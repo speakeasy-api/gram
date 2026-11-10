@@ -41,7 +41,7 @@ func registerChangeRiskPolicyAudience(reg *Registrar, catalogAvailable bool, han
 		{Properties: map[string]*jsonschema.Schema{"add_principals": {MinItems: new(1)}}},
 		{Properties: map[string]*jsonschema.Schema{"remove_principals": {MinItems: new(1)}}},
 	}
-	addTool(reg, &mcp.Tool{Meta: nil, OutputSchema: nil, Icons: nil, Name: operationChangeRiskPolicyAudience, Title: "Change Risk Policy Audience", Description: description, InputSchema: schema, Annotations: &mcp.ToolAnnotations{OpenWorldHint: nil, ReadOnlyHint: false, Title: "", DestructiveHint: new(true), IdempotentHint: true}}, ToolMeta{DiscoveryScopes: nil, Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}, ProjectScope: ProjectScopeExplicit}, instrumentRiskMutation(reg, operationChangeRiskPolicyAudience, handler))
+	addTool(reg, &mcp.Tool{Meta: nil, OutputSchema: nil, Icons: nil, Name: operationChangeRiskPolicyAudience, Title: "Change Risk Policy Audience", Description: description, InputSchema: schema, Annotations: &mcp.ToolAnnotations{OpenWorldHint: new(false), ReadOnlyHint: false, Title: "", DestructiveHint: new(true), IdempotentHint: true}}, ToolMeta{DiscoveryScopes: nil, Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}, ProjectScope: ProjectScopeExplicit}, instrumentRiskMutation(reg, operationChangeRiskPolicyAudience, handler))
 }
 
 func (s *riskPolicyMutationService) changePolicyAudienceTool(ctx context.Context, _ *mcp.CallToolRequest, raw map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {

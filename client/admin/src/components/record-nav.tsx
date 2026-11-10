@@ -1,6 +1,7 @@
 import type { AriaAttributes, JSX } from "react";
 import {
   BuildingIcon,
+  ListChecksIcon,
   ChevronLeftIcon,
   CreditCardIcon,
   FolderIcon,
@@ -109,6 +110,10 @@ export function RecordNav({
     to: "/organizations/$idOrSlug/billing",
     params: { idOrSlug },
   });
+  const onOnboarding = !!matchRoute({
+    to: "/organizations/$idOrSlug/onboarding",
+    params: { idOrSlug },
+  });
   const onMembers = !!matchRoute({
     to: "/organizations/$idOrSlug/members",
     params: { idOrSlug },
@@ -176,6 +181,23 @@ export function RecordNav({
                 >
                   <BuildingIcon />
                   <span>Overview</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onOnboarding}
+                tooltip="Onboarding"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/onboarding"
+                  params={{ idOrSlug }}
+                  {...currentProps(onOnboarding)}
+                >
+                  <ListChecksIcon />
+                  <span>Onboarding</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

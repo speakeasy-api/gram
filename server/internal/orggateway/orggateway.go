@@ -6,7 +6,7 @@
 // The gateway is not stored. It exists while its organization owns exactly
 // one organization-level user session issuer, so creating, moving, or
 // deleting that issuer is what offers or withdraws it. An organization admin
-// can also turn it off, which withdraws it until they turn it back on. It is
+// must explicitly opt in before it is served, and can turn it off again. It is
 // served on the
 // platform host only, so an organization whose custom domain restricts
 // access to an IP allowlist, which the platform host enforces by refusing
@@ -23,15 +23,12 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
-
-// RouteBase is the URL path prefix organization gateways are served under,
-// followed by the organization's slug.
-const RouteBase = "mcp/gateway"
 
 // issuerProbe bounds the issuer lookup. The gateway is offered only when the
 // organization owns exactly one issuer, so two rows are enough to tell one
@@ -67,34 +64,77 @@ const (
 	UnavailabilityTurnedOff Unavailability = "turned_off"
 )
 
+// LacksSingleIssuer reports whether u is only that the organization does not
+// own exactly one organization-level issuer. A caller that has already
+// signed the user in needs no issuer, so it can serve the gateway anyway.
+func (u Unavailability) LacksSingleIssuer() bool {
+	return u == UnavailabilityNoOrganizationIssuer || u == UnavailabilityMultipleOrganizationIssuers
+}
+
 // Availability returns the issuer an organization's gateway signs users in
 // through, or why the organization is not served one. Every surface that
 // offers the gateway asks this, so none offers a URL the gateway refuses.
 // Every read is uncached, so turning the gateway off takes effect on the next
 // request.
 func Availability(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum) (uuid.UUID, Unavailability, error) {
-	if organization.DisabledAt.Valid {
-		return uuid.Nil, UnavailabilityOrganizationDisabled, nil
+	return availability(ctx, db, organization, featuresrepo.New(db).IsFeatureEnabled)
+}
+
+// PlatformAvailability is Availability for Platform MCP, which uses the
+// gateway on its caller's behalf: there the gateway is on unless an
+// administrator turned it off explicitly, rather than off until one turns it
+// on. Every other unavailability applies unchanged.
+func PlatformAvailability(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum) (uuid.UUID, Unavailability, error) {
+	return availability(ctx, db, organization, isExplicitlyTurnedOff(db))
+}
+
+// PlatformServed is why Platform MCP may not serve an organization's gateway
+// to a caller it has already signed in, or UnavailabilityNone. It reads no
+// issuer: the organization issuer only signs people in to the gateway's own
+// URL.
+func PlatformServed(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum) (Unavailability, error) {
+	return served(ctx, db, organization, isExplicitlyTurnedOff(db))
+}
+
+func isExplicitlyTurnedOff(db usersessionsrepo.DBTX) func(context.Context, featuresrepo.IsFeatureEnabledParams) (bool, error) {
+	return func(ctx context.Context, arg featuresrepo.IsFeatureEnabledParams) (bool, error) {
+		return featuresrepo.New(db).IsFeatureExplicitlyEnabled(ctx, featuresrepo.IsFeatureExplicitlyEnabledParams(arg))
 	}
-	turnedOff, err := featuresrepo.New(db).IsFeatureEnabled(ctx, featuresrepo.IsFeatureEnabledParams{
+}
+
+func availability(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum, isTurnedOff func(context.Context, featuresrepo.IsFeatureEnabledParams) (bool, error)) (uuid.UUID, Unavailability, error) {
+	unavailable, err := served(ctx, db, organization, isTurnedOff)
+	if err != nil || unavailable != UnavailabilityNone {
+		return uuid.Nil, unavailable, err
+	}
+	return Resolve(ctx, usersessionsrepo.New(db), organization.ID)
+}
+
+// served is every reason an organization is not served a gateway except its
+// issuers.
+func served(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum, isTurnedOff func(context.Context, featuresrepo.IsFeatureEnabledParams) (bool, error)) (Unavailability, error) {
+	if organization.DisabledAt.Valid {
+		return UnavailabilityOrganizationDisabled, nil
+	}
+	turnedOff, err := isTurnedOff(ctx, featuresrepo.IsFeatureEnabledParams{
 		OrganizationID: organization.ID,
 		FeatureName:    string(productfeatures.FeatureOrganizationGatewayDisabled),
 	})
 	if err != nil {
-		return uuid.Nil, UnavailabilityNone, fmt.Errorf("read organization gateway setting: %w", err)
+		return UnavailabilityNone, fmt.Errorf("read organization gateway setting: %w", err)
 	}
 	if turnedOff {
-		return uuid.Nil, UnavailabilityTurnedOff, nil
+		return UnavailabilityTurnedOff, nil
 	}
 	domain, err := customdomainsrepo.New(db).GetCustomDomainByOrganization(ctx, organization.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
-		return uuid.Nil, UnavailabilityNone, fmt.Errorf("load custom domain: %w", err)
+		return UnavailabilityNone, fmt.Errorf("load custom domain: %w", err)
 	case len(domain.IpAllowlist) > 0:
-		return uuid.Nil, UnavailabilityCustomDomainOnly, nil
+		return UnavailabilityCustomDomainOnly, nil
 	}
-	return Resolve(ctx, usersessionsrepo.New(db), organization.ID)
+	return UnavailabilityNone, nil
 }
 
 // IssuerLister lists an organization's organization-level user session
@@ -128,5 +168,5 @@ func Resolve(ctx context.Context, issuers IssuerLister, organizationID string) (
 
 // URL is the organization gateway's MCP URL under baseURL.
 func URL(baseURL *url.URL, organizationSlug string) string {
-	return baseURL.JoinPath(RouteBase, organizationSlug).String()
+	return baseURL.JoinPath(mcproute.OrganizationGateway.String(), organizationSlug).String()
 }

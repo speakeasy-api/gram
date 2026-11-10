@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render as testingRender,
+  screen,
+} from "@testing-library/react";
+import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -29,11 +36,8 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-one" }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    logs: { href: () => "/org/logs" },
-    identity: { href: () => "/org/identity" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: undefined }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: React.ReactNode }) => children,
@@ -43,7 +47,8 @@ vi.mock("./session-audit-access", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./session-audit-access")>()),
   useSessionAuditAccess: () => mocks.access,
 }));
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }));
 vi.mock("@/components/observe/LoggingPageHeader", () => ({
@@ -55,6 +60,9 @@ vi.mock("./enable-logging-and-session-capture-setting", () => ({
 
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { EnableLoggingSection } from "./enable-logging-section";
+
+const render = (ui: ReactElement) =>
+  testingRender(ui, { wrapper: MemoryRouter });
 
 afterEach(cleanup);
 beforeEach(() => {

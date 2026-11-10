@@ -3,7 +3,8 @@
  */
 
 import * as z from "zod/v4-mini";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 
 export const KillswitchHistoryAction = {
   Created: "created",
@@ -12,11 +13,10 @@ export const KillswitchHistoryAction = {
   Expired: "expired",
   Restored: "restored",
 } as const;
-export type KillswitchHistoryAction = ClosedEnum<
-  typeof KillswitchHistoryAction
->;
+export type KillswitchHistoryAction = OpenEnum<typeof KillswitchHistoryAction>;
 
 /** @internal */
-export const KillswitchHistoryAction$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchHistoryAction
-> = z.enum(KillswitchHistoryAction);
+export const KillswitchHistoryAction$inboundSchema: z.ZodMiniType<
+  KillswitchHistoryAction,
+  unknown
+> = openEnums.inboundSchema(KillswitchHistoryAction);

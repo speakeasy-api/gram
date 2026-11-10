@@ -1,3 +1,6 @@
+import { enumPresentation } from "@/lib/enum";
+import { GatewayCodeExecution } from "./GatewayCodeExecution";
+import { useSession } from "@/contexts/Auth";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
@@ -18,7 +21,7 @@ import { mcpConnectionUrl } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -46,9 +49,22 @@ function argumentNames(inputSchema: unknown): string {
 const discoveryModeLabels: Record<string, string> = {
   progressive: "Progressive",
   direct: "Direct",
+  code_mode: "Code Mode",
 };
 
-export function GatewayInspectTab({
+export function GatewayInspectTab(
+  props: Parameters<typeof GatewayInspectConnection>[0],
+): JSX.Element {
+  const session = useSession();
+  return (
+    <GatewayInspectConnection
+      key={`${props.metaMcpServer.id}:${session.user.id}`}
+      {...props}
+    />
+  );
+}
+
+function GatewayInspectConnection({
   metaMcpServer,
   endpoints,
   isLoadingEndpoints,
@@ -62,16 +78,18 @@ export function GatewayInspectTab({
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedMode = searchParams.get("discovery_mode");
   const urlMode =
-    requestedMode === "direct" || requestedMode === "progressive"
+    requestedMode === "direct" ||
+    requestedMode === "progressive" ||
+    requestedMode === "code_mode"
       ? requestedMode
       : "default";
   const [modeDraft, setModeDraft] = useState<
-    "default" | "direct" | "progressive"
+    "default" | "direct" | "progressive" | "code_mode"
   >(urlMode);
   // A stable initial version lets the token and inspection caches hit across
   // visits; only an explicit reconnect mints a fresh one.
   const [connection, setConnection] = useState<{
-    mode: "default" | "direct" | "progressive";
+    mode: "default" | "direct" | "progressive" | "code_mode";
     version: string;
   }>({ mode: urlMode, version: urlMode });
   const syncKey = `${metaMcpServer.id}:${urlMode}`;
@@ -83,7 +101,7 @@ export function GatewayInspectTab({
       setConnection({ mode: urlMode, version: urlMode });
     }
   }
-  function applyMode(mode: "default" | "direct" | "progressive") {
+  function applyMode(mode: "default" | "direct" | "progressive" | "code_mode") {
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -138,6 +156,14 @@ export function GatewayInspectTab({
         (!metaMcpServer.userSessionIssuerId || !!accessToken),
       configurationKey,
     });
+  // Preserve source and execution across token refresh or failed inspection reads.
+  // Explicit reconnects reset the editor.
+  const [codeConnection, setCodeConnection] = useState<string>();
+  useEffect(() => {
+    if (data?.discoveryMode === "code_mode" && !isError && !mintError) {
+      setCodeConnection(configurationKey);
+    }
+  }, [data, isError, mintError, configurationKey]);
   // Configured membership, to explain a shortfall against what the endpoint
   // actually serves this connection.
   const { rows } = useGatewayMemberRows(metaMcpServer.id);
@@ -172,7 +198,8 @@ export function GatewayInspectTab({
                   if (
                     value === "default" ||
                     value === "direct" ||
-                    value === "progressive"
+                    value === "progressive" ||
+                    value === "code_mode"
                   )
                     setModeDraft(value);
                 }}
@@ -183,12 +210,24 @@ export function GatewayInspectTab({
                 <SelectContent>
                   <SelectItem value="default">
                     Use gateway default (
-                    {discoveryModeLabels[metaMcpServer.discoveryMode ?? ""] ??
-                      "Progressive"}
+                    {enumPresentation(
+                      discoveryModeLabels,
+                      metaMcpServer.discoveryMode,
+                      "Unknown",
+                    )}
                     )
                   </SelectItem>
                   <SelectItem value="progressive">Progressive</SelectItem>
                   <SelectItem value="direct">Direct</SelectItem>
+                  {(metaMcpServer.codeModeEnabled ||
+                    modeDraft === "code_mode") && (
+                    <SelectItem
+                      value="code_mode"
+                      disabled={!metaMcpServer.codeModeEnabled}
+                    >
+                      Code Mode
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
               <ReleaseStageBadge stage="preview" />
@@ -196,7 +235,10 @@ export function GatewayInspectTab({
             <Page.Toolbar.Actions>
               <Button
                 variant="secondary"
-                disabled={isMintingToken}
+                disabled={
+                  isMintingToken ||
+                  (modeDraft === "code_mode" && !metaMcpServer.codeModeEnabled)
+                }
                 onClick={() => {
                   applyMode(modeDraft);
                 }}
@@ -206,7 +248,42 @@ export function GatewayInspectTab({
             </Page.Toolbar.Actions>
           </Page.Toolbar>
         )}
+        {(connection.mode === "code_mode" ||
+          (connection.mode === "default" &&
+            metaMcpServer.discoveryMode === "code_mode")) &&
+          !metaMcpServer.codeModeEnabled && (
+            <Text muted small>
+              Code Mode is not available for this gateway. This connection uses
+              Progressive discovery.
+            </Text>
+          )}
+        {connection.mode === "code_mode" && !metaMcpServer.codeModeEnabled && (
+          <Button
+            variant="secondary"
+            disabled={isMintingToken}
+            onClick={() => applyMode("default")}
+          >
+            <Button.Text>Use gateway default and reconnect</Button.Text>
+          </Button>
+        )}
+        {codeConnection === configurationKey && connectUrl && (
+          <GatewayCodeExecution
+            key={`${configurationKey}:${connectUrl}`}
+            connectUrl={connectUrl}
+            headers={headers}
+            disabled={
+              isLoading ||
+              loading ||
+              isMintingToken ||
+              isError ||
+              !!mintError ||
+              needsAuth ||
+              data?.discoveryMode !== "code_mode"
+            }
+          />
+        )}
         <InspectBody
+          key={configurationKey}
           data={data}
           isLoading={isLoading || loading || isMintingToken}
           isError={isError || !!mintError}
@@ -299,8 +376,9 @@ function InspectBody({
   // argument names, the way the wire contract is easiest to scan.
   const nameWidth =
     Math.max(...data.tools.map((tool) => tool.name.length), 0) + 2;
+  const toolCount = `${data.tools.length} ${data.tools.length === 1 ? "tool" : "tools"}`;
   const toolSignatures = [
-    `// ${data.tools.length} tools (${data.discoveryMode})`,
+    `// ${toolCount} (${data.discoveryMode})`,
     ...data.tools.map(
       (tool) =>
         `${tool.name.padEnd(nameWidth)}${argumentNames(tool.inputSchema)}`,
@@ -311,7 +389,7 @@ function InspectBody({
     <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
       {/* Left column: the tool surface, then one level down into a member. */}
       <div className="flex flex-col gap-6">
-        <InspectCard title="tools/list" meta={`${data.tools.length} tools`}>
+        <InspectCard title="tools/list" meta={toolCount}>
           <CodeSnippet
             language="js"
             code={toolSignatures}
@@ -332,6 +410,13 @@ function InspectBody({
 
       {/* Right column: what the agent is told, and the state it can see. */}
       <div className="flex flex-col gap-6">
+        {data.discoveryMode === "code_mode" && (
+          <InspectCard title="execute description">
+            <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
+              {data.tools[0]?.description}
+            </pre>
+          </InspectCard>
+        )}
         <InspectCard
           title="server instructions"
           action={

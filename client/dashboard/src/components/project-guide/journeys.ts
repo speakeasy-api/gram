@@ -11,13 +11,15 @@ export function otherProjectGuideJourney(id: JourneyId): JourneyId {
 }
 
 /** Catalog entries we surface first in the automatic project-guide chooser. */
-export const AUTOMATIC_CATALOG_SERVER_NAMES = [
-  "Linear",
-  "Notion",
-  "Vercel",
-  "Granola",
-  "Ramp",
-  "GitHub",
+// Exact native identities from server/internal/mcpregistry/oktaseed/oktaseed.go.
+// Display titles are not identity or provenance evidence.
+export const AUTOMATIC_CATALOG_SERVER_SPECIFIERS = [
+  "app.linear/mcp",
+  "com.notion/mcp",
+  "com.vercel/mcp",
+  "ai.granola/mcp",
+  "com.ramp/mcp",
+  "com.github/mcp",
 ] as const;
 
 export const JOURNEY_STATUS_LABELS: Record<JourneyStatus, string> = {
@@ -29,6 +31,7 @@ export const JOURNEY_STATUS_LABELS: Record<JourneyStatus, string> = {
 
 export type JourneyMeta = {
   id: JourneyId;
+  headline: string;
   title: string;
   /** The observable win, stated as the user would describe it afterwards. */
   win: string;
@@ -74,8 +77,9 @@ export const PROJECT_GUIDE_COMPLETE = {
 export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
   {
     id: "secret-block",
+    headline: "Secure AI usage",
     title: "Block a leaked credential mid-prompt",
-    win: "A secrets policy denies any prompt carrying a credential. The attempt lands in Risk Events with the rule that caught it, the matched span, and who sent it.",
+    win: "Create a deny policy for secrets, then watch it stop a synthetic credential before it reaches the model.",
     completion: {
       heading: "The prompt was denied.",
       body: "The prompt matched the secrets policy and was rejected before the model answered. The finding sits in Risk Events with the rule that fired, the matched span, the severity, and who sent it.",
@@ -83,17 +87,18 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
     },
     steps: SECRET_BLOCK_STEPS,
     stepBlurbs: [
-      "A policy goes live that looks for secrets — API keys, tokens, private keys — in the prompts people send. It denies anything that matches, for everyone in the org.",
-      "Speakeasy builds the observability plugin for this project and signs it. You get a package to download — the next step installs it in your client.",
-      "Run the command below to install the observability plugin, then restart your agent so its activity can stream into this project.",
+      "Create a secrets policy that denies prompts containing API keys, tokens, or private keys for everyone in the organization.",
+      "The observability plugin sends agent activity to this project so policies can inspect prompts before they reach the model. Download it here, then install it in your client.",
+      "Run the command below to install the observability plugin, then restart your agent so prompts can be inspected by this project's policies.",
       "This key is synthetic and inert. It exists so the rule has something real-shaped to catch. The call should not survive the machine.",
       "The policy denies the request and a finding lands in Risk Events. It carries the rule that fired, the matched span, the severity, and who sent it.",
     ],
   },
   {
     id: "third-party-mcp",
-    title: "Govern a third-party MCP",
-    win: "Install a vendor's MCP server, connect your agent to it, and watch the first call arrive with the actor, the tools, and the result attached.",
+    headline: "Govern AI data access",
+    title: "Deploy an MCP gateway",
+    win: "Put a governed endpoint in front of a third-party MCP server, then watch the first authorized tool call arrive in your logs.",
     completion: {
       heading: "The path is governed.",
       body: "Your client now reaches the selected server through an endpoint you own. Tool lists are filtered to what each caller may use, every call lands in tool logs, and the vendor's server never changed. Remove the server and the path closes.",
@@ -101,7 +106,7 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
     },
     steps: PROJECT_GUIDE_MCP_STEPS,
     stepBlurbs: [
-      "The catalog lists servers from the official MCP Registry. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
+      "The catalog lists curated MCP servers. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
       "Run the command below to add the governed endpoint to your client. Complete OAuth when the client connects; the proxy keeps vendor credentials off the developer's machine.",
       "Run this in the client you just configured. Listing tools reads nothing and writes nothing — it puts the first real request on the governed path.",
       "The endpoint checks the call against the caller's tool access and records it before forwarding. This is the first entry.",

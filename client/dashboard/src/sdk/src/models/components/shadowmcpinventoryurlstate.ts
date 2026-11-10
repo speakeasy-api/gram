@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -33,7 +34,7 @@ export const ShadowMCPInventoryURLStateAccess = {
 /**
  * Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.
  */
-export type ShadowMCPInventoryURLStateAccess = ClosedEnum<
+export type ShadowMCPInventoryURLStateAccess = OpenEnum<
   typeof ShadowMCPInventoryURLStateAccess
 >;
 
@@ -60,9 +61,10 @@ export type ShadowMCPInventoryURLState = {
 };
 
 /** @internal */
-export const ShadowMCPInventoryURLStateAccess$inboundSchema: z.ZodMiniEnum<
-  typeof ShadowMCPInventoryURLStateAccess
-> = z.enum(ShadowMCPInventoryURLStateAccess);
+export const ShadowMCPInventoryURLStateAccess$inboundSchema: z.ZodMiniType<
+  ShadowMCPInventoryURLStateAccess,
+  unknown
+> = openEnums.inboundSchema(ShadowMCPInventoryURLStateAccess);
 
 /** @internal */
 export const ShadowMCPInventoryURLState$inboundSchema: z.ZodMiniType<

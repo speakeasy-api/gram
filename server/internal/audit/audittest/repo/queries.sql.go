@@ -32,6 +32,23 @@ func (q *Queries) BackdateAuditLog(ctx context.Context, arg BackdateAuditLogPara
 	return err
 }
 
+const backdateSecurityAuditLog = `-- name: BackdateSecurityAuditLog :exec
+UPDATE security_audit_logs
+SET created_at = $1
+WHERE id = $2
+`
+
+type BackdateSecurityAuditLogParams struct {
+	CreatedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+// Test-only: BackdateAuditLog for security_audit_logs.
+func (q *Queries) BackdateSecurityAuditLog(ctx context.Context, arg BackdateSecurityAuditLogParams) error {
+	_, err := q.db.Exec(ctx, backdateSecurityAuditLog, arg.CreatedAt, arg.ID)
+	return err
+}
+
 const countAuditLogs = `-- name: CountAuditLogs :one
 SELECT COUNT(*)
 FROM audit_logs
@@ -55,6 +72,57 @@ func (q *Queries) CountAuditLogsByAction(ctx context.Context, action string) (in
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const countPublishOutboxByOrg = `-- name: CountPublishOutboxByOrg :one
+SELECT count(*) FROM publish_outbox WHERE organization_id = $1
+`
+
+func (q *Queries) CountPublishOutboxByOrg(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countPublishOutboxByOrg, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPublishOutboxByOrgAndEvent = `-- name: CountPublishOutboxByOrgAndEvent :one
+SELECT count(*) FROM publish_outbox WHERE organization_id = $1 AND attributes->>'event_type' = $2::text
+`
+
+type CountPublishOutboxByOrgAndEventParams struct {
+	OrganizationID string
+	EventType      string
+}
+
+func (q *Queries) CountPublishOutboxByOrgAndEvent(ctx context.Context, arg CountPublishOutboxByOrgAndEventParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPublishOutboxByOrgAndEvent, arg.OrganizationID, arg.EventType)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSecurityAuditLogsByAction = `-- name: CountSecurityAuditLogsByAction :one
+SELECT COUNT(*)
+FROM security_audit_logs
+WHERE action = $1
+`
+
+func (q *Queries) CountSecurityAuditLogsByAction(ctx context.Context, action string) (int64, error) {
+	row := q.db.QueryRow(ctx, countSecurityAuditLogsByAction, action)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getAuditLogInternalBySubject = `-- name: GetAuditLogInternalBySubject :one
+SELECT is_internal FROM audit_logs WHERE subject_id = $1
+`
+
+func (q *Queries) GetAuditLogInternalBySubject(ctx context.Context, subjectID string) (bool, error) {
+	row := q.db.QueryRow(ctx, getAuditLogInternalBySubject, subjectID)
+	var is_internal bool
+	err := row.Scan(&is_internal)
+	return is_internal, err
 }
 
 const getLatestAuditLogByAction = `-- name: GetLatestAuditLogByAction :one
@@ -124,6 +192,78 @@ func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) 
 	return i, err
 }
 
+const getLatestAuditLogByActionAndSubject = `-- name: GetLatestAuditLogByActionAndSubject :one
+SELECT
+  action,
+  organization_id,
+  project_id,
+  actor_id,
+  actor_type,
+  actor_display_name,
+  actor_slug,
+  subject_id,
+  subject_type,
+  subject_display_name,
+  subject_slug,
+  metadata,
+  before_snapshot,
+  after_snapshot,
+  acting_surface,
+  acting_client_id
+FROM audit_logs
+WHERE action = $1 AND subject_id = $2
+ORDER BY seq DESC
+LIMIT 1
+`
+
+type GetLatestAuditLogByActionAndSubjectParams struct {
+	Action    string
+	SubjectID string
+}
+
+type GetLatestAuditLogByActionAndSubjectRow struct {
+	Action             string
+	OrganizationID     string
+	ProjectID          uuid.NullUUID
+	ActorID            string
+	ActorType          string
+	ActorDisplayName   pgtype.Text
+	ActorSlug          pgtype.Text
+	SubjectID          string
+	SubjectType        string
+	SubjectDisplayName pgtype.Text
+	SubjectSlug        pgtype.Text
+	Metadata           []byte
+	BeforeSnapshot     []byte
+	AfterSnapshot      []byte
+	ActingSurface      pgtype.Text
+	ActingClientID     pgtype.Text
+}
+
+func (q *Queries) GetLatestAuditLogByActionAndSubject(ctx context.Context, arg GetLatestAuditLogByActionAndSubjectParams) (GetLatestAuditLogByActionAndSubjectRow, error) {
+	row := q.db.QueryRow(ctx, getLatestAuditLogByActionAndSubject, arg.Action, arg.SubjectID)
+	var i GetLatestAuditLogByActionAndSubjectRow
+	err := row.Scan(
+		&i.Action,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ActorID,
+		&i.ActorType,
+		&i.ActorDisplayName,
+		&i.ActorSlug,
+		&i.SubjectID,
+		&i.SubjectType,
+		&i.SubjectDisplayName,
+		&i.SubjectSlug,
+		&i.Metadata,
+		&i.BeforeSnapshot,
+		&i.AfterSnapshot,
+		&i.ActingSurface,
+		&i.ActingClientID,
+	)
+	return i, err
+}
+
 const getLatestOutboxPayloadByOrg = `-- name: GetLatestOutboxPayloadByOrg :one
 SELECT message
 FROM publish_outbox
@@ -147,4 +287,83 @@ func (q *Queries) GetLatestOutboxPayloadByOrg(ctx context.Context, arg GetLatest
 	var message []byte
 	err := row.Scan(&message)
 	return message, err
+}
+
+const getLatestSecurityAuditLogByAction = `-- name: GetLatestSecurityAuditLogByAction :one
+SELECT
+  action,
+  organization_id,
+  project_id,
+  actor_id,
+  actor_type,
+  actor_display_name,
+  actor_slug,
+  subject_id,
+  subject_type,
+  subject_display_name,
+  subject_slug,
+  metadata,
+  before_snapshot,
+  after_snapshot,
+  acting_surface,
+  acting_client_id
+FROM security_audit_logs
+WHERE action = $1
+ORDER BY seq DESC
+LIMIT 1
+`
+
+type GetLatestSecurityAuditLogByActionRow struct {
+	Action             string
+	OrganizationID     string
+	ProjectID          uuid.NullUUID
+	ActorID            string
+	ActorType          string
+	ActorDisplayName   pgtype.Text
+	ActorSlug          pgtype.Text
+	SubjectID          string
+	SubjectType        string
+	SubjectDisplayName pgtype.Text
+	SubjectSlug        pgtype.Text
+	Metadata           []byte
+	BeforeSnapshot     []byte
+	AfterSnapshot      []byte
+	ActingSurface      pgtype.Text
+	ActingClientID     pgtype.Text
+}
+
+// Same columns as GetLatestAuditLogByAction, so the rows convert.
+func (q *Queries) GetLatestSecurityAuditLogByAction(ctx context.Context, action string) (GetLatestSecurityAuditLogByActionRow, error) {
+	row := q.db.QueryRow(ctx, getLatestSecurityAuditLogByAction, action)
+	var i GetLatestSecurityAuditLogByActionRow
+	err := row.Scan(
+		&i.Action,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ActorID,
+		&i.ActorType,
+		&i.ActorDisplayName,
+		&i.ActorSlug,
+		&i.SubjectID,
+		&i.SubjectType,
+		&i.SubjectDisplayName,
+		&i.SubjectSlug,
+		&i.Metadata,
+		&i.BeforeSnapshot,
+		&i.AfterSnapshot,
+		&i.ActingSurface,
+		&i.ActingClientID,
+	)
+	return i, err
+}
+
+const getSecurityAuditLogInternal = `-- name: GetSecurityAuditLogInternal :one
+SELECT is_internal FROM security_audit_logs WHERE id = $1
+`
+
+func (q *Queries) GetSecurityAuditLogInternal(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, getSecurityAuditLogInternal, id)
+	var is_internal bool
+	err := row.Scan(&is_internal)
+	return is_internal, err
 }

@@ -9,6 +9,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { MemoryRouter } from "react-router";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 
@@ -20,8 +21,6 @@ const permissions = vi.hoisted(() => ({
     "mcp:write:project",
     "project:write:project",
   ]),
-  tunnel: true,
-  functions: true,
   navigate: vi.fn(),
 }));
 vi.mock("react-router", async (importOriginal) => ({
@@ -42,29 +41,9 @@ vi.mock("@/hooks/useRBAC", () => ({
     isLoading: false,
   }),
 }));
-vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({
-    isFeatureEnabled: (flag: string) =>
-      flag === TUNNELED_MCP_FEATURE_FLAG
-        ? permissions.tunnel
-        : flag === "gram-functions"
-          ? permissions.functions
-          : false,
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: {
-      catalog: { href: () => "/catalog" },
-      add: Object.fromEntries(
-        ["remote", "tunneled", "openapi", "fromSource", "function"].map(
-          (key) => [key, { href: () => "/" + key }],
-        ),
-      ),
-    },
-  }),
-}));
-import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { AddServersSheet } from "./GatewayMembersSection";
 
 afterEach(() => {
@@ -75,8 +54,6 @@ afterEach(() => {
     "mcp:write:project",
     "project:write:project",
   ]);
-  permissions.tunnel = true;
-  permissions.functions = true;
   permissions.navigate.mockClear();
 });
 const servers = [
@@ -91,23 +68,25 @@ function setup(
     { key: "server-b", name: "Beta", error: "Try again" },
   ]);
   render(
-    <MemoryRouter>
-      <AddServersSheet
-        open
-        onOpenChange={() => {}}
-        servers={servers}
-        toolsets={[]}
-        isLoading={false}
-        loadFailed={false}
-        onRetryLoad={() => {}}
-        memberServerIds={new Set()}
-        onAdd={onAdd}
-        adding={false}
-        projectId="project"
-        gatewayId="gateway"
-        {...overrides}
-      />
-    </MemoryRouter>,
+    <TooltipProvider>
+      <MemoryRouter>
+        <AddServersSheet
+          open
+          onOpenChange={() => {}}
+          servers={servers}
+          toolsets={[]}
+          isLoading={false}
+          loadFailed={false}
+          onRetryLoad={() => {}}
+          memberServerIds={new Set()}
+          onAdd={onAdd}
+          adding={false}
+          projectId="project"
+          gatewayId="gateway"
+          {...overrides}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
   );
   return { onAdd };
 }
@@ -428,9 +407,11 @@ describe("Add servers sheet", () => {
       wrappers,
     };
     const view = render(
-      <MemoryRouter>
-        <AddServersSheet {...props} servers={[]} />
-      </MemoryRouter>,
+      <TooltipProvider>
+        <MemoryRouter>
+          <AddServersSheet {...props} servers={[]} />
+        </MemoryRouter>
+      </TooltipProvider>,
     );
     fireEvent.click(screen.getByRole("checkbox", { name: "Hosted" }));
     fireEvent.click(
@@ -438,22 +419,29 @@ describe("Add servers sheet", () => {
     );
     await screen.findByText("Hosted: Try again");
     view.rerender(
-      <MemoryRouter>
-        <AddServersSheet
-          {...props}
-          servers={
-            [
-              { id: "other", name: "Other", slug: "other", toolsetId: "tools" },
-              {
-                id: "created",
-                name: "Hosted",
-                slug: "hosted",
-                toolsetId: "tools",
-              },
-            ] as McpServer[]
-          }
-        />
-      </MemoryRouter>,
+      <TooltipProvider>
+        <MemoryRouter>
+          <AddServersSheet
+            {...props}
+            servers={
+              [
+                {
+                  id: "other",
+                  name: "Other",
+                  slug: "other",
+                  toolsetId: "tools",
+                },
+                {
+                  id: "created",
+                  name: "Hosted",
+                  slug: "hosted",
+                  toolsetId: "tools",
+                },
+              ] as McpServer[]
+            }
+          />
+        </MemoryRouter>
+      </TooltipProvider>,
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Add selected servers" }),
@@ -626,12 +614,30 @@ describe("Add servers sheet", () => {
   });
 
   it.each([
-    ["From the catalog", "/catalog?attachToGateway=gateway"],
-    ["Hosted remotely", "/remote?attachToGateway=gateway"],
-    ["Reachable through a tunnel", "/tunneled?attachToGateway=gateway"],
-    ["From your API", "/openapi?attachToGateway=gateway"],
-    ["From an existing source", "/fromSource?attachToGateway=gateway"],
-    ["Write custom code", "/function?attachToGateway=gateway"],
+    [
+      "From the catalog",
+      "/org/projects/project/mcp/catalog?attachToGateway=gateway",
+    ],
+    [
+      "Hosted remotely",
+      "/org/projects/project/mcp/add/remote?attachToGateway=gateway",
+    ],
+    [
+      "Reachable through a tunnel",
+      "/org/projects/project/mcp/add/tunneled?attachToGateway=gateway",
+    ],
+    [
+      "From your API",
+      "/org/projects/project/mcp/add/openapi?attachToGateway=gateway",
+    ],
+    [
+      "From an existing source",
+      "/org/projects/project/mcp/add/from-existing-source?attachToGateway=gateway",
+    ],
+    [
+      "Write custom code",
+      "/org/projects/project/mcp/add/function?attachToGateway=gateway",
+    ],
   ])("opens %s with gateway context", (label, href) => {
     setup();
     fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
@@ -647,35 +653,21 @@ describe("Add servers sheet", () => {
     expect(permissions.navigate).toHaveBeenCalledWith(href);
   });
 
-  it.each([
-    [false, false],
-    [true, false],
-    [false, true],
-    [true, true],
-  ])(
-    "gates tunnel (%s) and function (%s) creation independently",
-    (tunnel, functions) => {
-      permissions.tunnel = tunnel;
-      permissions.functions = functions;
-      setup();
-      fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
-        button: 0,
-        ctrlKey: false,
-        pointerType: "mouse",
-      });
-      expect(
-        screen.queryByRole("menuitem", {
-          name: /^Reachable through a tunnel/,
-        }) !== null,
-      ).toBe(tunnel);
-      expect(
-        screen.queryByRole("menuitem", { name: /^Write custom code/ }) !== null,
-      ).toBe(functions);
-      expect(screen.getAllByRole("menuitem")).toHaveLength(
-        4 + Number(tunnel) + Number(functions),
-      );
-    },
-  );
+  it("offers tunnel and function creation together", () => {
+    setup();
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    expect(
+      screen.getByRole("menuitem", { name: /^Reachable through a tunnel/ }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("menuitem", { name: /^Write custom code/ }),
+    ).toBeTruthy();
+    expect(screen.getAllByRole("menuitem")).toHaveLength(6);
+  });
 
   it("guards rapid duplicate submits while a batch is pending", async () => {
     let finish!: (results: []) => void;
@@ -844,7 +836,7 @@ it.each([["project:read:project", "mcp:write:gateway"], ["mcp:write:gateway"]])(
     expect(item.getAttribute("aria-disabled")).not.toBe("true");
     fireEvent.click(item);
     expect(permissions.navigate).toHaveBeenCalledWith(
-      "/catalog?attachToGateway=gateway",
+      "/org/projects/project/mcp/catalog?attachToGateway=gateway",
     );
   },
 );

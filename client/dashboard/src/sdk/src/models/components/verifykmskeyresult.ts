@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -29,7 +30,7 @@ export const ProbeOutcome = {
 /**
  * The machine-readable outcome of the probe.
  */
-export type ProbeOutcome = ClosedEnum<typeof ProbeOutcome>;
+export type ProbeOutcome = OpenEnum<typeof ProbeOutcome>;
 
 /**
  * Result of a live probe that Speakeasy can reach an external key and use it to sign.
@@ -50,8 +51,8 @@ export type VerifyKmsKeyResult = {
 };
 
 /** @internal */
-export const ProbeOutcome$inboundSchema: z.ZodMiniEnum<typeof ProbeOutcome> = z
-  .enum(ProbeOutcome);
+export const ProbeOutcome$inboundSchema: z.ZodMiniType<ProbeOutcome, unknown> =
+  openEnums.inboundSchema(ProbeOutcome);
 
 /** @internal */
 export const VerifyKmsKeyResult$inboundSchema: z.ZodMiniType<

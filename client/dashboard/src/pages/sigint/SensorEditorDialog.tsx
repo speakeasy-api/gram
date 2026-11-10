@@ -1,3 +1,8 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import {
+  InputStrategy,
+  Mode,
+} from "@gram/client/models/components/createsigintsensorform.js";
 import { duplicateNameCounts } from "./signal-names";
 import { slugError } from "./slug";
 import { AnyField } from "@/components/moon/any-field";
@@ -134,6 +139,29 @@ export function SensorEditorDialog({
     [signals],
   );
   const nameCounts = useMemo(() => duplicateNameCounts(signals), [signals]);
+  if (
+    !isKnownEnumValue(Mode, mode) ||
+    !isKnownEnumValue(InputStrategy, inputStrategy)
+  ) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Edit sensor</Dialog.Title>
+            <Dialog.Description>
+              Refresh the page before editing this sensor. Its configuration is
+              not supported by this dashboard yet.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Button variant="secondary" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    );
+  }
   const selected = new Set(signalIds);
   const needle = search.trim().toLocaleLowerCase();
   const available = signals.filter(

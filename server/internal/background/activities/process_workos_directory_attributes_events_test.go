@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -18,10 +19,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/directoryreview"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 )
@@ -415,6 +418,46 @@ func directoryUserEventDataWithoutState(workosOrgID, workosDirectoryUserID, emai
 	return []byte(`{"id":"` + workosDirectoryUserID + `","organization_id":"` + workosOrgID + `","email":"` + email + `","first_name":"Ada","last_name":"Lovelace","custom_attributes":{"department":"Engineering"},"created_at":"2026-05-12T10:00:00Z","updated_at":"` + updatedAt + `"}`)
 }
 
+func TestProcessWorkOSOrganizationEvents_DirectoryUserEventsStoreNames(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_directory_user_names")
+	logger := testenv.NewLogger(t)
+
+	const (
+		gramOrgID   = "gram_directory_user_names_org"
+		workosOrgID = "org_directory_user_names"
+		userID      = "directory_user_names"
+	)
+	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, gramOrgID, workosOrgID)
+
+	unnamed := []byte(`{"id":"` + userID + `","organization_id":"` + workosOrgID + `","email":"names@example.com","first_name":"","state":"active","custom_attributes":{},"created_at":"2026-05-12T10:00:00Z","updated_at":"2026-05-12T10:02:00Z"}`)
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_named", Event: "dsync.user.created", CreatedAt: time.Now(), Data: directoryUserEventDataWithState(workosOrgID, userID, "names@example.com", "active", "2026-05-12T10:01:00Z")},
+	}, {
+		{ID: "event_unnamed", Event: "dsync.user.updated", CreatedAt: time.Now(), Data: unnamed},
+	}})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	row, err := directoryrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, userID)
+	require.NoError(t, err)
+	require.Equal(t, "Ada", row.FirstName.String)
+	require.Equal(t, "Lovelace", row.LastName.String)
+
+	// The newest event wins, including when the directory stops reporting a name.
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	row, err = directoryrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, userID)
+	require.NoError(t, err)
+	require.False(t, row.FirstName.Valid)
+	require.False(t, row.LastName.Valid)
+}
+
 func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAccess(t *testing.T) {
 	t.Parallel()
 
@@ -647,4 +690,55 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserStatelessUpdateDoesNotResu
 
 	_, err = directoryrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, directoryUserID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestProcessWorkOSOrganizationEvents_DirectoryEventsRaiseReviewItemsInTheirOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_directory_review_events")
+	logger := testenv.NewLogger(t)
+
+	const (
+		gramOrgID   = "gram_directory_review_org"
+		workosOrgID = "org_directory_review"
+		otherOrgID  = "gram_directory_review_other_org"
+	)
+	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, gramOrgID, workosOrgID)
+	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, otherOrgID, "org_directory_review_other")
+	// department already has a mapping, so a new value of it needs a decision.
+	_, err := accessrepo.New(conn).InsertDirectoryAttributeRoleMapping(ctx, accessrepo.InsertDirectoryAttributeRoleMappingParams{
+		OrganizationID: gramOrgID, AttributeKey: conv.ToPGText("department"), AttributeValue: conv.ToPGText("Sales"),
+		RoleUrn: "role:organization:00000000-0000-0000-0000-000000000001",
+	})
+	require.NoError(t, err)
+	for _, orgID := range []string{gramOrgID, otherOrgID} {
+		_, err = directoryreview.ReconcileOrganization(ctx, conn, orgID)
+		require.NoError(t, err, "records the review baseline")
+	}
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_0001", Event: "dsync.group.created", CreatedAt: time.Now(), Data: directoryGroupEventData(workosOrgID, "directory_group_review", "Platform")},
+		{ID: "event_0002", Event: "dsync.user.created", CreatedAt: time.Now(), Data: directoryUserEventDataWithState(workosOrgID, "directory_user_review", "dsync.review@example.com", "active", "2026-05-12T12:00:00Z")},
+	}})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	items, err := testrepo.New(conn).ListDirectoryReviewItemsFixture(ctx, gramOrgID)
+	require.NoError(t, err)
+	// The baseline raises the Sales mapping, which nobody holds, as missing;
+	// the two events raise the rest.
+	require.Len(t, items, 3)
+	require.Equal(t, directoryreview.KindSourceMissing, items[0].Kind)
+	require.Equal(t, "department=Sales", items[0].Source)
+	require.Equal(t, directoryreview.KindNewGroup, items[1].Kind)
+	require.Equal(t, "directory_group_review", items[1].Source)
+	require.Equal(t, directoryreview.KindNewAttributeValue, items[2].Kind)
+	require.Equal(t, "department=Engineering", items[2].Source)
+
+	other, err := testrepo.New(conn).ListDirectoryReviewItemsFixture(ctx, otherOrgID)
+	require.NoError(t, err)
+	require.Empty(t, other, "another organization's review is untouched")
 }

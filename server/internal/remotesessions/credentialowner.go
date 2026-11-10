@@ -93,6 +93,15 @@ func requireSelfClientCredential(state clientCredentialState) error {
 	return nil
 }
 
+// requireForwardClientNameOwner refuses the setting on a client with no user sign-in.
+func requireForwardClientNameOwner(owner CredentialOwner, forwardClientName *bool) error {
+	if owner == CredentialOwnerSelf && forwardClientName != nil && *forwardClientName {
+		return oops.E(oops.CodeBadRequest, nil, "a client with credential_owner self has no user sign-in, so it cannot send the MCP client's name")
+	}
+
+	return nil
+}
+
 // requireSelfClientIssuer refuses an issuer a self client cannot obtain a
 // credential from. The client_credentials grant needs only the token
 // endpoint, so an issuer entered by hand without discovery qualifies.

@@ -41,3 +41,22 @@ export const WithDisabledReason: Story = {
     ],
   },
 };
+
+export const AccessActions: Story = {
+  args: {
+    triggerAriaLabel: "Server access actions",
+    actions: [
+      {
+        label: "Remove access",
+        description: "Access from other roles still works.",
+        onClick: () => {},
+      },
+      {
+        label: "Block access",
+        description: "Deny access even when another role grants it.",
+        destructive: true,
+        onClick: () => {},
+      },
+    ],
+  },
+};

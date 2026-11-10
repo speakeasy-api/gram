@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -24,14 +23,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -175,6 +174,14 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayl
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	// Whether the organization has one organization-level issuer decides
+	// whether its organization gateway fronts every server, so this change
+	// re-decides associations in every project. Their writer scope precedes
+	// every row lock.
+	reconcileScope, err := upstreamclients.LockOrganizationScope(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock organization upstream client writer scope").LogError(ctx, logger)
+	}
 	q := repo.New(dbtx)
 
 	if _, err := q.GetOrganizationManagedUserSessionIssuerByID(ctx, repo.GetOrganizationManagedUserSessionIssuerByIDParams{ID: issuerID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
@@ -268,6 +275,12 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayl
 	moved, err := q.GetOrganizationManagedUserSessionIssuerWithProjectByID(ctx, repo.GetOrganizationManagedUserSessionIssuerWithProjectByIDParams{ID: updated.ID, OrganizationID: authCtx.ActiveOrganizationID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read moved user session issuer").LogError(ctx, logger)
+	}
+	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
+		if errors.Is(err, upstreamclients.ErrScopeChanged) {
+			return nil, err //nolint:wrapcheck // oops errors pass through.
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
@@ -421,6 +434,68 @@ func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orggen
 	return userSessionMigrationPreflightView(preflight), nil
 }
 
+// mergedCimdClients counts the source rows folded into the target issuer's
+// rows by mergeDuplicateCimdClients.
+type mergedCimdClients struct {
+	// clients is the number of source CIMD clients retired in favor of the
+	// target's row for the same metadata document URL.
+	clients int64
+
+	// consents is the number of source consents repointed to a target client
+	// or retired because the target already held the same consent.
+	consents int64
+}
+
+// mergeDuplicateCimdClients folds each source client resolved from a Client
+// ID Metadata Document into the target issuer's client for the same document
+// URL. Both rows describe one client, so the target row survives: its consents
+// win where the same subject approved the same upstream set on both issuers,
+// and every other consent and session moves to it. Each pair's steps run in
+// order, each seeing the previous step's writes.
+func mergeDuplicateCimdClients(ctx context.Context, q *repo.Queries, organizationID string, sourceIssuerID, targetIssuerID uuid.UUID) (mergedCimdClients, error) {
+	pairs, err := q.ListMergeableCimdClientPairs(ctx, repo.ListMergeableCimdClientPairsParams{TargetIssuerID: targetIssuerID, SourceIssuerID: sourceIssuerID, OrganizationID: organizationID})
+	if err != nil {
+		return mergedCimdClients{}, fmt.Errorf("list mergeable clients: %w", err)
+	}
+
+	merged := mergedCimdClients{clients: 0, consents: 0}
+	for _, pair := range pairs {
+		source, target := pair.SourceClientID, pair.TargetClientID
+
+		if _, err := q.MoveDuplicateConsentResourcesToClient(ctx, repo.MoveDuplicateConsentResourcesToClientParams{SourceClientID: source, TargetClientID: target}); err != nil {
+			return mergedCimdClients{}, fmt.Errorf("move consent resources of client %s: %w", source, err)
+		}
+
+		if _, err := q.RetireDuplicateConsentResources(ctx, repo.RetireDuplicateConsentResourcesParams{SourceClientID: source, TargetClientID: target}); err != nil {
+			return mergedCimdClients{}, fmt.Errorf("retire duplicate consent resources of client %s: %w", source, err)
+		}
+
+		retired, err := q.RetireDuplicateConsents(ctx, repo.RetireDuplicateConsentsParams{SourceClientID: source, TargetClientID: target})
+		if err != nil {
+			return mergedCimdClients{}, fmt.Errorf("retire duplicate consents of client %s: %w", source, err)
+		}
+
+		repointed, err := q.RepointConsentsToClient(ctx, repo.RepointConsentsToClientParams{SourceClientID: source, TargetClientID: target})
+		if err != nil {
+			return mergedCimdClients{}, fmt.Errorf("repoint consents of client %s: %w", source, err)
+		}
+
+		if _, err := q.RepointSessionsToClient(ctx, repo.RepointSessionsToClientParams{SourceClientID: source, TargetClientID: target}); err != nil {
+			return mergedCimdClients{}, fmt.Errorf("repoint sessions of client %s: %w", source, err)
+		}
+
+		clients, err := q.RetireMergedUserSessionClient(ctx, source)
+		if err != nil {
+			return mergedCimdClients{}, fmt.Errorf("retire client %s: %w", source, err)
+		}
+
+		merged.clients += clients
+		merged.consents += retired + repointed
+	}
+
+	return merged, nil
+}
+
 func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssuerPayload) (*orggen.MigrateOrganizationUserSessionIssuerResult, error) {
 	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
@@ -437,9 +512,10 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-	// Hosted toolset saves take this lock before issuer and toolset locks.
-	if err := networkingressrepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle").LogError(ctx, logger)
+	// An inherited issuer can gain its first server in another project. Protect
+	// discovery before any ingress/issuer locks; never upgrade a shared gate.
+	if err := authclientbackfill.New(dbtx).LockEMAGatewayReachWriter(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock issuer migration reach").LogError(ctx, logger)
 	}
 	q := repo.New(dbtx)
 	source, target, err := loadUserSessionMigrationPair(ctx, q, authCtx.ActiveOrganizationID, sourceID, targetID, false)
@@ -448,6 +524,24 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 			return nil, oops.E(oops.CodeNotFound, err, "source or target user session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogError(ctx, logger)
+	}
+	lockProjects, err := q.ListMCPServerProjectIDsForUserSessionIssuerMigration(ctx, repo.ListMCPServerProjectIDsForUserSessionIssuerMigrationParams{
+		SourceIssuerID: conv.ToNullUUID(source.ID), TargetIssuerID: conv.ToNullUUID(target.ID), OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "discover issuer migration writer scope").LogError(ctx, logger)
+	}
+	for _, issuer := range []repo.UserSessionIssuer{source, target} {
+		if issuer.ProjectID.Valid {
+			lockProjects = append(lockProjects, issuer.ProjectID.UUID)
+		}
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, lockProjects); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock issuer migration writer scope").LogError(ctx, logger)
+	}
+	// Hosted toolset saves take this lock before issuer and toolset locks.
+	if err := networkingressrepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle").LogError(ctx, logger)
 	}
 	if err := lockUserSessionIssuersForMigration(ctx, q, source.ID, target.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock issuers for migration").LogError(ctx, logger)
@@ -476,6 +570,11 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err := q.LockUserSessionIssuerClientsForMigration(ctx, source.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock source user session clients").LogError(ctx, logger)
 	}
+	// Merged CIMD clients take their consents onto the target's rows, so a
+	// consent recorded on a target client mid-migration must wait.
+	if err := q.LockUserSessionIssuerClientsForMigration(ctx, target.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock target user session clients").LogError(ctx, logger)
+	}
 	preflight, err := s.buildUserSessionMigrationPreflight(ctx, q, authCtx.ActiveOrganizationID, source, target)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build user session issuer migrate preflight").LogError(ctx, logger)
@@ -485,6 +584,11 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	}
 	if preflight.warningsFingerprint != "" && (payload.ConfirmedWarningsFingerprint == nil || *payload.ConfirmedWarningsFingerprint != preflight.warningsFingerprint) {
 		return nil, oops.E(oops.CodeConflict, nil, "user session issuer migration warnings have not been confirmed or changed; refresh the preflight and confirm its exact warnings fingerprint").LogError(ctx, logger)
+	}
+
+	merged, err := mergeDuplicateCimdClients(ctx, q, authCtx.ActiveOrganizationID, source.ID, target.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "merge duplicate CIMD user session clients").LogError(ctx, logger)
 	}
 
 	targetProjectID := target.ProjectID
@@ -500,6 +604,10 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate user sessions").LogError(ctx, logger)
 	}
+	// Merged clients and their consents now live on the target's rows, so they
+	// count as migrated alongside the rows that moved as they were.
+	clientsMigrated += merged.clients
+	consentsMigrated += merged.consents
 	if _, err := q.MergeDuplicateUserSessionIssuerCimdClients(ctx, repo.MergeDuplicateUserSessionIssuerCimdClientsParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "merge duplicate CIMD clients").LogError(ctx, logger)
 	}
@@ -528,19 +636,19 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list MCP server projects for issuer migration").LogError(ctx, logger)
 	}
-	if err := migrateHostedToolsetsToUserSessionIssuer(ctx, logger, dbtx, s.audit, s.hostedSync, authCtx, source.ID, target.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "migrate hosted MCP servers").LogError(ctx, logger)
-	}
 	ownerUpdates := []struct {
 		name string
 		fn   func() (int64, error)
 	}{
-		// Toolsets before mcp_servers: hosted wrappers mirror their toolset under that lock order.
-		{name: "toolsets", fn: func() (int64, error) {
-			return q.UpdateToolsetsToUserSessionIssuer(ctx, repo.UpdateToolsetsToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
-		}},
 		{name: "MCP servers", fn: func() (int64, error) {
-			return q.UpdateMCPServersToUserSessionIssuer(ctx, repo.UpdateMCPServersToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
+			moved, err := q.UpdateMCPServersToUserSessionIssuer(ctx, repo.UpdateMCPServersToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
+			if err != nil {
+				return 0, fmt.Errorf("move MCP servers: %w", err)
+			}
+			if err := auditHostedIssuerMoves(ctx, dbtx, s.audit, authCtx, moved, source.ID); err != nil {
+				return 0, err
+			}
+			return int64(len(moved)), nil
 		}},
 		{name: "meta MCP servers", fn: func() (int64, error) {
 			return q.UpdateMetaMCPServersToUserSessionIssuer(ctx, repo.UpdateMetaMCPServersToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
@@ -555,6 +663,12 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		}
 	}
 	for _, projectID := range mcpServerProjectIDs {
+		// The migration moves the servers onto the target, which configures
+		// their sign-in there, so a server that is the target's only consumer
+		// offers the clients bound to it.
+		if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{target.ID}, nil); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "capture MCP server upstream clients").LogError(ctx, logger)
+		}
 		if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{source.ID, target.ID}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resync MCP server remote session issuers").LogError(ctx, logger)
 		}
@@ -586,118 +700,23 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	}, nil
 }
 
-// migrateHostedToolsetsToUserSessionIssuer moves each hosted toolset like a toolset save: column write, then wrapper Sync with its audit.
-// Sync runs only where it would change nothing but the issuer; every other wrapper keeps the bulk issuer update, as before.
-// Lock order matches UpdateToolset: toolsets in id order, then their domains in one sorted pass, then each wrapper's endpoints and row.
-func migrateHostedToolsetsToUserSessionIssuer(ctx context.Context, logger *slog.Logger, tx pgx.Tx, auditLogger *audit.Logger, syncWrapper HostedSyncFunc, authCtx *contextvalues.AuthContext, sourceID, targetID uuid.UUID) error {
-	toolsets := toolsetsrepo.New(tx)
-	locked, err := toolsets.LockHostedToolsetsByUserSessionIssuer(ctx, toolsetsrepo.LockHostedToolsetsByUserSessionIssuerParams{
-		OrganizationID: authCtx.ActiveOrganizationID, UserSessionIssuerID: sourceID,
-	})
-	if err != nil {
-		return fmt.Errorf("lock hosted toolsets: %w", err)
-	}
-	if len(locked) == 0 {
-		return nil
-	}
-	endpoints := mcpendpointsrepo.New(tx)
-	updated := make([]toolsetsrepo.Toolset, 0, len(locked))
-	domainIDs := make([]uuid.NullUUID, 0, len(locked))
-	for _, toolset := range locked {
-		row, err := toolsets.UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-			UserSessionIssuerID: conv.ToNullUUID(targetID), Slug: toolset.Slug, ProjectID: toolset.ProjectID,
-		})
-		if err != nil {
-			return fmt.Errorf("update hosted toolset %s: %w", toolset.ID, err)
-		}
-		updated = append(updated, row)
-		domainIDs = append(domainIDs, row.CustomDomainID)
-		endpointDomainIDs, err := endpoints.ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{McpServerID: row.ID, ProjectID: row.ProjectID})
-		if err != nil {
-			return fmt.Errorf("list hosted MCP domains %s: %w", row.ID, err)
-		}
-		for _, id := range endpointDomainIDs {
-			domainIDs = append(domainIDs, conv.ToNullUUID(id))
-		}
-	}
-	dead, err := hostedmcp.LockDomains(ctx, tx, authCtx.ActiveOrganizationID, domainIDs...)
-	if err != nil {
-		return fmt.Errorf("lock hosted MCP domains: %w", err)
-	}
-	// An issuer migration must not change a URL, name or plugin entry, so drifted wrappers keep the bulk issuer update.
-	skipped := map[uuid.UUID]bool{}
-	servers := mcpserversrepo.New(tx)
-	for _, toolset := range updated {
-		wrapperEndpoints, err := endpoints.LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{McpServerID: toolset.ID, ProjectID: toolset.ProjectID})
-		if err != nil {
-			return fmt.Errorf("lock hosted MCP endpoints %s: %w", toolset.ID, err)
-		}
-		wrapper, err := servers.LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
-		if err != nil {
-			return fmt.Errorf("lock hosted MCP server %s: %w", toolset.ID, err)
-		}
-		drift := hostedmcp.NonIssuerDrift(toolset, wrapper, wrapperEndpoints, dead)
-		// Only wrappers the bulk update would move take Sync; one on another issuer stays where it is.
-		if wrapper.UserSessionIssuerID != conv.ToNullUUID(sourceID) {
-			drift = append(drift, "user_session_issuer")
-		}
-		if len(drift) > 0 {
-			logger.WarnContext(ctx, "hosted MCP server drifted from its toolset; issuer migration skips its sync; the wrapper moves only if it is on the source issuer", attr.SlogToolsetID(toolset.ID.String()), attr.SlogReason(strings.Join(drift, ",")))
-			skipped[toolset.ID] = true
-		}
-	}
+// auditHostedIssuerMoves records each hosted server the bulk issuer move changed as its own update.
+func auditHostedIssuerMoves(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, moved []repo.UpdateMCPServersToUserSessionIssuerRow, sourceID uuid.UUID) error {
 	actor := hostedmcp.Actor{UserID: authCtx.UserID, Email: authCtx.Email, System: ""}
-	// One savepoint per attempt, not per toolset, keeps the subtransaction count bounded.
-	for range maxHostedSyncAttempts {
-		rejected, err := syncHostedToolsetsInSavepoint(ctx, tx, auditLogger, syncWrapper, actor, updated, skipped)
-		if err != nil {
-			return err
-		}
-		if rejected == nil {
-			return nil
-		}
-		logger.WarnContext(ctx, "hosted MCP sync rejected during issuer migration; falling back to issuer-only update", attr.SlogToolsetID(rejected.toolsetID.String()), attr.SlogError(rejected.err))
-		skipped[rejected.toolsetID] = true
-	}
-	logger.WarnContext(ctx, "too many hosted MCP sync rejections during issuer migration; falling back to issuer-only updates")
-	return nil
-}
-
-const maxHostedSyncAttempts = 4
-
-// HostedSyncFunc syncs one hosted wrapper during an issuer migration; the migration's per-project pass resyncs remote issuers.
-type HostedSyncFunc func(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor hostedmcp.Actor, toolset toolsetsrepo.Toolset) ([]uuid.UUID, error)
-
-var errHostedSyncClearedRoot = errors.New("hosted MCP sync would clear a custom domain root")
-
-type hostedSyncRejection struct {
-	toolsetID uuid.UUID
-	err       error
-}
-
-// syncHostedToolsetsInSavepoint syncs every non-skipped toolset, rolling all of them back on the first rejection.
-func syncHostedToolsetsInSavepoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, syncWrapper HostedSyncFunc, actor hostedmcp.Actor, toolsets []toolsetsrepo.Toolset, skipped map[uuid.UUID]bool) (*hostedSyncRejection, error) {
-	savepoint, err := tx.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin hosted MCP sync savepoint: %w", err)
-	}
-	for _, toolset := range toolsets {
-		if skipped[toolset.ID] {
+	for _, row := range moved {
+		if !row.Canonical {
 			continue
 		}
-		cleared, syncErr := syncWrapper(ctx, savepoint, auditLogger, actor, toolset)
-		if syncErr == nil && len(cleared) > 0 {
-			syncErr = errHostedSyncClearedRoot
+		after, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: row.ID, ProjectID: row.ProjectID})
+		if err != nil {
+			return fmt.Errorf("load moved hosted MCP server: %w", err)
 		}
-		if syncErr != nil {
-			if err := savepoint.Rollback(ctx); err != nil {
-				return nil, fmt.Errorf("roll back hosted MCP sync savepoint: %w", err)
-			}
-			return &hostedSyncRejection{toolsetID: toolset.ID, err: syncErr}, nil
+		before := after
+		before.UserSessionIssuerID = conv.ToNullUUID(sourceID)
+		before.UpdatedAt = row.PreviousUpdatedAt
+		if err := hostedmcp.LogUpdate(ctx, tx, auditLogger, actor, authCtx.ActiveOrganizationID, before, after); err != nil {
+			return fmt.Errorf("audit hosted MCP issuer move: %w", err)
 		}
 	}
-	if err := savepoint.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("release hosted MCP sync savepoint: %w", err)
-	}
-	return nil, nil
+	return nil
 }

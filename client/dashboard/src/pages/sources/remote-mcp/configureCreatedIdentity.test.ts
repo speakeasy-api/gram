@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Gram } from "@gram/client";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
@@ -128,7 +129,7 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     expect(result).toMatchObject({
       status: "setup-required",
       message:
-        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
+        "The shared credential was configured, but the server could not be enabled. Enable it from Settings.",
     });
     expect(mocks.createHeader).toHaveBeenCalledOnce();
   });
@@ -246,6 +247,25 @@ describe("configureCreatedRemoteMcpIdentity", () => {
       status: "setup-required",
       mcpServer: { visibility: "disabled" },
       message: expect.stringContaining("Settings > Identity"),
+    });
+    expect(mocks.updateServer).not.toHaveBeenCalled();
+  });
+
+  it("names organization admin when the commit is forbidden", async () => {
+    mocks.commit.mockRejectedValue(
+      Object.assign(new Error("forbidden"), { statusCode: 403 }),
+    );
+
+    const result = await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "user",
+    });
+
+    expect(result).toMatchObject({
+      status: "setup-required",
+      message: expect.stringContaining("organization admin"),
     });
     expect(mocks.updateServer).not.toHaveBeenCalled();
   });

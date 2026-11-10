@@ -4,6 +4,11 @@ info:
   title: Dashboard SDK policy
   version: 0.0.0
 actions:
+  # These two-field union tags determine which schedule dates are required.
+  # Opening them lets malformed schedules match a branch that has no dates.
+  - target: $.components.schemas['KillswitchScheduleStartNow','KillswitchScheduleStartScheduled','KillswitchScheduleEndUntilLifted','KillswitchScheduleEndBounded']
+    update:
+      x-speakeasy-unknown-values: disallow
   # Keep the legacy HTTP route for already-open tabs, not for new SDK callers.
   - target: $.paths["/rpc/access.setDirectoryRoleMapping"]
     remove: true

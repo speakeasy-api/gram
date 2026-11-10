@@ -24,7 +24,6 @@ export type CreatePromptTemplateFormEngine = ClosedEnum<
  */
 export const CreatePromptTemplateFormKind = {
   Prompt: "prompt",
-  HigherOrderTool: "higher_order_tool",
 } as const;
 /**
  * The kind of prompt the template is used for

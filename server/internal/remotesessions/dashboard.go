@@ -61,6 +61,8 @@ type serverIdentityRequest struct {
 	// registrationMethod is "dcr" when auto mode must skip CIMD; otherwise it
 	// is empty or "cimd", both of which prefer CIMD.
 	registrationMethod string
+	// replacement is the explicit choice to replace the provider's bound client.
+	replacement *ClientReplacement
 }
 
 func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload *gen.CommitServerIdentityConfigurationPayload) (*gen.CommitServerIdentityConfigurationResult, error) {
@@ -78,6 +80,11 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	if err != nil {
 		return nil, err
 	}
+	if payload.TargetServerOnly != nil && *payload.TargetServerOnly {
+		if err := requireSingleServerIssuer(ctx, s.db, authCtx.ActiveOrganizationID, target); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.checkServerIdentityRequest(ctx, logger, authCtx, &req, target); err != nil {
 		return nil, err
 	}
@@ -87,7 +94,11 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	if req.clientMode == serverIdentityClientModeAuto {
 		registrationResource = s.registrationResource(ctx, logger, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.ID)
 	}
-	plan := req.plan(authCtx, target, registrationResource)
+	orgAdmin, err := s.actorIsOrganizationAdmin(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check organization admin access").LogError(ctx, logger)
+	}
+	plan := req.plan(authCtx, orgAdmin, target, registrationResource)
 	commit := s.identity.Prepare(plan)
 	if err := commit.Preflight(ctx); err != nil {
 		return nil, identityOopsError(err, "check identity configuration").LogError(ctx, logger)
@@ -113,6 +124,11 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	}
 	if err := commit.Lock(ctx, tx); err != nil {
 		return nil, identityOopsError(err, "lock identity configuration").LogError(ctx, logger)
+	}
+	if payload.TargetServerOnly != nil && *payload.TargetServerOnly {
+		if err := requireSingleServerIssuer(ctx, tx.DB(), authCtx.ActiveOrganizationID, target); err != nil {
+			return nil, err
+		}
 	}
 	if err := commit.Bind(ctx, tx, reg); err != nil {
 		return nil, identityOopsError(err, "bind identity client").LogError(ctx, logger)
@@ -151,6 +167,13 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 	// this commit rewrites is keyed by issuer, and ResyncMCPServerRemoteSessionIssuers
 	// re-stamps every server carrying that issuer, so write access to the named
 	// target alone would let a caller repoint its siblings.
+	// A replacement moves the servers it names, which need not share the issuer:
+	// one can reach the client through a gateway or an organization issuer.
+	if req.replacement != nil {
+		for _, id := range req.replacement.ServerIDs {
+			checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), target.ProjectID.String()))
+		}
+	}
 	if target.UserSessionIssuerID.Valid {
 		sharing, err := mcpRepo.ListMCPServerIDsByUserSessionIssuerID(ctx, mcpserversrepo.ListMCPServerIDsByUserSessionIssuerIDParams{
 			ProjectID:           *authCtx.ProjectID,
@@ -170,6 +193,18 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 		return mcpserversrepo.McpServer{}, err
 	}
 	return target, nil
+}
+
+// actorIsOrganizationAdmin reports whether the caller holds organization admin,
+// which the organization's own client settings require and which lets a
+// project-level commit change bindings every project on an organization-level
+// user session issuer shares.
+func (s *Service) actorIsOrganizationAdmin(ctx context.Context, organizationID string) (bool, error) {
+	admin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil})
+	if err != nil {
+		return false, fmt.Errorf("evaluate organization admin: %w", err)
+	}
+	return admin, nil
 }
 
 // checkServerIdentityRequest checks what only this flow knows about: the MCP
@@ -231,10 +266,11 @@ func (s *Service) registrationResource(ctx context.Context, logger *slog.Logger,
 	return &out
 }
 
-// plan describes the request as an identity plan: the server's current
-// clients are replaced by the requested one. registrationResource is what a
-// registered client without scopes will discover at login.
-func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target mcpserversrepo.McpServer, registrationResource *ResourceScopes) IdentityPlan {
+// plan describes the request as an identity plan: this server moves to the
+// requested client, and no client another server uses is unbound.
+// registrationResource is what a registered client without scopes will discover
+// at login.
+func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, orgAdmin bool, target mcpserversrepo.McpServer, registrationResource *ResourceScopes) IdentityPlan {
 	provider := UseProvider(r.providerID)
 	if r.createProvider != nil {
 		provider = CreateProvider(createServerIdentityProviderParams(*authCtx.ProjectID, authCtx.ActiveOrganizationID, r.createProvider, r.logoAssetID))
@@ -272,12 +308,15 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 			ActorDisplayName: authCtx.Email,
 			// Gates tunnel-bound registration, which reaches a private network.
-			ActorIsPlatformAdmin: authCtx.IsAdmin,
+			ActorIsPlatformAdmin:     authCtx.IsAdmin,
+			ActorIsOrganizationAdmin: orgAdmin,
 		},
 		UserSessionIssuerID: target.UserSessionIssuerID.UUID,
+		MCPServerID:         target.ID,
 		Provider:            provider,
 		Client:              client,
 		Bound:               ReplaceBound,
+		Replacement:         r.replacement,
 		ResourceDisplay:     nil,
 	}
 }
@@ -333,9 +372,9 @@ func identityOopsError(err error, message string) *oops.ShareableError {
 		code = oops.CodeNotFound
 	case errors.Is(refusal.Kind, ErrIdentityInvalid):
 		code = oops.CodeBadRequest
-	case errors.Is(refusal.Kind, ErrIdentityForbidden):
+	case errors.Is(refusal.Kind, ErrIdentityForbidden), errors.Is(refusal.Kind, ErrIdentityOrgWideBinding):
 		code = oops.CodeForbidden
-	case errors.Is(refusal.Kind, ErrIdentityConflict), errors.Is(refusal.Kind, ErrIdentityOrgWideBinding):
+	case errors.Is(refusal.Kind, ErrIdentityConflict):
 		code = oops.CodeConflict
 	case errors.Is(refusal.Kind, ErrIdentityInvariant):
 		code = oops.CodeInvariantViolation
@@ -350,8 +389,10 @@ func (s *Service) serverIdentityResultView(res IdentityResult, clientMode string
 	}
 	providerTier := scopeOf(res.Provider).String()
 	clientTier := conv.Ternary(res.Client.ProjectID.Valid, "project-specific", "organization-level")
-	status := conv.Ternary(clientMode == serverIdentityClientModeExisting, serverIdentityStatusLinked, serverIdentityStatusRegistered)
-	method := string(res.Method)
+	status := conv.Ternary(clientMode == serverIdentityClientModeExisting || res.Reused, serverIdentityStatusLinked, serverIdentityStatusRegistered)
+	// Reusing the provider's bound client links a stored client, as far as the
+	// caller can tell.
+	method := conv.Ternary(res.Reused, string(RegistrationLinked), string(res.Method))
 	providerPath := serverIdentityProviderPath(res.Provider.ID)
 	clientPath := serverIdentityClientPath(res.Provider.ID, res.Client.ID)
 	return &gen.CommitServerIdentityConfigurationResult{
@@ -378,6 +419,20 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 		clientMode:          payload.ClientMode,
 		clientConfiguration: payload.ClientConfiguration,
 		registrationMethod:  conv.PtrValOr(payload.RegistrationMethod, ""),
+		replacement:         nil,
+	}
+	if conv.PtrValOr(payload.ReplaceClient, false) {
+		serverIDs := make([]uuid.UUID, 0, len(payload.ReplaceClientServerIds))
+		for _, raw := range payload.ReplaceClientServerIds {
+			serverID, err := uuid.Parse(raw)
+			if err != nil {
+				return serverIdentityRequest{}, fmt.Errorf("parse replace_client_server_ids: %w", err)
+			}
+			serverIDs = append(serverIDs, serverID)
+		}
+		req.replacement = &ClientReplacement{ServerIDs: serverIDs}
+	} else if len(payload.ReplaceClientServerIds) > 0 {
+		return serverIdentityRequest{}, errors.New("replace_client_server_ids requires replace_client")
 	}
 	var err error
 	req.mcpServerID, err = uuid.Parse(payload.McpServerID)
@@ -586,4 +641,21 @@ func serverIdentityProviderPath(providerID uuid.UUID) string {
 
 func serverIdentityClientPath(providerID, clientID uuid.UUID) string {
 	return serverIdentityProviderPath(providerID) + "/clients/" + clientID.String()
+}
+
+// requireSingleServerIssuer fails before registration and again under the
+// issuer lock. A setup save must never repoint sibling servers, even when the
+// caller has permission to change them all.
+func requireSingleServerIssuer(ctx context.Context, db repo.DBTX, organizationID string, target mcpserversrepo.McpServer) error {
+	if !target.UserSessionIssuerID.Valid {
+		return nil
+	}
+	servers, err := repo.New(db).ListOrganizationMCPServersForUserSessionIssuer(ctx, repo.ListOrganizationMCPServersForUserSessionIssuerParams{OrganizationID: organizationID, UserSessionIssuerID: target.UserSessionIssuerID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "Could not check shared sign-in configuration.")
+	}
+	if len(servers) != 1 || servers[0].ID != target.ID {
+		return oops.E(oops.CodeConflict, nil, "This server shares its sign-in configuration. Assign a dedicated User Identity issuer in server settings before saving setup credentials.")
+	}
+	return nil
 }

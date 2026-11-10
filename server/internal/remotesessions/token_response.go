@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 )
 
@@ -50,30 +51,39 @@ func (w *tokenResponseWire) UnmarshalJSON(data []byte) error {
 	var decoded plain
 	response := struct {
 		*plain
-		ExpiresIn json.RawMessage `json:"expires_in"`
-	}{plain: &decoded, ExpiresIn: nil}
+		ExpiresIn              json.RawMessage `json:"expires_in"`
+		RefreshTokenTimeout    json.RawMessage `json:"refresh_token_timeout"`
+		AuthorizationExpiresIn json.RawMessage `json:"authorization_expires_in"`
+		RefreshExpiresIn       json.RawMessage `json:"refresh_expires_in"`
+		RefreshTokenExpiresIn  json.RawMessage `json:"refresh_token_expires_in"`
+	}{plain: &decoded, ExpiresIn: nil, RefreshTokenTimeout: nil, AuthorizationExpiresIn: nil, RefreshExpiresIn: nil, RefreshTokenExpiresIn: nil}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return fmt.Errorf("decode token response fields: %w", err)
 	}
-	// Some providers encode expires_in as a string, including zero-padded values.
-	// Both forms must be non-negative integers that fit int and time.Duration
-	// when converted to seconds; missing and null retain the zero default.
-	raw := bytes.TrimSpace(response.ExpiresIn)
-	if len(raw) > 0 && string(raw) != "null" {
-		value := string(raw)
-		if raw[0] == '"' {
-			if err := json.Unmarshal(raw, &value); err != nil {
-				return fmt.Errorf("decode token response expires_in: %w", err)
-			}
-		}
-		seconds, err := strconv.Atoi(value)
-		if err != nil || seconds < 0 || int64(seconds) > int64((1<<63-1)/time.Second) {
-			return errors.New("token response expires_in must be an integer within range")
-		}
-		decoded.ExpiresIn = seconds
+	if seconds := decodeLifetime(response.ExpiresIn); seconds != nil && usableLifetime(*seconds) && *seconds <= int64(^uint(0)>>1) {
+		decoded.ExpiresIn = int(*seconds)
 	}
+	decoded.RefreshTokenTimeout = decodeLifetime(response.RefreshTokenTimeout)
+	decoded.AuthorizationExpiresIn = decodeLifetime(response.AuthorizationExpiresIn)
+	decoded.RefreshExpiresIn = conv.PtrValOr(decodeLifetime(response.RefreshExpiresIn), 0)
+	decoded.RefreshTokenExpiresIn = conv.PtrValOr(decodeLifetime(response.RefreshTokenExpiresIn), 0)
 	*w = tokenResponseWire(decoded)
 	return nil
+}
+
+// decodeLifetime reads an integer or integer string; anything else is unreported, so it cannot discard a token response.
+func decodeLifetime(raw json.RawMessage) *int64 {
+	value := string(bytes.TrimSpace(raw))
+	if len(value) > 0 && value[0] == '"' {
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return nil
+		}
+	}
+	seconds, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return nil
+	}
+	return &seconds
 }
 
 func (t *tokenResponse) UnmarshalJSON(data []byte) error {
@@ -195,22 +205,35 @@ func (t tokenResponse) Scopes() []string {
 	return strings.Fields(t.Scope)
 }
 
+// scopesForIssuer preserves RFC 6749 scope parsing except for Slack's official
+// MCP issuer, whose token endpoint reports a comma-separated grant.
+func (t tokenResponse) scopesForIssuer(issuer string) []string {
+	if issuerURLsCanonicallyEqual(issuer, "https://mcp.slack.com") {
+		return strings.Fields(strings.ReplaceAll(t.Scope, ",", " "))
+	}
+	return t.Scopes()
+}
+
 // ScopeReported distinguishes omission from Speakeasy's compatibility exception: an explicitly empty token-response scope.
 func (t tokenResponse) ScopeReported() bool {
 	return t.scopePresent
 }
 
+// usableLifetime reports whether a provider's lifetime in seconds can be a deadline.
+func usableLifetime(seconds int64) bool {
+	return seconds > 0 && seconds <= int64((1<<63-1)/time.Second)
+}
+
 // RefreshTokenTimeoutSeconds normalizes the standard sliding idle timeout and
-// two common provider aliases. The boolean distinguishes an omitted value from
-// an explicit zero-second timeout.
+// two common provider aliases. The boolean is false when no value is usable.
 func (t tokenResponse) RefreshTokenTimeoutSeconds() (int64, bool) {
-	if t.RefreshTokenTimeout != nil {
+	if t.RefreshTokenTimeout != nil && usableLifetime(*t.RefreshTokenTimeout) {
 		return *t.RefreshTokenTimeout, true
 	}
-	if t.RefreshExpiresIn > 0 {
+	if usableLifetime(t.RefreshExpiresIn) {
 		return t.RefreshExpiresIn, true
 	}
-	if t.RefreshTokenExpiresIn > 0 {
+	if usableLifetime(t.RefreshTokenExpiresIn) {
 		return t.RefreshTokenExpiresIn, true
 	}
 	return 0, false
@@ -245,9 +268,9 @@ func (t tokenResponse) AccessExpiresAt(now time.Time) *time.Time {
 }
 
 // AuthorizationLifetimeSeconds is the remaining absolute lifetime of the
-// upstream authorization, when the provider reports it.
+// upstream authorization, when the provider reports a usable one.
 func (t tokenResponse) AuthorizationLifetimeSeconds() (int64, bool) {
-	if t.AuthorizationExpiresIn == nil {
+	if t.AuthorizationExpiresIn == nil || !usableLifetime(*t.AuthorizationExpiresIn) {
 		return 0, false
 	}
 	return *t.AuthorizationExpiresIn, true

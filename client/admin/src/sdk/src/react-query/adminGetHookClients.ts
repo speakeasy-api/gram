@@ -56,7 +56,7 @@ export type AdminGetHookClientsQueryError =
  * getHookClients admin
  *
  * @remarks
- * Fleet-wide hook client grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, and inference hook traffic per Claude app.
+ * Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.
  */
 export function useAdminGetHookClients(
   request?: AdminGetHookClientsRequest | undefined,
@@ -80,7 +80,7 @@ export function useAdminGetHookClients(
  * getHookClients admin
  *
  * @remarks
- * Fleet-wide hook client grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, and inference hook traffic per Claude app.
+ * Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.
  */
 export function useAdminGetHookClientsSuspense(
   request?: AdminGetHookClientsRequest | undefined,

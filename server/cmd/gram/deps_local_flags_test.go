@@ -15,7 +15,7 @@ import (
 // flags.csv relies on: the header names four columns while rows carry three
 // or four, a three-column row still sets its boolean, and only a non-empty
 // fourth column sets a variant.
-func TestNewLocalFeatureFlagsAcceptsRowsWithAndWithoutVariant(t *testing.T) { //nolint:paralleltest // changes the working directory
+func TestNewLocalFeatureFlagsAcceptsRowsWithAndWithoutVariant(t *testing.T) {
 	t.Chdir(t.TempDir())
 	wd, err := os.Getwd()
 	require.NoError(t, err)
@@ -26,7 +26,7 @@ func TestNewLocalFeatureFlagsAcceptsRowsWithAndWithoutVariant(t *testing.T) { //
 			"org_four,gram-risk-llm-analyzer,true,shadow\n"+
 			"# a comment line\n"+
 			"org_empty,gram-risk-llm-analyzer,true,\n"+
-			"org_off,gram-risk-watchdog,false\n"+
+			"org_off,gram-explore,false\n"+
 			"org_no_pubsub,risk-enforcement-pubsub,false\n",
 	), 0o600))
 
@@ -41,7 +41,7 @@ func TestNewLocalFeatureFlagsAcceptsRowsWithAndWithoutVariant(t *testing.T) { //
 		{distinctID: "org_three", flag: feature.FlagRiskLLMAnalyzer, enabled: true, variant: ""},
 		{distinctID: "org_four", flag: feature.FlagRiskLLMAnalyzer, enabled: true, variant: feature.VariantRiskLLMShadow},
 		{distinctID: "org_empty", flag: feature.FlagRiskLLMAnalyzer, enabled: true, variant: ""},
-		{distinctID: "org_off", flag: feature.FlagRiskWatchdog, enabled: false, variant: ""},
+		{distinctID: "org_off", flag: feature.FlagExplore, enabled: false, variant: ""},
 		{distinctID: "org_three", flag: feature.FlagRiskEnforcementPubsub, enabled: true, variant: ""},
 		{distinctID: "org_no_pubsub", flag: feature.FlagRiskEnforcementPubsub, enabled: false, variant: ""},
 	} {

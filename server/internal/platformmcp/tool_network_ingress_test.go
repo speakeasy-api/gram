@@ -101,7 +101,7 @@ func TestSafeNetworkIngressErrorCodeWithholdsFreeText(t *testing.T) {
 
 func TestNetworkIngressNextActionNamesTheFirstBlockingStep(t *testing.T) {
 	t.Parallel()
-	ready := NetworkIngressSummary{Enabled: true, CredentialsConfigured: true, Status: "online", DNSName: "private-mcp.example.ts.net"}
+	ready := NetworkIngressSummary{Provider: "tailscale", Enabled: true, CredentialsConfigured: true, Status: "online", DNSName: "private-mcp.example.ts.net"}
 	with := func(mutate func(*NetworkIngressSummary)) *NetworkIngressSummary {
 		value := ready
 		mutate(&value)
@@ -114,6 +114,9 @@ func TestNetworkIngressNextActionNamesTheFirstBlockingStep(t *testing.T) {
 	}{
 		{"not entitled wins over a ready ingress", GetNetworkIngressOutput{Entitled: false, Ingress: &ready}, networkIngressNextRequestEntitlement},
 		{"entitled without ingress", GetNetworkIngressOutput{Entitled: true}, networkIngressNextConfigure},
+		{"unknown provider otherwise ready", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Provider = "future-provider" })}, networkIngressNextUnsupportedProvider},
+		{"unknown provider missing credentials", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Provider = "future-provider"; i.CredentialsConfigured = false })}, networkIngressNextUnsupportedProvider},
+		{"missing provider", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Provider = "" })}, networkIngressNextUnsupportedProvider},
 		{"missing credentials", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.CredentialsConfigured = false })}, networkIngressNextAddCredentials},
 		{"disabled", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Enabled = false; i.Status = "disabled" })}, networkIngressNextEnable},
 		{"error", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Status = "error" })}, networkIngressNextRepair},
@@ -219,4 +222,46 @@ func TestGetNetworkIngressReportsLiveStateWithoutCredentials(t *testing.T) {
 	require.False(t, other.Entitled)
 	require.False(t, other.Configured)
 	require.Nil(t, other.Ingress)
+}
+
+func TestGetNetworkIngressDoesNotReportUnknownProviderReady(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_unknown_ingress")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	_, err = featurerepo.New(conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{
+		OrganizationID: principal.OrganizationID,
+		FeatureName:    string(productfeatures.FeatureNetworkIngress),
+	})
+	require.NoError(t, err)
+	attestor := "attestor-" + uuid.NewString()[:8]
+	created, err := networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
+		ID: uuid.New(), OrganizationID: principal.OrganizationID,
+		Provider: "future-provider", Hostname: "private-mcp", EndpointNamespaceKind: "platform",
+		Enabled: true, CredentialsEncrypted: pgtype.Text{String: "sentinel-encrypted-credentials", Valid: true},
+		AttestorNamespace: attestor, AttestorServiceAccount: attestor,
+		ProviderResources: []byte(`{}`),
+	})
+	require.NoError(t, err)
+	updated, err := networkingressrepo.New(conn).RecordNetworkIngressObservation(ctx, networkingressrepo.RecordNetworkIngressObservationParams{
+		Status: "online", DnsName: pgtype.Text{String: "private-mcp.example.test", Valid: true},
+		ID: created.ID, OrganizationID: principal.OrganizationID, ExpectedUpdatedAt: created.UpdatedAt,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, updated)
+	service := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithNetworkIngressStatus(mustParseURL(t, "https://app.getgram.test")).networkIngress
+	got, err := service.Get(ctx, principal)
+	require.NoError(t, err)
+	require.True(t, got.Entitled)
+	require.True(t, got.Configured)
+	require.NotNil(t, got.Ingress)
+	require.Equal(t, "future-provider", got.Ingress.Provider)
+	require.Equal(t, "online", got.Ingress.Status)
+	require.True(t, got.Ingress.Enabled)
+	require.True(t, got.Ingress.CredentialsConfigured)
+	require.Equal(t, "private-mcp.example.test", got.Ingress.DNSName)
+	require.False(t, got.ReadyForPrivateAccess)
+	require.Equal(t, networkIngressNextUnsupportedProvider, got.NextAction)
 }

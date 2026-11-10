@@ -96,9 +96,32 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 ### Dashboard browser automation
 
-Use the `gram-playwright-cli` skill and `mise run playwright` for routine dashboard inspection, page interaction, console or network debugging, and screenshots. The mise task uses the repository Playwright config, installs Chromium when missing, and writes ignored artifacts to `.playwright-cli/`.
+Use the `gram-playwright-cli` skill and `mise run playwright` for routine dashboard inspection, page interaction, console or network debugging, and screenshots. The mise task uses the repository Playwright config, launches the system Google Chrome with its sandbox enabled, and writes ignored artifacts to `.playwright-cli/`.
+
+The Playwright MCP server (`.mcp.json`, `opencode.json`, `.codex/config.toml`) uses the same sandboxed system Chrome. Neither the MCP server nor `mise run playwright` installs Chrome: both fail until it is present. Installing Chrome needs root, so an agent cannot do it on its own; install it once yourself. On macOS, use Google's standard installer. On Debian or Ubuntu, add Google's signed apt repository, check the key fingerprint against the one on https://www.google.com/linuxrepositories/, then install `google-chrome-stable`:
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo tee /etc/apt/keyrings/google-chrome.asc >/dev/null
+gpg --show-keys --with-fingerprint /etc/apt/keyrings/google-chrome.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/google-chrome.asc] https://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+sudo apt update && sudo apt install --no-install-recommends google-chrome-stable
+```
+
+On Ubuntu, Chrome's sandbox also depends on AppArmor. Ubuntu blocks unprivileged user namespaces by default and allows them for Chrome only through the profile at `/etc/apparmor.d/chrome`, which the `apparmor` package ships and which covers `/opt/google/chrome/chrome` alone. If Chrome exits with `No usable sandbox!`:
+
+- Check that you are running `/opt/google/chrome/chrome` and not a Chrome or Chromium copy elsewhere.
+- Check that the profile is loaded with `sudo aa-status | grep -w chrome`; if it isn't, reload it with `sudo apparmor_parser -r /etc/apparmor.d/chrome`.
+
+Do not work around it with `--no-sandbox`.
+
+Do not fall back to `--browser=chromium` or Playwright's `install-browser` command: Playwright's bundled Chromium is pinned to a build that lags upstream security fixes, and its Chrome installer downloads an unverified package and does not support Linux arm64.
 
 Use `pull-request-demo` when a user-visible change needs a shareable PR screenshot, GIF recording, or PR comment. It builds on the same `mise run playwright` workflow and adds the capture and publishing steps. Do not use `npm`, `npx`, or `yarn` for either workflow.
+
+### Testing Code Mode locally
+
+Gateway Code Mode runs as a native Pitchfork daemon. `./zero` includes `mise run zero:code-mode`, which writes missing local provider/token settings and builds the pinned OSS runtime. Start or restart it with `mise exec -- pitchfork start code-runtime` or `mise exec -- pitchfork restart code-runtime`. Normal stack start/wake includes it when `GRAM_CODE_RUNTIME_PROVIDER=local`, and pause stops it. The runner Docker image is only needed for the restricted-Linux smoke test. Runtime logs are available through `pitchfork logs code-runtime`. Use `mise run test:code-mode -race` for the actual interpreter/gateway integration tests.
 
 ### Testing assistants locally
 
@@ -123,6 +146,10 @@ Background-work rules live in the `gram-temporal` skill (`.agents/skills/gram-te
 ### Platform MCP
 
 The Platform MCP is a first-party product surface under `server/internal/platformmcp/`. When adding or changing backend APIs, dashboard workflows, permissions, or user-facing product capabilities, explicitly assess whether an existing Platform MCP tool must change or a new outcome-oriented tool should be added. Keep tool schemas, descriptions, authorization, audiences, server instructions, tests, and shipped Platform MCP skills in sync with the product behavior. Activate the `maintaining-platform-mcp` skill (`.agents/skills/maintaining-platform-mcp/SKILL.md`) for this assessment and any Platform MCP implementation. Use `authoring-platform-mcp-skills` as well when changing workflows under `server/internal/plugins/platform_mcp_skills/`.
+
+### Command K discoverability
+
+When adding or changing dashboard pages, navigation, named resource lists/details, resource names, permissions, feature gates, or Command K search candidates/ranking/registration, assess Command K page actions and individual resource candidates separately. Sidebar links and overview routes do not automatically index resources by name. Add/update and register the appropriate candidates, or record a justified exclusion with test evidence. Activate `.agents/skills/maintaining-command-palette/SKILL.md`; Cubic's `cubic.yaml` rule and `REVIEW.md` use the same checklist.
 
 ### Staff Admin MCP
 

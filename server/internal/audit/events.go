@@ -13,14 +13,17 @@ const (
 	subjectTypeAccessChallenge             subjectType = "access_challenge"
 	subjectTypeAccessMember                subjectType = "access_member"
 	subjectTypeAccessRole                  subjectType = "access_role"
+	subjectTypeAccessGrant                 subjectType = "access_grant"
 	subjectTypeAIIntegration               subjectType = "ai_integration_config"
 	subjectTypeAgent                       subjectType = "agent"
 	subjectTypeAssistant                   subjectType = "assistant"
 	subjectTypeAssistantMemory             subjectType = "assistant_memory"
 	subjectTypeAsset                       subjectType = "asset"
+	subjectTypeAuthClient                  subjectType = "auth_client"
 	subjectTypeAwsIamCredential            subjectType = "aws_iam_credential"
 	subjectTypeAwsKmsKey                   subjectType = "aws_kms_key"
 	subjectTypeBillingMetadata             subjectType = "billing_metadata"
+	subjectTypeCatalogPromotion            subjectType = "catalog_promotion"
 	subjectTypeChatAnalysisSettings        subjectType = "chat_analysis_settings"
 	subjectTypeChatSession                 subjectType = "chat_session"
 	subjectTypeCustomDomain                subjectType = "custom_domain"
@@ -29,6 +32,8 @@ const (
 	subjectTypeAiScanTarget                subjectType = "device_agent_ai_scan_target"
 	subjectTypeAIToolDecision              subjectType = "ai_tool_decision"
 	subjectTypeDeviceIntegration           subjectType = "device_integration_config"
+	subjectTypeDirectoryReviewItem         subjectType = "directory_review_item"
+	subjectTypeDirectoryReviewSettings     subjectType = "directory_review_settings"
 	subjectTypeDirectoryRoleMapping        subjectType = "directory_role_mapping"
 	subjectTypeEnvironment                 subjectType = "environment"
 	subjectTypeGcpIamCredential            subjectType = "gcp_iam_credential"
@@ -37,6 +42,7 @@ const (
 	subjectTypeJsonWebKey                  subjectType = "json_web_key"
 	subjectTypeJsonWebKeySet               subjectType = "json_web_key_set"
 	subjectTypeInternalSessionIssuer       subjectType = "internal_session_issuer"
+	subjectTypeIssuanceSelectionProfile    subjectType = "issuance_selection_profile"
 	subjectTypeKillswitchPrescription      subjectType = "killswitch_prescription"
 	subjectTypeLiteLLMInstance             subjectType = "litellm_instance"
 	subjectTypeMcpApprovalRequest          subjectType = "mcp_approval_request"
@@ -89,7 +95,28 @@ const (
 	subjectTypeWorkloadIssuer          subjectType = "workload_issuer"
 )
 
+// SubjectTypeWorkloadAdmission is the workload admission subject type, for the
+// security log, which records these entries outside this package.
+const SubjectTypeWorkloadAdmission = string(subjectTypeWorkloadAdmission)
+
 type Action string
+
+// Category says which log an entry belongs to.
+//
+// Configuration entries are changes to the platform's configuration made by an
+// organization's members or by the Speakeasy team. This package records them
+// in audit_logs, and the audit log page shows them by default. Security entries
+// record machine access and other security-relevant activity that is not a
+// configuration decision. A runtime's own start and teardown are neither and
+// are not recorded. The securityevent package records them in
+// security_audit_logs. Both are delivered as webhooks, carrying their category,
+// and both are visible to staff.
+type Category string
+
+const (
+	CategoryConfiguration Category = "configuration"
+	CategorySecurity      Category = "security"
+)
 
 func marshalAuditPayload(value any) ([]byte, error) {
 	if value == nil {

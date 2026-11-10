@@ -13,6 +13,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type McpServerToolsetSummary = {
   /**
+   * The toolset's description, if any
+   */
+  description?: string | undefined;
+  /**
    * Whether every configured tool is an external MCP proxy tool, so the real tool count is unknown until a user signs in
    */
   externalMcpProxyOnly: boolean;
@@ -24,6 +28,10 @@ export type McpServerToolsetSummary = {
    * The ID of the external OAuth server attached to the toolset, if any
    */
   externalOauthServerId?: string | undefined;
+  /**
+   * The ID of the MCP server that stands in for the toolset: its canonical server, whose ID is the toolset's, or when it has none, its oldest live server with a live endpoint. Absent when it has neither.
+   */
+  hostingMcpServerId?: string | undefined;
   /**
    * The ID of the toolset
    */
@@ -41,7 +49,7 @@ export type McpServerToolsetSummary = {
    */
   slug: string;
   /**
-   * The number of distinct configured tools in the latest toolset version, excluding external MCP proxy tools. Counts configured tool URNs, so it may differ from the number of tools that resolve against the active deployment.
+   * Number of tools the toolset serves: deployment-backed tools (HTTP, function, external MCP) that resolve in the project's latest completed deployment, plus its prompt templates and registered platform tools. External MCP proxy tools are excluded.
    */
   toolCount: number;
   /**
@@ -56,9 +64,11 @@ export const McpServerToolsetSummary$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    description: z.optional(z.string()),
     external_mcp_proxy_only: z.boolean(),
     external_mcp_slugs: z.array(z.string()),
     external_oauth_server_id: z.optional(z.string()),
+    hosting_mcp_server_id: z.optional(z.string()),
     id: z.string(),
     name: z.string(),
     registry_specifier: z.optional(z.string()),
@@ -71,6 +81,7 @@ export const McpServerToolsetSummary$inboundSchema: z.ZodMiniType<
       "external_mcp_proxy_only": "externalMcpProxyOnly",
       "external_mcp_slugs": "externalMcpSlugs",
       "external_oauth_server_id": "externalOauthServerId",
+      "hosting_mcp_server_id": "hostingMcpServerId",
       "registry_specifier": "registrySpecifier",
       "tool_count": "toolCount",
       "tool_selection_mode": "toolSelectionMode",

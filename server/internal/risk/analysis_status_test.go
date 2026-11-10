@@ -10,7 +10,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 )
@@ -23,7 +22,6 @@ func TestGetRiskAnalysisStatus_Idle(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -62,7 +60,6 @@ func TestGetRiskAnalysisStatus_Running(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -98,7 +95,6 @@ func TestGetRiskAnalysisStatus_Never(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -124,7 +120,6 @@ func TestGetRiskAnalysisStatus_DescribeError(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -139,34 +134,12 @@ func TestGetRiskAnalysisStatus_DescribeError(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeUnexpected)
 }
 
-// TestGetRiskAnalysisStatus_FlagDisabled asserts an org without the
-// gram-risk-watchdog flag is refused even with the org:admin scope, matching
-// the signals endpoint it accompanies.
-func TestGetRiskAnalysisStatus_FlagDisabled(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	_, err := ti.service.GetRiskAnalysisStatus(ctx, &gen.GetRiskAnalysisStatusPayload{
-		ApikeyToken:      nil,
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-	})
-	requireOopsCode(t, err, oops.CodeForbidden)
-}
-
 // TestGetRiskAnalysisStatus_RequiresOrgAdmin asserts the endpoint denies
 // callers without the org:admin scope.
 func TestGetRiskAnalysisStatus_RequiresOrgAdmin(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
 
 	_, err := ti.service.GetRiskAnalysisStatus(ctx, &gen.GetRiskAnalysisStatusPayload{

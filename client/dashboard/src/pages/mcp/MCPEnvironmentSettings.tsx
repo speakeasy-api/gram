@@ -12,7 +12,7 @@ import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
-import { Toolset } from "@/lib/toolTypes";
+import type { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components/mcpenvironmentconfiginput.js";
 import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
@@ -37,14 +37,14 @@ import { toast } from "sonner";
 import { AddVariableSheet } from "./AddVariableSheet";
 import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
 import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
-import {
-  ConnectOAuthModal,
-  OAuthDetailsModal,
-  PageSection,
-} from "./MCPDetails";
-import {
+import { OAuthDetailsModal } from "./OAuthDetailsModal";
+import { ConnectOAuthModal } from "./oauth-wizard";
+import { PageSection } from "./PageSection";
+import type {
   EnvVarState,
   EnvironmentVariable,
+} from "./environmentVariableUtils";
+import {
   getValueForEnvironment,
   hasEntryInEnvironment,
   isSecretInEnvironment,
@@ -68,8 +68,11 @@ const EMPTY_ENVIRONMENTS: never[] = [];
 
 export function MCPAuthenticationTab({
   toolset,
+  showOAuth = true,
 }: {
   toolset: Toolset;
+  /** Off on the MCP server page, whose Authentication section replaces it. */
+  showOAuth?: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
@@ -685,7 +688,7 @@ export function MCPAuthenticationTab({
 
   return (
     <Stack className="mb-4">
-      <OAuthSection toolset={toolset} />
+      {showOAuth && <ToolsetOAuthSection toolset={toolset} />}
 
       <PageSection
         heading="Environment Variables"
@@ -945,7 +948,9 @@ type OAuthSectionProps = {
  * clean slate gets the shared section; External OAuth keeps its configuration
  * UI plus a convert path.
  */
-function OAuthSection({ toolset }: OAuthSectionProps) {
+export function ToolsetOAuthSection({
+  toolset,
+}: OAuthSectionProps): JSX.Element {
   const oauthParadigm = getOAuthParadigm(toolset);
   const surface = toolsetAuthSurface({
     userSessionIssuerWired: isUserSessionIssuerWired(toolset),
@@ -1003,7 +1008,9 @@ function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
 
   const disabledTooltipText = !toolset.mcpEnabled
     ? "Enable the MCP server to configure OAuth"
-    : "This MCP server does not require the OAuth authorization code flow";
+    : externalMcpOAuthStatus === "unknown"
+      ? "The upstream authentication requirements are unknown; check the provider’s documentation"
+      : "This MCP server does not require the OAuth authorization code flow";
 
   // The dispatcher sends wired issuers to the manage surface. Keep this
   // defensive check aligned in case the External OAuth section is reused directly.
@@ -1062,6 +1069,7 @@ function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
         isOAuthConnected={isOAuthConnected}
         isOAuthEligible={!!isOAuthEligible}
         externalMcpRequiresOAuth={externalMcpRequiresOAuth}
+        externalMcpAuthUnknown={externalMcpOAuthStatus === "unknown"}
         loginSecured={loginSecured}
         showConfigureAction={!hideConfigureButton}
         oauthParadigm={oauthParadigm}
@@ -1098,6 +1106,7 @@ function OAuthStatusDisplay({
   isOAuthConnected,
   isOAuthEligible,
   externalMcpRequiresOAuth,
+  externalMcpAuthUnknown,
   loginSecured,
   showConfigureAction,
   oauthParadigm,
@@ -1107,6 +1116,7 @@ function OAuthStatusDisplay({
   isOAuthConnected: boolean;
   isOAuthEligible: boolean;
   externalMcpRequiresOAuth: boolean;
+  externalMcpAuthUnknown: boolean;
   loginSecured: boolean;
   showConfigureAction: boolean;
   oauthParadigm: OAuthParadigm | null;
@@ -1139,6 +1149,22 @@ function OAuthStatusDisplay({
           Users will authenticate with your external OAuth server before
           accessing this MCP server.
         </p>
+      </div>
+    );
+  }
+
+  if (externalMcpAuthUnknown) {
+    return (
+      <div className="border border-dashed p-4 text-center">
+        <p>Upstream authentication requirements are unknown</p>
+        <p className="text-muted-foreground text-sm">
+          Check the upstream provider’s documentation before configuring access.
+        </p>
+        {isOAuthEligible && showConfigureAction && (
+          <Button variant="secondary" onClick={onConfigureClick}>
+            <Button.Text>Configure OAuth</Button.Text>
+          </Button>
+        )}
       </div>
     );
   }

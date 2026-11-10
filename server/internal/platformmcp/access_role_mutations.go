@@ -17,6 +17,7 @@ import (
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -94,13 +95,17 @@ type AccessRoleMutationSummary struct {
 type CreateMCPAccessRoleOutput struct {
 	Role           AccessRoleMutationSummary `json:"role"`
 	Reconciliation string                    `json:"reconciliation" jsonschema:"pending: provider sync was requested after the commit; rate_limited or unavailable: this replay did not request provider sync again because the retry allowance is spent or could not be checked"`
-	Receipt        RiskMutationToolReceipt   `json:"receipt"`
+	// SensitiveScopesAdded names the sensitive permissions the write gave
+	// the role, as the audit log records them; absent when it added none.
+	SensitiveScopesAdded []string                `json:"sensitive_scopes_added,omitempty" jsonschema:"sensitive permissions this write gave the role that it did not hold before; absent when none"`
+	Receipt              RiskMutationToolReceipt `json:"receipt"`
 }
 
 type UpdateMCPAccessRoleOutput struct {
-	Role           AccessRoleMutationSummary `json:"role"`
-	Reconciliation string                    `json:"reconciliation"`
-	Receipt        RiskMutationToolReceipt   `json:"receipt"`
+	Role                 AccessRoleMutationSummary `json:"role"`
+	Reconciliation       string                    `json:"reconciliation"`
+	SensitiveScopesAdded []string                  `json:"sensitive_scopes_added,omitempty" jsonschema:"sensitive permissions this write gave the role that it did not hold before; absent when none"`
+	Receipt              RiskMutationToolReceipt   `json:"receipt"`
 }
 
 // AccessRoleMutationBackend matches the transaction-scoped access manager API.
@@ -112,6 +117,7 @@ type AccessRoleMutationBackend interface {
 	AddMemberRoleTx(context.Context, pgx.Tx, string, string, string, access.RoleAuditActor, access.MemberRoleValidation) (access.MemberRoleAddResult, access.MemberRoleReconciliation, error)
 	CurrentMemberRoleReconciliationTx(context.Context, pgx.Tx, string, string) (access.MemberRoleReconciliation, error)
 	ReconcileRoleIdentity(context.Context, string, string, string, string, bool)
+	ReconcileRoleDelivery(context.Context, access.RoleReconciliation)
 	ReconcileMemberRoles(context.Context, access.MemberRoleReconciliation)
 }
 
@@ -143,6 +149,9 @@ type AccessRoleMutationService struct {
 	backend    AccessRoleMutationBackend
 	receipts   *AccessRoleMutationReceiptStore
 	versionKey []byte
+	// audit records shared-credential rule changes; nil leaves
+	// set_mcp_role_auth_client_access unavailable.
+	audit *audit.Logger
 }
 
 func NewAccessRoleMutationService(reads *AccessReadService, flags feature.Provider, budget OperationBudget, keyMaterial string, backend AccessRoleMutationBackend) (*AccessRoleMutationService, error) {
@@ -152,7 +161,7 @@ func NewAccessRoleMutationService(reads *AccessReadService, flags feature.Provid
 	key := sha256.Sum256([]byte("platform-mcp-access-role-version:" + keyMaterial))
 	return &AccessRoleMutationService{
 		reads: reads, flags: flags, budget: budget, backend: backend,
-		receipts: NewAccessRoleMutationReceiptStore(reads.db), versionKey: key[:],
+		receipts: NewAccessRoleMutationReceiptStore(reads.db), versionKey: key[:], audit: nil,
 	}, nil
 }
 
@@ -185,7 +194,7 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 		if err != nil {
 			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(err)
 		}
-		return s.receiptResult(result.Role, result.Slug, "created", "pending")
+		return s.receiptResult(nil, result.Role, result.Slug, "created", "pending")
 	})
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
@@ -203,7 +212,7 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
 	}
-	return CreateMCPAccessRoleOutput{Role: summary, Reconciliation: result.Reconciliation, Receipt: riskMutationToolReceipt(receipt)}, nil
+	return CreateMCPAccessRoleOutput{Role: summary, Reconciliation: result.Reconciliation, SensitiveScopesAdded: result.SensitiveScopesAdded, Receipt: riskMutationToolReceipt(receipt)}, nil
 }
 
 func (s *AccessRoleMutationService) Update(ctx context.Context, principal Principal, input UpdateMCPAccessRoleInput) (UpdateMCPAccessRoleOutput, error) {
@@ -250,6 +259,9 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 		ProjectID: project.ID.String(), RoleID: roleID, ExpectedVersion: input.ExpectedVersion,
 		AddRules: addRules, RemoveRules: removeRules,
 	}
+	// Only a fresh commit changes role plugins; a replayed receipt runs no
+	// transaction and must not republish again.
+	var delivery access.RoleReconciliation
 	receipt, err := s.receipts.ExecuteUpdate(ctx, principal, project, input.IdempotencyKey, normalized, s.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
 		roleUUID, parseErr := uuid.Parse(roleID)
 		if parseErr != nil || roleUUID == uuid.Nil {
@@ -271,17 +283,21 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 		if versionErr != nil || !hmac.Equal([]byte(version), []byte(input.ExpectedVersion)) {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationConflict("The access role changed after it was read. Read it again and retry with the new version.")
 		}
-		result, _, err := s.backend.UpdateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.UpdateRolePayload{ApikeyToken: nil, SessionToken: nil, ID: roleID, Name: nil, Description: nil, AddGrants: accessRoleRulesToGenGrants(addRules, project.ID), RemoveGrants: accessRoleRulesToGenGrants(removeRules, project.ID), MemberIds: nil, AgentIds: nil})
+		result, reconciliation, err := s.backend.UpdateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.UpdateRolePayload{ApikeyToken: nil, SessionToken: nil, ID: roleID, Name: nil, Description: nil, AddGrants: accessRoleRulesToGenGrants(addRules, project.ID), RemoveGrants: accessRoleRulesToGenGrants(removeRules, project.ID), MemberIds: nil, AgentIds: nil})
 		if err != nil {
 			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(err)
 		}
 		if result.After == nil {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
 		}
-		return s.receiptResult(result.After, result.Slug, "updated", "complete")
+		delivery = reconciliation
+		return s.receiptResult(current, result.After, result.Slug, "updated", "complete")
 	})
 	if err != nil {
 		return UpdateMCPAccessRoleOutput{}, err
+	}
+	if !receipt.Replayed {
+		s.backend.ReconcileRoleDelivery(ctx, delivery)
 	}
 	result, err := decodeAccessRoleMutationReceipt(operationUpdateMCPAccessRole, receipt.ResultPayload)
 	if err != nil {
@@ -291,7 +307,7 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 	if err != nil {
 		return UpdateMCPAccessRoleOutput{}, err
 	}
-	return UpdateMCPAccessRoleOutput{Role: summary, Reconciliation: result.Reconciliation, Receipt: riskMutationToolReceipt(receipt)}, nil
+	return UpdateMCPAccessRoleOutput{Role: summary, Reconciliation: result.Reconciliation, SensitiveScopesAdded: result.SensitiveScopesAdded, Receipt: riskMutationToolReceipt(receipt)}, nil
 }
 
 func (s *AccessRoleMutationService) admit(ctx context.Context, principal Principal, projectID string) (ResolvedProject, string, error) {
@@ -423,7 +439,7 @@ func accessRoleRulesToGenGrants(rules []normalizedMCPAccessRoleRule, projectID u
 		if rule.Disposition != "" {
 			selector[authz.SelectorKeyDisposition] = rule.Disposition
 		}
-		generated := &accessgen.Selector{ResourceKind: selector[authz.SelectorKeyResourceKind], ResourceID: selector[authz.SelectorKeyResourceID], Disposition: nil, Tool: nil, ProjectID: nil, ServerURL: nil}
+		generated := &accessgen.Selector{ResourceKind: selector[authz.SelectorKeyResourceKind], ResourceID: selector[authz.SelectorKeyResourceID], Disposition: nil, Tool: nil, ProjectID: nil, ServerURL: nil, ClientType: nil, ConnectionOwner: nil, UpstreamClient: nil}
 		if value := selector[authz.SelectorKeyProjectID]; value != "" {
 			generated.ProjectID = &value
 		}
@@ -438,7 +454,10 @@ func accessRoleRulesToGenGrants(rules []normalizedMCPAccessRoleRule, projectID u
 	return grants
 }
 
-func (s *AccessRoleMutationService) receiptResult(state *accessgen.Role, roleSlug, category, reconciliation string) (AccessRoleMutationReceiptResult, error) {
+// receiptResult records the role as written. before is the role as read in
+// the same transaction, or nil for a creation, so the receipt can name the
+// sensitive permissions the write added the way the audit log does.
+func (s *AccessRoleMutationService) receiptResult(before, state *accessgen.Role, roleSlug, category, reconciliation string) (AccessRoleMutationReceiptResult, error) {
 	if state == nil || state.IsSystem || uuid.Validate(state.ID) != nil || roleSlug == "" {
 		return AccessRoleMutationReceiptResult{}, accessRoleMutationUnavailable(errors.New("unsafe role backend result"))
 	}
@@ -446,9 +465,14 @@ func (s *AccessRoleMutationService) receiptResult(state *accessgen.Role, roleSlu
 	if err != nil {
 		return AccessRoleMutationReceiptResult{}, accessRoleMutationUnavailable(err)
 	}
+	var beforeGrants []*accessgen.RoleGrant
+	if before != nil {
+		beforeGrants = before.Grants
+	}
 	return AccessRoleMutationReceiptResult{
 		RoleID: state.ID, RoleSlug: roleSlug, Name: state.Name, Description: state.Description, Version: version,
 		MCPAccess: summarizeMCPConnect(state.Grants), ResultCategory: category, Reconciliation: reconciliation,
+		SensitiveScopesAdded: authz.SensitiveScopesAdded(roleGrantScopes(beforeGrants), roleGrantScopes(state.Grants)),
 	}, nil
 }
 

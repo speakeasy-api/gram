@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const InternalSessionIssuerKeyState = {
 /**
  * Lifecycle state.
  */
-export type InternalSessionIssuerKeyState = ClosedEnum<
+export type InternalSessionIssuerKeyState = OpenEnum<
   typeof InternalSessionIssuerKeyState
 >;
 
@@ -35,9 +36,10 @@ export type InternalSessionIssuerKey = {
 };
 
 /** @internal */
-export const InternalSessionIssuerKeyState$inboundSchema: z.ZodMiniEnum<
-  typeof InternalSessionIssuerKeyState
-> = z.enum(InternalSessionIssuerKeyState);
+export const InternalSessionIssuerKeyState$inboundSchema: z.ZodMiniType<
+  InternalSessionIssuerKeyState,
+  unknown
+> = openEnums.inboundSchema(InternalSessionIssuerKeyState);
 
 /** @internal */
 export const InternalSessionIssuerKey$inboundSchema: z.ZodMiniType<

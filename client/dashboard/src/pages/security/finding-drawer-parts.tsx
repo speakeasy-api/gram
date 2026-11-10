@@ -1,6 +1,9 @@
+import { Spinner } from "@/components/ui/Spinner";
+import { RiskContentNotice } from "./RiskContentNotice";
+import { useRiskContentRestricted } from "./use-risk-content-restricted";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
+import { Eye, EyeOff, Lock } from "lucide-react";
 import type { ReactNode } from "react";
 import { REVEAL_DENIED_REASON } from "./unmask";
 
@@ -55,6 +58,8 @@ export function RevealToggleButton({
 }
 
 export function NoRevealAccessNote(): JSX.Element {
+  const restricted = useRiskContentRestricted();
+  if (restricted) return <RiskContentNotice />;
   return (
     <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
       <Lock className="size-3 shrink-0" />
@@ -75,7 +80,7 @@ export function RevealingNote({
       role="status"
       className={cn("flex items-center gap-2 text-sm", className)}
     >
-      <Loader2 className="size-4 animate-spin" />
+      <Spinner className="mr-0 size-4" />
       <span>Revealing…</span>
     </div>
   );

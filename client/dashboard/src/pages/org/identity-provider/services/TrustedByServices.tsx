@@ -8,7 +8,11 @@ import { StatusDot } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
 
 import { emaServiceHref } from "../tabs";
-import { acceptanceLabel, type ProviderView } from "./emaServiceView";
+import {
+  acceptanceLabel,
+  supportsProvider,
+  type ProviderView,
+} from "./emaServiceView";
 import { useEmaServices, type ServiceRow } from "./useEmaServices";
 
 type Entry = { row: ServiceRow; provider: ProviderView };
@@ -23,11 +27,13 @@ export function TrustedByServices(): JSX.Element {
     const provider = row.providers.find((p) => p.kind === "speakeasy");
     return provider ? [{ row, provider }] : [];
   });
-  const broken = entries.filter((entry) => !entry.provider.usable);
-  const accepted = entries.filter(
+  const unknown = entries.filter((entry) => !supportsProvider(entry.provider));
+  const supported = entries.filter((entry) => supportsProvider(entry.provider));
+  const broken = supported.filter((entry) => !entry.provider.usable);
+  const accepted = supported.filter(
     (entry) => entry.provider.usable && entry.provider.lastAcceptedAt,
   );
-  const waiting = entries.filter(
+  const waiting = supported.filter(
     (entry) => entry.provider.usable && !entry.provider.lastAcceptedAt,
   );
 
@@ -71,6 +77,7 @@ export function TrustedByServices(): JSX.Element {
           ) : (
             <div className="space-y-5">
               <EntryList label="Not working" entries={broken} />
+              <EntryList label="Unknown availability" entries={unknown} />
               <EntryList label="Working" entries={accepted} />
               <EntryList label="Hasn’t worked yet" entries={waiting} />
             </div>
@@ -99,11 +106,13 @@ function EntryList({
           <li key={row.key} className="flex items-baseline gap-2">
             <StatusDot
               tone={
-                !provider.usable
-                  ? "warning"
-                  : provider.lastAcceptedAt
-                    ? "success"
-                    : "neutral"
+                !supportsProvider(provider)
+                  ? "neutral"
+                  : !provider.usable
+                    ? "warning"
+                    : provider.lastAcceptedAt
+                      ? "success"
+                      : "neutral"
               }
               className="translate-y-[-1px]"
             />

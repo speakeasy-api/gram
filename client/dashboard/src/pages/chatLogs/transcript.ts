@@ -10,6 +10,7 @@ import {
   splitLeadingEnvelopes,
   stripLeadingEnvelopes,
 } from "@/lib/harnessEnvelopes";
+import { isStalePendingToolCall } from "@/lib/toolCallStatus";
 
 type MessageEntryType = Extract<
   TraceEntryType,
@@ -134,6 +135,73 @@ export interface ToolRow {
   callMessage?: ChatMessage;
   resultMessage?: ChatMessage;
   generation: number;
+}
+
+export type ToolResultStatus =
+  | "complete"
+  | "error"
+  | "running"
+  | "pending"
+  | "unknown";
+
+/** When a tool row's call started, while it still has no result; undefined
+ * once it has one. Its pending status turns unknown a while after this. */
+export function pendingSinceMs(row: ToolRow): number | undefined {
+  if (row.resultMessage) return undefined;
+  const startedAt = row.callMessage?.createdAt;
+  if (!startedAt) return undefined;
+  return new Date(startedAt).getTime();
+}
+
+/** The status of a tool row. A call with no result is never a success: it is
+ * pending while it may still run, and unknown once it is too old to be
+ * running. A hook-captured failure carries the "error" finish reason. For a
+ * Kit result, interpret the retained patch without changing its lossless
+ * output text. Require the patch discriminator and matching call ID, not an
+ * arbitrary tool's JSON output containing a field named status.
+ */
+export function toolResultStatus(
+  row: ToolRow,
+  nowMs: number = Date.now(),
+): ToolResultStatus {
+  const message = row.resultMessage;
+  if (!message) {
+    const startedAt = row.callMessage?.createdAt;
+    if (
+      startedAt &&
+      isStalePendingToolCall(new Date(startedAt).getTime(), nowMs)
+    )
+      return "unknown";
+    return "pending";
+  }
+  if (message.finishReason === "error") return "error";
+  try {
+    const patch: unknown = JSON.parse(joinedTextParts(message.content));
+    if (
+      typeof patch !== "object" ||
+      patch === null ||
+      !("sessionUpdate" in patch) ||
+      patch.sessionUpdate !== "tool_call_update" ||
+      !("toolCallId" in patch) ||
+      !message.toolCallId ||
+      patch.toolCallId !== message.toolCallId ||
+      !("status" in patch)
+    )
+      return "complete";
+    switch (patch.status) {
+      case "failed":
+      case "cancelled":
+        return "error";
+      case "in_progress":
+        return "running";
+      case "pending":
+        return "pending";
+      default:
+        return "complete";
+    }
+  } catch {
+    return "complete";
+  }
 }
 
 export type TranscriptRow = MessageRow | ToolRow;

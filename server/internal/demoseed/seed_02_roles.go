@@ -2,6 +2,8 @@ package demoseed
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -10,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 )
 
@@ -30,9 +33,13 @@ type rolesCustomRole struct {
 // generated, never literal, so each tenant's rows stay its own.
 var rolesCustomRoles = []rolesCustomRole{
 	{
+		// Holds both scopes of the "Review other members' sessions"
+		// task, so the role editor and the grant dialog have a complete
+		// sensitive task to show; Engineer below holds mcp:write without
+		// environment:read, an incomplete one.
 		slug: "session-reviewer", name: "Session Reviewer",
-		description: "Reads chat transcripts across the organization for quality review.",
-		scopes:      []string{"chat:read"},
+		description: "Reads chat transcripts across the organization and tool-call logs in the demo project for quality review.",
+		scopes:      []string{"chat:read", "log:read"},
 		members:     []string{"hana", "jonas"},
 		agents:      []string{},
 	},
@@ -163,7 +170,7 @@ var rolesMDMDevices = []rolesMDMDevice{
 	{3, "C02DEMO0003", "priya-mbp", "macOS", "14.7", "priya", true, "1 day"},
 	// The contractor's machine: enrolled, but the agent stopped reporting.
 	{4, "C02DEMO0004", "mateo-mbp", "macOS", "14.6", "mateo", true, "6 days"},
-	// The one Windows machine, and one of the two with no agent at all.
+	// The one Windows machine Jamf enrolled, and the one with no agent at all.
 	{5, "WINDEMO0005", "HANA-WIN11", "Windows", "11 23H2", "hana", true, "8 hours"},
 	{6, "C02DEMO0006", "lucas-mbp", "macOS", "15.3", "lucas", true, "3 hours"},
 	// A spare laptop the MDM reports against an address no member holds: the
@@ -233,7 +240,8 @@ func (s *seeder) seedRoles(ctx context.Context) error {
 	}
 
 	// Show the completed one-time onboarding result, not a pending repair job.
-	// Role plugins stay role-only; the Default plugin remains Everyone.
+	// Role plugins stay role-only and install by default; the Default plugin
+	// remains Everyone and is available for members to turn on.
 	// Matching server content is populated after the servers exist below.
 	defaultPluginID, err := s.q.RolesInsertDefaultPlugin(ctx, repo.RolesInsertDefaultPluginParams{
 		OrganizationID: org,
@@ -372,6 +380,15 @@ func (s *seeder) rolesSlackMemberID(n int) uuid.UUID {
 func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 	org := s.orgID()
 
+	if err := s.q.RolesDeleteDirectoryReviewItems(ctx, org); err != nil {
+		return fmt.Errorf("delete demo directory review items: %w", err)
+	}
+	if err := s.q.RolesDeleteDirectoryReviewOrgState(ctx, org); err != nil {
+		return fmt.Errorf("delete demo directory review state: %w", err)
+	}
+	if err := s.q.RolesDeleteDirectoryReviewOptOuts(ctx, org); err != nil {
+		return fmt.Errorf("delete demo directory review opt-outs: %w", err)
+	}
 	if err := s.q.RolesDeleteDirectoryRoleMappings(ctx, org); err != nil {
 		return fmt.Errorf("delete demo directory role mappings: %w", err)
 	}
@@ -399,11 +416,14 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 
 	for _, u := range demoUsers {
 		dirUserID := "demo_dir_" + s.userID(u.handle)
+		firstName, lastName := splitDemoName(u.name)
 		if err := s.q.RolesInsertDirectoryUser(ctx, repo.RolesInsertDirectoryUserParams{
 			OrganizationID:        org,
-			UserID:                s.userID(u.handle),
+			UserID:                conv.ToPGText(s.userID(u.handle)),
 			WorkosDirectoryUserID: dirUserID,
 			Email:                 s.email(u.handle),
+			FirstName:             conv.ToPGText(firstName),
+			LastName:              conv.ToPGText(lastName),
 			DivisionName:          u.division,
 			DepartmentName:        u.department,
 			JobTitle:              u.title,
@@ -418,6 +438,34 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 			Team:                  u.team,
 		}); err != nil {
 			return fmt.Errorf("insert demo directory group membership %s: %w", u.handle, err)
+		}
+	}
+
+	// Directory people who have not signed in, including one address the
+	// directory reports twice.
+	for _, p := range demoDirectoryPeople {
+		dirUserID := "demo_dir_" + s.userID(p.handle)
+		if err := s.q.RolesInsertDirectoryUser(ctx, repo.RolesInsertDirectoryUserParams{
+			OrganizationID:        org,
+			UserID:                conv.ToPGTextEmpty(""),
+			WorkosDirectoryUserID: dirUserID,
+			Email:                 s.email(p.emailHandle),
+			FirstName:             conv.ToPGText(p.firstName),
+			LastName:              conv.ToPGText(p.lastName),
+			DivisionName:          "",
+			DepartmentName:        p.department,
+			JobTitle:              p.title,
+			EmployeeType:          "full-time",
+			CostCenterName:        "",
+		}); err != nil {
+			return fmt.Errorf("insert demo directory person %s: %w", p.handle, err)
+		}
+		if err := s.q.RolesInsertDirectoryGroupMembership(ctx, repo.RolesInsertDirectoryGroupMembershipParams{
+			WorkosDirectoryUserID: dirUserID,
+			OrganizationID:        org,
+			Team:                  p.team,
+		}); err != nil {
+			return fmt.Errorf("insert demo directory group membership %s: %w", p.handle, err)
 		}
 	}
 
@@ -440,6 +488,23 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo department role mapping: %w", err)
 	}
+	// A group deleted from the directory keeps its mapping, which grants
+	// nothing; the mappings page lists it as a missing source.
+	if err := s.q.RolesInsertDeletedDirectoryGroup(ctx, repo.RolesInsertDeletedDirectoryGroupParams{
+		OrganizationID: org,
+		GroupPrefix:    s.spec.GroupPrefix,
+		Slug:           "legacy-platform",
+		Name:           "Legacy Platform",
+	}); err != nil {
+		return fmt.Errorf("insert demo deleted directory group: %w", err)
+	}
+	if err := s.q.RolesInsertGroupRoleMapping(ctx, repo.RolesInsertGroupRoleMappingParams{
+		OrganizationID: org,
+		GroupName:      "Legacy Platform",
+		RoleSlug:       "analyst",
+	}); err != nil {
+		return fmt.Errorf("insert demo deleted group role mapping: %w", err)
+	}
 	// Contractors arrive through the directory, so Check Access on GitHub can
 	// name the mapping that put a person in the role that blocks them.
 	if err := s.q.RolesInsertAttributeRoleMapping(ctx, repo.RolesInsertAttributeRoleMappingParams{
@@ -449,6 +514,55 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 		RoleSlug:       "contractors",
 	}); err != nil {
 		return fmt.Errorf("insert demo contractor role mapping: %w", err)
+	}
+	return s.seedRolesDirectoryReview(ctx)
+}
+
+// seedRolesDirectoryReview starts directory review after the groups above
+// exist, then raises one change of each kind for the SSO tab's review list:
+// a group first seen since, a new value of a mapped attribute key, and the
+// deleted group that still has a mapping.
+func (s *seeder) seedRolesDirectoryReview(ctx context.Context) error {
+	org := s.orgID()
+
+	if err := s.q.RolesInsertDirectoryReviewOrgState(ctx, org); err != nil {
+		return fmt.Errorf("insert demo directory review state: %w", err)
+	}
+	if err := s.q.RolesInsertNewDirectoryGroup(ctx, repo.RolesInsertNewDirectoryGroupParams{
+		OrganizationID: org,
+		GroupPrefix:    s.spec.GroupPrefix,
+		Slug:           "field-engineering",
+		Name:           "Field Engineering",
+	}); err != nil {
+		return fmt.Errorf("insert demo new directory group: %w", err)
+	}
+	for _, handle := range []string{"priya", "mateo"} {
+		if err := s.q.RolesInsertDirectoryGroupMembership(ctx, repo.RolesInsertDirectoryGroupMembershipParams{
+			WorkosDirectoryUserID: "demo_dir_" + s.userID(handle),
+			OrganizationID:        org,
+			Team:                  "Field Engineering",
+		}); err != nil {
+			return fmt.Errorf("insert demo new directory group membership %s: %w", handle, err)
+		}
+	}
+
+	for _, item := range []repo.RolesInsertDirectoryReviewGroupItemParams{
+		{OrganizationID: org, Kind: "new_group", GroupName: "Field Engineering"},
+		{OrganizationID: org, Kind: "source_missing", GroupName: "Legacy Platform"},
+	} {
+		if err := s.q.RolesInsertDirectoryReviewGroupItem(ctx, item); err != nil {
+			return fmt.Errorf("insert demo directory review item for %s: %w", item.GroupName, err)
+		}
+	}
+	// department_name already has a mapping, so a value nobody has mapped is
+	// raised when the directory first gives it to someone.
+	if err := s.q.RolesInsertDirectoryReviewAttributeItem(ctx, repo.RolesInsertDirectoryReviewAttributeItemParams{
+		OrganizationID: org,
+		Kind:           "new_attribute_value",
+		AttributeKey:   "department_name",
+		AttributeValue: "Platform Engineering",
+	}); err != nil {
+		return fmt.Errorf("insert demo directory review attribute item: %w", err)
 	}
 	return nil
 }
@@ -474,6 +588,12 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 	if err := s.q.RolesDeleteDeviceAgentDeviceSyncs(ctx, org); err != nil {
 		return fmt.Errorf("delete demo device agent device syncs: %w", err)
 	}
+	if err := s.q.RolesDeleteDeviceAgentStateReports(ctx, org); err != nil {
+		return fmt.Errorf("delete demo device agent state reports: %w", err)
+	}
+	// The policy every active agent was last served, and the one it replaced.
+	currentEtag := s.policyEtag("current")
+	previousEtag := s.policyEtag("previous")
 	for i, u := range demoUsers {
 		userID := s.userID(u.handle)
 		if err := s.q.RolesInsertUserAccount(ctx, repo.RolesInsertUserAccountParams{
@@ -501,22 +621,35 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 		// Agent heartbeats, split so coverage has more than one answer to
 		// give. The first three reported minutes ago (agent_active); the
 		// contractor's last check-in is six days old (agent_stale); the last
-		// two never installed it (no_agent). A fleet where every row is the
+		// two have none here (Lucas's is added below). A fleet where every row is the
 		// same colour tells an admin nothing, which is the whole job of this
 		// page.
 		if i < 4 {
 			lastSeenAgo := "6 days"
+			servedEtag := conv.ToPGTextEmpty("")
 			if i < 3 {
 				lastSeenAgo = "12 minutes"
+				servedEtag = conv.ToPGText(currentEtag)
 			}
 			if err := s.q.RolesInsertDeviceAgentSync(ctx, repo.RolesInsertDeviceAgentSyncParams{
 				OrganizationID: org,
 				Email:          s.email(u.handle),
 				LastSeenAgo:    lastSeenAgo,
+				ServedEtag:     servedEtag,
 			}); err != nil {
 				return fmt.Errorf("insert demo device agent sync %s: %w", u.handle, err)
 			}
 		}
+	}
+	// Lucas runs the agent only on his Windows desktop, so his heartbeat is
+	// fresh while his MacBook has no agent of its own.
+	if err := s.q.RolesInsertDeviceAgentSync(ctx, repo.RolesInsertDeviceAgentSyncParams{
+		OrganizationID: org,
+		Email:          s.email("lucas"),
+		LastSeenAgo:    "11 minutes",
+		ServedEtag:     conv.ToPGText(currentEtag),
+	}); err != nil {
+		return fmt.Errorf("insert demo device agent sync lucas: %w", err)
 	}
 
 	// Three personal accounts across two providers: a contractor on his own
@@ -632,6 +765,13 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 		// Installed, then went quiet: the drift case, and the row worth
 		// chasing.
 		{"C02DEMO0004", "mateo", "mateo-mbp", "6 days"},
+		// Two machines Jamf never enrolled, so only their agents list them
+		// (the Devices tab's "Not in an MDM" rows). Amara's build box
+		// enforces policy; Priya's old laptop went quiet after she moved to
+		// a new one. Both owners' enrolled laptops already answer by their
+		// own serials, so these leave the MDM coverage buckets unchanged.
+		{"H4DEMO0101", "amara", "amara-build-mini", "9 minutes"},
+		{"C02DEMO0102", "priya", "priya-old-mbp", "5 days"},
 	}
 	for _, d := range deviceSyncs {
 		if err := s.q.RolesInsertDeviceAgentDeviceSync(ctx, repo.RolesInsertDeviceAgentDeviceSyncParams{
@@ -644,5 +784,68 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 			return fmt.Errorf("insert demo device agent device sync %s: %w", d.serial, err)
 		}
 	}
+
+	// State reports, so coverage can say whether each active machine
+	// enforces the policy it was served. Amara's applied it, Jonas's is still
+	// on the previous one because Claude Code's managed settings are not
+	// writable, and Priya's runs a build that does not report. Three answers,
+	// for the same reason the heartbeats above are split. Amara's build box
+	// reports too, so the agent-only rows include an enforcing machine.
+	reports := []struct {
+		serial, owner, hostname, os, arch, reportedAgo, etag, appliedAgo, tools string
+		degraded                                                                int32
+	}{
+		{
+			"C02DEMO0001", "amara", "amara-mbp", "darwin", "arm64", "8 minutes", currentEtag, "2 days",
+			`[{"tool":"claude_code","layer":"managed","outcome":"armed","restart_required":false,"action_required":false,"drift_corrections":2},` +
+				`{"tool":"cursor","layer":"user","outcome":"armed","restart_required":false,"action_required":false,"drift_corrections":0},` +
+				`{"tool":"codex","layer":"off","outcome":"skipped","restart_required":false,"action_required":false}]`,
+			0,
+		},
+		{
+			"C02DEMO0002", "jonas", "jonas-mbp", "darwin", "arm64", "14 minutes", previousEtag, "9 days",
+			`[{"tool":"claude_code","layer":"managed","outcome":"error","error_kind":"permission_denied","restart_required":false,"action_required":true},` +
+				`{"tool":"cursor","layer":"user","outcome":"armed","restart_required":true,"action_required":false,"drift_corrections":0}]`,
+			1,
+		},
+		{
+			"H4DEMO0101", "amara", "amara-build-mini", "darwin", "arm64", "6 minutes", currentEtag, "2 days",
+			`[{"tool":"claude_code","layer":"managed","outcome":"armed","restart_required":false,"action_required":false,"drift_corrections":0}]`,
+			0,
+		},
+		// Lucas's Windows desktop, whose agent reports no serial. It must not
+		// stand in for his MacBook, which has no agent of its own: the Mac
+		// reads "No policy report", and the desktop gets its own row.
+		{
+			"", "lucas", "LUCAS-DESKTOP", "windows", "amd64", "11 minutes", currentEtag, "3 days",
+			`[{"tool":"cursor","layer":"user","outcome":"armed","restart_required":false,"action_required":false,"drift_corrections":0}]`,
+			0,
+		},
+	}
+	for _, r := range reports {
+		if err := s.q.RolesInsertDeviceAgentStateReport(ctx, repo.RolesInsertDeviceAgentStateReportParams{
+			OrganizationID:    org,
+			Email:             s.email(r.owner),
+			SerialNumber:      r.serial,
+			Hostname:          r.hostname,
+			ReportedAgo:       r.reportedAgo,
+			AppliedEtag:       r.etag,
+			AppliedAgo:        r.appliedAgo,
+			Tools:             []byte(r.tools),
+			DegradedToolCount: r.degraded,
+			SpeakeasydVersion: "0.42.0",
+			Os:                r.os,
+			Arch:              r.arch,
+		}); err != nil {
+			return fmt.Errorf("insert demo device agent state report %s: %w", r.hostname, err)
+		}
+	}
 	return nil
+}
+
+// policyEtag is a device-agent policy etag in the shape GetPlugins serves: a
+// hex sha256.
+func (s *seeder) policyEtag(label string) string {
+	sum := sha256.Sum256([]byte(s.name("policy-etag-" + label)))
+	return hex.EncodeToString(sum[:])
 }

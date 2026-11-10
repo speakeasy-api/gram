@@ -4,9 +4,30 @@ Run `./zero` until it succeeds. This script is what you will use to run the dash
 
 The main dependencies for this project are Mise and Docker. The `./zero` script will guide you to install these if they are not found.
 
+### Agentation
+
+Optional dashboard annotation toolbar. From your worktree, run:
+
+```sh
+mise run start:agentation
+```
+
+Setup and any needed dashboard restart are handled for you. Refresh the page. You can close the terminal.
+
+Stop with `pitchfork stop agentation` (clears annotations). It won't start again automatically.
+
 ### Development over Tailscale
 
 With the Tailscale CLI installed, logged in, and a Tailnet DNS name assigned to this machine, `./zero` offers to configure remote development before generating TLS certificates. Accepting saves the DNS name as `GRAM_HOST`, switches `GRAM_BIND_IP` to the machine's Tailnet IP (preferring IPv4), and refreshes their dependent settings in `mise.local.toml`. Assigned ports and explicit per-service listener overrides are preserved. The machine's DNS name and IPs are also included in the mkcert certificate. Other devices must trust the local mkcert CA.
+
+#### HTTPS certificates over Tailscale
+
+If HTTPS certificates are enabled for the tailnet (on the DNS page of the Tailscale admin console), accepting also sets `GRAM_TLS_PROVIDER=tailscale`. The stack then serves the machine's Tailscale certificate, which Let's Encrypt issues, instead of an mkcert certificate. Browsers on other tailnet devices trust it without installing a local CA. Without HTTPS certificates, setup keeps mkcert and other devices must trust this machine's mkcert CA. Certificates are published in Certificate Transparency logs, so the machine's Tailnet DNS name becomes public.
+
+- `mise run tls:tailscale` fetches the certificate into `local/ssl/tailscale/`. `tailscaled` caches it for every worktree, so the call is a local read while the certificate has more than 14 days left (`--min-validity`) and only then requests a new one. On Linux, the user running the stack must be the Tailscale operator (`sudo tailscale set --operator=$USER`).
+- `mise run start` (and therefore `mise run wake`) refreshes it before the listeners start. While the stack runs, the `tailscale-cert` Pitchfork cron renews it daily and restarts the daemons that serve TLS when it changes.
+- The certificate covers only the Tailnet DNS name, so `zero:tls` fails if an HTTPS endpoint uses another host. Setup also sets `GRAM_ASSISTANT_RUNTIME_SERVER_URL` to the Tailnet server URL, unless you have set it already, because local assistant runtime containers otherwise call back through `host.docker.internal`.
+- To go back to mkcert, set `GRAM_TLS_PROVIDER=mkcert` in `mise.local.toml`, then run `mise run zero:tls` and `mise run start`.
 
 Services using `GRAM_BIND_IP` default to `127.0.0.1` for local development; Tailscale is optional. Accepting Tailscale setup opts these services into listening on the Tailnet address. Health/control listeners stay on `127.0.0.1` independently of the public bind address. The dashboard and parking server have separate listener settings.
 

@@ -24,7 +24,7 @@ func TestGetMcpServer_ByToolsetID(t *testing.T) {
 	require.True(t, ok)
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
-		Name: "Selected hosted server", Slug: "selected-hosted-server", McpEnabled: true,
+		Name: "Selected hosted server", Slug: "selected-hosted-server",
 	})
 	require.NoError(t, err)
 	servers := mcpserversrepo.New(ti.conn)
@@ -154,6 +154,7 @@ func TestListMcpServers_DegradesWhenEnrichmentFails(t *testing.T) {
 	require.Equal(t, server.ID, result.McpServers[0].ID)
 	require.Nil(t, result.McpServers[0].Toolset)
 	require.Nil(t, result.McpServers[0].PrimaryEndpointID)
+	require.Nil(t, result.McpServers[0].HasEndpoint, "unknown, not false, so clients never hide on a failed read")
 
 	orgResult, err := ti.service.ListMcpServersForOrg(ctx, &gen.ListMcpServersForOrgPayload{})
 	require.NoError(t, err)

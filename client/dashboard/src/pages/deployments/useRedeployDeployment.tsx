@@ -1,10 +1,10 @@
 import { useRoutes } from "@/routes.js";
-import { MutationHookOptions } from "@gram/client/react-query/_types.js";
-import {
+import type { MutationHookOptions } from "@gram/client/react-query/_types.js";
+import type {
   RedeployDeploymentMutationData,
   RedeployDeploymentMutationVariables,
-  useRedeployDeploymentMutation,
 } from "@gram/client/react-query/redeployDeployment.js";
+import { useRedeployDeploymentMutation } from "@gram/client/react-query/redeployDeployment.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import RedeploySuccessToast from "./RedeploySuccessToast";

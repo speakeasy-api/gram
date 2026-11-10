@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -127,7 +128,7 @@ func seedRemoteLoginInFlight(t *testing.T, slug string, spy *revocationSpy) (con
 		UserSessionIssuerID: userIssuer,
 		Subject:             &subject,
 		McpSlug:             slug,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 	}, clients[0])
 	require.NoError(t, err)
 

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -198,6 +199,26 @@ func TestLoginRefusesBrokenConfig(t *testing.T) {
 	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}
 	err := NewRelay(cfg).Login(t.Context(), true)
 	require.ErrorContains(t, err, "reinstall")
+}
+
+// TestLoginKeepsCachedSignInBesideAgentKey: an agent's baked key is not the
+// person's sign-in, so an explicit login with a matching cache reports signed
+// in without opening a browser.
+func TestLoginKeepsCachedSignInBesideAgentKey(t *testing.T) {
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.example.test\napi_key=personal-key\nproject=acme\nemail=\norg=org-1\n"), 0o600))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	forceInteractiveEnv(t)
+	var opened atomic.Int32
+	orig := openBrowser
+	t.Cleanup(func() { openBrowser = orig })
+	openBrowser = func(string) { opened.Add(1) }
+
+	cfg := Config{ServerURL: "https://app.example.test", SiteURL: "", ProjectSlug: "acme", OrgID: "org-1", HooksAPIKey: "agent-key", AgentKey: true, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	require.NoError(t, NewRelay(cfg).Login(t.Context(), false))
+	require.Zero(t, opened.Load())
 }
 
 // TestMarkAttemptCreatesAuthDir: on a fresh machine the auth directory only

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const RiskBlockFeedback = {
 /**
  * Existing feedback sentiment recorded for this block, when any.
  */
-export type RiskBlockFeedback = ClosedEnum<typeof RiskBlockFeedback>;
+export type RiskBlockFeedback = OpenEnum<typeof RiskBlockFeedback>;
 
 export type RiskBlock = {
   /**
@@ -57,9 +58,10 @@ export type RiskBlock = {
 };
 
 /** @internal */
-export const RiskBlockFeedback$inboundSchema: z.ZodMiniEnum<
-  typeof RiskBlockFeedback
-> = z.enum(RiskBlockFeedback);
+export const RiskBlockFeedback$inboundSchema: z.ZodMiniType<
+  RiskBlockFeedback,
+  unknown
+> = openEnums.inboundSchema(RiskBlockFeedback);
 
 /** @internal */
 export const RiskBlock$inboundSchema: z.ZodMiniType<RiskBlock, unknown> = z

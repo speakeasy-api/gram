@@ -10,7 +10,11 @@ import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
-import type { EMAProviderInput } from "@gram/client/models/components/emaproviderinput.js";
+import {
+  EMAProviderInputKind,
+  type EMAProviderInput,
+} from "@gram/client/models/components/emaproviderinput.js";
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { invalidateAllOrganizationRemoteSessionIssuerEMAServices } from "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js";
 import { useSetOrganizationRemoteSessionIssuerEMAProvidersMutation } from "@gram/client/react-query/setOrganizationRemoteSessionIssuerEMAProviders.js";
@@ -20,6 +24,7 @@ import {
   serverDisplayName,
   strandedNotes,
   strandedServers,
+  supportsProvider,
   type ProviderView,
   type ServerSignIn,
 } from "./emaServiceView";
@@ -30,7 +35,7 @@ const MAX_ACCEPTED = 10;
 /** One identity provider an admin can choose for a service to accept. */
 export type ProviderCandidate = {
   key: string;
-  kind: "external" | "speakeasy";
+  kind: ProviderView["kind"];
   name: string;
   /** The external provider's issuer record. */
   remoteSessionIssuerId?: string;
@@ -87,6 +92,10 @@ export function EmaAllowedProvidersEditor({
   // A refused save waits for the current list before the editor can rebase
   // onto it, or the next save would conflict again.
   const [refreshing, setRefreshing] = useState(false);
+  const supportsEditing =
+    current.every(supportsProvider) &&
+    (isDefault || current.every(supportsProviderInput)) &&
+    candidates.every(supportsProviderInput);
   const saved: ProviderCandidate[] = isDefault
     ? []
     : current.map((provider) => {
@@ -114,23 +123,29 @@ export function EmaAllowedProvidersEditor({
   // Judged on every render, so a draft started before the candidates loaded
   // is checked against them once they have. An entry that is only paused or
   // disabled stays valid and gets a readiness note instead.
-  const available = (entry: ProviderCandidate): boolean =>
-    !candidatesReady ||
-    (candidates.some((c) => c.key === entry.key) &&
-      (entry.kind === "speakeasy" ||
-        current.find((p) => p.key === entry.key)?.unavailableReason !==
-          "deleted"));
+  const available = (entry: ProviderCandidate): boolean | undefined => {
+    const provider = current.find((p) => p.key === entry.key);
+    if (provider && !supportsProvider(provider)) return undefined;
+    return (
+      !candidatesReady ||
+      (candidates.some((c) => c.key === entry.key) &&
+        (entry.kind === "speakeasy" ||
+          provider?.unavailableReason !== "deleted"))
+    );
+  };
   const readiness = (key: string): string | undefined => {
     if (key === "speakeasy" && speakeasyRecreated)
       return canEdit
         ? "Speakeasy was set up again. Save this list again to use it."
         : "Speakeasy was set up again. An organization admin needs to save this list again to use it.";
     const provider = current.find((p) => p.key === key);
+    if (provider && !supportsProvider(provider)) return provider.unavailable;
     return provider && !provider.usable && !provider.placeholder
       ? `${provider.unavailable}. It’s skipped until it works again.`
       : undefined;
   };
   const startEditing = (keys: string[]) => {
+    if (!supportsEditing || !canEdit || !candidatesReady) return;
     setBase(saved);
     setConflict(false);
     setDraft(keys);
@@ -156,7 +171,8 @@ export function EmaAllowedProvidersEditor({
         saved.map((entry) => entry.key),
       ));
   const invalidChecked = checked.filter((entry) => !available(entry));
-  const strandingKeys = custom ? checked.map((entry) => entry.key) : null;
+  const strandingKeys =
+    supportsEditing && custom ? checked.map((entry) => entry.key) : null;
   const strandingKey = strandingKeys?.join(",");
   const stranded = useMemo(
     () =>
@@ -201,7 +217,26 @@ export function EmaAllowedProvidersEditor({
     },
   });
   const submit = (entries: ProviderCandidate[]) => {
-    if (!remoteSessionIssuerId) return;
+    if (
+      !remoteSessionIssuerId ||
+      !supportsEditing ||
+      save.isPending ||
+      refreshing ||
+      changedUnderneath ||
+      !entries.every(supportsProviderInput) ||
+      !(base ?? saved).every(supportsProviderInput)
+    )
+      return;
+    if (
+      entries.length === 0
+        ? !canRestore
+        : !canEdit ||
+          !candidatesReady ||
+          !dirty ||
+          entries.length > MAX_ACCEPTED ||
+          invalidChecked.length > 0
+    )
+      return;
     save.mutate({
       request: {
         setEMAProvidersRequestBody: {
@@ -214,12 +249,14 @@ export function EmaAllowedProvidersEditor({
   };
   const conflictError =
     save.error instanceof GramError && save.error.statusCode === 409;
-  const toggle = (key: string, on: boolean) =>
+  const toggle = (key: string, on: boolean) => {
+    if (!supportsEditing || !canEdit) return;
     setDraft((keys) =>
       on
         ? [...(keys ?? []), key]
         : (keys ?? []).filter((existing) => existing !== key),
     );
+  };
   // Editing the default starts from what it does today: every candidate.
   const edit = () =>
     startEditing(
@@ -230,7 +267,9 @@ export function EmaAllowedProvidersEditor({
   // In the default every provider is enabled. Before the candidates load,
   // or for someone who can't load them, show what the service lists today.
   const defaultRows: { key: string; name: string }[] =
-    candidatesReady && candidates.length > 0 ? candidates : current;
+    supportsEditing && candidatesReady && candidates.length > 0
+      ? candidates
+      : current;
 
   return (
     <SettingsSection id="accepted-providers">
@@ -261,7 +300,7 @@ export function EmaAllowedProvidersEditor({
           ) : (
             <>
               {changedUnderneath && (
-                <Alert variant="warning" alignTop>
+                <Alert variant="warning">
                   <div className="flex flex-col items-start gap-2">
                     <Text small className="block">
                       {editing
@@ -286,8 +325,9 @@ export function EmaAllowedProvidersEditor({
                       <Button
                         variant="tertiary"
                         size="sm"
-                        disabled={refreshing}
+                        disabled={refreshing || !supportsEditing}
                         onClick={() => {
+                          if (!supportsEditing) return;
                           if (editing) setBase(saved);
                           setConflict(false);
                           save.reset();
@@ -299,7 +339,7 @@ export function EmaAllowedProvidersEditor({
                   </div>
                 </Alert>
               )}
-              {editing && canEdit ? (
+              {editing && canEdit && supportsEditing ? (
                 <ul
                   aria-label="Identity providers to enable"
                   className="space-y-2"
@@ -331,6 +371,7 @@ export function EmaAllowedProvidersEditor({
                           <EntryNote
                             available={available(row)}
                             readiness={on ? readiness(row.key) : undefined}
+                            canEdit
                           />
                         </span>
                       </li>
@@ -354,6 +395,7 @@ export function EmaAllowedProvidersEditor({
                           <EntryNote
                             available={available(row)}
                             readiness={readiness(row.key)}
+                            canEdit={canEdit && supportsEditing}
                           />
                         )}
                       </AcceptedRow>
@@ -388,8 +430,14 @@ export function EmaAllowedProvidersEditor({
               {readOnlyReason}
             </Text>
           )}
+          {!supportsEditing && (
+            <Text muted small>
+              Refresh the page before changing this unsupported identity
+              provider configuration.
+            </Text>
+          )}
           {canEdit && candidatesError ? (
-            <Alert variant="error" alignTop>
+            <Alert variant="error">
               <div className="flex flex-col items-start gap-2">
                 <Text small className="block">
                   Couldn’t load the identity providers you can choose from. You
@@ -428,7 +476,12 @@ export function EmaAllowedProvidersEditor({
                 <Button
                   variant="secondary"
                   size="sm"
-                  disabled={save.isPending}
+                  disabled={
+                    save.isPending ||
+                    !supportsEditing ||
+                    changedUnderneath ||
+                    refreshing
+                  }
                   onClick={() => submit([])}
                 >
                   Use default
@@ -438,7 +491,9 @@ export function EmaAllowedProvidersEditor({
                 <Button
                   variant="secondary"
                   size="sm"
-                  disabled={save.isPending || !candidatesReady}
+                  disabled={
+                    save.isPending || !candidatesReady || !supportsEditing
+                  }
                   onClick={edit}
                 >
                   Edit
@@ -459,6 +514,7 @@ export function EmaAllowedProvidersEditor({
                     size="sm"
                     disabled={
                       save.isPending ||
+                      !supportsEditing ||
                       !candidatesReady ||
                       changedUnderneath ||
                       !dirty ||
@@ -516,14 +572,16 @@ function AcceptedRow({
 function EntryNote({
   available,
   readiness,
+  canEdit,
 }: {
-  available: boolean;
+  available: boolean | undefined;
   readiness: string | undefined;
+  canEdit: boolean;
 }): JSX.Element | null {
-  if (!available)
+  if (available === false)
     return (
       <Text as="span" small className="text-default-warning">
-        No longer available. Uncheck it to save.
+        No longer available.{canEdit ? " Uncheck it to save." : ""}
       </Text>
     );
   if (!readiness) return null;
@@ -535,9 +593,23 @@ function EntryNote({
 }
 
 function providerInput(entry: ProviderCandidate): EMAProviderInput {
-  return entry.kind === "speakeasy" || !entry.remoteSessionIssuerId
-    ? { kind: "speakeasy" }
-    : { kind: "external", remoteSessionIssuerId: entry.remoteSessionIssuerId };
+  const kind = requireKnownEnumValue(EMAProviderInputKind, entry.kind);
+  if (kind === "external" && !entry.remoteSessionIssuerId)
+    throw new Error(
+      "An external identity provider needs an issuer before it can be saved.",
+    );
+  return kind === "speakeasy"
+    ? { kind }
+    : { kind, remoteSessionIssuerId: entry.remoteSessionIssuerId };
+}
+
+function supportsProviderInput(
+  entry: Pick<ProviderCandidate, "kind" | "remoteSessionIssuerId">,
+): boolean {
+  return (
+    isKnownEnumValue(EMAProviderInputKind, entry.kind) &&
+    (entry.kind !== "external" || Boolean(entry.remoteSessionIssuerId))
+  );
 }
 
 function sameOrder(a: ProviderCandidate[], b: ProviderCandidate[]): boolean {

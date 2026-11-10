@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import type {
   InferenceSpendCap,
   InferenceSpendCapKeyType,
@@ -47,6 +48,16 @@ const CAP_COPY: Record<InferenceSpendCapKeyType, CapCopy> = {
   },
 };
 
+const UNKNOWN_CAP_COPY: CapCopy = {
+  name: "Unknown inference",
+  slug: "unknown",
+  paused: "Inference is paused. Refresh the page for updated details.",
+};
+
+function capCopy(keyType: InferenceSpendCapKeyType): CapCopy {
+  return enumPresentation(CAP_COPY, keyType, UNKNOWN_CAP_COPY);
+}
+
 /**
  * The display order the caps are always rendered in.
  *
@@ -81,12 +92,15 @@ export function spendCapFillPercent(used: number, cap: number): number {
 
 /** The label for a cap. The one place a key type becomes words. */
 export function inferenceCapLabel(keyType: InferenceSpendCapKeyType): string {
-  return `${CAP_COPY[keyType].name} cap`;
+  return `${capCopy(keyType).name} cap`;
 }
 
-/** The anchor for a cap's own control, unique per key and free of identifiers. */
+/** Known caps link to their control; unsupported caps link to the section. */
 export function inferenceCapAnchor(keyType: InferenceSpendCapKeyType): string {
-  return `${INFERENCE_CAPS_ANCHOR}-${CAP_COPY[keyType].slug}`;
+  const copy = capCopy(keyType);
+  return copy === UNKNOWN_CAP_COPY
+    ? INFERENCE_CAPS_ANCHOR
+    : `${INFERENCE_CAPS_ANCHOR}-${copy.slug}`;
 }
 
 /** Whether an element id is one this section answers for. */
@@ -99,7 +113,7 @@ export function isInferenceCapAnchor(id: string): boolean {
 export function inferenceCapPausedNote(
   keyType: InferenceSpendCapKeyType,
 ): string {
-  return CAP_COPY[keyType].paused;
+  return capCopy(keyType).paused;
 }
 
 /**
@@ -112,7 +126,9 @@ export function inferenceCapPausedNote(
 export function inferenceCapRaiseLabel(
   keyType: InferenceSpendCapKeyType,
 ): string {
-  return `Raise ${CAP_COPY[keyType].name.toLowerCase()} cap`;
+  const copy = capCopy(keyType);
+  if (copy === UNKNOWN_CAP_COPY) return "View inference caps";
+  return `Raise ${copy.name.toLowerCase()} cap`;
 }
 
 /**
@@ -144,7 +160,9 @@ export function isInferenceCapReached(
 export function sortInferenceCaps(
   caps: readonly InferenceSpendCap[],
 ): InferenceSpendCap[] {
-  return [...caps].sort(
-    (a, b) => CAP_ORDER.indexOf(a.keyType) - CAP_ORDER.indexOf(b.keyType),
-  );
+  const rank = (keyType: InferenceSpendCapKeyType) => {
+    const index = CAP_ORDER.indexOf(keyType);
+    return index < 0 ? CAP_ORDER.length : index;
+  };
+  return [...caps].sort((a, b) => rank(a.keyType) - rank(b.keyType));
 }

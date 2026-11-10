@@ -2736,6 +2736,7 @@ func marshalTypesWorkloadIssuerToWorkloadIssuerResponseBody(v *types.WorkloadIss
 		Issuer:                 v.Issuer,
 		JwksURI:                v.JwksURI,
 		Description:            v.Description,
+		AllowAssertionReuse:    v.AllowAssertionReuse,
 		AllowWildcardAdmission: v.AllowWildcardAdmission,
 		CreatedAt:              v.CreatedAt,
 		UpdatedAt:              v.UpdatedAt,
@@ -2816,18 +2817,6 @@ func marshalWorkloadidentitiesWorkloadPlatformToWorkloadPlatformResponseBody(v *
 	if v.Subject != nil {
 		res.Subject = marshalWorkloadidentitiesWorkloadPlatformSubjectToWorkloadPlatformSubjectResponseBody(v.Subject)
 	}
-	if v.Steps != nil {
-		res.Steps = make([]*WorkloadPlatformStepResponseBody, len(v.Steps))
-		for i, val := range v.Steps {
-			if val == nil {
-				res.Steps[i] = nil
-				continue
-			}
-			res.Steps[i] = marshalWorkloadidentitiesWorkloadPlatformStepToWorkloadPlatformStepResponseBody(val)
-		}
-	} else {
-		res.Steps = []*WorkloadPlatformStepResponseBody{}
-	}
 
 	return res
 }
@@ -2868,51 +2857,40 @@ func marshalWorkloadidentitiesWorkloadPlatformSubjectToWorkloadPlatformSubjectRe
 	res := &WorkloadPlatformSubjectResponseBody{
 		Template: v.Template,
 		Wildcard: v.Wildcard,
+		Label:    v.Label,
 	}
-
-	return res
-}
-
-// marshalWorkloadidentitiesWorkloadPlatformStepToWorkloadPlatformStepResponseBody
-// builds a value of type *WorkloadPlatformStepResponseBody from a value of
-// type *workloadidentities.WorkloadPlatformStep.
-func marshalWorkloadidentitiesWorkloadPlatformStepToWorkloadPlatformStepResponseBody(v *workloadidentities.WorkloadPlatformStep) *WorkloadPlatformStepResponseBody {
-	res := &WorkloadPlatformStepResponseBody{
-		ID:    v.ID,
-		Title: v.Title,
-		Phase: v.Phase,
+	{
+		var zero string
+		if res.Label == zero {
+			res.Label = ""
+		}
 	}
-	if v.Blocks != nil {
-		res.Blocks = make([]*WorkloadPlatformBlockResponseBody, len(v.Blocks))
-		for i, val := range v.Blocks {
+	if v.Alternatives != nil {
+		res.Alternatives = make([]*WorkloadPlatformSubjectAlternativeResponseBody, len(v.Alternatives))
+		for i, val := range v.Alternatives {
 			if val == nil {
-				res.Blocks[i] = nil
+				res.Alternatives[i] = nil
 				continue
 			}
-			res.Blocks[i] = marshalWorkloadidentitiesWorkloadPlatformBlockToWorkloadPlatformBlockResponseBody(val)
+			res.Alternatives[i] = marshalWorkloadidentitiesWorkloadPlatformSubjectAlternativeToWorkloadPlatformSubjectAlternativeResponseBody(val)
 		}
-	} else {
-		res.Blocks = []*WorkloadPlatformBlockResponseBody{}
 	}
 
 	return res
 }
 
-// marshalWorkloadidentitiesWorkloadPlatformBlockToWorkloadPlatformBlockResponseBody
-// builds a value of type *WorkloadPlatformBlockResponseBody from a value of
-// type *workloadidentities.WorkloadPlatformBlock.
-func marshalWorkloadidentitiesWorkloadPlatformBlockToWorkloadPlatformBlockResponseBody(v *workloadidentities.WorkloadPlatformBlock) *WorkloadPlatformBlockResponseBody {
-	res := &WorkloadPlatformBlockResponseBody{
-		Type:     v.Type,
-		Markdown: v.Markdown,
-		Src:      v.Src,
-		Alt:      v.Alt,
-		Caption:  v.Caption,
-		Href:     v.Href,
+// marshalWorkloadidentitiesWorkloadPlatformSubjectAlternativeToWorkloadPlatformSubjectAlternativeResponseBody
+// builds a value of type *WorkloadPlatformSubjectAlternativeResponseBody from
+// a value of type *workloadidentities.WorkloadPlatformSubjectAlternative.
+func marshalWorkloadidentitiesWorkloadPlatformSubjectAlternativeToWorkloadPlatformSubjectAlternativeResponseBody(v *workloadidentities.WorkloadPlatformSubjectAlternative) *WorkloadPlatformSubjectAlternativeResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &WorkloadPlatformSubjectAlternativeResponseBody{
+		Key:      v.Key,
 		Label:    v.Label,
-		Variable: v.Variable,
-		Value:    v.Value,
-		Help:     v.Help,
+		Template: v.Template,
+		Wildcard: v.Wildcard,
 	}
 
 	return res

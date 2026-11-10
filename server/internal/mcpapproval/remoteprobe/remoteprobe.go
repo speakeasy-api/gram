@@ -18,7 +18,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
@@ -94,15 +93,9 @@ func (p *Probe) DiscoverAuthority(ctx context.Context, serverURL string) (*autho
 // undeclared on every hint. The registry catalog path reads raw JSON and
 // preserves field presence for all four.
 func (p *Probe) ListToolDeclarations(ctx context.Context, serverURL string) ([]capability.Declaration, error) {
-	// Retries are disabled: the assembler bounds this source with its own
-	// deadline, and an unreachable host should spend one connection attempt,
-	// not several.
-	client, err := externalmcp.NewClient(ctx, p.logger, p.guardian, serverURL, externalmcptypes.TransportTypeStreamableHTTP, &externalmcp.ClientOptions{
-		Metrics:          nil,
-		Authorization:    "",
-		Headers:          nil,
-		DisableRetries:   true,
+	client, err := externalmcp.NewClient(ctx, p.logger, p.guardian, serverURL, &externalmcp.ClientOptions{
 		MaxResponseBytes: maxProbeResponseBytes,
+		MaxMessageBytes:  0,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("connect for tool declarations: %w", err)

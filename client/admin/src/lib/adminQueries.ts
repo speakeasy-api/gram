@@ -37,7 +37,7 @@ import {
   type ListOrganizationsResult,
   type ListProjectMcpServersResult,
 } from "@/lib/gramAdminApi";
-import { organizationActivityQuery } from "@/lib/gramAdminClient";
+import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 
 // What queryOptions infers, named so the exports can carry the return type that
 // `typescript/explicit-module-boundary-types` demands. Writing the shape out by
@@ -100,7 +100,9 @@ export function invalidateOrganizationActivity(
   organizationID: string,
 ): void {
   void qc.invalidateQueries({
-    queryKey: organizationActivityQuery(organizationID).queryKey,
+    queryKey: queryKeyAdminListOrganizationActivityInfinite({
+      organizationId: organizationID,
+    }),
     exact: true,
   });
 }
@@ -366,6 +368,11 @@ export function projectQuery(
     ] as const,
     queryFn: () => getProject(idOrSlug, organizationIdOrSlug),
   });
+}
+
+// A redeploy adds a deployment, so every read of a project's counts is stale.
+export function invalidateProjects(qc: QueryClient): Promise<void> {
+  return qc.invalidateQueries({ queryKey: ["gram-admin-project"] });
 }
 
 export function usersListQuery(

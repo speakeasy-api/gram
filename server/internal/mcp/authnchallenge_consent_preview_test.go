@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http/httptest"
@@ -11,6 +12,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 )
 
 // TestConsentPagePreview renders every shape of the consent page, asserting
@@ -34,7 +38,7 @@ func TestConsentPagePreview(t *testing.T) {
 	base := consentTemplateData{
 		ClientName:     "Claude Code",
 		MCPSlug:        "speakeasy-team-datadog",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "12b256a1-a7b9-44f7-af8b-0ce000000000",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "adam@speakeasy.com",
@@ -105,6 +109,27 @@ func TestConsentPagePreview(t *testing.T) {
 		data consentTemplateData
 	}{
 		{"no-services", base},
+		{"tool-definition-diff", func() consentTemplateData {
+			d := withIsland(base)
+			d.ClientName = "Coding assistant"
+			d.MCPSlug = "team-tools"
+			before := &connectionCatalog{Tools: []*toolListEntry{
+				{Name: "issues--search", Description: "Search issues by title", InputSchema: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer","maximum":10}},"required":["query"]}`)},
+				{Name: "issues--archive", Description: "Archive a resolved issue", InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}`)},
+			}}
+			var inventory consentToolInventory
+			for _, tool := range []*toolListEntry{
+				{Name: "issues--search", Description: "Search issues by title and description", InputSchema: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer","maximum":100}},"required":["query"]}`)},
+				{Name: "issues--assign", Description: "Assign an issue to a team member", InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"assignee":{"type":"string"}},"required":["id","assignee"]}`)},
+			} {
+				inventory.Tools = append(inventory.Tools, consentInventoryTool{Name: tool.Name, Definition: tool, DefinitionHash: consentEvidenceHash(tool)})
+			}
+			changes, err := compareCatalogInventory(before, inventory)
+			require.NoError(t, err)
+			d.CatalogChanges = &changes
+			return d
+		}()},
+
 		{"no-services-tool-picker", withIsland(base)},
 		{"single-service-connected", withIsland(withCards(base, connectedCard))},
 		// The only way a single unlinked service renders at all: auto-connect
@@ -179,11 +204,11 @@ func TestConsentPagePreview(t *testing.T) {
 	// output directory so a plain static server resolves them.
 	fontDir := filepath.Join(outDir, "mcp", "consent-fonts")
 	require.NoError(t, os.MkdirAll(fontDir, 0o750))
-	fonts, err := consentPageFontNames()
+	fonts, err := consentpage.FontNames()
 	require.NoError(t, err)
 	for _, name := range fonts {
-		data, err := consentPageAssets.ReadFile("consent_page_assets/" + name)
-		require.NoError(t, err)
+		data, ok := consentpage.Font(name)
+		require.True(t, ok, name)
 		require.NoError(t, os.WriteFile(filepath.Join(fontDir, name), data, 0o600))
 	}
 
@@ -201,7 +226,7 @@ func TestConsentPagePreview(t *testing.T) {
 
 	for _, v := range variants {
 		data := v.data
-		data.Styles = consentPageStyles
+		data.Styles = consentpage.Styles
 		var page bytes.Buffer
 		require.NoError(t, consentTemplate.Execute(&page, data), v.name)
 		require.NoError(t, os.WriteFile(filepath.Join(outDir, v.name+".html"), page.Bytes(), 0o600))

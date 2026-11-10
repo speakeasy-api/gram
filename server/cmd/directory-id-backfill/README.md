@@ -24,6 +24,20 @@ Review the JSON report before applying. `unmatched` lists only kind-prefixed Wor
 
 The command snapshots the organization event cursor before fetching inventory, then takes the same transaction lock as the updated worker and checks the cursor again before writing. An event processed during retrieval, including a replay, rejects the run without attribution writes. Rerun with fresh inventory and review residuals; rejection does not mean the organization is covered. Updates are batched by directory and source type. An output failure after apply explicitly reports that writes have already committed.
 
+## Filling directory user names
+
+`--fill-names` copies first and last names from the same WorkOS user inventory onto live directory users that have no name yet. Rows with either name already set are left alone, because Directory Sync events are the source of truth. It never changes event cursors, timestamps or tombstones, runs under the same event-sync lock as attribution, and refuses a listing that names one WorkOS user twice. It is a dry run unless `--apply` is also passed.
+
+```sh
+cd server
+GRAM_ENVIRONMENT=local GRAM_DATABASE_URL=<LOCAL_DATABASE_URL> WORKOS_API_KEY=<LOCAL_STUB_KEY> WORKOS_API_URL=<LOCAL_WORKOS_URL> \
+  mise exec -- go run ./cmd/directory-id-backfill --organization-id <ORG_ID> --fill-names
+# then, after reviewing the report:
+  mise exec -- go run ./cmd/directory-id-backfill --organization-id <ORG_ID> --fill-names --apply
+```
+
+The report is counts only (`directories`, `listed_users`, `users_with_name`, `users_filled`); it never prints names or emails. Apply the directory user name migration before running it.
+
 ## Rollout checklist
 
 - Apply the additive directory ID schema migration first.

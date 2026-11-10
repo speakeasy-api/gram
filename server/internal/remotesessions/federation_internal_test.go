@@ -282,8 +282,15 @@ func TestFederatedSignerPreflightAndExchange(t *testing.T) {
 	for _, signer := range []TokenEndpointAssertionSigner{nil, unavailableTokenEndpointAssertionSigner{}} {
 		m := &ChallengeManager{assertions: signer}
 		require.ErrorIs(t, m.preflightFederatedSigner(p), ErrFederatedUnavailable)
+		require.ErrorIs(t, m.preflightFederatedSigner(p), ErrFederatedSigning)
+		_, refreshErr := m.RefreshFederatedIdentity(t.Context(), p, "refresh", "subject", "")
+		require.ErrorIs(t, refreshErr, ErrFederatedSigning)
+		var setup *FederatedRefreshError
+		require.ErrorAs(t, refreshErr, &setup)
+		require.Equal(t, FederatedRefreshSetupRetryable, setup.Kind)
 		_, err := NewTokenEndpointRequest(t.Context(), p.metadata.TokenEndpoint, url.Values{}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: signer})
 		require.ErrorIs(t, classifyFederatedExchangeError(err), ErrFederatedUnavailable)
+		require.ErrorIs(t, classifyFederatedExchangeError(err), ErrFederatedSigning)
 	}
 	calls := 0
 	signer := federatedAssertionSignerFunc(func(context.Context, ClientAssertionRequest) (string, error) { calls++; return "signed-assertion", nil })
@@ -318,6 +325,11 @@ func TestFederatedExchangeErrorClassification(t *testing.T) {
 		{newTokenEndpointError(http.StatusRequestTimeout, "408", nil), ErrFederatedUnavailable},
 		{newTokenEndpointError(400, "400", []byte(`{"error":"invalid_client","error_description":"secret"}`)), ErrFederatedConfiguration},
 		{newTokenEndpointError(400, "400", []byte(`{"error":"invalid_grant","error_description":"secret"}`)), ErrFederatedIdentity},
+		{newTokenEndpointError(200, "200", []byte(`{"error":"invalid_client","error_description":"secret"}`)), ErrFederatedConfiguration},
+		{newTokenEndpointError(200, "200", []byte(`{"error":"unauthorized_client","error_description":"secret"}`)), ErrFederatedConfiguration},
+		{newTokenEndpointError(200, "200", []byte(`{"error":"temporarily_unavailable","error_description":"secret"}`)), ErrFederatedUnavailable},
+		{newTokenEndpointError(200, "200", []byte(`{"error":"server_error","error_description":"secret"}`)), ErrFederatedUnavailable},
+		{newTokenEndpointError(200, "200", []byte(`{"error":"invalid_grant","error_description":"secret"}`)), ErrFederatedIdentity},
 		{&tokenEndpointSigningError{err: fmt.Errorf("sign detail: %w", errClientAssertionKeyUnconfigured)}, ErrFederatedConfiguration},
 		{&tokenEndpointSigningError{err: fmt.Errorf("load active client assertion key detail: %w", pgx.ErrNoRows)}, ErrFederatedConfiguration},
 		{&tokenEndpointSigningError{err: errors.New("kms detail")}, ErrFederatedSigning},

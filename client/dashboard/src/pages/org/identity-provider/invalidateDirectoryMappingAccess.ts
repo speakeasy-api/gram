@@ -1,7 +1,9 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { invalidateAllAudienceOptions } from "@gram/client/react-query/audienceOptions.js";
 import { invalidateAllAudiences } from "@gram/client/react-query/audiences.js";
+import { invalidateAllDirectoryReviewItems } from "@gram/client/react-query/directoryReviewItems.js";
 import { invalidateAllDirectoryRoleMappings } from "@gram/client/react-query/directoryRoleMappings.js";
+import { invalidateAllDirectoryRoleSetupPreview } from "@gram/client/react-query/directoryRoleSetupPreview.js";
 import { invalidateAllExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
 import { invalidateAllIdentityAccess } from "@gram/client/react-query/identityAccess.js";
 import { invalidateAllMembers } from "@gram/client/react-query/members.js";
@@ -14,6 +16,9 @@ export function invalidateDirectoryMappingAccess(
 ): Promise<void[]> {
   return Promise.all([
     invalidateAllDirectoryRoleMappings(queryClient),
+    invalidateAllDirectoryRoleSetupPreview(queryClient),
+    // Editing a source's roles settles review items it resolves.
+    invalidateAllDirectoryReviewItems(queryClient),
     invalidateAllMembers(queryClient),
     invalidateAllRoles(queryClient),
     invalidateAllRole(queryClient),

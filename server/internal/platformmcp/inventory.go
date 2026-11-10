@@ -108,6 +108,14 @@ func mcpFromInventoryItem(row platformrepo.GetPlatformMCPInventoryItemRow, distr
 }
 
 func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, slug, visibility, model string, backendKind MCPBackendKind, upstreamURL string, registrationID uuid.UUID, sourceKind, provider, reference, registrationStatus string, registrationRemoteID, registrationIssuerID, registrationMCPID, registrationEndpointID uuid.NullUUID, readinessState, checkedAt, expiresAt string, distributions map[uuid.UUID][]MCPDistribution) MCP {
+	enabledState := "unknown"
+	switch visibility {
+	case "private", "public":
+		enabledState = "enabled"
+	case "disabled":
+		enabledState = "disabled"
+	}
+
 	mcp := MCP{
 		ID:               id.String(),
 		ProjectID:        projectID.String(),
@@ -117,7 +125,8 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		Slug:             slug,
 		Version:          "",
 		Visibility:       visibility,
-		EffectiveEnabled: visibility != "disabled",
+		EffectiveEnabled: enabledState == "enabled",
+		EnabledState:     enabledState,
 		Model:            "",
 		BackendKind:      backendKind,
 		UpstreamURL:      "",
@@ -151,9 +160,9 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		if readinessState != "" {
 			mcp.Readiness = MCPReadiness{State: readinessState, CheckedAt: checkedAt, ExpiresAt: expiresAt}
 		}
-		// Disabled MCPs retain historical readiness evidence for audit and later
-		// diagnosis, but it cannot be treated as effective current readiness.
-		if visibility == "disabled" {
+		// Only confirmed enabled MCPs can expose historical readiness evidence
+		// as effective current readiness.
+		if enabledState != "enabled" {
 			mcp.Readiness = MCPReadiness{State: "unknown", CheckedAt: "", ExpiresAt: ""}
 		}
 		mcp.Operations = []string{"read", "dashboard_setup", "update_mcp_metadata"}

@@ -48,6 +48,17 @@ func AdmitWorkloadSession(ctx context.Context, db *pgxpool.Pool) (authz.Workload
 	return admission, nil
 }
 
+// AdmitWorkloadSessionInTx evaluates live workload policy on a caller-owned
+// lifecycle transaction. The caller must begin with REPEATABLE READ or
+// SERIALIZABLE before any reads, and owns commit/rollback. READ COMMITTED is
+// not supported: its per-statement snapshots can combine inconsistent authority.
+func AdmitWorkloadSessionInTx(ctx context.Context, tx pgx.Tx) (authz.WorkloadSessionAdmission, error) {
+	if tx == nil || !hasWorkloadSessionAdmissionContext(ctx) {
+		return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
+	}
+	return admitWorkloadSessionInTx(ctx, tx)
+}
+
 // admitWorkloadSessionInTx reads every row admission depends on from one
 // snapshot.
 //
@@ -74,19 +85,20 @@ func admitWorkloadSessionInTx(ctx context.Context, tx accessrepo.DBTX) (authz.Wo
 	}
 
 	var storedCeiling []authz.Grant
+	var legacyAuthCeiling bool
 	if credential.DerivesPolicyAtAdmission {
 		if len(credential.DelegatedGrants) != 0 {
 			return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
 		}
 	} else {
-		policy, err := DecodeDelegatedPolicy(DelegatedPolicyVersion(credential.DelegatedGrantsVersion), credential.DelegatedGrants)
+		var err error
+		storedCeiling, legacyAuthCeiling, err = admitStoredPolicy(ctx, tx, authCtx.ActiveOrganizationID, credential.DelegatedGrantsVersion, credential.DelegatedGrants)
 		if err != nil {
 			if errors.Is(err, ErrInvalidDelegatedPolicy) {
 				return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
 			}
 			return authz.WorkloadSessionAdmission{}, fmt.Errorf("decode workload session policy: %w", err)
 		}
-		storedCeiling = policy.RuntimeGrants()
 	}
 
 	agentID, assigned, err := workloadidentity.ResolveAssignedAgent(ctx, tx, workloadidentity.AssignmentParams{
@@ -145,6 +157,8 @@ func admitWorkloadSessionInTx(ctx context.Context, tx accessrepo.DBTX) (authz.Wo
 		Ceiling:        ceiling,
 		Agent:          agentPolicy,
 		Owner:          ownerPolicy,
+
+		LegacyAuthCeiling: legacyAuthCeiling,
 	}, nil
 }
 

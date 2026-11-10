@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -90,10 +91,11 @@ func newTestAdminServiceOnDB(t *testing.T, conn *pgxpool.Pool) (context.Context,
 		logger:           logger,
 		db:               conn,
 		audit:            audit.NewLogger(),
+		scopes:           remotemcp.NewStaffScopes(logger, conn, audit.NewLogger()),
 		trial:            trialemails.NoopNotifier{},
 		sessions:         sessions,
 		loginStates:      cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
-		hookClientsCache: cache.NewTypedObjectCache[hookClientsSnapshot](logger, adminCache, cache.SuffixNone),
+		HookClientsCache: NewHookClientsCache(logger, adminCache, nil, nil),
 		productFeatures:  productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
 	}
 	svc.oidc = newTestOIDCClient(t, userinfoOK("sub-admin", "operator@example.com"))

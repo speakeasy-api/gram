@@ -42,7 +42,7 @@ class Reading(_message.Message):
         tool_call: Reading.ToolCall
         def __init__(self, kind: _Optional[str] = ..., id: _Optional[str] = ..., occurred_at: _Optional[str] = ..., conversation_message: _Optional[_Union[Reading.ConversationMessage, _Mapping]] = ..., tool_call: _Optional[_Union[Reading.ToolCall, _Mapping]] = ...) -> None: ...
     class ConversationMessage(_message.Message):
-        __slots__ = ("conversation_id", "role")
+        __slots__ = ("conversation_id", "role", "generation", "sequence", "capture_kind", "original_message_id")
         class Role(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
             __slots__ = ()
             ROLE_UNSPECIFIED: _ClassVar[Reading.ConversationMessage.Role]
@@ -53,9 +53,17 @@ class Reading(_message.Message):
         ROLE_ASSISTANT: Reading.ConversationMessage.Role
         CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
         ROLE_FIELD_NUMBER: _ClassVar[int]
+        GENERATION_FIELD_NUMBER: _ClassVar[int]
+        SEQUENCE_FIELD_NUMBER: _ClassVar[int]
+        CAPTURE_KIND_FIELD_NUMBER: _ClassVar[int]
+        ORIGINAL_MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
         conversation_id: str
         role: Reading.ConversationMessage.Role
-        def __init__(self, conversation_id: _Optional[str] = ..., role: _Optional[_Union[Reading.ConversationMessage.Role, str]] = ...) -> None: ...
+        generation: int
+        sequence: int
+        capture_kind: str
+        original_message_id: str
+        def __init__(self, conversation_id: _Optional[str] = ..., role: _Optional[_Union[Reading.ConversationMessage.Role, str]] = ..., generation: _Optional[int] = ..., sequence: _Optional[int] = ..., capture_kind: _Optional[str] = ..., original_message_id: _Optional[str] = ...) -> None: ...
     class ToolCall(_message.Message):
         __slots__ = ("tool_name", "tool_call_id", "mcp_server_id")
         TOOL_NAME_FIELD_NUMBER: _ClassVar[int]

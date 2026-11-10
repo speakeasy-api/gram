@@ -2,10 +2,13 @@ package mcp
 
 import (
 	"bytes"
+	"net/http"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 )
 
 func gatewayTestMember(slug, name string, issuer uuid.UUID, projectID uuid.UUID) metaMember {
@@ -201,6 +204,42 @@ func TestMetaGateMemberConnectURL(t *testing.T) {
 	require.Empty(t, metaGateContext{}.memberConnectURL(gatewayTestMember("github", "", issuer, uuid.New())))
 }
 
+// Where the typed auth client resolver judged a member, what it decided sets
+// the connect page, never the member's derived authorization server.
+func TestMetaGateMemberConnectURL_TypedChoiceDecides(t *testing.T) {
+	t.Parallel()
+
+	gate := metaGateContext{connectRoot: "https://app.example.com/mcp/tools", memberChoices: &memberChoices{enforced: true}}
+	link := "https://app.example.com/mcp/tools/connect/first-party?server=github"
+	registration := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	for _, tc := range []struct {
+		name          string
+		derivedIssuer uuid.UUID
+		resolution    *authClientResolution
+		registration  uuid.NullUUID
+		want          string
+	}{
+		{name: "choice names a registration and no issuer was derived", derivedIssuer: uuid.Nil, resolution: &authClientResolution{outcome: authClientResolved}, registration: registration, want: link},
+		{name: "resolved no-auth choice though an issuer was derived", derivedIssuer: uuid.New(), resolution: &authClientResolution{outcome: authClientNoAuth}, want: ""},
+		{name: "no recorded choice on a server that needs authentication", derivedIssuer: uuid.Nil, resolution: &authClientResolution{outcome: authClientGap, reason: authClientReasonMissingChoice}, want: link},
+		{name: "gap on a server that needs no authentication though an issuer was derived", derivedIssuer: uuid.New(), resolution: &authClientResolution{outcome: authClientGap, noAuthAllowed: true}, want: ""},
+		{name: "stale no-auth choice only a new consent replaces", derivedIssuer: uuid.New(), resolution: &authClientResolution{outcome: authClientGap, noAuthChoice: true}, want: ""},
+		{name: "member the resolver did not judge keeps its derived issuer", derivedIssuer: uuid.New(), resolution: nil, want: link},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			member := gatewayTestMember("github", "", tc.derivedIssuer, uuid.New())
+			member.authClient = tc.resolution
+			member.chosenClientID = tc.registration
+			require.Equal(t, tc.want, gate.memberConnectURL(member))
+		})
+	}
+
+	derived := gatewayTestMember("github", "", uuid.New(), uuid.New())
+	derived.authClient = &authClientResolution{outcome: authClientGap, noAuthAllowed: true}
+	require.Equal(t, link, metaGateContext{connectRoot: "https://app.example.com/mcp/tools", memberChoices: &memberChoices{enforced: false}}.memberConnectURL(derived), "without enforcement the derived issuer still decides")
+}
+
 // A member with nothing routed, or a rejected credential, names the page that
 // connects it when the gateway has one.
 func TestMemberAuthFailure_LinksConnectPage(t *testing.T) {
@@ -209,16 +248,16 @@ func TestMemberAuthFailure_LinksConnectPage(t *testing.T) {
 	member := gatewayTestMember("github", "GitHub", uuid.New(), uuid.New())
 	connectURL := "https://app.example.com/mcp/tools/connect/first-party?server=github"
 
-	err := memberAuthFailure(member, memberDial{anonymous: true, connectURL: connectURL})
+	err := memberAuthFailure(member, memberDial{anonymous: true, fix: personFix(connectURL)}, http.StatusUnauthorized)
 	require.ErrorContains(t, err, `server "github" is not connected for this user`)
 	require.ErrorContains(t, err, connectURL)
 
-	err = memberAuthFailure(member, memberDial{anonymous: false, connectURL: connectURL})
+	err = memberAuthFailure(member, memberDial{anonymous: false, fix: personFix(connectURL)}, http.StatusUnauthorized)
 	require.ErrorContains(t, err, "rejected the user's credential")
 	require.ErrorContains(t, err, connectURL)
 
-	err = memberAuthFailure(member, memberDial{anonymous: true})
-	require.ErrorContains(t, err, "connect it from this gateway's sign-in page")
+	err = memberAuthFailure(member, memberDial{anonymous: true}, http.StatusUnauthorized)
+	require.ErrorContains(t, err, "Ask your administrator to connect it")
 }
 
 func renderGatewayConsent(t *testing.T, data consentTemplateData) string {
@@ -232,7 +271,7 @@ func gatewayTemplateData(view *gatewayConsentView, cards []remoteSessionCard) co
 	return consentTemplateData{
 		ClientName:         "Example Client",
 		MCPSlug:            "acme",
-		MCPRouteBase:       "mcp/gateway",
+		MCPRouteBase:       mcproute.OrganizationGateway,
 		State:              "state-id",
 		CSRFToken:          "csrf",
 		SubjectDisplay:     "user@example.com",
@@ -266,7 +305,7 @@ func TestConsentTemplate_GatewayListsServers(t *testing.T) {
 	require.NotContains(t, page, "data-gateway-server-page")
 	require.Contains(t, page, `id="consent-approve-button"`)
 	require.NotContains(t, page, "data-service-connections")
-	require.NotContains(t, page, "Connect a service above to enable access")
+	require.NotContains(t, page, "Connect or reconnect a service above to give access.")
 }
 
 // A server's connect page shows its services with no approval: connecting is
@@ -296,6 +335,32 @@ func TestConsentTemplate_GatewayServerPageHasNoApproval(t *testing.T) {
 	page = renderGatewayConsent(t, firstParty)
 	require.Contains(t, page, "Go back to your AI client and try again")
 	require.NotContains(t, page, "consent-approve-button")
+}
+
+// A server the identity provider is still being checked for is a sign-in
+// server: its page must not claim it needs no sign-in beside the pending
+// identity-provider card.
+func TestConsentTemplate_GatewayChainPendingServerPage(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.New()
+	idp := uuid.New()
+	card := gatewayTestCard("wiki-client", idp, uuid.NullUUID{})
+	card.Chained = true
+	card.ChainCheck = chainCheckPending
+	cards := []remoteSessionCard{card}
+	view := gatewayServersView([]metaMember{gatewayTestMember("wiki", "Wiki", idp, project)}, cards)
+	require.Equal(t, gatewayServerChainPending, view.Servers[0].Status)
+	require.True(t, view.Servers[0].NeedsSignIn())
+
+	list := renderGatewayConsent(t, gatewayTemplateData(view, nil))
+	require.Contains(t, list, `server=wiki" class="text-muted-foreground interact:text-foreground shrink-0 text-xs" data-gateway-server-page >Connect`)
+
+	focus := view.Servers[0]
+	view.Focus = &focus
+	page := renderGatewayConsent(t, gatewayTemplateData(view, focusedCards(view, focus, cards)))
+	require.Contains(t, page, "Connecting is all Wiki needs")
+	require.NotContains(t, page, "needs no sign-in")
 }
 
 // A server signing in through several services connects on its own page,
@@ -362,4 +427,22 @@ func TestConsentTemplate_GatewayListLinksNotSetUpServer(t *testing.T) {
 	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
 	require.Contains(t, page, `server=eng.jira" class="text-muted-foreground interact:text-foreground shrink-0 text-xs" data-gateway-server-page >View`)
 	require.NotContains(t, page, "server=docs")
+}
+
+func TestConsentTemplateGatewayAuthPickerAndVisibility(t *testing.T) {
+	t.Parallel()
+	member := gatewayTestMember("source", "Source", uuid.Nil, uuid.New())
+	member.serverID = uuid.New()
+	view := gatewayServersView([]metaMember{member}, nil)
+	view.CanHide = true
+	view.Servers[0].Auth = &consentServerAuth{Status: consentAuthChoose, Options: []consentAuthClientOption{
+		{ID: uuid.New(), Name: "Personal", Type: authClientTypeRemoteSession, State: consentClientReady},
+		{ID: uuid.New(), Name: "Shared", Type: authClientTypeStaticCredential, State: consentClientReady},
+	}}
+	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
+	require.Contains(t, page, `id="gateway-auth-form"`)
+	require.Contains(t, page, `name="auth_client.source" form="gateway-auth-form"`)
+	require.Contains(t, page, `aria-label="Sign in to Source as"`)
+	require.Contains(t, page, `value="hide_server"`)
+	require.Contains(t, page, `name="server_id" value="`+member.serverID.String()+`"`)
 }

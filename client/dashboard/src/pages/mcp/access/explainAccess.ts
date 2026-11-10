@@ -1,5 +1,10 @@
+import { enumPresentation, isKnownEnumValue } from "@/lib/enum";
 import type { ExplainedAccessLevel } from "@gram/client/models/components/explainedaccesslevel.js";
-import type { ExplainedAccessRule } from "@gram/client/models/components/explainedaccessrule.js";
+import {
+  AppliesTo,
+  Effect,
+  type ExplainedAccessRule,
+} from "@gram/client/models/components/explainedaccessrule.js";
 import type { ExplainResourceAccessResult } from "@gram/client/models/components/explainresourceaccessresult.js";
 import type { Badge } from "@/components/ui/Badge";
 import type { ComponentProps } from "react";
@@ -242,7 +247,13 @@ export function ruleAccessLabel(
   rule: ExplainedAccessRule,
   explained: ExplainedLevel,
 ): string {
-  const access = RULE_LEVEL_NAME[rule.level];
+  const tone = ruleAccessTone(rule);
+  if (tone === "none") return "Unknown access";
+  const access = enumPresentation(
+    RULE_LEVEL_NAME,
+    rule.level,
+    "Unknown access",
+  );
   const narrowing = narrowingLabel(rule);
   // A label leading with a tool name keeps the name exactly as the tool has
   // it; one leading with words ("all tools", "read-only tools") reads as a
@@ -252,7 +263,7 @@ export function ruleAccessLabel(
   const narrowed = leadsWithTool
     ? narrowing
     : `${narrowing.charAt(0).toUpperCase()}${narrowing.slice(1)}`;
-  if (!ruleIsBlock(rule) && rule.level !== explained) {
+  if (tone === "allowed" && rule.level !== explained) {
     const includes = `${access} · includes ${LEVEL_NAME[explained]}`;
     // A grant narrowed to some tools says so, so two such grants on one row
     // are told apart.
@@ -305,6 +316,7 @@ export function groupRules(
     const key = [
       rule.principalUrn,
       rule.effect,
+      ruleAccessTone(rule),
       rule.appliesTo,
       rule.reason ?? "",
     ].join("|");
@@ -317,7 +329,9 @@ export function groupRules(
   }
   return [...groups.entries()].map(([key, members]) => {
     const ordered = [...members].sort(
-      (a, b) => RULE_LEVEL_RANK[a.level] - RULE_LEVEL_RANK[b.level],
+      (a, b) =>
+        enumPresentation(RULE_LEVEL_RANK, a.level, 4) -
+        enumPresentation(RULE_LEVEL_RANK, b.level, 4),
     );
     const labels = [
       ...new Set(ordered.map((rule) => ruleAccessLabel(rule, explained))),
@@ -326,8 +340,27 @@ export function groupRules(
   });
 }
 
-export function ruleIsBlock(rule: ExplainedAccessRule): boolean {
-  return rule.level.startsWith("blocked");
+/** A rule's own access type, only when its reach and effect are understood. */
+export function ruleAccessTone(rule: ExplainedAccessRule): AccessTone {
+  if (
+    !isKnownEnumValue(AppliesTo, rule.appliesTo) ||
+    !isKnownEnumValue(Effect, rule.effect)
+  ) {
+    return "none";
+  }
+  switch (rule.level) {
+    case "use":
+    case "view":
+    case "manage":
+    case "all":
+      return "allowed";
+    case "blocked":
+    case "blocked_view":
+    case "blocked_manage":
+      return "blocked";
+    default:
+      return "none";
+  }
 }
 
 /** Where a rule applies: this server, its project, or every server. */
@@ -343,6 +376,7 @@ export function ruleReachLabel(
     case "all_resources":
       return "All servers";
   }
+  return "Unknown reach";
 }
 
 const EFFECT_BADGE: Record<
@@ -361,7 +395,10 @@ export function effectBadge(rule: ExplainedAccessRule): {
   label: string;
   variant: BadgeVariant;
 } {
-  return EFFECT_BADGE[rule.effect];
+  return enumPresentation(EFFECT_BADGE, rule.effect, {
+    label: "Unknown",
+    variant: "neutral",
+  });
 }
 
 /**
@@ -376,8 +413,15 @@ export function effectNote(
 ): string {
   switch (rule.effect) {
     case "allows":
-      if (rule.appliesTo === "resource") return "Defined on this server.";
-      return "Inherited from a rule covering more servers.";
+      switch (rule.appliesTo) {
+        case "resource":
+          return "Defined on this server.";
+        case "project":
+        case "all_resources":
+          return "Inherited from a rule covering more servers.";
+        default:
+          return "Rule reach unavailable.";
+      }
     case "overrides":
       return `Direct grants that name ${serverName} override blocks from roles and everyone.`;
     case "blocks":
@@ -401,6 +445,7 @@ export function effectNote(
           return blockedByNote(level);
       }
   }
+  return "Access effect unavailable.";
 }
 
 /**

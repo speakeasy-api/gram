@@ -791,3 +791,50 @@ func TestGapFillCopiesFalsePositiveUnderRuleExclusion(t *testing.T) {
 	require.Equal(t, exclusionID.String(), gotExclusionID)
 	require.True(t, falsePositive)
 }
+
+func TestGapFillMatchesJudgeFindingsAcrossSpanOffsets(t *testing.T) {
+	t.Parallel()
+
+	tn := seedTenant(t)
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	createdAt := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	messageID := uuid.NewString()
+	finding := func(source, ruleID string, endPos int32) FindingRow {
+		id := uuid.New()
+		return FindingRow{
+			ID:                id,
+			sourceID:          id,
+			CreatedAt:         createdAt,
+			OrganizationID:    tn.orgID,
+			ProjectID:         tn.projectID.String(),
+			ChatMessageID:     messageID,
+			RiskPolicyID:      tn.policyID.String(),
+			RiskPolicyVersion: 1,
+			RuleID:            ruleID,
+			Source:            source,
+			Tags:              []string{},
+			StartPos:          0,
+			EndPos:            endPos,
+			MessageCreatedAt:  createdAt,
+		}
+	}
+	seedSink := NewSink(conn, SinkOptions{BatchSize: 10, LiftPartitionGuard: true})
+	require.NoError(t, seedSink.insertRows(t.Context(), []FindingRow{
+		finding("llm_judge", "llm_judge", 0),
+		finding("prompt_injection", "prompt_injection", 4609),
+		finding("presidio", "pii.email_address", 17),
+	}))
+
+	sink := NewSink(conn, SinkOptions{BatchSize: 10, DryRun: true, GapFill: true})
+	require.NoError(t, sink.flushGapFill(t.Context(), []FindingRow{
+		finding("llm_judge", "llm_judge", 316),
+		finding("prompt_injection", "prompt_injection", 5663),
+		finding("presidio", "pii.email_address", 21),
+	}))
+
+	require.Equal(t, SourceStats{MatchedByKey: 1}, sink.StatsBySource()["llm_judge"])
+	require.Equal(t, SourceStats{MatchedByKey: 1}, sink.StatsBySource()["prompt_injection"])
+	require.Equal(t, SourceStats{Inserted: 1}, sink.StatsBySource()["presidio"])
+}

@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -16,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -258,9 +262,35 @@ func TestMemberClientResultCaptureHonorsRejection(t *testing.T) {
 	defer cancel()
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), guardedBuild, time.Second)
 	require.NoError(t, err)
-	raw, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
+	raw, err := callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "ping"})
 	require.Error(t, err)
+	rpcErr, ok := errors.AsType[*jsonrpc.Error](err)
+	require.True(t, ok)
+	require.EqualValues(t, jsonrpc.CodeInvalidParams, rpcErr.Code, "the withheld response looks like an invalid-params refusal")
 	require.Empty(t, raw)
+	require.True(t, invocation.dispatched)
+	require.False(t, invocation.rejected, "a response withheld after the tool ran is not the member's refusal")
+	require.NoError(t, session.Close())
+}
+
+func TestMemberClientMarksMembersOwnRefusal(t *testing.T) {
+	t.Parallel()
+	server := sdk.NewServer(&sdk.Implementation{Name: "fixture", Version: "1"}, nil)
+	server.AddTool(&sdk.Tool{Name: "ping", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *sdk.CallToolRequest) (*sdk.CallToolResult, error) {
+		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: "pong"}}}, nil
+	})
+	upstream := httptest.NewServer(sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return server }, nil))
+	t.Cleanup(upstream.Close)
+	service, build := memberClientFixture(t, upstream.URL)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), build, time.Second)
+	require.NoError(t, err)
+	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
+	_, err = callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "missing"})
+	require.Error(t, err)
+	require.True(t, invocation.rejected)
 	require.NoError(t, session.Close())
 }
 
@@ -269,7 +299,7 @@ type rejectMemberResult struct{}
 func (rejectMemberResult) Name() string { return "reject_member_result" }
 
 func (rejectMemberResult) InterceptToolsCallResponse(context.Context, *proxy.ToolsCallResponse) error {
-	return fmt.Errorf("response refused by policy")
+	return oops.E(oops.CodeInvalid, nil, "response refused by policy")
 }
 
 // The SDK re-sends tools/call after an input_required answer on the same
@@ -346,7 +376,8 @@ func TestMemberToolResultIgnoresUncorrelatedRequests(t *testing.T) {
 }
 
 // Failures must name the exchange that failed, not an earlier leg: a legacy
-// member answers server/discover with 404 before the SDK falls back.
+// member answers server/discover with 404 before the SDK falls back. Only a
+// failure a retry can change is retryable.
 func TestMemberClientFailureClassifiesUnansweredExchanges(t *testing.T) {
 	t.Parallel()
 	member := metaMember{slug: "fixture"}
@@ -366,14 +397,22 @@ func TestMemberClientFailureClassifiesUnansweredExchanges(t *testing.T) {
 	}
 	for name, tc := range map[string]struct {
 		unroutable bool
+		untrusted  bool
 		want       string
+		retryable  bool
 	}{
-		"no route":      {unroutable: true, want: `server "fixture" is not reachable right now`},
-		"dropped reply": {unroutable: false, want: `server "fixture" did not answer: upstream unreachable or timed out`},
+		"no route":              {unroutable: true, untrusted: false, want: `server "fixture" can't be reached right now`, retryable: false},
+		"dropped reply":         {unroutable: false, untrusted: false, want: `server "fixture" did not answer: upstream unreachable or timed out`, retryable: true},
+		"untrusted certificate": {unroutable: false, untrusted: true, want: `server "fixture" did not answer: upstream unreachable or timed out`, retryable: false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			upstream := httptest.NewServer(http.HandlerFunc(legacyThenDrop))
+			upstream := httptest.NewUnstartedServer(http.HandlerFunc(legacyThenDrop))
+			if tc.untrusted {
+				upstream.StartTLS()
+			} else {
+				upstream.Start()
+			}
 			t.Cleanup(upstream.Close)
 			service, build := memberClientFixture(t, upstream.URL)
 			if tc.unroutable {
@@ -385,20 +424,60 @@ func TestMemberClientFailureClassifiesUnansweredExchanges(t *testing.T) {
 			require.Error(t, err)
 			got := memberClientFailure(ctx, testenv.NewLogger(t), rt, memberDial{build: build, anonymous: false}, member, err)
 			require.EqualError(t, got, tc.want)
+			failure, ok := errors.AsType[memberDiscoveryError](got)
+			require.True(t, ok, "%v", got)
+			require.Equal(t, tc.retryable, failure.retryable)
 		})
 	}
 }
 
+// A recorded transport failure is retryable only when a retry can change it:
+// a timeout already spent the attempt's time, and egress policy refuses the
+// same address again. A transport timeout need not wrap a context error.
+func TestMemberClientFailureRetriesOnlyTransportFailuresARetryCanChange(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		err       error
+		retryable bool
+	}{
+		"connection reset": {err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, retryable: true},
+		"i/o timeout":      {err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}, retryable: false},
+		"blocked address":  {err: fmt.Errorf("dial member: %w", guardian.ErrBlockedIP), retryable: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			attempt := newMemberAttempt(nil)
+			attempt.recordFailure(true, tc.err)
+			got := memberClientFailure(t.Context(), testenv.NewLogger(t), attempt, memberDial{}, metaMember{slug: "fixture"}, tc.err)
+			require.EqualError(t, got, `server "fixture" did not answer: upstream unreachable or timed out`)
+			failure, ok := errors.AsType[memberDiscoveryError](got)
+			require.True(t, ok, "%v", got)
+			require.Equal(t, tc.retryable, failure.retryable)
+		})
+	}
+}
+
+// An outage the attempt's own renewal hit is retryable unless the attempt's
+// time ran out or the token endpoint rate limited the client; a misconfigured
+// credential stays a member failure.
 func TestMemberClientFailurePreservesClientCredentialRenewalRemedy(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name string
-		err  error
-		want string
+		name      string
+		err       error
+		want      string
+		discovery bool
+		retryable bool
 	}{
-		{name: "outage", err: remotesessions.ErrClientCredentialUnavailable, want: "retry shortly"},
-		{name: "misconfigured", err: remotesessions.ErrClientCredentialMisconfigured, want: "contact the MCP server administrator"},
+		{name: "outage nothing ties to the provider", err: remotesessions.ErrClientCredentialUnavailable, want: "can't get its credential right now", discovery: true, retryable: true},
+		{name: "signing outage", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, &remotesessions.TokenEndpointError{Signing: true}), want: "can't get its credential right now", discovery: true, retryable: true},
+		{name: "token endpoint down", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, &remotesessions.TokenEndpointError{StatusCode: http.StatusServiceUnavailable}), want: "because its provider isn't available right now", discovery: true, retryable: true},
+		{name: "token endpoint unreachable", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, &remotesessions.TokenEndpointError{Transport: true}), want: "because its provider isn't available right now", discovery: true, retryable: true},
+		{name: "timed out outage", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, context.DeadlineExceeded), want: "Retry shortly", discovery: true, retryable: false},
+		{name: "rate limited outage", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, &remotesessions.TokenEndpointError{StatusCode: http.StatusTooManyRequests}), want: "Retry shortly", discovery: true, retryable: false},
+		{name: "misconfigured", err: remotesessions.ErrClientCredentialMisconfigured, want: "Ask an admin of the server's project to fix the server's credential", discovery: false, retryable: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -429,6 +508,11 @@ func TestMemberClientFailurePreservesClientCredentialRenewalRemedy(t *testing.T)
 			got := memberClientFailure(ctx, testenv.NewLogger(t), rt, memberDial{build: buildWithRenewal, clientCredential: true}, metaMember{slug: "fixture"}, err)
 			require.Contains(t, got.Error(), tc.want)
 			require.NotContains(t, got.Error(), "reconnect")
+			failure, discovery := errors.AsType[memberDiscoveryError](got)
+			require.Equal(t, tc.discovery, discovery)
+			require.Equal(t, tc.retryable, failure.retryable)
+			_, outage := errors.AsType[memberUnavailableError](got)
+			require.Equal(t, tc.discovery, outage, "the connection status reads this as an outage")
 		})
 	}
 }

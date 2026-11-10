@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -33,7 +34,7 @@ export const OpenAPIv3EvaluationStatus = {
 /**
  * Whether the source is new, changed, unchanged or removed.
  */
-export type OpenAPIv3EvaluationStatus = ClosedEnum<
+export type OpenAPIv3EvaluationStatus = OpenEnum<
   typeof OpenAPIv3EvaluationStatus
 >;
 
@@ -86,9 +87,10 @@ export type OpenAPIv3Evaluation = {
 };
 
 /** @internal */
-export const OpenAPIv3EvaluationStatus$inboundSchema: z.ZodMiniEnum<
-  typeof OpenAPIv3EvaluationStatus
-> = z.enum(OpenAPIv3EvaluationStatus);
+export const OpenAPIv3EvaluationStatus$inboundSchema: z.ZodMiniType<
+  OpenAPIv3EvaluationStatus,
+  unknown
+> = openEnums.inboundSchema(OpenAPIv3EvaluationStatus);
 
 /** @internal */
 export const OpenAPIv3Evaluation$inboundSchema: z.ZodMiniType<

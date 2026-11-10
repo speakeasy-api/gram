@@ -1,4 +1,6 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Input } from "@/components/ui/Input";
+import { ServerUsageImpactById } from "@/components/mcp-server-usage/ServerUsageConfirmation";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -10,7 +12,6 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -19,6 +20,7 @@ export function DeleteRemoteIdentityProviderDialog({
   onOpenChange,
   userSessionIssuerId,
   issuer,
+  mcpServerId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -28,14 +30,17 @@ export function DeleteRemoteIdentityProviderDialog({
   // remote_session_issuer record alone so other servers can still use it.
   userSessionIssuerId: string;
   issuer: RemoteSessionIssuer;
+  /** The MCP server the provider is removed from, for the usage preview. */
+  mcpServerId?: string;
 }): JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content>
+      <Dialog.Content className="max-w-2xl!">
         {open && (
           <DeleteRemoteIdentityProviderDialogBody
             userSessionIssuerId={userSessionIssuerId}
             issuer={issuer}
+            mcpServerId={mcpServerId}
             onClose={() => onOpenChange(false)}
           />
         )}
@@ -47,10 +52,12 @@ export function DeleteRemoteIdentityProviderDialog({
 function DeleteRemoteIdentityProviderDialogBody({
   userSessionIssuerId,
   issuer,
+  mcpServerId,
   onClose,
 }: {
   userSessionIssuerId: string;
   issuer: RemoteSessionIssuer;
+  mcpServerId?: string;
   onClose: () => void;
 }) {
   const client = useSdkClient();
@@ -132,6 +139,16 @@ function DeleteRemoteIdentityProviderDialogBody({
         </Dialog.Description>
       </Dialog.Header>
 
+      {mcpServerId && (
+        <div className="grid gap-2">
+          <ServerUsageImpactById mcpServerId={mcpServerId} />
+          <Text small muted>
+            Counts cover every sign-in to this server, including through its
+            other authorization servers.
+          </Text>
+        </div>
+      )}
+
       <div className="grid gap-2">
         <Text small>
           To confirm, type the issuer URL: <strong>{issuer.issuer}</strong>
@@ -167,7 +184,7 @@ function DeleteRemoteIdentityProviderDialogBody({
         >
           {submitting && (
             <Button.LeftIcon>
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
             </Button.LeftIcon>
           )}
           <Button.Text>{submitting ? "Removing" : "Remove"}</Button.Text>

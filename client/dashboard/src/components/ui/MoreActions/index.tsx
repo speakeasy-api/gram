@@ -7,9 +7,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
-import { IconName } from "@/components/ui/Icon/names";
+import type { IconName } from "@/components/ui/Icon/names";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 
 export type Action = {
   icon?: IconName;
@@ -93,10 +94,11 @@ export function MoreActions({
             aria-busy={triggerLoading === true}
             style={triggerStyle}
           >
-            <Icon
-              name={triggerLoading ? "loader-circle" : "ellipsis-vertical"}
-              className={cn("mr-1.5 size-4", triggerLoading && "animate-spin")}
-            />
+            {triggerLoading ? (
+              <Spinner className="mr-1.5 size-4" />
+            ) : (
+              <Icon name="ellipsis-vertical" className="mr-1.5 size-4" />
+            )}
             {triggerLabel}
           </Button>
         ) : (
@@ -109,10 +111,11 @@ export function MoreActions({
             aria-busy={triggerLoading === true}
             style={triggerStyle}
           >
-            <Icon
-              name={triggerLoading ? "loader-circle" : "ellipsis-vertical"}
-              className={cn("size-4", triggerLoading && "animate-spin")}
-            />
+            {triggerLoading ? (
+              <Spinner className="mr-0 size-4" />
+            ) : (
+              <Icon name="ellipsis-vertical" className="size-4" />
+            )}
             <Button.Text className="sr-only">
               {triggerLoading
                 ? "Action in progress"
@@ -136,7 +139,7 @@ export function MoreActions({
               className={cn(
                 "group flex cursor-pointer items-center justify-between",
                 action.destructive &&
-                  "text-destructive hover:bg-destructive! hover:text-background! trans",
+                  "text-destructive hover:bg-accent focus:text-destructive",
               )}
             >
               <div className="min-w-0">
@@ -152,8 +155,7 @@ export function MoreActions({
                   name={action.icon}
                   className={cn(
                     "size-3 opacity-0 group-hover:opacity-100",
-                    action.destructive &&
-                      "text-destructive group-hover:text-background",
+                    action.destructive && "text-destructive",
                   )}
                 />
               )}

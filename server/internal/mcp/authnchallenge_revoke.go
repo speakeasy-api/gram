@@ -16,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -28,12 +30,12 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
+		return oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidRequest, "an mcp slug must be provided", nil)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
-		return err
+		return tokenEndpointResolutionError(err)
 	}
 	return s.ServeRevoke(w, r, endpoint)
 }
@@ -79,12 +81,20 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
 	}
 
+	if code := oauthwire.ClientAuthenticationError(r); code != "" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", "", "", "", code)
+		if code == oautherr.CodeInvalidClient {
+			return writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
+		}
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, "invalid client authentication request")
+	}
+
 	creds := extractClientCredentials(r)
 	presentedAuthMethod := creds.method
 	clientID, reason := resolvePresentedClientID(creds)
 	if reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", reason)
-		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
+		return writeInvalidClientError(ctx, w, r, logger, "client_id is required")
 	}
 	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
 		UserSessionIssuerID: issuerID,
@@ -93,7 +103,7 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", "unknown_client_id")
-			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+			return writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
@@ -105,7 +115,7 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 	// de-admitted should still be able to kill its own outstanding tokens.
 	if reason := s.authenticateOAuthClient(ctx, logger, issuerID, urls, clientAssertionAtRevoke, &clientRow, creds); reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", reason)
-		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+		return writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authenticated", clientID, presentedAuthMethod, "", "")
 

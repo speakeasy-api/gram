@@ -191,7 +191,7 @@ function ConfiguredPrivateNetwork({
     <SettingsSection.Panel>
       <SettingsSection.Body>
         {!entitled && (
-          <Alert variant="warning" dismissible={false} alignTop>
+          <Alert variant="warning" dismissible={false}>
             {enterprise
               ? "Private network access is no longer enabled for this organization."
               : "Private network access requires an Enterprise plan."}{" "}
@@ -401,6 +401,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
       query.state.data?.ingress?.status === "deleting" ? 5_000 : false,
   });
   const ingress = ingressResult.data?.ingress;
+  const unsupportedProvider = ingress && ingress.provider !== "tailscale";
   const [setupOpen, setSetupOpen] = useState(false);
 
   if (!canManageIngress) return null;
@@ -410,11 +411,21 @@ export function PrivateNetworkSection(): JSX.Element | null {
       <SettingsSection.Header>
         <SettingsSection.Title>Private network access</SettingsSection.Title>
         <SettingsSection.Description>
-          Serve hosted MCP endpoints inside your Tailscale network without
-          exposing a public fallback.
+          {unsupportedProvider
+            ? "Serve hosted MCP endpoints inside your private network."
+            : "Serve hosted MCP endpoints inside your Tailscale network without exposing a public fallback."}
         </SettingsSection.Description>
       </SettingsSection.Header>
-      {ingress?.status === "deleting" ? (
+      {unsupportedProvider ? (
+        <SettingsSection.Panel>
+          <SettingsSection.Body>
+            <Text small muted>
+              Refresh the page before managing this unsupported private network
+              provider.
+            </Text>
+          </SettingsSection.Body>
+        </SettingsSection.Panel>
+      ) : ingress?.status === "deleting" ? (
         <PrivateNetworkCleanup
           ingress={ingress}
           statusStale={ingressResult.isError}
@@ -476,7 +487,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
           }
         />
       )}
-      {entitled && (
+      {entitled && !ingress && (
         <PrivateNetworkSetupSheet
           open={setupOpen}
           onOpenChange={setSetupOpen}

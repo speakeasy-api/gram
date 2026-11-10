@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -31,7 +32,7 @@ export const ClientTier = {
 /**
  * The client ownership tier.
  */
-export type ClientTier = ClosedEnum<typeof ClientTier>;
+export type ClientTier = OpenEnum<typeof ClientTier>;
 
 /**
  * The provider ownership tier.
@@ -44,7 +45,7 @@ export const ProviderTier = {
 /**
  * The provider ownership tier.
  */
-export type ProviderTier = ClosedEnum<typeof ProviderTier>;
+export type ProviderTier = OpenEnum<typeof ProviderTier>;
 
 /**
  * How the client was obtained. Present on success and registration failure.
@@ -59,7 +60,7 @@ export const CommitServerIdentityConfigurationResultRegistrationMethod = {
  * How the client was obtained. Present on success and registration failure.
  */
 export type CommitServerIdentityConfigurationResultRegistrationMethod =
-  ClosedEnum<typeof CommitServerIdentityConfigurationResultRegistrationMethod>;
+  OpenEnum<typeof CommitServerIdentityConfigurationResultRegistrationMethod>;
 
 /**
  * Successful commit status. Present only after local commit.
@@ -71,7 +72,7 @@ export const CommitServerIdentityConfigurationResultStatus = {
 /**
  * Successful commit status. Present only after local commit.
  */
-export type CommitServerIdentityConfigurationResultStatus = ClosedEnum<
+export type CommitServerIdentityConfigurationResultStatus = OpenEnum<
   typeof CommitServerIdentityConfigurationResultStatus
 >;
 
@@ -124,24 +125,26 @@ export type CommitServerIdentityConfigurationResult = {
 };
 
 /** @internal */
-export const ClientTier$inboundSchema: z.ZodMiniEnum<typeof ClientTier> = z
-  .enum(ClientTier);
+export const ClientTier$inboundSchema: z.ZodMiniType<ClientTier, unknown> =
+  openEnums.inboundSchema(ClientTier);
 
 /** @internal */
-export const ProviderTier$inboundSchema: z.ZodMiniEnum<typeof ProviderTier> = z
-  .enum(ProviderTier);
+export const ProviderTier$inboundSchema: z.ZodMiniType<ProviderTier, unknown> =
+  openEnums.inboundSchema(ProviderTier);
 
 /** @internal */
 export const CommitServerIdentityConfigurationResultRegistrationMethod$inboundSchema:
-  z.ZodMiniEnum<
-    typeof CommitServerIdentityConfigurationResultRegistrationMethod
-  > = z.enum(CommitServerIdentityConfigurationResultRegistrationMethod);
+  z.ZodMiniType<
+    CommitServerIdentityConfigurationResultRegistrationMethod,
+    unknown
+  > = openEnums.inboundSchema(
+    CommitServerIdentityConfigurationResultRegistrationMethod,
+  );
 
 /** @internal */
 export const CommitServerIdentityConfigurationResultStatus$inboundSchema:
-  z.ZodMiniEnum<typeof CommitServerIdentityConfigurationResultStatus> = z.enum(
-    CommitServerIdentityConfigurationResultStatus,
-  );
+  z.ZodMiniType<CommitServerIdentityConfigurationResultStatus, unknown> =
+    openEnums.inboundSchema(CommitServerIdentityConfigurationResultStatus);
 
 /** @internal */
 export const CommitServerIdentityConfigurationResult$inboundSchema:

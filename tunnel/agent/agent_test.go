@@ -5,9 +5,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 func TestAgentPreservesPinnedRootTargetPath(t *testing.T) {
@@ -204,4 +207,59 @@ func TestNormalizeGatewayURLRejectsEmptyHostname(t *testing.T) {
 
 	_, err := normalizeGatewayURL("wss://:443/connect")
 	require.Error(t, err)
+}
+
+// connectHeaders runs one connect attempt against a gateway that rejects the
+// WebSocket upgrade and returns the headers the agent announced.
+func connectHeaders(t *testing.T, cfg Config) http.Header {
+	t.Helper()
+
+	received := make(chan http.Header, 1)
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- r.Header.Clone()
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(gateway.Close)
+
+	cfg.GatewayURL = "ws" + strings.TrimPrefix(gateway.URL, "http") + "/connect"
+	agent, err := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, err)
+
+	var rejected *dialError
+	require.ErrorAs(t, agent.connectOnce(t.Context()), &rejected)
+	return <-received
+}
+
+func TestAgentAnnouncesDiagnosticsWithHostOnlyTarget(t *testing.T) {
+	t.Parallel()
+
+	header := connectHeaders(t, Config{
+		APIKey:         "gram_tunnel_test",
+		LocalMCPURL:    "https://user:pass@mcp.internal:8443/mcp/secret-token?api_key=private#fragment",
+		ServiceVersion: "1.0.0",
+	})
+
+	capabilities := header.Get(wire.HeaderCapabilities)
+	require.Equal(t, wire.DiagnosticsCapability, capabilities)
+	require.True(t, wire.SupportsDiagnostics(capabilities, header.Get(wire.HeaderControlToken)))
+	require.False(t, wire.DiagnosticsDisabled(capabilities))
+	require.Equal(t, "https://mcp.internal:8443", header.Get(wire.HeaderTargetDisplay))
+}
+
+func TestAgentWithDiagnosticsTurnedOffAnnouncesIt(t *testing.T) {
+	t.Parallel()
+
+	header := connectHeaders(t, Config{
+		APIKey:             "gram_tunnel_test",
+		LocalMCPURL:        "https://mcp.internal:8443/mcp/secret-token",
+		ServiceVersion:     "1.0.0",
+		DisableDiagnostics: true,
+	})
+
+	capabilities := header.Get(wire.HeaderCapabilities)
+	require.Equal(t, wire.DiagnosticsDisabledCapability, capabilities)
+	require.True(t, wire.DiagnosticsDisabled(capabilities))
+	require.False(t, wire.SupportsDiagnostics(capabilities, header.Get(wire.HeaderControlToken)))
+	require.Empty(t, header.Values(wire.HeaderControlToken), "a turned-off agent serves no control path")
+	require.Empty(t, header.Values(wire.HeaderTargetDisplay), "a turned-off agent does not reveal its target")
 }

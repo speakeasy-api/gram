@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Deployment } from "@gram/client/models/components/deployment.js";
 import type { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
 import { createElement } from "react";

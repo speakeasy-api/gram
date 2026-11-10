@@ -3,6 +3,7 @@ import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { cn } from "@/lib/utils";
 import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
 import { logoutToLogin } from "@/lib/logout-to-login";
+import { recordOrganizationSwitch } from "@/lib/organization-host";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { Icon } from "@/components/ui/Icon";
@@ -123,6 +124,7 @@ export const ImpersonationBanner = (): JSX.Element => {
       if (isDemo && ownOrg) {
         localStorage.removeItem(PRE_DEMO_ORG_KEY);
         await client.auth.switchScopes({ organizationId: ownOrg.id });
+        recordOrganizationSwitch(ownOrg.id);
         window.location.replace("/");
         return;
       }

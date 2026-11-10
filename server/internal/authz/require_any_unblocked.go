@@ -23,7 +23,7 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		return err
 	}
 	if !enforce {
-		return nil
+		return e.RequireAny(ctx, checks...)
 	}
 	if len(checks) == 0 {
 		return e.mapError(ctx, ErrNoChecks)
@@ -38,6 +38,7 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		}
 	}
 	for _, check := range checks {
+		check = authorization.bind(check)
 		exclusionScope, ok := ExclusionScopeFor(check.Scope)
 		if !ok {
 			continue
@@ -48,7 +49,7 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		if exclusion.ResourceKind == "" {
 			exclusion.ResourceKind = ResourceKindForScope(check.Scope)
 		}
-		for _, policy := range authorization.policies {
+		for _, policy := range authorization.policiesFor(check) {
 			grant, _ := matchingGrant(policy, expandWithoutRoot(exclusion))
 			if grant == nil {
 				continue

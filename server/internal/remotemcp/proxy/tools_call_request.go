@@ -29,6 +29,11 @@ type ToolsCallRequest struct {
 	// ID, raw messages) and for forwarding control via the underlying HTTP
 	// request.
 	UserRequest *UserRequest
+
+	// responded is set once the call's reply reaches the
+	// [ToolsCallResponseInterceptor] chain; a forwarded call that ends
+	// without it is reported to [ToolsCallFailureInterceptor]s instead.
+	responded bool
 }
 
 // userRequestMethod returns the JSON-RPC method of a single-message user
@@ -87,7 +92,7 @@ func toolsCallRequestFromUserRequest(req *UserRequest) (*ToolsCallRequest, error
 		return nil, nil
 	}
 
-	call := &ToolsCallRequest{Params: nil, UserRequest: req}
+	call := &ToolsCallRequest{Params: nil, UserRequest: req, responded: false}
 	if firstNonWhitespaceByte(rpcReq.Params) != '{' {
 		return call, fmt.Errorf("tools/call params must be a JSON object")
 	}

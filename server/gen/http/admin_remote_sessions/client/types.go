@@ -260,8 +260,8 @@ type UpdateGlobalClientRequestBody struct {
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
 	// unchanged.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Replace the upstream OAuth audience sent for this client. Omit to leave
-	// unchanged.
+	// Replace the upstream OAuth audience sent for this client. Pass an empty
+	// string to clear it. Omit to leave unchanged.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
 }
 
@@ -641,6 +641,9 @@ type CreateGlobalClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -668,6 +671,10 @@ type CreateGlobalClientResponseBody struct {
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -720,6 +727,9 @@ type GetGlobalClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -747,6 +757,10 @@ type GetGlobalClientResponseBody struct {
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -791,6 +805,9 @@ type UpdateGlobalClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -818,6 +835,10 @@ type UpdateGlobalClientResponseBody struct {
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -4158,6 +4179,9 @@ type RemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -4185,6 +4209,10 @@ type RemoteSessionClientResponseBody struct {
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -6080,6 +6108,7 @@ func NewCreateGlobalClientRemoteSessionClientOK(body *CreateGlobalClientResponse
 		OrganizationID:                  *body.OrganizationID,
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
@@ -6088,6 +6117,7 @@ func NewCreateGlobalClientRemoteSessionClientOK(body *CreateGlobalClientResponse
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
@@ -6443,6 +6473,7 @@ func NewGetGlobalClientRemoteSessionClientOK(body *GetGlobalClientResponseBody) 
 		OrganizationID:                  *body.OrganizationID,
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
@@ -6451,6 +6482,7 @@ func NewGetGlobalClientRemoteSessionClientOK(body *GetGlobalClientResponseBody) 
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
@@ -6637,6 +6669,7 @@ func NewUpdateGlobalClientRemoteSessionClientOK(body *UpdateGlobalClientResponse
 		OrganizationID:                  *body.OrganizationID,
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
@@ -6645,6 +6678,7 @@ func NewUpdateGlobalClientRemoteSessionClientOK(body *UpdateGlobalClientResponse
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
@@ -7752,6 +7786,9 @@ func ValidateCreateGlobalClientResponseBody(body *CreateGlobalClientResponseBody
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
@@ -7852,6 +7889,9 @@ func ValidateGetGlobalClientResponseBody(body *GetGlobalClientResponseBody) (err
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
@@ -7935,6 +7975,9 @@ func ValidateUpdateGlobalClientResponseBody(body *UpdateGlobalClientResponseBody
 	}
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
 	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
@@ -12143,6 +12186,9 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
 	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))

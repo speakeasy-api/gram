@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import type { EnforcementOutcome } from "@gram/client/models/components/riskresult.js";
 
 const OUTCOME_LABELS: Record<EnforcementOutcome, string> = {
@@ -21,7 +22,7 @@ const BLOCKING_OUTCOMES = new Set<EnforcementOutcome>([
 export function enforcementOutcomeLabel(
   outcome: EnforcementOutcome | undefined,
 ): string | null {
-  return outcome ? OUTCOME_LABELS[outcome] : null;
+  return outcome ? enumPresentation(OUTCOME_LABELS, outcome, "Unknown") : null;
 }
 
 export function isBlockingOutcome(

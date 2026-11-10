@@ -19,7 +19,7 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { assert } from "@/lib/utils";
-import { Key } from "@gram/client/models/components/key.js";
+import type { Key } from "@gram/client/models/components/key.js";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { invalidateListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useQueryClient } from "@tanstack/react-query";
@@ -140,7 +140,7 @@ export function CreateApiKeySheet({
         {createdKey ? (
           <>
             <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
-              <Alert variant="warning" alignTop>
+              <Alert variant="warning">
                 You will not be able to see this token value again once you
                 close this panel. Copy it now and store it securely.
               </Alert>

@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 /**
  * Tool limits for a role's Use access, and the server inventory the role
  * editor's access grid reads.
@@ -8,12 +9,12 @@ import type { Disposition } from "@gram/client/models/components/selector.js";
 import type { Server, ServerGroup, ServerTool } from "./serverMerge";
 
 /** The four tool annotations the backend checks, in the order shown. */
-export const DISPOSITIONS: readonly Disposition[] = [
+export const DISPOSITIONS = [
   "read_only",
   "idempotent",
   "destructive",
   "open_world",
-];
+] as const satisfies readonly Disposition[];
 
 export const DISPOSITION_COPY: Record<
   Disposition,
@@ -53,7 +54,9 @@ export type ToolLimitKind = ToolLimit["kind"];
  * The one disposition the runtime assigns a tool: the first of its hints set
  * to true, in the backend's priority order (server/internal/conv/tools.go).
  */
-export function toolDisposition(tool: ServerTool): Disposition | null {
+export function toolDisposition(
+  tool: ServerTool,
+): (typeof DISPOSITIONS)[number] | null {
   const hints = tool.annotations;
   if (hints?.readOnlyHint) return "read_only";
   if (hints?.destructiveHint) return "destructive";
@@ -141,4 +144,23 @@ export function indexServers(
 /** The short handle shown under a server's name: its MCP slug when it has one. */
 export function serverHandle(server: Server): string {
   return server.mcpSlug ?? server.slug;
+}
+
+export function dispositionCopy(
+  disposition: Disposition,
+): (typeof DISPOSITION_COPY)[Disposition] {
+  return enumPresentation(DISPOSITION_COPY, disposition, {
+    label: "Unknown annotation",
+    badge: "Unknown annotation",
+    description: "Refresh the page for updated annotation details.",
+  });
+}
+
+export function toggleDisposition(
+  selected: Disposition[],
+  disposition: Disposition,
+  on: boolean,
+): Disposition[] {
+  if (!on) return selected.filter((value) => value !== disposition);
+  return [...new Set([...selected, disposition])];
 }

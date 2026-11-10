@@ -2,7 +2,9 @@ const OKTA_ORG_HOST_SUFFIXES = [
   "okta.com",
   "oktapreview.com",
   "okta-emea.com",
+  "okta-gov.com",
   "okta.mil",
+  "trexcloud.com",
 ] as const;
 
 const HOST_LABEL = "[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?";

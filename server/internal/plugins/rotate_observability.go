@@ -138,11 +138,12 @@ func (s *Service) RotateObservabilityCredential(ctx context.Context, payload *ge
 				Slug:            nil,
 				CreatedByUserID: ac.UserID,
 			},
-			GitHubUsernames:   nil,
-			CommitMessage:     "Rotate observability plugin credential",
-			SkipIfUnchanged:   true,
-			RotateHooksKey:    true,
-			HooksKeyCandidate: &candidate,
+			GitHubUsernames:      nil,
+			CommitMessage:        "Rotate observability plugin credential",
+			SkipIfUnchanged:      true,
+			IncludePausedPlugins: false,
+			RotateHooksKey:       true,
+			HooksKeyCandidate:    &candidate,
 		})
 		if err != nil {
 			return nil, err
@@ -330,6 +331,7 @@ func (s *Service) createRotatedHooksAPIKey(ctx context.Context, dbtx keysrepo.DB
 		KeyName:          candidate.keyName,
 		Scopes:           scopes,
 		AgentCredential:  nil,
+		PolicyGrants:     nil,
 	}); err != nil {
 		return fmt.Errorf("audit log key creation: %w", err)
 	}
@@ -418,6 +420,7 @@ func (s *Service) retirePreviousHooksKeys(
 				KeyName:          key.name,
 				Scopes:           key.scopes,
 				AgentCredential:  nil,
+				PolicyGrants:     nil,
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "audit log key revocation").LogError(ctx, s.logger)
 			}

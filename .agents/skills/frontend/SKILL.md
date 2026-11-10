@@ -10,6 +10,10 @@ metadata:
 
 Good UI does not come from a better first prompt. It comes from running a short loop several times. Most dashboard UI that needs rework failed the same way: it was built from the backend model outward and never judged on screen. Each pattern below came up in several recent PRs and needed follow-up PRs to fix. Code hygiene was rarely the problem.
 
+## MCP provider setup
+
+For MCP catalog provider onboarding, setup pages and app-registration flows, use [implementing-mcp-provider-setup](../implementing-mcp-provider-setup/SKILL.md) before the design loop below. Existing approved implementation is the starting point. Changes to its flow or interaction pattern require explicit approval under that skill's gate, including when the user is unavailable. Ordinary integration and defect fixes within approved behavior proceed without renewed approval. For extensions of the approved flow, the requirements below to compare alternative directions and remove something do not apply; review affected states and shared-provider regressions.
+
 ## Designing UI (read first)
 
 ### Size the loop to the change
@@ -70,7 +74,7 @@ Working with no user to choose? Pick your recommended direction, put the other t
 | One row per grant, so roles repeat             | One row per role                                       |
 | Widgets get their own tab next to Dashboards   | Widgets are a step inside building a dashboard         |
 
-A primary feature gets a sidebar item, not a sub-tab of another page.
+A primary feature gets a sidebar item, not a sub-tab of another page. Also assess Command K page actions and individual named-resource candidates separately using `.agents/skills/maintaining-command-palette/SKILL.md`. A sidebar item or overview route does not make resources searchable by name; add/update coverage or record a justified exclusion with focused test evidence.
 
 **3. Reuse what we have; borrow what we don't.** Use the [reference shelf](#reference-shelf) and [Building a page](#building-a-page). A fourth drawer slightly different from the other three is a defect, as are a page-level `.css` file, a custom breakpoint, a hand-rolled card, or a bespoke heading. For anything we lack, copy a named detail from a named product.
 
@@ -383,6 +387,8 @@ The dashboard follows an editorial, print-like design language. The load-bearing
 ### Verification Commands
 
 Use `aube` package scripts for frontend checks. From the repo root, prefer `aube run -F <package> <script>` so commands run against the right frontend package without `cd`. Do not run `npm exec`, `npx`, bare `vitest`, bare `eslint`, bare `oxfmt`, or bare `tsc` unless you are debugging the package script itself.
+
+Vitest defaults to happy-dom. Put `// @vitest-environment node` on the first line of a test whose assertions do not need the DOM, browser storage, `location`, or other browser behavior. Leave component tests and browser-behavior tests on happy-dom. Do not add a browser shim, weaken an assertion, or change production code so a file can run in Node.
 
 | Need                | Dashboard                           | Whole workspace                                 |
 | ------------------- | ----------------------------------- | ----------------------------------------------- |

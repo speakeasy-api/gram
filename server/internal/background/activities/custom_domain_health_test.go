@@ -650,3 +650,31 @@ func TestCustomDomainHealthCheckCNAMEMatchWithForeignAddressesIsMismatch(t *test
 	require.Equal(t, "unhealthy", domain.HealthStatus.String)
 	require.Equal(t, "dns_target_mismatch", domain.HealthIssue.String)
 }
+
+func TestCustomDomainHealthCheckBackfillsDNSTargetToken(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "custom_domain_health_backfill_token")
+	require.NoError(t, err)
+	repository := customdomainsrepo.New(conn)
+	domainID := createActivatedCustomDomain(t, repository, "test-organization", "backfill.example.com")
+	before, err := repository.GetCustomDomainDNSTargetToken(t.Context(), customdomainsrepo.GetCustomDomainDNSTargetTokenParams{ID: domainID, OrganizationID: "test-organization"})
+	require.NoError(t, err)
+	require.False(t, before.Valid)
+
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("backfill.example.com")))
+	checker.SetProbe(func(context.Context, string) error { return nil })
+
+	_, err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
+		CustomDomainID: domainID,
+		OrganizationID: "test-organization",
+		CheckedAt:      time.Now().UTC(),
+	})
+	require.NoError(t, err)
+
+	token, err := repository.GetCustomDomainDNSTargetToken(t.Context(), customdomainsrepo.GetCustomDomainDNSTargetTokenParams{ID: domainID, OrganizationID: "test-organization"})
+	require.NoError(t, err)
+	require.True(t, token.Valid)
+	require.Len(t, token.String, customdomains.DNSTargetTokenLength)
+}

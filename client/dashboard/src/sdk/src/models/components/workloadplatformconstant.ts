@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -18,7 +19,7 @@ export const WorkloadPlatformConstantVisibility = {
 /**
  * Whether the operator sees the value.
  */
-export type WorkloadPlatformConstantVisibility = ClosedEnum<
+export type WorkloadPlatformConstantVisibility = OpenEnum<
   typeof WorkloadPlatformConstantVisibility
 >;
 
@@ -37,9 +38,10 @@ export type WorkloadPlatformConstant = {
 };
 
 /** @internal */
-export const WorkloadPlatformConstantVisibility$inboundSchema: z.ZodMiniEnum<
-  typeof WorkloadPlatformConstantVisibility
-> = z.enum(WorkloadPlatformConstantVisibility);
+export const WorkloadPlatformConstantVisibility$inboundSchema: z.ZodMiniType<
+  WorkloadPlatformConstantVisibility,
+  unknown
+> = openEnums.inboundSchema(WorkloadPlatformConstantVisibility);
 
 /** @internal */
 export const WorkloadPlatformConstant$inboundSchema: z.ZodMiniType<

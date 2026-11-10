@@ -18,7 +18,7 @@ export {
 
 export { REDACTED_SECRET } from "./model/secret";
 
-export { normalizeScopes } from "./model/clientConfiguration";
+export { providerUrlLabel } from "./model/provider";
 
 export {
   headerDraftErrors,
@@ -46,7 +46,10 @@ export {
 
 export { useAllRemoteSessionClients } from "./queries/useAllRemoteSessionClients";
 export { useRemoteSessionIssuersByIds } from "./queries/useRemoteSessionIssuersByIds";
-export { resetAllProtectedResourceMetadata } from "./queries/useProtectedResourceMetadata";
+export {
+  resetAllProtectedResourceMetadata,
+  useProtectedResourceMetadata,
+} from "./queries/useProtectedResourceMetadata";
 export { useUpstreamProbe } from "./queries/useUpstreamProbe";
 
 export { AgentIdentityRow } from "./components/CredentialFields";
@@ -73,6 +76,7 @@ export type {
 } from "./model/serviceAccount";
 export { ServiceAccountPanel } from "./components/ServiceAccountPanel";
 export { useServiceAccountClientDraft } from "./drafts/useServiceAccountClientDraft";
+export type { ServiceAccountClientSpec } from "./drafts/useServiceAccountClientDraft";
 export { useCustomerManagedKeys } from "./queries/useCustomerManagedKeys";
 export { useOrganizationKeySets, useResolveKeySet } from "./queries/useKeySets";
 export { AvailabilityBadge } from "./components/AvailabilityBadge";

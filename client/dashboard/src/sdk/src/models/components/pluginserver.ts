@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const PluginServerPolicy = {
 /**
  * Whether this server is required or optional.
  */
-export type PluginServerPolicy = ClosedEnum<typeof PluginServerPolicy>;
+export type PluginServerPolicy = OpenEnum<typeof PluginServerPolicy>;
 
 export type PluginServer = {
   createdAt: Date;
@@ -54,9 +55,10 @@ export type PluginServer = {
 };
 
 /** @internal */
-export const PluginServerPolicy$inboundSchema: z.ZodMiniEnum<
-  typeof PluginServerPolicy
-> = z.enum(PluginServerPolicy);
+export const PluginServerPolicy$inboundSchema: z.ZodMiniType<
+  PluginServerPolicy,
+  unknown
+> = openEnums.inboundSchema(PluginServerPolicy);
 
 /** @internal */
 export const PluginServer$inboundSchema: z.ZodMiniType<PluginServer, unknown> =

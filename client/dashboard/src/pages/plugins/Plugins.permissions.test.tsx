@@ -18,6 +18,13 @@ const state = vi.hoisted(() => ({
   settings: vi.fn(),
   settingsRead: vi.fn(),
 }));
+vi.mock("@gram/client/react-query/organizationGateway.js", () => ({
+  useOrganizationGateway: () => ({
+    data: state.read
+      ? { available: true, url: "https://gateway.example.test/mcp" }
+      : undefined,
+  }),
+}));
 vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => state.writer || state.admin,
 }));
@@ -34,14 +41,12 @@ vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-a", slug: "project-a" }),
   useOrganization: () => ({ id: "org-a" }),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({}),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project-a" }),
+}));
 vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: vi.fn() }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    plugins: { detail: { href: (id: string) => `/plugins/${id}` } },
-  }),
 }));
 vi.mock("@gram/client/react-query/plugins", () => ({
   usePluginsSuspense: state.list,
@@ -140,6 +145,7 @@ beforeEach(() => {
           skillCount: 0,
           agentPluginsV1Compatible: true,
           autoCreated: false,
+          autoSyncEnabled: true,
         } satisfies Plugin,
       ],
     },
@@ -201,6 +207,9 @@ describe("Plugins index authorization", () => {
   it("loads and offers creation and publishing for a writer without org read", () => {
     render(page());
     expect(state.list).toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "Connect all servers" }),
+    ).toBeNull();
     expect(screen.getByText("A populated plugin card")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Sync plugins" }));
     expect(state.publish).toHaveBeenCalled();
@@ -213,7 +222,11 @@ describe("Plugins index authorization", () => {
     expect(state.create).toHaveBeenCalledWith(
       expect.objectContaining({
         request: {
-          createPluginForm: { name: "Example plugin", description: undefined },
+          createPluginForm: {
+            name: "Example plugin",
+            description: undefined,
+            autoSyncEnabled: true,
+          },
         },
       }),
     );
@@ -222,6 +235,59 @@ describe("Plugins index authorization", () => {
     ).toBeNull();
     expect(state.settings).not.toHaveBeenCalled();
     expect(state.settingsRead).not.toHaveBeenCalled();
+  });
+  it("creates a plugin with auto sync off when the switch is turned off", () => {
+    render(page());
+    fireEvent.click(screen.getByRole("button", { name: "Create plugin" }));
+    const toggle = screen.getByRole("switch", {
+      name: "Sync changes automatically",
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(toggle);
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Staged plugin" },
+    });
+    fireEvent.submit(screen.getByLabelText("Name").closest("form")!);
+    expect(state.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: {
+          createPluginForm: expect.objectContaining({
+            name: "Staged plugin",
+            autoSyncEnabled: false,
+          }),
+        },
+      }),
+    );
+  });
+  it("tells admins which plugins wait for Sync changes", () => {
+    state.admin = true;
+    state.list.mockReturnValue({
+      data: {
+        plugins: [
+          {
+            id: "plugin-a",
+            name: "Staged plugin",
+            slug: "staged-plugin",
+            createdAt: new Date("2026-01-01"),
+            updatedAt: new Date("2026-01-01"),
+            agentPluginsV1Compatible: true,
+            autoCreated: false,
+            autoSyncEnabled: false,
+          } satisfies Plugin,
+        ],
+      },
+    });
+    render(page());
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Toggle project marketplace details",
+      }),
+    );
+    expect(
+      screen.getByText(
+        "Auto sync is off for Staged plugin, so its changes publish only when someone clicks Sync changes.",
+      ),
+    ).toBeTruthy();
   });
   it("does not mount index queries without plugin read access", () => {
     state.writer = false;

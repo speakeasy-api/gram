@@ -36,6 +36,7 @@ function memoryTypeVariant(
     case "result":
       return "neutral";
   }
+  return "neutral";
 }
 
 function formatSimilarity(similarity: number | undefined): string {

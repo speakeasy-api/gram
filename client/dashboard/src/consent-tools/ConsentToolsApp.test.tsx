@@ -1,4 +1,11 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -60,6 +67,15 @@ function renderApp(
     inventoryDeferred: false,
     serverName: "example",
     prefill: null,
+    ...(overrides.gateway
+      ? {
+          gatewayInventory: {
+            attempt: "server-attempt",
+            tools: [{ name: "get_thing", annotations: ["read_only"] }],
+            roleHiddenTools: { count: 0, names: [] },
+          },
+        }
+      : {}),
     ...overrides,
   };
   return { ...render(<ConsentToolsApp {...props} />), button };
@@ -104,6 +120,108 @@ afterEach(() => {
 });
 
 describe("ConsentToolsApp", () => {
+  it("discards the old snapshot immediately when the direct identity changes", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+      <input type="radio" name="auth_client" form="consent-approve-form" value="client-a" checked>
+      <input type="radio" name="auth_client" form="consent-approve-form" value="client-b">
+    `,
+    );
+    const { button } = renderApp();
+    await waitFor(() => expect(button.disabled).toBe(false));
+    const oldAttempt = formFieldValues("tool_inventory_id")[0];
+    expect(
+      transportCtor.mock.calls[0]![1].requestInit.headers[
+        "Gram-Consent-Auth-Client"
+      ],
+    ).toBe("client-a");
+    let finish!: (value: { tools: { name: string }[] }) => void;
+    listTools.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const next = document.querySelector<HTMLInputElement>(
+      'input[value="client-b"]',
+    )!;
+    next.checked = true;
+    fireEvent.change(next);
+    expect(button.disabled).toBe(true);
+    expect(formFieldValues("tool_inventory_id")).toEqual([]);
+    await waitFor(() => expect(transportCtor).toHaveBeenCalledTimes(2));
+    expect(
+      transportCtor.mock.calls[1]![1].requestInit.headers[
+        "Gram-Consent-Auth-Client"
+      ],
+    ).toBe("client-b");
+    await act(async () => finish({ tools: [{ name: "new_identity_tool" }] }));
+    await waitFor(() => expect(button.disabled).toBe(false));
+    expect(formFieldValues("tool_inventory_id")[0]).not.toBe(oldAttempt);
+  });
+
+  it("ignores an old in-flight inventory after the direct identity changes", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+      <input type="radio" name="auth_client" form="consent-approve-form" value="client-a" checked>
+      <input type="radio" name="auth_client" form="consent-approve-form" value="client-b">
+    `,
+    );
+    let finishOld!: (value: { tools: { name: string }[] }) => void;
+    listTools.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOld = resolve;
+        }),
+    );
+    const { button } = renderApp();
+    await waitFor(() => expect(listTools).toHaveBeenCalledOnce());
+    const next = document.querySelector<HTMLInputElement>(
+      'input[value="client-b"]',
+    )!;
+    next.checked = true;
+    fireEvent.change(next);
+    await waitFor(() => expect(button.disabled).toBe(false));
+    const attempt = formFieldValues("tool_inventory_id")[0];
+    await act(async () => finishOld({ tools: [{ name: "stale_tool" }] }));
+    expect(formFieldValues("tool_inventory_id")).toEqual([attempt]);
+    await openPicker(userEvent.setup());
+    expect(screen.queryByText("stale_tool")).toBeNull();
+  });
+
+  it("keeps the captured gateway inventory when member identities change", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<input type="radio" name="auth_client.docs" value="member-client">',
+    );
+    const { button } = renderApp({ gateway: true });
+    await waitFor(() => expect(button.disabled).toBe(false));
+    const input = document.querySelector<HTMLInputElement>(
+      'input[name="auth_client.docs"]',
+    )!;
+    input.checked = true;
+    fireEvent.change(input);
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_inventory_id")).toEqual(["server-attempt"]);
+    expect(transportCtor).not.toHaveBeenCalled();
+  });
+
+  it("reads a single hidden direct identity", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<input type="hidden" name="auth_client" form="consent-approve-form" value="client-only">',
+    );
+    const { button } = renderApp();
+    await waitFor(() => expect(button.disabled).toBe(false));
+    expect(
+      transportCtor.mock.calls[0]![1].requestInit.headers[
+        "Gram-Consent-Auth-Client"
+      ],
+    ).toBe("client-only");
+  });
+
   it("performs an MCP session with the consent headers and enables approval", async () => {
     const { button } = renderApp();
     await waitFor(() => expect(button.disabled).toBe(false));
@@ -174,7 +292,48 @@ describe("ConsentToolsApp", () => {
     );
     expect(screen.getByRole("button", { name: "Reload page" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Give access to all tools" }),
+    ).toBeNull();
     expect(button.disabled).toBe(true);
+  });
+
+  it("falls back to all tools when the inventory cannot be captured", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(422, "too many tools"));
+    const { button } = renderApp();
+    await screen.findByText(/too many tools to choose from here/);
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+    expect(formFieldValues("tool_inventory_id")).toEqual([]);
+  });
+
+  it("asks before widening a stored selection the inventory cannot honor", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(422, "too many tools"));
+    const user = userEvent.setup();
+    const { button } = renderApp({
+      prefill: { annotations: [], tools: ["get_thing"] },
+    });
+    await screen.findByText(/too many tools to choose from here/);
+    expect(button.disabled).toBe(true);
+    expect(formFieldValues("tool_filtering")).toEqual([]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Give access to all tools" }),
+    );
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+  });
+
+  it("lets the user give access with all tools after a failed load", async () => {
+    listTools.mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    const { button } = renderApp();
+    await user.click(
+      await screen.findByRole("button", { name: "Give access to all tools" }),
+    );
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+    expect(formFieldValues("tool_inventory_id")).toEqual([]);
   });
 
   it("gives access with all tools when a chained service defers the inventory", async () => {
@@ -255,6 +414,18 @@ describe("ConsentToolsApp", () => {
     expect(screen.queryByText("get_thing")).toBeNull();
   });
 
+  it("warns, without blocking, when specific tools grants none", async () => {
+    const user = userEvent.setup();
+    const { button } = renderApp();
+    await openPicker(user);
+    const note = /No tools selected/;
+    expect(screen.getByText(note)).toBeTruthy();
+    expect(button.disabled).toBe(false);
+
+    await user.click(screen.getByRole("checkbox", { name: /get_thing/ }));
+    expect(screen.queryByText(note)).toBeNull();
+  });
+
   it("returning to all tools drops the narrowed grant", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -266,6 +437,21 @@ describe("ConsentToolsApp", () => {
     expect(formFieldValues("tool_filtering")).toEqual(["off"]);
     expect(formFieldValues("tools")).toEqual([]);
     expect(screen.queryByText("get_thing")).toBeNull();
+  });
+
+  it("a group covered by picks shows checked and clears without a grant", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("checkbox", { name: /get_thing/ }));
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    const selectAll = screen.getByRole("checkbox", { name: /Select all 1/ });
+    expect(selectAll.getAttribute("aria-checked")).toBe("true");
+
+    await user.click(selectAll);
+    expect(formFieldValues("tools")).toEqual([]);
+    expect(formFieldValues("tool_annotations")).toEqual([]);
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
   });
 
   it("navigating groups filters the list without granting anything", async () => {
@@ -373,7 +559,7 @@ describe("ConsentToolsApp", () => {
     const user = userEvent.setup();
     renderApp();
     await openPicker(user);
-    await user.click(screen.getByRole("button", { name: /Other/ }));
+    await user.click(screen.getByRole("button", { name: /Unannotated/ }));
     await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
 
     expect(formFieldValues("tool_filtering")).toEqual(["on"]);
@@ -430,6 +616,85 @@ describe("ConsentToolsApp", () => {
     expect(screen.getByText("delete_thing")).toBeTruthy();
     await user.clear(screen.getByRole("searchbox", { name: "Search tools" }));
     expect(await screen.findByText("get_thing")).toBeTruthy();
+  });
+
+  it("selects only the tools a search shows, keeping earlier picks", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("checkbox", { name: /plain_tool/ }));
+    await user.type(screen.getByRole("searchbox"), "thing");
+
+    const selectAll = screen.getByRole("checkbox", { name: /Select all 2/ });
+    expect(selectAll.getAttribute("aria-checked")).toBe("false");
+    await user.click(selectAll);
+
+    expect(formFieldValues("tools")).toEqual([
+      "delete_thing",
+      "get_thing",
+      "plain_tool",
+    ]);
+    expect(formFieldValues("tool_annotations")).toEqual([]);
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+  });
+
+  it("clears only the tools a search shows", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("checkbox", { name: /Select all 3/ }));
+    await user.type(screen.getByRole("searchbox"), "thing");
+
+    const selectAll = screen.getByRole("checkbox", { name: /Select all 2/ });
+    expect(selectAll.getAttribute("aria-checked")).toBe("true");
+    await user.click(selectAll);
+
+    expect(formFieldValues("tools")).toEqual(["plain_tool"]);
+  });
+
+  it("picks a group's search matches by name instead of granting it", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        { name: "get_thing", annotations: { readOnlyHint: true } },
+        { name: "list_things", annotations: { readOnlyHint: true } },
+        { name: "plain_tool" },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.type(screen.getByRole("searchbox"), "get");
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
+
+    expect(formFieldValues("tools")).toEqual(["get_thing"]);
+    expect(formFieldValues("tool_annotations")).toEqual([]);
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+  });
+
+  it("clearing a granted group's search matches keeps its hidden tools", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        { name: "get_thing", annotations: { readOnlyHint: true } },
+        { name: "list_things", annotations: { readOnlyHint: true } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 2/ }));
+    expect(formFieldValues("tool_annotations_live")).toEqual(["read_only"]);
+
+    await user.type(screen.getByRole("searchbox"), "get");
+    const selectAll = screen.getByRole("checkbox", { name: /Select all 1/ });
+    expect(selectAll.getAttribute("aria-checked")).toBe("true");
+    await user.click(selectAll);
+
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+    expect(formFieldValues("tools")).toEqual(["list_things"]);
   });
 
   it("discards prefilled grants that no longer match any tool, with notice", async () => {
@@ -494,4 +759,285 @@ describe("parsePrefillBootstrap", () => {
     ).toBeNull();
     expect(parsePrefillBootstrap('{"tools":["a"]}')).toBeNull();
   });
+  it("groups a gateway's tools by source and selects a source at once", async () => {
+    const user = userEvent.setup();
+    renderApp({
+      gateway: true,
+      serverName: "gateway",
+      gatewayInventory: {
+        attempt: "server-attempt",
+        tools: [
+          {
+            name: "github--create_issue",
+            annotations: [],
+            source: "GitHub",
+          },
+          {
+            name: "github--list_issues",
+            annotations: ["read_only"],
+            source: "GitHub",
+          },
+          { name: "docs--search", annotations: [], source: "Docs" },
+        ],
+        roleHiddenTools: { count: 0, names: [] },
+      },
+    });
+    await openPicker(user);
+
+    expect(screen.getByRole("group", { name: "GitHub" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Docs" })).toBeTruthy();
+    expect(screen.getByText("create_issue")).toBeTruthy();
+    expect(screen.queryByText("github--create_issue")).toBeNull();
+
+    await user.click(screen.getByRole("checkbox", { name: /GitHub/ }));
+    expect(formFieldValues("tools")).toEqual([
+      "github--create_issue",
+      "github--list_issues",
+    ]);
+
+    await user.type(screen.getByRole("searchbox"), "docs");
+    expect(screen.queryByRole("group", { name: "GitHub" })).toBeNull();
+    await user.click(screen.getByText("search"));
+    expect(formFieldValues("tools")).toEqual([
+      "docs--search",
+      "github--create_issue",
+      "github--list_issues",
+    ]);
+  });
+  it("shows partially selected sources as mixed and counts scope once", async () => {
+    const user = userEvent.setup();
+    renderApp({
+      gateway: true,
+      serverName: "gateway",
+      gatewayInventory: {
+        attempt: "server-attempt",
+        tools: [
+          {
+            name: "github--create_issue",
+            annotations: [],
+            source: "GitHub",
+          },
+          {
+            name: "github--list_issues",
+            annotations: [],
+            source: "GitHub",
+          },
+          { name: "docs--search", annotations: [], source: "Docs" },
+        ],
+        roleHiddenTools: { count: 0, names: [] },
+      },
+    });
+    await openPicker(user);
+
+    await user.click(screen.getByText("create_issue"));
+    expect(
+      screen
+        .getByRole("checkbox", { name: /GitHub/ })
+        .getAttribute("aria-checked"),
+    ).toBe("mixed");
+    expect(
+      screen
+        .getByRole("checkbox", { name: /Docs/ })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(
+      screen
+        .getByRole("checkbox", { name: /Select all 3/ })
+        .getAttribute("aria-checked"),
+    ).toBe("mixed");
+    const footer = screen.getByText(
+      /of 3 tools in scope on gateway/,
+    ).textContent;
+    expect(footer).toContain("1 of 3 tools in scope on gateway");
+    expect(footer).not.toMatch(/picked/);
+  });
+  it("keeps another source's tools when clearing a source covered by a grant", async () => {
+    const user = userEvent.setup();
+    renderApp({
+      gateway: true,
+      serverName: "gateway",
+      gatewayInventory: {
+        attempt: "server-attempt",
+        tools: [
+          {
+            name: "github--list_issues",
+            annotations: ["read_only"],
+            source: "GitHub",
+          },
+          {
+            name: "docs--search",
+            annotations: ["read_only"],
+            source: "Docs",
+          },
+          { name: "docs--write", annotations: [], source: "Docs" },
+        ],
+        roleHiddenTools: { count: 0, names: [] },
+      },
+    });
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 2/ }));
+    expect(formFieldValues("tool_annotations")).toEqual(["read_only"]);
+
+    await user.click(screen.getByRole("checkbox", { name: /GitHub/ }));
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+    expect(formFieldValues("tools")).toEqual(["docs--search"]);
+  });
+
+  it("clearing one annotation group keeps an overlapping grant", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        {
+          name: "get_thing",
+          annotations: { readOnlyHint: true, idempotentHint: true },
+        },
+        { name: "put_thing", annotations: { idempotentHint: true } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp({
+      prefill: {
+        annotations: [
+          { name: "idempotent", mode: "live" },
+          { name: "read_only", mode: "live" },
+        ],
+        tools: [],
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: /Read/ }));
+
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
+    expect(formFieldValues("tool_annotations_live")).toEqual(["idempotent"]);
+  });
+
+  it("keeps members that share a display name in separate sections", async () => {
+    const user = userEvent.setup();
+    renderApp({
+      gateway: true,
+      serverName: "gateway",
+      gatewayInventory: {
+        attempt: "server-attempt",
+        tools: [
+          {
+            name: "github-prod--create_issue",
+            annotations: [],
+            source: "GitHub",
+          },
+          {
+            name: "github-sandbox--create_issue",
+            annotations: [],
+            source: "GitHub",
+          },
+          { name: "docs--search", annotations: [], source: "Docs" },
+        ],
+        roleHiddenTools: { count: 0, names: [] },
+      },
+    });
+    await openPicker(user);
+
+    expect(
+      screen.getByRole("group", { name: "GitHub (github-prod)" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Docs" })).toBeTruthy();
+    await user.click(
+      screen.getByRole("checkbox", { name: /GitHub \(github-sandbox\)/ }),
+    );
+    expect(formFieldValues("tools")).toEqual(["github-sandbox--create_issue"]);
+  });
+});
+
+describe("gateway consent catalogs", () => {
+  it("offers live, frozen and specific access and submits the catalog choice", async () => {
+    const user = userEvent.setup();
+    renderApp({ gateway: true });
+    const cached = await screen.findByRole<HTMLInputElement>("radio", {
+      name: /All tools \(frozen\)/,
+    });
+    expect(cached.checked).toBe(true);
+    expect(formFieldValues("tool_catalog_mode")).toEqual(["cached"]);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+    await user.click(screen.getByRole("radio", { name: /All tools \(live\)/ }));
+    expect(formFieldValues("tool_catalog_mode")).toEqual(["live"]);
+    await openPicker(user);
+    expect(formFieldValues("tool_catalog_mode")).toEqual(["cached"]);
+    expect(formFieldValues("tool_filtering")).toEqual(["on"]);
+  });
+
+  it("keeps approval disabled when a gateway inventory cannot be captured", async () => {
+    const { button } = renderApp({
+      gateway: true,
+      gatewayInventory: undefined,
+    });
+    await screen.findByRole("alert");
+    expect(button.disabled).toBe(true);
+    expect(
+      screen.queryByRole("button", { name: /Give access to all tools/i }),
+    ).toBeNull();
+    expect(formFieldValues("tool_inventory_id")).toEqual([]);
+  });
+
+  it("uses the captured gateway inventory without an upstream session", async () => {
+    renderApp({
+      gateway: true,
+      gatewayInventory: {
+        attempt: "server-attempt",
+        tools: [{ name: "docs--search", source: "Docs", annotations: [] }],
+        roleHiddenTools: { count: 0, names: [] },
+      },
+    });
+    await screen.findByRole("radio", { name: /All tools \(frozen\)/ });
+    expect(formFieldValues("tool_inventory_id")).toEqual(["server-attempt"]);
+    expect(listTools).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it("freezes annotation selections for a gateway", async () => {
+    const user = userEvent.setup();
+    renderApp({
+      gateway: true,
+      gatewayInventory: {
+        attempt: "server-attempt",
+        tools: [
+          { name: "docs--search", source: "Docs", annotations: ["read_only"] },
+        ],
+        roleHiddenTools: { count: 0, names: [] },
+      },
+    });
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
+    expect(formFieldValues("tool_annotations")).toEqual(["read_only"]);
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+    expect(
+      screen.queryByRole("checkbox", { name: /Include future matching tools/ }),
+    ).toBeNull();
+  });
+
+  it("restores a cached all-tools choice when reconnecting", async () => {
+    renderApp({
+      gateway: true,
+      prefill: parsePrefillBootstrap(
+        '{"annotations":[],"tools":["get_thing"],"accessMode":"cached"}',
+      ),
+    });
+    const cached = await screen.findByRole<HTMLInputElement>("radio", {
+      name: /All tools \(frozen\)/,
+    });
+    expect(cached.checked).toBe(true);
+    expect(formFieldValues("tool_catalog_mode")).toEqual(["cached"]);
+  });
+  it.each(["all", "specific"] as const)(
+    "restores the %s gateway choice",
+    async (accessMode) => {
+      renderApp({
+        gateway: true,
+        prefill: { annotations: [], tools: ["get_thing"], accessMode },
+      });
+      const radio = await screen.findByRole<HTMLInputElement>("radio", {
+        name: accessMode === "all" ? /All tools \(live\)/ : /Specific tools/,
+      });
+      expect(radio.checked).toBe(true);
+    },
+  );
 });

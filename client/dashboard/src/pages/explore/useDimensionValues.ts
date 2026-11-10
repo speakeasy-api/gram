@@ -1,6 +1,7 @@
 import { useProject } from "@/contexts/Auth";
 import { analyticsDimensionValues } from "@gram/client/funcs/analyticsDimensionValues.js";
 import type { AnalyticsDimensionValuesResult } from "@gram/client/models/components/analyticsdimensionvaluesresult.js";
+import type { AnalyticsSignalScope } from "@gram/client/models/components/analyticssignalscope.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp.js";
 import {
@@ -59,6 +60,7 @@ export function dimensionValuesQuery(
   from: Date,
   to: Date,
   enabled: boolean,
+  signalScope?: AnalyticsSignalScope,
 ): UseQueryOptions<AnalyticsDimensionValuesResult, Error> {
   return {
     queryKey: [
@@ -68,6 +70,7 @@ export function dimensionValuesQuery(
       dimension,
       from.toISOString(),
       to.toISOString(),
+      ...(signalScope ? [signalScope] : []),
     ],
     enabled: enabled && dataset !== "" && dimension !== "",
     // A failed list leaves its picker empty; thrown, one filter's values
@@ -86,6 +89,7 @@ export function dimensionValuesQuery(
               from,
               to,
               limit: DIMENSION_VALUES_LIMIT,
+              signalScope,
             },
           },
           undefined,

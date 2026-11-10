@@ -219,3 +219,21 @@ func TestChatEndpoints_MissingChatIsNotFound(t *testing.T) {
 		})
 	}
 }
+
+// Legacy WorkOS impersonation has the same content restriction as validated
+// support access, including owner bypass and mutations at the shared gate.
+func TestChatEndpoints_LegacyImpersonationBlocked(t *testing.T) {
+	t.Parallel()
+	for _, ep := range allChatEndpoints() {
+		t.Run(ep.name, func(t *testing.T) {
+			t.Parallel()
+			ti := newTestChatServiceWithCompletion(t, &mockCompletionClient{})
+			ctx := initSessionCtx(t, ti)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "private session")
+			ctx = contextvalues.WithValidatedGramSession(ctx, authCtx, true)
+			requireOopsCode(t, ep.call(ctx, ti, chatID.String()), oops.CodeForbidden)
+		})
+	}
+}

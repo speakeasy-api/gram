@@ -4,13 +4,17 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestMemberResponseRecorderStatusStartsUnset(t *testing.T) {
@@ -224,7 +228,7 @@ func TestRouteMetaMemberToken_SelfCredential(t *testing.T) {
 		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: self("", remotesessions.ErrClientCredentialMisconfigured)}, remoteMember, "https://a.example.com/mcp")
 		memberErr, ok := errors.AsType[*metaMemberError](err)
 		require.True(t, ok, "error: %v", err)
-		require.Contains(t, memberErr.message, "contact the MCP server administrator")
+		require.Contains(t, memberErr.message, "Ask an admin of the server's project to fix the server's credential")
 	})
 
 	t.Run("self credential for another resource names the administrator", func(t *testing.T) {
@@ -236,23 +240,180 @@ func TestRouteMetaMemberToken_SelfCredential(t *testing.T) {
 		require.Contains(t, memberErr.message, "issued for a different resource")
 	})
 
-	t.Run("unavailable self credential asks for a retry", func(t *testing.T) {
+	// The request resolved its token map once, so discovery records the
+	// outage without retrying it within the listing.
+	t.Run("unavailable self credential asks for a later retry", func(t *testing.T) {
 		t.Parallel()
-		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: self("", remotesessions.ErrClientCredentialUnavailable)}, remoteMember, "https://a.example.com/mcp")
-		memberErr, ok := errors.AsType[*metaMemberError](err)
-		require.True(t, ok, "error: %v", err)
-		require.Contains(t, memberErr.message, "retry shortly")
+		tunnelMember := metaMember{slug: "m", tunneledServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: memberIssuer, Valid: true}}
+		for _, route := range []struct {
+			member   metaMember
+			upstream string
+		}{{member: remoteMember, upstream: "https://a.example.com/mcp"}, {member: tunnelMember, upstream: ""}} {
+			_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: self("", remotesessions.ErrClientCredentialUnavailable)}, route.member, route.upstream)
+			failure, ok := errors.AsType[memberDiscoveryError](err)
+			require.True(t, ok, "error: %v", err)
+			require.Contains(t, failure.message, "Retry shortly")
+			require.False(t, failure.retryable)
+		}
 	})
+}
+
+func TestRouteMetaMemberToken_SessionOutage(t *testing.T) {
+	t.Parallel()
+
+	const upstream = "https://a.example.com/mcp"
+	memberIssuer := uuid.New()
+	remoteMember := metaMember{slug: "m", remoteServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: memberIssuer, Valid: true}}
+	tunneledMember := metaMember{slug: "m", tunneledServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: memberIssuer, Valid: true}}
+	outage := func(resource string) remotesessions.UpstreamToken {
+		return remotesessions.UpstreamToken{Resource: resource, CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: remotesessions.ErrRemoteSessionUnavailable}
+	}
+	requireRetry := func(t *testing.T, err error) {
+		t.Helper()
+		_, retryable := errors.AsType[memberUnavailableError](err)
+		require.True(t, retryable, "error: %v", err)
+		_, credential := errors.AsType[memberCredentialError](err)
+		require.False(t, credential, "an outage must not ask for a reconnect")
+	}
+
+	t.Run("remote member by recorded resource", func(t *testing.T) {
+		t.Parallel()
+		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): outage(upstream)}, remoteMember, upstream)
+		requireRetry(t, err)
+	})
+
+	t.Run("remote member by issuer when no resource was recorded", func(t *testing.T) {
+		t.Parallel()
+		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: outage("")}, remoteMember, upstream)
+		requireRetry(t, err)
+	})
+
+	t.Run("tunneled member", func(t *testing.T) {
+		t.Parallel()
+		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: outage("")}, tunneledMember, upstream)
+		requireRetry(t, err)
+	})
+
+	t.Run("a sibling's outage leaves this member anonymous", func(t *testing.T) {
+		t.Parallel()
+		got, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): outage("https://b.example.com/mcp")}, remoteMember, upstream)
+		require.NoError(t, err)
+		require.Empty(t, got.Token)
+	})
+
+	t.Run("a usable credential for the upstream outranks the outage", func(t *testing.T) {
+		t.Parallel()
+		got, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{
+			uuid.New(): outage(upstream),
+			uuid.New(): {Token: "good", Resource: upstream, CredentialOwner: remotesessions.CredentialOwnerSubject},
+		}, remoteMember, upstream)
+		require.NoError(t, err)
+		require.Equal(t, "good", got.Token)
+	})
+}
+
+func TestRouteUpstreamToken_LiveMatchOutranksOutage(t *testing.T) {
+	t.Parallel()
+
+	const upstream = "https://a.example.com/mcp"
+	outage := remotesessions.UpstreamToken{Resource: upstream, CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: remotesessions.ErrRemoteSessionUnavailable}
+	none := uuid.NullUUID{}
+
+	got, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
+		uuid.New(): outage,
+		uuid.New(): {Token: "good", Resource: upstream, CredentialOwner: remotesessions.CredentialOwnerSubject},
+	}, upstream, false, none)
+	require.NoError(t, err)
+	require.Equal(t, "good", got.Token)
+
+	_, err = routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): outage}, upstream, false, none)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+}
+
+func TestMemberTokens_StoreOutageReadsAsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	gate := func(err error) metaGateContext {
+		return metaGateContext{projectTokens: &projectTokenCache{resolve: func(context.Context, uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+			return nil, err
+		}, byProject: map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{}}}
+	}
+	outageGate, brokenGate := gate(&pgconn.PgError{Code: "57P01"}), gate(&pgconn.PgError{Code: "42P01"})
+
+	_, err := outageGate.memberTokens(t.Context(), metaMember{slug: "m"})
+	_, unavailable := errors.AsType[memberUnavailableError](err)
+	require.True(t, unavailable, "error: %v", err)
+
+	_, err = brokenGate.memberTokens(t.Context(), metaMember{slug: "m"})
+	require.Error(t, err)
+	_, unavailable = errors.AsType[memberUnavailableError](err)
+	require.False(t, unavailable, "a broken query is not an outage: %v", err)
+	require.NotContains(t, strings.ToLower(err.Error()), "retry", "retrying can't fix a broken query")
+	require.Contains(t, err.Error(), "contact Speakeasy support")
+}
+
+func TestChainMetaMember_ChainingServesAnOutage(t *testing.T) {
+	t.Parallel()
+
+	routed := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: remotesessions.ErrRemoteSessionUnavailable}
+	routeErr := errors.New("outage")
+	chaining := func(token string) metaGateContext {
+		return metaGateContext{chainUpstream: func(context.Context, metaMember, string) (string, error) { return token, nil }}
+	}
+
+	_, token, err := chainMetaMember(t.Context(), chaining("chained"), metaMember{}, "r", routed, routeErr)
+	require.NoError(t, err)
+	require.Equal(t, "chained", token)
+
+	_, token, err = chainMetaMember(t.Context(), chaining(""), metaMember{}, "r", routed, routeErr)
+	require.ErrorIs(t, err, routeErr, "with nothing to chain the outage stands")
+	require.Empty(t, token)
+
+	self := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSelf, ClientCredentialErr: remotesessions.ErrClientCredentialUnavailable}
+	_, _, err = chainMetaMember(t.Context(), chaining("chained"), metaMember{}, "r", self, routeErr)
+	require.ErrorIs(t, err, routeErr, "a self client's failure is never chained around")
 }
 
 func TestMemberAuthFailure_SelfCredentialNamesAdministrator(t *testing.T) {
 	t.Parallel()
 
 	member := metaMember{slug: "m"}
-	err := memberAuthFailure(member, memberDial{anonymous: false, clientCredential: true})
-	require.Contains(t, err.Error(), "contact the MCP server administrator")
+	err := memberAuthFailure(member, memberDial{anonymous: false, clientCredential: true}, http.StatusUnauthorized)
+	require.Contains(t, err.Error(), "Ask an admin of the server's project to fix the server's credential")
 	require.NotContains(t, err.Error(), "reconnect")
 
-	err = memberAuthFailure(member, memberDial{anonymous: false, clientCredential: false})
-	require.Contains(t, err.Error(), "reconnect it from this gateway's sign-in page")
+	err = memberAuthFailure(member, memberDial{anonymous: false, clientCredential: false}, http.StatusUnauthorized)
+	require.Contains(t, err.Error(), "Ask your administrator to reconnect it")
+}
+
+func TestConnectionOutageMessage(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		kind remotesessions.RefreshOutageKind
+		wait time.Duration
+		want string
+	}{
+		{"Fake Docs", remotesessions.RefreshOutageProvider, 30 * time.Second, "Fake Docs' provider isn't available right now. Try again in about 30 seconds."},
+		{"Linear", remotesessions.RefreshOutageProvider, 5 * time.Minute, "Linear's provider isn't available right now. Try again in about 5 minutes."},
+		{"Linear", remotesessions.RefreshOutageProvider, 0, "Linear's provider isn't available right now. Try again shortly."},
+		{"Linear", remotesessions.RefreshOutageProvider, 400 * time.Millisecond, "Linear's provider isn't available right now. Try again shortly."},
+		{"Linear", remotesessions.RefreshOutageProvider, time.Second, "Linear's provider isn't available right now. Try again shortly."},
+		{"Linear", remotesessions.RefreshOutageProvider, 2 * time.Second, "Linear's provider isn't available right now. Try again in about 2 seconds."},
+		{"Linear", remotesessions.RefreshOutageTunnel, 30 * time.Second, "Linear can't renew its sign-in right now. Try again in about 30 seconds. If it keeps happening, ask your administrator to check that the server and its sign-in provider are running."},
+		{"Linear", remotesessions.RefreshOutageNone, 0, "Linear can't renew its sign-in right now. Try again shortly."},
+		{"Linear", remotesessions.RefreshOutageNone, 5 * time.Minute, "Linear can't renew its sign-in right now. Try again in about 5 minutes."},
+	} {
+		require.Equal(t, tc.want, connectionOutageMessage(tc.name, tc.kind, tc.wait))
+	}
+}
+
+// A caller with no connect page is sent to an administrator, not told to ask a user to open one.
+func TestMemberAuthFailure_NoConnectPageNamesAdministrator(t *testing.T) {
+	t.Parallel()
+
+	member := metaMember{slug: "m"}
+	require.EqualError(t, memberAuthFailure(member, memberDial{anonymous: true}, http.StatusUnauthorized), `server "m" requires authentication and has no credential for this caller. Ask your administrator to connect it`)
+	require.EqualError(t, memberAuthFailure(member, memberDial{}, http.StatusUnauthorized), `server "m" rejected the stored credential. Ask your administrator to reconnect it`)
 }

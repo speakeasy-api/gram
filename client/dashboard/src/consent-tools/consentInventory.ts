@@ -3,11 +3,13 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker";
 
 import type { ToolAnnotation } from "@/components/tool-selection/annotations";
-import { isRecord } from "./prefill";
+import { isRecord, isToolAnnotation } from "./prefill";
 
 export interface ConsentTool {
   name: string;
   annotations: ToolAnnotation[];
+  /** The gateway member server the tool comes from; absent on single servers. */
+  source?: string;
 }
 
 export interface RoleHiddenTools {
@@ -23,12 +25,57 @@ export interface ConsentInventory {
 }
 
 /**
+ * Parses the server-rendered gateway capture. Every tool is validated, so a
+ * malformed bootstrap fails initialization (approval stays disabled and the
+ * page offers a reload) instead of reaching the picker and crashing it.
+ */
+export function parseGatewayInventoryBootstrap(
+  raw: string | undefined,
+): (ConsentInventory & { attempt: string }) | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw ?? "");
+  } catch {
+    return null;
+  }
+  if (
+    !isRecord(value) ||
+    typeof value.attempt !== "string" ||
+    value.attempt === "" ||
+    !Array.isArray(value.tools)
+  )
+    return null;
+  const tools: ConsentTool[] = [];
+  const seen = new Set<string>();
+  for (const entry of value.tools) {
+    if (!isRecord(entry)) return null;
+    const { name, annotations, source } = entry;
+    if (typeof name !== "string" || name === "" || seen.has(name)) return null;
+    if (!Array.isArray(annotations) || !annotations.every(isToolAnnotation))
+      return null;
+    if (source !== undefined && typeof source !== "string") return null;
+    seen.add(name);
+    tools.push({
+      name,
+      annotations,
+      ...(source ? { source } : {}),
+    });
+  }
+  return {
+    attempt: value.attempt,
+    tools,
+    roleHiddenTools: { count: 0, names: [] },
+  };
+}
+
+/**
  * The island is an ordinary MCP client of the consent-scoped transport: the
  * official SDK performs initialize, paginated tools/list, and session
  * termination against the URL the page provided; state and CSRF ride
  * headers so every message stays pure MCP. The attempt id keys the
  * server-side inventory snapshot this session accumulates — approval later
- * binds to it, so the caller must submit it only after this resolves.
+ * binds to it, so the caller must submit it only after this resolves. Direct
+ * typed clients pass their selected auth client on every transport request.
  */
 export async function fetchConsentInventory(
   toolsUrl: string,
@@ -36,18 +83,26 @@ export async function fetchConsentInventory(
   csrfToken: string,
   attempt: string,
   signal?: AbortSignal,
+  authClient?: string,
 ): Promise<ConsentInventory> {
   const transport = new StreamableHTTPClientTransport(
     new URL(toolsUrl, window.location.origin),
     {
       // The SDK replaces requestInit.signal with its own controller. Combine
-      // the deadline at the fetch boundary so discovery and DELETE both stop.
+      // the discovery deadline at the fetch boundary. Session termination must
+      // survive discovery cancellation, but gets its own bounded deadline.
       fetch: (input, init) =>
         fetch(input, {
           ...init,
-          signal: signal
-            ? AbortSignal.any([signal, ...(init?.signal ? [init.signal] : [])])
-            : init?.signal,
+          signal:
+            init?.method === "DELETE"
+              ? AbortSignal.timeout(2000)
+              : signal
+                ? AbortSignal.any([
+                    signal,
+                    ...(init?.signal ? [init.signal] : []),
+                  ])
+                : init?.signal,
         }),
       requestInit: {
         credentials: "omit",
@@ -55,6 +110,7 @@ export async function fetchConsentInventory(
           "Gram-Consent-State": state,
           "Gram-Consent-Csrf": csrfToken,
           "Gram-Consent-Inventory-Attempt": attempt,
+          ...(authClient ? { "Gram-Consent-Auth-Client": authClient } : {}),
         },
       },
     },

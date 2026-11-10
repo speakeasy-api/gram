@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
 
 const (
@@ -241,7 +242,7 @@ func registerDashboardTools(reg *Registrar, service *DashboardsService) {
 			return service.save(ctx, principal, input)
 		})
 	})
-	addTool(reg, dashboardManifest(duplicateDashboardToolName, "Duplicate a Dashboard", "Copy a project dashboard by id, or a Speakeasy-built dashboard by slug, into a new project dashboard the caller owns. Every card of the copy shows a new saved widget, so the copy changes independently of the original."+dashboardWriteSafeguards, dashboardHints{read: false, destructive: false, idempotent: false}), meta, func(ctx context.Context, _ *mcp.CallToolRequest, input duplicateDashboardInput) (*mcp.CallToolResult, dashboardWriteOutput, error) {
+	addTool(reg, dashboardManifest(duplicateDashboardToolName, "Duplicate a Dashboard", "Copy a project dashboard by id, or a Speakeasy-built dashboard by slug, into a new project dashboard the caller owns. Every card of the copy shows a new saved widget, so the copy changes independently of the original. A dashboard with widgets over a dataset only organization administrators may read, such as risk_findings, can only be copied by them, and anyone else is refused as dataset_restricted."+dashboardWriteSafeguards, dashboardHints{read: false, destructive: false, idempotent: false}), meta, func(ctx context.Context, _ *mcp.CallToolRequest, input duplicateDashboardInput) (*mcp.CallToolResult, dashboardWriteOutput, error) {
 		return principalToolCall(ctx, dashboardToolError(ctx, logger), func(principal Principal) (dashboardWriteOutput, error) {
 			return service.duplicate(ctx, principal, input)
 		})
@@ -386,6 +387,8 @@ func dashboardToolError(ctx context.Context, logger *slog.Logger) func(error) (*
 			refusal.Code, refusal.Message = previewExpiredCode, previewExpiredMessage
 		case errors.Is(err, ErrForbidden):
 			refusal.Code, refusal.Message = "permission_denied", "An authorized external user with project:read on the exact project is required."
+		case errors.Is(err, widgets.ErrDatasetRestricted):
+			refusal.Code, refusal.Message = widgetDatasetRestricted, "This dashboard has widgets over a dataset only organization administrators can read, so only they can copy it."
 		case isShareable && (shareable.Code == oops.CodeBadRequest || shareable.Code == oops.CodeInvalid):
 			refusal.Code, refusal.Reason, refusal.Message = "invalid_request", shareable.Error(), "Correct what the reason names and preview again."
 		case isShareable && shareable.Code == oops.CodeConflict:

@@ -27,9 +27,10 @@ func TestAvailableAccessReadToolsAreReadOnlyWithStableAudiences(t *testing.T) {
 	requireAccessReadToolDescriptors(t, registrar)
 }
 
-// list_access_members is the one access read the assistant is admitted to: it
-// replaces the managed toolset's organization user lookup. The other reads
-// stay external-only.
+// list_access_members and describe_access_permissions are the access reads
+// the assistant is admitted to: the first replaces the managed toolset's
+// organization user lookup, the second explains permissions without exposing
+// who holds them. The other reads stay external-only.
 func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 	t.Helper()
 
@@ -37,11 +38,12 @@ func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 		projectScope ProjectScope
 		audiences    []Audience
 	}{
-		"list_access_roles":     {ProjectScopeNone, externalOnly},
-		"list_access_members":   {ProjectScopeNone, bothAudiences},
-		"list_my_mcp_access":    {ProjectScopeNone, externalOnly},
-		"get_member_mcp_access": {ProjectScopeNone, externalOnly},
-		"get_mcp_access":        {ProjectScopeExplicit, externalOnly},
+		"list_access_roles":           {ProjectScopeNone, externalOnly},
+		"list_access_members":         {ProjectScopeNone, bothAudiences},
+		"list_my_mcp_access":          {ProjectScopeNone, externalOnly},
+		"get_member_mcp_access":       {ProjectScopeNone, externalOnly},
+		"get_mcp_access":              {ProjectScopeExplicit, externalOnly},
+		"describe_access_permissions": {ProjectScopeNone, bothAudiences},
 	}
 	for _, descriptor := range registrar.Descriptors() {
 		expected, ok := wanted[descriptor.Name]
@@ -59,6 +61,7 @@ func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 
 	assistant := names(registrar.For(AudienceAssistant))
 	require.Contains(t, assistant, "list_access_members")
+	require.Contains(t, assistant, "describe_access_permissions")
 	require.NotContains(t, assistant, "list_access_roles")
 	require.NotContains(t, assistant, "list_my_mcp_access")
 	require.NotContains(t, assistant, "get_member_mcp_access")
@@ -134,6 +137,9 @@ func TestGetMemberMCPAccessAdvertisesTableReadyOutput(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(outputSchema), "connection_access")
 	require.Contains(t, string(outputSchema), "can_manage")
+	require.Contains(t, string(outputSchema), "rules")
+	require.Contains(t, string(outputSchema), "source_name")
+	require.Contains(t, string(outputSchema), "effect")
 }
 
 func TestGetMemberMCPAccessStubAdvertisesLiveInputSchema(t *testing.T) {

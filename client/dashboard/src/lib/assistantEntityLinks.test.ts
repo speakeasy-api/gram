@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import { resolveEntityLink } from "./assistantEntityLinkResolve";
@@ -35,6 +36,14 @@ describe("resolveEntityLink", () => {
 
   it("returns unresolvable for an empty skill id", () => {
     expect(resolveEntityLink("gram:skill/", "acme", "proj")).toEqual({
+      href: null,
+    });
+  });
+
+  it("does not link legacy custom-tool references to a removed route", () => {
+    expect(
+      resolveEntityLink("gram:custom_tool/example", "acme", "proj"),
+    ).toEqual({
       href: null,
     });
   });

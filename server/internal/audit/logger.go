@@ -18,7 +18,10 @@ type Logger struct {
 
 type LoggerOption func(*Logger)
 
-// WithoutOutbox records audit rows without publishing webhook events, for operator backfills.
+// WithoutOutbox records audit rows without publishing outbox events. Use it for
+// operator backfills independently of internal-event classification.
+// Skipping the outbox also drops the event from internal outbox consumers such
+// as growth signals.
 func WithoutOutbox() LoggerOption {
 	return func(l *Logger) { l.skipOutbox = true }
 }
@@ -43,16 +46,7 @@ type auditEntry struct {
 // They describe the request, not the event, which is why they are derived from
 // the context at the moment of the write.
 func (l *Logger) log(ctx context.Context, dbtx repo.DBTX, entry auditEntry) error {
-	applyAuthenticatedActor(ctx, &entry.Params)
-	identity := actingIdentityFromContext(ctx)
-	// The column is nullable so that rows predating it need no backfill, but
-	// nothing written from here on is left null: an unattributable write
-	// records SurfaceUnknown explicitly. A null surface therefore means "older
-	// than attribution", which is a different statement from "unidentifiable".
-	entry.Params.ActingSurface = conv.ToPGText(string(identity.Surface))
-	// A call with no OAuth client records NULL, not an empty string: absent and
-	// blank are different answers to "which client acted".
-	entry.Params.ActingClientID = conv.ToPGTextEmpty(identity.ClientID)
+	StampRequest(ctx, &entry.Params)
 
 	row, err := repo.New(dbtx).InsertAuditLog(ctx, entry.Params)
 	if err != nil {
@@ -62,11 +56,24 @@ func (l *Logger) log(ctx context.Context, dbtx repo.DBTX, entry auditEntry) erro
 	if l.skipOutbox {
 		return nil
 	}
-	if err := appendToOutbox(ctx, dbtx, entry, row); err != nil {
-		return err
-	}
+	return PublishWebhook(ctx, dbtx, entry.Params, row, CategoryConfiguration, entry.OutboxEvent)
+}
 
-	return nil
+// StampRequest sets what every entry takes from the request rather than from
+// its event: the authenticated agent when an agent is acting, and the acting
+// surface and client. The configuration and security logs both call it, so
+// their entries are attributed alike.
+func StampRequest(ctx context.Context, params *repo.InsertAuditLogParams) {
+	applyAuthenticatedActor(ctx, params)
+	identity := actingIdentityFromContext(ctx)
+	// The column is nullable so that rows predating it need no backfill, but
+	// nothing written from here on is left null: an unattributable write
+	// records SurfaceUnknown explicitly. A null surface therefore means "older
+	// than attribution", which is a different statement from "unidentifiable".
+	params.ActingSurface = conv.ToPGText(string(identity.Surface))
+	// A call with no OAuth client records NULL, not an empty string: absent and
+	// blank are different answers to "which client acted".
+	params.ActingClientID = conv.ToPGTextEmpty(identity.ClientID)
 }
 
 func applyAuthenticatedActor(ctx context.Context, params *repo.InsertAuditLogParams) {

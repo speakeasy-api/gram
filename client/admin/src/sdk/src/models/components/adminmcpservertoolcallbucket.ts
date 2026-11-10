@@ -14,7 +14,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export type AdminMcpServerToolCallBucket = {
   bucketStart: Date;
   /**
-   * Failed tool calls in the bucket.
+   * Tool calls in the bucket that failed with status 400 or above. Tool errors returned inside HTTP 200 (isError) are not counted here.
    */
   failed: number;
   /**

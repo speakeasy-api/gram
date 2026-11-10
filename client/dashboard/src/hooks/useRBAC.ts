@@ -3,11 +3,17 @@ import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+// Open SDK enums accept future values, but only understood scopes may authorize.
+const knownScopes: ReadonlySet<string> = new Set(Object.values(Scope));
+
 /**
  * Derive the resource kind from a scope's family prefix.
  * Mirrors the server-side ResourceKindForScope in authz/selector.go.
+ * mcp:auth is not checkable client-side: the server binds the connection owner.
  */
 export function resourceKindForScope(scope: string): string {
+  if (scope === "mcp:auth" || scope === "mcp:blocked_auth")
+    return "mcp_auth_client";
   if (
     scope.startsWith("project:") ||
     scope.startsWith("plugin:") ||
@@ -18,6 +24,7 @@ export function resourceKindForScope(scope: string): string {
   if (scope.startsWith("org:")) return "org";
   if (scope.startsWith("environment:")) return "environment";
   if (scope.startsWith("skill:")) return "skill";
+  if (scope.startsWith("inference:")) return "inference";
   if (scope.startsWith("assistant:")) return "assistant";
   if (scope.startsWith("risk_policy:")) return "risk_policy";
   if (scope.startsWith("chat:")) return "chat";
@@ -73,6 +80,7 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   "mcp:read": ["mcp:blocked_read"],
   "mcp:write": ["mcp:blocked_write"],
   "mcp:connect": ["mcp:blocked_connect"],
+  "mcp:auth": ["mcp:blocked_auth"],
   "environment:read": ["environment:blocked_read"],
   "environment:write": [
     "environment:blocked_write",
@@ -146,6 +154,10 @@ export function hasScopeInGrants(
   resourceId?: string | readonly string[],
   projectId?: string,
 ): boolean {
+  if (!knownScopes.has(scope)) return false;
+  // Only the server can bind the connection owner of an auth-client check.
+  if (resourceKindForScope(scope) === "mcp_auth_client") return false;
+
   const resourceIds =
     typeof resourceId === "string" || resourceId === undefined
       ? [resourceId]
@@ -174,6 +186,8 @@ export function hasScopeInGrants(
   const directAllow = allowChecks.map(() => false);
 
   for (const grant of grants) {
+    // An unknown parent must not authorize through its known sub-scopes either.
+    if (grant.scope === undefined || !knownScopes.has(grant.scope)) continue;
     const effect = grant.effect || "allow";
 
     const isLegacyDeny = effect === "deny" && grant.scope === scope;

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const CredentialOwner = {
 /**
  * Who the upstream access credential belongs to. subject means each caller connects their own upstream account; self means the client holds one credential for itself, obtained with the client_credentials grant, that every caller shares.
  */
-export type CredentialOwner = ClosedEnum<typeof CredentialOwner>;
+export type CredentialOwner = OpenEnum<typeof CredentialOwner>;
 
 /**
  * Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.
@@ -31,7 +32,7 @@ export const TokenEndpointAuthAudienceFormat = {
 /**
  * Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.
  */
-export type TokenEndpointAuthAudienceFormat = ClosedEnum<
+export type TokenEndpointAuthAudienceFormat = OpenEnum<
   typeof TokenEndpointAuthAudienceFormat
 >;
 
@@ -47,7 +48,7 @@ export const RemoteSessionClientTokenEndpointAuthMethod = {
 /**
  * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
  */
-export type RemoteSessionClientTokenEndpointAuthMethod = ClosedEnum<
+export type RemoteSessionClientTokenEndpointAuthMethod = OpenEnum<
   typeof RemoteSessionClientTokenEndpointAuthMethod
 >;
 
@@ -82,9 +83,17 @@ export type RemoteSessionClient = {
    */
   credentialOwner: CredentialOwner;
   /**
+   * Administrator-chosen name for the client. Null when unset, in which case the client is shown by its client_id.
+   */
+  displayName?: string | undefined;
+  /**
    * The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
    */
   federatedCallbackUrl?: string | undefined;
+  /**
+   * Whether the connecting MCP client's self-reported name is sent to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions.
+   */
+  forwardClientName: boolean;
   /**
    * Recorded effective registration grants. Null means unknown; an empty array means no recorded grants.
    */
@@ -139,20 +148,21 @@ export type RemoteSessionClient = {
 };
 
 /** @internal */
-export const CredentialOwner$inboundSchema: z.ZodMiniEnum<
-  typeof CredentialOwner
-> = z.enum(CredentialOwner);
+export const CredentialOwner$inboundSchema: z.ZodMiniType<
+  CredentialOwner,
+  unknown
+> = openEnums.inboundSchema(CredentialOwner);
 
 /** @internal */
-export const TokenEndpointAuthAudienceFormat$inboundSchema: z.ZodMiniEnum<
-  typeof TokenEndpointAuthAudienceFormat
-> = z.enum(TokenEndpointAuthAudienceFormat);
+export const TokenEndpointAuthAudienceFormat$inboundSchema: z.ZodMiniType<
+  TokenEndpointAuthAudienceFormat,
+  unknown
+> = openEnums.inboundSchema(TokenEndpointAuthAudienceFormat);
 
 /** @internal */
 export const RemoteSessionClientTokenEndpointAuthMethod$inboundSchema:
-  z.ZodMiniEnum<typeof RemoteSessionClientTokenEndpointAuthMethod> = z.enum(
-    RemoteSessionClientTokenEndpointAuthMethod,
-  );
+  z.ZodMiniType<RemoteSessionClientTokenEndpointAuthMethod, unknown> = openEnums
+    .inboundSchema(RemoteSessionClientTokenEndpointAuthMethod);
 
 /** @internal */
 export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
@@ -175,7 +185,9 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     credential_owner: CredentialOwner$inboundSchema,
+    display_name: z.optional(z.string()),
     federated_callback_url: z.optional(z.string()),
+    forward_client_name: z.boolean(),
     grant_types: z.nullable(z.array(z.string())),
     id: z.string(),
     json_web_key_set_id: z.optional(z.string()),
@@ -208,7 +220,9 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
       "credential_owner": "credentialOwner",
+      "display_name": "displayName",
       "federated_callback_url": "federatedCallbackUrl",
+      "forward_client_name": "forwardClientName",
       "grant_types": "grantTypes",
       "json_web_key_set_id": "jsonWebKeySetId",
       "legacy_callback_url": "legacyCallbackUrl",

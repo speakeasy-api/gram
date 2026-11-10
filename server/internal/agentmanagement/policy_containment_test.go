@@ -94,7 +94,14 @@ func TestPolicyWritesRequireCallerAndOwnerContainment(t *testing.T) {
 					after, loadErr := repo.New(f.db).ListAgentPolicyGrants(ctx, repo.ListAgentPolicyGrantsParams{OrganizationID: "org-delegable", AgentID: f.agentID})
 					require.NoError(t, loadErr)
 					require.Equal(t, before, after)
-					agents, loadErr := repo.New(f.db).ListManagedAgents(ctx, "org-delegable")
+					agents, loadErr := repo.New(f.db).ListManagedAgents(ctx, repo.ListManagedAgentsParams{
+						OrganizationID: "org-delegable",
+						// Empty rather than nil: the query guards on cardinality(),
+						// and a NULL array there drops every row.
+						Lifecycles:   []string{},
+						OwnerUserIds: []string{},
+						PageLimit:    100,
+					})
 					require.NoError(t, loadErr)
 					require.Len(t, agents, 1)
 					require.Empty(t, auditActions(t, f.db, "org-delegable", ""))
@@ -174,7 +181,14 @@ func TestInitialPolicyContainmentFailureRollsBackEarlierGrants(t *testing.T) {
 		{Scope: string(authz.ScopeMCPRead), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: "mcp", ResourceID: "server-b"}},
 	}})
 	requireOopsCode(t, err, oops.CodeForbidden)
-	agents, err := repo.New(f.db).ListManagedAgents(ctx, "org-delegable")
+	agents, err := repo.New(f.db).ListManagedAgents(ctx, repo.ListManagedAgentsParams{
+		OrganizationID: "org-delegable",
+		// Empty rather than nil: the query guards on cardinality(),
+		// and a NULL array there drops every row.
+		Lifecycles:   []string{},
+		OwnerUserIds: []string{},
+		PageLimit:    100,
+	})
 	require.NoError(t, err)
 	require.Len(t, agents, 1)
 	grants, err := repo.New(f.db).ListAgentPolicyGrants(ctx, repo.ListAgentPolicyGrantsParams{OrganizationID: "org-delegable", AgentID: f.agentID})

@@ -42,6 +42,9 @@ type Server struct {
 	Unshare                http.Handler
 	GetShared              http.Handler
 	ListDistributions      http.Handler
+	Link                   http.Handler
+	Unlink                 http.Handler
+	ListLinks              http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -94,6 +97,9 @@ func New(
 			{"Unshare", "POST", "/rpc/skills.unshare"},
 			{"GetShared", "GET", "/rpc/skills.getShared"},
 			{"ListDistributions", "GET", "/rpc/skills.listDistributions"},
+			{"Link", "POST", "/rpc/skills.link"},
+			{"Unlink", "POST", "/rpc/skills.unlink"},
+			{"ListLinks", "GET", "/rpc/skills.listLinks"},
 		},
 		Create:                 NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
 		AddVersion:             NewAddVersionHandler(e.AddVersion, mux, decoder, encoder, errhandler, formatter),
@@ -118,6 +124,9 @@ func New(
 		Unshare:                NewUnshareHandler(e.Unshare, mux, decoder, encoder, errhandler, formatter),
 		GetShared:              NewGetSharedHandler(e.GetShared, mux, decoder, encoder, errhandler, formatter),
 		ListDistributions:      NewListDistributionsHandler(e.ListDistributions, mux, decoder, encoder, errhandler, formatter),
+		Link:                   NewLinkHandler(e.Link, mux, decoder, encoder, errhandler, formatter),
+		Unlink:                 NewUnlinkHandler(e.Unlink, mux, decoder, encoder, errhandler, formatter),
+		ListLinks:              NewListLinksHandler(e.ListLinks, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -149,6 +158,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Unshare = m(s.Unshare)
 	s.GetShared = m(s.GetShared)
 	s.ListDistributions = m(s.ListDistributions)
+	s.Link = m(s.Link)
+	s.Unlink = m(s.Unlink)
+	s.ListLinks = m(s.ListLinks)
 }
 
 // MethodNames returns the methods served.
@@ -179,6 +191,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUnshareHandler(mux, h.Unshare)
 	MountGetSharedHandler(mux, h.GetShared)
 	MountListDistributionsHandler(mux, h.ListDistributions)
+	MountLinkHandler(mux, h.Link)
+	MountUnlinkHandler(mux, h.Unlink)
+	MountListLinksHandler(mux, h.ListLinks)
 }
 
 // Mount configures the mux to serve the skills endpoints.
@@ -1382,6 +1397,165 @@ func NewListDistributionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listDistributions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountLinkHandler configures the mux to serve the "skills" service "link"
+// endpoint.
+func MountLinkHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.link", f)
+}
+
+// NewLinkHandler creates a HTTP handler which loads the HTTP request and calls
+// the "skills" service "link" endpoint.
+func NewLinkHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeLinkRequest(mux, decoder)
+		encodeResponse = EncodeLinkResponse(encoder)
+		encodeError    = EncodeLinkError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "link")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUnlinkHandler configures the mux to serve the "skills" service "unlink"
+// endpoint.
+func MountUnlinkHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.unlink", f)
+}
+
+// NewUnlinkHandler creates a HTTP handler which loads the HTTP request and
+// calls the "skills" service "unlink" endpoint.
+func NewUnlinkHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUnlinkRequest(mux, decoder)
+		encodeResponse = EncodeUnlinkResponse(encoder)
+		encodeError    = EncodeUnlinkError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "unlink")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListLinksHandler configures the mux to serve the "skills" service
+// "listLinks" endpoint.
+func MountListLinksHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skills.listLinks", f)
+}
+
+// NewListLinksHandler creates a HTTP handler which loads the HTTP request and
+// calls the "skills" service "listLinks" endpoint.
+func NewListLinksHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListLinksRequest(mux, decoder)
+		encodeResponse = EncodeListLinksResponse(encoder)
+		encodeError    = EncodeListLinksError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listLinks")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -9,13 +9,17 @@ import { assistantsGet } from "../funcs/assistantsGet.js";
 import { assistantsGetManaged } from "../funcs/assistantsGetManaged.js";
 import { assistantsInterruptTurn } from "../funcs/assistantsInterruptTurn.js";
 import { assistantsList } from "../funcs/assistantsList.js";
+import { assistantsListExecutionProfiles } from "../funcs/assistantsListExecutionProfiles.js";
 import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
+import { assistantsSetExecutionProfileChoice } from "../funcs/assistantsSetExecutionProfileChoice.js";
 import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
 import { assistantsUpgradeIdentity } from "../funcs/assistantsUpgradeIdentity.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { Assistant } from "../models/components/assistant.js";
+import { AssistantExecutionProfile } from "../models/components/assistantexecutionprofile.js";
 import { InterruptTurnResult } from "../models/components/interruptturnresult.js";
 import { ListAssistantsResult } from "../models/components/listassistantsresult.js";
+import { ListExecutionProfilesResult } from "../models/components/listexecutionprofilesresult.js";
 import { SendMessageResult } from "../models/components/sendmessageresult.js";
 import {
   CreateAssistantRequest,
@@ -42,6 +46,10 @@ import {
   InterruptAssistantTurnSecurity,
 } from "../models/operations/interruptassistantturn.js";
 import {
+  ListAssistantExecutionProfilesRequest,
+  ListAssistantExecutionProfilesSecurity,
+} from "../models/operations/listassistantexecutionprofiles.js";
+import {
   ListAssistantsRequest,
   ListAssistantsSecurity,
 } from "../models/operations/listassistants.js";
@@ -49,6 +57,10 @@ import {
   SendAssistantMessageRequest,
   SendAssistantMessageSecurity,
 } from "../models/operations/sendassistantmessage.js";
+import {
+  SetAssistantExecutionProfileChoiceRequest,
+  SetAssistantExecutionProfileChoiceSecurity,
+} from "../models/operations/setassistantexecutionprofilechoice.js";
 import {
   UpdateAssistantRequest,
   UpdateAssistantSecurity,
@@ -194,6 +206,25 @@ export class Assistants extends ClientSDK {
   }
 
   /**
+   * listExecutionProfiles assistants
+   *
+   * @remarks
+   * List the upstream credentials an assistant's turns use on each MCP server it reaches, per root trigger and per whether the turn acts for a user. Each server shows its current choice, or why it has none, and the credentials that can be chosen. Requires assistant read access.
+   */
+  async listExecutionProfiles(
+    request: ListAssistantExecutionProfilesRequest,
+    security?: ListAssistantExecutionProfilesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListExecutionProfilesResult> {
+    return unwrapAsync(assistantsListExecutionProfiles(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * sendMessage assistants
    *
    * @remarks
@@ -205,6 +236,25 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SendMessageResult> {
     return unwrapAsync(assistantsSendMessage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setExecutionProfileChoice assistants
+   *
+   * @remarks
+   * Choose the upstream credential an assistant's turns use on one MCP server, for one root trigger and execution context: an auth client, no upstream authentication, or back to the choice the next turn makes on its own. Turns already running keep their choice; later turns use the new one. Turns that act for nobody can use shared credentials only. Choosing grants nothing: each request checks the turn may use the credential. Requires assistant write access.
+   */
+  async setExecutionProfileChoice(
+    request: SetAssistantExecutionProfileChoiceRequest,
+    security?: SetAssistantExecutionProfileChoiceSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AssistantExecutionProfile> {
+    return unwrapAsync(assistantsSetExecutionProfileChoice(
       this,
       request,
       security,

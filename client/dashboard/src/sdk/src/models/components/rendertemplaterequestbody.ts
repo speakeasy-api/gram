@@ -23,7 +23,6 @@ export type RenderTemplateRequestBodyEngine = ClosedEnum<
  */
 export const RenderTemplateRequestBodyKind = {
   Prompt: "prompt",
-  HigherOrderTool: "higher_order_tool",
 } as const;
 /**
  * The kind of prompt the template is used for

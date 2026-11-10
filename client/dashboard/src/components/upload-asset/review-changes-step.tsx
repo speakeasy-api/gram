@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -99,11 +100,11 @@ function ChangeRow({
   return (
     <li className="flex items-start gap-3 py-3">
       <Badge
-        variant={severityVariant[change.severity]}
+        variant={enumPresentation(severityVariant, change.severity, "warning")}
         size="sm"
         className="mt-0.5 w-20 shrink-0 justify-center text-center"
       >
-        {severityLabel[change.severity]}
+        {enumPresentation(severityLabel, change.severity, "Unknown")}
       </Badge>
       <div className="min-w-0 flex-1">
         {change.tools.length > 0 ? (
@@ -151,7 +152,7 @@ function AffectedServers({
             className="flex items-center justify-between gap-3 py-2"
           >
             <Link
-              to={routes.mcp.details.href(toolset.slug)}
+              to={routes.toolset.href(toolset.slug)}
               className="min-w-0 truncate underline-offset-2 hover:underline"
               title={toolset.name}
             >

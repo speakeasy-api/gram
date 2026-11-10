@@ -30,11 +30,17 @@ type countingRoleBackend struct {
 	*access.RoleManager
 	identityReconciles int
 	memberReconciles   int
+	deliveryReconciles int
 }
 
 func (b *countingRoleBackend) ReconcileRoleIdentity(ctx context.Context, workosOrgID, slug, name, description string, create bool) {
 	b.identityReconciles++
 	b.RoleManager.ReconcileRoleIdentity(ctx, workosOrgID, slug, name, description, create)
+}
+
+func (b *countingRoleBackend) ReconcileRoleDelivery(ctx context.Context, reconciliation access.RoleReconciliation) {
+	b.deliveryReconciles++
+	b.RoleManager.ReconcileRoleDelivery(ctx, reconciliation)
 }
 
 func (b *countingRoleBackend) ReconcileMemberRoles(ctx context.Context, reconciliation access.MemberRoleReconciliation) {
@@ -126,7 +132,7 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	reads := NewAccessReadService(logger, conn, allowBudget(), "access-role-integration-key")
 	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard())
-	backend := &countingRoleBackend{RoleManager: manager, identityReconciles: 0, memberReconciles: 0}
+	backend := &countingRoleBackend{RoleManager: manager, identityReconciles: 0, memberReconciles: 0, deliveryReconciles: 0}
 	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", backend)
 	require.NoError(t, err)
 
@@ -207,16 +213,23 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 
 	updateAuditsBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessRoleUpdate)
 	require.NoError(t, err)
-	updated, err := service.Update(ctx, principal, UpdateMCPAccessRoleInput{
+	updateInput := UpdateMCPAccessRoleInput{
 		ProjectID: project.ID.String(), RoleReference: current.Reference, ExpectedVersion: current.Version,
 		AddRules:       []MCPAccessRoleRule{{MCPID: targetID, Disposition: authz.DispositionReadOnly}},
 		RemoveRules:    []MCPAccessRoleRule{{MCPID: targetID}},
 		IdempotencyKey: "update-mcp-operators", Confirmed: true,
-	})
+	}
+	updated, err := service.Update(ctx, principal, updateInput)
 	require.NoError(t, err)
 	require.False(t, updated.Receipt.Replayed)
 	require.Equal(t, "complete", updated.Reconciliation)
 	require.NotEqual(t, current.Version, updated.Role.Version)
+	require.Equal(t, 1, backend.deliveryReconciles, "a committed update republishes the role plugins it changed")
+
+	updateReplayed, err := service.Update(ctx, principal, updateInput)
+	require.NoError(t, err)
+	require.True(t, updateReplayed.Receipt.Replayed)
+	require.Equal(t, 1, backend.deliveryReconciles, "a replayed update must not republish again")
 
 	stored, err = manager.GetRoleByID(ctx, principal.OrganizationID, roleID)
 	require.NoError(t, err)

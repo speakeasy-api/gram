@@ -48,7 +48,7 @@ func registerProjectLifecycleTools(reg *Registrar, service *ProjectLifecycleServ
 			"Supply only a display name: the project's slug, which addresses it in dashboard links and never changes, comes from the name exactly as the dashboard derives it and cannot be chosen. Do not work the slug out yourself. Call first without confirmed: true: nothing is created, and the confirmation_required refusal returns the exact name and slug this call would create. Show that slug to the user. " +
 			"Then call again with confirmed: true, only after the user confirms the exact name and slug. Choose one idempotency key for this create and pass it on both the preview and the confirmed call; the preview records nothing under it. Use a fresh key only for a new attempt after a refusal. A retry with the same key and name returns the project the first call created instead of making a second one. " +
 			"A name with no letters or digits is refused, and a name whose slug matches an existing project is refused as a conflict; nothing is created in either case. The new project comes with the Default environment and Default plugin every project gets.",
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly,
 		// Organization-scoped: there is no project until this call makes one.
@@ -60,7 +60,7 @@ func registerProjectLifecycleTools(reg *Registrar, service *ProjectLifecycleServ
 		Description: "Change the display name of one exact project. Nothing else changes: the project's slug stays the same, so dashboard links and anything addressing the project by slug keep working, and its MCP servers, skills, plugins, and their audiences are untouched. " +
 			"Supply the project ID from list_projects, an idempotency key, and confirmed: true only after the user confirms the exact project and new name. " +
 			"Needs write access to that exact project, as in the dashboard; without it the call is refused with the missing permission, and the refusal is the same whether or not the project exists.",
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}, ToolMeta{
 		// Authorized as the dashboard's project update is: project:write on
 		// the exact project, which the handler checks. Member authorization

@@ -1,7 +1,10 @@
 import { createRoot } from "react-dom/client";
 
 import { ConsentToolsApp, type ConsentToolsAppProps } from "./ConsentToolsApp";
-import { fetchConsentInventory } from "./consentInventory";
+import {
+  fetchConsentInventory,
+  parseGatewayInventoryBootstrap,
+} from "./consentInventory";
 import { parsePrefillBootstrap } from "./prefill";
 import "./consent-tools.css";
 
@@ -28,6 +31,14 @@ function readBootstrap(el: HTMLElement): ConsentToolsAppProps | null {
   ) {
     return null;
   }
+  let gatewayInventory: ConsentToolsAppProps["gatewayInventory"];
+  if (el.dataset["gateway"] === "true") {
+    const parsed = parseGatewayInventoryBootstrap(
+      el.dataset["gatewayInventory"],
+    );
+    if (!parsed) return null;
+    gatewayInventory = parsed;
+  }
   return {
     toolsUrl,
     state,
@@ -35,7 +46,9 @@ function readBootstrap(el: HTMLElement): ConsentToolsAppProps | null {
     formId,
     approveButtonId,
     consentEnabled: consentEnabled === "true",
+    gateway: el.dataset["gateway"] === "true",
     inventoryDeferred: inventoryDeferred === "true",
+    ...(gatewayInventory ? { gatewayInventory } : {}),
     serverName,
     prefill: parsePrefillBootstrap(el.dataset["prefill"]),
   };

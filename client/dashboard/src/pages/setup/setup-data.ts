@@ -10,8 +10,9 @@ import {
   COMING_SOON_AGENT_PROVIDER_IDS,
   type AgentProviderId,
 } from "@/components/agent-providers/agent-providers";
+import { CLAUDE_ORG_INSTRUCTION } from "@/lib/claude-org-instruction";
 import { agentEgressHosts, getServerURL } from "@/lib/utils";
-import type { AgentPlatform } from "./types";
+import type { AgentPlatform, PlatformSetupStep } from "./types";
 
 // Claude Code reads the same keys from Managed Settings (org rollout) and from
 // a user's ~/.claude/settings.json (personal plans), so both paths share it.
@@ -44,6 +45,174 @@ const claudeCodeSettingsJSON = (origin: string) => `{
 // Every step carrying the settings block reminds the reader that the
 // marketplace keys must stay the marketplace.json name shown in the snippet.
 const claudeCodeMarketplaceNameNote = [` ${CLAUDE_CODE_EXACT_NAME_NOTE}`];
+
+// Cowork's sandbox needs only Speakeasy's hosts: the hooks bootstrap downloads
+// its binary from the Speakeasy server, not GitHub, and hooks send there too.
+const coworkEgressFields = (egressHosts: string[]) =>
+  egressHosts.map((host) => ({
+    label: "Additional allowed domains",
+    value: host,
+  }));
+
+// The Team and Enterprise Cowork rollout, split the way the setup wizard
+// splits it across cards: registering the plugins (Register Speakeasy's
+// plugins in Claude), the organization instruction and its check (Add Claude
+// organization instructions), and native monitoring (Set up Anthropic admin
+// controls). The Plugins page shows the same steps whole, in Owner order.
+const coworkTeamStepGroups = (origin: string, egressHosts: string[]) => {
+  const registration: PlatformSetupStep[] = [
+    {
+      title: "Open Organization settings on Claude.ai",
+      description:
+        "Sign in to claude.ai as an Owner or Primary Owner and navigate to Organization settings → Plugins & skills → Marketplaces → Add plugins → Sync from GitHub. Cowork syncs through its own GitHub App.",
+      helpLink: {
+        url: "https://claude.ai/",
+        linkLabel: "claude.ai",
+        sentence: "Sign in to {LINK} as an Owner or Primary Owner",
+      },
+    },
+    {
+      title: "Click Add plugins → Sync from GitHub",
+      description:
+        'Open the "Add plugins" dialog and pick "Sync from GitHub". The other two options (Anthropic sources, Upload .zip) aren\'t needed — your repo is the source of truth.',
+      screenshot: {
+        src: "/setup/claude-cowork-add-plugins.png",
+        alt: "Claude.ai Add plugins dialog with three options: Browse Anthropic sources, Sync from GitHub (highlighted), Upload a file",
+        caption: 'Pick "Sync from GitHub".',
+      },
+    },
+    {
+      title: "Install Claude's GitHub App, then select your repo",
+      description:
+        "Organization marketplaces on github.com require a private or internal repository. The importer needs accepted GitHub repository access and permission to grant the Claude GitHub App access; ask the repository owner if needed. Select the repo below. Organization members do not each need a GitHub invitation for this rollout.",
+      screenshot: {
+        src: "/setup/claude-cowork-sync-from-github.png",
+        alt: 'Claude.ai "Sync from GitHub" picker showing "No repositories found" and an "Install the Claude GitHub app" link at the bottom',
+        caption:
+          'If you see "No repositories found", install the Claude GitHub App on your repo via the link at the bottom.',
+      },
+      code: `{{GRAM_REPO_OWNER}}/{{GRAM_REPO_NAME}}`,
+      language: "text",
+      helpLink: {
+        url: "https://support.claude.com/en/articles/13837433-manage-claude-cowork-plugins-for-your-organization",
+        linkLabel: "Cowork setup guide",
+        sentence: "See the {LINK} for GitHub App installation details",
+      },
+    },
+    {
+      title: "Mark the observability plugin as Required",
+      description: [
+        "After the repo syncs, your plugins appear in a table on Claude.ai. Find ",
+        {
+          code: "{{GRAM_CLAUDE_PLUGIN_NAME}}",
+          fallback: "the observability plugin",
+        },
+        ` in the plugin list and set Default access → Required. That pre-installs it for org members and prevents disabling or removal. Required installation does not prove hook execution or event delivery; verify both in a new conversation. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+      ],
+      screenshot: {
+        src: "/setup/claude-cowork-set-required.png",
+        alt: "Claude.ai plugin access dropdown showing four options (Available to install, Installed by default, Not available, Required) with Required selected",
+        caption:
+          'Open the Default access dropdown on the observability plugin row and select "Required".',
+      },
+    },
+    {
+      title: "Set access for your MCP plugins",
+      description:
+        "Set Default access on your MCP server plugins: Required installs them for everyone; Installed by default lets people remove them.",
+    },
+    {
+      title: "Allow Speakeasy in Claude's network egress settings",
+      description:
+        "Cowork runs plugins in a sandbox that reaches only the hosts your organization allows, so the plugin can't upload sessions to Speakeasy until its domains are allowed. As an Owner or Primary Owner, open Organization settings → Capabilities and turn on Code execution and file creation if it is off (the network egress controls stay hidden until it is on). Then turn on Allow network egress, keep Domain allowlist on Package managers only, and add each domain below under Additional allowed domains. Session uploads and the first-run hooks binary download both go to these hosts; no other domain is needed. All domains also works but opens the sandbox to the whole internet. Native OTEL monitoring allowlists its own collector; the plugin does not. On Claude Team, the organization instruction also needs Code execution and file creation.",
+      helpLink: {
+        url: "https://claude.ai/admin-settings/capabilities",
+        linkLabel: "Capabilities settings",
+        sentence: "Open {LINK} on Claude.ai",
+      },
+      fields: coworkEgressFields(egressHosts),
+      afterFields:
+        "Egress changes apply to new Cowork sessions only; a session that is already running keeps its old rules. With Allow network egress turned off, the sandbox reaches only Anthropic hosts and the native OTEL collector, so no sessions arrive.",
+    },
+  ];
+  const instruction: PlatformSetupStep = {
+    title: "Add the organization instruction",
+    description:
+      "As an Owner or Primary Owner, open Organization settings → Organization on Claude.ai, paste the text below into Organization instructions, and save. It has Claude run one short command per reply, which moves the conversation into Cowork. Needs Code execution and file creation, from the egress step.",
+    helpLink: {
+      url: "https://claude.ai/admin-settings/organization",
+      linkLabel: "Organization settings",
+      sentence: "Open {LINK} on Claude.ai",
+    },
+    code: CLAUDE_ORG_INSTRUCTION,
+    language: "text",
+    afterFields: "Conversations started before you save aren't captured.",
+  };
+  const monitoring: PlatformSetupStep = {
+    title: "Enable OTEL export",
+    description:
+      "Native monitoring requires Team or Enterprise and Claude Desktop 1.1.4173 or later. Open Admin settings → Cowork → Monitoring and enter the values below. This is where Cowork usage and cost come from; plugin uploads carry no token counts. Verify the endpoint, project, and headers against actual received events.",
+    fields: [
+      {
+        label: "OTLP endpoint",
+        value: `${origin}/rpc/hooks.otel`,
+      },
+      { label: "OTLP protocol", value: "http/json" },
+      {
+        label: "OTLP headers",
+        value: "Speakeasy-AI-Project=default,Speakeasy-AI-Key={{GRAM_API_KEY}}",
+        requiresApiKey: true,
+      },
+    ],
+    afterFields:
+      "Save the settings and start a new Cowork session to verify receipt. The native exporter automatically allowlists the collector hostname.",
+    helpLink: {
+      url: "https://claude.com/docs/cowork/monitoring#setup",
+      linkLabel: "Cowork monitoring setup",
+      sentence: "See {LINK} for native export requirements",
+    },
+    requiresApiKey: true,
+  };
+  const check: PlatformSetupStep = {
+    title: "Check it in a new conversation",
+    description:
+      "Start a new conversation and send any message. Claude runs a short command before replying, and the conversation appears in Agent Sessions once the reply finishes. No command? Check the instruction is saved and Code execution is on. No session? Check the plugin is Required and the egress domains are added.",
+  };
+  // The general walkthrough serves Team and Enterprise alike, so it verifies
+  // without the Team-only organization instruction.
+  const verify: PlatformSetupStep = {
+    title: "Verify in a new Cowork session",
+    description:
+      "Start a new Cowork session and run a tool. Once Claude's reply finishes, the conversation appears in Agent Sessions. On Claude Team, also add the organization instruction from the Set up Claude Desktop card so every conversation runs in Cowork.",
+  };
+  return { registration, instruction, monitoring, check, verify };
+};
+
+// The Team and Enterprise Cowork rollout the Plugins and Organization Gateway
+// pages show: register the plugins, export telemetry, verify. The Team-only
+// organization instruction and its check live on their setup card, which
+// applies the plan condition these pages can't.
+const coworkTeamSteps = (
+  origin: string,
+  egressHosts: string[],
+): PlatformSetupStep[] => {
+  const { registration, monitoring, verify } = coworkTeamStepGroups(
+    origin,
+    egressHosts,
+  );
+  return [...registration, monitoring, verify];
+};
+
+/**
+ * The Team and Enterprise Cowork steps grouped by the setup card that walks
+ * them, for the host the reader is on.
+ */
+export function getCoworkTeamSteps(
+  serverURL: string = getServerURL(),
+): ReturnType<typeof coworkTeamStepGroups> {
+  const server = new URL(serverURL, window.location.origin);
+  return coworkTeamStepGroups(server.origin, agentEgressHosts(server.href));
+}
 
 // Setup copy names the host the reader is on (app.getgram.ai or
 // ai.speakeasy.com): every platform host serves the OTLP and hooks endpoints.
@@ -184,6 +353,14 @@ const setupAgentPlatforms = (
               },
             },
             {
+              title: "Allow Speakeasy in Claude's network egress settings",
+              description:
+                "Cowork runs plugin hooks in a sandbox that reaches only allowed hosts, so hooks cannot report to Speakeasy until its domains are allowed. Each person opens Settings → Capabilities in Claude and turns on Code execution and file creation if it is off (the network egress controls stay hidden until it is on). Then they turn on Allow network egress, keep Domain allowlist on Package managers only, and add each domain below under Additional allowed domains. Hook events and the first-run hooks binary download both go to these hosts; no other domain is needed. All domains also works but opens the sandbox to the whole internet.",
+              fields: coworkEgressFields(egressHosts),
+              afterFields:
+                "Egress changes apply to new Cowork sessions only; a session that is already running keeps its old rules.",
+            },
+            {
               title: "Verify Cowork hooks in a new session",
               description:
                 "Run a tool in a Cowork session, not ordinary chat, where hooks are ignored. Confirm real events arrive in Speakeasy: successful upload does not prove hook execution, bootstrap binary downloads, credentials, or network access. The ZIP embeds hooks authentication, not connector sign-in. Native Cowork OTEL monitoring is a separate Team/Enterprise feature, not included on Pro/Max. Verify hook behavior on the surface and version you use.",
@@ -196,98 +373,7 @@ const setupAgentPlatforms = (
           ],
         },
       },
-      {
-        title: "Open Organization settings on Claude.ai",
-        description:
-          "Sign in to claude.ai as an Owner or Primary Owner and navigate to Organization settings → Plugins & skills → Marketplaces → Add plugins → Sync from GitHub. Cowork syncs through its own GitHub App.",
-        helpLink: {
-          url: "https://claude.ai/",
-          linkLabel: "claude.ai",
-          sentence: "Sign in to {LINK} as an Owner or Primary Owner",
-        },
-      },
-      {
-        title: "Click Add plugins → Sync from GitHub",
-        description:
-          'Open the "Add plugins" dialog and pick "Sync from GitHub". The other two options (Anthropic sources, Upload .zip) aren\'t needed — your repo is the source of truth.',
-        screenshot: {
-          src: "/setup/claude-cowork-add-plugins.png",
-          alt: "Claude.ai Add plugins dialog with three options: Browse Anthropic sources, Sync from GitHub (highlighted), Upload a file",
-          caption: 'Pick "Sync from GitHub".',
-        },
-      },
-      {
-        title: "Install Claude's GitHub App, then select your repo",
-        description:
-          "Organization marketplaces on github.com require a private or internal repository. The importer needs accepted GitHub repository access and permission to grant the Claude GitHub App access; ask the repository owner if needed. Select the repo below. Organization members do not each need a GitHub invitation for this rollout.",
-        screenshot: {
-          src: "/setup/claude-cowork-sync-from-github.png",
-          alt: 'Claude.ai "Sync from GitHub" picker showing "No repositories found" and an "Install the Claude GitHub app" link at the bottom',
-          caption:
-            'If you see "No repositories found", install the Claude GitHub App on your repo via the link at the bottom.',
-        },
-        code: `{{GRAM_REPO_OWNER}}/{{GRAM_REPO_NAME}}`,
-        language: "text",
-        helpLink: {
-          url: "https://support.claude.com/en/articles/13837433-manage-claude-cowork-plugins-for-your-organization",
-          linkLabel: "Cowork setup guide",
-          sentence: "See the {LINK} for GitHub App installation details",
-        },
-      },
-      {
-        title: "Mark the observability plugin as Required",
-        description: [
-          "After the repo syncs, your plugins appear in a table on Claude.ai. Find ",
-          {
-            code: "{{GRAM_CLAUDE_PLUGIN_NAME}}",
-            fallback: "the observability plugin",
-          },
-          ` in the plugin list and set Default access → Required. That pre-installs it for org members and prevents disabling or removal. Required installation does not prove hook execution or event delivery; verify both in a new Cowork session. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
-        ],
-        screenshot: {
-          src: "/setup/claude-cowork-set-required.png",
-          alt: "Claude.ai plugin access dropdown showing four options (Available to install, Installed by default, Not available, Required) with Required selected",
-          caption:
-            'Open the Default access dropdown on the observability plugin row and select "Required".',
-        },
-      },
-      {
-        title: "Enable OTEL export",
-        description:
-          "Native monitoring requires Team or Enterprise and Claude Desktop 1.1.4173 or later. Open Admin settings → Cowork → Monitoring and enter the values below. This is separate from plugin hooks; verify the endpoint, project, and headers against actual received events.",
-        fields: [
-          {
-            label: "OTLP endpoint",
-            value: `${origin}/rpc/hooks.otel`,
-          },
-          { label: "OTLP protocol", value: "http/json" },
-          {
-            label: "OTLP headers",
-            value:
-              "Speakeasy-AI-Project=default,Speakeasy-AI-Key={{GRAM_API_KEY}}",
-            requiresApiKey: true,
-          },
-        ],
-        afterFields:
-          "Save the settings and start a new Cowork session to verify receipt. The native exporter automatically allowlists the collector hostname.",
-        helpLink: {
-          url: "https://claude.com/docs/cowork/monitoring#setup",
-          linkLabel: "Cowork monitoring setup",
-          sentence: "See {LINK} for native export requirements",
-        },
-        requiresApiKey: true,
-      },
-      {
-        title: "Verify hook and bootstrap network access",
-        description:
-          "Native OTEL automatically allowlists its collector hostname; it does not require a manual egress exception. Hook scripts and bootstrap binary downloads are separate traffic. If they are blocked, review Admin settings → Capabilities → Network egress and allow only the destinations they need, including the hook endpoints below.",
-        fields: egressHosts.map((host) => ({
-          label: "Additional allowed domains",
-          value: host,
-        })),
-        afterFields:
-          "Start a new Cowork session, run a tool, and confirm hook events and native monitoring separately in Speakeasy. A successful plugin install or a single allowlisted domain does not prove bootstrap downloads and hooks can run.",
-      },
+      ...coworkTeamSteps(origin, egressHosts),
     ],
   },
   {
@@ -467,7 +553,7 @@ speakeasy-hooks install --provider=opencode --dir=. --project={{GRAM_PROJECT_SLU
   },
 ];
 
-function toAgentPlatform(
+export function toAgentPlatform(
   id: AgentProviderId,
   setupSteps: AgentPlatform["setupSteps"],
   available = true,

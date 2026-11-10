@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { createActor, fromPromise, waitFor } from "xstate";
 
@@ -50,6 +51,7 @@ const DISCOVERED_2_1: DiscoveredOAuth = {
 
 const baseInput: Input = {
   discovered: null,
+  toolsetId: "toolset-1",
   toolsetSlug: "ts",
   toolsetName: "Toolset",
   activeOrganizationId: "org-1",
@@ -194,6 +196,7 @@ function withExternal(over: Partial<Context["external"]> = {}): Context {
     error: null,
     autoRegistering: false,
     result: null,
+    toolsetId: "",
     toolsetSlug: "",
     toolsetName: "",
     activeOrganizationId: "",

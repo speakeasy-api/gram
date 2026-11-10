@@ -15,7 +15,7 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manages re-usable prompt templates and higher-order tools for a project.
+// Manages re-usable prompt templates for a project.
 type Service interface {
 	// Create a new prompt template.
 	CreateTemplate(context.Context, *CreateTemplatePayload) (res *CreatePromptTemplateResult, err error)

@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
@@ -660,9 +661,6 @@ func (s *Service) attachOktaRows(ctx context.Context, logger *slog.Logger, authC
 		ListingMode:                  listingMode,
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
-			return nil, oops.E(oops.CodeConflict, err, "this Okta org is already connected to another organization")
-		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create okta connection details").LogError(ctx, logger)
 	}
 
@@ -709,6 +707,22 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 
 	q := repo.New(dbtx)
 	rq := remotesessionsrepo.New(dbtx)
+	// The managed client's associations go with it, so their writer scope is
+	// taken before the first row lock.
+	var associations upstreamclients.ClientAssociationScope
+	var bindingServers remotesessions.ClientBindingServers
+	if managed != nil {
+		bindingServers, err = remotesessions.ReadClientBindingServers(cleanupCtx, dbtx, organizationID, managed.ClientRowID)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to read servers on abandoned connection client's issuers", attr.SlogError(err))
+			return
+		}
+		associations, err = upstreamclients.LockClientAssociationScope(cleanupCtx, dbtx, organizationID, managed.ClientRowID, bindingServers.Projects(organizationID))
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to lock writer scope of abandoned connection client", attr.SlogError(err))
+			return
+		}
+	}
 	if !issuerID.Valid {
 		found, err := q.GetConnectionIssuerBySlug(cleanupCtx, repo.GetConnectionIssuerBySlugParams{
 			OrganizationID: conv.ToPGText(organizationID),
@@ -735,6 +749,18 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 			OrganizationID: conv.ToPGText(organizationID),
 		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			logger.ErrorContext(ctx, "failed to tombstone client of abandoned connection", attr.SlogError(err))
+			return
+		}
+		if err := rq.DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(cleanupCtx, managed.ClientRowID); err != nil {
+			logger.ErrorContext(ctx, "failed to unbind client of abandoned connection", attr.SlogError(err))
+			return
+		}
+		if err := associations.PruneInLockedTransaction(cleanupCtx, dbtx); err != nil {
+			logger.ErrorContext(ctx, "failed to prune associations of abandoned connection client", attr.SlogError(err))
+			return
+		}
+		if err := bindingServers.Derive(cleanupCtx, dbtx); err != nil {
+			logger.ErrorContext(ctx, "failed to derive upstream issuer of abandoned connection client's servers", attr.SlogError(err))
 			return
 		}
 		if managed.JSONWebKeySetID.Valid {
@@ -1239,10 +1265,6 @@ func (s *Service) persistVerification(ctx context.Context, logger *slog.Logger, 
 		OrganizationID:               rows.Connection.OrganizationID,
 	})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "okta_identity_provider_connections_issuer_url_key" {
-			return nil, oops.E(oops.CodeConflict, nil, "this Okta org is already connected to another organization")
-		}
 		return nil, oops.E(oops.CodeUnexpected, err, "record verification details").LogError(ctx, logger)
 	}
 	return &connectionRows{Connection: connection, Okta: oktaRow, Managed: rows.Managed}, nil

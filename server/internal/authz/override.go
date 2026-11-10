@@ -26,6 +26,10 @@ func readScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 func GrantsFromOverrides(overrides []RoleGrant) []Grant {
 	var grants []Grant
 	for _, o := range overrides {
+		// Overrides administer; they never grant auth client use.
+		if Scope(o.Scope) == ScopeMCPAuth {
+			continue
+		}
 		if len(o.Selectors) == 0 {
 			grants = append(grants, NewGrant(Scope(o.Scope), WildcardResource))
 			continue

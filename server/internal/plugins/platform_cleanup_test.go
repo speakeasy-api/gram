@@ -40,7 +40,7 @@ func TestPlatformCleanupPreservesManualAndPublishes(t *testing.T) {
 			backend := createTestToolset(t, ctx, ti.conn, "cleanup-"+name)
 			toolsetID := backend.ID.String()
 			manualPayload := &gen.AddPluginServerPayload{ToolsetID: &toolsetID, Policy: "required"}
-			endpointSlug := backend.McpSlug.String
+			endpointSlug := backend.Slug
 			var endpointID uuid.UUID
 			if wrapped {
 				wrapperID := uuid.New()
@@ -57,7 +57,7 @@ func TestPlatformCleanupPreservesManualAndPublishes(t *testing.T) {
 				ProjectID: projectID, OrganizationID: org, Name: "Cleanup assistant", Model: "test-model", Instructions: "Test distribution", WarmTtlSeconds: 60, MaxConcurrency: 1, Status: "active",
 			})
 			require.NoError(t, err)
-			_, err = assistantsrepo.New(ti.conn).AddAssistantToolsets(ctx, []assistantsrepo.AddAssistantToolsetsParams{{AssistantID: assistant.ID, ToolsetID: backend.ID, ProjectID: projectID}})
+			_, err = assistantsrepo.New(ti.conn).AddAssistantMcpServers(ctx, []assistantsrepo.AddAssistantMcpServersParams{{AssistantID: assistant.ID, McpServerID: backend.ID, ProjectID: projectID}})
 			require.NoError(t, err)
 			role := createTestRolePrincipal(t, ctx, ti, "cleanup")
 			principal, err := urn.ParsePrincipal(role)
@@ -157,12 +157,9 @@ func TestPlatformCleanupPreservesManualAndPublishes(t *testing.T) {
 			require.Contains(t, publishedServers("cursor-plugins/cleanup-manual-cursor/mcp.json"), manualMembership.DisplayName)
 			_, err = assistantsrepo.New(ti.conn).GetAssistant(ctx, assistantsrepo.GetAssistantParams{AssistantID: assistant.ID, ProjectID: projectID})
 			require.NoError(t, err, "cleanup must preserve the assistant")
-			attached, err := assistantsrepo.New(ti.conn).LoadAssistantToolsets(ctx, assistantsrepo.LoadAssistantToolsetsParams{AssistantIds: []uuid.UUID{assistant.ID}, ProjectID: projectID})
+			attached, err := assistantsrepo.New(ti.conn).ListAssistantAttachedServerIDs(ctx, assistantsrepo.ListAssistantAttachedServerIDsParams{AssistantID: assistant.ID, ProjectID: projectID})
 			require.NoError(t, err)
-			require.Len(t, attached, 1)
-			require.Equal(t, backend.ID, attached[0].ToolsetID)
-			require.True(t, attached[0].McpEnabled)
-			require.Equal(t, backend.McpSlug, attached[0].McpSlug)
+			require.Equal(t, []uuid.UUID{backend.ID}, attached)
 			if wrapped {
 				endpoint, err := endpointrepo.New(ti.conn).GetMCPEndpointByID(ctx, endpointrepo.GetMCPEndpointByIDParams{ID: endpointID, ProjectID: projectID})
 				require.NoError(t, err, "cleanup must preserve the MCP endpoint")

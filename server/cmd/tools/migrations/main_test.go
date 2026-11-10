@@ -58,7 +58,7 @@ func TestPrintReportIncludesPerSourceGapFillCounts(t *testing.T) {
 			"gitleaks": {PresentByID: 1, Inserted: 1},
 			"presidio": {MatchedByKey: 2, StateCopies: 1, SkippedCHNewer: 1, Inserted: 1},
 		},
-		uuid.Nil,
+		uuid.Nil.String(),
 	))
 
 	require.Contains(t, out.String(), "gitleaks: postgres=2 present_by_id=1 matched_by_key=0 state_copies=0 skipped_ch_newer=0 inserts=1")
@@ -70,10 +70,32 @@ func TestParseFlagsGapFillResumeRequiresExplicitFrom(t *testing.T) {
 	t.Setenv("GRAM_DATABASE_URL", "postgres://local")
 	t.Setenv("GRAM_RISK_FINGERPRINT_PEPPER_KEYRING", `{"current":"v1","keys":{"v1":"dGVzdA=="}}`)
 
-	cursor := "00000000-0000-0000-0000-000000000001"
-	_, err := parseFlags([]string{"-gap-fill", "-org", "org_test", "-cursor", cursor}, time.Now().UTC())
+	cursor := "00000000-0000-0000-0000-00000000000a/2026-07-02T03:04:05.123456Z/00000000-0000-0000-0000-000000000001"
+	_, err := parseFlags([]string{"-gap-fill", "-org", "org_test", "-gap-fill-cursor", cursor}, time.Now().UTC())
 	require.ErrorContains(t, err, "-from is required")
 
-	_, err = parseFlags([]string{"-gap-fill", "-org", "org_test", "-cursor", cursor, "-from", "2026-07-01T00:00:00Z"}, time.Now().UTC())
+	cfg, err := parseFlags([]string{"-gap-fill", "-org", "org_test", "-gap-fill-cursor", cursor, "-from", "2026-07-01T00:00:00Z"}, time.Now().UTC())
 	require.NoError(t, err)
+	require.Equal(t, cursor, cfg.gapFillCursor.String())
+	require.Equal(t, cfg.gapFillCursor, cfg.criteria()[riskfindings.CriteriaGapFillCursor])
+}
+
+func TestParseFlagsGapFillRejectsIDCursor(t *testing.T) {
+	t.Setenv("GRAM_DATABASE_URL", "postgres://local")
+	t.Setenv("GRAM_RISK_FINGERPRINT_PEPPER_KEYRING", `{"current":"v1","keys":{"v1":"dGVzdA=="}}`)
+
+	_, err := parseFlags([]string{"-gap-fill", "-org", "org_test", "-cursor", "00000000-0000-0000-0000-000000000001", "-from", "2026-07-01T00:00:00Z"}, time.Now().UTC())
+	require.ErrorContains(t, err, "-gap-fill-cursor")
+}
+
+func TestParseFlagsGapFillCursorMustMatchProject(t *testing.T) {
+	t.Setenv("GRAM_DATABASE_URL", "postgres://local")
+	t.Setenv("GRAM_RISK_FINGERPRINT_PEPPER_KEYRING", `{"current":"v1","keys":{"v1":"dGVzdA=="}}`)
+
+	cursor := "00000000-0000-0000-0000-00000000000a/2026-07-02T03:04:05Z/00000000-0000-0000-0000-000000000001"
+	_, err := parseFlags([]string{
+		"-gap-fill", "-org", "org_test", "-from", "2026-07-01T00:00:00Z",
+		"-project", "00000000-0000-0000-0000-00000000000b", "-gap-fill-cursor", cursor,
+	}, time.Now().UTC())
+	require.ErrorContains(t, err, "different project")
 }

@@ -5,6 +5,8 @@ description: Summarize critical Watchdog findings for an explicit Speakeasy AI C
 
 # Summarize critical Watchdog findings
 
+If this connection lists `call_platform_tool` instead of the tools this workflow names, find each named tool with `search_platform_tools`, describe it with `describe_platform_tool`, then run it with `call_platform_tool` and the same arguments. Whether a tool exists for you is decided by `describe_platform_tool` with its exact name, not by `tools/list` or one page of search results: a name returned in `not_found` is unavailable to you, so say so rather than guess. The call itself still checks your access. When `execute` is also listed, a multi-step read may run in `execute` with `tools.search`, `tools.describe` and `tools.call` on `platform--<tool name>` paths. End each `execute` run at a confirmation point and ask the user before any write.
+
 Turn an AICP Watchdog review into a concise, channel-neutral digest: establish the authenticated scope, read critical findings, rank the rules that need attention, and report coverage and limitations.
 
 ## Scope and prerequisites
@@ -13,7 +15,7 @@ Turn an AICP Watchdog review into a concise, channel-neutral digest: establish t
 - Require an explicit project slug or ID from the user or saved task instructions. Do not silently choose the Default project. A request explicitly naming the Default project is sufficient.
 - If an expected organization ID is configured, require an exact match. Otherwise report the connection's organization ID and ask the user to confirm it before reading findings. Never infer an organization name from its ID.
 - This skill only returns a digest. Do not send messages, create schedules, or change policies, exclusions, or MCP configuration. Delivery and scheduling belong to separate user instructions and independently authorized connectors. No delivery connector is required to run this skill.
-- Never request or expose credentials. If authentication or permissions fail, stop and ask the user to reconnect or obtain access through the approved setup flow.
+- Never request or expose credentials. If authentication fails, stop and follow the `platform-sign-in` workflow to sign this client in. If permissions fail, stop and ask the user to obtain access through the approved setup flow.
 
 ## Read workflow
 

@@ -87,7 +87,7 @@ func newTestAssetsServiceWithPolicy(t *testing.T, guardianPolicy *guardian.Polic
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 
 	storage := assetstest.NewTestBlobStore(t)
 

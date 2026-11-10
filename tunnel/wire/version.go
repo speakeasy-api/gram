@@ -1,3 +1,4 @@
 package wire
 
-const AgentVersion = "0.1.0"
+// AgentVersion is set to the release image tag at build time.
+var AgentVersion = "0.2.0-dev"

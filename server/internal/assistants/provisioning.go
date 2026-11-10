@@ -130,6 +130,13 @@ func (s *ServiceCore) EnableManagedAssistant(
 		// Repair managed assistants provisioned before dashboard ingress existed:
 		// the trigger is provisioned lazily here so re-running enable is enough.
 		if err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
+			// Repair any bound agent, including a suspended or revoked one, so
+			// the ceiling is in place when it becomes active again.
+			if provisionIdentity && existing.IdentityState != string(assistantidentity.NeverConfigured) {
+				if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, existing.ID, createdByUserID); err != nil {
+					return err
+				}
+			}
 			return s.ensureDashboardTrigger(ctx, tx, organizationID, projectID, existing.ID, existing.Name)
 		}); err != nil {
 			return assistantRecord{}, fmt.Errorf("heal managed assistant dashboard trigger: %w", err)
@@ -342,6 +349,9 @@ func (s *ServiceCore) createManagedAssistant(
 		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, AgentID: uuid.Nil, AgentName: ""}); err != nil {
 			return assistantRecord{}, fmt.Errorf("provision managed assistant identity: %w", err)
 		}
+		if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, record.ID, createdByUserID); err != nil {
+			return assistantRecord{}, err
+		}
 	}
 	if err := s.ensureDashboardTrigger(ctx, tx, organizationID, projectID, record.ID, name); err != nil {
 		return assistantRecord{}, err
@@ -372,6 +382,7 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.RuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,

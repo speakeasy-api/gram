@@ -160,7 +160,7 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 	}
 	defer conn.Release()
 	queries := repo.New(conn)
-	lockKey := "slack_directory_sync:" + input.ConnectionID.String()
+	lockKey := syncLockKey(input.ConnectionID)
 	locked, err := queries.TryLockSlackDirectorySync(ctx, lockKey)
 	if err != nil {
 		return fmt.Errorf("lock Slack sync: %w", err)

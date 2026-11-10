@@ -63,6 +63,9 @@ type ProductFeatureName string
 // ProductFeatures is the result type of the features service
 // getProductFeatures method.
 type ProductFeatures struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool
 	// Whether logging is enabled
 	LogsEnabled bool
 	// Whether tool I/O logging is enabled
@@ -114,10 +117,16 @@ type ProductFeatures struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled bool
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service
@@ -208,7 +217,10 @@ func NewViewedProductFeatures(res *ProductFeatures, view string) *featuresviews.
 // newProductFeatures converts projected type ProductFeatures to service type
 // ProductFeatures.
 func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeatures {
-	res := &ProductFeatures{}
+	res := &ProductFeatures{
+		ProviderSetupEnabled: vres.ProviderSetupEnabled,
+		UpstreamAuthEnforced: vres.UpstreamAuthEnforced,
+	}
 	if vres.LogsEnabled != nil {
 		res.LogsEnabled = *vres.LogsEnabled
 	}
@@ -269,6 +281,9 @@ func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeature
 	if vres.OrganizationGatewayDisabled != nil {
 		res.OrganizationGatewayDisabled = *vres.OrganizationGatewayDisabled
 	}
+	if vres.CodeModeEnabled != nil {
+		res.CodeModeEnabled = *vres.CodeModeEnabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -279,6 +294,7 @@ func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeature
 // type ProductFeaturesView using the "default" view.
 func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeaturesView {
 	vres := &featuresviews.ProductFeaturesView{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
 		LogsEnabled:                             &res.LogsEnabled,
 		ToolIoLogsEnabled:                       &res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   &res.SessionCaptureEnabled,
@@ -299,7 +315,9 @@ func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeatures
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         &res.CodeModeEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return vres
 }

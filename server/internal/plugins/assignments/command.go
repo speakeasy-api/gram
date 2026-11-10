@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -62,35 +63,28 @@ func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, plug
 	if tx == nil || organizationID == "" || projectID == uuid.Nil || pluginID == uuid.Nil {
 		return pluginsrepo.Plugin{}, ErrInvalid
 	}
-	var plugin pluginsrepo.Plugin
-	err := tx.QueryRow(ctx, `
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
-FROM plugins
-WHERE id = $1
-  AND organization_id = $2
-  AND project_id = $3
-  AND deleted IS FALSE
-FOR UPDATE`, pluginID, organizationID, projectID).Scan(
-		&plugin.ID,
-		&plugin.OrganizationID,
-		&plugin.ProjectID,
-		&plugin.Name,
-		&plugin.Slug,
-		&plugin.Description,
-		&plugin.IsDefault,
-		&plugin.AutoCreated,
-		&plugin.CreatedAt,
-		&plugin.UpdatedAt,
-		&plugin.DeletedAt,
-		&plugin.Deleted,
-	)
+	row, err := pluginsrepo.New(tx).LockPluginForAssignments(ctx, pluginsrepo.LockPluginForAssignmentsParams{ID: pluginID, OrganizationID: organizationID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return pluginsrepo.Plugin{}, ErrNotFound
 	}
 	if err != nil {
 		return pluginsrepo.Plugin{}, fmt.Errorf("lock plugin assignment target: %w", err)
 	}
-	return plugin, nil
+	return pluginsrepo.Plugin{
+		ID:              row.ID,
+		OrganizationID:  row.OrganizationID,
+		ProjectID:       row.ProjectID,
+		Name:            row.Name,
+		Slug:            row.Slug,
+		Description:     row.Description,
+		IsDefault:       row.IsDefault,
+		AutoCreated:     row.AutoCreated,
+		AutoSyncEnabled: pgtype.Bool{Bool: false, Valid: false},
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
+		DeletedAt:       row.DeletedAt,
+		Deleted:         row.Deleted,
+	}, nil
 }
 
 // IsSubset compares canonical assignment sets without inferring group membership.
@@ -118,7 +112,8 @@ type Guard func(ctx context.Context, tx pgx.Tx, plugin pluginsrepo.Plugin, curre
 
 // BeforeReplace remains separate from authorization. Platform MCP uses it for
 // optimistic concurrency after the guard has accepted the desired audience.
-type BeforeReplace func(ctx context.Context, plugin pluginsrepo.Plugin, current, desired []string) error
+// currentModes holds the stored install mode of each principal in current.
+type BeforeReplace func(ctx context.Context, plugin pluginsrepo.Plugin, current, desired []string, currentModes map[string]installmode.Mode) error
 
 type Dependencies struct {
 	DeliveryGuard *admission.Guard
@@ -210,7 +205,7 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 		return Result{}, err
 	}
 	if dependencies.BeforeReplace != nil {
-		if err := dependencies.BeforeReplace(ctx, plugin, current, desired); err != nil {
+		if err := dependencies.BeforeReplace(ctx, plugin, current, desired, previousModes); err != nil {
 			return Result{}, err
 		}
 	}
@@ -363,6 +358,9 @@ func normalizePrincipal(ctx context.Context, db pluginsrepo.DBTX, organizationID
 		}
 		if principal.Type == urn.PrincipalTypeWorkload {
 			return normalizedPrincipal{}, fmt.Errorf("%w: workload principals are not assignable", ErrInvalid)
+		}
+		if principal.Type == urn.PrincipalTypeAPIKey {
+			return normalizedPrincipal{}, fmt.Errorf("%w: api key principals are not assignable", ErrInvalid)
 		}
 		if principal.Type == urn.PrincipalTypeRole {
 			if err := authz.ValidatePrincipal(ctx, db, organizationID, principal); err != nil {

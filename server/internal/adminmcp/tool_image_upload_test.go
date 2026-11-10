@@ -28,10 +28,10 @@ func (f *fakeImageUploads) Issue(_ context.Context, operatorEmail string) (asset
 
 func TestCreateImageUploadURLIssuesForTheVerifiedStaffMember(t *testing.T) {
 	t.Parallel()
-	f := newProposalFixture(t, "admin_mcp_image_upload_url")
+	f := newWriteFixture(t, "admin_mcp_image_upload_url")
 	ctx := writeContext(t, f)
 	uploads := &fakeImageUploads{}
-	enabled := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationUploadPlatformImage: true}} //nolint:exhaustive // Only the upload operation is enabled.
+	enabled := WriteConfig{Enabled: true}
 
 	out, err := createImageUploadURL(ctx, uploads, enabled)
 	require.NoError(t, err)
@@ -44,7 +44,7 @@ func TestCreateImageUploadURLIssuesForTheVerifiedStaffMember(t *testing.T) {
 	require.Equal(t, `printf 'Authorization: Bearer %s' "$UPLOAD_TOKEN" | curl -fsS -X PUT -H @- --data-binary @icon.png 'https://admin.example.test/admin/assets.uploadImage'`, out.ExampleCommand)
 	require.NotContains(t, out.ExampleCommand, "upload-token", "the example keeps the token out of command arguments")
 	require.Equal(t, "Bearer upload-token", out.Headers["Authorization"])
-	require.NotContains(t, out.AllowedContentTypes, "image/svg+xml")
+	require.Contains(t, out.AllowedContentTypes, "image/svg+xml")
 
 	_, err = createImageUploadURL(ctx, uploads, WriteConfig{})
 	require.ErrorIs(t, err, ErrWriteDisabled)
@@ -56,31 +56,30 @@ func TestCreateImageUploadURLIssuesForTheVerifiedStaffMember(t *testing.T) {
 
 func TestAttachWritesImageUploadNeedsAssetStorage(t *testing.T) {
 	t.Parallel()
-	enabled := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationUploadPlatformImage: true}} //nolint:exhaustive // Only the upload operation is enabled.
+	enabled := WriteConfig{Enabled: true}
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}
 
-	err := AttachWrites(NewRuntime(nil, ""), &StaffOAuth{Approval: &StaffProposalApproval{}}, deps, enabled)
-	require.ErrorContains(t, err, "not implemented")
+	withoutStorage := NewRuntime(nil, "")
+	require.NoError(t, AttachWrites(withoutStorage, &StaffOAuth{runner: &writeRunner{}}, deps, enabled))
+	require.False(t, withoutStorage.writes.implements(OperationUploadPlatformImage))
 
 	runtime := NewRuntime(nil, "")
-	oauth := &StaffOAuth{Approval: &StaffProposalApproval{}}
+	oauth := &StaffOAuth{runner: &writeRunner{}}
 	deps.ImageUploads = &fakeImageUploads{}
 	require.NoError(t, AttachWrites(runtime, oauth, deps, enabled))
 	require.True(t, runtime.writes.implements(OperationUploadPlatformImage))
-	require.NotContains(t, oauth.Approval.operations, OperationUploadPlatformImage, "a direct write has no approval page")
 }
 
-func TestWriteWorkflowsSeparateDirectUploadFromProposals(t *testing.T) {
+func TestWriteWorkflowsDescribeEnabledWrites(t *testing.T) {
 	t.Parallel()
 	require.Empty(t, writeWorkflows(nil))
 
 	uploadOnly := writeWorkflows([]WriteOperation{OperationUploadPlatformImage})
 	require.Len(t, uploadOnly, 1)
-	require.Contains(t, uploadOnly[0], "without browser approval")
-	require.NotContains(t, uploadOnly[0], "proposal", "a direct upload alone offers no proposal workflow")
+	require.Contains(t, uploadOnly[0], "image upload URLs")
 
 	both := writeWorkflows([]WriteOperation{OperationCreateRegistryEntry, OperationUploadPlatformImage})
 	require.Len(t, both, 2)
-	require.Contains(t, both[0], "separate browser approval")
+	require.Contains(t, both[0], "explicitly confirms")
 	require.Equal(t, uploadOnly[0], both[1])
 }

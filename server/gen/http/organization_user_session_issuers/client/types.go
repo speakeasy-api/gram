@@ -16,12 +16,6 @@ import (
 // CreateIssuerRequestBody is the type of the "organizationUserSessionIssuers"
 // service "createIssuer" endpoint HTTP request body.
 type CreateIssuerRequestBody struct {
-	// Organization-level or global remote_session_issuer whose assertions this
-	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
-	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
-	// Organization-level remote_session_client Speakeasy uses with the trusted
-	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
-	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
@@ -29,6 +23,12 @@ type CreateIssuerRequestBody struct {
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
 	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	// Organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// Organization-level remote_session_client Speakeasy uses with the trusted
+	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 }
 
 // UpdateIssuerRequestBody is the type of the "organizationUserSessionIssuers"
@@ -542,8 +542,11 @@ type GetIssuerMigratePreflightResponseBody struct {
 	CimdClientCount *int `form:"cimd_client_count,omitempty" json:"cimd_client_count,omitempty" xml:"cimd_client_count,omitempty"`
 	// Remote-session credentials whose issuer provenance would move.
 	RemoteSessionCount *int `form:"remote_session_count,omitempty" json:"remote_session_count,omitempty" xml:"remote_session_count,omitempty"`
-	// Active OAuth client ids already present on both issuers. Non-empty blocks
-	// migration.
+	// Active OAuth client ids present on both issuers that cannot be merged.
+	// Non-empty blocks migration. A client resolved from the same Client ID
+	// Metadata Document on both issuers is not listed: it merges onto the target's
+	// client, keeping its sessions and consents, unless an issuance selection
+	// profile pins the source client to the source issuer.
 	ConflictingClientIds []string `form:"conflicting_client_ids,omitempty" json:"conflicting_client_ids,omitempty" xml:"conflicting_client_ids,omitempty"`
 	// Active principal bindings that would violate target uniqueness. Non-zero
 	// blocks migration.
@@ -3801,11 +3804,11 @@ type UserSessionIssuerCimdClientResponseBody struct {
 // the "createIssuer" endpoint of the "organizationUserSessionIssuers" service.
 func NewCreateIssuerRequestBody(p *organizationusersessionissuers.CreateIssuerPayload) *CreateIssuerRequestBody {
 	body := &CreateIssuerRequestBody{
-		TrustedRemoteSessionIssuerID: p.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID: p.TrustedRemoteSessionClientID,
 		Slug:                         p.Slug,
 		AuthnChallengeMode:           p.AuthnChallengeMode,
 		SessionDurationHours:         p.SessionDurationHours,
+		TrustedRemoteSessionIssuerID: p.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID: p.TrustedRemoteSessionClientID,
 	}
 	return body
 }

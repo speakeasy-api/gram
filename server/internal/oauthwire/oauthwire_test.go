@@ -123,3 +123,39 @@ func TestResourceIndicatorsFrom_DistinguishesAbsentFromEmpty(t *testing.T) {
 	repeated := url.Values{"resource": []string{canonicalResource, "https://evil.example.com/mcp/support-bot"}}
 	require.Len(t, oauthwire.ResourceIndicatorsFrom(repeated), 2)
 }
+
+func TestMayAutoRedirectBeforeAuthentication(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		uri     string
+		allowed bool
+	}{
+		{"http://127.0.0.1/cb", true},
+		{"https://127.0.0.1:54321/cb", true},
+		{"http://[::1]:54321/cb", true},
+		{"https://[::1]/cb", true},
+		{"http://localhost:54321/cb", true},
+		{"https://LOCALHOST/cb?keep=value", true},
+		{"https://client.example/cb", false},
+		{"http://localhost.example/cb", false},
+		{"https://localhost./cb", false},
+		{"http://127.0.0.2/cb", false},
+		{"http://127.1/cb", false},
+		{"http://2130706433/cb", false},
+		{"http://[::ffff:127.0.0.1]/cb", false},
+		{"https://localhost@client.example/cb", false},
+		{"https://client.example@localhost/cb", false},
+		{"https://localhost/cb#fragment", false},
+		{"com.example.app://localhost/cb", false},
+		{"https:localhost", false},
+		{"//localhost/cb", false},
+		{"https://localhost\\@client.example/cb", false},
+		{"https://localhost:bad/cb", false},
+		{"", false},
+	} {
+		t.Run(tc.uri, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.allowed, oauthwire.MayAutoRedirectBeforeAuthentication(tc.uri))
+		})
+	}
+}

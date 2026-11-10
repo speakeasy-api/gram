@@ -9,6 +9,9 @@ import { CodeBlock } from "@/components/code";
 import { Card } from "@/components/ui/Card";
 import { InfoIcon } from "lucide-react";
 
+const UNKNOWN_TIER_MESSAGE =
+  "An authorization server already exists for this issuer URL.";
+
 // What reusing the existing record gives the operator instead of adding their
 // own. Phrased as what they gain, because duplicating is a legitimate choice and
 // the warning is here to inform it rather than to scold.
@@ -40,6 +43,7 @@ function tierRationale(
       }
       return "It's already configured here, so a second record would double the metadata and documentation you maintain.";
   }
+  return UNKNOWN_TIER_MESSAGE;
 }
 
 // tierCopy explains where a matching issuer already exists. A project-specific
@@ -55,6 +59,7 @@ function tierCopy(match: RemoteSessionIssuerDuplicateMatch): string {
         return `Project "${match.projectName}" already has an authorization server for this issuer URL.`;
       return `This project already has an authorization server for this issuer URL.`;
   }
+  return UNKNOWN_TIER_MESSAGE;
 }
 
 function tierLabel(match: RemoteSessionIssuerDuplicateMatch): string {
@@ -68,6 +73,7 @@ function tierLabel(match: RemoteSessionIssuerDuplicateMatch): string {
         ? `Project ${match.projectName}`
         : "This project";
   }
+  return "Unknown tier";
 }
 
 // matchDisplayName mirrors how issuers are named everywhere else: the display

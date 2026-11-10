@@ -1,19 +1,68 @@
+import { useRoutes } from "@/routes";
+import { useProject } from "@/contexts/Auth";
+import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
+import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { useQuery } from "@tanstack/react-query";
+import { serializeFilters } from "@/pages/logs/log-filter-url";
+import { Operator } from "@gram/client/models/components/logfilter";
+import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
 import { Stack } from "@/components/ui/Stack";
-import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
+import {
+  type HostedServerRef,
+  MCPOverviewTab,
+} from "@/pages/mcp/overview/MCPOverviewTab";
+import {
+  isCanonicalHostedWrapper,
+  standsInForToolset,
+} from "@/pages/mcp/x/MCPServerDetailsRouting";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { TunneledMcpConnectionsPanel } from "./TunneledMcpConnectionsPanel";
 import { UnproxiedMcpOverviewTab } from "./UnproxiedMcpOverviewTab";
 
 // Picks the overview for the server's backend. Unproxied servers have no
 // Speakeasy-proxied traffic and get their own scoped-down tab; tunneled servers
-// get the live connections panel on top of the shared usage dashboard.
+// get tunnel status and activity on top of the shared usage dashboard.
 export function OverviewTab({
   mcpServer,
   agentSetupHref,
+  hostedToolset: loadedToolset,
 }: {
   mcpServer: McpServer;
   agentSetupHref: string;
+  /** The hosted toolset when loaded, for when the read's summary is missing. */
+  hostedToolset?: { id: string; slug: string; name: string };
 }): JSX.Element | null {
+  const routes = useRoutes();
+  const client = useGramContext();
+  const project = useProject();
+  const canViewToolLogs = useCanViewToolLogs();
+  // Tool Logs is empty when the organization does not record logs, so the
+  // tunnel view links to it only when it can show something. Tool Logs' own
+  // search answers 404 in that case and is authorized for the same log:read
+  // audience as the link, unlike the organization's feature settings. A
+  // one-minute, one-row search keeps the probe cheap.
+  const toolLogsProbe = useQuery({
+    queryKey: ["tool-logs-available", project.id],
+    queryFn: () => {
+      const to = new Date();
+      return unwrapAsync(
+        telemetrySearchLogs(client, {
+          searchLogsPayload: {
+            from: new Date(to.getTime() - 60_000),
+            to,
+            limit: 1,
+          },
+        }),
+      );
+    },
+    enabled: canViewToolLogs && !!mcpServer.tunneledMcpServerId,
+    staleTime: 5 * 60_000,
+    retry: false,
+    throwOnError: false,
+  });
+  const toolLogsAvailable = canViewToolLogs && toolLogsProbe.isSuccess;
   if (mcpServer.unproxiedMcpServerId) {
     return (
       <UnproxiedMcpOverviewTab
@@ -24,33 +73,72 @@ export function OverviewTab({
       />
     );
   }
-  // The usage dashboard is keyed by slug; a tunneled server without one still
-  // gets its connections panel.
-  const usage = mcpServer.slug ? (
-    <MCPOverviewTab
-      server={{
+  const hosted = standsInForToolset(mcpServer);
+  const hostedToolset = hosted
+    ? (mcpServer.toolset ?? loadedToolset)
+    : undefined;
+  // Without the toolset slug a hosted server's traffic can't be shown at all.
+  if (hosted && !hostedToolset) return null;
+  // Hosted traffic is only attributed by toolset slug, so a hosted server keeps the toolset page's overview.
+  const server: HostedServerRef = hostedToolset
+    ? {
+        kind: "toolset",
+        id: hostedToolset.id,
+        slug: hostedToolset.slug,
+        name: hostedToolset.name,
+      }
+    : {
         kind: "mcp-server",
         id: mcpServer.id,
-        slug: mcpServer.slug,
+        slug: mcpServer.slug ?? "",
         name: mcpServer.name ?? "MCP Server",
-      }}
-      // Tool Logs cannot currently filter a tunneled target by id. Treating
-      // it as hosted or shadow would silently show the wrong server's calls.
-      logsTarget={
-        mcpServer.tunneledMcpServerId
-          ? null
-          : { type: "hosted", id: mcpServer.slug }
-      }
+      };
+  const tunneled = !!mcpServer.tunneledMcpServerId;
+  // The usage dashboard is keyed by slug; a tunneled server without one still
+  // gets its tunnel status.
+  // Plugin entries name a non-canonical host by its own id; only the canonical wrapper shares the toolset's.
+  const pluginServer: HostedServerRef =
+    hostedToolset && !isCanonicalHostedWrapper(mcpServer)
+      ? {
+          kind: "mcp-server",
+          id: mcpServer.id,
+          slug: mcpServer.slug ?? "",
+          name: mcpServer.name ?? "MCP Server",
+        }
+      : server;
+  const usage = hostedToolset ? (
+    <MCPOverviewTab server={server} pluginServer={pluginServer} />
+  ) : mcpServer.slug ? (
+    <MCPOverviewTab
+      server={server}
+      // For tunneled servers the marketplace banner sits above the tunnel
+      // status, so the usage dashboard must not show it a second time.
+      showPluginBanner={!tunneled}
+      // Tool Logs lists no tunneled servers as filter options yet.
+      logsTarget={tunneled ? null : { type: "mcp_server", id: mcpServer.id }}
     />
   ) : null;
 
   if (!mcpServer.tunneledMcpServerId) return usage;
 
+  const filters = serializeFilters([
+    {
+      id: "tunnel",
+      path: "gram.tunneled_mcp_server.id",
+      op: Operator.Eq,
+      value: mcpServer.tunneledMcpServerId,
+    },
+  ]);
+  const logsHref = toolLogsAvailable
+    ? `${routes.logs.href()}?${new URLSearchParams({ af: filters ?? "" })}`
+    : undefined;
   return (
     <Stack gap={6}>
+      <PluginStatusBanner server={server} />
       <TunneledMcpConnectionsPanel
         tunneledMcpServerId={mcpServer.tunneledMcpServerId}
         agentSetupHref={agentSetupHref}
+        logsHref={logsHref}
       />
       {usage}
     </Stack>

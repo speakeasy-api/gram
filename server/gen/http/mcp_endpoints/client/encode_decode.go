@@ -1039,6 +1039,9 @@ func EncodeCheckMcpEndpointSlugAvailabilityRequest(encoder func(*http.Request) g
 		if p.CustomDomainID != nil {
 			values.Add("custom_domain_id", *p.CustomDomainID)
 		}
+		if p.McpServerID != nil {
+			values.Add("mcp_server_id", *p.McpServerID)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

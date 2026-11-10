@@ -45,3 +45,21 @@ func IsIETFRegisteredCode(code string) bool {
 	_, ok := ietfRegisteredCodes[code]
 	return ok
 }
+
+// RegisteredCodeLabel preserves only explicitly allowlisted IETF and OpenID
+// Connect Core error codes. Arbitrary caller text never becomes a label.
+func RegisteredCodeLabel(code string) string {
+	if IsIETFRegisteredCode(code) {
+		return code
+	}
+	// OpenID Connect Core §3.1.2.6. Keep this separate from the IETF registry:
+	// these standardized codes are safe labels, but are not IETF registrations.
+	switch code {
+	case OIDCCodeInteractionRequired, OIDCCodeLoginRequired, OIDCCodeAccountSelectionRequired,
+		OIDCCodeConsentRequired, OIDCCodeInvalidRequestURI, OIDCCodeInvalidRequestObject,
+		OIDCCodeRequestNotSupported, OIDCCodeRequestURINotSupported, OIDCCodeRegistrationNotSupported:
+		return code
+	default:
+		return "unregistered"
+	}
+}

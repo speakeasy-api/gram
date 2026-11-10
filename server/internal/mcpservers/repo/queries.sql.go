@@ -85,6 +85,120 @@ func (q *Queries) AddMCPServerToolMetadata(ctx context.Context, arg AddMCPServer
 	return items, nil
 }
 
+const addMissingMCPServerToolMetadata = `-- name: AddMissingMCPServerToolMetadata :many
+INSERT INTO mcp_server_tool_metadata (
+    project_id,
+    mcp_server_id,
+    tool_name,
+    title,
+    read_only_hint,
+    destructive_hint,
+    idempotent_hint,
+    open_world_hint
+)
+SELECT
+    $1,
+    $2,
+    elem->>'tool_name',
+    elem->>'title',
+    (elem->>'read_only_hint')::boolean,
+    (elem->>'destructive_hint')::boolean,
+    (elem->>'idempotent_hint')::boolean,
+    (elem->>'open_world_hint')::boolean
+FROM jsonb_array_elements($3::jsonb) AS elem
+ON CONFLICT (mcp_server_id, tool_name) WHERE deleted IS FALSE DO NOTHING
+RETURNING id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
+`
+
+type AddMissingMCPServerToolMetadataParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	Tools       []byte
+}
+
+// Records tools the catalog has no live entry for, leaving existing entries
+// untouched. Used when the proxy discovers tools from the upstream, where
+// concurrent requests routinely race to record the same tool, so a conflict
+// means another request got there first rather than a stale caller. RETURNING
+// yields only the rows actually inserted. See SetMCPServerToolMetadata for why
+// the payload is unpacked with ->> rather than jsonb_to_recordset.
+func (q *Queries) AddMissingMCPServerToolMetadata(ctx context.Context, arg AddMissingMCPServerToolMetadataParams) ([]McpServerToolMetadatum, error) {
+	rows, err := q.db.Query(ctx, addMissingMCPServerToolMetadata, arg.ProjectID, arg.McpServerID, arg.Tools)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServerToolMetadatum
+	for rows.Next() {
+		var i McpServerToolMetadatum
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.McpServerID,
+			&i.ToolName,
+			&i.Title,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countEMAClientHeadersFixture = `-- name: CountEMAClientHeadersFixture :one
+SELECT count(*) FROM mcp_auth_client_headers
+WHERE auth_client_id = $1 AND organization_id = $2 AND NOT deleted
+`
+
+type CountEMAClientHeadersFixtureParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CountEMAClientHeadersFixture(ctx context.Context, arg CountEMAClientHeadersFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countEMAClientHeadersFixture, arg.AuthClientID, arg.OrganizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countUserSessionIssuerServingServers = `-- name: CountUserSessionIssuerServingServers :one
+SELECT (
+  (SELECT count(*) FROM mcp_servers AS ms
+   JOIN projects AS p ON p.id = ms.project_id AND p.organization_id = $1::text AND p.deleted IS FALSE
+   WHERE ms.user_session_issuer_id = $2::uuid AND ms.deleted IS FALSE)
+  +
+  (SELECT count(*) FROM meta_mcp_servers AS g
+   WHERE g.user_session_issuer_id = $2::uuid
+     AND g.organization_id = $1::text AND g.deleted IS FALSE)
+)::bigint AS server_count
+`
+
+type CountUserSessionIssuerServingServersParams struct {
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+}
+
+// MCP servers and gateways that authenticate against the issuer, across the
+// organization. More than one means the issuer is a shared sign-in.
+func (q *Queries) CountUserSessionIssuerServingServers(ctx context.Context, arg CountUserSessionIssuerServingServersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserSessionIssuerServingServers, arg.OrganizationID, arg.UserSessionIssuerID)
+	var server_count int64
+	err := row.Scan(&server_count)
+	return server_count, err
+}
+
 const createMCPServer = `-- name: CreateMCPServer :one
 INSERT INTO mcp_servers (
     id,
@@ -116,7 +230,7 @@ VALUES (
     $12,
     $13
 )
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateMCPServerParams struct {
@@ -164,9 +278,11 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -194,7 +310,7 @@ const deleteMCPServer = `-- name: DeleteMCPServer :one
 UPDATE mcp_servers
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteMCPServerParams struct {
@@ -217,9 +333,11 @@ func (q *Queries) DeleteMCPServer(ctx context.Context, arg DeleteMCPServerParams
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -266,7 +384,7 @@ func (q *Queries) DeleteMCPServerToolMetadata(ctx context.Context, arg DeleteMCP
 }
 
 const getMCPServerByIDAndOrganizationID = `-- name: GetMCPServerByIDAndOrganizationID :one
-SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.created_at, m.updated_at, m.deleted_at, m.deleted
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.builtin_backend, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.requires_upstream_auth, m.created_at, m.updated_at, m.deleted_at, m.deleted
 FROM mcp_servers AS m
 JOIN projects AS p ON p.id = m.project_id
 WHERE m.id = $1
@@ -297,9 +415,11 @@ func (q *Queries) GetMCPServerByIDAndOrganizationID(ctx context.Context, arg Get
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -309,7 +429,7 @@ func (q *Queries) GetMCPServerByIDAndOrganizationID(ctx context.Context, arg Get
 }
 
 const getMCPServerByIDAndProjectID = `-- name: GetMCPServerByIDAndProjectID :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -334,9 +454,11 @@ func (q *Queries) GetMCPServerByIDAndProjectID(ctx context.Context, arg GetMCPSe
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -346,7 +468,7 @@ func (q *Queries) GetMCPServerByIDAndProjectID(ctx context.Context, arg GetMCPSe
 }
 
 const getMCPServerByLiveProjectForOrganization = `-- name: GetMCPServerByLiveProjectForOrganization :one
-SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.created_at, m.updated_at, m.deleted_at, m.deleted
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.builtin_backend, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.requires_upstream_auth, m.created_at, m.updated_at, m.deleted_at, m.deleted
 FROM mcp_servers AS m
 JOIN projects AS p
   ON p.id = m.project_id
@@ -378,9 +500,11 @@ func (q *Queries) GetMCPServerByLiveProjectForOrganization(ctx context.Context, 
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -390,7 +514,7 @@ func (q *Queries) GetMCPServerByLiveProjectForOrganization(ctx context.Context, 
 }
 
 const getMCPServerBySlug = `-- name: GetMCPServerBySlug :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -415,9 +539,11 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -427,7 +553,7 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 }
 
 const getMCPServerByToolsetID = `-- name: GetMCPServerByToolsetID :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE toolset_id = $1::uuid AND project_id = $2 AND deleted IS FALSE
 ORDER BY (visibility = 'disabled'), (id = toolset_id) DESC, created_at, id
@@ -455,9 +581,11 @@ func (q *Queries) GetMCPServerByToolsetID(ctx context.Context, arg GetMCPServerB
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -594,22 +722,6 @@ source_annotations AS (
   JOIN active_deployment ad ON ad.id = f.deployment_id
   WHERE f.project_id = $2
     AND f.deleted IS FALSE
-  UNION ALL
-  SELECT
-    e.tool_urn,
-    e.name AS tool_name,
-    e.read_only_hint,
-    e.destructive_hint,
-    e.idempotent_hint,
-    e.open_world_hint
-  FROM latest_toolset_version tv
-  JOIN external_mcp_tool_definitions e ON e.tool_urn = ANY(tv.tool_urns)
-  JOIN external_mcp_attachments a ON a.id = e.external_mcp_attachment_id
-  JOIN active_deployment ad ON ad.id = a.deployment_id
-  WHERE e.deleted IS FALSE
-    AND a.deleted IS FALSE
-    AND e.type <> 'proxy'
-    AND e.name IS NOT NULL
 ),
 varied_annotations AS (
   SELECT
@@ -701,7 +813,7 @@ func (q *Queries) ListEffectiveMCPServerToolAnnotations(ctx context.Context, arg
 }
 
 const listEnabledMCPServersByToolsetID = `-- name: ListEnabledMCPServersByToolsetID :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers ms
 WHERE ms.toolset_id = $1::uuid
   AND ms.project_id = $2
@@ -748,9 +860,11 @@ func (q *Queries) ListEnabledMCPServersByToolsetID(ctx context.Context, arg List
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
+			&i.BuiltinBackend,
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.RequiresUpstreamAuth,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -802,6 +916,155 @@ func (q *Queries) ListLiveMCPServerIDsInOrganization(ctx context.Context, arg Li
 	return items, nil
 }
 
+const listMCPServerAssociationProviders = `-- name: ListMCPServerAssociationProviders :one
+SELECT ARRAY(
+           SELECT DISTINCT c.remote_session_issuer_id
+           FROM mcp_server_remote_session_clients AS a
+           JOIN remote_session_clients AS c
+             ON c.id = a.remote_session_client_id
+            AND c.deleted IS FALSE
+            AND (c.project_id = a.project_id
+                 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+           JOIN remote_session_issuers AS provider
+             ON provider.id = c.remote_session_issuer_id
+            AND provider.deleted IS FALSE
+            AND (provider.project_id = a.project_id
+                 OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+           WHERE a.mcp_server_id = m.id
+             AND a.deleted IS FALSE
+       )::uuid[] AS association_provider_ids
+FROM mcp_servers AS m
+WHERE m.id = $1 AND m.project_id = $2 AND m.deleted IS FALSE
+`
+
+type ListMCPServerAssociationProvidersParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The distinct live providers an MCP server's live client associations name.
+func (q *Queries) ListMCPServerAssociationProviders(ctx context.Context, arg ListMCPServerAssociationProvidersParams) ([]uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, listMCPServerAssociationProviders, arg.ID, arg.ProjectID)
+	var association_provider_ids []uuid.UUID
+	err := row.Scan(&association_provider_ids)
+	return association_provider_ids, err
+}
+
+const listMCPServerConsentConfigurations = `-- name: ListMCPServerConsentConfigurations :many
+WITH servers AS (
+    SELECT m.id, m.project_id, m.toolset_id, m.remote_session_issuer_id,
+           jsonb_build_object(
+               'remote', m.remote_mcp_server_id, 'url', r.url,
+               'transport', r.transport_type,
+               'tunnel', m.tunneled_mcp_server_id, 'resource', t.resource_identifier,
+               'toolset', m.toolset_id, 'environment', m.environment_id,
+               'variation', m.tool_variations_group_id,
+               'visibility', m.visibility, 'network', m.network_access_mode,
+               'requires_auth', m.requires_upstream_auth,
+               'headers', COALESCE((
+                   SELECT jsonb_agg(jsonb_build_array(h.name, h.value,
+                              h.value_from_request_header, h.is_required, h.is_secret)
+                                    ORDER BY h.name, h.id)
+                   FROM remote_mcp_server_headers AS h
+                   WHERE h.remote_mcp_server_id = r.id AND h.deleted IS FALSE
+               ), '[]'::jsonb)
+           ) AS base,
+           ARRAY(
+               SELECT DISTINCT c.remote_session_issuer_id
+               FROM mcp_server_remote_session_clients AS a
+               JOIN remote_session_clients AS c
+                 ON c.id = a.remote_session_client_id
+                AND c.deleted IS FALSE
+                AND (c.project_id = a.project_id
+                     OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+               JOIN remote_session_issuers AS provider
+                 ON provider.id = c.remote_session_issuer_id
+                AND provider.deleted IS FALSE
+                AND (provider.project_id = a.project_id
+                     OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+               WHERE a.mcp_server_id = m.id
+                 AND a.deleted IS FALSE
+           )::uuid[] AS association_provider_ids
+    FROM mcp_servers AS m
+    JOIN projects AS p ON p.id = m.project_id
+     AND p.organization_id = $1::text AND p.deleted IS FALSE
+    LEFT JOIN remote_mcp_servers AS r ON r.id = m.remote_mcp_server_id
+     AND r.project_id = m.project_id AND r.deleted IS FALSE
+    LEFT JOIN tunneled_mcp_servers AS t ON t.id = m.tunneled_mcp_server_id
+     AND t.project_id = m.project_id AND t.deleted IS FALSE
+    WHERE m.id = ANY($2::uuid[]) AND m.deleted IS FALSE
+)
+SELECT id, project_id,
+       encode(sha256(convert_to(
+           (base || jsonb_build_object('issuer', remote_session_issuer_id))::text, 'UTF8')), 'hex')::text AS configuration_hash,
+       encode(sha256(convert_to(
+           (base || jsonb_build_object('issuer',
+               CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END))::text, 'UTF8')), 'hex')::text AS association_configuration_hash,
+       encode(sha256(convert_to(
+           (CASE WHEN toolset_id IS NULL THEN base
+                 ELSE base || jsonb_build_object('issuer', remote_session_issuer_id) END)::text, 'UTF8')), 'hex')::text AS typed_configuration_hash,
+       encode(sha256(convert_to(
+           (CASE WHEN toolset_id IS NULL THEN base
+                 ELSE base || jsonb_build_object('issuer',
+                     CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END) END)::text, 'UTF8')), 'hex')::text AS typed_association_configuration_hash
+FROM servers
+`
+
+type ListMCPServerConsentConfigurationsParams struct {
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+type ListMCPServerConsentConfigurationsRow struct {
+	ID                                uuid.UUID
+	ProjectID                         uuid.UUID
+	ConfigurationHash                 string
+	AssociationConfigurationHash      string
+	TypedConfigurationHash            string
+	TypedAssociationConfigurationHash string
+}
+
+// Hash stored routing configuration in one tenant-scoped read. Header secrets
+// remain ciphertext; tool definitions are deliberately outside this boundary.
+//
+// configuration_hash takes the upstream issuer from the column and
+// association_configuration_hash from the server's associations: their one
+// provider, or null with several or none. jsonb stores its keys sorted, so
+// adding the issuer to the rest renders the same text as building every key
+// at once.
+//
+// The typed hashes are what an approval is compared on where typed auth
+// clients choose upstream authentication: they leave out a proxied server's
+// upstream issuer, which decides nothing there, so resynchronizing it changes
+// nothing an approval covers. A hosted server is still routed by that issuer,
+// so its typed hashes cover it.
+func (q *Queries) ListMCPServerConsentConfigurations(ctx context.Context, arg ListMCPServerConsentConfigurationsParams) ([]ListMCPServerConsentConfigurationsRow, error) {
+	rows, err := q.db.Query(ctx, listMCPServerConsentConfigurations, arg.OrganizationID, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMCPServerConsentConfigurationsRow
+	for rows.Next() {
+		var i ListMCPServerConsentConfigurationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ConfigurationHash,
+			&i.AssociationConfigurationHash,
+			&i.TypedConfigurationHash,
+			&i.TypedAssociationConfigurationHash,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServerIDsByUserSessionIssuerID = `-- name: ListMCPServerIDsByUserSessionIssuerID :many
 SELECT id
 FROM mcp_servers
@@ -832,6 +1095,45 @@ func (q *Queries) ListMCPServerIDsByUserSessionIssuerID(ctx context.Context, arg
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServerIDsWithEndpoints = `-- name: ListMCPServerIDsWithEndpoints :many
+SELECT DISTINCT e.mcp_server_id::uuid AS mcp_server_id
+FROM mcp_endpoints e
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.organization_id = $1
+  AND p.deleted IS FALSE
+WHERE e.project_id = ANY($2::uuid[])
+  AND e.mcp_server_id = ANY($3::uuid[])
+  AND e.deleted IS FALSE
+`
+
+type ListMCPServerIDsWithEndpointsParams struct {
+	OrganizationID string
+	ProjectIds     []uuid.UUID
+	McpServerIds   []uuid.UUID
+}
+
+// Any live endpoint counts, addressable or not.
+func (q *Queries) ListMCPServerIDsWithEndpoints(ctx context.Context, arg ListMCPServerIDsWithEndpointsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMCPServerIDsWithEndpoints, arg.OrganizationID, arg.ProjectIds, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -888,8 +1190,110 @@ func (q *Queries) ListMCPServerToolMetadata(ctx context.Context, arg ListMCPServ
 	return items, nil
 }
 
+const listMCPServerUsageSubjects = `-- name: ListMCPServerUsageSubjects :many
+WITH grouped AS (
+  SELECT s.subject_urn::text AS subject_urn,
+         count(*)::bigint AS connection_count,
+         count(*) FILTER (WHERE s.resource IS NULL)::bigint AS issuer_scoped_count,
+         max(s.last_used_at)::timestamptz AS last_used_at,
+         array_remove(array_agg(DISTINCT c.client_name), NULL)::text[] AS client_names
+  FROM user_sessions AS s
+  LEFT JOIN user_session_clients AS c
+    ON c.id = s.user_session_client_id
+    AND c.organization_id = s.organization_id
+    AND c.user_session_issuer_id = s.user_session_issuer_id
+    AND c.deleted IS FALSE
+  WHERE s.organization_id = $1::text
+    AND s.user_session_issuer_id = $3::uuid
+    AND s.deleted IS FALSE
+    AND s.refresh_expires_at > clock_timestamp()
+    AND (s.resource IS NULL
+         OR s.resource = ANY($4::text[])
+         OR substring(s.resource FROM '^https?://[^/]+(/.*)$') = ANY($5::text[]))
+  GROUP BY s.subject_urn
+)
+SELECT g.subject_urn, g.connection_count, g.issuer_scoped_count, g.last_used_at, g.client_names,
+       u.display_name AS user_display_name,
+       u.email AS user_email,
+       u.photo_url AS user_photo_url,
+       k.name AS api_key_name,
+       agent.name AS agent_name
+FROM grouped AS g
+LEFT JOIN users AS u
+  ON g.subject_urn LIKE 'user:%'
+  AND u.id = split_part(g.subject_urn, ':', 2)
+  AND u.deleted_at IS NULL
+LEFT JOIN api_keys AS k
+  ON k.id = CASE WHEN g.subject_urn LIKE 'apikey:%' THEN split_part(g.subject_urn, ':', 2)::uuid END
+  AND k.organization_id = $1::text
+LEFT JOIN agents AS agent
+  ON g.subject_urn = 'agent:' || agent.id::text
+  AND agent.organization_id = $1::text AND agent.deleted IS FALSE
+ORDER BY g.last_used_at DESC NULLS LAST, g.subject_urn
+LIMIT $2::int
+`
+
+type ListMCPServerUsageSubjectsParams struct {
+	OrganizationID      string
+	RowLimit            int32
+	UserSessionIssuerID uuid.UUID
+	Resources           []string
+	PlatformPaths       []string
+}
+
+type ListMCPServerUsageSubjectsRow struct {
+	SubjectUrn        string
+	ConnectionCount   int64
+	IssuerScopedCount int64
+	LastUsedAt        pgtype.Timestamptz
+	ClientNames       []string
+	UserDisplayName   pgtype.Text
+	UserEmail         pgtype.Text
+	UserPhotoUrl      pgtype.Text
+	ApiKeyName        pgtype.Text
+	AgentName         pgtype.Text
+}
+
+// Per-subject view of SummarizeMCPServerUsage, most recently used first.
+func (q *Queries) ListMCPServerUsageSubjects(ctx context.Context, arg ListMCPServerUsageSubjectsParams) ([]ListMCPServerUsageSubjectsRow, error) {
+	rows, err := q.db.Query(ctx, listMCPServerUsageSubjects,
+		arg.OrganizationID,
+		arg.RowLimit,
+		arg.UserSessionIssuerID,
+		arg.Resources,
+		arg.PlatformPaths,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMCPServerUsageSubjectsRow
+	for rows.Next() {
+		var i ListMCPServerUsageSubjectsRow
+		if err := rows.Scan(
+			&i.SubjectUrn,
+			&i.ConnectionCount,
+			&i.IssuerScopedCount,
+			&i.LastUsedAt,
+			&i.ClientNames,
+			&i.UserDisplayName,
+			&i.UserEmail,
+			&i.UserPhotoUrl,
+			&i.ApiKeyName,
+			&i.AgentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServersByLiveProjectForOrganizationLimited = `-- name: ListMCPServersByLiveProjectForOrganizationLimited :many
-SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.created_at, m.updated_at, m.deleted_at, m.deleted
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.builtin_backend, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.requires_upstream_auth, m.created_at, m.updated_at, m.deleted_at, m.deleted
 FROM mcp_servers AS m
 JOIN projects AS p
   ON p.id = m.project_id
@@ -928,9 +1332,11 @@ func (q *Queries) ListMCPServersByLiveProjectForOrganizationLimited(ctx context.
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
+			&i.BuiltinBackend,
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.RequiresUpstreamAuth,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -947,12 +1353,22 @@ func (q *Queries) ListMCPServersByLiveProjectForOrganizationLimited(ctx context.
 }
 
 const listMCPServersByOrganizationID = `-- name: ListMCPServersByOrganizationID :many
-SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.created_at, m.updated_at, m.deleted_at, m.deleted
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.builtin_backend, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.requires_upstream_auth, m.created_at, m.updated_at, m.deleted_at, m.deleted
 FROM mcp_servers AS m
 JOIN projects AS p ON p.id = m.project_id
 WHERE p.organization_id = $1
   AND m.deleted IS FALSE
   AND p.deleted IS FALSE
+  -- Same retired approvals server and live-toolset rules as
+  -- ListMCPServersByProjectID.
+  AND m.builtin_backend IS NULL
+  AND (
+    m.toolset_id IS NULL
+    OR EXISTS (
+      SELECT 1 FROM toolsets t
+      WHERE t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+    )
+  )
 ORDER BY m.created_at DESC
 `
 
@@ -980,9 +1396,11 @@ func (q *Queries) ListMCPServersByOrganizationID(ctx context.Context, organizati
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
+			&i.BuiltinBackend,
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.RequiresUpstreamAuth,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -999,15 +1417,23 @@ func (q *Queries) ListMCPServersByOrganizationID(ctx context.Context, organizati
 }
 
 const listMCPServersByProjectID = `-- name: ListMCPServersByProjectID :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
-FROM mcp_servers
-WHERE project_id = $1
-  AND deleted IS FALSE
-  AND ($2::uuid IS NULL OR remote_mcp_server_id = $2::uuid)
-  AND ($3::uuid IS NULL OR tunneled_mcp_server_id = $3::uuid)
-  AND ($4::uuid IS NULL OR toolset_id = $4::uuid)
-  AND ($5::uuid IS NULL OR unproxied_mcp_server_id = $5::uuid)
-ORDER BY created_at DESC
+SELECT ms.id, ms.project_id, ms.name, ms.slug, ms.environment_id, ms.user_session_issuer_id, ms.remote_session_issuer_id, ms.remote_mcp_server_id, ms.tunneled_mcp_server_id, ms.toolset_id, ms.unproxied_mcp_server_id, ms.builtin_backend, ms.tool_variations_group_id, ms.visibility, ms.network_access_mode, ms.requires_upstream_auth, ms.created_at, ms.updated_at, ms.deleted_at, ms.deleted
+FROM mcp_servers ms
+WHERE ms.project_id = $1
+  AND ms.deleted IS FALSE
+  AND ms.builtin_backend IS NULL
+  AND (
+    ms.toolset_id IS NULL
+    OR EXISTS (
+      SELECT 1 FROM toolsets t
+      WHERE t.id = ms.toolset_id AND t.project_id = ms.project_id AND t.deleted IS FALSE
+    )
+  )
+  AND ($2::uuid IS NULL OR ms.remote_mcp_server_id = $2::uuid)
+  AND ($3::uuid IS NULL OR ms.tunneled_mcp_server_id = $3::uuid)
+  AND ($4::uuid IS NULL OR ms.toolset_id = $4::uuid)
+  AND ($5::uuid IS NULL OR ms.unproxied_mcp_server_id = $5::uuid)
+ORDER BY ms.created_at DESC
 `
 
 type ListMCPServersByProjectIDParams struct {
@@ -1018,6 +1444,9 @@ type ListMCPServersByProjectIDParams struct {
 	UnproxiedMcpServerID uuid.NullUUID
 }
 
+// A toolset-backed row whose toolset is deleted serves nothing, so it is not
+// listed. Neither is a retired approvals server (builtin_backend), which the
+// gateway answers as not found until a cleanup migration deletes it.
 func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServersByProjectIDParams) ([]McpServer, error) {
 	rows, err := q.db.Query(ctx, listMCPServersByProjectID,
 		arg.ProjectID,
@@ -1045,9 +1474,11 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
+			&i.BuiltinBackend,
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.RequiresUpstreamAuth,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1183,6 +1614,49 @@ func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, pro
 	return items, nil
 }
 
+const listProjectsSharingOrganizationUserSessionIssuers = `-- name: ListProjectsSharingOrganizationUserSessionIssuers :many
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.user_session_issuer_id = ANY($1::uuid[])
+  AND usi.project_id IS NULL
+  AND usi.organization_id = $2::text
+  AND usi.deleted IS FALSE
+  AND p.organization_id = $2::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY s.project_id
+`
+
+type ListProjectsSharingOrganizationUserSessionIssuersParams struct {
+	UserSessionIssuerIds []uuid.UUID
+	OrganizationID       string
+}
+
+// Projects of the organization with a live MCP server on one of the named
+// organization-level user session issuers. Their servers share the issuer's
+// client bindings, so a binding change on it is resynced in each of them.
+func (q *Queries) ListProjectsSharingOrganizationUserSessionIssuers(ctx context.Context, arg ListProjectsSharingOrganizationUserSessionIssuersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectsSharingOrganizationUserSessionIssuers, arg.UserSessionIssuerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServableMCPServersByOrganizationID = `-- name: ListServableMCPServersByOrganizationID :many
 SELECT
     s.id AS mcp_server_id,
@@ -1199,6 +1673,22 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    ARRAY(
+        SELECT DISTINCT c.remote_session_issuer_id
+        FROM mcp_server_remote_session_clients AS a
+        JOIN remote_session_clients AS c
+          ON c.id = a.remote_session_client_id
+         AND c.deleted IS FALSE
+         AND (c.project_id = a.project_id
+              OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+        JOIN remote_session_issuers AS provider
+          ON provider.id = c.remote_session_issuer_id
+         AND provider.deleted IS FALSE
+         AND (provider.project_id = a.project_id
+              OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+        WHERE a.mcp_server_id = s.id
+          AND a.deleted IS FALSE
+    )::uuid[] AS mcp_server_association_provider_ids,
     COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier,
     EXISTS (
       SELECT 1 FROM unnest(latest.tool_urns) AS u(urn)
@@ -1229,22 +1719,23 @@ ORDER BY s.project_id, s.slug
 `
 
 type ListServableMCPServersByOrganizationIDRow struct {
-	McpServerID                    uuid.UUID
-	McpServerProjectID             uuid.UUID
-	McpServerProjectSlug           string
-	McpServerName                  pgtype.Text
-	McpServerSlug                  pgtype.Text
-	McpServerVisibility            string
-	McpServerNetworkAccessMode     pgtype.Text
-	McpServerToolsetID             uuid.NullUUID
-	McpServerRemoteMcpServerID     uuid.NullUUID
-	McpServerTunneledMcpServerID   uuid.NullUUID
-	McpServerUnproxiedMcpServerID  uuid.NullUUID
-	McpServerEnvironmentID         uuid.NullUUID
-	McpServerToolVariationsGroupID uuid.NullUUID
-	McpServerRemoteSessionIssuerID uuid.NullUUID
-	TunneledResourceIdentifier     string
-	HasPlatformTool                bool
+	McpServerID                     uuid.UUID
+	McpServerProjectID              uuid.UUID
+	McpServerProjectSlug            string
+	McpServerName                   pgtype.Text
+	McpServerSlug                   pgtype.Text
+	McpServerVisibility             string
+	McpServerNetworkAccessMode      pgtype.Text
+	McpServerToolsetID              uuid.NullUUID
+	McpServerRemoteMcpServerID      uuid.NullUUID
+	McpServerTunneledMcpServerID    uuid.NullUUID
+	McpServerUnproxiedMcpServerID   uuid.NullUUID
+	McpServerEnvironmentID          uuid.NullUUID
+	McpServerToolVariationsGroupID  uuid.NullUUID
+	McpServerRemoteSessionIssuerID  uuid.NullUUID
+	McpServerAssociationProviderIds []uuid.UUID
+	TunneledResourceIdentifier      string
+	HasPlatformTool                 bool
 }
 
 // Candidate members for a gateway whose membership is derived rather than
@@ -1271,6 +1762,8 @@ type ListServableMCPServersByOrganizationIDRow struct {
 // reduce it to one flag would scale with toolset size. Ordered by project then
 // slug: a derived gateway has no operator-authored order, and slugs are unique
 // only within a project, so the pair is what makes the listing stable.
+// association_provider_ids are the distinct live providers of the member's
+// live client associations.
 func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, organizationID string) ([]ListServableMCPServersByOrganizationIDRow, error) {
 	rows, err := q.db.Query(ctx, listServableMCPServersByOrganizationID, organizationID)
 	if err != nil {
@@ -1295,6 +1788,7 @@ func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, or
 			&i.McpServerEnvironmentID,
 			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
+			&i.McpServerAssociationProviderIds,
 			&i.TunneledResourceIdentifier,
 			&i.HasPlatformTool,
 		); err != nil {
@@ -1308,18 +1802,133 @@ func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, or
 	return items, nil
 }
 
+const listToolsetHostingMCPServerIDs = `-- name: ListToolsetHostingMCPServerIDs :many
+SELECT DISTINCT ON (ms.toolset_id)
+    ms.toolset_id::uuid AS toolset_id
+  , ms.id AS mcp_server_id
+FROM mcp_servers ms
+JOIN projects p
+  ON p.id = ms.project_id
+  AND p.organization_id = $1
+  AND p.deleted IS FALSE
+WHERE ms.toolset_id = ANY($2::uuid[])
+  AND ms.project_id = ANY($3::uuid[])
+  AND ms.deleted IS FALSE
+  AND (
+    ms.id = ms.toolset_id
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM mcp_servers c
+        WHERE c.id = ms.toolset_id AND c.project_id = ms.project_id AND c.deleted IS FALSE
+      )
+      AND EXISTS (
+        SELECT 1 FROM mcp_endpoints e
+        WHERE e.mcp_server_id = ms.id AND e.project_id = ms.project_id AND e.deleted IS FALSE
+      )
+    )
+  )
+ORDER BY ms.toolset_id, (ms.id = ms.toolset_id) DESC, ms.created_at, ms.id
+`
+
+type ListToolsetHostingMCPServerIDsParams struct {
+	OrganizationID string
+	ToolsetIds     []uuid.UUID
+	ProjectIds     []uuid.UUID
+}
+
+type ListToolsetHostingMCPServerIDsRow struct {
+	ToolsetID   uuid.UUID
+	McpServerID uuid.UUID
+}
+
+// A toolset's host is its canonical wrapper (id = toolset id); without one, its
+// oldest server with an endpoint. Visibility is ignored so a toggle never moves it.
+func (q *Queries) ListToolsetHostingMCPServerIDs(ctx context.Context, arg ListToolsetHostingMCPServerIDsParams) ([]ListToolsetHostingMCPServerIDsRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetHostingMCPServerIDs, arg.OrganizationID, arg.ToolsetIds, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetHostingMCPServerIDsRow
+	for rows.Next() {
+		var i ListToolsetHostingMCPServerIDsRow
+		if err := rows.Scan(&i.ToolsetID, &i.McpServerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listToolsetSummariesByIDs = `-- name: ListToolsetSummariesByIDs :many
+WITH active_deployments AS MATERIALIZED (
+  SELECT p.project_id, d.id
+  FROM (
+    SELECT DISTINCT ts.project_id
+    FROM toolsets ts
+    WHERE ts.id = ANY($1::uuid[])
+      AND ts.organization_id = $2
+      AND ts.project_id = ANY($3::uuid[])
+      AND ts.deleted IS FALSE
+  ) p
+  CROSS JOIN LATERAL (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON ds.deployment_id = d.id
+    WHERE d.project_id = p.project_id
+      AND d.organization_id = $2
+      AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+  ) d
+)
 SELECT
     t.id
   , t.slug
   , t.name
+  , t.description
   , t.tool_selection_mode
   , t.external_oauth_server_id
   , (
-      SELECT COUNT(DISTINCT u.urn)
-      FROM unnest(lv.tool_urns) AS u(urn)
-      WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy'
+      (
+        SELECT COUNT(DISTINCT h.name)
+        FROM http_tool_definitions h
+        WHERE h.deployment_id = ANY(ARRAY(
+            SELECT ad.id
+            UNION ALL
+            SELECT pv.deployment_id
+            FROM deployments_packages dp
+            JOIN package_versions pv ON pv.id = dp.version_id
+            WHERE dp.deployment_id = ad.id
+          ))
+          AND h.tool_urn = ANY(lv.tool_urns)
+          AND h.deleted IS FALSE
+      )
+      + (
+        SELECT COUNT(*)
+        FROM function_tool_definitions f
+        WHERE f.deployment_id = ad.id
+          AND f.project_id = t.project_id
+          AND f.deleted IS FALSE
+          AND f.tool_urn = ANY(lv.tool_urns)
+      )
+      + (
+        SELECT COUNT(DISTINCT pt.tool_urn)
+        FROM prompt_templates pt
+        WHERE pt.project_id = t.project_id
+          AND pt.deleted IS FALSE
+          AND pt.tool_urn = ANY(lv.tool_urns)
+      )
     )::bigint AS tool_count
+  , ARRAY(
+      SELECT DISTINCT u.urn
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:platform:%'
+      ORDER BY u.urn
+    )::text[] AS platform_tool_urns
   , ARRAY(
       SELECT DISTINCT split_part(u.urn, ':', 3) AS slug
       FROM unnest(lv.tool_urns) AS u(urn)
@@ -1340,6 +1949,7 @@ LEFT JOIN LATERAL (
   ORDER BY tv.version DESC
   LIMIT 1
 ) lv ON TRUE
+LEFT JOIN active_deployments ad ON ad.project_id = t.project_id
 LEFT JOIN LATERAL (
   SELECT o.origin_registry_specifier
   FROM toolset_origins o
@@ -1365,15 +1975,17 @@ type ListToolsetSummariesByIDsRow struct {
 	ID                    uuid.UUID
 	Slug                  string
 	Name                  string
+	Description           pgtype.Text
 	ToolSelectionMode     string
 	ExternalOauthServerID uuid.NullUUID
 	ToolCount             int64
+	PlatformToolUrns      []string
 	ExternalMcpSlugs      []string
 	ExternalMcpProxyOnly  bool
 	RegistrySpecifier     string
 }
 
-// Proxy URNs are tools:externalmcp:<slug>:proxy; tool_count skips them.
+// tool_count resolves URNs like mv.readToolsetTools, minus :proxy URNs; callers add platform_tool_urns.
 func (q *Queries) ListToolsetSummariesByIDs(ctx context.Context, arg ListToolsetSummariesByIDsParams) ([]ListToolsetSummariesByIDsRow, error) {
 	rows, err := q.db.Query(ctx, listToolsetSummariesByIDs, arg.ToolsetIds, arg.OrganizationID, arg.ProjectIds)
 	if err != nil {
@@ -1387,9 +1999,11 @@ func (q *Queries) ListToolsetSummariesByIDs(ctx context.Context, arg ListToolset
 			&i.ID,
 			&i.Slug,
 			&i.Name,
+			&i.Description,
 			&i.ToolSelectionMode,
 			&i.ExternalOauthServerID,
 			&i.ToolCount,
+			&i.PlatformToolUrns,
 			&i.ExternalMcpSlugs,
 			&i.ExternalMcpProxyOnly,
 			&i.RegistrySpecifier,
@@ -1441,8 +2055,50 @@ func (q *Queries) LockLiveMCPServersInOrganization(ctx context.Context, arg Lock
 	return items, nil
 }
 
+const lockLiveRemoteMCPSource = `-- name: LockLiveRemoteMCPSource :one
+SELECT TRUE
+FROM remote_mcp_servers
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockLiveRemoteMCPSourceParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LockLiveRemoteMCPSource(ctx context.Context, arg LockLiveRemoteMCPSourceParams) (bool, error) {
+	row := q.db.QueryRow(ctx, lockLiveRemoteMCPSource, arg.ID, arg.ProjectID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const lockLiveTunneledMCPSource = `-- name: LockLiveTunneledMCPSource :one
+SELECT TRUE
+FROM tunneled_mcp_servers
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockLiveTunneledMCPSourceParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LockLiveTunneledMCPSource(ctx context.Context, arg LockLiveTunneledMCPSourceParams) (bool, error) {
+	row := q.db.QueryRow(ctx, lockLiveTunneledMCPSource, arg.ID, arg.ProjectID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const lockMCPServerByIDAndProjectID = `-- name: LockMCPServerByIDAndProjectID :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 FOR UPDATE
@@ -1468,9 +2124,11 @@ func (q *Queries) LockMCPServerByIDAndProjectID(ctx context.Context, arg LockMCP
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1498,7 +2156,7 @@ func (q *Queries) LockMCPServerToolMetadataWrite(ctx context.Context, mcpServerI
 }
 
 const lockMCPServersByIDs = `-- name: LockMCPServersByIDs :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = $1
   AND id = ANY($2::uuid[])
@@ -1533,9 +2191,11 @@ func (q *Queries) LockMCPServersByIDs(ctx context.Context, arg LockMCPServersByI
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
+			&i.BuiltinBackend,
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.RequiresUpstreamAuth,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1573,12 +2233,43 @@ WITH resolved AS (
            ON i.id = c.remote_session_issuer_id
           AND i.deleted IS FALSE
     GROUP BY input.user_session_issuer_id
+), associated AS (
+    SELECT server.id,
+           resolved.remote_session_issuer_id AS resolved_issuer_id,
+           ARRAY(
+               SELECT DISTINCT c.remote_session_issuer_id
+               FROM mcp_server_remote_session_clients AS a
+               JOIN remote_session_clients AS c
+                 ON c.id = a.remote_session_client_id
+                AND c.deleted IS FALSE
+                AND (c.project_id = a.project_id
+                     OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+               JOIN remote_session_issuers AS provider
+                 ON provider.id = c.remote_session_issuer_id
+                AND provider.deleted IS FALSE
+                AND (provider.project_id = a.project_id
+                     OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+               WHERE a.mcp_server_id = server.id
+                 AND a.deleted IS FALSE
+           )::uuid[] AS association_provider_ids
+    FROM resolved
+    JOIN mcp_servers AS server
+      ON server.user_session_issuer_id = resolved.user_session_issuer_id
+     AND server.project_id = $1::uuid
+), derived AS (
+    -- Associations decide when there are any: one provider stamps it, several
+    -- leave it NULL. With none, the issuer's bindings decide.
+    SELECT id,
+           CASE WHEN cardinality(association_provider_ids) = 0 THEN resolved_issuer_id
+                WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1]
+           END AS remote_session_issuer_id
+    FROM associated
 )
 UPDATE mcp_servers AS s
-SET remote_session_issuer_id = resolved.remote_session_issuer_id,
+SET remote_session_issuer_id = derived.remote_session_issuer_id,
     updated_at = clock_timestamp()
-FROM resolved
-WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
+FROM derived
+WHERE s.id = derived.id
   AND s.project_id = $1::uuid
   -- Belt and suspenders on the caller's org/project pair agreeing.
   AND EXISTS (SELECT 1
@@ -1586,7 +2277,7 @@ WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
               WHERE p.id = s.project_id
                 AND p.organization_id = $2::text)
   AND s.deleted IS FALSE
-  AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id
+  AND s.remote_session_issuer_id IS DISTINCT FROM derived.remote_session_issuer_id
 `
 
 type ResyncMCPServerRemoteSessionIssuersParams struct {
@@ -1595,9 +2286,12 @@ type ResyncMCPServerRemoteSessionIssuersParams struct {
 	UserSessionIssuerIds []uuid.UUID
 }
 
-// Recomputes mcp_servers.remote_session_issuer_id from the live client
-// bindings on each named user session issuer. Exactly one distinct remote
-// issuer stamps it; none or several leave it NULL and readers fail closed.
+// Recomputes mcp_servers.remote_session_issuer_id for the servers on each named
+// user session issuer. A server with a live client association takes its one
+// provider, or NULL with several. A server with none falls back to the live
+// client bindings on its issuer: exactly one distinct remote issuer stamps it,
+// none or several leave it NULL and readers fail closed. The fallback only
+// feeds readers of this column and goes away with it.
 //
 // Best effort: runs post-commit outside the mutating transaction, so it takes
 // no advisory lock and a raced run merely leaves a stale value, which the
@@ -1612,13 +2306,32 @@ type ResyncMCPServerRemoteSessionIssuersParams struct {
 // pinned to the caller's own project — a foreign id derives no row and writes
 // nothing — and only that project's servers are written. Organization-level
 // clients of the caller's organization count toward the derivation, matching
-// what the attach surface permits.
+// what the attach surface permits. An association counts only through a live
+// client and provider visible to the association's own project, its
+// organization, or globally, the tiers the resolver admits; foreign keys pin
+// the association to the server's project and organization.
 func (q *Queries) ResyncMCPServerRemoteSessionIssuers(ctx context.Context, arg ResyncMCPServerRemoteSessionIssuersParams) (int64, error) {
 	result, err := q.db.Exec(ctx, resyncMCPServerRemoteSessionIssuers, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerIds)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setEMABindingGatewayIssuerFixture = `-- name: SetEMABindingGatewayIssuerFixture :exec
+UPDATE remote_session_ema_bindings SET user_session_issuer_id = $1
+WHERE remote_session_client_id = $2 AND project_id = $3
+`
+
+type SetEMABindingGatewayIssuerFixtureParams struct {
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+	ProjectID             uuid.UUID
+}
+
+func (q *Queries) SetEMABindingGatewayIssuerFixture(ctx context.Context, arg SetEMABindingGatewayIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, setEMABindingGatewayIssuerFixture, arg.UserSessionIssuerID, arg.RemoteSessionClientID, arg.ProjectID)
+	return err
 }
 
 const setMCPServerToolMetadata = `-- name: SetMCPServerToolMetadata :many
@@ -1767,6 +2480,56 @@ func (q *Queries) SetMCPServerToolMetadata(ctx context.Context, arg SetMCPServer
 	return items, nil
 }
 
+const summarizeMCPServerUsage = `-- name: SummarizeMCPServerUsage :one
+SELECT count(*)::bigint AS connection_count,
+       count(DISTINCT s.subject_urn)::bigint AS subject_count,
+       count(*) FILTER (WHERE s.resource IS NULL)::bigint AS issuer_scoped_count,
+       max(s.last_used_at)::timestamptz AS last_used_at
+FROM user_sessions AS s
+WHERE s.organization_id = $1::text
+  AND s.user_session_issuer_id = $2::uuid
+  AND s.deleted IS FALSE
+  AND s.refresh_expires_at > clock_timestamp()
+  AND (s.resource IS NULL
+       OR s.resource = ANY($3::text[])
+       OR substring(s.resource FROM '^https?://[^/]+(/.*)$') = ANY($4::text[]))
+`
+
+type SummarizeMCPServerUsageParams struct {
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+	Resources           []string
+	PlatformPaths       []string
+}
+
+type SummarizeMCPServerUsageRow struct {
+	ConnectionCount   int64
+	SubjectCount      int64
+	IssuerScopedCount int64
+	LastUsedAt        pgtype.Timestamptz
+}
+
+// Active sessions able to reach one MCP server: issued by its issuer and either
+// issuer-scoped (resource IS NULL) or bound to one of its addresses. Custom
+// domain addresses match by full URL; platform addresses match by path, since
+// the platform answers under several hosts.
+func (q *Queries) SummarizeMCPServerUsage(ctx context.Context, arg SummarizeMCPServerUsageParams) (SummarizeMCPServerUsageRow, error) {
+	row := q.db.QueryRow(ctx, summarizeMCPServerUsage,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.Resources,
+		arg.PlatformPaths,
+	)
+	var i SummarizeMCPServerUsageRow
+	err := row.Scan(
+		&i.ConnectionCount,
+		&i.SubjectCount,
+		&i.IssuerScopedCount,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
 const syncHostedMCPServer = `-- name: SyncHostedMCPServer :one
 UPDATE mcp_servers
 SET
@@ -1785,7 +2548,7 @@ WHERE id = $7
   AND project_id = $8
   AND toolset_id = $7
   AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 `
 
 type SyncHostedMCPServerParams struct {
@@ -1825,9 +2588,11 @@ func (q *Queries) SyncHostedMCPServer(ctx context.Context, arg SyncHostedMCPServ
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1842,37 +2607,46 @@ SET
     name = $1,
     slug = $2,
     environment_id = $3,
-    user_session_issuer_id = COALESCE($4, user_session_issuer_id),
-    remote_mcp_server_id = $5,
-    tunneled_mcp_server_id = $6,
-    toolset_id = $7,
-    unproxied_mcp_server_id = $8,
-    tool_variations_group_id = $9,
-    visibility = $10,
+    user_session_issuer_id = CASE
+        WHEN $4::boolean THEN NULL
+        ELSE COALESCE($5, user_session_issuer_id)
+    END,
+    -- Detaching the issuer clears the derived remote issuer, which no resync can reach.
+    remote_session_issuer_id = CASE
+        WHEN $4::boolean THEN NULL
+        ELSE remote_session_issuer_id
+    END,
+    remote_mcp_server_id = $6,
+    tunneled_mcp_server_id = $7,
+    toolset_id = $8,
+    unproxied_mcp_server_id = $9,
+    tool_variations_group_id = $10,
+    visibility = $11,
     network_access_mode = CASE
-        WHEN $11::boolean THEN $12
+        WHEN $12::boolean THEN $13
         ELSE network_access_mode
     END,
     updated_at = clock_timestamp()
-WHERE id = $13 AND project_id = $14 AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+WHERE id = $14 AND project_id = $15 AND deleted IS FALSE
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMCPServerParams struct {
-	Name                  pgtype.Text
-	Slug                  pgtype.Text
-	EnvironmentID         uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	TunneledMcpServerID   uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	UnproxiedMcpServerID  uuid.NullUUID
-	ToolVariationsGroupID uuid.NullUUID
-	Visibility            string
-	NetworkAccessModeSet  bool
-	NetworkAccessMode     pgtype.Text
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
+	Name                   pgtype.Text
+	Slug                   pgtype.Text
+	EnvironmentID          uuid.NullUUID
+	ClearUserSessionIssuer bool
+	UserSessionIssuerID    uuid.NullUUID
+	RemoteMcpServerID      uuid.NullUUID
+	TunneledMcpServerID    uuid.NullUUID
+	ToolsetID              uuid.NullUUID
+	UnproxiedMcpServerID   uuid.NullUUID
+	ToolVariationsGroupID  uuid.NullUUID
+	Visibility             string
+	NetworkAccessModeSet   bool
+	NetworkAccessMode      pgtype.Text
+	ID                     uuid.UUID
+	ProjectID              uuid.UUID
 }
 
 func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams) (McpServer, error) {
@@ -1880,6 +2654,7 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		arg.Name,
 		arg.Slug,
 		arg.EnvironmentID,
+		arg.ClearUserSessionIssuer,
 		arg.UserSessionIssuerID,
 		arg.RemoteMcpServerID,
 		arg.TunneledMcpServerID,
@@ -1905,15 +2680,41 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const updateMCPServerNetworkAccessMode = `-- name: UpdateMCPServerNetworkAccessMode :execrows
+UPDATE mcp_servers
+SET network_access_mode = $1,
+    updated_at = clock_timestamp()
+WHERE mcp_servers.id = $2
+  AND mcp_servers.project_id = $3
+  AND mcp_servers.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = mcp_servers.project_id AND p.deleted IS FALSE)
+`
+
+type UpdateMCPServerNetworkAccessModeParams struct {
+	NetworkAccessMode pgtype.Text
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+func (q *Queries) UpdateMCPServerNetworkAccessMode(ctx context.Context, arg UpdateMCPServerNetworkAccessModeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateMCPServerNetworkAccessMode, arg.NetworkAccessMode, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateMCPServerToolMetadata = `-- name: UpdateMCPServerToolMetadata :one

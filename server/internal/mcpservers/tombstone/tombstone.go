@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -17,6 +18,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/memberbindings"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -71,24 +73,31 @@ type Input struct {
 	ActorUserID    string
 	ActorEmail     *string
 
+	// ActorSystem audits a write with no user or agent behind it as system:<ActorSystem>.
+	ActorSystem string
+
 	// TracerProvider traces the risk policy cleanup the delete runs.
 	TracerProvider trace.TracerProvider
+
+	// Logger records the gateway bindings the delete removes or keeps.
+	Logger *slog.Logger
 }
 
 // Result is the tombstoned server, how many plugin attachments it lost, and
-// the risk policies deleted with it, whose results the caller cleans post-commit.
+// the risk policies deleted with it (results cleaned post-commit) or edited.
 type Result struct {
 	Server                repo.McpServer
 	DetachedPluginServers int
 	DeletedRiskPolicies   []uuid.UUID
+	RiskPolicyScopeEdits  []policylifecycle.ScopeEdit
 }
 
 // Tombstone soft-deletes a locked server and its attachments; the caller audits the server delete.
 func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked Locked, input Input) (Result, error) {
-	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !ActorPresent(ctx, input.ActorUserID) {
+	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.Logger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !hasActor(ctx, input) {
 		return Result{}, errors.New("invalid MCP server tombstone input")
 	}
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID)
+	actor := auditActor(ctx, input)
 	servers := repo.New(tx)
 
 	deleted, err := servers.DeleteMCPServer(ctx, repo.DeleteMCPServerParams{ID: locked.Server.ID, ProjectID: input.ProjectID})
@@ -98,7 +107,7 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 	if err := servers.DeleteAssistantMCPServersByMCPServer(ctx, repo.DeleteAssistantMCPServersByMCPServerParams{McpServerID: deleted.ID, ProjectID: input.ProjectID}); err != nil {
 		return Result{}, fmt.Errorf("detach assistant mcp servers: %w", err)
 	}
-	deletedPolicies, err := policylifecycle.NewCleaner(input.TracerProvider, auditLogger).SoftDeleteForMCPServer(ctx, tx, input.OrganizationID, input.ProjectID, deleted.ID, policylifecycle.Actor{
+	policyCleanup, err := policylifecycle.NewCleaner(input.TracerProvider, auditLogger).SoftDeleteForMCPServer(ctx, tx, input.OrganizationID, input.ProjectID, deleted.ID, policylifecycle.Actor{
 		Principal:   actor,
 		DisplayName: input.ActorEmail,
 		Slug:        nil,
@@ -143,6 +152,19 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 		return Result{}, fmt.Errorf("delete meta mcp memberships: %w", err)
 	}
 	for _, membership := range deletedMemberships {
+		// The membership bound the server's provider client to the gateway's
+		// issuer, so the deletion that ends the membership removes the binding.
+		if membership.MetaMcpServerUserSessionIssuerID.Valid {
+			gateway := memberbindings.Gateway{
+				ID:                  membership.MetaMcpServerID,
+				OrganizationID:      input.OrganizationID,
+				ProjectID:           input.ProjectID,
+				UserSessionIssuerID: membership.MetaMcpServerUserSessionIssuerID.UUID,
+			}
+			if err := memberbindings.DetachServerProvider(ctx, tx, input.Logger, gateway, deleted.ID); err != nil {
+				return Result{}, fmt.Errorf("unbind deleted member provider client: %w", err)
+			}
+		}
 		if err := auditLogger.LogMetaMcpMemberRemove(ctx, tx, audit.LogMetaMcpMemberEvent{
 			OrganizationID:   input.OrganizationID,
 			ProjectID:        input.ProjectID,
@@ -179,7 +201,22 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 		}
 	}
 
-	return Result{Server: deleted, DetachedPluginServers: len(detachedPluginServers), DeletedRiskPolicies: deletedPolicies}, nil
+	return Result{Server: deleted, DetachedPluginServers: len(detachedPluginServers), DeletedRiskPolicies: policyCleanup.Deleted, RiskPolicyScopeEdits: policyCleanup.ScopeEdits}, nil
+}
+
+func hasActor(ctx context.Context, input Input) bool {
+	return ActorPresent(ctx, input.ActorUserID) || input.ActorSystem != ""
+}
+
+// auditActor names the principal the audit logger records: an authenticated agent, the user, then system:<ActorSystem>.
+func auditActor(ctx context.Context, input Input) urn.Principal {
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
+		return actor
+	}
+	if input.ActorUserID == "" && input.ActorSystem != "" {
+		return urn.NewSystemPrincipal(input.ActorSystem)
+	}
+	return urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID)
 }
 
 // ActorPresent reports whether a write has an actor: a user id, or an agent

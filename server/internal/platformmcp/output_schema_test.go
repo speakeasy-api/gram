@@ -119,6 +119,7 @@ func TestFindAndGetMCPOutputSchemasAcceptPluginMemberships(t *testing.T) {
 		Version:          "v1",
 		Visibility:       "private",
 		EffectiveEnabled: true,
+		EnabledState:     "enabled",
 		Model:            "platform_managed",
 		BackendKind:      MCPBackendRemote,
 		UpstreamURL:      "https://mcp.example.test/platform",
@@ -136,15 +137,19 @@ func TestFindAndGetMCPOutputSchemasAcceptPluginMemberships(t *testing.T) {
 		DashboardPath: "/mcp/reviewed",
 	}
 
-	for name, output := range map[string]any{
-		"find_mcp": FindMCPOutput{MCPs: []MCP{item}, NextCursor: "next"},
-		"get_mcp":  item,
-	} {
-		encoded, err := json.Marshal(output)
-		require.NoError(t, err)
-		var decoded any
-		require.NoError(t, json.Unmarshal(encoded, &decoded))
-		require.NoErrorf(t, schemas[name].Validate(decoded), "%s: %s", name, encoded)
+	for _, state := range []string{"enabled", "disabled", "unknown"} {
+		item.EnabledState = state
+		item.EffectiveEnabled = state == "enabled"
+		for name, output := range map[string]any{
+			"find_mcp": FindMCPOutput{MCPs: []MCP{item}, NextCursor: "next"},
+			"get_mcp":  item,
+		} {
+			encoded, err := json.Marshal(output)
+			require.NoError(t, err)
+			var decoded any
+			require.NoError(t, json.Unmarshal(encoded, &decoded))
+			require.NoErrorf(t, schemas[name].Validate(decoded), "%s: %s", name, encoded)
+		}
 	}
 }
 

@@ -1,7 +1,7 @@
 import React from "react";
 import { useStepper as useStepperContext } from "../stepper/use-stepper";
 import { StepContext } from "./use-step";
-import { StepState } from "./types";
+import type { StepState } from "./types";
 
 type StepContextProviderProps = {
   step: number;

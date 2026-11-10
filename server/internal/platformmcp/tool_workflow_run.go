@@ -39,12 +39,18 @@ func workflowRunToolResult(err error) (*mcp.CallToolResult, bool) {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
 }
 
+// Every call records a new workflow run.
+func recordWorkflowRunAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(false, false, false)
+}
+
 func registerWorkflowRunTool(reg *Registrar, workflowRun *WorkflowRunService) {
 	if !workflowRun.valid() {
 		addTool(reg, &mcp.Tool{
 			Name:        recordWorkflowRunToolName,
 			Title:       "Record Workflow Run",
 			Description: "Record what one run of a Speakeasy workflow handled. This is not switched on for your organization yet.",
+			Annotations: recordWorkflowRunAnnotations(),
 		}, ToolMeta{
 			Authorization: ExternalAuthorizationOrgAdmin,
 			Audiences:     bothAudiences,
@@ -57,6 +63,7 @@ func registerWorkflowRunTool(reg *Registrar, workflowRun *WorkflowRunService) {
 		Name:        recordWorkflowRunToolName,
 		Title:       "Record Workflow Run",
 		Description: recordWorkflowRunToolDescription,
+		Annotations: recordWorkflowRunAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		Audiences:     bothAudiences,

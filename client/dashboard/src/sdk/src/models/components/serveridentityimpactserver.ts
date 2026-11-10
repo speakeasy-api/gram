@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const ServerIdentityImpactServerImpact = {
 /**
  * repoint: its upstream authorization server changes to another single provider. clear: it is left with no single provider and loses its upstream. resignin: its upstream is unchanged but its client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.
  */
-export type ServerIdentityImpactServerImpact = ClosedEnum<
+export type ServerIdentityImpactServerImpact = OpenEnum<
   typeof ServerIdentityImpactServerImpact
 >;
 
@@ -35,7 +36,7 @@ export const ServerIdentityImpactServerKind = {
 /**
  * Whether this is an MCP server or a gateway.
  */
-export type ServerIdentityImpactServerKind = ClosedEnum<
+export type ServerIdentityImpactServerKind = OpenEnum<
   typeof ServerIdentityImpactServerKind
 >;
 
@@ -74,14 +75,16 @@ export type ServerIdentityImpactServer = {
 };
 
 /** @internal */
-export const ServerIdentityImpactServerImpact$inboundSchema: z.ZodMiniEnum<
-  typeof ServerIdentityImpactServerImpact
-> = z.enum(ServerIdentityImpactServerImpact);
+export const ServerIdentityImpactServerImpact$inboundSchema: z.ZodMiniType<
+  ServerIdentityImpactServerImpact,
+  unknown
+> = openEnums.inboundSchema(ServerIdentityImpactServerImpact);
 
 /** @internal */
-export const ServerIdentityImpactServerKind$inboundSchema: z.ZodMiniEnum<
-  typeof ServerIdentityImpactServerKind
-> = z.enum(ServerIdentityImpactServerKind);
+export const ServerIdentityImpactServerKind$inboundSchema: z.ZodMiniType<
+  ServerIdentityImpactServerKind,
+  unknown
+> = openEnums.inboundSchema(ServerIdentityImpactServerKind);
 
 /** @internal */
 export const ServerIdentityImpactServer$inboundSchema: z.ZodMiniType<

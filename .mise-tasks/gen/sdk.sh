@@ -25,7 +25,10 @@ generate() {
   # prompts to purge node_modules and aborts without a TTY; since the SDK was
   # inlined, gen.yaml sets compileCommand to `true` and no package manager is
   # invoked at all.
-  CI=true speakeasy-sdks run "$@" --skip-versioning --skip-upload-spec --minimal
+  # The pinned generator hardcodes Staticcheck 0.8.1, which cannot decode Go
+  # 1.27 export data. Run the Go compile/lint pipeline below with a compatible
+  # Staticcheck. Both inlined TypeScript targets already use compileCommand=true.
+  CI=true speakeasy-sdks run "$@" --skip-versioning --skip-upload-spec --skip-compile --minimal
 }
 
 check_inputs() {
@@ -69,4 +72,11 @@ if [[ "${usage_check:-}" == "true" ]]; then
   check_inputs
 else
   generate
+  (
+    cd hooks/sdk
+    go mod tidy
+    go build ./...
+    go test -run=XXX_SHOULD_NEVER_MATCH_XXX ./...
+    go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -checks=inherit,-SA1019,-SA5008 ./...
+  )
 fi

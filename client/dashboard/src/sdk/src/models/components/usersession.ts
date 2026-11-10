@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -29,7 +30,7 @@ export const ClientCredentialKind = {
 /**
  * What the client that established this session must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces. Null only when the session has no bound client, which is the case for API key and anonymous subjects; a bound client always resolves to one of the four.
  */
-export type ClientCredentialKind = ClosedEnum<typeof ClientCredentialKind>;
+export type ClientCredentialKind = OpenEnum<typeof ClientCredentialKind>;
 
 /**
  * An issued user_session record. refresh_token_hash is never returned.
@@ -53,7 +54,7 @@ export type UserSession = {
   clientTokenEndpointAuthMethod?: string | undefined;
   createdAt: Date;
   /**
-   * Terminal session expiry; ceiling on refresh_expires_at.
+   * Current access-token expiry. Sessions with a refresh grant may refresh before refresh_expires_at; workload and other sessions without a refresh grant cannot.
    */
   expiresAt: Date;
   /**
@@ -73,7 +74,7 @@ export type UserSession = {
    */
   lastUsedAt?: Date | undefined;
   /**
-   * Next refresh deadline.
+   * Inbound authorization deadline. Refresh is possible until this time only when the session has a refresh grant.
    */
   refreshExpiresAt: Date;
   /**
@@ -116,9 +117,10 @@ export type UserSession = {
 };
 
 /** @internal */
-export const ClientCredentialKind$inboundSchema: z.ZodMiniEnum<
-  typeof ClientCredentialKind
-> = z.enum(ClientCredentialKind);
+export const ClientCredentialKind$inboundSchema: z.ZodMiniType<
+  ClientCredentialKind,
+  unknown
+> = openEnums.inboundSchema(ClientCredentialKind);
 
 /** @internal */
 export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z

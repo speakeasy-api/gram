@@ -1,3 +1,5 @@
+// @vitest-environment node
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
@@ -7,6 +9,7 @@ import {
   allowDestructiveWrite,
   allowWrite,
   blockDestructiveWrite,
+  clearScopeWrite,
   narrowingSeed,
   narrowWrite,
   revokeRowWrite,
@@ -155,6 +158,46 @@ describe("revokeScopeWrite", () => {
         dispositions: [],
       },
     ]);
+  });
+});
+
+describe("clearScopeWrite", () => {
+  it("drops the row's own grant and block for that scope only", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "view" }),
+      entry({ principalUrn: "user:1", level: "blocked_view" }),
+      entry({ principalUrn: "user:1", level: "blocked_manage" }),
+    ]);
+
+    const write = clearScopeWrite(direct, rows[0]!, "view", "Acme Ops");
+
+    expect(write.entries).toEqual([
+      { principalUrn: "user:1", level: "blocked_manage" },
+    ]);
+    expect(write.message).toBe("Cleared Hana Sato's view setting on Acme Ops.");
+  });
+
+  it("writes no block in place of a grant something else still gives", () => {
+    // Unlike revoking, clearing leaves the line to whatever else decides it.
+    const { direct, rows } = state([
+      role({ level: "manage" }),
+      role({ appliesTo: "resource", level: "blocked_manage" }),
+    ]);
+
+    expect(clearScopeWrite(direct, rows[0]!, "manage").entries).toEqual([]);
+  });
+
+  it("says the row leaves the list when its last rule here is cleared", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "blocked_view" }),
+    ]);
+
+    const write = clearScopeWrite(direct, rows[0]!, "view", "Acme Ops");
+
+    expect(write.entries).toEqual([]);
+    expect(write.message).toBe(
+      "Cleared Hana Sato's view setting on Acme Ops. Hana Sato has nothing else set here and is no longer listed.",
+    );
   });
 });
 
@@ -1043,4 +1086,23 @@ it("keeps unannotated tools when an existing direct grant already overrides the 
       { name: "unannotated", annotations: [] },
     ]),
   ).toEqual(["search", "fetch", "unannotated"]);
+});
+
+it("refuses narrowing that would discard an unknown stored block", () => {
+  const { direct, rows } = state([
+    role(),
+    role({
+      appliesTo: "resource",
+      level: "blocked",
+      dispositions: [unrecognized("future_disposition")],
+    }),
+  ]);
+  expect(() =>
+    narrowWrite(
+      direct,
+      rows[0]!,
+      { tools: ["search", "fetch", "delete"], dispositions: [] },
+      catalog,
+    ),
+  ).toThrow("not supported");
 });

@@ -198,6 +198,18 @@ var allowList = map[string]bool{
 	"mistralai/mistral-medium-3.1":  true,
 }
 
+// AllowedModels returns a sorted copy of the models supported by the proxy.
+func AllowedModels() []string {
+	models := make([]string, 0, len(allowList))
+	for model, allowed := range allowList {
+		if allowed {
+			models = append(models, model)
+		}
+	}
+	slices.Sort(models)
+	return models
+}
+
 // IsModelAllowed checks if a model is in the allowlist
 func IsModelAllowed(model string) bool {
 	return allowList[model]

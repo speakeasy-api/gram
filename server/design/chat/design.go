@@ -28,6 +28,9 @@ var _ = Service("chat", func() {
 			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
 				Format(FormatUUID)
 			})
+			Attribute("agent_id", String, "Filter to chats produced by this agent (the agent principal recorded on the session at capture)", func() {
+				Format(FormatUUID)
+			})
 			Attribute("source_kind", String, "When set with assistant_id, list only that assistant's threads whose source_kind matches this value (e.g. 'setup' for onboarding threads). Empty for no filter.")
 			Attribute("exclude_source_kind", String, "When set with assistant_id, exclude that assistant's threads whose source_kind matches this value (e.g. 'setup' to hide onboarding threads from runtime views). Empty for no filter.")
 			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
@@ -65,6 +68,9 @@ var _ = Service("chat", func() {
 				Enum("asc", "desc")
 				Default("desc")
 			})
+			Attribute("pinned_first", Boolean, "List pinned chats before unpinned ones, then apply sort_by and sort_order within each group", func() {
+				Default(false)
+			})
 		})
 
 		Result(ListChatsResult)
@@ -76,6 +82,7 @@ var _ = Service("chat", func() {
 			Param("user_id")
 			Param("source")
 			Param("assistant_id")
+			Param("agent_id")
 			Param("source_kind")
 			Param("exclude_source_kind")
 			Param("has_risk")
@@ -88,6 +95,7 @@ var _ = Service("chat", func() {
 			Param("offset")
 			Param("sort_by")
 			Param("sort_order")
+			Param("pinned_first")
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()
@@ -483,6 +491,44 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatSources", "type": "query"}`)
 	})
 
+	Method("countByUser", func() {
+		Description("Count agent sessions per user for a time range. Uses the same population and visibility scoping as listChats, so each user's count matches listChats filtered to that user and the total matches the unfiltered listChats total.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+			Attribute("from", String, "Count chats last active after this timestamp (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Count chats created before this timestamp (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("limit", Int, "Maximum number of users to return", func() {
+				Default(10)
+				Minimum(1)
+				Maximum(100)
+			})
+		})
+
+		Result(CountChatsByUserResult)
+
+		HTTP(func() {
+			GET("/rpc/chat.countByUser")
+			Param("from")
+			Param("to")
+			Param("limit")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "countChatsByUser")
+		Meta("openapi:extension:x-speakeasy-name-override", "countByUser")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CountChatsByUser", "type": "query"}`)
+	})
+
 	Method("listSessionLinks", func() {
 		Description("List session-lineage links touching the given chats (session portability). A link records that a session was moved to another harness; the child side is present when the continuation's session id was known at move time. Returns every link where a requested chat is either the parent or the child, honoring the same visibility scoping as listChats.")
 
@@ -571,6 +617,20 @@ var ListSourcesResult = Type("ListSourcesResult", func() {
 	Required("sources")
 })
 
+var ChatUserSessionCount = Type("ChatUserSessionCount", func() {
+	Attribute("user_id", String, "Speakeasy user ID. Empty for sessions with no Speakeasy user (external users, agent actors).")
+	Attribute("email", String, "The user's email, empty when unknown")
+	Attribute("display_name", String, "The user's display name, empty when unknown")
+	Attribute("count", Int, "Number of sessions; equals the chat.list total when filtered to this user")
+	Required("user_id", "email", "display_name", "count")
+})
+
+var CountChatsByUserResult = Type("CountChatsByUserResult", func() {
+	Attribute("users", ArrayOf(ChatUserSessionCount), "Users ranked by session count, highest first, truncated to the requested limit")
+	Attribute("total", Int, "Total sessions across all users; equals the unfiltered chat.list total for the same range")
+	Required("users", "total")
+})
+
 var ListChatsResult = Type("ListChatsResult", func() {
 	Attribute("chats", ArrayOf(ChatOverview), "The list of chats")
 	Attribute("total", Int, "Total number of chats (before pagination)")
@@ -616,6 +676,8 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("assistant_id", String, "The ID of the assistant that produced this chat, if any")
 	Attribute("assistant_name", String, "The name of the assistant that produced this chat, if any")
 	Attribute("assistant_agent_id", String, "The ID of the agent the assistant acts as, when the assistant has a dedicated agent identity")
+	Attribute("agent_id", String, "The ID of the agent that produced this session, recorded from the authenticated actor at capture. Set for sessions an agent drove directly, such as a channel session, which has no assistant record.")
+	Attribute("agent_name", String, "The current name of the agent that produced this session. Absent when the agent has since been deleted, in which case agent_id is still reported.")
 	Attribute("num_messages", Int, "The number of messages in the chat")
 	Attribute("source", String, "The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)")
 	Attribute("originating_client", String, "The supported client that originated a chat routed through the source, when known")

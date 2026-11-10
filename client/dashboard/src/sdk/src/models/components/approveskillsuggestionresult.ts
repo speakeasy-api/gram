@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -24,7 +25,7 @@ export const ApproveSkillSuggestionResultOutcome = {
 /**
  * Whether the suggestion created a version, created one and stayed open carrying its remaining changes, or was stale.
  */
-export type ApproveSkillSuggestionResultOutcome = ClosedEnum<
+export type ApproveSkillSuggestionResultOutcome = OpenEnum<
   typeof ApproveSkillSuggestionResultOutcome
 >;
 
@@ -47,9 +48,10 @@ export type ApproveSkillSuggestionResult = {
 };
 
 /** @internal */
-export const ApproveSkillSuggestionResultOutcome$inboundSchema: z.ZodMiniEnum<
-  typeof ApproveSkillSuggestionResultOutcome
-> = z.enum(ApproveSkillSuggestionResultOutcome);
+export const ApproveSkillSuggestionResultOutcome$inboundSchema: z.ZodMiniType<
+  ApproveSkillSuggestionResultOutcome,
+  unknown
+> = openEnums.inboundSchema(ApproveSkillSuggestionResultOutcome);
 
 /** @internal */
 export const ApproveSkillSuggestionResult$inboundSchema: z.ZodMiniType<

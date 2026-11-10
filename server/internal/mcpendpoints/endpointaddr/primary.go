@@ -65,10 +65,10 @@ func EndpointURL(endpoint *repo.McpEndpoint, domain string, serverURL string) (s
 // PrimaryEndpointURL resolves a server's primary addressable endpoint to its
 // public URL; "" when the server has none.
 func PrimaryEndpointURL(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, mcpServerID uuid.UUID, serverURL string) (string, error) {
-	rows, err := repo.New(db).ListAddressableMCPEndpointsByMCPServerID(ctx, repo.ListAddressableMCPEndpointsByMCPServerIDParams{
+	rows, err := repo.New(db).ListAddressableMCPEndpointsByMCPServerIDs(ctx, repo.ListAddressableMCPEndpointsByMCPServerIDsParams{
 		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		McpServerID:    mcpServerID,
+		ProjectIds:     []uuid.UUID{projectID},
+		McpServerIds:   []uuid.UUID{mcpServerID},
 	})
 	if err != nil {
 		return "", fmt.Errorf("list addressable mcp server endpoints: %w", err)

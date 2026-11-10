@@ -64,6 +64,11 @@ func (p *Provisioner) ProvisionOrganizationAdminTx(ctx context.Context, tx pgx.T
 	if err := SeedSystemRoleGrantsTx(ctx, tx, organizationID); err != nil {
 		return err
 	}
+	// Only at creation: reconciling an existing organization must never
+	// restore a default its admins removed.
+	if err := SeedPersonalAuthClientDefaultTx(ctx, tx, organizationID); err != nil {
+		return err
+	}
 
 	rows, err := repo.New(tx).UpsertOrganizationRoleAssignment(ctx, repo.UpsertOrganizationRoleAssignmentParams{
 		OrganizationID:     organizationID,

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const EventLogEntryKind = {
 /**
  * Signal kind
  */
-export type EventLogEntryKind = ClosedEnum<typeof EventLogEntryKind>;
+export type EventLogEntryKind = OpenEnum<typeof EventLogEntryKind>;
 
 /**
  * A single ingested OpenTelemetry signal (log record or span) in the event feed
@@ -68,9 +69,10 @@ export type EventLogEntry = {
 };
 
 /** @internal */
-export const EventLogEntryKind$inboundSchema: z.ZodMiniEnum<
-  typeof EventLogEntryKind
-> = z.enum(EventLogEntryKind);
+export const EventLogEntryKind$inboundSchema: z.ZodMiniType<
+  EventLogEntryKind,
+  unknown
+> = openEnums.inboundSchema(EventLogEntryKind);
 
 /** @internal */
 export const EventLogEntry$inboundSchema: z.ZodMiniType<

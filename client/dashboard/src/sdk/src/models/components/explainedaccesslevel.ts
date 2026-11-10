@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -24,7 +25,7 @@ export const Level = {
 /**
  * The access being explained.
  */
-export type Level = ClosedEnum<typeof Level>;
+export type Level = OpenEnum<typeof Level>;
 
 /**
  * For use: whether every tool, only some, or none are reachable.
@@ -37,7 +38,7 @@ export const ToolAccess = {
 /**
  * For use: whether every tool, only some, or none are reachable.
  */
-export type ToolAccess = ClosedEnum<typeof ToolAccess>;
+export type ToolAccess = OpenEnum<typeof ToolAccess>;
 
 export type ExplainedAccessLevel = {
   /**
@@ -59,11 +60,12 @@ export type ExplainedAccessLevel = {
 };
 
 /** @internal */
-export const Level$inboundSchema: z.ZodMiniEnum<typeof Level> = z.enum(Level);
+export const Level$inboundSchema: z.ZodMiniType<Level, unknown> = openEnums
+  .inboundSchema(Level);
 
 /** @internal */
-export const ToolAccess$inboundSchema: z.ZodMiniEnum<typeof ToolAccess> = z
-  .enum(ToolAccess);
+export const ToolAccess$inboundSchema: z.ZodMiniType<ToolAccess, unknown> =
+  openEnums.inboundSchema(ToolAccess);
 
 /** @internal */
 export const ExplainedAccessLevel$inboundSchema: z.ZodMiniType<

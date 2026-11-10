@@ -24,6 +24,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -67,7 +69,7 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
 		return err
 	}
@@ -82,14 +84,28 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 // Generated client_secret is returned plaintext exactly once; only its
 // bcrypt hash is persisted in user_session_clients.client_secret_hash.
 func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
-	return s.serveRegister(w, r, endpoint.LogWith(s.logger).With(attr.SlogToolsetMCPSlug(endpoint.Slug)), endpoint.UserSessionIssuerID)
+	refused := func(ctx context.Context, code string) {
+		what := mcpconnectionattempts.CodeRegistrationInvalid
+		if code == "internal_error" {
+			what = mcpconnectionattempts.CodeInternalError
+		}
+		s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppDCR), mcpconnectionattempts.StepInboundAuthorize, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Detail(code))
+	}
+	return s.serveRegister(w, r, endpoint.LogWith(s.logger).With(attr.SlogToolsetMCPSlug(endpoint.Slug)), endpoint.UserSessionIssuerID, refused)
 }
 
 // serveRegister registers a client with the issuer. Clients belong to the
 // issuer, not to an MCP server, so per-endpoint and shared authorization
 // servers share it.
-func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID) error {
+// refused records registration metadata that parsed but was rejected, where a server is known.
+func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID, refused func(ctx context.Context, code string)) (retErr error) {
 	ctx := r.Context()
+	refusalRecorded := false
+	refuse := func(code, description string) error {
+		refused(ctx, code)
+		refusalRecorded = true
+		return writeDCRError(ctx, w, logger, code, description)
+	}
 
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		mediaType, _, err := mime.ParseMediaType(ct)
@@ -108,10 +124,19 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 		return writeDCRError(ctx, w, logger, "invalid_client_metadata", "request body is not valid JSON")
 	}
 
+	defer func() {
+		panicked := recover()
+		if (retErr != nil || panicked != nil) && !refusalRecorded && !errors.Is(ctx.Err(), context.Canceled) {
+			refused(ctx, "internal_error")
+		}
+		if panicked != nil {
+			panic(panicked)
+		}
+	}()
 	req.SetDefaults()
 	if err := req.Validate(usersessions.RegistrableGrantTypes, usersessions.SupportedAuthMethods); err != nil {
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
-			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
+			return refuse(oauthErr.Code, oauthErr.Description)
 		}
 		return oops.E(oops.CodeUnexpected, err, "validate DCR request").LogError(ctx, logger)
 	}
@@ -143,7 +168,7 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 		// Public clients prove PKCE possession; asymmetric clients prove
 		// possession of a key the server never holds. Neither gets a secret.
 	default:
-		return writeDCRError(ctx, w, logger, "invalid_client_metadata", fmt.Sprintf("unsupported token_endpoint_auth_method %q", req.TokenEndpointAuthMethod))
+		return refuse("invalid_client_metadata", fmt.Sprintf("unsupported token_endpoint_auth_method %q", req.TokenEndpointAuthMethod))
 	}
 
 	row, err := usersessions_repo.New(s.db).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{

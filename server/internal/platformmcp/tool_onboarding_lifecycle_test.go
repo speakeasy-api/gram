@@ -14,11 +14,11 @@ func TestIdentityProviderAttachmentOutputPresentsExactAuthorizationLink(t *testi
 		"project",
 		"registration",
 		CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: "https://provider.example"},
-		"https://dashboard.example/organization/projects/project/mcp/x/server/inspect",
+		"https://dashboard.example/organization/projects/project/mcp/server/inspect",
 	)
 
 	require.Equal(t, "open_authorization_url", output.NextAction)
-	require.Equal(t, "https://dashboard.example/organization/projects/project/mcp/x/server/inspect", output.AuthorizationURL)
+	require.Equal(t, "https://dashboard.example/organization/projects/project/mcp/server/inspect", output.AuthorizationURL)
 	require.Contains(t, output.Message, "Open this link to authorize it: "+output.AuthorizationURL)
 	require.Contains(t, output.Message, "Connect or Authorize")
 	require.NotContains(t, output.Message, "above")

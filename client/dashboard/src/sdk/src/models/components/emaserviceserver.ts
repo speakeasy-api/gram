@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const EMAServiceServerStatus = {
 /**
  * working: on, and the vendor accepted an assertion for this server from a provider that can vouch now. not_proven: on, with no such acceptance yet. needs_attention: on but blocked, or no provider can vouch for it right now.
  */
-export type EMAServiceServerStatus = ClosedEnum<typeof EMAServiceServerStatus>;
+export type EMAServiceServerStatus = OpenEnum<typeof EMAServiceServerStatus>;
 
 /**
  * One live MCP server whose identity chaining binding for the service has been turned on.
@@ -69,9 +70,10 @@ export type EMAServiceServer = {
 };
 
 /** @internal */
-export const EMAServiceServerStatus$inboundSchema: z.ZodMiniEnum<
-  typeof EMAServiceServerStatus
-> = z.enum(EMAServiceServerStatus);
+export const EMAServiceServerStatus$inboundSchema: z.ZodMiniType<
+  EMAServiceServerStatus,
+  unknown
+> = openEnums.inboundSchema(EMAServiceServerStatus);
 
 /** @internal */
 export const EMAServiceServer$inboundSchema: z.ZodMiniType<

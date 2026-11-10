@@ -76,6 +76,7 @@ func message() *conversationv1.MessageEvent {
 	m.SetMessageCreatedAt("2026-09-28T12:00:00.123456789Z")
 	m.SetOccurredAt("2026-10-01T09:00:00.987654321Z")
 	m.SetRole(conversationv1.MessageEvent_ROLE_USER)
+	m.SetCaptureKind("original")
 	return m
 }
 

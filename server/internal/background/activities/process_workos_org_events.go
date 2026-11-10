@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/signins"
@@ -479,6 +480,9 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 		if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, resolved.organizationID); err != nil {
 			return effects, fmt.Errorf("seed organization default entitlements for organization %q from workos event: %w", payload.ID, err)
 		}
+		if err := authz.SeedPersonalAuthClientDefaultTx(ctx, tx, resolved.organizationID); err != nil {
+			return effects, fmt.Errorf("seed auth client defaults for organization %q from workos event: %w", payload.ID, err)
+		}
 	default:
 		if err := updateOrganizationFromWorkOSEvent(ctx, repo, resolved.row, payload, event.ID); err != nil {
 			return effects, err
@@ -489,6 +493,16 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 	// Seeding is idempotent and preserves existing grants.
 	if err := authz.SeedSystemRoleGrantsTx(ctx, dbtx, resolved.organizationID); err != nil {
 		return effects, fmt.Errorf("provision access defaults for organization %q from workos event: %w", payload.ID, err)
+	}
+
+	if !resolved.isNew && resolved.row.Name != payload.Name && shouldApplyOrganizationEvent(resolved.row, payload, event.ID) {
+		tx, ok := dbtx.(pgx.Tx)
+		if !ok {
+			return effects, fmt.Errorf("lock renamed organization package content requires a transaction")
+		}
+		if err := plugins.LockOrganizationPluginPackageContent(ctx, tx, resolved.organizationID); err != nil {
+			return effects, fmt.Errorf("lock renamed organization package content: %w", err)
+		}
 	}
 
 	if resolved.needsExternalIDUpdate {

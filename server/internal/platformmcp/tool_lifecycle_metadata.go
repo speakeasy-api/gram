@@ -33,6 +33,7 @@ func registerLifecycleMetadataTool(reg *Registrar, registrations *RegistrationSe
 		Name:        "update_mcp_metadata",
 		Title:       "Rename an MCP Server",
 		Description: "Rename one fully set-up MCP server in a named project. Nothing else changes: not its provider configuration, not whether it is working, not which plugins carry it, and not who receives it.",
+		Annotations: writeAnnotations(false, true, false),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpdateMCPMetadataToolInput) (*mcp.CallToolResult, UpdateMCPMetadataToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {

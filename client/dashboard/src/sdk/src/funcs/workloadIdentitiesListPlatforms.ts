@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listPlatforms workloadIdentities
  *
  * @remarks
- * List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.
+ * List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.
  */
 export function workloadIdentitiesListPlatforms(
   client: GramCore,

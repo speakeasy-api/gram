@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const advanceTriggerThreadRouteCursor = `-- name: AdvanceTriggerThreadRouteCursor :exec
@@ -103,6 +104,77 @@ func (q *Queries) CreateDashboardTriggerInstance(ctx context.Context, arg Create
 		arg.TargetDisplay,
 		arg.ConfigJson,
 		arg.Status,
+	)
+	var i TriggerInstance
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.DefinitionSlug,
+		&i.Name,
+		&i.EnvironmentID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.TargetDisplay,
+		&i.ConfigJson,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createSpeakeasySlackTriggerInstance = `-- name: CreateSpeakeasySlackTriggerInstance :one
+INSERT INTO trigger_instances (
+    organization_id,
+    project_id,
+    definition_slug,
+    name,
+    environment_id,
+    target_kind,
+    target_ref,
+    target_display,
+    config_json,
+    status
+) VALUES (
+    $1,
+    $2,
+    'speakeasy_slack',
+    $3,
+    NULL,
+    $4,
+    $5,
+    $6,
+    $7,
+    'active'
+)
+ON CONFLICT (project_id, target_ref)
+  WHERE definition_slug = 'speakeasy_slack' AND status = 'active' AND deleted IS FALSE
+DO NOTHING
+RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateSpeakeasySlackTriggerInstanceParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	TargetKind     string
+	TargetRef      string
+	TargetDisplay  string
+	ConfigJson     []byte
+}
+
+func (q *Queries) CreateSpeakeasySlackTriggerInstance(ctx context.Context, arg CreateSpeakeasySlackTriggerInstanceParams) (TriggerInstance, error) {
+	row := q.db.QueryRow(ctx, createSpeakeasySlackTriggerInstance,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.TargetDisplay,
+		arg.ConfigJson,
 	)
 	var i TriggerInstance
 	err := row.Scan(
@@ -266,6 +338,47 @@ func (q *Queries) DeleteTriggerInstancesByTargetExceptDefinition(ctx context.Con
 	return err
 }
 
+const getSpeakeasySlackTriggerInstance = `-- name: GetSpeakeasySlackTriggerInstance :one
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+FROM trigger_instances
+WHERE project_id = $1
+  AND definition_slug = 'speakeasy_slack'
+  AND target_kind = $2
+  AND target_ref = $3
+  AND status = 'active'
+  AND deleted IS FALSE
+LIMIT 1
+`
+
+type GetSpeakeasySlackTriggerInstanceParams struct {
+	ProjectID  uuid.UUID
+	TargetKind string
+	TargetRef  string
+}
+
+func (q *Queries) GetSpeakeasySlackTriggerInstance(ctx context.Context, arg GetSpeakeasySlackTriggerInstanceParams) (TriggerInstance, error) {
+	row := q.db.QueryRow(ctx, getSpeakeasySlackTriggerInstance, arg.ProjectID, arg.TargetKind, arg.TargetRef)
+	var i TriggerInstance
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.DefinitionSlug,
+		&i.Name,
+		&i.EnvironmentID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.TargetDisplay,
+		&i.ConfigJson,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getTriggerInstanceByID = `-- name: GetTriggerInstanceByID :one
 SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
@@ -409,6 +522,35 @@ func (q *Queries) GetTriggerThreadRoute(ctx context.Context, arg GetTriggerThrea
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getWakeWorkloadSession = `-- name: GetWakeWorkloadSession :one
+SELECT id
+FROM user_sessions
+WHERE jti = $1 AND subject_urn = $2
+  AND organization_id = $3
+  AND (project_id = $4 OR project_id IS NULL)
+  AND deleted IS FALSE AND expires_at > clock_timestamp()
+`
+
+type GetWakeWorkloadSessionParams struct {
+	Jti            string
+	SubjectUrn     urn.SessionSubject
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+}
+
+// Recheck the authenticated session inside the wake transaction.
+func (q *Queries) GetWakeWorkloadSession(ctx context.Context, arg GetWakeWorkloadSessionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getWakeWorkloadSession,
+		arg.Jti,
+		arg.SubjectUrn,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listActiveTriggerInstancesByTarget = `-- name: ListActiveTriggerInstancesByTarget :many

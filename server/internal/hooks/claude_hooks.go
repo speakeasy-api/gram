@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -41,6 +42,47 @@ import (
 // payload.
 const decodeBodySampleLimit = 1024
 
+// maxHooksRequestBodyBytes bounds both the wire and the decompressed size of
+// every hooks request body. Hooks are reachable before authentication, so a
+// small gzip body must not be able to expand without limit in memory. It
+// matches the OTLP export limit of the otel ingest service, since the hooks
+// logs and metrics routes carry the same payloads.
+const maxHooksRequestBodyBytes = 20 * constants.MiB
+
+var errHooksRequestBodyTooLarge = errors.New("hooks request body too large")
+
+// readAtMost reads r fully but never buffers more than limit+1 bytes,
+// returning errHooksRequestBodyTooLarge when r holds more than limit bytes.
+func readAtMost(r io.Reader, limit int64) ([]byte, error) {
+	b, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+	if int64(len(b)) > limit {
+		return nil, errHooksRequestBodyTooLarge
+	}
+	return b, nil
+}
+
+// hooksErrorFormatter keeps Goa's default error body but answers
+// request_too_large with 413. The hooks design does not declare that error,
+// so Goa would otherwise encode it as 400.
+func hooksErrorFormatter(ctx context.Context, err error) goahttp.Statuser {
+	resp := goahttp.NewErrorResponse(ctx, err)
+	if se, ok := errors.AsType[*goa.ServiceError](err); ok && se.Name == string(oops.CodeRequestTooLarge) {
+		if er, ok := resp.(*goahttp.ErrorResponse); ok {
+			return &requestTooLargeResponse{ErrorResponse: er}
+		}
+	}
+	return resp
+}
+
+type requestTooLargeResponse struct {
+	*goahttp.ErrorResponse
+}
+
+func (*requestTooLargeResponse) StatusCode() int { return http.StatusRequestEntityTooLarge }
+
 const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call. Try restarting Claude, or running /reload-plugins."
 
 // Diagnostic codes appended to claudeShadowMCPMetadataUnavailableReason. The
@@ -63,6 +105,8 @@ type decoderFunc func(v any) error
 func (f decoderFunc) Decode(v any) error { return f(v) }
 
 // newHooksRequestDecoder returns a Goa request decoder factory that:
+//   - rejects bodies over the route's byte limit, on the wire and after
+//     decompression, without buffering more than the limit,
 //   - transparently decompresses gzip-encoded request bodies (the OTel
 //     Collector otlphttp exporter defaults to compression: gzip),
 //   - dispatches to formDecoder for x-www-form-urlencoded bodies,
@@ -75,18 +119,33 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 		contentType := r.Header.Get("Content-Type")
 		contentEncoding := r.Header.Get("Content-Encoding")
 		skillUpload := r.URL.Path == "/rpc/hooks.uploadSkillContent"
+		limit := int64(maxHooksRequestBodyBytes)
+		if skillUpload {
+			limit = maxSkillUploadRequestBodyBytes
+		}
 		logBody := func(body []byte) []byte {
 			if skillUpload {
 				return nil
 			}
 			return body
 		}
-		if skillUpload && r.Body != nil {
-			r.Body = http.MaxBytesReader(nil, r.Body, maxSkillUploadRequestBodyBytes)
+		tooLarge := func(what string) goahttp.Decoder {
+			err := oops.E(oops.CodeRequestTooLarge, errHooksRequestBodyTooLarge, "hooks request %s exceeds %d bytes", what, limit).AsGoa(ctx)
+			return decoderFunc(func(_ any) error {
+				logDecodeFailure(ctx, logger, err, nil, contentType, contentEncoding)
+				return err //nolint:wrapcheck // Goa keeps the 413 status only for an unwrapped service error.
+			})
 		}
 
-		raw, err := io.ReadAll(r.Body)
+		if r.ContentLength > limit {
+			_ = r.Body.Close()
+			return tooLarge("body")
+		}
+		raw, err := readAtMost(r.Body, limit)
 		_ = r.Body.Close()
+		if errors.Is(err, errHooksRequestBodyTooLarge) {
+			return tooLarge("body")
+		}
 		if err != nil {
 			wrapped := fmt.Errorf("read hooks request body: %w", err)
 			return decoderFunc(func(_ any) error {
@@ -105,23 +164,15 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 					return wrapped
 				})
 			}
-			var reader io.Reader = gz
-			if skillUpload {
-				reader = io.LimitReader(gz, maxSkillUploadRequestBodyBytes+1)
-			}
-			decompressed, gerr := io.ReadAll(reader)
+			decompressed, gerr := readAtMost(gz, limit)
 			_ = gz.Close()
+			if errors.Is(gerr, errHooksRequestBodyTooLarge) {
+				return tooLarge("decompressed body")
+			}
 			if gerr != nil {
 				wrapped := fmt.Errorf("decompress gzip hooks request body: %w", gerr)
 				return decoderFunc(func(_ any) error {
 					logDecodeFailure(ctx, logger, wrapped, logBody(raw), contentType, contentEncoding)
-					return wrapped
-				})
-			}
-			if skillUpload && len(decompressed) > maxSkillUploadRequestBodyBytes {
-				wrapped := fmt.Errorf("decompressed skill content upload exceeds %d bytes", maxSkillUploadRequestBodyBytes)
-				return decoderFunc(func(_ any) error {
-					logDecodeFailure(ctx, logger, wrapped, nil, contentType, contentEncoding)
 					return wrapped
 				})
 			}
@@ -242,7 +293,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
 	if token := pluginDeviceAgentToken(payload.DeviceAgentToken); token != "" {
@@ -339,35 +390,41 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		return makeHookResult(payload.HookEventName), nil
 	}
 
-	// Route to appropriate handler based on hook type
-	var (
-		result *gen.ClaudeHookResult
-	)
+	result, postureOutcome, err := s.decideClaudeHookWithinBudget(ctx, logger, start, hookEvent, payload.HookEventName)
+	if postureOutcome != "" {
+		outcome = postureOutcome
+	}
+	return result, err
+}
+
+// dispatchClaudeHookEvent routes a normalized Claude hook event to its handler.
+// It runs off the request goroutine, so it recovers a handler panic and
+// returns errHandlerPanicked.
+func (s *Service) dispatchClaudeHookEvent(ctx context.Context, logger *slog.Logger, hookEvent any, hookEventName string) (res *gen.ClaudeHookResult, err error) {
+	defer recoverDetachedPanic(ctx, logger, &err)
 	switch ev := hookEvent.(type) {
 	case *hookevents.SessionStart:
-		result, err = s.handleSessionStart(ctx, ev)
+		return s.handleSessionStart(ctx, ev)
 	case *hookevents.ConfigChange:
-		result, err = s.handleConfigChange(ctx, ev)
+		return s.handleConfigChange(ctx, ev)
 	case *hookevents.BeforeToolUse:
-		result, err = s.handlePreToolUse(ctx, ev)
+		return s.handlePreToolUse(ctx, ev)
 	case *hookevents.AfterToolUse:
-		result, err = s.handlePostToolUse(ctx, ev)
+		return s.handlePostToolUse(ctx, ev)
 	case *hookevents.AfterToolUseFailure:
-		result, err = s.handlePostToolUseFailure(ctx, ev)
+		return s.handlePostToolUseFailure(ctx, ev)
 	case *hookevents.UserPromptSubmit:
-		result, err = s.handleUserPromptSubmit(ctx, ev)
+		return s.handleUserPromptSubmit(ctx, ev)
 	case *hookevents.Stop:
-		result, err = s.handleStop(ctx, ev)
+		return s.handleStop(ctx, ev)
 	case *hookevents.SessionEnd:
-		result, err = s.handleSessionEnd(ctx, ev)
+		return s.handleSessionEnd(ctx, ev)
 	case *hookevents.Notification:
-		result, err = s.handleNotification(ctx, ev)
+		return s.handleNotification(ctx, ev)
 	default:
-		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
-		result = makeHookResult(payload.HookEventName)
+		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", hookEventName))
+		return makeHookResult(hookEventName), nil
 	}
-
-	return result, err
 }
 
 func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (any, error) {
@@ -707,17 +764,12 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 		Scopes:         []string{},
 		RequiredScopes: []string{"hooks"},
 	}
-	ctx, err = s.auth.Authorize(ctx, projectSlug, projectScheme)
+	ctx, err = s.authorizeHooksProject(ctx, projectSlug, projectScheme)
 	if err != nil {
 		if isAgentActor(ctx) {
 			return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
 		}
 		return ctx, fmt.Errorf("authorize hook project slug: %w", err)
-	}
-	// The hooks grant may be bounded to one project, so it is checked only
-	// once the project slug has resolved.
-	if err := s.requireAgentHooksIngest(ctx); err != nil {
-		return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
 	}
 	return ctx, nil
 }
@@ -1467,7 +1519,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	serverPrefix string,
 	detail string,
 ) (uuid.UUID, uuid.UUID, bool) {
-	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
+	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) || isVerdictSuperseded(ctx) {
 		return uuid.Nil, uuid.Nil, false
 	}
 
@@ -1563,7 +1615,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 // gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
 // trace will surface as blocked regardless of which row arrives first.
 func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
-	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) {
+	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) || isVerdictSuperseded(ctx) {
 		return
 	}
 

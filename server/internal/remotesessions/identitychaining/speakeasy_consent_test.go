@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/signins"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -204,6 +205,27 @@ func TestSpeakeasyConsent_LegacySlotHeldByGrant(t *testing.T) {
 	require.EqualValues(t, 2, lf.calls.Load(), "a consent reload does not redeem again")
 }
 
+// Consent-time discovery calls the upstream with the credential, so a
+// recorded acceptance whose credential could not be stored never stands in
+// for one: discovery exchanges again and receives a real token.
+func TestSpeakeasyConsent_AcquireAfterUnstoredAcceptanceReturnsToken(t *testing.T) {
+	t.Parallel()
+	lf := newSpeakeasyLiveFixture(t)
+	lf.acquire(t, lf.newGrant(t, lf.signIn.ID), true)
+	other := lf.recordSignIn(t, uuid.NewString())
+	lf.consent(t, other.ID.UUID, true)
+	require.EqualValues(t, 2, lf.calls.Load(), "the held legacy slot leaves the acceptance unstored")
+
+	token, outcome := lf.chainer.AcquireConsent(t.Context(), lf.consentRequest(), other.ID.UUID)
+	lf.checkExchange()
+	require.True(t, outcome.Succeeded(), "%+v", outcome)
+	require.Equal(t, "live-downstream", token.Value())
+	require.EqualValues(t, 3, lf.calls.Load(), "discovery exchanges again rather than reusing a tokenless acceptance")
+
+	lf.consent(t, other.ID.UUID, false)
+	require.EqualValues(t, 3, lf.calls.Load(), "the outcome-only check still reuses the acceptance")
+}
+
 func TestSpeakeasyConsent_BelongsToItsSignIn(t *testing.T) {
 	t.Parallel()
 	lf := newSpeakeasyLiveFixture(t)
@@ -329,11 +351,26 @@ func TestSpeakeasyConsent_DenyRetiresPendingCredential(t *testing.T) {
 	t.Parallel()
 	lf := newSpeakeasyLiveFixture(t)
 	lf.consent(t, lf.signIn.ID.UUID, true)
-	require.NoError(t, lf.chainer.RetireConsentCredentials(t.Context(), lf.f.req.OrganizationID, lf.f.req.ProjectID, lf.f.req.UserSessionIssuerID, lf.f.req.UserID, lf.signIn.ID.UUID))
+	q := repo.New(lf.f.db)
+	otherProject, err := testrepo.New(lf.f.db).CreateProjectFixture(t.Context(), testrepo.CreateProjectFixtureParams{ID: uuid.New(), OrganizationID: lf.f.req.OrganizationID, Name: "Other project", Slug: "other-" + uuid.NewString()[:8]})
+	require.NoError(t, err)
+	pending := lf.f.credentials(t)
+	require.Len(t, pending, 1)
+	require.NoError(t, testrepo.New(lf.f.db).CopyConsentEMACredentialToProjectFixture(t.Context(), testrepo.CopyConsentEMACredentialToProjectFixtureParams{ID: pending[0].ID, OrganizationID: conv.ToPGText(lf.f.req.OrganizationID), ProjectID: otherProject}))
+	other, err := q.ListEMACredentialsFixture(t.Context(), uuid.NullUUID{UUID: otherProject, Valid: true})
+	require.NoError(t, err)
+	require.Len(t, other, 1)
+	require.False(t, other[0].Deleted)
+	require.NoError(t, lf.chainer.RetireConsentCredentials(t.Context(), lf.f.req.OrganizationID, lf.f.req.UserSessionIssuerID, lf.f.req.UserID, lf.signIn.ID.UUID))
 	for _, row := range lf.f.credentials(t) {
 		require.True(t, row.Deleted, "denied consent leaves no live credential")
 		require.False(t, row.AccessTokenEncrypted.Valid, "denied consent erases the ciphertext")
 	}
+	other, err = q.ListEMACredentialsFixture(t.Context(), uuid.NullUUID{UUID: otherProject, Valid: true})
+	require.NoError(t, err)
+	require.Len(t, other, 1)
+	require.True(t, other[0].Deleted, "Deny retires every member project's pending consent")
+	require.False(t, other[0].AccessTokenEncrypted.Valid)
 	lf.acquire(t, lf.newGrant(t, lf.signIn.ID), true)
 	require.EqualValues(t, 2, lf.calls.Load(), "nothing is left to adopt")
 }

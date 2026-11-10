@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
@@ -1217,7 +1218,8 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 // It probes the well-known locations from issuerProbeCandidates in order. The
 // first document carrying both an authorization_endpoint and a token_endpoint
 // is the primary; one same-issuer document of the other family then fills in
-// the members the primary omits. A 200 that parses but lacks those endpoints
+// the members the primary omits, except RFC 9207 iss support, which only the
+// primary decides. A 200 that parses but lacks those endpoints
 // is almost always a catch-all answering a speculative candidate, so it is
 // returned only when no candidate yields a usable document. A candidate that
 // fails transiently is unreadable: the run still succeeds when another
@@ -1264,8 +1266,8 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 	// documents, and several providers publish jwks_uri, claims_supported, and
 	// the ID token signing algorithms only in the OpenID one, so after the
 	// primary the other family is probed and one same-issuer document fills
-	// in what the primary left out. There are only two families, so the loop
-	// ends as soon as the second has contributed.
+	// in what the primary left out, except RFC 9207 iss support. There are
+	// only two families, so the loop ends as soon as the second has contributed.
 	var firstErr *discoveryError
 	var untrustedErr *untrustedDocumentError
 	var primary, fallback *rfc8414Document
@@ -1395,6 +1397,11 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 // even as false or empty, is kept: the primary document is authoritative for
 // flags such as CIMD support that Speakeasy acts on. Either side without a JSON
 // object leaves base unchanged.
+//
+// RFC 9207 iss support never comes from extra. A primary document that omits it
+// declares no support (RFC 9207 §3), and turning the flag on makes the login
+// callback reject every response without iss, so another document's claim
+// cannot enable that check.
 func mergeIssuerMetadata(base, extra rfc8414Document) rfc8414Document {
 	var baseMembers, extraMembers map[string]json.RawMessage
 	if err := json.Unmarshal(base.raw, &baseMembers); err != nil || baseMembers == nil {
@@ -1404,6 +1411,7 @@ func mergeIssuerMetadata(base, extra rfc8414Document) rfc8414Document {
 		return base
 	}
 	merged := maps.Clone(extraMembers)
+	delete(merged, oauthwire.MetadataAuthorizationResponseIssParameterSupported)
 	maps.Copy(merged, baseMembers)
 	if len(merged) == len(baseMembers) {
 		return base

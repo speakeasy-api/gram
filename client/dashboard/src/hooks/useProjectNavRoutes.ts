@@ -2,8 +2,9 @@ import { useMemo } from "react";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { AppRoute, useRoutes } from "@/routes";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { AppRoute } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
@@ -30,8 +31,7 @@ export interface ProjectNavRoute {
  * Single source of truth shared by the sidebar (`AppSidebar`) and the command
  * palette so the two never drift — the palette only lists pages a user can
  * actually reach from the nav, in the same order, behind the same scopes.
- * Honors the same feature flags the sidebar uses to gate Deployments,
- * Assistants, and demo pages.
+ * Honors the remaining feature flags that control navigation.
  *
  * The returned array is memoized so consumers can safely use it as a `useEffect`
  * dependency without re-running every render (this hook feeds the command
@@ -49,20 +49,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isSignalsIntelligenceEnabled =
     productFeatures.isSuccess &&
     productFeatures.data.signalsIntelligenceEnabled === true;
-  const userSessionsFlag = useFeatureFlag(FEATURE_FLAGS.userSessionsDashboard);
-  const assistantsFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
-  const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
-  const riskWatchdogFlag = useFeatureFlag(FEATURE_FLAGS.riskWatchdog);
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
-  // Assistants is opt-in: unavailable flags remain hidden.
-  const isAssistantsEnabled = assistantsFlag.status === "enabled";
-  // Deployments is opt-out: it remains visible unless PostHog explicitly
-  // resolves the flag to disabled.
-  const isDeploymentsPageEnabled = deploymentsPageFlag.status !== "disabled";
-  // Watchdog is opt-in like Assistants: unavailable flags remain hidden.
-  const isRiskWatchdogEnabled = riskWatchdogFlag.status === "enabled";
   // Explore is opt-in while it is dogfooded: the flag is released to the
   // organizations trying it, and everyone else never sees the page.
   const isExploreEnabled = exploreFlag.status === "enabled";
@@ -83,17 +72,16 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         scope: ["assistant:read"],
         projectId,
       },
-      { route: routes.identities, scope: observe },
-      { route: routes.agents, scope: [] },
-      ...(userSessionsFlag.status === "enabled"
-        ? [
-            {
-              route: routes.mcpSessions,
-              scope: read,
-              resourceId: projectId,
-            },
-          ]
-        : []),
+      // Two rosters, two entries: a person arrives from the identity
+      // provider, an agent is registered here. The bare identities URL
+      // redirects to the people.
+      { route: routes.identities.people, scope: observe },
+      { route: routes.identities.agents, scope: observe },
+      {
+        route: routes.mcpSessions,
+        scope: read,
+        resourceId: projectId,
+      },
       {
         route: routes.remoteIdentityProviders,
         scope: ["org:read", "org:admin"],
@@ -102,19 +90,13 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         route: routes.playground,
         scope: ["mcp:read", "mcp:write", "mcp:connect"],
       },
-      ...(isDeploymentsPageEnabled
-        ? [{ route: routes.deployments, scope: readWrite }]
-        : []),
+      { route: routes.deployments, scope: readWrite },
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
-      ...(isAssistantsEnabled
-        ? [
-            {
-              route: routes.assistants,
-              scope: ["assistant:read"] as Scope[],
-              projectId,
-            },
-          ]
-        : []),
+      {
+        route: routes.assistants,
+        scope: ["assistant:read"],
+        projectId,
+      },
       {
         route: routes.skills,
         scope: ["skill:read"],
@@ -122,9 +104,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
-      ...(isRiskWatchdogEnabled
-        ? [{ route: routes.watchdog, scope: read }]
-        : []),
+      { route: routes.watchdog, scope: ["org:admin"] as Scope[] },
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
       { route: routes.costs, scope: observe },
@@ -153,13 +133,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     ];
   }, [
     routes,
-    userSessionsFlag.status,
     projectId,
-    isAssistantsEnabled,
-    isDeploymentsPageEnabled,
     isExploreEnabled,
     isOrgMemoryEnabled,
-    isRiskWatchdogEnabled,
     isSignalsIntelligenceEnabled,
   ]);
 }

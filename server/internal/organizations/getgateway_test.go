@@ -27,6 +27,12 @@ func createGatewayIssuer(t *testing.T, ctx context.Context, ti *testInstance, or
 		SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
 	})
 	require.NoError(t, err)
+	settings := featuresrepo.New(ti.conn)
+	flag := featuresrepo.EnableFeatureParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureOrganizationGatewayDisabled)}
+	_, err = settings.EnableFeature(ctx, flag)
+	require.NoError(t, err)
+	_, err = settings.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams(flag))
+	require.NoError(t, err)
 }
 
 func TestService_GetGateway_Available(t *testing.T) {
@@ -57,7 +63,7 @@ func TestService_GetGateway_NoOrganizationIssuer(t *testing.T) {
 	require.False(t, res.Available)
 	require.Nil(t, res.URL)
 	require.NotNil(t, res.UnavailableReason)
-	require.Equal(t, "no_organization_issuer", *res.UnavailableReason)
+	require.Equal(t, "turned_off", *res.UnavailableReason)
 }
 
 func TestService_GetGateway_SeveralOrganizationIssuers(t *testing.T) {

@@ -84,7 +84,7 @@ func agentMarketplaceName(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	require.NoError(t, err)
 	view := mv.BuildAgentPluginsView(rows, func(token string) string {
 		return "https://app.getgram.ai/marketplace/" + token + ".git"
-	})
+	}, nil)
 	for _, marketplace := range view.Marketplaces {
 		if strings.HasSuffix(marketplace.URL, "/"+connection.MarketplaceToken.String+".git") {
 			return marketplace.Name

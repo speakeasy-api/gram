@@ -53,8 +53,9 @@ func feedbackToolResult(err error) (*mcp.CallToolResult, bool) {
 func registerFeedbackTool(reg *Registrar, feedback *FeedbackService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "send_platform_mcp_feedback",
-		Title:       "Send Feedback About This Platform",
+		Title:       "Submit Platform Feedback",
 		Description: "Store one short feedback report about this platform for the team to read. Ask the user for consent before submitting. Constraints: never include credentials, URLs, identifiers, payloads, logs, headers, or attachments.",
+		Annotations: feedbackAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		Audiences:     bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SendPlatformMCPFeedbackToolInput) (*mcp.CallToolResult, SendPlatformMCPFeedbackToolOutput, error) {

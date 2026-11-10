@@ -2,10 +2,13 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const oauthState = vi.hoisted(() => ({ status: "configured" }));
+
 vi.mock("@/components/sources/sources-hooks", () => ({
-  useExternalMcpOAuthConfigStatus: () => "configured",
+  useExternalMcpOAuthConfigStatus: () => oauthState.status,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ activeOrganizationId: "org-1" }),
@@ -19,12 +22,8 @@ vi.mock("@/hooks/useMissingEnvironmentVariables", () => ({
 vi.mock("@/hooks/useToolsetUrl", () => ({
   useMcpUrl: () => ({ url: "https://gram.example/mcp/server" }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    environments: {
-      Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@gram/client/react-query/createEnvironment.js", () => ({
   useCreateEnvironmentMutation: () => ({ mutate: vi.fn(), isPending: false }),
@@ -60,7 +59,7 @@ vi.mock("@gram/client/react-query/updateEnvironment.js", () => ({
 vi.mock("./useEnvironmentVariables", () => ({
   useEnvironmentVariables: () => [],
 }));
-vi.mock("./MCPDetails", () => ({
+vi.mock("./PageSection", () => ({
   PageSection: ({
     children,
     action,
@@ -73,6 +72,8 @@ vi.mock("./MCPDetails", () => ({
       {children}
     </section>
   ),
+}));
+vi.mock("./OAuthDetailsModal", () => ({
   OAuthDetailsModal: ({
     isOpen,
     onManageMetadata,
@@ -83,6 +84,8 @@ vi.mock("./MCPDetails", () => ({
     isOpen ? (
       <button onClick={onManageMetadata}>Manage metadata source</button>
     ) : null,
+}));
+vi.mock("./oauth-wizard", () => ({
   ConnectOAuthModal: ({
     isOpen,
     existingConfig,
@@ -104,9 +107,27 @@ vi.mock(
   }),
 );
 
+vi.mock(
+  "./x/tabs/settings/sections/authentication/AuthenticationSection",
+  () => ({
+    AuthenticationSectionBody: ({
+      additionalSetupAction,
+    }: {
+      additionalSetupAction?: ReactNode;
+    }) => (
+      <div data-testid="authentication-section-body">
+        {additionalSetupAction}
+      </div>
+    ),
+  }),
+);
+
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  oauthState.status = "configured";
+});
 
 describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
   it("renders the eligible recommendation and opens its review entry point", () => {
@@ -128,6 +149,7 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
           <MCPAuthenticationTab toolset={toolset} />
         </TooltipProvider>
       </QueryClientProvider>,
+      { wrapper: MemoryRouter },
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Review update" }));
@@ -156,6 +178,7 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
           <MCPAuthenticationTab toolset={toolset} />
         </TooltipProvider>
       </QueryClientProvider>,
+      { wrapper: MemoryRouter },
     );
 
     expect(screen.getByRole("button", { name: "Manage" })).toBeTruthy();
@@ -180,6 +203,7 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
           <MCPAuthenticationTab toolset={toolset} />
         </TooltipProvider>
       </QueryClientProvider>,
+      { wrapper: MemoryRouter },
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));
@@ -191,4 +215,43 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
       "https://current.example.com",
     );
   });
+});
+
+describe("unknown external MCP authentication", () => {
+  it.each([0, 1])(
+    "preserves uncertainty with %i advertised OAuth flows",
+    (oauth2SecurityCount) => {
+      oauthState.status = "unknown";
+      const toolset = {
+        slug: "server",
+        mcpSlug: "server",
+        mcpEnabled: true,
+        mcpIsPublic: true,
+        oauthEnablementMetadata: { oauth2SecurityCount },
+      } as unknown as Parameters<typeof MCPAuthenticationTab>[0]["toolset"];
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <TooltipProvider>
+            <MCPAuthenticationTab toolset={toolset} />
+          </TooltipProvider>
+        </QueryClientProvider>,
+        { wrapper: MemoryRouter },
+      );
+      expect(
+        screen.getByText("Upstream authentication requirements are unknown"),
+      ).toBeTruthy();
+      expect(screen.queryByText("OAuth is not applicable")).toBeNull();
+      expect(screen.getByTestId("authentication-section-body")).toBeTruthy();
+      const setup = screen.queryByRole("button", {
+        name: "Configure External OAuth",
+      });
+      if (oauth2SecurityCount > 0) {
+        expect(setup).toBeTruthy();
+        fireEvent.click(setup!);
+        expect(screen.getByTestId("oauth-review-dialog")).toBeTruthy();
+      } else {
+        expect(setup).toBeNull();
+      }
+    },
+  );
 });

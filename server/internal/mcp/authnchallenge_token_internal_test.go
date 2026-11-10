@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -12,14 +13,19 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -34,6 +40,7 @@ func TestWriteRefreshTokenReplayRejectsDifferentCacheKey(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
 	err := service.writeRefreshTokenReplay(
 		t.Context(),
+		nil,
 		w,
 		r,
 		endpoint,
@@ -57,6 +64,7 @@ func TestWriteRefreshTokenReplayRejectsExpiredCredentials(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	err := service.writeRefreshTokenReplay(
 		t.Context(),
+		nil,
 		w,
 		r,
 		endpoint,
@@ -81,7 +89,7 @@ func TestWriteRefreshTokenReplayRecomputesRemainingLifetimes(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
 	err := service.writeRefreshTokenReplay(
-		t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none",
+		t.Context(), nil, w, r, endpoint, clientRow, "https://gram.example", "none",
 		"userSessionRefreshReplay:expected", replay, testenv.NewLogger(t),
 	)
 	require.NoError(t, err)
@@ -112,7 +120,7 @@ func TestWriteRefreshTokenReplayFailurePrecedesClientBinding(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
 	err = service.writeRefreshTokenReplay(
-		t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none",
+		t.Context(), nil, w, r, endpoint, clientRow, "https://gram.example", "none",
 		"userSessionRefreshReplay:expected", replay, testenv.NewLogger(t),
 	)
 	require.NoError(t, err)
@@ -133,7 +141,7 @@ func TestStoreRefreshTokenReplayFailureDoesNotOverwriteSuccess(t *testing.T) {
 	require.NoError(t, service.userSessionRefreshReplayCache.Store(t.Context(), replay))
 
 	stored := service.storeRefreshTokenReplayFailure(
-		t.Context(), replay.Key, clientRow.ID,
+		t.Context(), replay.Key, clientRow.ID, nil,
 		"refresh_token_unknown_or_already_used",
 		"refresh_token is unknown or already used", testenv.NewLogger(t),
 	)
@@ -159,6 +167,7 @@ func TestWriteRefreshTokenReplayRecordsServedEvent(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	err := service.writeRefreshTokenReplay(
 		t.Context(),
+		nil,
 		w,
 		r,
 		endpoint,
@@ -194,7 +203,7 @@ func newRefreshTokenReplayTestFixture(
 		McpServerID:          uuid.NullUUID{},
 		OrganizationID:       "org_test",
 		ProjectID:            uuid.New(),
-		RouteBase:            "mcp",
+		RouteBase:            mcproute.MCP,
 		Slug:                 "test",
 		ToolsetID:            uuid.NullUUID{},
 		UpstreamResource:     "",
@@ -229,9 +238,156 @@ func newRefreshTokenReplayTestFixture(
 	service.enc = enc
 	service.metrics = &mcpmetrics.Metrics{}
 	service.userSessionSigner = sessiontokens.NewSigner("test-jwt-secret")
-	service.replayLiveness = func(context.Context, *ResolvedMcpEndpoint, string) (string, bool) { return "", true }
+	service.replayLiveness = func(context.Context, *ResolvedMcpEndpoint, string) (string, bool, error) { return "", true, nil }
 	return service, endpoint, &clientRow, userSessionRefreshReplay{
 		Key:        payload.ReplayKey,
 		Ciphertext: ciphertext,
+		ttl:        0,
 	}
+}
+
+func TestRefreshTokenReplayTTL(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	require.Equal(t, time.Hour, refreshTokenReplayTTL(now.Add(time.Hour), now))
+	require.Equal(t, refreshTokenReplayGracePeriod, refreshTokenReplayTTL(now.Add(time.Second), now))
+	require.Equal(t, refreshTokenReplayGracePeriod, refreshTokenReplayTTL(time.Time{}, now))
+}
+
+func TestStoredRefreshTokenReplayOutlivesGracePeriod(t *testing.T) {
+	t.Parallel()
+
+	service, _, clientRow, _ := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	service.userSessionRefreshReplayCache = cache.NewTypedObjectCache[userSessionRefreshReplay](
+		testenv.NewLogger(t), cache.NewRedisCacheAdapter(client), cache.SuffixNone,
+	)
+
+	successKey := "userSessionRefreshReplay:success"
+	subject := urn.NewUserSubject("user-id")
+	require.NoError(t, service.storeRefreshTokenReplay(t.Context(), successKey, userSessionRefreshReplayPayload{
+		AccessExpiresAt:        time.Now().Add(time.Hour),
+		AudienceURN:            "toolset:test",
+		AuthorizationExpiresAt: time.Now().Add(time.Hour),
+		ClientID:               clientRow.ID,
+		EndpointIssuer:         "https://gram.example/mcp/test",
+		ErrorDescription:       "",
+		FailureReason:          "",
+		JTI:                    strings.Repeat("a", 43),
+		ReplayKey:              "",
+		Resource:               "",
+		Response: tokenResponse{
+			AccessToken:            "access-token",
+			TokenType:              "Bearer",
+			ExpiresIn:              3600,
+			RefreshToken:           "refresh-token",
+			AuthorizationExpiresIn: 3600,
+		},
+		Subject: &subject,
+	}))
+	failureKey := "userSessionRefreshReplay:failure"
+	require.True(t, service.storeRefreshTokenReplayFailure(
+		t.Context(), failureKey, clientRow.ID, nil,
+		"refresh_token_unknown_or_already_used",
+		"refresh_token is unknown or already used", testenv.NewLogger(t),
+	))
+
+	// A process that shares the credential presents the old refresh token
+	// well after the winner rotated it.
+	mr.FastForward(refreshTokenReplayGracePeriod + 10*time.Minute)
+
+	_, err := service.userSessionRefreshReplayCache.Get(t.Context(), successKey)
+	require.NoError(t, err, "a successful rotation stays replayable until its access token expires")
+	_, err = service.userSessionRefreshReplayCache.Get(t.Context(), failureKey)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "a cached failure expires after the grace period")
+
+	mr.FastForward(time.Hour)
+	_, err = service.userSessionRefreshReplayCache.Get(t.Context(), successKey)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "the replay ends when the successor access token expires")
+}
+
+func TestRefreshReplayLookupOutage(t *testing.T) {
+	t.Parallel()
+	service, endpoint, client, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	rec := mcpconnectionattemptstest.New(t)
+	endpoint.McpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	service.replayLiveness = func(context.Context, *ResolvedMcpEndpoint, string) (string, bool, error) {
+		return "refresh_token_replay_lookup_failed", false, errors.New("database unavailable")
+	}
+	tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundToken)
+	w := httptest.NewRecorder()
+	err := service.writeRefreshTokenReplay(t.Context(), tracker, w, httptest.NewRequest(http.MethodPost, "/token", nil), endpoint, client, "https://example.com", "none", "userSessionRefreshReplay:expected", replay, testenv.NewLogger(t))
+	tracker.Finish(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	require.Contains(t, w.Body.String(), "temporarily_unavailable")
+	require.NotContains(t, w.Body.String(), "invalid_grant")
+	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// closedPool fails every query with a store error, without a database.
+func closedPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	pool, err := pgxpool.New(t.Context(), "postgres://127.0.0.1:1/none")
+	require.NoError(t, err)
+	pool.Close()
+	return pool
+}
+
+func TestRefreshReplayResignLookupOutage(t *testing.T) {
+	t.Parallel()
+	service, endpoint, client, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	service.db = closedPool(t)
+	rec := mcpconnectionattemptstest.New(t)
+	endpoint.McpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundToken)
+	w := httptest.NewRecorder()
+	err := service.writeRefreshTokenReplay(t.Context(), tracker, w, httptest.NewRequest(http.MethodPost, "/token", nil), endpoint, client, "https://example.com", "none", "userSessionRefreshReplay:expected", replay, testenv.NewLogger(t))
+	tracker.Finish(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	require.Contains(t, w.Body.String(), "temporarily_unavailable")
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError)
+	require.Equal(t, refreshReplayLookupFailed, row.SubReason)
+	require.Len(t, rec.Rows(), 1)
+}
+
+func TestRefreshReplayResignLookupClientDisconnectRecordsNothing(t *testing.T) {
+	t.Parallel()
+	service, endpoint, client, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	service.db = closedPool(t)
+	rec := mcpconnectionattemptstest.New(t)
+	endpoint.McpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundToken)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	w := httptest.NewRecorder()
+	err := service.writeRefreshTokenReplay(ctx, tracker, w, httptest.NewRequest(http.MethodPost, "/token", nil), endpoint, client, "https://example.com", "none", "userSessionRefreshReplay:expected", replay, testenv.NewLogger(t))
+	tracker.Finish(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	rec.RequireNothing()
+}
+
+func TestRefreshReplayLookupClientDisconnectRecordsNothing(t *testing.T) {
+	t.Parallel()
+	service, endpoint, client, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	rec := mcpconnectionattemptstest.New(t)
+	endpoint.McpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	service.replayLiveness = func(context.Context, *ResolvedMcpEndpoint, string) (string, bool, error) {
+		return "refresh_token_replay_lookup_failed", false, context.Canceled
+	}
+	tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundToken)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	w := httptest.NewRecorder()
+	err := service.writeRefreshTokenReplay(ctx, tracker, w, httptest.NewRequest(http.MethodPost, "/token", nil), endpoint, client, "https://example.com", "none", "userSessionRefreshReplay:expected", replay, testenv.NewLogger(t))
+	tracker.Finish(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	rec.RequireNothing()
 }

@@ -12,6 +12,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activityCountSignalMessages = `-- name: ActivityCountSignalMessages :one
+SELECT count(*) FROM chat_messages
+WHERE project_id = $1 AND id = ANY($2::uuid[]) AND capture_kind = 'original'
+`
+
+type ActivityCountSignalMessagesParams struct {
+	ProjectID  uuid.NullUUID
+	MessageIds []uuid.UUID
+}
+
+func (q *Queries) ActivityCountSignalMessages(ctx context.Context, arg ActivityCountSignalMessagesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, activityCountSignalMessages, arg.ProjectID, arg.MessageIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const activityDeleteAnthropicInferenceConfig = `-- name: ActivityDeleteAnthropicInferenceConfig :exec
 DELETE FROM ai_integration_configs WHERE organization_id = $1 AND provider = 'anthropic_inference'
 `
@@ -31,6 +48,15 @@ DELETE FROM audit_logs WHERE organization_id = $1
 // rules, and Explore widgets. Every tenant identifier is a parameter.
 func (q *Queries) ActivityDeleteAuditLogs(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, activityDeleteAuditLogs, organizationID)
+	return err
+}
+
+const activityDeleteSecurityAuditLogs = `-- name: ActivityDeleteSecurityAuditLogs :exec
+DELETE FROM security_audit_logs WHERE organization_id = $1
+`
+
+func (q *Queries) ActivityDeleteSecurityAuditLogs(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, activityDeleteSecurityAuditLogs, organizationID)
 	return err
 }
 
@@ -70,7 +96,7 @@ func (q *Queries) ActivityInsertAnthropicInferenceConfig(ctx context.Context, ar
 
 const activityInsertAssistantThread = `-- name: ActivityInsertAssistantThread :exec
 INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, last_event_at)
-VALUES ($1, $2, $3, $4, $5, 'dashboard', now() - interval '38 minutes')
+VALUES ($1, $2, $3, $4, $5, $6, now() - interval '38 minutes')
 `
 
 type ActivityInsertAssistantThreadParams struct {
@@ -79,6 +105,7 @@ type ActivityInsertAssistantThreadParams struct {
 	ProjectID     uuid.UUID
 	CorrelationID string
 	ChatID        uuid.UUID
+	SourceKind    string
 }
 
 func (q *Queries) ActivityInsertAssistantThread(ctx context.Context, arg ActivityInsertAssistantThreadParams) error {
@@ -88,14 +115,16 @@ func (q *Queries) ActivityInsertAssistantThread(ctx context.Context, arg Activit
 		arg.ProjectID,
 		arg.CorrelationID,
 		arg.ChatID,
+		arg.SourceKind,
 	)
 	return err
 }
 
 const activityInsertChat = `-- name: ActivityInsertChat :exec
-INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, created_at, updated_at)
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, agent_id, created_at, updated_at)
 VALUES ($1, $2, $3, $4::text, $5::text, $6::text,
-        $7::text, now() - $8::interval, now() - $9::interval)
+        $7::text, $8::uuid,
+        now() - $9::interval, now() - $10::interval)
 `
 
 type ActivityInsertChatParams struct {
@@ -106,10 +135,13 @@ type ActivityInsertChatParams struct {
 	ExternalUserID string
 	Title          string
 	SessionSurface pgtype.Text
+	AgentID        uuid.NullUUID
 	CreatedAge     pgtype.Interval
 	UpdatedAge     pgtype.Interval
 }
 
+// agent_id names the Speakeasy agent principal that produced the session, as
+// hook capture stamps it. NULL for the human-driven sessions.
 func (q *Queries) ActivityInsertChat(ctx context.Context, arg ActivityInsertChatParams) error {
 	_, err := q.db.Exec(ctx, activityInsertChat,
 		arg.ID,
@@ -119,6 +151,7 @@ func (q *Queries) ActivityInsertChat(ctx context.Context, arg ActivityInsertChat
 		arg.ExternalUserID,
 		arg.Title,
 		arg.SessionSurface,
+		arg.AgentID,
 		arg.CreatedAge,
 		arg.UpdatedAge,
 	)
@@ -377,6 +410,75 @@ func (q *Queries) ActivityInsertQuarantineAuditLog(ctx context.Context, arg Acti
 		arg.RiskPolicyID,
 	)
 	return err
+}
+
+const activityInsertSecurityAuditLog = `-- name: ActivityInsertSecurityAuditLog :exec
+INSERT INTO security_audit_logs (id, organization_id, project_id, actor_id, actor_type,
+                                 actor_display_name, action, subject_id, subject_type,
+                                 subject_display_name, acting_surface, created_at)
+VALUES ($1, $2, $3::uuid, $4, 'agent',
+        (SELECT agents.name FROM agents
+         WHERE agents.organization_id = $2 AND agents.id::text = $4),
+        $5, $6, 'workload_admission', $7::text,
+        'system', now() - $8::interval)
+`
+
+type ActivityInsertSecurityAuditLogParams struct {
+	ID                 uuid.UUID
+	OrganizationID     string
+	ProjectID          uuid.UUID
+	ActorID            string
+	Action             string
+	SubjectID          string
+	SubjectDisplayName string
+	Age                pgtype.Interval
+}
+
+// Security entries: an agent's runtime admitting and withdrawing its own
+// workload identity on each start and teardown. They live in the security log
+// and show under Security activity on the audit log page.
+// The actor's name is read from the seeded agent, as the runtime records it.
+func (q *Queries) ActivityInsertSecurityAuditLog(ctx context.Context, arg ActivityInsertSecurityAuditLogParams) error {
+	_, err := q.db.Exec(ctx, activityInsertSecurityAuditLog,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ActorID,
+		arg.Action,
+		arg.SubjectID,
+		arg.SubjectDisplayName,
+		arg.Age,
+	)
+	return err
+}
+
+const activityInsertSignalMessage = `-- name: ActivityInsertSignalMessage :one
+INSERT INTO chat_messages (id, chat_id, project_id, role, content, source, model, capture_kind, created_at, risk_analyzed_at)
+VALUES ($1, $2, $3::uuid, $4, $5, 'claude-code', 'demo-model', 'original', $6, now())
+RETURNING seq
+`
+
+type ActivityInsertSignalMessageParams struct {
+	ID        uuid.UUID
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	Role      string
+	Content   string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ActivityInsertSignalMessage(ctx context.Context, arg ActivityInsertSignalMessageParams) (int64, error) {
+	row := q.db.QueryRow(ctx, activityInsertSignalMessage,
+		arg.ID,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Role,
+		arg.Content,
+		arg.CreatedAt,
+	)
+	var seq int64
+	err := row.Scan(&seq)
+	return seq, err
 }
 
 const activityInsertSpendRuleEvents = `-- name: ActivityInsertSpendRuleEvents :exec

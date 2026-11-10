@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -21,7 +22,7 @@ type StaffOAuth struct {
 	Clients              *StaffOAuthClients
 	Authorization        *StaffOAuthAuthorization
 	Tokens               *StaffOAuthTokens
-	Approval             *StaffProposalApproval
+	runner               *writeRunner
 	issuer               string
 	resource             string
 	protectedResourceURL string
@@ -29,8 +30,8 @@ type StaffOAuth struct {
 }
 
 // NewStaffOAuth builds the staff OAuth handlers. The zero WriteConfig keeps
-// every connection read-only: consent refuses admin:write unless at least one
-// write operation is switched on.
+// every connection read-only: consent refuses admin:write unless writes are
+// switched on.
 func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cache, verifier adminSessionVerifier, cipher *encryption.Client, signer *sessiontokens.Signer, writes WriteConfig, logger *slog.Logger) (*StaffOAuth, error) {
 	if baseURL == nil || baseURL.Scheme != "https" || baseURL.Host == "" || (baseURL.Path != "" && baseURL.Path != "/") || db == nil || challengeCache == nil || verifier == nil || cipher == nil || signer == nil {
 		return nil, errors.New("staff OAuth configuration is incomplete")
@@ -58,7 +59,7 @@ func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cach
 		Clients:              clients,
 		Authorization:        authorization,
 		Tokens:               NewStaffOAuthTokens(clientStore, postgresStaffGrantStore{db: db}, verifier, cipher, signer, issuer, resource),
-		Approval:             newStaffProposalApproval(newProposalStore(db, logger), authorization, challengeCache, writes),
+		runner:               newWriteRunner(db, logger),
 		issuer:               issuer,
 		resource:             resource,
 		protectedResourceURL: protectedResourceURL,
@@ -67,7 +68,7 @@ func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cach
 }
 
 func (s *StaffOAuth) scopesSupported() []string {
-	if s.writes.WritesAvailable() {
+	if s.writes.Enabled {
 		return []string{ScopeRead, ScopeWrite}
 	}
 	return []string{ScopeRead}
@@ -89,8 +90,11 @@ func (s *StaffOAuth) Attach(mux interface {
 	mux.Handle("GET", Path+"/connect", s.handler(s.Authorization.ConnectHandler()))
 	mux.Handle("POST", Path+"/connect", s.handler(s.Authorization.ConnectHandler()))
 	mux.Handle("POST", Path+"/token", s.handler(s.Tokens.TokenHandler()))
-	mux.Handle("GET", Path+"/proposals/{id}", s.handler(s.Approval.Handler()))
-	mux.Handle("POST", Path+"/proposals/{id}", s.handler(s.Approval.Handler()))
+	// The authorization error page inlines the shared consent stylesheet, whose
+	// @font-face urls resolve against this origin.
+	mux.Handle("GET", "/mcp/consent-fonts/{file}", func(w http.ResponseWriter, r *http.Request) {
+		_ = consentpage.WriteFont(w, r.PathValue("file"))
+	})
 }
 
 func (*StaffOAuth) handler(h http.Handler) http.HandlerFunc {

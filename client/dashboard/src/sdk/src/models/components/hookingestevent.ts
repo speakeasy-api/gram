@@ -23,6 +23,7 @@ export const HookIngestEventType = {
   UsageReported: "usage.reported",
   SkillActivated: "skill.activated",
   NotificationReported: "notification.reported",
+  ClientDeliveryFailed: "client.delivery_failed",
 } as const;
 /**
  * Canonical Speakeasy hook event type.

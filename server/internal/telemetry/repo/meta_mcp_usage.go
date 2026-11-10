@@ -3,10 +3,15 @@ package repo
 import (
 	"context"
 	"fmt"
+
+	"github.com/Masterminds/squirrel"
 )
 
 type GetMetaMCPServerUsageParams struct {
-	GramProjectID   string
+	// GramProjectIDs are the projects whose rows count. A gateway's own
+	// project for stored gateways; every project in the organization, plus
+	// the nil project its discovery rows carry, for an organization gateway.
+	GramProjectIDs  []string
 	MetaMCPServerID string
 	TimeStart       int64
 	TimeEnd         int64
@@ -46,15 +51,18 @@ func (q *Queries) GetMetaMCPServerUsage(ctx context.Context, arg GetMetaMCPServe
 		return usage, fmt.Errorf("meta mcp server id is required")
 	}
 
-	rows, err := q.conn.Query(ctx,
-		`SELECT tool_name, count() AS calls
-		 FROM telemetry_logs
-		 WHERE gram_project_id = ?
-		   AND meta_mcp_server_id = ?
-		   AND event_source = 'meta_discovery'
-		   AND time_unix_nano >= ? AND time_unix_nano <= ?
-		 GROUP BY tool_name`,
-		arg.GramProjectID, arg.MetaMCPServerID, arg.TimeStart, arg.TimeEnd)
+	funnelQuery, funnelArgs, err := sq.Select("tool_name", "count() AS calls").
+		From("telemetry_logs").
+		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
+		Where("meta_mcp_server_id = ?", arg.MetaMCPServerID).
+		Where("event_source = 'meta_discovery'").
+		Where("time_unix_nano >= ? AND time_unix_nano <= ?", arg.TimeStart, arg.TimeEnd).
+		GroupBy("tool_name").
+		ToSql()
+	if err != nil {
+		return usage, fmt.Errorf("build meta mcp discovery funnel query: %w", err)
+	}
+	rows, err := q.conn.Query(ctx, funnelQuery, funnelArgs...)
 	if err != nil {
 		return usage, fmt.Errorf("query meta mcp discovery funnel: %w", err)
 	}
@@ -78,19 +86,24 @@ func (q *Queries) GetMetaMCPServerUsage(ctx context.Context, arg GetMetaMCPServe
 		return usage, err
 	}
 
-	memberRows, err := q.conn.Query(ctx,
-		`SELECT mcp_server_id,
-		        count() AS tool_calls,
-		        countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS error_count,
-		        max(time_unix_nano) AS last_called_unix_nano
-		 FROM telemetry_logs
-		 WHERE gram_project_id = ?
-		   AND meta_mcp_server_id = ?
-		   AND event_source = 'tool_call'
-		   AND time_unix_nano >= ? AND time_unix_nano <= ?
-		 GROUP BY mcp_server_id
-		 ORDER BY tool_calls DESC`,
-		arg.GramProjectID, arg.MetaMCPServerID, arg.TimeStart, arg.TimeEnd)
+	memberQuery, memberArgs, err := sq.Select(
+		"mcp_server_id",
+		"count() AS tool_calls",
+		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS error_count",
+		"max(time_unix_nano) AS last_called_unix_nano",
+	).
+		From("telemetry_logs").
+		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
+		Where("meta_mcp_server_id = ?", arg.MetaMCPServerID).
+		Where("event_source = 'tool_call'").
+		Where("time_unix_nano >= ? AND time_unix_nano <= ?", arg.TimeStart, arg.TimeEnd).
+		GroupBy("mcp_server_id").
+		OrderBy("tool_calls DESC").
+		ToSql()
+	if err != nil {
+		return usage, fmt.Errorf("build meta mcp member usage query: %w", err)
+	}
+	memberRows, err := q.conn.Query(ctx, memberQuery, memberArgs...)
 	if err != nil {
 		return usage, fmt.Errorf("query meta mcp member usage: %w", err)
 	}

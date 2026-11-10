@@ -1,5 +1,6 @@
 import { useSessionAgents } from "@/hooks/useSessionAgents";
-import { AgentIcon, AgentLink } from "@/components/agent-link";
+import { AgentIcon } from "@/components/agent-link";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { IdentityLink } from "@/components/identity-link";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -270,6 +271,10 @@ function GroupIcon({
   group: ConnectionGroup;
   grouping: ConnectionGrouping;
 }): JSX.Element {
+  // An agent-identity row names itself through `ActingPrincipal`, which draws
+  // the agent's own face. A mark in this slot as well put two faces on one
+  // row, which reads as two actors.
+  if (group.identity?.agentId) return <span className="size-6 shrink-0" />;
   if (group.workload) return <WorkloadIcon />;
   if (grouping === "subject" && group.sessions[0]?.subjectType === "agent") {
     return <AgentIcon />;
@@ -307,6 +312,16 @@ function SubRowIcon({
 }): JSX.Element {
   if (!childIsPerson) return <ClientIcon label={label} />;
   if (session.workload) return <WorkloadIcon />;
+  // An agent subject is not a person. Under issuer, provider or client
+  // grouping the children are subjects, and an agent landed here with a
+  // person's avatar and initials struck from its own name.
+  if (session.subjectUrn.startsWith("agent:")) {
+    return (
+      <span className="text-muted-foreground flex size-6 items-center justify-center">
+        <AgentIcon />
+      </span>
+    );
+  }
   return (
     <PersonIcon label={label} photoUrl={session.subjectPhotoUrl ?? undefined} />
   );
@@ -432,6 +447,7 @@ function ConnectionGroupRow({
   grouping,
   now,
   canRevoke,
+  canViewRegistrations,
   onRevoked,
   project,
   killswitchContext,
@@ -449,6 +465,7 @@ function ConnectionGroupRow({
   /** Project the registrations belong to; see the list's own prop. */
   project?: { slug: string; id: string };
   canRevoke: boolean;
+  canViewRegistrations: boolean;
   onRevoked: () => void;
   killswitchContext?: ConnectionKillswitchContext;
   killswitchBadges: ReadonlyMap<string, KillswitchUserBadge>;
@@ -483,7 +500,7 @@ function ConnectionGroupRow({
     // list already holds, so this one is offered whether or not they can
     // revoke. It is the only action a read-only viewer gets, and without it
     // they would have no menu at all.
-    ...(group.clientId
+    ...(canViewRegistrations && group.clientId
       ? [
           {
             label: "View registration",
@@ -603,12 +620,17 @@ function ConnectionGroupRow({
 
           <span className="flex min-w-0 items-center gap-2">
             {group.identity?.agentId ? (
-              <AgentLink
-                agentId={group.identity.agentId}
-                className="text-foreground truncate text-sm font-medium"
-              >
-                {group.label}
-              </AgentLink>
+              // No authorizer: a UserSession carries its subject and nothing
+              // about who approved it, so this names the agent alone rather
+              // than guessing at a person.
+              <ActingPrincipal
+                agent={{ id: group.identity.agentId, name: group.label }}
+                // The group is built from this project's own sessions, so the
+                // agent is one the reader already reached.
+                linked
+                projectSlug={project?.slug}
+                className="text-foreground text-sm font-medium"
+              />
             ) : group.identity?.urn ? (
               <IdentityLink
                 identifier={{ urn: group.identity.urn }}
@@ -762,7 +784,7 @@ function ConnectionGroupRow({
 
       {/* The registration record is only handed to this list by the MCP server
           tab; elsewhere the sheet has nothing but the id and fetches the rest. */}
-      {group.clientId && detailMounted ? (
+      {canViewRegistrations && group.clientId && detailMounted ? (
         <ClientDetailSheet
           clientId={group.clientId}
           client={group.client}
@@ -785,6 +807,7 @@ export function ConnectionsList({
   sessions: unresolvedSessions,
   grouping,
   canRevoke,
+  canViewRegistrations = true,
   onRevoked,
   clients,
   project,
@@ -794,6 +817,12 @@ export function ConnectionsList({
   sessions: UserSession[];
   grouping: ConnectionGrouping;
   canRevoke: boolean;
+  /**
+   * Whether registration rows offer their detail sheet. Off for a listing that
+   * spans projects: the sheet reads the registration through the working
+   * project, which need not be the one it belongs to.
+   */
+  canViewRegistrations?: boolean;
   onRevoked: () => void;
   /**
    * Registrations for this scope. Used only by client grouping, to surface
@@ -863,6 +892,7 @@ export function ConnectionsList({
             grouping={grouping}
             now={now}
             canRevoke={canRevoke}
+            canViewRegistrations={canViewRegistrations}
             onRevoked={onRevoked}
             project={project}
             killswitchContext={

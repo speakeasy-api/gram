@@ -2,7 +2,6 @@ package platformmcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -11,15 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 )
-
-// ErrRiskFeatureNotEnabled marks a risk read whose capability is switched off
-// for the caller's organization. It is distinct from ErrUnavailable, which
-// means the deployment cannot answer right now.
-var ErrRiskFeatureNotEnabled = errors.New("platform mcp risk capability not enabled")
 
 // riskAnalysisWakeDelay is how long after new chat traffic the Watchdog
 // analysis is expected to start. It is the same value the server hands the
@@ -30,33 +23,29 @@ const riskAnalysisWakeDelay = analysisstatus.SignalCooldown
 // for one project. The analysis is event-driven rather than scheduled, so the
 // answer is the state of its most recent run.
 type RiskAnalysisStatusService struct {
-	logger        *slog.Logger
-	describer     analysisstatus.Describer
-	flags         feature.Provider
-	organizations OrganizationSlugResolver
-	projects      riskProjectResolver
-	now           func() time.Time
+	logger    *slog.Logger
+	describer analysisstatus.Describer
+	projects  riskProjectResolver
+	now       func() time.Time
 }
 
 // NewRiskAnalysisStatusService returns nil when the analysis run state cannot
 // be described in this deployment, so the registrar serves the tool as a stub
 // rather than reporting a made-up state.
-func NewRiskAnalysisStatusService(logger *slog.Logger, db *pgxpool.Pool, describer analysisstatus.Describer, flags feature.Provider, organizations OrganizationSlugResolver) *RiskAnalysisStatusService {
-	if logger == nil || db == nil || describer == nil || organizations == nil {
+func NewRiskAnalysisStatusService(logger *slog.Logger, db *pgxpool.Pool, describer analysisstatus.Describer) *RiskAnalysisStatusService {
+	if logger == nil || db == nil || describer == nil {
 		return nil
 	}
 	return &RiskAnalysisStatusService{
-		logger:        logger.With(attr.SlogComponent("platformmcp")),
-		describer:     describer,
-		flags:         flags,
-		organizations: organizations,
-		projects:      postgresRiskProjectResolver{queries: platformrepo.New(db)},
-		now:           time.Now,
+		logger:    logger.With(attr.SlogComponent("platformmcp")),
+		describer: describer,
+		projects:  postgresRiskProjectResolver{queries: platformrepo.New(db)},
+		now:       time.Now,
 	}
 }
 
 func (s *RiskAnalysisStatusService) valid() bool {
-	return s != nil && s.logger != nil && s.describer != nil && s.organizations != nil && s.projects != nil && s.now != nil
+	return s != nil && s.logger != nil && s.describer != nil && s.projects != nil && s.now != nil
 }
 
 type GetRiskAnalysisStatusInput struct {
@@ -80,9 +69,7 @@ type GetRiskAnalysisStatusOutput struct {
 	Explanation string `json:"explanation"`
 }
 
-// Get resolves the project, checks the Watchdog rollout flag for it, and
-// describes the analysis run state. Flag lookups that error or come back
-// indeterminate fail closed, matching the other risk capabilities.
+// Get resolves the project and describes its analysis run state.
 func (s *RiskAnalysisStatusService) Get(ctx context.Context, principal Principal, input GetRiskAnalysisStatusInput) (GetRiskAnalysisStatusOutput, error) {
 	if !s.valid() {
 		return GetRiskAnalysisStatusOutput{}, ErrUnavailable
@@ -90,20 +77,6 @@ func (s *RiskAnalysisStatusService) Get(ctx context.Context, principal Principal
 	project, err := s.projects.Resolve(ctx, principal.OrganizationID, input.ProjectID, input.ProjectSlug)
 	if err != nil {
 		return GetRiskAnalysisStatusOutput{}, fmt.Errorf("resolve risk analysis status project: %w", err)
-	}
-	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil {
-		return GetRiskAnalysisStatusOutput{}, fmt.Errorf("%w: resolve organization slug for risk analysis status: %w", ErrUnavailable, err)
-	}
-	if organizationSlug == "" {
-		return GetRiskAnalysisStatusOutput{}, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)
-	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagRiskWatchdog, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, project.Slug))
-	if err != nil {
-		return GetRiskAnalysisStatusOutput{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
-	}
-	if evaluation != feature.EvaluationEnabled {
-		return GetRiskAnalysisStatusOutput{}, ErrRiskFeatureNotEnabled
 	}
 	status, err := s.describer.Describe(ctx, project.ID)
 	if err != nil {

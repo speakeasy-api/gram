@@ -30,7 +30,7 @@ var _ = Service("auth", func() {
 		Payload(func() {
 			Attribute("code", String, "The auth code for authentication from the speakeasy system")
 			Attribute("state", String, "The opaque state string optionally provided during initialization.")
-			Required("code")
+			Attribute("error", String, "The identity provider error, when sign-in was not completed.")
 		})
 
 		Result(func() {
@@ -43,6 +43,7 @@ var _ = Service("auth", func() {
 		HTTP(func() {
 			GET("/rpc/auth.callback")
 			Param("code")
+			Param("error")
 			Param("state")
 
 			Response(StatusTemporaryRedirect, func() {
@@ -69,6 +70,17 @@ var _ = Service("auth", func() {
 			Attribute("org_name", String, "Optional organization name. When set, the organization is created for a new user during the auth callback.")
 			Attribute("email", String, "Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.")
 			Attribute("support_handoff", String, "Opaque, one-time organization support handoff. Never included in OAuth state.")
+			// Sign-up attribution. Present only from the sign-up page, which
+			// forwards the UTMs it was opened with and its analytics session so
+			// the server-side sign-up events can be attributed. Deliberately
+			// unvalidated here: values are trimmed and truncated in the handler,
+			// and a malformed one must never block a login.
+			Attribute("utm_source", String, "Optional sign-up attribution: UTM source.")
+			Attribute("utm_medium", String, "Optional sign-up attribution: UTM medium.")
+			Attribute("utm_campaign", String, "Optional sign-up attribution: UTM campaign.")
+			Attribute("utm_term", String, "Optional sign-up attribution: UTM term.")
+			Attribute("utm_content", String, "Optional sign-up attribution: UTM content.")
+			Attribute("analytics_session_id", String, "Optional sign-up attribution: the browser's product analytics session id.")
 		})
 
 		Result(func() {
@@ -86,6 +98,12 @@ var _ = Service("auth", func() {
 			// request logging middleware redacts it from logged URLs.
 			Param("email")
 			Param("support_handoff")
+			Param("utm_source")
+			Param("utm_medium")
+			Param("utm_campaign")
+			Param("utm_term")
+			Param("utm_content")
+			Param("analytics_session_id")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {
@@ -327,7 +345,7 @@ var _ = Service("auth", func() {
 	})
 
 	Method("transferIn", func() {
-		Description("Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.")
+		Description("Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host, unless the browser already holds a valid session here for the same user and start mode did not set replace_session; that session is then kept. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.")
 
 		NoSecurity()
 
@@ -335,12 +353,13 @@ var _ = Service("auth", func() {
 			Attribute("source_host", String, "Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)")
 			Attribute("code", String, "Callback mode: the opaque one-time transfer code from the source host's transferOut endpoint")
 			Attribute("redirect", String, "Optional URL path to land on once the session is established on this host")
+			Attribute("replace_session", Boolean, "Start mode: replace a session this browser already holds on this host for the same user. Without it, the callback keeps that session and its organization, so a stale source session cannot undo an organization switch made here. Set it right after switching organization on the source host.")
 		})
 
 		Result(func() {
 			Attribute("location", String, "The URL to redirect to: the source host's transferOut (start mode), the requested page (callback mode), or this host's login page when a check fails")
-			Attribute("session_token", String, "The new authentication session on this host. Set only when callback mode succeeds.")
-			Attribute("session_cookie", String, "The new authentication session on this host. Set only when callback mode succeeds.")
+			Attribute("session_token", String, "The new authentication session on this host. Set only when callback mode mints one.")
+			Attribute("session_cookie", String, "The new authentication session on this host. Set only when callback mode mints one.")
 			Required("location")
 		})
 
@@ -349,6 +368,7 @@ var _ = Service("auth", func() {
 			Param("source_host")
 			Param("code")
 			Param("redirect")
+			Param("replace_session")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {

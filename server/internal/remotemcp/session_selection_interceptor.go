@@ -11,6 +11,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
+// ToolNotApprovedMessage is the refusal for a tools/call outside the
+// session's tool selection.
+const ToolNotApprovedMessage = "tool is not approved for this session"
+
 // SessionSelectionInterceptor enforces a consent-screen session selection
 // on both sides of a proxied MCP conversation with one shared predicate: it
 // is a [proxy.ToolsListResponseInterceptor] that filters listings down to
@@ -151,7 +155,7 @@ func (i *SessionSelectionInterceptor) InterceptToolsListResponse(ctx context.Con
 	// Commit the filtered result before witnessing: a failed commit must
 	// never leave call authorization behind for a page that was not
 	// accepted.
-	if err := list.SetPrivateTools(allowed); err != nil {
+	if err := list.SetTools(allowed); err != nil {
 		return fmt.Errorf("commit session-filtered tools/list result: %w", err)
 	}
 
@@ -190,7 +194,7 @@ func (i *SessionSelectionInterceptor) InterceptToolsCallRequest(ctx context.Cont
 	}
 	return &proxy.RejectError{
 		Code:    proxy.RejectCodeInvalidRequest,
-		Message: "tool is not approved for this session",
+		Message: ToolNotApprovedMessage,
 		Data:    nil,
 	}
 }

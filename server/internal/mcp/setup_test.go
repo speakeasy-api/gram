@@ -2,9 +2,11 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"slices"
@@ -25,6 +27,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -67,6 +71,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
@@ -110,7 +115,7 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	principalCredentials *principalcredential.Issuer
-	service              *mcp.Service
+	service              *migratedService
 	conn                 *pgxpool.Pool
 	sessionManager       *sessions.Manager
 	serverURL            *url.URL
@@ -127,12 +132,105 @@ type testInstance struct {
 	// features is the injectable flag provider wired into the service; tests
 	// enable flag-gated behavior (e.g. the Platform MCP assistant toolset
 	// variant) with SetFlagVariant.
-	features         *feature.InMemory
+	features *feature.InMemory
+
+	// productFeatures writes organization entitlements such as Code Mode.
+	productFeatures  *productfeatures.Client
 	efficacySignaler *background.ThrottledSignaler
 	// clientCredentials serves self clients from the production minter;
 	// tests replace it to control the upstream credential.
 	clientCredentials *testClientCredentials
 	toolCallRecords   *toolCallRecorder
+	// remoteProxyManager builds the service's remote and tunnel proxies; tests
+	// that assert tunnel activity metrics install a collector on it.
+	remoteProxyManager *remotemcp.ProxyManager
+}
+
+// migratedService models an organization after the upstream OAuth migration:
+// every request entry point first runs the association and credential choice
+// backfills over the test database, as an operator runs them before serving
+// reads choices, so fixtures that write bindings, members and grants directly
+// are served as the migrated state they describe. Everything else is the
+// service itself.
+type migratedService struct {
+	*mcp.Service
+	conn *pgxpool.Pool
+	// manual leaves associations and choices to the test, for tests of how
+	// serving treats a missing or particular choice.
+	manual bool
+}
+
+// migrate is best effort: a test that breaks the database on purpose to
+// exercise a failure path sees the service meet the same broken database.
+func (s *migratedService) migrate(ctx context.Context) {
+	if s.manual {
+		return
+	}
+	ctx = context.WithoutCancel(ctx)
+	if _, err := associationbackfill.Run(ctx, s.conn, associationbackfill.Options{OrganizationID: "", Apply: true, PageSize: 0}); err != nil {
+		return
+	}
+	_, _ = selectionbackfill.Run(ctx, s.conn, selectionbackfill.Options{OrganizationID: "", Apply: true, PageSize: 0})
+}
+
+func (s *migratedService) ServePublic(w http.ResponseWriter, r *http.Request) error {
+	s.migrate(r.Context())
+	return s.Service.ServePublic(w, r) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) ServeOrganizationGateway(w http.ResponseWriter, r *http.Request) error {
+	s.migrate(r.Context())
+	return s.Service.ServeOrganizationGateway(w, r) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) ServeConsent(w http.ResponseWriter, r *http.Request, endpoint *mcp.ResolvedMcpEndpoint) error {
+	s.migrate(r.Context())
+	return s.Service.ServeConsent(w, r, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) ServeConsentAction(w http.ResponseWriter, r *http.Request, endpoint *mcp.ResolvedMcpEndpoint) error {
+	s.migrate(r.Context())
+	return s.Service.ServeConsentAction(w, r, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoint *mcp.ResolvedMcpEndpoint) error {
+	s.migrate(r.Context())
+	return s.Service.ServeConsentMCP(w, r, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) HandleToken(w http.ResponseWriter, r *http.Request) error {
+	s.migrate(r.Context())
+	return s.Service.HandleToken(w, r) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) HandleConsent(w http.ResponseWriter, r *http.Request) error {
+	s.migrate(r.Context())
+	return s.Service.HandleConsent(w, r) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) ApplyIssuerGate(ctx context.Context, w http.ResponseWriter, authToken, baseURL string, endpoint *mcp.ResolvedMcpEndpoint) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionPolicy, error) {
+	s.migrate(ctx)
+	return s.Service.ApplyIssuerGate(ctx, w, nil, authToken, baseURL, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) HandleToolsCall(ctx context.Context, inputs *mcp.McpInputs, toolName string, arguments json.RawMessage) (*mcp.ToolCallResult, error) {
+	s.migrate(ctx)
+	return s.Service.HandleToolsCall(ctx, inputs, toolName, arguments) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) SweepRemoteSessionRechecks(ctx context.Context) (int, error) {
+	s.migrate(ctx)
+	return s.Service.SweepRemoteSessionRechecks(ctx) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) VerifyRemoteGrant(ctx context.Context, grant remotesessions.RemoteGrant) time.Time {
+	s.migrate(ctx)
+	return s.Service.VerifyRemoteGrant(ctx, grant)
+}
+
+func (s *migratedService) VerifyRemoteGrantOn(ctx context.Context, endpoint *mcp.ResolvedMcpEndpoint, grant remotesessions.RemoteGrant) {
+	s.migrate(ctx)
+	s.Service.VerifyRemoteGrantOn(ctx, endpoint, grant)
 }
 
 // testClientCredentials is the challenge manager's client credential source.
@@ -427,7 +525,7 @@ func newTestMCPServiceWithPlatformMCPReadTools(t *testing.T) (context.Context, *
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, provider, nil, nil, "", true)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, provider, nil, nil, "", true, nil)
 	return ctx, ti, recorder
 }
 
@@ -450,7 +548,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return buildTestMCPService(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, withTemporal, metaRuntime, tracerProvider, funcs, callerAssertions, serverURLOverride, false, guardianOpts...)
+	return buildTestMCPService(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, withTemporal, metaRuntime, tracerProvider, funcs, callerAssertions, serverURLOverride, false, nil, guardianOpts...)
 }
 
 func buildTestMCPService(
@@ -468,6 +566,7 @@ func buildTestMCPService(
 	callerAssertions *mcpauthz.Issuer,
 	serverURLOverride string,
 	withPlatformMCPReadTools bool,
+	refreshRecorder *mcpconnectionattempts.Recorder,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
@@ -525,7 +624,7 @@ func buildTestMCPService(
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
-	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
@@ -537,6 +636,7 @@ func buildTestMCPService(
 		AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 		AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 		AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
+		AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 		DevMode:                          false,
 	})
 
@@ -562,7 +662,7 @@ func buildTestMCPService(
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 	principalCredentials := principalcredential.New(callerAssertions, conn)
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine, principalCredentials, cache.NewRedisCacheAdapter(redisClient))
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
@@ -579,6 +679,7 @@ func buildTestMCPService(
 			clientCredentials.use(clientcredentials.New(logger, conn, enc, m, cacheAdapter))
 			return clientCredentials
 		}),
+		remotesessions.WithConnectionRecorder(refreshRecorder),
 		remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(idTokenKeys)),
 		remotesessions.WithProtectedResourceProber(protectedResources),
 	)
@@ -620,7 +721,7 @@ func buildTestMCPService(
 	toolCallRecords := &toolCallRecorder{}
 	// Named as in production, so the pipeline derives the same source.
 	toolCallLogs := otelpub.NewLogger(toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GatewayLogScope)
-	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime, nil, nil)
 	require.NoError(t, err)
 	// Identity chaining runs as in production, so gate tests without bindings
 	// prove it leaves their behavior unchanged.
@@ -633,7 +734,7 @@ func buildTestMCPService(
 
 	return ctx, &testInstance{
 		principalCredentials: principalCredentials,
-		service:              svc,
+		service:              &migratedService{Service: svc, conn: conn, manual: false},
 		conn:                 conn,
 		sessionManager:       sessionManager,
 		serverURL:            serverURL,
@@ -648,9 +749,11 @@ func buildTestMCPService(
 		audit:                auditLogger,
 		tunnelRoutes:         tunnelRoutes,
 		features:             features,
+		productFeatures:      featClient,
 		efficacySignaler:     efficacySignaler,
 		clientCredentials:    clientCredentials,
 		toolCallRecords:      toolCallRecords,
+		remoteProxyManager:   remoteProxyManager,
 	}
 }
 
@@ -906,4 +1009,21 @@ func createTestUser(t *testing.T, ctx context.Context, ti *testInstance, id stri
 	})
 	require.NoError(t, err)
 	return urn.NewUserSubject(id)
+}
+
+// enableCodeMode grants the test context's organization the Code Mode
+// entitlement, which Code Mode requires besides an available runtime.
+func enableCodeMode(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+	setCodeModeEntitlement(t, ctx, ti, true)
+}
+
+// setCodeModeEntitlement writes the Code Mode entitlement for the test
+// context's organization. Every test shares one mock organization and one
+// Redis keyspace, so the cached value is visible to concurrent tests.
+func setCodeModeEntitlement(t *testing.T, ctx context.Context, ti *testInstance, enabled bool) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureCodeMode, enabled))
 }

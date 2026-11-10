@@ -14,7 +14,8 @@ mkdir -p "$workdir"
 extra_ca=/usr/local/share/gram/extra-ca.pem
 if [ -f "$extra_ca" ]; then
   ca_bundle=/tmp/gram-ca-bundle.pem
-  cat /etc/ssl/certs/ca-certificates.crt "$extra_ca" > "$ca_bundle"
+  # Preserve the explicit distrust entries when adding the local CA.
+  cat /usr/local/share/gram/bun-ca-certificates.pem "$extra_ca" > "$ca_bundle"
   export SSL_CERT_FILE="$ca_bundle"
   export NODE_EXTRA_CA_CERTS="$extra_ca"
 fi

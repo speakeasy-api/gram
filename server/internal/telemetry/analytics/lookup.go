@@ -54,7 +54,7 @@ func (c *Catalog) WithLoaders(loaders map[string]LookupLoader) (*Catalog, error)
 			return nil, fmt.Errorf("catalog: loader for undeclared lookup %q", name)
 		}
 	}
-	return &Catalog{datasets: c.datasets, lookups: bound}, nil
+	return &Catalog{datasets: c.datasets, lookups: bound, signalMetrics: c.signalMetrics}, nil
 }
 
 // LoadLookups fetches each lookup the read fields declare, once. A lookup

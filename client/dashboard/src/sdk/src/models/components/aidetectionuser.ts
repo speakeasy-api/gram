@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -13,7 +14,7 @@ export const AIDetectionUserSignals = {
   Installed: "installed",
   Running: "running",
 } as const;
-export type AIDetectionUserSignals = ClosedEnum<typeof AIDetectionUserSignals>;
+export type AIDetectionUserSignals = OpenEnum<typeof AIDetectionUserSignals>;
 
 /**
  * One enrolled user a detection target was found for, with that user's share of the organization's scan reports: the evidence AIDetection carries for the whole organization, narrowed to one person.
@@ -46,9 +47,10 @@ export type AIDetectionUser = {
 };
 
 /** @internal */
-export const AIDetectionUserSignals$inboundSchema: z.ZodMiniEnum<
-  typeof AIDetectionUserSignals
-> = z.enum(AIDetectionUserSignals);
+export const AIDetectionUserSignals$inboundSchema: z.ZodMiniType<
+  AIDetectionUserSignals,
+  unknown
+> = openEnums.inboundSchema(AIDetectionUserSignals);
 
 /** @internal */
 export const AIDetectionUser$inboundSchema: z.ZodMiniType<

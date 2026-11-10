@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { NetworkIngressProvider } from "@gram/client/models/components/networkingress.js";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 
 import { PrivateNetworkSection } from "./PrivateNetworkSection";
 
@@ -26,7 +28,7 @@ const state = vi.hoisted(() => ({
     | {
         id: string;
         organizationId: string;
-        provider: "tailscale";
+        provider: NetworkIngressProvider;
         hostname: string;
         endpointNamespaceKind: "platform";
         enabled: boolean;
@@ -146,6 +148,37 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("PrivateNetworkSection", () => {
+  it.each(["online", "deleting"])(
+    "does not expose Tailscale settings for an unsupported provider (%s)",
+    (status) => {
+      state.ingress = {
+        id: "ingress-1",
+        organizationId: "org-1",
+        provider: unrecognized("future_provider"),
+        hostname: "private-mcp",
+        endpointNamespaceKind: "platform",
+        enabled: true,
+        identityRequired: false,
+        credentialsConfigured: true,
+        status,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      };
+      render(<PrivateNetworkSection />);
+      expect(
+        screen.getByText(/managing this unsupported private network provider/),
+      ).toBeTruthy();
+      expect(screen.queryByRole("switch")).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Rotate credentials" }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Retry cleanup" }),
+      ).toBeNull();
+      expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    },
+  );
+
   it.each(["base", "payg"] as const)(
     "shows a Tailscale Enterprise upsell for %s without exposing setup",
     (tier) => {
@@ -232,6 +265,31 @@ describe("PrivateNetworkSection", () => {
         /MCP servers opt in separately and keep their own endpoint paths/,
       ),
     ).toBeTruthy();
+  });
+
+  it("closes a setup draft when an unsupported provider arrives", () => {
+    const { rerender } = render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+    expect(
+      screen.getByRole("textbox", { name: "Organization private hostname" }),
+    ).toBeTruthy();
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: unrecognized("future_provider"),
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: true,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "online",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+    rerender(<PrivateNetworkSection />);
+    expect(
+      screen.queryByRole("textbox", { name: "Organization private hostname" }),
+    ).toBeNull();
   });
 
   it.each([

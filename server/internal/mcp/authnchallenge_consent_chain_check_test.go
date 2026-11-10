@@ -71,6 +71,7 @@ func TestConsentChainCheck_SuccessConnectsWithRuntimeRequest(t *testing.T) {
 		UserID:                fx.subject.ID,
 		UpstreamResource:      consentChainedUpstream,
 		RemoteSessionIssuerID: uuid.NullUUID{},
+		RemoteSessionClientID: uuid.NullUUID{UUID: fx.clientA, Valid: true},
 	}}, g.acquired, "the check acquires, and so publishes, exactly the runtime's credential")
 	require.False(t, deadline.IsZero())
 	require.LessOrEqual(t, time.Until(deadline), 5*time.Second, "the check is bounded well under the chainer's own attempt budget")
@@ -157,8 +158,8 @@ func TestConsentChainCheck_RejectsBadRequests(t *testing.T) {
 		edit func(url.Values)
 		code oops.Code
 	}{
-		{"bad csrf", func(f url.Values) { f.Set("csrf_token", "forged") }, oops.CodeUnauthorized},
-		{"unknown state", func(f url.Values) { f.Set("state", uuid.NewString()) }, oops.CodeUnauthorized},
+		{"bad csrf", func(f url.Values) { f.Set("csrf_token", "forged") }, oops.CodeBadRequest},
+		{"unknown state", func(f url.Values) { f.Set("state", uuid.NewString()) }, oops.CodeBadRequest},
 		{"malformed client", func(f url.Values) { f.Set("client_id", "nope") }, oops.CodeBadRequest},
 		{"foreign client", func(f url.Values) { f.Set("client_id", uuid.NewString()) }, oops.CodeBadRequest},
 	} {
@@ -180,7 +181,7 @@ func TestConsentChainCheck_UnresolvedSubjectIsRejected(t *testing.T) {
 	require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
 
 	_, err = postChainCheck(t, fx, func(f url.Values) { f.Set("state", state.ID) })
-	requireOopsCode(t, err, oops.CodeUnauthorized)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestConsentChainCheck_UnchainedServiceIsRejected(t *testing.T) {
@@ -235,7 +236,7 @@ func TestConsentChainCheck_UnknownAllowsAuthorizationWithoutPersonalOAuth(t *tes
 	require.Nil(t, redirect, "must not redirect to personal upstream OAuth")
 	require.Contains(t, page, `data-consent-enabled="true"`)
 	require.Contains(t, page, "Use a separate sign-in instead")
-	require.NotContains(t, page, "Connect a service above to enable access.")
+	require.NotContains(t, page, "Connect or reconnect a service above to give access.")
 	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

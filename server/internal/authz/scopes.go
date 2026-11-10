@@ -30,6 +30,8 @@ const (
 	ScopeMCPBlockedWrite         Scope = "mcp:blocked_write"
 	ScopeMCPConnect              Scope = "mcp:connect"
 	ScopeMCPBlockedConnect       Scope = "mcp:blocked_connect"
+	ScopeMCPAuth                 Scope = "mcp:auth"
+	ScopeMCPBlockedAuth          Scope = "mcp:blocked_auth"
 	ScopeEnvironmentRead         Scope = "environment:read"
 	ScopeEnvironmentBlockedRead  Scope = "environment:blocked_read"
 	ScopeEnvironmentWrite        Scope = "environment:write"
@@ -49,6 +51,7 @@ const (
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
 	ScopeChatRead                Scope = "chat:read"
 	ScopeChatWrite               Scope = "chat:write"
+	ScopeInferenceExecute        Scope = "inference:execute"
 	ScopeLogRead                 Scope = "log:read"
 	ScopeAgentRead               Scope = "agent:read"
 	ScopeAgentWrite              Scope = "agent:write"
@@ -94,6 +97,7 @@ var adminScopes = []Scope{
 	ScopeMCPRead,
 	ScopeMCPWrite,
 	ScopeMCPConnect,
+	ScopeMCPAuth,
 	ScopeEnvironmentRead,
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
@@ -105,12 +109,10 @@ var adminScopes = []Scope{
 	ScopeAgentWrite,
 	ScopeAgentAuthorize,
 	ScopeAgentTransfer,
-	// Configuring workload identity is an administrator's job, and it sits
-	// beside agent:authorize deliberately: assigning an agent to a workload is
-	// the same delegation as issuing that agent a credential. Neither is a
-	// member default — workload:read alone discloses which machines an
-	// organization recognises, which is its trust policy, so a member who needs
-	// to see it gets an explicit grant through a custom role.
+	// workload:read is a member default (see memberScopes below) so that team
+	// members can view the Access Hub. workload:write remains admin-only:
+	// assigning an agent to a workload is the same delegation as issuing that
+	// agent a credential.
 	ScopeWorkloadRead,
 	ScopeWorkloadWrite,
 	// chat:read and chat:write are intentionally NOT defaults for any system
@@ -148,6 +150,8 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeMCPBlockedWrite:         scopeVisibilityInternal,
 	ScopeMCPConnect:              scopeVisibilityUserVisible,
 	ScopeMCPBlockedConnect:       scopeVisibilityInternal,
+	ScopeMCPAuth:                 scopeVisibilityUserVisible,
+	ScopeMCPBlockedAuth:          scopeVisibilityInternal,
 	ScopeEnvironmentRead:         scopeVisibilityUserVisible,
 	ScopeEnvironmentBlockedRead:  scopeVisibilityInternal,
 	ScopeEnvironmentWrite:        scopeVisibilityUserVisible,
@@ -167,6 +171,7 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
 	ScopeChatWrite:               scopeVisibilityUserVisible,
+	ScopeInferenceExecute:        scopeVisibilityUserVisible,
 	ScopeLogRead:                 scopeVisibilityUserVisible,
 	ScopeAgentRead:               scopeVisibilityUserVisible,
 	ScopeAgentWrite:              scopeVisibilityUserVisible,
@@ -185,8 +190,10 @@ var memberScopes = []Scope{
 	ScopeProjectRead,
 	ScopeMCPRead,
 	ScopeMCPConnect,
+	ScopeMCPAuth,
 	ScopeSkillRead,
 	ScopeAssistantRead,
+	ScopeWorkloadRead,
 	// environment:read is intentionally NOT a default for members: environment
 	// values include secrets, so viewing them must be granted explicitly via a
 	// custom role. Admins retain environment:read/write via adminScopes.
@@ -194,6 +201,10 @@ var memberScopes = []Scope{
 	// Most Observe pages are separately gated on org:admin. The Identities
 	// roster and required-employee-scoped Shadow AI read are project:read
 	// surfaces; identity detail resolution separately requires org:read.
+	//
+	// workload:read is a member default so that team members can view the
+	// Access Hub in preview deployments and development environments.
+	// workload:write remains admin-only since it allows granting machine access.
 }
 
 func (s Scope) Parts() ScopeParts {
@@ -254,6 +265,9 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 // have to manage it — so "cannot connect" has to be expressible without also
 // meaning "cannot see or manage". Anything that takes a principal off a
 // server entirely writes all three.
+//
+// mcp:auth is independent of every other scope: server access, authoring and
+// administration imply no use of an auth client.
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:                    nil,
 	ScopeOrgRead:                 {ScopeOrgAdmin},
@@ -270,6 +284,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeMCPBlockedWrite:         nil,
 	ScopeMCPConnect:              {ScopeMCPRead, ScopeMCPWrite},
 	ScopeMCPBlockedConnect:       nil,
+	ScopeMCPAuth:                 nil,
+	ScopeMCPBlockedAuth:          nil,
 	ScopeEnvironmentRead:         {ScopeEnvironmentWrite},
 	ScopeEnvironmentBlockedRead:  nil,
 	ScopeEnvironmentWrite:        nil,
@@ -289,6 +305,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyBlock:         nil,
 	ScopeChatRead:                {ScopeChatWrite},
 	ScopeChatWrite:               nil,
+	ScopeInferenceExecute:        nil,
 	ScopeLogRead:                 nil,
 	ScopeAgentRead:               nil,
 	ScopeAgentWrite:              nil,
@@ -321,6 +338,8 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeMCPBlockedWrite:         "",
 	ScopeMCPConnect:              ScopeMCPBlockedConnect,
 	ScopeMCPBlockedConnect:       "",
+	ScopeMCPAuth:                 ScopeMCPBlockedAuth,
+	ScopeMCPBlockedAuth:          "",
 	ScopeEnvironmentRead:         ScopeEnvironmentBlockedRead,
 	ScopeEnvironmentBlockedRead:  "",
 	ScopeEnvironmentWrite:        ScopeEnvironmentBlockedWrite,
@@ -340,6 +359,7 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeRiskPolicyBlock:         "",
 	ScopeChatRead:                "",
 	ScopeChatWrite:               "",
+	ScopeInferenceExecute:        "",
 	ScopeLogRead:                 "",
 	ScopeAgentRead:               "",
 	ScopeAgentWrite:              "",

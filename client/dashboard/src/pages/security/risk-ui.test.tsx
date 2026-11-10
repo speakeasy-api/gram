@@ -14,6 +14,12 @@ import {
   RuleLabel,
 } from "./risk-ui";
 
+const contentAccess = vi.hoisted(() => ({ restricted: false }));
+
+vi.mock("./use-risk-content-restricted", () => ({
+  useRiskContentRestricted: () => contentAccess.restricted,
+}));
+
 const hasScope = vi.fn<(scope: string) => boolean>();
 const unmaskMutation = vi.hoisted(() => ({ mutate: vi.fn() }));
 
@@ -52,11 +58,34 @@ function renderCell(
 
 afterEach(cleanup);
 beforeEach(() => {
+  contentAccess.restricted = false;
   hasScope.mockReset();
   unmaskMutation.mutate.mockReset();
 });
 
 describe("EventMatchDialog", () => {
+  it.each(["<redacted len=0>", ""])(
+    "does not claim absent event content is hidden during impersonation (%s)",
+    (matchRedacted) => {
+      contentAccess.restricted = true;
+      renderCell(RATIONALE, matchRedacted);
+
+      expect(screen.getByText(RATIONALE)).toBeTruthy();
+      expect(screen.queryByText("Hidden during impersonation")).toBeNull();
+      expect(screen.queryByRole("button")).toBeNull();
+    },
+  );
+
+  it("marks stored event content as hidden during impersonation", () => {
+    contentAccess.restricted = true;
+    renderCell(RATIONALE);
+
+    expect(screen.getByText(RATIONALE)).toBeTruthy();
+    expect(screen.getByText("Hidden during impersonation")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(unmaskMutation.mutate).not.toHaveBeenCalled();
+  });
+
   it("shows the judge rationale inline instead of a bare reveal prompt", () => {
     hasScope.mockReturnValue(true);
     renderCell(RATIONALE);

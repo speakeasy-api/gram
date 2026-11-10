@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import {
   Sheet,
@@ -18,15 +18,23 @@ import { usePlatformApiKeys } from "./platform-setup-values";
 interface PlatformInstrumentationSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The platforms to offer; the setup platforms when omitted. */
+  platforms?: AgentPlatform[];
+  /** Opens straight on this platform's steps instead of the picker. */
+  initialPlatformId?: string | null;
 }
 
-// Instrumentation instructions for one agent platform at a time, opened from
-// a surface that has no platform in hand — so the sheet's first step is always
+// Instructions for one agent platform at a time. Step 1 is the picker: a
+// surface with no platform in hand opens there, and one that already has the
+// reader's pick (the Organization Gateway's agent list) passes
+// initialPlatformId to open on that platform's steps, with Back returning to
 // the picker. The setup card sections instead lay a single platform's steps
 // out inline with PlatformSetupFlow.
 export function PlatformInstrumentationSheet({
   open,
   onOpenChange,
+  platforms,
+  initialPlatformId = null,
 }: PlatformInstrumentationSheetProps): JSX.Element {
   const [pickedPlatformId, setPickedPlatformId] = useState<string | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState<
@@ -35,7 +43,10 @@ export function PlatformInstrumentationSheet({
   const [eligibility, setEligibility] = useState<Record<string, boolean>>({});
   const apiKeys = usePlatformApiKeys();
 
-  const agentPlatforms = useMemo(() => getAgentPlatforms(), []);
+  const agentPlatforms = useMemo(
+    () => platforms ?? getAgentPlatforms(),
+    [platforms],
+  );
   const activePlatform =
     agentPlatforms.find((p) => p.id === pickedPlatformId) ?? null;
   const availablePlatforms = agentPlatforms.filter(
@@ -52,6 +63,12 @@ export function PlatformInstrumentationSheet({
   // Mint the key the snippets need as soon as a platform is picked, unless its
   // first step still has to establish the org qualifies. Guarded by a ref so a
   // failed mint isn't retried on every render.
+  // Opened from a platform the reader already picked on the page. A layout
+  // effect, so the picker never paints first.
+  useLayoutEffect(() => {
+    if (open && initialPlatformId) setPickedPlatformId(initialPlatformId);
+  }, [open, initialPlatformId]);
+
   const { ensure } = apiKeys;
   const initializedPlatform = useRef<string | null>(null);
   useEffect(() => {

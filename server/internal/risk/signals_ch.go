@@ -12,11 +12,8 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -48,8 +45,7 @@ const (
 // GetRiskSignals serves the Watchdog page: findings clustered by rule into
 // ranked signals, window-level KPI counts with previous-window comparisons,
 // and the exposure-by-category rollup. ClickHouse-only — there is no Postgres
-// fallback, so orgs must be on the ClickHouse findings ingest before the
-// Watchdog UI is enabled for them.
+// fallback; findings are available when ClickHouse ingestion is configured.
 func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignalsPayload) (*gen.RiskSignalsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -58,10 +54,6 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
-	}
-
-	if !s.riskWatchdogEnabled(ctx, authCtx) {
-		return nil, oops.E(oops.CodeForbidden, nil, "risk signals are not enabled for this organization")
 	}
 
 	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
@@ -270,26 +262,6 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		Exposure:             signalExposure(aggregates),
 		Signals:              signals,
 	}, nil
-}
-
-// riskWatchdogEnabled reports whether the Watchdog signals endpoint is
-// enabled for the org. Same PostHog flag key the dashboard uses to show the
-// Watchdog page, so one flag controls both surfaces. A nil provider or a
-// failed lookup degrades to disabled.
-func (s *Service) riskWatchdogEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	if s.flags == nil {
-		return false
-	}
-	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
-	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, groups)
-	if err != nil {
-		s.logger.WarnContext(ctx, "gram-risk-watchdog flag check failed; treating as disabled",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-		)
-		return false
-	}
-	return on
 }
 
 // signalSparklines gap-fills the sparse per-(rule, bucket) series into dense

@@ -5,9 +5,26 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Auth client type filter (mcp:auth and mcp:blocked_auth only).
+ */
+export const ClientType = {
+  RemoteSession: "remote_session",
+  ServiceAccount: "service_account",
+  StaticCredential: "static_credential",
+  PassThrough: "pass_through",
+  Ema: "ema",
+  Wildcard: "*",
+} as const;
+/**
+ * Auth client type filter (mcp:auth and mcp:blocked_auth only).
+ */
+export type ClientType = OpenEnum<typeof ClientType>;
 
 /**
  * Tool disposition filter (MCP scopes only).
@@ -21,7 +38,7 @@ export const Disposition = {
 /**
  * Tool disposition filter (MCP scopes only).
  */
-export type Disposition = ClosedEnum<typeof Disposition>;
+export type Disposition = OpenEnum<typeof Disposition>;
 
 /**
  * The kind of resource this selector targets.
@@ -35,25 +52,35 @@ export const ResourceKind = {
   Assistant: "assistant",
   RiskPolicy: "risk_policy",
   Chat: "chat",
+  Inference: "inference",
   Agent: "agent",
   Workload: "workload",
+  McpAuthClient: "mcp_auth_client",
   Wildcard: "*",
 } as const;
 /**
  * The kind of resource this selector targets.
  */
-export type ResourceKind = ClosedEnum<typeof ResourceKind>;
+export type ResourceKind = OpenEnum<typeof ResourceKind>;
 
 /**
  * A constraint that narrows which resources a grant applies to.
  */
 export type Selector = {
   /**
+   * Auth client type filter (mcp:auth and mcp:blocked_auth only).
+   */
+  clientType?: ClientType | undefined;
+  /**
+   * Personal connection owner filter (mcp:auth and mcp:blocked_auth on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.
+   */
+  connectionOwner?: string | undefined;
+  /**
    * Tool disposition filter (MCP scopes only).
    */
   disposition?: Disposition | undefined;
   /**
-   * Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.
+   * Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
    */
   projectId?: string | undefined;
   /**
@@ -72,49 +99,69 @@ export type Selector = {
    * Specific tool name filter (MCP scopes only).
    */
   tool?: string | undefined;
+  /**
+   * Upstream OAuth client filter (mcp:auth and mcp:blocked_auth on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
+   */
+  upstreamClient?: string | undefined;
 };
 
 /** @internal */
-export const Disposition$inboundSchema: z.ZodMiniEnum<typeof Disposition> = z
-  .enum(Disposition);
+export const ClientType$inboundSchema: z.ZodMiniType<ClientType, unknown> =
+  openEnums.inboundSchema(ClientType);
 /** @internal */
-export const Disposition$outboundSchema: z.ZodMiniEnum<typeof Disposition> =
-  Disposition$inboundSchema;
+export const ClientType$outboundSchema: z.ZodMiniType<string, ClientType> =
+  openEnums.outboundSchema(ClientType);
 
 /** @internal */
-export const ResourceKind$inboundSchema: z.ZodMiniEnum<typeof ResourceKind> = z
-  .enum(ResourceKind);
+export const Disposition$inboundSchema: z.ZodMiniType<Disposition, unknown> =
+  openEnums.inboundSchema(Disposition);
 /** @internal */
-export const ResourceKind$outboundSchema: z.ZodMiniEnum<typeof ResourceKind> =
-  ResourceKind$inboundSchema;
+export const Disposition$outboundSchema: z.ZodMiniType<string, Disposition> =
+  openEnums.outboundSchema(Disposition);
+
+/** @internal */
+export const ResourceKind$inboundSchema: z.ZodMiniType<ResourceKind, unknown> =
+  openEnums.inboundSchema(ResourceKind);
+/** @internal */
+export const ResourceKind$outboundSchema: z.ZodMiniType<string, ResourceKind> =
+  openEnums.outboundSchema(ResourceKind);
 
 /** @internal */
 export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
   z.object({
+    client_type: z.optional(ClientType$inboundSchema),
+    connection_owner: z.optional(z.string()),
     disposition: z.optional(Disposition$inboundSchema),
     project_id: z.optional(z.string()),
     resource_id: z.string(),
     resource_kind: ResourceKind$inboundSchema,
     server_url: z.optional(z.string()),
     tool: z.optional(z.string()),
+    upstream_client: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "client_type": "clientType",
+      "connection_owner": "connectionOwner",
       "project_id": "projectId",
       "resource_id": "resourceId",
       "resource_kind": "resourceKind",
       "server_url": "serverUrl",
+      "upstream_client": "upstreamClient",
     });
   }),
 );
 /** @internal */
 export type Selector$Outbound = {
+  client_type?: string | undefined;
+  connection_owner?: string | undefined;
   disposition?: string | undefined;
   project_id?: string | undefined;
   resource_id: string;
   resource_kind: string;
   server_url?: string | undefined;
   tool?: string | undefined;
+  upstream_client?: string | undefined;
 };
 
 /** @internal */
@@ -123,19 +170,25 @@ export const Selector$outboundSchema: z.ZodMiniType<
   Selector
 > = z.pipe(
   z.object({
+    clientType: z.optional(ClientType$outboundSchema),
+    connectionOwner: z.optional(z.string()),
     disposition: z.optional(Disposition$outboundSchema),
     projectId: z.optional(z.string()),
     resourceId: z.string(),
     resourceKind: ResourceKind$outboundSchema,
     serverUrl: z.optional(z.string()),
     tool: z.optional(z.string()),
+    upstreamClient: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      clientType: "client_type",
+      connectionOwner: "connection_owner",
       projectId: "project_id",
       resourceId: "resource_id",
       resourceKind: "resource_kind",
       serverUrl: "server_url",
+      upstreamClient: "upstream_client",
     });
   }),
 );

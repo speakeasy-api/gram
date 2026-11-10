@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const AwsKmsKeyAlgorithm = {
 /**
  * The signing algorithm of the key.
  */
-export type AwsKmsKeyAlgorithm = ClosedEnum<typeof AwsKmsKeyAlgorithm>;
+export type AwsKmsKeyAlgorithm = OpenEnum<typeof AwsKmsKeyAlgorithm>;
 
 /**
  * The cloud KMS provider of the key.
@@ -31,7 +32,7 @@ export const AwsKmsKeyProvider = {
 /**
  * The cloud KMS provider of the key.
  */
-export type AwsKmsKeyProvider = ClosedEnum<typeof AwsKmsKeyProvider>;
+export type AwsKmsKeyProvider = OpenEnum<typeof AwsKmsKeyProvider>;
 
 /**
  * An AWS KMS external key.
@@ -80,14 +81,16 @@ export type AwsKmsKey = {
 };
 
 /** @internal */
-export const AwsKmsKeyAlgorithm$inboundSchema: z.ZodMiniEnum<
-  typeof AwsKmsKeyAlgorithm
-> = z.enum(AwsKmsKeyAlgorithm);
+export const AwsKmsKeyAlgorithm$inboundSchema: z.ZodMiniType<
+  AwsKmsKeyAlgorithm,
+  unknown
+> = openEnums.inboundSchema(AwsKmsKeyAlgorithm);
 
 /** @internal */
-export const AwsKmsKeyProvider$inboundSchema: z.ZodMiniEnum<
-  typeof AwsKmsKeyProvider
-> = z.enum(AwsKmsKeyProvider);
+export const AwsKmsKeyProvider$inboundSchema: z.ZodMiniType<
+  AwsKmsKeyProvider,
+  unknown
+> = openEnums.inboundSchema(AwsKmsKeyProvider);
 
 /** @internal */
 export const AwsKmsKey$inboundSchema: z.ZodMiniType<AwsKmsKey, unknown> = z

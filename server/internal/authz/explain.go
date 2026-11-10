@@ -77,6 +77,11 @@ type GrantCheckExplanation struct {
 	// matching exclusion, each in load order. Grants that do not match the
 	// check are omitted.
 	Contributions []GrantContribution
+
+	// ConnectionNotOwned reports a personal auth-client check denied because
+	// the connection is not the represented user's own; outside the engine no
+	// user is ever represented. Contributions is then empty.
+	ConnectionNotOwned bool
 }
 
 // ExplainGrantCheck evaluates one check against already-loaded grants and
@@ -88,6 +93,9 @@ type GrantCheckExplanation struct {
 func ExplainGrantCheck(grants []Grant, check Check) (GrantCheckExplanation, error) {
 	if err := validateInput(check); err != nil {
 		return GrantCheckExplanation{}, err
+	}
+	if personalCheckUnbound(check) {
+		return GrantCheckExplanation{Allowed: false, Contributions: nil, ConnectionNotOwned: true}, nil
 	}
 	evaluation, err := evaluateGrantCheck(grants, check)
 	if err != nil {
@@ -149,7 +157,7 @@ func ExplainGrantCheck(grants []Grant, check Check) (GrantCheckExplanation, erro
 		}
 	}
 
-	return GrantCheckExplanation{Allowed: allowed, Contributions: contributions}, nil
+	return GrantCheckExplanation{Allowed: allowed, Contributions: contributions, ConnectionNotOwned: false}, nil
 }
 
 // blockedReason says why a blocked allow grant did not outrank the

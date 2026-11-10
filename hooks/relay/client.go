@@ -151,6 +151,9 @@ const (
 	// verdict — an intermediary's JSON, a captive portal, a skewed server.
 	causeUnreadable failureCause = "unreadable-response"
 	causeUnknown    failureCause = "unknown"
+	// causeCredential is a token command that produced no usable token: the
+	// box's identity could not be presented, so no verdict was obtainable.
+	causeCredential failureCause = "credential-unavailable"
 )
 
 // classifyTransportError names the failure behind an error that produced no
@@ -373,6 +376,13 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		XGramReplayed:  nil,
 		Body:           body,
 	}
+	var opts []operations.Option
+	if c.Source == credToken {
+		// A token credential authenticates with the device-agent bearer
+		// alone; a Gram-Key beside it would be a second identity.
+		req.GramKey = nil
+		opts = append(opts, operations.WithSetHeaders(map[string]string{"Authorization": "Bearer " + c.Bearer}))
+	}
 	if cl.replayed {
 		req.XGramReplayed = new(true)
 	}
@@ -386,7 +396,7 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		// Bounded per attempt so a stalled connection costs one attempt
 		// rather than the whole send.
 		attemptCtx, cancelAttempt := context.WithTimeout(ctx, attemptTimeout(ctx))
-		res, err = cl.sdk.Hooks.Ingest(attemptCtx, req)
+		res, err = cl.sdk.Hooks.Ingest(attemptCtx, req, opts...)
 		cancelAttempt()
 		if err == nil {
 			break
@@ -539,6 +549,8 @@ func causeMessage(cause failureCause) string {
 		return "Speakeasy hooks could not connect to the Speakeasy AI Control Plane (connection)."
 	case causeUnreadable:
 		return "Speakeasy hooks could not read the server's verdict (unreadable-response)."
+	case causeCredential:
+		return "Speakeasy hooks could not obtain this device's credential from the device agent (credential-unavailable)."
 	default:
 		return "Speakeasy hooks could not reach the Speakeasy AI Control Plane (unknown)."
 	}

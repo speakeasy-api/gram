@@ -36,7 +36,7 @@ export function LegacyCallbackAlert({
   const current = callbackUrl;
 
   return (
-    <Alert variant="warning" dismissible={false} alignTop className={className}>
+    <Alert variant="warning" dismissible={false} className={className}>
       <div className="flex flex-col items-start gap-3">
         <span>
           This app was registered with the{" "}

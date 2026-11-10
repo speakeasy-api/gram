@@ -48,10 +48,7 @@ func TestToolsetsService_PrivateMCPNeverRetainsExternalOAuthDuringConcurrentUpda
 				return nil
 			}
 			makePrivate := func() error {
-				_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
-					Slug:        toolset.Slug,
-					McpIsPublic: new(false),
-				})
+				_, err := ti.service.UpdateHostedServer(ctx, hostedUpdate(toolset, "private", nil))
 				if err != nil {
 					return fmt.Errorf("make MCP private: %w", err)
 				}
@@ -72,20 +69,20 @@ func TestToolsetsService_PrivateMCPNeverRetainsExternalOAuthDuringConcurrentUpda
 
 			require.NoError(t, blocker.Commit(ctx))
 			firstErr, secondErr := <-firstResult, <-secondResult
-			if firstOperation == "add external OAuth" {
-				require.NoError(t, firstErr)
-				require.NoError(t, secondErr)
-			} else {
-				require.NoError(t, firstErr)
-				var oopsErr *oops.ShareableError
-				require.ErrorAs(t, secondErr, &oopsErr)
-				require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-			}
-
+			require.NoError(t, firstErr)
+			var oopsErr *oops.ShareableError
+			require.ErrorAs(t, secondErr, &oopsErr)
 			got, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
 			require.NoError(t, err)
-			require.False(t, *got.McpIsPublic)
-			require.Nil(t, got.ExternalOauthServer)
+			if firstOperation == "add external OAuth" {
+				require.Equal(t, oops.CodeInvalid, oopsErr.Code, "a server with external OAuth stays public")
+				require.True(t, *got.McpIsPublic)
+				require.NotNil(t, got.ExternalOauthServer)
+			} else {
+				require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+				require.False(t, *got.McpIsPublic)
+				require.Nil(t, got.ExternalOauthServer)
+			}
 		})
 	}
 }

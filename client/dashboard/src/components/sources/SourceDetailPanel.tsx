@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
@@ -14,7 +15,7 @@ import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
-import { Download, Loader2 } from "lucide-react";
+import { Download } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { downloadSourceFile, sourceDownloadFilename } from "./sourceDownload";
@@ -94,12 +95,9 @@ function SourceServersPanel({
         <ul className="flex flex-col gap-1">
           {servers.map((toolset) => (
             <li key={toolset.id}>
-              <routes.mcp.details.Link
-                params={[toolset.slug]}
-                className="text-sm"
-              >
+              <routes.toolset.Link params={[toolset.slug]} className="text-sm">
                 {toolset.name}
-              </routes.mcp.details.Link>
+              </routes.toolset.Link>
             </li>
           ))}
         </ul>
@@ -138,12 +136,12 @@ function SourceServersPanel({
                 className="flex items-center justify-between gap-4 px-6 py-3"
               >
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <routes.mcp.details.Link
+                  <routes.toolset.Link
                     params={[toolset.slug]}
                     className="truncate text-sm font-medium"
                   >
                     {toolset.name}
-                  </routes.mcp.details.Link>
+                  </routes.toolset.Link>
                   <Text muted className="truncate font-mono text-xs">
                     {toolset.slug}
                   </Text>
@@ -528,7 +526,7 @@ export function SourceDownloadButton({
         <Button.Text>{label}</Button.Text>
         <Button.RightIcon>
           {isDownloading ? (
-            <Loader2 className="size-4 animate-spin" />
+            <Spinner className="mr-0 size-4" />
           ) : (
             <Download className="size-4" />
           )}
@@ -548,7 +546,7 @@ export function SourceDownloadButton({
     >
       {label}
       {isDownloading ? (
-        <Loader2 className="size-3 animate-spin" />
+        <Spinner className="mr-0 size-3" />
       ) : (
         <Download className="size-3" />
       )}

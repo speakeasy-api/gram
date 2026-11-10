@@ -1,5 +1,18 @@
-import type { RiskPreset } from "@gram/client/models/components/riskpreset.js";
-import type { SuggestRiskPolicyResult } from "@gram/client/models/components/suggestriskpolicyresult.js";
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
+import {
+  RiskPolicyAudienceType,
+  RiskPolicyPolicyType,
+  RiskPolicyShadowMcpDisposition,
+  type RiskPolicy,
+} from "@gram/client/models/components/riskpolicy.js";
+import {
+  RiskPresetAction,
+  type RiskPreset,
+} from "@gram/client/models/components/riskpreset.js";
+import {
+  SuggestRiskPolicyResultAction,
+  type SuggestRiskPolicyResult,
+} from "@gram/client/models/components/suggestriskpolicyresult.js";
 import type { PolicyAction } from "./policy-data";
 import type { PolicyMCPScopeValue } from "./policy-mcp-scope";
 
@@ -54,14 +67,73 @@ function toAction(value: string): PolicyAction {
   return ACTIONS.has(value) ? (value as PolicyAction) : "flag";
 }
 
+// Sources the editors can round-trip through policyToCategories and
+// categoriesToPayload. Unknown sources must not disappear during an edit.
+const SUPPORTED_SOURCES: ReadonlySet<string> = new Set([
+  "gitleaks",
+  "presidio",
+  "shadow_mcp",
+  "destructive_tool",
+  "cli_destructive",
+  "prompt_injection",
+  "account_identity",
+]);
+
+function supportsSources(sources: readonly string[]): boolean {
+  return sources.every((source) => SUPPORTED_SOURCES.has(source));
+}
+
+function draftSources(sources: readonly string[]): string[] {
+  if (!supportsSources(sources)) {
+    throw new Error(
+      "This policy's detectors are not supported by this version of Speakeasy. Refresh the page before editing.",
+    );
+  }
+  return [...sources];
+}
+
+export function supportsPolicyDraft(source: {
+  policyType: string;
+  action: string;
+  sources: readonly string[];
+}): boolean {
+  return (
+    isKnownEnumValue(RiskPolicyPolicyType, source.policyType) &&
+    // A draft opens in a detection editor, so require_approval is not one.
+    ACTIONS.has(source.action) &&
+    supportsSources(source.sources)
+  );
+}
+
+export function supportsPolicyEditing(
+  policy: Pick<
+    RiskPolicy,
+    | "policyType"
+    | "action"
+    | "audienceType"
+    | "shadowMcpDisposition"
+    | "sources"
+  >,
+): boolean {
+  return (
+    supportsPolicyDraft(policy) &&
+    isKnownEnumValue(RiskPolicyAudienceType, policy.audienceType) &&
+    (policy.shadowMcpDisposition === undefined ||
+      isKnownEnumValue(
+        RiskPolicyShadowMcpDisposition,
+        policy.shadowMcpDisposition,
+      ))
+  );
+}
+
 export function draftFromPreset(preset: RiskPreset): PolicyDraft {
   return {
     presetId: preset.id,
-    policyType: preset.policyType,
+    policyType: requireKnownEnumValue(RiskPolicyPolicyType, preset.policyType),
     name: preset.label,
-    action: toAction(preset.action),
+    action: requireKnownEnumValue(RiskPresetAction, preset.action),
     score: preset.score,
-    sources: [...preset.sources],
+    sources: draftSources(preset.sources),
     presidioEntities: [...preset.presidioEntities],
     prompt: preset.prompt,
     userMessage: preset.userMessage,
@@ -75,11 +147,17 @@ export function draftFromSuggestion(
 ): PolicyDraft {
   return {
     presetId: suggestion.presetId,
-    policyType: suggestion.policyType,
+    policyType: requireKnownEnumValue(
+      RiskPolicyPolicyType,
+      suggestion.policyType,
+    ),
     name: suggestion.name,
-    action: toAction(suggestion.action),
+    action: requireKnownEnumValue(
+      SuggestRiskPolicyResultAction,
+      suggestion.action,
+    ),
     score: suggestion.score,
-    sources: [...suggestion.sources],
+    sources: draftSources(suggestion.sources),
     presidioEntities: [...suggestion.presidioEntities],
     prompt: suggestion.prompt,
     userMessage: suggestion.userMessage,
@@ -151,7 +229,9 @@ export function readPolicyDraft(state: unknown): PolicyDraft | null {
   const draft = candidate as Partial<PolicyDraft>;
   if (
     (draft.policyType !== "standard" && draft.policyType !== "prompt_based") ||
-    typeof draft.name !== "string"
+    typeof draft.name !== "string" ||
+    (draft.sources !== undefined &&
+      (!Array.isArray(draft.sources) || !supportsSources(draft.sources)))
   ) {
     return null;
   }
@@ -335,9 +415,9 @@ export function clearPolicyStartSession(projectSlug: string): void {
 export function actionBadgeVariant(
   action: string,
 ): "neutral" | "warning" | "destructive" {
-  if (action === "flag") return "neutral";
   if (action === "warn") return "warning";
-  return "destructive";
+  if (action === "block" || action === "quarantine") return "destructive";
+  return "neutral";
 }
 
 const HOSTNAME =

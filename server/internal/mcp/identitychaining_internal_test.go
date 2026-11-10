@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -111,13 +112,14 @@ func TestIdentityChainingRequest_OnlyValidatedHumans(t *testing.T) {
 			}
 			s := chainingService(t, chainer)
 			ctx := tc.ctx(t)
-			req, ok := s.identityChainingRequest(ctx, chainingTestOrg, project, tc.issuer, "https://upstream.example.test/mcp", false, uuid.NullUUID{})
+			chosen := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+			req, ok := s.identityChainingRequest(ctx, chainingTestOrg, project, tc.issuer, "https://upstream.example.test/mcp", false, uuid.NullUUID{}, chosen)
 			require.Equal(t, tc.want, ok)
 			if tc.want {
 				identity, hasIdentity := mcpidentity.FromContext(ctx)
 				require.True(t, hasIdentity)
 				require.NotEmpty(t, req.UserSessionJTI)
-				require.Equal(t, identitychaining.Request{OrganizationID: chainingTestOrg, ProjectID: project, UserSessionIssuerID: issuer, UserID: "user-1", UserSessionJTI: identity.SessionJTI(), UpstreamResource: "https://upstream.example.test/mcp", RemoteSessionIssuerID: uuid.NullUUID{}}, req)
+				require.Equal(t, identitychaining.Request{OrganizationID: chainingTestOrg, ProjectID: project, UserSessionIssuerID: issuer, UserID: "user-1", UserSessionJTI: identity.SessionJTI(), UpstreamResource: "https://upstream.example.test/mcp", RemoteSessionIssuerID: uuid.NullUUID{}, RemoteSessionClientID: chosen}, req)
 			}
 		})
 	}
@@ -143,54 +145,71 @@ func TestIdentityChainingError(t *testing.T) {
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, retryable, &shareable)
 	require.Equal(t, oops.CodeUnavailable, shareable.Code)
-	require.Contains(t, retryable.Error(), "transient_failure")
+	require.Equal(t, "Company sign-in for this server is temporarily unavailable. Try again in a moment.", shareable.Error())
 
 	denied := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidTarget, Confidence: identitychaining.ConfidenceInferred, Retryable: false, Cached: false, Provider: ""})
 	require.ErrorAs(t, denied, &shareable)
 	require.Equal(t, oops.CodeForbidden, shareable.Code, "an explicit binding never falls back to interactive authorization")
+	require.Equal(t, "Company sign-in for this server isn't working. Contact your administrator.", shareable.Error())
+
+	rejected := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""})
+	require.ErrorAs(t, rejected, &shareable)
+	require.Equal(t, oops.CodeForbidden, shareable.Code)
+	require.Equal(t, "Company sign-in for this server isn't working. Reconnect this server in your AI client. If that doesn't help, contact your administrator.", shareable.Error())
+
+	redemption := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""})
+	require.ErrorAs(t, redemption, &shareable)
+	require.Equal(t, "Company sign-in for this server isn't working. Contact your administrator.", shareable.Error())
 }
 
 func TestMetaMemberChainer(t *testing.T) {
 	t.Parallel()
 	project, issuer := uuid.New(), uuid.New()
 	gate := &metaGateContext{projectID: project, organizationID: chainingTestOrg, userSessionIssuerID: issuer}
-	member := metaMember{slug: "docs", projectID: project}
+	member := metaMember{slug: "docs", projectID: project, chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 
 	t.Run("member outside the gateway project", func(t *testing.T) {
 		t.Parallel()
 		s := chainingService(t, &recordingChainer{})
 		other := member
 		other.projectID = uuid.New()
-		require.Nil(t, s.metaMemberChainer(gate, other))
+		for _, kind := range []mcpidentity.Kind{mcpidentity.KindUserSession, mcpidentity.KindConsentDiscovery} {
+			require.Nil(t, s.metaMemberChainer(gate, other, kind, uuid.Nil), "consent and runtime share the project boundary")
+		}
 	})
 	t.Run("ungated gateway", func(t *testing.T) {
 		t.Parallel()
 		s := chainingService(t, &recordingChainer{})
 		ungated := *gate
 		ungated.userSessionIssuerID = uuid.Nil
-		require.Nil(t, s.metaMemberChainer(&ungated, member))
+		require.Nil(t, s.metaMemberChainer(&ungated, member, mcpidentity.KindUserSession, uuid.Nil))
 	})
 	for _, tc := range []struct {
 		name    string
 		outcome identitychaining.Outcome
 		wantErr bool
+		message string
 	}{
-		{"not applicable stays anonymous", identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, false},
-		{"reauthentication is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonReauthenticationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true},
-		{"provider rejection is member scoped", identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true},
+		{"not applicable stays anonymous", identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, false, ""},
+		{"reauthentication is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonReauthenticationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Server "docs" needs a new company sign-in. Reconnect this gateway in your AI client.`},
+		{"provider rejection is member scoped", identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Contact your administrator.`},
+		{"provider rejecting the saved sign-in offers a reconnect", identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.`},
+		{"temporary failure is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" is temporarily unavailable. Try again in a moment.`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			chainer := &recordingChainer{outcome: tc.outcome}
 			s := chainingService(t, chainer)
-			chain := s.metaMemberChainer(gate, member)
+			chain := s.metaMemberChainer(gate, member, mcpidentity.KindUserSession, uuid.Nil)
 			require.NotNil(t, chain)
 			token, err := chain(humanChainingContext(t, "user-1", chainingTestOrg), "https://docs.example.test/mcp")
 			require.Empty(t, token)
 			if tc.wantErr {
 				var memberErr *metaMemberError
 				require.ErrorAs(t, err, &memberErr, "chaining failures surface as member-scoped tool errors")
-				require.Contains(t, memberErr.message, `"docs"`)
+				require.Equal(t, tc.message, memberErr.message)
+				_, credential := errors.AsType[memberCredentialError](err)
+				require.Equal(t, tc.outcome.Reason == identitychaining.ReasonReauthenticationRequired, credential, "only sign-in failures should offer reconnect")
 			} else {
 				require.NoError(t, err)
 			}
@@ -201,40 +220,88 @@ func TestMetaMemberChainer(t *testing.T) {
 	}
 }
 
+// A transient failure that is safe to repeat is retried within a listing,
+// unless the attempt's own context ended, since its time is already spent.
+func TestMetaMemberChainerRetriesSafeTransientFailuresWhileTheAttemptLives(t *testing.T) {
+	t.Parallel()
+	project := uuid.New()
+	gate := &metaGateContext{projectID: project, organizationID: chainingTestOrg, userSessionIssuerID: uuid.New()}
+	member := metaMember{slug: "docs", projectID: project, chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	transient := identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceInferred, Retryable: true, Cached: false, Provider: ""}
+
+	for name, ended := range map[string]bool{"live attempt": false, "ended attempt": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(humanChainingContext(t, "user-1", chainingTestOrg))
+			defer cancel()
+			if ended {
+				cancel()
+			}
+			chain := chainingService(t, &recordingChainer{outcome: transient}).metaMemberChainer(gate, member, mcpidentity.KindUserSession, uuid.Nil)
+			_, err := chain(ctx, "https://docs.example.test/mcp")
+			failure, ok := errors.AsType[memberDiscoveryError](err)
+			require.True(t, ok, "%v", err)
+			require.Equal(t, !ended, failure.retryable)
+		})
+	}
+}
+
 func TestIdentityChainingRequest_TunnelRoutesByOwnIssuer(t *testing.T) {
 	t.Parallel()
 	project, issuer, tunnelIssuer := uuid.New(), uuid.New(), uuid.New()
 	s := chainingService(t, &recordingChainer{})
 	ctx := humanChainingContext(t, "user-1", chainingTestOrg)
 
-	req, ok := s.identityChainingRequest(ctx, chainingTestOrg, project, issuer, "https://tunnel.example.test/mcp", true, uuid.NullUUID{UUID: tunnelIssuer, Valid: true})
+	chosen := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	req, ok := s.identityChainingRequest(ctx, chainingTestOrg, project, issuer, "https://tunnel.example.test/mcp", true, uuid.NullUUID{UUID: tunnelIssuer, Valid: true}, chosen)
 	require.True(t, ok)
 	require.Equal(t, uuid.NullUUID{UUID: tunnelIssuer, Valid: true}, req.RemoteSessionIssuerID, "a tunnel may only select a binding for its own issuer")
 
-	_, ok = s.identityChainingRequest(ctx, chainingTestOrg, project, issuer, "https://tunnel.example.test/mcp", true, uuid.NullUUID{})
+	_, ok = s.identityChainingRequest(ctx, chainingTestOrg, project, issuer, "https://tunnel.example.test/mcp", true, uuid.NullUUID{}, chosen)
 	require.False(t, ok, "a tunnel without a derived issuer calls anonymously and never chains")
 
-	req, ok = s.identityChainingRequest(ctx, chainingTestOrg, project, issuer, "https://remote.example.test/mcp", false, uuid.NullUUID{UUID: tunnelIssuer, Valid: true})
+	req, ok = s.identityChainingRequest(ctx, chainingTestOrg, project, issuer, "https://remote.example.test/mcp", false, uuid.NullUUID{UUID: tunnelIssuer, Valid: true}, chosen)
 	require.True(t, ok)
 	require.False(t, req.RemoteSessionIssuerID.Valid, "a remote backend routes by the URL it dials")
+}
+
+// A session credential chains only through the client it chose, so one
+// without a choice, a no-auth choice included, never chains, even where a
+// binding for another client of the issuer would serve the upstream.
+func TestIdentityChainingRequest_RequiresAChosenClient(t *testing.T) {
+	t.Parallel()
+	project, issuer := uuid.New(), uuid.New()
+	s := chainingService(t, &recordingChainer{})
+	ctx := humanChainingContext(t, "user-1", chainingTestOrg)
+
+	_, ok := s.identityChainingRequest(ctx, chainingTestOrg, project, issuer, "https://remote.example.test/mcp", false, uuid.NullUUID{}, uuid.NullUUID{})
+	require.False(t, ok)
+
+	member := metaMember{slug: "remote", projectID: project}
+	gate := &metaGateContext{projectID: project, organizationID: chainingTestOrg, userSessionIssuerID: issuer}
+	chainer := &recordingChainer{}
+	token, err := chainingService(t, chainer).metaMemberChainer(gate, member, mcpidentity.KindUserSession, uuid.Nil)(ctx, "https://remote.example.test/mcp")
+	require.NoError(t, err)
+	require.Empty(t, token)
+	require.Empty(t, chainer.requests, "a member without a chosen client never asks the chainer")
 }
 
 func TestMetaMemberChainer_TunneledMemberRoutesByOwnIssuer(t *testing.T) {
 	t.Parallel()
 	project, issuer, tunnelIssuer := uuid.New(), uuid.New(), uuid.New()
 	gate := &metaGateContext{projectID: project, organizationID: chainingTestOrg, userSessionIssuerID: issuer}
-	member := metaMember{slug: "tunnel", projectID: project, tunneledServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: tunnelIssuer, Valid: true}}
+	member := metaMember{slug: "tunnel", projectID: project, tunneledServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: tunnelIssuer, Valid: true}, chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	chainer := &recordingChainer{outcome: identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}}
 	s := chainingService(t, chainer)
 
-	_, err := s.metaMemberChainer(gate, member)(humanChainingContext(t, "user-1", chainingTestOrg), "https://victim.example.test/mcp")
+	_, err := s.metaMemberChainer(gate, member, mcpidentity.KindUserSession, uuid.Nil)(humanChainingContext(t, "user-1", chainingTestOrg), "https://victim.example.test/mcp")
 	require.NoError(t, err)
 	require.Len(t, chainer.requests, 1)
 	require.Equal(t, uuid.NullUUID{UUID: tunnelIssuer, Valid: true}, chainer.requests[0].RemoteSessionIssuerID, "a tunnel claiming a sibling's resource only selects bindings for its own issuer")
 
 	unidentified := member
 	unidentified.remoteSessionIssuerID = uuid.NullUUID{}
-	token, err := s.metaMemberChainer(gate, unidentified)(humanChainingContext(t, "user-1", chainingTestOrg), "https://victim.example.test/mcp")
+	token, err := s.metaMemberChainer(gate, unidentified, mcpidentity.KindUserSession, uuid.Nil)(humanChainingContext(t, "user-1", chainingTestOrg), "https://victim.example.test/mcp")
 	require.NoError(t, err)
 	require.Empty(t, token)
 	require.Len(t, chainer.requests, 1, "a tunnel without a derived issuer never chains")
@@ -267,6 +334,31 @@ func (g *recordingChainer) CheckConsent(ctx context.Context, req identitychainin
 	return outcome
 }
 
-func (c *recordingChainer) RetireConsentCredentials(context.Context, string, uuid.UUID, uuid.UUID, string, uuid.UUID) error {
+// A credential's chosen client constrains chaining as it does interactive
+// resolution, on a direct backend and on every gateway member.
+func TestIdentityChainingCarriesTheChosenClient(t *testing.T) {
+	t.Parallel()
+	project, issuer, chosen := uuid.New(), uuid.New(), uuid.New()
+	chainer := &recordingChainer{outcome: identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}}
+	s := chainingService(t, chainer)
+	ctx := humanChainingContext(t, "user-1", chainingTestOrg)
+
+	req, ok := s.identityChainingRequest(ctx, chainingTestOrg, project, issuer, "https://remote.example.test/mcp", false, uuid.NullUUID{}, uuid.NullUUID{UUID: chosen, Valid: true})
+	require.True(t, ok)
+	require.Equal(t, uuid.NullUUID{UUID: chosen, Valid: true}, req.RemoteSessionClientID)
+
+	gate := &metaGateContext{projectID: project, organizationID: chainingTestOrg, userSessionIssuerID: issuer}
+	member := metaMember{slug: "remote", projectID: project, chosenClientID: uuid.NullUUID{UUID: chosen, Valid: true}}
+	_, err := s.metaMemberChainer(gate, member, mcpidentity.KindUserSession, uuid.Nil)(ctx, "https://remote.example.test/mcp")
+	require.NoError(t, err)
+	require.Len(t, chainer.requests, 1)
+	require.Equal(t, uuid.NullUUID{UUID: chosen, Valid: true}, chainer.requests[0].RemoteSessionClientID)
+}
+
+func (c *recordingChainer) RetireConsentCredentials(context.Context, string, uuid.UUID, string, uuid.UUID) error {
 	return nil
+}
+
+func (g *recordingChainer) AcquireConsent(ctx context.Context, req identitychaining.Request, _ uuid.UUID) (identitychaining.Token, identitychaining.Outcome) {
+	return g.Acquire(ctx, req)
 }

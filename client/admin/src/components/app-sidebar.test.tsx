@@ -229,10 +229,14 @@ describe("AppSidebar", () => {
           { label: "Use Cases & Playbooks", href: "/onboarding-playbooks" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
           {
-            label: "External MCP migration",
-            href: "/external-mcp-migration",
+            label: "Upstream OAuth migration",
+            href: "/upstream-oauth-migration",
           },
-          { label: "Hook clients", href: "/hook-clients" },
+          { label: "Fleet health", href: "/fleet-health" },
+          {
+            label: "Platform MCP feedback",
+            href: "/platform-mcp-feedback",
+          },
           { label: "Admin MCP", href: "/mcp-setup" },
           {
             label: "Demo organization",

@@ -4,6 +4,8 @@ import {
   moveKey,
   organizationHostRedirectTarget,
   recordMove,
+  recordOrganizationSwitch,
+  switchedRecently,
 } from "./organization-host";
 
 const current = {
@@ -258,5 +260,42 @@ describe("move guard", () => {
     expect(alreadyMoved(moveKey("org-1", "https://ai.example.com/acme"))).toBe(
       false,
     );
+  });
+});
+
+describe("organization switch", () => {
+  afterEach(() => {
+    sessionStorage.clear();
+  });
+
+  it("asks the other host to replace its session after a switch", () => {
+    const target = organizationHostRedirectTarget(
+      "https://ai.example.com",
+      current,
+      true,
+    );
+    expect(new URL(target!).searchParams.get("replace_session")).toBe("true");
+  });
+
+  it("keeps the other host's session by default", () => {
+    const target = organizationHostRedirectTarget(
+      "https://ai.example.com",
+      current,
+    );
+    expect(new URL(target!).searchParams.has("replace_session")).toBe(false);
+  });
+
+  it("remembers a switch to that organization for a minute", () => {
+    const now = Date.now();
+    recordOrganizationSwitch("org-1", now);
+
+    expect(switchedRecently("org-1", now + 59_000)).toBe(true);
+    expect(switchedRecently("org-2", now)).toBe(false);
+    expect(switchedRecently("org-1", now + 60_000)).toBe(false);
+  });
+
+  it("ignores a corrupt record", () => {
+    sessionStorage.setItem("organizationSwitch", "{not json");
+    expect(switchedRecently("org-1")).toBe(false);
   });
 });

@@ -124,12 +124,6 @@ type CreateCimdClientPayload struct {
 // organizationUserSessionIssuers service createIssuer method.
 type CreateIssuerPayload struct {
 	SessionToken *string
-	// Organization-level or global remote_session_issuer whose assertions this
-	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
-	TrustedRemoteSessionIssuerID *string
-	// Organization-level remote_session_client Speakeasy uses with the trusted
-	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
-	TrustedRemoteSessionClientID *string
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug string
@@ -137,6 +131,12 @@ type CreateIssuerPayload struct {
 	AuthnChallengeMode string
 	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours int
+	// Organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
+	TrustedRemoteSessionIssuerID *string
+	// Organization-level remote_session_client Speakeasy uses with the trusted
+	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
+	TrustedRemoteSessionClientID *string
 }
 
 // CreateUserSessionIssuerCimdClientResult is the result type of the
@@ -346,8 +346,11 @@ type OrganizationUserSessionIssuerMigratePreflight struct {
 	CimdClientCount int
 	// Remote-session credentials whose issuer provenance would move.
 	RemoteSessionCount int
-	// Active OAuth client ids already present on both issuers. Non-empty blocks
-	// migration.
+	// Active OAuth client ids present on both issuers that cannot be merged.
+	// Non-empty blocks migration. A client resolved from the same Client ID
+	// Metadata Document on both issuers is not listed: it merges onto the target's
+	// client, keeping its sessions and consents, unless an issuance selection
+	// profile pins the source client to the source issuer.
 	ConflictingClientIds []string
 	// Active principal bindings that would violate target uniqueness. Non-zero
 	// blocks migration.

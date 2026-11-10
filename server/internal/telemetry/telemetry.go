@@ -18,6 +18,7 @@ const (
 	EventSourceEvaluation     EventSource = "evaluation"
 	EventSourceResourceRead   EventSource = "resource_read"
 	EventSourceHook           EventSource = "hook"
+	EventSourceHookDiagnostic EventSource = "hook_diagnostic"
 	EventSourceAPI            EventSource = "api"
 	EventSourceTrigger        EventSource = "trigger"
 	EventSourceAssistant      EventSource = "assistant"

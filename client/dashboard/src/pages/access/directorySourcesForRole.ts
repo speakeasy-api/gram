@@ -1,4 +1,5 @@
 import type { FacepileMember } from "@/components/member-facepile";
+import { memberInDirectoryGroup } from "@/lib/member-roles";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { ListDirectoryRoleMappingsResult } from "@gram/client/models/components/listdirectoryrolemappingsresult.js";
 
@@ -14,6 +15,11 @@ export type RoleDirectorySource = {
   memberCount: number | undefined;
   /** Speakeasy members in the group. Attributes are not matched to members. */
   members: FacepileMember[];
+  /**
+   * The group was deleted from the directory, or no directory user has the
+   * attribute value any more. A missing source grants nothing.
+   */
+  missing: boolean;
 };
 
 function facepileMember(member: AccessMember): FacepileMember {
@@ -53,7 +59,7 @@ export function roleDirectorySources(
       .map((mapping): RoleDirectorySource => {
         if (mapping.sourceKind === "group") {
           const group = groups.get(mapping.directoryGroupId ?? "");
-          if (!group) {
+          if (!group || mapping.sourceStatus === "missing") {
             // The group was deleted from the directory: the mapping matches
             // nobody, and a live group reusing its name is not it.
             const name = mapping.directoryGroupName;
@@ -63,6 +69,7 @@ export function roleDirectorySources(
               label: name ? `${name} (removed)` : "Removed group",
               memberCount: 0,
               members: [],
+              missing: true,
             };
           }
           return {
@@ -70,23 +77,22 @@ export function roleDirectorySources(
             kind: "group",
             label: group.name || "Unnamed group",
             memberCount: group.memberCount,
-            // Members name their directory groups, not group ids, so match on
-            // the name, as the mappings table does.
-            members: group.name
-              ? members
-                  .filter((member) => member.groups?.includes(group.name))
-                  .map(facepileMember)
-              : [],
+            members: members
+              .filter((member) => memberInDirectoryGroup(member, group))
+              .map(facepileMember),
+            missing: false,
           };
         }
         const key = mapping.attributeKey ?? "";
         const value = mapping.attributeValue ?? "";
+        const missing = mapping.sourceStatus === "missing";
         return {
           key: mapping.id,
           kind: "attribute",
-          label: `${key} = ${value}`,
-          memberCount: attributeMemberCount(data, key, value),
+          label: missing ? `${key} = ${value} (no users)` : `${key} = ${value}`,
+          memberCount: missing ? 0 : attributeMemberCount(data, key, value),
           members: [],
+          missing,
         };
       })
       // Groups first, then attributes, each by name.

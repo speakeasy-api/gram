@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
@@ -50,7 +51,7 @@ func TestRemoteLoginConsentURL(t *testing.T) {
 			parsed, err := url.Parse(serverURL)
 			require.NoError(t, err)
 			service := &Service{serverURL: parsed, authenticationHostBaseURL: tc.authenticationHost}
-			endpoint := &ResolvedMcpEndpoint{RouteBase: "mcp", Slug: "billing", useAuthenticationHost: tc.useAuthenticationHost, CustomDomainID: uuid.NullUUID{UUID: uuid.New(), Valid: tc.customDomain}}
+			endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.MCP, Slug: "billing", useAuthenticationHost: tc.useAuthenticationHost, CustomDomainID: uuid.NullUUID{UUID: uuid.New(), Valid: tc.customDomain}}
 			if tc.shared {
 				endpoint.sharedAuthorizationServer = &sharedAuthorizationServer{issuerID: sharedIssuerID, issuer: sharedIssuer}
 				endpoint.sharedResource = &sharedResource{origin: requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: tc.mintOrigin}}
@@ -91,7 +92,7 @@ func TestRedirectToAuthorizationServer(t *testing.T) {
 			parsed, err := url.Parse(serverURL)
 			require.NoError(t, err)
 			service := &Service{serverURL: parsed, authenticationHostBaseURL: authenticationHost}
-			endpoint := &ResolvedMcpEndpoint{RouteBase: "mcp", Slug: "billing", useAuthenticationHost: true}
+			endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.MCP, Slug: "billing", useAuthenticationHost: true}
 
 			ctx := requestorigin.WithContext(t.Context(), requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: serverURL})
 			if tc.arrivedOn != "" {

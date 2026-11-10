@@ -1,5 +1,6 @@
 import { useFilterState, type OptionsById } from "@/components/filters";
 import {
+  customDateRangeBounds,
   defaultValueForDimension,
   type DateRangeValue,
   type FilterDimension,
@@ -241,7 +242,7 @@ function useFieldOptions(
   const project = useProject();
   const catalog = useAnalyticsDescribe().data?.datasets ?? [];
   const { from, to } =
-    date.customRange ??
+    customDateRangeBounds(date) ??
     windowRange(date.preset ?? optionsWindow ?? DEFAULT_OPTIONS_WINDOW);
   const candidates =
     optionsDatasets?.flatMap((name) => findDataset(catalog, name) ?? []) ??

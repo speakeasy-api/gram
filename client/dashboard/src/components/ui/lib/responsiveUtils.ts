@@ -1,10 +1,10 @@
-import {
+import type {
   Breakpoint,
-  breakpoints,
   Gap,
   ResponsiveValue,
   Size,
 } from "@/components/ui/lib/types";
+import { breakpoints } from "@/components/ui/lib/types";
 import { isResponsiveValueObject, isSize } from "./typeUtils";
 
 export const gapMapper = (gap: Gap): string => `gap-${gap}`;

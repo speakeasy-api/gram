@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const OrganizationInvitationState = {
 /**
  * Invitation lifecycle state.
  */
-export type OrganizationInvitationState = ClosedEnum<
+export type OrganizationInvitationState = OpenEnum<
   typeof OrganizationInvitationState
 >;
 
@@ -63,9 +64,10 @@ export type OrganizationInvitation = {
 };
 
 /** @internal */
-export const OrganizationInvitationState$inboundSchema: z.ZodMiniEnum<
-  typeof OrganizationInvitationState
-> = z.enum(OrganizationInvitationState);
+export const OrganizationInvitationState$inboundSchema: z.ZodMiniType<
+  OrganizationInvitationState,
+  unknown
+> = openEnums.inboundSchema(OrganizationInvitationState);
 
 /** @internal */
 export const OrganizationInvitation$inboundSchema: z.ZodMiniType<

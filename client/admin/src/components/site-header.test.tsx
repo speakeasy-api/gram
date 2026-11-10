@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { registryEntryNameKey } from "@/lib/registryEntryName";
 import { organizationQuery, projectQuery } from "@/lib/adminQueries";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization, aProject } from "@/test/fixtures";
@@ -416,4 +417,15 @@ describe("SiteHeader", () => {
       expect(router.state.location.pathname).toBe(`/organizations/${ORG.slug}`);
     });
   });
+});
+
+it("names the registry entry crumb from the detail name cache", async () => {
+  const client = seeded();
+  const id = "00000000-0000-4000-8000-000000000001";
+  client.setQueryData(registryEntryNameKey(id), { name: "example.test/demo" });
+  await renderRouteTree(routeTree, {
+    initialPath: `/registry/${id}`,
+    queryClient: client,
+  });
+  expect(crumbs()).toEqual(["MCP Registry", "example.test/demo"]);
 });

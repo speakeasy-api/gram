@@ -7,10 +7,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  AttachedUserSessions,
-  ToolsetAttachedUserSessions,
-} from "./AttachedUserSessions";
+import { AttachedUserSessions } from "./AttachedUserSessions";
 
 const mocks = vi.hoisted(() => ({
   organization: { id: "org", slug: "org" },
@@ -56,9 +53,6 @@ vi.mock("@/lib/utils", async (importOriginal) => ({
   firstPartyConnectUrl: (url: string | undefined) =>
     url ? `${url}/connect/first-party` : undefined,
 }));
-vi.mock("@/hooks/useToolsetUrl", () => ({
-  useToolsetMcpTarget: () => mocks.target,
-}));
 
 const agent = (id: string, authorize = true, lifecycle = "active") => ({
   id,
@@ -101,11 +95,18 @@ beforeEach(() => {
     impersonatorEmail: "",
   };
   mocks.scope = null;
+  // agents.list is paginated, so it resolves to pages, not to agents.
   mocks.list.mockResolvedValue([
-    agent("first"),
-    agent("second"),
-    agent("denied", false),
-    { ...agent("not-owned"), ownerUserId: "another-user" },
+    {
+      result: {
+        items: [
+          agent("first"),
+          agent("second"),
+          agent("denied", false),
+          { ...agent("not-owned"), ownerUserId: "another-user" },
+        ],
+      },
+    },
   ]);
   mocks.candidates.mockResolvedValue([
     { id: "session", remoteSessionClientId: "client", scopes: [] },
@@ -215,7 +216,7 @@ describe("AttachedUserSessions container", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
   });
   it("displays the canonical identity of a binding from a compatible source issuer", async () => {
-    mocks.list.mockResolvedValue([agent("first")]);
+    mocks.list.mockResolvedValue([{ result: { items: [agent("first")] } }]);
     mocks.candidates.mockResolvedValue([]);
     mocks.bindings.mockResolvedValue([
       {
@@ -245,7 +246,7 @@ describe("AttachedUserSessions container", () => {
     ).toBeNull();
   });
   it("does not label a tombstone as active when a new grant reuses its session ID", async () => {
-    mocks.list.mockResolvedValue([agent("first")]);
+    mocks.list.mockResolvedValue([{ result: { items: [agent("first")] } }]);
     mocks.bindings.mockResolvedValue([
       {
         id: "binding",
@@ -275,7 +276,9 @@ describe("AttachedUserSessions container", () => {
     expect(mocks.attach).not.toHaveBeenCalled();
   });
   it("keeps unavailable existing bindings detachable", async () => {
-    mocks.list.mockResolvedValue([agent("first", true, "disabled")]);
+    mocks.list.mockResolvedValue([
+      { result: { items: [agent("first", true, "disabled")] } },
+    ]);
     mocks.candidates.mockResolvedValue([]);
     mocks.bindings.mockResolvedValue([
       {
@@ -299,7 +302,9 @@ describe("AttachedUserSessions container", () => {
   });
   it("validates every selected agent before starting even earlier detach writes", async () => {
     const second = agent("second");
-    mocks.list.mockResolvedValue([agent("first"), second]);
+    mocks.list.mockResolvedValue([
+      { result: { items: [agent("first"), second] } },
+    ]);
     mocks.bindings.mockImplementation((id) =>
       Promise.resolve(
         id === "first"
@@ -438,38 +443,3 @@ vi.mock("@gram/client/react-query/remoteSessionsDetachBinding.js", () => ({
     },
   }),
 }));
-
-describe("ToolsetAttachedUserSessions selected target", () => {
-  it("lists the selected server issuer and connects to its endpoint", async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={client}>
-        <ToolsetAttachedUserSessions
-          toolset={
-            {
-              id: "toolset",
-              userSessionIssuerId: "canonical-issuer",
-            } as Parameters<typeof ToolsetAttachedUserSessions>[0]["toolset"]
-          }
-        />
-      </QueryClientProvider>,
-    );
-    await waitFor(() =>
-      expect(mocks.listRemoteSessions).toHaveBeenCalledWith(
-        expect.objectContaining({ userSessionIssuerId: "selected-issuer" }),
-        undefined,
-        expect.anything(),
-      ),
-    );
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
-    fireEvent.click(screen.getByRole("button", { name: /connect/i }));
-    expect(open).toHaveBeenCalledWith(
-      "https://api.example/mcp/enabled-alternate/connect/first-party",
-      "_blank",
-      "noopener,noreferrer",
-    );
-    open.mockRestore();
-  });
-});

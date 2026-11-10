@@ -443,6 +443,75 @@ func TestListRecentToolCallsRequiresLogRead(t *testing.T) {
 	require.Empty(t, telemetry.params.GramProjectID, "no tool-call rows are read without log:read")
 }
 
+func TestListRecentToolCallsProjectsAgentIdentityAndFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_recent_agent_calls")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	agentID := uuid.NewString()
+	telemetry := &recordingRecentToolCallReader{rows: []telemetryrepo.ToolUsageTraceSummary{
+		{UserKind: "agent_id", UserKey: agentID, EventSource: "hook"},
+		{UserKind: "agent_id", UserKey: agentID, EventSource: "tool_call"},
+		{UserKind: "email", UserKey: "private-person@example.test", AuthorizerUserID: "private-authorizer"},
+		{UserKind: "external_user_id", UserKey: uuid.NewString()},
+		{UserKind: "agent_id", UserKey: "private-invalid-actor"},
+	}}
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithAuthorization(engine).
+		WithRecentToolCalls(telemetry, mustParseURL(t, "https://app.getgram.test"))
+	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
+	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeLogRead, project.ID.String())})
+
+	output, err := reader.ListRecentToolCalls(ctx, principal, ListRecentToolCallsInput{ProjectID: project.ID.String(), AgentID: strings.ToUpper(agentID)})
+	require.NoError(t, err)
+	require.Equal(t, project.ID.String(), telemetry.params.GramProjectID)
+	require.Equal(t, []string{agentID}, telemetry.params.AgentIDs)
+	require.Empty(t, telemetry.params.UserFilters)
+	require.Equal(t, agentID, output.Calls[0].AgentID)
+	require.Equal(t, agentID, output.Calls[1].AgentID)
+	for _, call := range output.Calls[2:] {
+		require.Empty(t, call.AgentID)
+	}
+	encoded, err := json.Marshal(output)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "private-")
+	require.NotContains(t, string(encoded), telemetry.rows[3].UserKey)
+}
+
+func TestListRecentToolCallsRejectsInvalidAgentBeforeReadingLogs(t *testing.T) {
+	t.Parallel()
+	for _, agentID := range []string{"not-an-agent-id", uuid.Nil.String()} {
+		t.Run(agentID, func(t *testing.T) {
+			t.Parallel()
+			telemetry := &recordingRecentToolCallReader{}
+			reader := NewPostgresReader(testenv.NewLogger(t), nil).
+				WithRecentToolCalls(telemetry, mustParseURL(t, "https://app.getgram.test"))
+			_, err := reader.ListRecentToolCalls(t.Context(), Principal{}, ListRecentToolCallsInput{ProjectID: uuid.NewString(), AgentID: agentID})
+			require.ErrorContains(t, err, "agent_id")
+			require.Empty(t, telemetry.params.GramProjectID)
+		})
+	}
+}
+
+func TestRecentToolCallAgentContractMatchesUnavailable(t *testing.T) {
+	t.Parallel()
+	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
+	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
+	registerRecentToolCallTools(live, nil)
+	registerUnavailableRecentToolCallTools(unavailable)
+	a, b := descriptorByName(t, live, "list_recent_tool_calls"), descriptorByName(t, unavailable, "list_recent_tool_calls")
+	require.JSONEq(t, string(a.InputSchema), string(b.InputSchema))
+	require.Contains(t, string(a.InputSchema), "agent_id")
+	require.Equal(t, a.output, b.output)
+	require.Equal(t, a.Meta, b.Meta)
+	require.Equal(t, bothAudiences, a.Meta.Audiences)
+	require.Equal(t, discoveryLogRead, a.Meta.DiscoveryScopes)
+}
+
 func TestRecentToolCallTargetOmitsUnclassifiedShadowSource(t *testing.T) {
 	t.Parallel()
 

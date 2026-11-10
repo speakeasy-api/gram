@@ -2,7 +2,7 @@
 
 package sdk
 
-// Generated from OpenAPI doc version 0.0.1 and generator version 2.933.0
+// Generated from OpenAPI doc version 0.0.1 and generator version 2.950.2
 
 import (
 	"context"
@@ -129,8 +129,11 @@ func New(opts ...SDKOption) *SpeakeasyHooks {
 	sdk := &SpeakeasyHooks{
 		SDKVersion: "0.1.0",
 		sdkConfiguration: config.SDKConfiguration{
-			UserAgent:  "speakeasy-sdk/go 0.1.0 2.933.0 0.0.1 github.com/speakeasy-api/gram/hooks/sdk",
-			ServerList: ServerList,
+			UserAgent:         "speakeasy-sdk/go 0.1.0 2.950.2 0.0.1 github.com/speakeasy-api/gram/hooks/sdk",
+			SDKVersion:        "0.1.0",
+			GenVersion:        "2.950.2",
+			OpenAPIDocVersion: "0.0.1",
+			ServerList:        ServerList,
 		},
 		hooks: hooks.New(),
 	}

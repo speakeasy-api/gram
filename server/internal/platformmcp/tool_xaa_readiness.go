@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/url"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -51,6 +51,10 @@ type xaaReadinessService struct {
 	// describe: orgs without one, and servers Speakeasy may vouch for.
 	emaEnabled FeatureChecker
 	servers    xaaServerReader
+
+	// flags decides per organization whether identity chaining resource
+	// ownership comes from client associations; nil keeps issuer bindings.
+	flags feature.Provider
 }
 
 // xaaServer is one eligible server and whether Speakeasy vouches for it.
@@ -97,7 +101,7 @@ func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, sign
 			return flags.IsFlagEnabled(ctx, flag, orgID, feature.OrgProjectGroups(slug, ""))
 		}
 	}
-	r.xaaReadiness = &xaaReadinessService{logger: r.logger, connections: connections, signIn: signIn, enabled: flagChecker(feature.FlagOktaConnections), identity: nil, emaEnabled: flagChecker(feature.FlagEMAProviders), servers: nil}
+	r.xaaReadiness = &xaaReadinessService{logger: r.logger, connections: connections, signIn: signIn, enabled: flagChecker(feature.FlagOktaConnections), identity: nil, emaEnabled: flagChecker(feature.FlagEMAProviders), servers: nil, flags: flags}
 	return r
 }
 
@@ -106,8 +110,8 @@ func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, sign
 // for clients that recorded none.
 func (r *PostgresReader) WithXAAIdentityChaining(governor IdentityChainingGovernor, outbound *url.URL) *PostgresReader {
 	if r.xaaReadiness != nil && r.db != nil {
-		r.xaaReadiness.identity = &postgresXAAIdentityInspector{logger: r.logger, db: r.db, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil}}
-		r.xaaReadiness.servers = &postgresXAAServerReader{reader: r}
+		r.xaaReadiness.identity = &postgresXAAIdentityInspector{logger: r.logger, db: r.db, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil}, flags: r.xaaReadiness.flags}
+		r.xaaReadiness.servers = &postgresXAAServerReader{reader: r, authEnforcement: authenforcement.NewGate(r.db)}
 	}
 	return r
 }
@@ -116,6 +120,11 @@ func (r *PostgresReader) WithXAAIdentityChaining(governor IdentityChainingGovern
 // WithAuthorization may compose after WithXAAIdentityChaining.
 type postgresXAAServerReader struct {
 	reader *PostgresReader
+
+	// authEnforcement reads which organizations choose upstream
+	// authentication through typed auth clients, where a server's
+	// authorization server comes from what it offers.
+	authEnforcement *authenforcement.Gate
 }
 
 func (s *postgresXAAServerReader) Server(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) (xaaServer, bool, error) {
@@ -124,7 +133,11 @@ func (s *postgresXAAServerReader) Server(ctx context.Context, organizationID str
 	if engine == nil {
 		return none, false, ErrUnavailable
 	}
-	row, err := oktarepo.New(s.reader.db).GetEligibleServer(ctx, oktarepo.GetEligibleServerParams{OrganizationID: organizationID, McpServerID: serverID})
+	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
+	if err != nil {
+		return none, false, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
+	row, err := oktarepo.New(s.reader.db).GetEligibleServer(ctx, oktarepo.GetEligibleServerParams{OrganizationID: organizationID, McpServerID: serverID, TypedAuthEnforced: enforced})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, false, nil
@@ -261,7 +274,7 @@ func registerXAAReadinessTool(reg *Registrar, service *xaaReadinessService) {
 	addTool(reg, &mcp.Tool{
 		Name: "get_xaa_readiness", Title: "Check Cross-App Access Readiness",
 		Description: "Inspect stored Cross-App Access (XAA) readiness, the enterprise-managed authorization path where an EMA provider (an external identity provider such as Okta, or the organization's Speakeasy issuer) issues ID-JAGs, for one exact project and MCP server. When the organization has an Okta connection and the vendor's order names no Speakeasy issuer, or this server's sign-in is federated and the order also names an external issuer, reports the dashboard's derived Okta resource connection state and exchange evidence (connected means administrator-confirmed, not verified). Otherwise, including for any vendor whose order names the Speakeasy issuer (unless this server's sign-in is federated through an external issuer and the order also names one) and in organizations with no Okta connection, state comes from identity chaining alone: ready, not_ready or not_applicable, without the Okta fields. May fetch read-only OAuth resource metadata to resolve the endpoint; does not exchange tokens, connect or change configuration. identity_chaining lists this server's identity-chaining bindings with state, remediation, configured scopes (recorded when identity chaining was prepared), the scopes actually requested after dropping OpenID Connect scopes, and whether the server connection's scopes have changed since (prepareEMA with the current expected_generation applies them); served is true only when exactly one ready binding serves the upstream at runtime and at least one EMA provider in the vendor's order can serve now; providers lists the providers the vendor accepts, stored as an ordered list: by default the endpoint's trusted external issuer alone, or the organization's Speakeasy issuer when the endpoint trusts none, or else the administrator's saved list, each with unavailable_reason when it cannot serve and last_accepted_at when the vendor has accepted that exact provider anywhere in the organization (omitted both when it never has and when acceptance could not be read, so absence is not proof the vendor never accepted it). Identity chaining skips providers that cannot serve, including providers the endpoint's sign-in does not go through (not_trusted_by_endpoint: an external issuer other than the sign-in's trusted issuer, or the Speakeasy issuer on a sign-in federated through an external issuer, since Speakeasy vouches only for servers that use Speakeasy's own sign-in). Each server can use only the provider its sign-in goes through, so the saved list acts as the set of providers the vendor accepts and its order does not change who vouches; not_served_reason says why served is false. The Speakeasy issuer serves only while the organization's sign-in enforcement is on. Changing which providers a vendor accepts is not available here; organization admins choose them on the dashboard's Organization → IDP and SSO → Identity providers → Services page for the vendor, or with the organizationRemoteSessionIssuers.setEMAProviders management API (saving a provider list needs the ema-providers rollout; restoring the default does not). federated_callback_url is the redirect URI to register in the identity provider sign-in app for this server's user sign-in. okta_sign_in reports the organization's Okta sign-in setup: whether the agent's sign-in client exists, the public key to paste in the agent's Credentials in Okta and Activate (re-register it after rotating or publishing a new key), the redirect URI for the linked app, which sign-in issuers trust it or still trust a previous agent's client, and the next setup step. Changing bindings or setting up sign-in is not available here; sign-in setup needs a signing key choice and a confirmed trust change, so send the administrator to the dashboard for it. Requires organization administration and read access to the server. Unlike get_mcp_readiness, this checks organization XAA configuration, not a registration's provider readiness.",
-		Annotations: readOnlyAnnotations(),
+		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, DiscoveryScopes: discoveryMCPRead, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetXAAReadinessInput) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
 		// External-only: the service reads an org-wide snapshot under a live member
 		// user context. Project assistants have no reviewed org-admin authority for
@@ -475,6 +488,10 @@ type postgresXAAIdentityInspector struct {
 	db       *pgxpool.Pool
 	governor IdentityChainingGovernor
 	origins  remotesessions.CallbackOrigins
+
+	// flags decides per organization whether resource ownership comes from
+	// client associations; nil keeps issuer bindings.
+	flags feature.Provider
 }
 
 type identityChainingResourceResolver interface {
@@ -520,8 +537,8 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 		out.NotServedReason = new(xaaNotRoutable)
 		return out, callback, nil
 	}
-	req, routable := identitychaining.NewUpstreamRequest(organizationID, projectID, userIssuerID, resource, server.TunneledMcpServerID.Valid, server.RemoteSessionIssuerID)
 	scope := uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true}
+	req, routable := identitychaining.NewUpstreamRequest(organizationID, projectID, userIssuerID, resource, server.TunneledMcpServerID.Valid, scope)
 	resources := []string{resource}
 	discoveryFailed := false
 	if routable {
@@ -540,9 +557,7 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 					return out, callback, fmt.Errorf("read XAA diagnostic candidates: %w", readErr)
 				}
 				for _, candidate := range candidates {
-					if identitychaining.MatchesDiagnosticOrigin(resource, candidate) && !slices.ContainsFunc(resources, func(existing string) bool {
-						return strings.TrimRight(existing, "/") == strings.TrimRight(candidate, "/")
-					}) {
+					if identitychaining.MatchesDiagnosticOrigin(resource, candidate) && !slices.Contains(resources, candidate) {
 						resources = append(resources, candidate)
 					}
 				}
@@ -558,7 +573,7 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 	for _, diagnosticResource := range resources {
 		// Every deployment serving Platform MCP wires a protected resource
 		// prober into logins, so their scope requests consult resource rows.
-		results, err := remotesessions.InspectIdentityChainingForTenant(ctx, i.db, projectID, organizationID, userIssuerID, scope, diagnosticResource, true)
+		results, err := remotesessions.InspectIdentityChainingForTenant(ctx, i.db, projectID, organizationID, userIssuerID, scope, diagnosticResource, true, feature.UpstreamIssuerFromAssociations(ctx, i.flags, organizationID))
 		if err != nil {
 			return out, nil, fmt.Errorf("inspect XAA readiness identity chaining: %w", err)
 		}

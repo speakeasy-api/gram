@@ -6,8 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +15,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -320,7 +322,7 @@ func mintFirstPartyConsentState(t *testing.T, ctx context.Context, ti *testInsta
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       orgID,
 		ProjectID:            projectID,
-		RouteBase:            "mcp",
+		RouteBase:            mcproute.MCP,
 		Slug:                 slug,
 		ToolsetID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UpstreamResource:     "",
@@ -399,6 +401,12 @@ func seedMetaValidationFixture(t *testing.T, prefix string) (context.Context, va
 
 	reader, provider := newValidationMeterProvider()
 	ctx, ti := newTestMCPServiceWithValidationTimeout(t, provider, validationProbeTimeout)
+	return ctx, seedMetaValidationFixtureOn(t, ctx, ti, reader, prefix)
+}
+
+func seedMetaValidationFixtureOn(t *testing.T, ctx context.Context, ti *testInstance, reader *sdkmetric.ManualReader, prefix string) validationFixture {
+	t.Helper()
+
 	projectID, orgID := consentTestTenant(t, ctx)
 
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
@@ -412,7 +420,7 @@ func seedMetaValidationFixture(t *testing.T, prefix string) (context.Context, va
 	createMetaMember(t, ctx, ti.conn, projectID, metaServerID, prefix+"-member", member.url, conv.ToNullUUID(issuerID), 0)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-"+prefix, member.url)
 
-	return ctx, validationFixture{
+	return validationFixture{
 		ti:       ti,
 		reader:   reader,
 		endpoint: endpoint,
@@ -764,7 +772,7 @@ func TestServeConsentAction_ValidateRefusesUnconnectedAndUnroutable(t *testing.T
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-	require.ErrorContains(t, err, "Connect this service before verifying it.")
+	require.ErrorContains(t, err, "unknown remote session client", "a client no member is associated with is not offered at all")
 	require.Empty(t, w.Header().Get("Location"))
 
 	// A grant qualified to another upstream is unroutable on this gateway.
@@ -777,6 +785,12 @@ func TestServeConsentAction_ValidateRefusesUnconnectedAndUnroutable(t *testing.T
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 	require.ErrorContains(t, err, "cannot be verified")
+
+	// A notice shows on a card that isn't connected too, not just a connected one.
+	claimant := fx
+	claimant.server = "aim204-refuse-claimant"
+	page := renderConsentAt(t, claimant, consentPagePath(claimant)+"&validate_unfinished="+elsewhere.String())
+	require.Contains(t, page, "data-validation-notice")
 
 	require.Empty(t, fx.member.drain(), "no probe reached the member")
 	require.Empty(t, validationCounts(t, fx.reader))
@@ -1182,13 +1196,7 @@ func TestServeConsentAction_ValidateRefusesExpiredGrant(t *testing.T) {
 		ProjectID:       conv.ToNullUUID(projectID),
 	}))
 
-	_, err := postValidate(t, fx, fx.clientID)
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-	require.ErrorContains(t, err, "Connect this service before verifying it.")
-	require.Empty(t, fx.member.drain(), "no probe reached the member")
+	requireVerifyNotice(t, fx, fx.clientID, verifyExpiredCard)
 	require.Empty(t, validationCounts(t, fx.reader))
 }
 
@@ -1284,7 +1292,7 @@ func TestServeConsentAction_ValidateRateLimited(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, w.Code)
 	location := w.Header().Get("Location")
-	require.Equal(t, consentPagePath(fx)+"&validate_limited="+fx.clientID.String(), location)
+	require.Equal(t, consentPagePath(fx)+"&consent=required&validate_limited="+fx.clientID.String(), location)
 	require.Empty(t, fx.member.drain(), "a limited verify never reaches the member")
 
 	page := renderConsentAt(t, fx, location)
@@ -1399,4 +1407,121 @@ func TestServeConsentAction_ValidateMemberProtocolRevisions(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A refresh that failed with nothing on record keeps the card connected, so the notice says Verify didn't finish.
+func TestServeConsentAction_ValidateWithNoRecordedOutageShowsNotice(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedMetaValidationFixture(t, "aim866-unfinished")
+	sess := storedSession(t, ctx, fx)
+	refresh, err := fx.ti.enc.Encrypt([]byte("live-refresh"))
+	require.NoError(t, err)
+	access, err := fx.ti.enc.Encrypt([]byte("expired"))
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn: sess.SubjectUrn, UserSessionIssuerID: sess.UserSessionIssuerID, RemoteSessionClientID: sess.RemoteSessionClientID,
+		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: sess.Resource,
+	})
+	require.NoError(t, err)
+	projectID, orgID := consentTestTenant(t, ctx)
+	// The provider answers, but its tokens can't be stored: Postgres refuses a NUL in text.
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"a","refresh_token":"r","expires_in":3600,"scope":"read\u0000write"}`))
+	}))
+	t.Cleanup(provider.Close)
+	rows, err := testrepo.New(fx.ti.conn).ForceRemoteSessionIssuerTokenEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerTokenEndpointFixtureParams{
+		TokenEndpoint: conv.ToPGText(provider.URL), RemoteSessionClientID: fx.clientID, ProjectID: projectID, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	w, err := postValidate(t, fx, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	page := renderConsentAt(t, fx, w.Header().Get("Location"))
+	require.Contains(t, page, "data-validation-notice")
+	require.Contains(t, page, "Your last Verify didn")
+	require.Contains(t, page, "If it keeps happening, ask your administrator to contact Speakeasy support.")
+	require.NotContains(t, page, "Unavailable · try again shortly")
+	require.NotContains(t, renderConsent(t, fx), "Your last Verify didn", "the notice is not sticky")
+}
+
+// Status comes from stored state: the URL alone can't mark a card Unavailable or hide a notice on one.
+func TestConsentPage_ValidateUnfinishedParamOnlyAddsTheNotice(t *testing.T) {
+	t.Parallel()
+
+	_, fx := seedMetaValidationFixture(t, "aim866-url-only")
+	page := renderConsentAt(t, fx, consentPagePath(fx)+"&validate_unfinished="+fx.clientID.String())
+	require.NotContains(t, page, "Unavailable · try again shortly")
+	require.Contains(t, page, "Your last Verify didn")
+}
+
+// Verify while another request holds the refresh is a moment's wait, not a problem on our side.
+func TestServeConsentAction_ValidateWhileRefreshIsBusySaysWait(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedMetaValidationFixture(t, "aim866-busy")
+	sess := storedSession(t, ctx, fx)
+	refresh, err := fx.ti.enc.Encrypt([]byte("live-refresh"))
+	require.NoError(t, err)
+	access, err := fx.ti.enc.Encrypt([]byte("expired"))
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn: sess.SubjectUrn, UserSessionIssuerID: sess.UserSessionIssuerID, RemoteSessionClientID: sess.RemoteSessionClientID,
+		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: sess.Resource,
+	})
+	require.NoError(t, err)
+	held, err := fx.ti.cacheAdapter.Add(ctx, "remotesession:refresh:"+sess.SubjectUrn.String()+":"+sess.RemoteSessionClientID.String(), time.Minute)
+	require.NoError(t, err)
+	require.True(t, held)
+
+	w, err := postValidate(t, fx, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	require.Contains(t, w.Header().Get("Location"), "validate_limited=")
+}
+
+// A failing provider reads as an outage on the consent page's Verify, and the
+// grant survives it.
+func TestServeConsentAction_ValidateDuringProviderOutageSaysRetry(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedMetaValidationFixture(t, "aim866-outage")
+	projectID, orgID := consentTestTenant(t, ctx)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(provider.Close)
+	rows, err := testrepo.New(fx.ti.conn).ForceRemoteSessionIssuerTokenEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerTokenEndpointFixtureParams{
+		TokenEndpoint: conv.ToPGText(provider.URL), RemoteSessionClientID: fx.clientID, ProjectID: projectID, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	sess := storedSession(t, ctx, fx)
+	refresh, err := fx.ti.enc.Encrypt([]byte("live-refresh"))
+	require.NoError(t, err)
+	access, err := fx.ti.enc.Encrypt([]byte("expired"))
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn: sess.SubjectUrn, UserSessionIssuerID: sess.UserSessionIssuerID, RemoteSessionClientID: sess.RemoteSessionClientID,
+		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: sess.Resource,
+	})
+	require.NoError(t, err)
+
+	w, err := postValidate(t, fx, fx.clientID)
+	require.NoError(t, err, "no dead-end error page")
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	location := w.Header().Get("Location")
+	page := renderConsentAt(t, fx, location)
+	require.Contains(t, page, "Unavailable · try again shortly", "the card says so, from stored state")
+	require.NotContains(t, page, "data-validate-link", "nothing to verify during the outage")
+	require.NotContains(t, page, "data-validation-notice", "the card already says it")
+	require.True(t, storedSession(t, ctx, fx).RefreshTokenEncrypted.Valid, "the outage keeps the grant")
+	require.Empty(t, fx.member.drain(), "no probe reached the member")
 }

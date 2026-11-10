@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { Selector, Selector$inboundSchema } from "./selector.js";
@@ -18,6 +19,8 @@ export const ListRoleGrantScope = {
   OrgBlockedRead: "org:blocked_read",
   OrgAdmin: "org:admin",
   OrgBlockedAdmin: "org:blocked_admin",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
   ProjectRead: "project:read",
   ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",
@@ -28,6 +31,8 @@ export const ListRoleGrantScope = {
   McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpAuth: "mcp:auth",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentRead: "environment:read",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
@@ -36,17 +41,18 @@ export const ListRoleGrantScope = {
   SkillBlockedRead: "skill:blocked_read",
   SkillWrite: "skill:write",
   SkillBlockedWrite: "skill:blocked_write",
+  PluginWrite: "plugin:write",
+  PluginBlockedWrite: "plugin:blocked_write",
   AssistantRead: "assistant:read",
   AssistantBlockedRead: "assistant:blocked_read",
   AssistantWrite: "assistant:write",
   AssistantBlockedWrite: "assistant:blocked_write",
-  PluginWrite: "plugin:write",
-  PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  InferenceExecute: "inference:execute",
   LogRead: "log:read",
   AgentRead: "agent:read",
   AgentWrite: "agent:write",
@@ -56,19 +62,19 @@ export const ListRoleGrantScope = {
   WorkloadBlockedRead: "workload:blocked_read",
   WorkloadWrite: "workload:write",
   WorkloadBlockedWrite: "workload:blocked_write",
-  OrgDeviceAgentSync: "org:device_agent_sync",
-  OrgHooksIngest: "org:hooks_ingest",
 } as const;
 /**
  * The scope slug this grant applies to.
  */
-export type ListRoleGrantScope = ClosedEnum<typeof ListRoleGrantScope>;
+export type ListRoleGrantScope = OpenEnum<typeof ListRoleGrantScope>;
 
 export const SubScopes = {
   OrgRead: "org:read",
   OrgBlockedRead: "org:blocked_read",
   OrgAdmin: "org:admin",
   OrgBlockedAdmin: "org:blocked_admin",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
   ProjectRead: "project:read",
   ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",
@@ -79,6 +85,8 @@ export const SubScopes = {
   McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpAuth: "mcp:auth",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentRead: "environment:read",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
@@ -87,17 +95,18 @@ export const SubScopes = {
   SkillBlockedRead: "skill:blocked_read",
   SkillWrite: "skill:write",
   SkillBlockedWrite: "skill:blocked_write",
+  PluginWrite: "plugin:write",
+  PluginBlockedWrite: "plugin:blocked_write",
   AssistantRead: "assistant:read",
   AssistantBlockedRead: "assistant:blocked_read",
   AssistantWrite: "assistant:write",
   AssistantBlockedWrite: "assistant:blocked_write",
-  PluginWrite: "plugin:write",
-  PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  InferenceExecute: "inference:execute",
   LogRead: "log:read",
   AgentRead: "agent:read",
   AgentWrite: "agent:write",
@@ -107,10 +116,8 @@ export const SubScopes = {
   WorkloadBlockedRead: "workload:blocked_read",
   WorkloadWrite: "workload:write",
   WorkloadBlockedWrite: "workload:blocked_write",
-  OrgDeviceAgentSync: "org:device_agent_sync",
-  OrgHooksIngest: "org:hooks_ingest",
 } as const;
-export type SubScopes = ClosedEnum<typeof SubScopes>;
+export type SubScopes = OpenEnum<typeof SubScopes>;
 
 export type ListRoleGrant = {
   /**
@@ -132,14 +139,14 @@ export type ListRoleGrant = {
 };
 
 /** @internal */
-export const ListRoleGrantScope$inboundSchema: z.ZodMiniEnum<
-  typeof ListRoleGrantScope
-> = z.enum(ListRoleGrantScope);
+export const ListRoleGrantScope$inboundSchema: z.ZodMiniType<
+  ListRoleGrantScope,
+  unknown
+> = openEnums.inboundSchema(ListRoleGrantScope);
 
 /** @internal */
-export const SubScopes$inboundSchema: z.ZodMiniEnum<typeof SubScopes> = z.enum(
-  SubScopes,
-);
+export const SubScopes$inboundSchema: z.ZodMiniType<SubScopes, unknown> =
+  openEnums.inboundSchema(SubScopes);
 
 /** @internal */
 export const ListRoleGrant$inboundSchema: z.ZodMiniType<

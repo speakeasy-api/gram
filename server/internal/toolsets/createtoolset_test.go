@@ -21,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -292,7 +294,7 @@ func TestCreateToolsetInTransaction_FailsClosedWhenTheEnabledCountCannotBeRead(t
 	require.True(t, ok)
 	input := toolsets.ToolsetCreateInput{
 		OrganizationID: authCtx.ActiveOrganizationID, OrganizationSlug: authCtx.OrganizationSlug, ProjectID: *authCtx.ProjectID,
-		ActorUserID: authCtx.UserID, Name: "First Server",
+		Authz: ti.authz, ActorUserID: authCtx.UserID, Name: "First Server",
 	}
 
 	// Rolled back whatever the outcome, so a failed assertion cannot leave a
@@ -317,7 +319,6 @@ func TestCreateToolsetInTransaction_FailsClosedWhenTheEnabledCountCannotBeRead(t
 	created, err := toolsets.CreateToolsetInTransaction(ctx, readable, testenv.NewLogger(t), audit.NewLogger(), input)
 	require.NoError(t, readable.Rollback(ctx))
 	require.NoError(t, err)
-	require.True(t, created.McpEnabled)
 	require.True(t, created.AddedToDefaultPlugin)
 }
 
@@ -348,8 +349,9 @@ func TestToolsetsService_CreateToolset_InvalidEnvironment(t *testing.T) {
 		DefaultEnvironmentSlug: (*types.Slug)(new("non-existent-env")),
 		ProjectSlugInput:       nil,
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "error finding environment")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
 	require.NoError(t, err)
@@ -515,7 +517,6 @@ func TestToolsetsService_CreateToolset_AttachesToDefaultPlugin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
-	ti.service.WithFeatureProvider(serverKeyFlags())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -546,7 +547,6 @@ func TestToolsetsService_CreateToolset_AttachesToDefaultPlugin(t *testing.T) {
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
 	require.Len(t, servers, 1)
-	require.False(t, servers[0].ToolsetID.Valid, "stored under the canonical server")
 	require.Equal(t, uuid.MustParse(result.ID), servers[0].McpServerID.UUID)
 	require.Equal(t, "Attach Toolset", servers[0].DisplayName)
 	require.Equal(t, "required", servers[0].Policy)
@@ -562,11 +562,12 @@ func TestToolsetsService_CreateToolset_AttachesToDefaultPlugin(t *testing.T) {
 	require.NotContains(t, metadata, "toolset_urn")
 }
 
-func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttach(t *testing.T) {
+// A later server starts private like the first, but only the first joins the
+// Default plugin, so being served never also means being distributed.
+func TestToolsetsService_CreateToolset_SecondToolset_IsPrivateButDoesNotAutoAttach(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
-	ti.service.WithFeatureProvider(serverKeyFlags())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -588,6 +589,8 @@ func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttach(t *testin
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
+	require.True(t, *first.McpEnabled)
+	require.False(t, *first.McpIsPublic)
 
 	second, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
@@ -599,11 +602,16 @@ func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttach(t *testin
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
-	require.False(t, *second.McpEnabled)
+	require.True(t, *second.McpEnabled)
+	require.False(t, *second.McpIsPublic)
+
+	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: uuid.MustParse(second.ID), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, mcpservers.VisibilityPrivate, server.Visibility)
 
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
-	require.Len(t, servers, 1, "only the auto-enabled first toolset should be attached")
+	require.Len(t, servers, 1, "only the organization's first toolset should be attached")
 	require.Equal(t, uuid.MustParse(first.ID), servers[0].McpServerID.UUID)
 }
 

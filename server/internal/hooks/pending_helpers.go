@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -86,6 +87,11 @@ func (s *Service) claimHookIdempotency(ctx context.Context, token string, replay
 }
 
 func (s *Service) claimBlockedPromptTelemetry(ctx context.Context, payload *gen.ClaudePayload) bool {
+	// A superseded verdict writes no block telemetry, so it must not use up the
+	// dedupe key that a later block of the same prompt needs.
+	if isVerdictSuperseded(ctx) {
+		return false
+	}
 	if payload == nil || payload.SessionID == nil || payload.Prompt == nil {
 		return true
 	}
@@ -291,6 +297,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		}
 	}
 
+	stampEndpointGeneration(ctx, attrs)
 	return attrs
 }
 
@@ -663,9 +670,13 @@ func isDeltaTemporality(v any) bool {
 // Hooks buffered under metadata's project always flush; unauthenticated ones
 // flush only when includeUnscoped is set.
 func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata, includeUnscoped bool) {
-	s.flushPendingHookList(ctx, hookPendingCacheKey(metadata.ProjectID, sessionID), metadata)
+	// Only hooks.claude buffers events, and the flush runs in a later
+	// request, so the endpoint generation comes from the buffer: unscoped
+	// buffers hold events no credential tied to a project, either because
+	// none was sent or because it failed to authenticate.
+	s.flushPendingHookList(middleware.WithHookEndpointGeneration(ctx, middleware.HookEndpointGenerationLegacyKeyed), hookPendingCacheKey(metadata.ProjectID, sessionID), metadata)
 	if includeUnscoped {
-		s.flushPendingHookList(ctx, hookPendingCacheKey("", sessionID), metadata)
+		s.flushPendingHookList(middleware.WithHookEndpointGeneration(ctx, middleware.HookEndpointGenerationLegacyUnkeyed), hookPendingCacheKey("", sessionID), metadata)
 	}
 }
 

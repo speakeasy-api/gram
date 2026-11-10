@@ -10,9 +10,12 @@
 //	                failing test has an open flaky ticket. A failing candidate is
 //	                quarantined: relabelled "flaky-quarantined" and handed to the
 //	                autopilot assignee and delegate to fix.
+//	flaky prune     cancel every open flaky ticket whose test no longer exists
+//	                in the checkout, commenting with the commit that removed it.
 //
-// Closing a ticket makes its test blocking again. Both subcommands read
-// LINEAR_API_KEY; analyze also reads GITHUB_TOKEN and GITHUB_REPOSITORY.
+// Closing a ticket makes its test blocking again. Every subcommand reads
+// LINEAR_API_KEY; analyze also reads GITHUB_TOKEN and GITHUB_REPOSITORY, and
+// prune reads GITHUB_REPOSITORY to link removal commits.
 package main
 
 import (
@@ -35,7 +38,7 @@ func main() {
 
 func run(ctx context.Context, argv []string, stdout io.Writer) error {
 	if len(argv) == 0 {
-		return errors.New("usage: flaky <analyze|gate> [flags]")
+		return errors.New("usage: flaky <analyze|gate|prune> [flags]")
 	}
 
 	fs := flag.NewFlagSet("flaky "+argv[0], flag.ContinueOnError)
@@ -102,8 +105,24 @@ func run(ctx context.Context, argv []string, stdout io.Writer) error {
 			},
 		}, stdout)
 
+	case "prune":
+		root := fs.String("root", ".", "repository checkout, with history, that tests are looked up in")
+		dryRun := fs.Bool("dry-run", false, "print the tickets that would be canceled instead of canceling them")
+		if err := setup(); err != nil {
+			return err
+		}
+		if linear == nil {
+			return errors.New("LINEAR_API_KEY must be set")
+		}
+
+		return runPrune(ctx, linear, pruneOptions{
+			Root:   *root,
+			Repo:   os.Getenv("GITHUB_REPOSITORY"),
+			DryRun: *dryRun,
+		}, stdout)
+
 	default:
-		return fmt.Errorf("unknown subcommand %q: want analyze or gate", argv[0])
+		return fmt.Errorf("unknown subcommand %q: want analyze, gate, or prune", argv[0])
 	}
 }
 

@@ -29,6 +29,7 @@ func listChatsTool(description string) *mcp.Tool {
 			"risk":           {Type: "string", Enum: []any{ChatRiskWithFindings, ChatRiskWithoutFindings}, Description: "Optional risk presence filter: with_findings keeps chats with at least one live finding, without_findings keeps the rest. Omit for no filter."},
 			"source":         stringSchema("Optional exact chat source label to keep, as reported in a previous row's source field.", 1, maxChatSourceLength),
 			"assistant_id":   uuidSchema("Optional assistant ID to keep only that assistant's threads."),
+			"agent_id":       uuidSchema("Optional agent ID to keep only sessions attributed to that agent."),
 			"user_reference": stringSchema("Optional person reference from a previous list_chats row in this project, to keep only that person's chats.", 1, 1024),
 			"limit":          {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(maxChatListLimit)), Description: "Maximum chats to return; defaults to 20 and is capped at 50."},
 			"cursor":         stringSchema("Opaque cursor returned by a previous list_chats result.", 1, 2048),
@@ -37,7 +38,7 @@ func listChatsTool(description string) *mcp.Tool {
 }
 
 func registerChatMetadataTools(reg *Registrar, service *ChatMetadataService) {
-	addTool(reg, listChatsTool("List one project's chats active in a window of up to 30 days, newest activity first, as metadata only. Each chat is reduced to when it started and was last active, how many messages it holds, how many live risk findings it carries, the app and account type that produced it, the assistant behind it when there was one, a masked participant, and a short-lived person reference that narrows a follow-up listing. Narrow by window, risk presence, source, assistant, or person reference. Constraints: this is not a transcript reader or a search; no titles, messages, prompts, tool inputs or outputs, or raw identities are returned, pages are bounded and a limit above 50 is capped rather than refused, every count is in chats (one row per chat, total_matches in chats, at most 500 chats walked per listing), a cursor pins the window it was minted for, and cursors and references expire and are bound to this session."), listChatsMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input ListChatsInput) (*mcp.CallToolResult, ListChatsOutput, error) {
+	addTool(reg, listChatsTool("List one project's chats active in a window of up to 30 days, newest activity first, as metadata only. Each chat is reduced to when it started and was last active, how many messages it holds, how many live risk findings it carries, the app and account type that produced it, the assistant behind it when there was one, the agent principal that produced it when an agent drove it directly, a masked participant, and a short-lived person reference that narrows a follow-up listing. Narrow by window, risk presence, source, assistant, agent, or person reference. Constraints: this is not a transcript reader or a search; no titles, messages, prompts, tool inputs or outputs, or raw identities are returned, the agent and assistant behind a chat are named but its human participants are only ever masked, pages are bounded and a limit above 50 is capped rather than refused, every count is in chats (one row per chat, total_matches in chats, at most 500 chats walked per listing), a cursor pins the window it was minted for, and cursors and references expire and are bound to this session."), listChatsMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input ListChatsInput) (*mcp.CallToolResult, ListChatsOutput, error) {
 		return principalToolCall(ctx, chatMetadataToolResult, func(principal Principal) (ListChatsOutput, error) {
 			return service.List(ctx, principal, input)
 		})
@@ -58,7 +59,7 @@ func chatMetadataToolResult(err error) (*mcp.CallToolResult, bool) {
 	var result operationBudgetResult
 	switch {
 	case errors.Is(err, ErrChatListInvalid), errors.Is(err, ErrRiskReadInvalid), errors.Is(err, ErrDiagnosticWindowInvalid), errors.Is(err, ErrDiagnosticWindowTooLong):
-		result = operationBudgetResult{Code: "invalid_request", Message: "That chat listing request is not valid. Use one project selector, a window of 1h, 24h, 7d, or 30d, a risk filter of with_findings or without_findings, and a source label or assistant ID from a previous result."}
+		result = operationBudgetResult{Code: "invalid_request", Message: "That chat listing request is not valid. Use one project selector, a window of 1h, 24h, 7d, or 30d, a risk filter of with_findings or without_findings, and a source label, assistant ID, or agent ID from a previous result."}
 	case errors.Is(err, ErrRiskReadNotFound):
 		result = operationBudgetResult{Code: "not_found", Message: "That project is not one this organization holds. Choose one returned by list_projects."}
 	case errors.Is(err, ErrSubjectReferenceNotFound):

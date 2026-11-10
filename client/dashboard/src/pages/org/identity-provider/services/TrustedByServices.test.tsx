@@ -9,6 +9,8 @@ import {
 import { MemoryRouter } from "react-router";
 import { TrustedByServices } from "./TrustedByServices";
 import type { ServiceRow } from "./useEmaServices";
+import { providerView } from "./emaServiceView";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 
 const mocks = vi.hoisted(() => ({
   rows: [] as unknown[],
@@ -63,6 +65,29 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Services that trust Speakeasy", () => {
+  it("separates unknown availability from working and broken services", () => {
+    mocks.rows = [
+      {
+        ...service("Example", undefined),
+        providers: [
+          providerView(
+            {
+              kind: "speakeasy",
+              unavailableReason: unrecognized("future_reason"),
+            },
+            { issuer: undefined, speakeasyIssuerUrl: undefined },
+          ),
+        ],
+      },
+    ];
+    show();
+    const list = screen.getByRole("list", { name: "Unknown availability" });
+    expect(list.querySelector("[data-tone]")?.getAttribute("data-tone")).toBe(
+      "neutral",
+    );
+    expect(screen.queryByRole("list", { name: "Not working" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "Working" })).toBeNull();
+  });
   it("splits services that accepted Speakeasy from those that haven't yet", () => {
     mocks.rows = [
       service("Linear", new Date(Date.now() - 2 * 60 * 60 * 1000)),

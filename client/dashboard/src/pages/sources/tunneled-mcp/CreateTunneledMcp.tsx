@@ -1,21 +1,19 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
 import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { CodeBlock } from "@/components/code";
 import { FormPage } from "@/components/page-templates";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { mcpServerRouteParam, tunneledMcpRouteParam } from "@/lib/sources";
-import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { useState } from "react";
-import { Navigate } from "react-router";
 import { toast } from "sonner";
 import { NewServerGuardrailSection } from "@/pages/security/server-guardrails/NewServerGuardrailSection";
 import {
@@ -44,25 +42,7 @@ type CreatedState = {
   mcpServer: McpServer;
 };
 
-export default function CreateTunneledMcp(): JSX.Element | null {
-  const routes = useRoutes();
-  const telemetry = useTelemetry();
-  const isTunneledMcpEnabled = telemetry.isFeatureEnabled(
-    TUNNELED_MCP_FEATURE_FLAG,
-  );
-
-  if (isTunneledMcpEnabled === undefined) {
-    return null;
-  }
-
-  if (!isTunneledMcpEnabled) {
-    return <Navigate to={routes.mcp.add.href()} replace />;
-  }
-
-  return <CreateTunneledMcpForm />;
-}
-
-function CreateTunneledMcpForm() {
+export default function CreateTunneledMcp(): JSX.Element {
   const flow = useGatewayCreation();
   const creationLocked = flow.createdServerId !== null || flow.isAttaching;
   const routes = useRoutes();
@@ -145,7 +125,7 @@ function CreateTunneledMcpForm() {
                 <Button
                   variant="secondary"
                   onClick={() =>
-                    routes.mcp.x.guardrails.goTo(
+                    routes.mcp.details.guardrails.goTo(
                       mcpServerRouteParam(created.mcpServer),
                     )
                   }
@@ -207,7 +187,7 @@ function CreateTunneledMcpForm() {
                 <Button
                   variant="primary"
                   onClick={() =>
-                    routes.mcp.x.overview.goTo(
+                    routes.mcp.details.overview.goTo(
                       mcpServerRouteParam(created.mcpServer),
                     )
                   }
@@ -217,7 +197,7 @@ function CreateTunneledMcpForm() {
                 <Button
                   variant="secondary"
                   onClick={() =>
-                    routes.mcp.x.overview.goTo(
+                    routes.mcp.details.overview.goTo(
                       tunneledMcpRouteParam(created.tunneledMcpServer),
                     )
                   }
@@ -348,7 +328,7 @@ function CreateTunneledMcpForm() {
             <Button type="submit" variant="primary" disabled={submitDisabled}>
               {createSource.isPending ? (
                 <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               ) : null}
               <Button.Text>

@@ -1,6 +1,7 @@
 import * as React from "react";
 
-import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
+import type { AppRoute } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { ArrowLeft, MinusIcon, TestTube2Icon } from "lucide-react";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import {
@@ -19,15 +20,19 @@ import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { Icon } from "@/components/ui/Icon";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { Link } from "react-router";
-import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
 import { GatewaySidebarNav } from "./gateway-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
+import { useMcpServerRouteMissing } from "./mcp/useMcpServerRouteMissing";
 import { ProjectGuideSidebarCta } from "./project-guide-sidebar-cta";
 import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
 import { RequireScope } from "./require-scope";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import {
+  ScopeGatedNavGroup,
+  type ScopeGatedNavEntry,
+} from "@/components/scope-gated-nav-group";
+import { sidebarNavLayout } from "@/components/sidebar-nav-layout";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
@@ -83,7 +88,7 @@ export function AppSidebar({
   const { state } = useSidebar();
   // While grants reload (e.g. right after switching projects, when the query
   // cache is cleared), show a skeleton so the scope-gated nav doesn't flash empty.
-  const { isLoading: rbacLoading } = useRBAC();
+  const { isLoading: rbacLoading, hasAnyScope } = useRBAC();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   // useProjectNavRoutes owns feature-flag and scope decisions for both the
@@ -99,7 +104,7 @@ export function AppSidebar({
   const isExploreEnabled = navAccess.has(routes.explore.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
   const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
-  const isAgentManagementEnabled = navAccess.has(routes.agents.url);
+  const isAgentManagementEnabled = navAccess.has(routes.identities.agents.url);
   const isSignalsIntelligenceEnabled = navAccess.has(
     routes.signalsIntelligence.url,
   );
@@ -109,6 +114,7 @@ export function AppSidebar({
   // labels org-level pages in the header but is not a sidebar group.
   const navArea = useNavArea();
   const activeGroup = navArea === "Organization" ? undefined : navArea;
+  const mcpServerMissing = useMcpServerRouteMissing(routes.mcp.details.active);
 
   // Find the specific active route title for the sliding highlight. Shared with
   // the command palette via useProjectNavRoutes so the two stay in sync.
@@ -125,10 +131,112 @@ export function AppSidebar({
         }
       : { scope: ["project:read"] };
   };
+  const canSee = (access: {
+    scope?: Scope[];
+    resourceId?: string;
+    projectId?: string;
+  }): boolean =>
+    access.scope === undefined ||
+    hasAnyScope(access.scope, access.resourceId, access.projectId);
+
+  const navGroups: {
+    label: string;
+    icon: React.ComponentProps<typeof Icon>["name"];
+    items: ScopeGatedNavEntry[];
+  }[] = [
+    {
+      label: "Identity",
+      icon: "fingerprint",
+      items: [
+        {
+          item: routes.identities.people,
+          ...accessFor(routes.identities.people),
+        },
+        ...(isAgentManagementEnabled
+          ? [
+              {
+                item: routes.identities.agents,
+                ...accessFor(routes.identities.agents),
+              },
+            ]
+          : []),
+        ...(isUserSessionsEnabled
+          ? [{ item: routes.mcpSessions, ...accessFor(routes.mcpSessions) }]
+          : []),
+        {
+          item: routes.remoteIdentityProviders,
+          ...accessFor(routes.remoteIdentityProviders),
+        },
+      ],
+    },
+    {
+      label: "MCP Gateway",
+      icon: "hammer",
+      items: [
+        { item: routes.mcp, ...accessFor(routes.mcp) },
+        ...(isAssistantsEnabled
+          ? [{ item: routes.assistants, ...accessFor(routes.assistants) }]
+          : []),
+        { item: routes.skills, ...accessFor(routes.skills) },
+        { item: routes.plugins, ...accessFor(routes.plugins) },
+        { item: routes.environments, ...accessFor(routes.environments) },
+        { item: routes.playground, ...accessFor(routes.playground) },
+      ],
+    },
+    {
+      label: "Security and Policy",
+      icon: "shield",
+      items: [
+        ...(isRiskWatchdogEnabled
+          ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
+          : []),
+        { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
+        { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
+      ],
+    },
+    {
+      label: "Observability",
+      icon: "eye",
+      items: [
+        { item: routes.costs, ...accessFor(routes.costs) },
+        ...(isExploreEnabled
+          ? [
+              { item: routes.explore, ...accessFor(routes.explore) },
+              { item: routes.dashboards, ...accessFor(routes.dashboards) },
+            ]
+          : []),
+        { item: routes.insights, ...accessFor(routes.insights) },
+        { item: routes.agentSessions, ...accessFor(routes.agentSessions) },
+        ...(isSignalsIntelligenceEnabled
+          ? [
+              {
+                item: routes.signalsIntelligence,
+                ...accessFor(routes.signalsIntelligence),
+              },
+            ]
+          : []),
+        ...(isOrgMemoryEnabled
+          ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
+          : []),
+        { item: routes.logs, ...accessFor(routes.logs) },
+      ],
+    },
+  ];
+  // Mirrors the scopes on Home, Project Overview and Chat below.
+  const hasTopItems =
+    hasAnyScope(["org:read", "project:read", "org:admin"]) ||
+    canSee(accessFor(routes.home)) ||
+    canSee(accessFor(routes.chat));
+  const navLayout = sidebarNavLayout(navGroups, hasTopItems, hasAnyScope);
+  const flatEntries = navLayout.flatEntries;
+
   // In collapsed mode, sub-items are hidden — fall back to group highlight.
-  // Top-level items (Home, Settings) have no activeGroup, so keep activeItem for those.
+  // Top-level items (Home, Settings) have no activeGroup, so keep activeItem
+  // for those, and for a lone group's items, which are listed flat.
   const activeItem =
-    state === "collapsed" && activeGroup ? undefined : activeRoute?.title;
+    state === "collapsed" && activeGroup && !flatEntries
+      ? undefined
+      : activeRoute?.title;
 
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
@@ -168,9 +276,7 @@ export function AppSidebar({
         </SidebarMenuItem>
       </SidebarMenu>
     );
-  } else if (routes.mcp.details.active) {
-    sidebarContent = <McpDetailSidebarNav />;
-  } else if (routes.mcp.x.active) {
+  } else if (routes.mcp.details.active && !mcpServerMissing) {
     sidebarContent = <McpServerXSidebarNav />;
   } else if (routes.mcp.gateway.active) {
     sidebarContent = <GatewaySidebarNav />;
@@ -180,7 +286,10 @@ export function AppSidebar({
     sidebarContent = <PluginDetailSidebarNav />;
   } else {
     sidebarContent = (
-      <NavGroupProvider activeGroup={activeGroup} activeItem={activeItem}>
+      <NavGroupProvider
+        activeGroup={flatEntries ? undefined : activeGroup}
+        activeItem={activeItem}
+      >
         <SidebarMenu className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0">
           {/* Home — the org-scoped app (was the "Organization settings"
               footer action); the project's own landing page sits below it as
@@ -212,98 +321,35 @@ export function AppSidebar({
             {...accessFor(routes.chat)}
           />
 
-          {/* Divider: sets Home + Chat apart from the grouped nav below */}
-          <li aria-hidden="true" className="my-2 px-1">
-            <div className="border-border border-t" />
-          </li>
+          {/* Divider: sets Home + Chat apart from the grouped nav below.
+              Only drawn when there is something on both sides of it. */}
+          {navLayout.showDivider && (
+            <li aria-hidden="true" className="my-2 px-1">
+              <div className="border-border border-t" />
+            </li>
+          )}
 
-          {/* Identity group */}
-          <ScopeGatedNavGroup
-            label="Identity"
-            Icon={(p) => <Icon {...p} name="fingerprint" />}
-            items={[
-              { item: routes.identities, ...accessFor(routes.identities) },
-              ...(isAgentManagementEnabled
-                ? [{ item: routes.agents, ...accessFor(routes.agents) }]
-                : []),
-              ...(isUserSessionsEnabled
-                ? [
-                    {
-                      item: routes.mcpSessions,
-                      ...accessFor(routes.mcpSessions),
-                    },
-                  ]
-                : []),
-              {
-                item: routes.remoteIdentityProviders,
-                ...accessFor(routes.remoteIdentityProviders),
-              },
-            ]}
-          />
-
-          {/* MCP Gateway group */}
-          <ScopeGatedNavGroup
-            label="MCP Gateway"
-            Icon={(p) => <Icon {...p} name="hammer" />}
-            items={[
-              { item: routes.mcp, ...accessFor(routes.mcp) },
-              ...(isAssistantsEnabled
-                ? [{ item: routes.assistants, ...accessFor(routes.assistants) }]
-                : []),
-              { item: routes.skills, ...accessFor(routes.skills) },
-              { item: routes.plugins, ...accessFor(routes.plugins) },
-              { item: routes.environments, ...accessFor(routes.environments) },
-              { item: routes.playground, ...accessFor(routes.playground) },
-            ]}
-          />
-
-          {/* Security and Policy group */}
-          <ScopeGatedNavGroup
-            label="Security and Policy"
-            Icon={(p) => <Icon {...p} name="shield" />}
-            items={[
-              ...(isRiskWatchdogEnabled
-                ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
-                : []),
-              { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
-              { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-            ]}
-          />
-
-          {/* Observability group */}
-          <ScopeGatedNavGroup
-            label="Observability"
-            Icon={(p) => <Icon {...p} name="eye" />}
-            items={[
-              { item: routes.costs, ...accessFor(routes.costs) },
-              ...(isExploreEnabled
-                ? [
-                    { item: routes.explore, ...accessFor(routes.explore) },
-                    {
-                      item: routes.dashboards,
-                      ...accessFor(routes.dashboards),
-                    },
-                  ]
-                : []),
-              { item: routes.insights, ...accessFor(routes.insights) },
-              {
-                item: routes.agentSessions,
-                ...accessFor(routes.agentSessions),
-              },
-              ...(isSignalsIntelligenceEnabled
-                ? [
-                    {
-                      item: routes.signalsIntelligence,
-                      ...accessFor(routes.signalsIntelligence),
-                    },
-                  ]
-                : []),
-              ...(isOrgMemoryEnabled
-                ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
-                : []),
-              { item: routes.logs, ...accessFor(routes.logs) },
-            ]}
-          />
+          {flatEntries
+            ? flatEntries.map((entry) => (
+                <SidebarMenuItem key={entry.item.url}>
+                  <NavButton
+                    id={entry.item.title}
+                    title={entry.label ?? entry.item.title}
+                    href={entry.item.href()}
+                    active={entry.item.active}
+                    Icon={entry.item.Icon}
+                    stage={entry.item.stage}
+                  />
+                </SidebarMenuItem>
+              ))
+            : navLayout.groups.map((group) => (
+                <ScopeGatedNavGroup
+                  key={group.label}
+                  label={group.label}
+                  Icon={(p) => <Icon {...p} name={group.icon} />}
+                  items={group.items}
+                />
+              ))}
 
           {/* Settings — top-level, no group */}
           <ScopeGatedTopLevelItem

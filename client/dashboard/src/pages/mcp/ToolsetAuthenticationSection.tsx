@@ -3,7 +3,7 @@ import type { Toolset } from "@/lib/toolTypes";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { useState } from "react";
-import { PageSection } from "./MCPDetails";
+import { PageSection } from "./PageSection";
 import { ConnectOAuthModal } from "./oauth-wizard";
 import { AttachRemoteIdentityProviderSheet } from "./x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet";
 import { AuthenticationSectionBody } from "./x/tabs/settings/sections/authentication/AuthenticationSection";
@@ -37,6 +37,20 @@ export function ToolsetAuthenticationSection({
         heading="Authentication"
         description="Who may connect to this server and how they sign in. Changes take effect on new connections."
       >
+        {externalMcpOAuthStatus === "unknown" && (
+          <Alert variant="info" className="mb-4">
+            <AlertTitle>
+              Upstream authentication requirements are unknown
+            </AlertTitle>
+            <AlertDescription>
+              The catalog does not establish whether this MCP source requires
+              OAuth. Check the upstream provider’s documentation before
+              configuring access. Attaching an identity provider controls
+              sign-in to this server; it does not establish the upstream
+              source’s authentication requirements.
+            </AlertDescription>
+          </Alert>
+        )}
         <AuthenticationSectionBody
           target={target}
           additionalSetupAction={

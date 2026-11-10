@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -71,7 +72,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
@@ -538,6 +538,9 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
 	// The issuer kill switch fails closed when unset, so local dev sets it off.
 	inmem.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, feature.AnyDistinctID, false)
+	// The dashboard shows every flag on in local dev, so the server lets local
+	// orgs create tool approval policies too. A CSV row can still turn it off.
+	inmem.SetFlag(feature.FlagToolApprovals, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -662,13 +665,26 @@ func newBillingProvider(
 	}
 }
 
+var stripePublishableKeyPattern = regexp.MustCompile(`^pk_(test|live)_[A-Za-z0-9]+$`)
+
 func newStripeClient(
 	ctx context.Context,
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.Client, error) {
+	publishableKey := c.String("stripe-publishable-key")
+	if stripeclient.IsConfigured(publishableKey) && !stripePublishableKeyPattern.MatchString(publishableKey) {
+		return nil, errors.New("invalid Stripe publishable key format")
+	}
 	apiKey := c.String("stripe-api-key")
+	apiKeyParts := strings.SplitN(apiKey, "_", 3)
+	if stripeclient.IsConfigured(publishableKey) && len(apiKeyParts) == 3 &&
+		(apiKeyParts[0] == "sk" || apiKeyParts[0] == "rk") &&
+		(apiKeyParts[1] == "test" || apiKeyParts[1] == "live") &&
+		!strings.HasPrefix(publishableKey, "pk_"+apiKeyParts[1]+"_") {
+		return nil, errors.New("mismatched Stripe API and publishable key modes")
+	}
 	if !stripeclient.IsConfigured(apiKey) {
 		if c.String("environment") == "local" {
 			logger.WarnContext(ctx, "using stub Stripe client: Stripe not configured")
@@ -693,6 +709,7 @@ func newStripeClient(
 		guardianPolicy,
 		apiKey,
 		c.String("stripe-webhook-secret"),
+		publishableKey,
 		catalog,
 	), nil
 }
@@ -1111,23 +1128,6 @@ func newFunctionOrchestrator(
 	default:
 		return nil, nilShutdown, fmt.Errorf("unrecognized functions provider: %s", provider)
 	}
-}
-
-type mcpRegistryClientOptions struct {
-	pulseTenantID string
-	pulseAPIKey   conv.Secret
-	cacheImpl     cache.Cache
-}
-
-func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
-	pulseURL, err := url.Parse("https://api.pulsemcp.com")
-	if err != nil {
-		return nil, fmt.Errorf("parse pulse registry url: %w", err)
-	}
-
-	backend := externalmcp.NewPulseBackend(pulseURL, opts.pulseTenantID, opts.pulseAPIKey)
-
-	return externalmcp.NewRegistryClient(logger, tracerProvider, guardianPolicy, backend, opts.cacheImpl), nil
 }
 
 func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat productfeatures.Feature) telemetry.FeatureChecker {

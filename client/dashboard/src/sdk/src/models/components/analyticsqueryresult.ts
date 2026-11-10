@@ -3,12 +3,17 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AnalyticsSignalResult,
+  AnalyticsSignalResult$inboundSchema,
+} from "./analyticssignalresult.js";
 
 /**
- * One shape for both modes. Row keys are the requested dimension names plus each measure's alias; time_bucket is present only when grain is set, and time on ungrouped rows.
+ * Composed queries return requested dimensions and measure aliases, with time_bucket for grouped intervals or time for ungrouped rows. The signals dataset instead returns fixed time-series rows: time_bucket, bucket_end, series_id, observed, partial, matched_messages, answered, match_share, matched_sessions, evaluated_sessions, session_breadth, and outcome/definition companions. series_id joins each row to signal_result.groups; signal_result.metadata and signal_result.summary describe the scope and whole-window population. Signal rows remain in the top-level rows field.
  */
 export type AnalyticsQueryResult = {
   /**
@@ -23,17 +28,26 @@ export type AnalyticsQueryResult = {
    * Result rows
    */
   rows: Array<{ [k: string]: any }>;
+  signalResult?: AnalyticsSignalResult | undefined;
 };
 
 /** @internal */
 export const AnalyticsQueryResult$inboundSchema: z.ZodMiniType<
   AnalyticsQueryResult,
   unknown
-> = z.object({
-  dataset: z.string(),
-  plan: z.string(),
-  rows: z.array(z.record(z.string(), z.any())),
-});
+> = z.pipe(
+  z.object({
+    dataset: z.string(),
+    plan: z.string(),
+    rows: z.array(z.record(z.string(), z.any())),
+    signal_result: z.optional(AnalyticsSignalResult$inboundSchema),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "signal_result": "signalResult",
+    });
+  }),
+);
 
 export function analyticsQueryResultFromJSON(
   jsonString: string,

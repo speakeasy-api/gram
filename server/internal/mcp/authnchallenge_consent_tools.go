@@ -26,19 +26,13 @@ import (
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// consentToolNameLimit caps how many explicit tool names one approve form
-// may submit. Matches consentInventoryMaxTools so any subset of a full
-// inventory — including all of it — is submittable; the approve POST's 1 MiB
-// body cap covers the worst case with URL-encoding inflation.
-const consentToolNameLimit = consentInventoryMaxTools
-
 // consentPrefillAttr serializes the subject's stored selection for the
 // island's server-rendered bootstrap: annotation grants with their modes
 // plus manually picked tool names. Snapshot expansions are omitted — the
 // island re-previews annotation grants against the inventory it fetches.
 // Empty when there is no restrictive prefill.
-func consentPrefillAttr(prefill *toolfilter.SessionSelection) string {
-	if prefill == nil {
+func consentPrefillAttr(prefill *toolfilter.SessionSelection, catalog *toolfilter.CatalogReference) string {
+	if prefill == nil && catalog == nil {
 		return ""
 	}
 	type prefillAnnotation struct {
@@ -47,7 +41,11 @@ func consentPrefillAttr(prefill *toolfilter.SessionSelection) string {
 	}
 	annotations := []prefillAnnotation{}
 	tools := []string{}
-	for _, entry := range prefill.Allow {
+	var allow []toolfilter.AllowEntry
+	if prefill != nil {
+		allow = prefill.Allow
+	}
+	for _, entry := range allow {
 		switch entry.Type {
 		case toolfilter.AllowTypeAnnotation:
 			if entry.Mode != nil {
@@ -57,7 +55,21 @@ func consentPrefillAttr(prefill *toolfilter.SessionSelection) string {
 			tools = append(tools, entry.Name)
 		}
 	}
-	encoded, err := json.Marshal(map[string]any{"annotations": annotations, "tools": tools})
+	accessMode := ""
+	if catalog != nil {
+		accessMode = "specific"
+		if catalog.AllTools {
+			accessMode = "all"
+			if catalog.Mode == toolfilter.CatalogModeCached {
+				accessMode = "cached"
+			}
+		}
+	}
+	encoded, err := json.Marshal(struct {
+		Annotations []prefillAnnotation `json:"annotations"`
+		Tools       []string            `json:"tools"`
+		AccessMode  string              `json:"accessMode,omitempty"`
+	}{Annotations: annotations, Tools: tools, AccessMode: accessMode})
 	if err != nil {
 		return ""
 	}
@@ -111,22 +123,10 @@ func (s *Service) describeConsentToolset(ctx context.Context, endpoint *Resolved
 	return toolset, nil
 }
 
-func (s *Service) consentToolPickerEligible(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
-	if !endpoint.McpServerID.Valid {
-		return false, nil
-	}
-	if !endpoint.ToolsetID.Valid {
-		return true, nil
-	}
-
-	hasProxy, err := toolsets_repo.New(s.db).ToolsetHasExternalMCPProxy(ctx, toolsets_repo.ToolsetHasExternalMCPProxyParams{
-		ToolsetID: endpoint.ToolsetID.UUID,
-		ProjectID: endpoint.ProjectID,
-	})
-	if err != nil {
-		return false, fmt.Errorf("check toolset for external MCP proxy: %w", err)
-	}
-	return !hasProxy, nil
+// consentToolPickerEligible reports whether the endpoint fronts an MCP server
+// whose tools the consent screen can offer for selection.
+func consentToolPickerEligible(endpoint *ResolvedMcpEndpoint) bool {
+	return endpoint.MetaMcpServerID.Valid || endpoint.McpServerID.Valid
 }
 
 // trueAnnotationValues lists the vocabulary values whose raw hint is
@@ -302,8 +302,8 @@ func chosenToolSelection(form url.Values, inventory *consentToolInventory) (*too
 	// Manual picks: strict duplicates, per-name cap, unknown intersected
 	// away, grant-covered picks canonicalized away.
 	submitted := form["tools"]
-	if len(submitted) > consentToolNameLimit {
-		return nil, fmt.Errorf("too many tools submitted (%d; limit is %d)", len(submitted), consentToolNameLimit)
+	if len(submitted) > toolfilter.MaxTools {
+		return nil, fmt.Errorf("too many tools submitted (%d; limit is %d)", len(submitted), toolfilter.MaxTools)
 	}
 	displayed := make(map[string]bool, len(inventory.Tools))
 	for _, tool := range inventory.Tools {

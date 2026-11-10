@@ -28,6 +28,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -91,7 +92,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	o11y.AttachHandler(mux, "POST", "/rpc/assistants.getThreadBootstrap", oops.ErrHandle(service.logger, service.handleGetThreadBootstrap).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/rpc/assistants.recordCompactedGeneration", oops.ErrHandle(service.logger, service.handleRecordCompactedGeneration).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/rpc/assistantMcpAuth.create", oops.ErrHandle(service.logger, service.handleCreateMCPAuthFlow).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", "/rpc/assistantMcpAuth/{id}/oauth/callback", oops.ErrHandle(service.logger, service.handleMCPAuthCallback).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/rpc/assistantMcpAuth/{id}/oauth/callback", oops.BrowserErrHandle(service.logger, service.handleMCPAuthCallback).ServeHTTP)
 	// Public, unauthenticated outbound-CIMD document. Distinct from the
 	// remote-session path at /.well-known/oauth-client/{id}: assistants are
 	// addressed by assistant id, and the document identifies the assistant.
@@ -178,6 +179,10 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 	if err != nil {
 		return nil, err
 	}
+	canBindEnvironment, err := s.core.readableEnvironments(ctx, *authCtx.ProjectID, payload.Toolsets, payload.McpServers)
+	if err != nil {
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "authorize assistant environments")
+	}
 	record, err := s.core.CreateAssistant(
 		ctx,
 		authCtx.ActiveOrganizationID,
@@ -193,6 +198,7 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 		conv.PtrValOrEmpty(payload.Status, StatusActive),
 		true,
 		canEnableMCP,
+		canBindEnvironment,
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "create assistant")
@@ -222,6 +228,10 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 	if err != nil {
 		return nil, err
 	}
+	canBindEnvironment, err := s.core.readableEnvironments(ctx, *authCtx.ProjectID, payload.Toolsets, payload.McpServers)
+	if err != nil {
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "authorize assistant environments")
+	}
 	record, err := s.core.UpdateAssistant(
 		ctx,
 		*authCtx.ProjectID,
@@ -235,6 +245,8 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 		payload.MaxConcurrency,
 		payload.Status,
 		canEnableMCP,
+		canBindEnvironment,
+		runtimeSelectionChange{Version: payload.RuntimeVersion, ExpectedVersion: payload.ExpectedRuntimeVersion},
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "update assistant")
@@ -499,16 +511,7 @@ func (s *Service) requireAttachmentAccess(ctx context.Context, projectID uuid.UU
 	if err != nil {
 		return nil, err
 	}
-	allowed := make(map[uuid.UUID]struct{}, len(writable))
-	for _, id := range writable {
-		if parsed, parseErr := uuid.Parse(id); parseErr == nil {
-			allowed[parsed] = struct{}{}
-		}
-	}
-	return func(id uuid.UUID) bool {
-		_, ok := allowed[id]
-		return ok
-	}, nil
+	return idSetPredicate(writable), nil
 }
 
 func (s *Service) Kind() string {
@@ -572,6 +575,12 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		}
 	}
 	switch {
+	case errors.Is(err, errRuntimeSwitchBusy):
+		return oops.E(oops.CodeConflict, err, "%s", errRuntimeSwitchBusy.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errRuntimeSwitchConflict):
+		return oops.E(oops.CodeConflict, err, "%s", errRuntimeSwitchConflict.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errRuntimeSwitchUnavailable):
+		return oops.E(oops.CodeConflict, err, "%s", errRuntimeSwitchUnavailable.Error()).LogWarn(ctx, logger)
 	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, assistantidentity.ErrNotFound):
 		return oops.E(oops.CodeNotFound, err, "%s", message).LogError(ctx, logger)
 	case errors.Is(err, assistantidentity.ErrInvalidIdentity):
@@ -582,6 +591,12 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		return oops.E(oops.CodeUnauthorized, err, "%s", message).LogWarn(ctx, logger)
 	case errors.Is(err, errMCPEnableForbidden):
 		return oops.E(oops.CodeForbidden, err, "%s", errMCPEnableForbidden.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errEnvironmentBindingForbidden):
+		return oops.E(oops.CodeForbidden, err, "%s", errEnvironmentBindingForbidden.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errMCPEnableUnavailable):
+		return oops.E(oops.CodeInvalid, err, "%s", errMCPEnableUnavailable.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errToolsetNoMCPServer):
+		return oops.E(oops.CodeBadRequest, err, "%s", hostedmcp.NoServerMessage).LogWarn(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
 		return oops.E(oops.CodeBadRequest, err, "%s", message).LogError(ctx, logger)
 	default:

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -23,7 +24,7 @@ export const BlockingReason = {
 /**
  * Stable reason deletion is blocked. Present when can_delete is false.
  */
-export type BlockingReason = ClosedEnum<typeof BlockingReason>;
+export type BlockingReason = OpenEnum<typeof BlockingReason>;
 
 /**
  * Authoritative impact summary for deleting a remote_session_client, including identity-provider login references that block deletion.
@@ -56,9 +57,10 @@ export type OrganizationClientDeletePreflight = {
 };
 
 /** @internal */
-export const BlockingReason$inboundSchema: z.ZodMiniEnum<
-  typeof BlockingReason
-> = z.enum(BlockingReason);
+export const BlockingReason$inboundSchema: z.ZodMiniType<
+  BlockingReason,
+  unknown
+> = openEnums.inboundSchema(BlockingReason);
 
 /** @internal */
 export const OrganizationClientDeletePreflight$inboundSchema: z.ZodMiniType<

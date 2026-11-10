@@ -265,7 +265,7 @@ function ReadinessChecklist({
       {readiness.isError && <ApiErrorAlert error={readiness.error} />}
 
       {!data.agentRecorded && (
-        <Alert variant="warning" alignTop>
+        <Alert variant="warning">
           <Text variant="small">
             Okta links and confirmations need the AI agent&apos;s ID.{" "}
             <Link
@@ -329,7 +329,7 @@ function ReadinessChecklist({
         </div>
 
         {feedback.kind === "confirmed" && feedback.count > 0 && (
-          <Alert variant="success" alignTop>
+          <Alert variant="success">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Text variant="small">
                 {pluralize(feedback.count, "server")} confirmed

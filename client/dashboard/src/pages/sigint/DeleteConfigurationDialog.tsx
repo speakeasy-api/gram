@@ -34,7 +34,7 @@ export function DeleteConfigurationDialog({
             Delete &ldquo;{name}&rdquo;? This action cannot be undone.
           </Dialog.Description>
         </Dialog.Header>
-        <Alert variant="warning" alignTop>
+        <Alert variant="warning">
           {isSignal
             ? "This shared signal will be detached from every sensor that uses it. Surviving sensor order will be compacted, and those sensors may become empty or incomplete drafts."
             : "Deleting this sensor removes its ordered memberships. Shared signals remain available to other sensors."}

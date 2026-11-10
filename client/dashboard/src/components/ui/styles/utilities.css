@@ -341,6 +341,11 @@
   color: var(--text-link-information);
 }
 
+/* Feature */
+@utility text-default-feature {
+  color: var(--text-default-feature);
+}
+
 /* Success */
 @utility text-default-success {
   color: var(--text-default-success);
@@ -675,6 +680,10 @@
 
 @utility border-information-muted {
   border-color: var(--border-information-muted);
+}
+
+@utility border-feature-default {
+  border-color: var(--border-feature-default);
 }
 
 @utility border-information-softest {

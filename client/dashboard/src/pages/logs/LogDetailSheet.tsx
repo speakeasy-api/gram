@@ -1,12 +1,16 @@
 import { useRoutes } from "@/routes";
 import { Link } from "react-router";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
+import { signedInWithFor } from "@/components/ui/ActingPrincipal/credential";
+import { useUser } from "@/contexts/Auth";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForKind } from "@/lib/identity-urn";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/Sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { cn } from "@/lib/utils";
-import { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
+import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { Operator } from "@gram/client/models/components/logfilter";
 import {
   DropdownMenu,
@@ -23,11 +27,20 @@ import {
   type CodeLine,
   type CodeToken,
 } from "@/components/ui/lib/codeUtils";
+import { getNestedAttribute, httpStatusCode } from "./log-attributes";
 import { formatNanoTimestamp } from "./utils";
+
+/** The person whose own connection served a call, as the row named them. */
+export type ConnectionOwner = { userId: string; label?: string | undefined };
 
 interface LogDetailSheetProps {
   log: TelemetryLogRecord | null;
   hostedToolsetSlug?: string;
+  /**
+   * The connection owner the row this sheet was opened from resolved. The
+   * log carries only their id, so their name comes from the row.
+   */
+  connectionOwner?: ConnectionOwner | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddFilter?: (path: string, op: Operator, value: string) => void;
@@ -36,6 +49,7 @@ interface LogDetailSheetProps {
 export function LogDetailSheet({
   log,
   hostedToolsetSlug,
+  connectionOwner,
   open,
   onOpenChange,
   onAddFilter,
@@ -50,6 +64,7 @@ export function LogDetailSheet({
           <LogDetailContent
             log={log}
             hostedToolsetSlug={hostedToolsetSlug}
+            connectionOwner={connectionOwner}
             onAddFilter={onAddFilter}
           />
         )}
@@ -69,25 +84,15 @@ const HOOK_BLOCK_REASON_KEY = "gram.hook.block_reason";
 const HOOK_ERROR_KEY = "gram.hook.error";
 
 /**
- * Extract a deeply nested value from an object using a dot-separated path.
- * e.g. getNestedValue(obj, "gram.tool_call.input.content")
+ * Extract a deeply nested value of any type from an object using a
+ * dot-separated path.
  */
 function getNestedValue(
   obj: Record<string, unknown>,
   path: string,
 ): string | undefined {
-  const parts = path.split(".");
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (
-      current === null ||
-      current === undefined ||
-      typeof current !== "object"
-    )
-      return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return typeof current === "string" ? current : undefined;
+  const value = getNestedAttribute(obj, path);
+  return typeof value === "string" ? value : undefined;
 }
 
 /**
@@ -114,13 +119,16 @@ function removeNestedKey(
 function LogDetailContent({
   log,
   hostedToolsetSlug,
+  connectionOwner,
   onAddFilter,
 }: {
   log: TelemetryLogRecord;
   hostedToolsetSlug?: string;
+  connectionOwner?: ConnectionOwner | undefined;
   onAddFilter?: (path: string, op: Operator, value: string) => void;
 }) {
   const routes = useRoutes();
+  const viewer = useUser();
   const resourceAttrs = log.resourceAttributes as
     | { gram?: { tool?: { urn?: string } } }
     | undefined;
@@ -163,6 +171,67 @@ function LogDetailContent({
     filteredAttrs = removeNestedKey(filteredAttrs, HOOK_ERROR_KEY);
   }
 
+  // An agent that made this call, and the person whose authority it used.
+  //
+  // Both are on the raw log and neither reaches the summary the table reads,
+  // so this sheet is the only place the pair can be shown. Without it a call
+  // an agent made under someone's authority rendered as that person calling
+  // the tool themselves, which is the wrong accusation to put in front of
+  // whoever opened the trace.
+  const actingAgent = (() => {
+    if (!attrs) return null;
+    if (getNestedValue(attrs, "gram.authorization.actor.type") !== "agent") {
+      return null;
+    }
+    const id = getNestedValue(attrs, "gram.authorization.actor.id");
+    if (!id) return null;
+    return {
+      id,
+      name: getNestedValue(attrs, "gram.authorization.actor.name") || undefined,
+    };
+  })();
+  // The id is off a telemetry row, which is not permission to open that
+  // agent, so the name links only once it resolved through the inventory this
+  // reader is allowed to read. The matched record also names the agent: a
+  // call made under an authenticated actor carries no name on the span, and
+  // the id on its own reads as "agent:<uuid>".
+  const agents = useReadableAgents(Boolean(actingAgent));
+  const readableAgent = agents.isError
+    ? undefined
+    : (agents.data ?? []).find((agent) => agent.id === actingAgent?.id);
+  const agentIsReadable = Boolean(readableAgent);
+  const authorizerUserID = attrs
+    ? getNestedValue(attrs, "gram.authorization.authorizer_user_id")
+    : "";
+  // How Speakeasy signed the call in upstream. It replaces "on behalf of" the
+  // key's authorizer: a shared credential acted for nobody. The raw values
+  // stay in the attributes below. Only a gateway tool-call row is trusted to
+  // name it: a hook row's attributes are self-reported by the client.
+  const signedInWith = (() => {
+    if (!attrs) return undefined;
+    if (getNestedValue(attrs, "gram.event.source") !== "tool_call") {
+      return undefined;
+    }
+    const type = getNestedValue(attrs, "gram.auth_client.type");
+    if (!type) return undefined;
+    const ownerUserId = getNestedValue(
+      attrs,
+      "gram.auth_client.connection_owner_user_id",
+    );
+    return signedInWithFor(
+      {
+        type,
+        clientId: getNestedValue(attrs, "gram.auth_client.id"),
+        ownerUserId,
+        ownerName:
+          ownerUserId && connectionOwner?.userId === ownerUserId
+            ? connectionOwner.label
+            : undefined,
+      },
+      viewer.id,
+    );
+  })();
+
   // The caller, by the same precedence the roster uses: an address first,
   // then the ids an agent or an external user is keyed on.
   const caller = (() => {
@@ -185,9 +254,7 @@ function LogDetailContent({
 
   // The row this was opened from derives failure from the HTTP status, so a
   // 500 with no hook error must not read as a success here.
-  const statusCode = attrs
-    ? Number(getNestedValue(attrs, "http.response.status_code"))
-    : Number.NaN;
+  const statusCode = attrs ? httpStatusCode(attrs) : Number.NaN;
   const failed =
     Boolean(toolError) || (Number.isFinite(statusCode) && statusCode >= 400);
   // A span with no status, no error and no result has not finished — the same
@@ -260,20 +327,46 @@ function LogDetailContent({
           {/* Who made the call. The first question asked of a single trace is
               usually "who did this", and it was previously only answerable by
               unfolding Context. */}
-          {caller && (
-            <div className="flex items-center gap-2.5 pt-1.5">
-              <IdentityAvatar
-                label={caller.label}
-                className="size-7"
-                textClassName="text-xs"
+          {actingAgent ? (
+            <div className="flex items-center gap-2.5 pt-1.5 text-sm">
+              <ActingPrincipal
+                agent={{
+                  ...actingAgent,
+                  name: readableAgent?.name ?? actingAgent.name,
+                }}
+                linked={agentIsReadable}
+                authorizer={
+                  // The address is the better label when the log carries
+                  // one; the bare id is all there is otherwise. This one is
+                  // a Speakeasy user id, so it also addresses an identity.
+                  authorizerUserID
+                    ? {
+                        id: authorizerUserID,
+                        name: caller?.label,
+                        identity: { userId: authorizerUserID },
+                      }
+                    : undefined
+                }
+                signedInWith={signedInWith}
+                className="truncate"
               />
-              <IdentityLink
-                identifier={caller.ref}
-                className="text-foreground truncate text-sm"
-              >
-                {caller.label}
-              </IdentityLink>
             </div>
+          ) : (
+            caller && (
+              <div className="flex items-center gap-2.5 pt-1.5">
+                <IdentityAvatar
+                  label={caller.label}
+                  className="size-7"
+                  textClassName="text-xs"
+                />
+                <IdentityLink
+                  identifier={caller.ref}
+                  className="text-foreground truncate text-sm"
+                >
+                  {caller.label}
+                </IdentityLink>
+              </div>
+            )
           )}
         </div>
 

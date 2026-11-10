@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -24,7 +25,7 @@ export const AppliesTo = {
 /**
  * Whether the rule names this resource, every resource in its project, or every resource of its kind.
  */
-export type AppliesTo = ClosedEnum<typeof AppliesTo>;
+export type AppliesTo = OpenEnum<typeof AppliesTo>;
 
 export const Dispositions = {
   ReadOnly: "read_only",
@@ -32,7 +33,7 @@ export const Dispositions = {
   Idempotent: "idempotent",
   OpenWorld: "open_world",
 } as const;
-export type Dispositions = ClosedEnum<typeof Dispositions>;
+export type Dispositions = OpenEnum<typeof Dispositions>;
 
 /**
  * How the rule shaped the decision. allows: proves the access. overrides: a rule made directly to the member that proves the access despite a block from a role or everyone. overridden: a block such a rule overrides. blocks: takes the access away. blocked: an allow that matches but that a block keeps from counting. limits: a block taking away some of the resource's tools.
@@ -48,12 +49,12 @@ export const Effect = {
 /**
  * How the rule shaped the decision. allows: proves the access. overrides: a rule made directly to the member that proves the access despite a block from a role or everyone. overridden: a block such a rule overrides. blocks: takes the access away. blocked: an allow that matches but that a block keeps from counting. limits: a block taking away some of the resource's tools.
  */
-export type Effect = ClosedEnum<typeof Effect>;
+export type Effect = OpenEnum<typeof Effect>;
 
 /**
  * What the principal identifies.
  */
-export const Kind = {
+export const ExplainedAccessRuleKind = {
   Everyone: "everyone",
   Role: "role",
   User: "user",
@@ -62,7 +63,7 @@ export const Kind = {
 /**
  * What the principal identifies.
  */
-export type Kind = ClosedEnum<typeof Kind>;
+export type ExplainedAccessRuleKind = OpenEnum<typeof ExplainedAccessRuleKind>;
 
 /**
  * The access the rule gives, or the access a "blocked_" rule takes away. "all" is a grant covering every permission.
@@ -79,7 +80,7 @@ export const ExplainedAccessRuleLevel = {
 /**
  * The access the rule gives, or the access a "blocked_" rule takes away. "all" is a grant covering every permission.
  */
-export type ExplainedAccessRuleLevel = ClosedEnum<
+export type ExplainedAccessRuleLevel = OpenEnum<
   typeof ExplainedAccessRuleLevel
 >;
 
@@ -94,7 +95,7 @@ export const Reason = {
 /**
  * Why a blocked rule made directly to the member did not override the block. wildcard_direct_grant: it covers every resource. narrower_direct_grant: it constrains something the tool does not carry. own_exclusion: the member's own block applies.
  */
-export type Reason = ClosedEnum<typeof Reason>;
+export type Reason = OpenEnum<typeof Reason>;
 
 export type ExplainedAccessRule = {
   /**
@@ -120,7 +121,7 @@ export type ExplainedAccessRule = {
   /**
    * What the principal identifies.
    */
-  kind: Kind;
+  kind: ExplainedAccessRuleKind;
   /**
    * The access the rule gives, or the access a "blocked_" rule takes away. "all" is a grant covering every permission.
    */
@@ -144,31 +145,32 @@ export type ExplainedAccessRule = {
 };
 
 /** @internal */
-export const AppliesTo$inboundSchema: z.ZodMiniEnum<typeof AppliesTo> = z.enum(
-  AppliesTo,
-);
+export const AppliesTo$inboundSchema: z.ZodMiniType<AppliesTo, unknown> =
+  openEnums.inboundSchema(AppliesTo);
 
 /** @internal */
-export const Dispositions$inboundSchema: z.ZodMiniEnum<typeof Dispositions> = z
-  .enum(Dispositions);
+export const Dispositions$inboundSchema: z.ZodMiniType<Dispositions, unknown> =
+  openEnums.inboundSchema(Dispositions);
 
 /** @internal */
-export const Effect$inboundSchema: z.ZodMiniEnum<typeof Effect> = z.enum(
-  Effect,
-);
+export const Effect$inboundSchema: z.ZodMiniType<Effect, unknown> = openEnums
+  .inboundSchema(Effect);
 
 /** @internal */
-export const Kind$inboundSchema: z.ZodMiniEnum<typeof Kind> = z.enum(Kind);
+export const ExplainedAccessRuleKind$inboundSchema: z.ZodMiniType<
+  ExplainedAccessRuleKind,
+  unknown
+> = openEnums.inboundSchema(ExplainedAccessRuleKind);
 
 /** @internal */
-export const ExplainedAccessRuleLevel$inboundSchema: z.ZodMiniEnum<
-  typeof ExplainedAccessRuleLevel
-> = z.enum(ExplainedAccessRuleLevel);
+export const ExplainedAccessRuleLevel$inboundSchema: z.ZodMiniType<
+  ExplainedAccessRuleLevel,
+  unknown
+> = openEnums.inboundSchema(ExplainedAccessRuleLevel);
 
 /** @internal */
-export const Reason$inboundSchema: z.ZodMiniEnum<typeof Reason> = z.enum(
-  Reason,
-);
+export const Reason$inboundSchema: z.ZodMiniType<Reason, unknown> = openEnums
+  .inboundSchema(Reason);
 
 /** @internal */
 export const ExplainedAccessRule$inboundSchema: z.ZodMiniType<
@@ -183,7 +185,7 @@ export const ExplainedAccessRule$inboundSchema: z.ZodMiniType<
     display_name: z.string(),
     dispositions: z.optional(z.array(Dispositions$inboundSchema)),
     effect: Effect$inboundSchema,
-    kind: Kind$inboundSchema,
+    kind: ExplainedAccessRuleKind$inboundSchema,
     level: ExplainedAccessRuleLevel$inboundSchema,
     principal_urn: z.string(),
     reason: z.optional(Reason$inboundSchema),

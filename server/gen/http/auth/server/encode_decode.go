@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -48,23 +49,24 @@ func DecodeCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 	return func(r *http.Request) (*auth.CallbackPayload, error) {
 		var payload *auth.CallbackPayload
 		var (
-			code  string
-			state *string
-			err   error
+			code   *string
+			error_ *string
+			state  *string
 		)
 		qp := r.URL.Query()
-		code = qp.Get("code")
-		if code == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("code", "query string"))
+		codeRaw := qp.Get("code")
+		if codeRaw != "" {
+			code = &codeRaw
+		}
+		error_Raw := qp.Get("error")
+		if error_Raw != "" {
+			error_ = &error_Raw
 		}
 		stateRaw := qp.Get("state")
 		if stateRaw != "" {
 			state = &stateRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewCallbackPayload(code, state)
+		payload = NewCallbackPayload(code, error_, state)
 
 		return payload, nil
 	}
@@ -243,12 +245,18 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 	return func(r *http.Request) (*auth.LoginPayload, error) {
 		var payload *auth.LoginPayload
 		var (
-			redirect       *string
-			orgName        *string
-			partnerCode    *string
-			email          *string
-			supportHandoff *string
-			err            error
+			redirect           *string
+			orgName            *string
+			partnerCode        *string
+			email              *string
+			supportHandoff     *string
+			utmSource          *string
+			utmMedium          *string
+			utmCampaign        *string
+			utmTerm            *string
+			utmContent         *string
+			analyticsSessionID *string
+			err                error
 		)
 		qp := r.URL.Query()
 		redirectRaw := qp.Get("redirect")
@@ -276,10 +284,34 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		if supportHandoffRaw != "" {
 			supportHandoff = &supportHandoffRaw
 		}
+		utmSourceRaw := qp.Get("utm_source")
+		if utmSourceRaw != "" {
+			utmSource = &utmSourceRaw
+		}
+		utmMediumRaw := qp.Get("utm_medium")
+		if utmMediumRaw != "" {
+			utmMedium = &utmMediumRaw
+		}
+		utmCampaignRaw := qp.Get("utm_campaign")
+		if utmCampaignRaw != "" {
+			utmCampaign = &utmCampaignRaw
+		}
+		utmTermRaw := qp.Get("utm_term")
+		if utmTermRaw != "" {
+			utmTerm = &utmTermRaw
+		}
+		utmContentRaw := qp.Get("utm_content")
+		if utmContentRaw != "" {
+			utmContent = &utmContentRaw
+		}
+		analyticsSessionIDRaw := qp.Get("analytics_session_id")
+		if analyticsSessionIDRaw != "" {
+			analyticsSessionID = &analyticsSessionIDRaw
+		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewLoginPayload(redirect, orgName, partnerCode, email, supportHandoff)
+		payload = NewLoginPayload(redirect, orgName, partnerCode, email, supportHandoff, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, analyticsSessionID)
 
 		return payload, nil
 	}
@@ -1903,9 +1935,11 @@ func DecodeTransferInRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 	return func(r *http.Request) (*auth.TransferInPayload, error) {
 		var payload *auth.TransferInPayload
 		var (
-			sourceHost *string
-			code       *string
-			redirect   *string
+			sourceHost     *string
+			code           *string
+			redirect       *string
+			replaceSession *bool
+			err            error
 		)
 		qp := r.URL.Query()
 		sourceHostRaw := qp.Get("source_host")
@@ -1920,7 +1954,20 @@ func DecodeTransferInRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if redirectRaw != "" {
 			redirect = &redirectRaw
 		}
-		payload = NewTransferInPayload(sourceHost, code, redirect)
+		{
+			replaceSessionRaw := qp.Get("replace_session")
+			if replaceSessionRaw != "" {
+				v, err2 := strconv.ParseBool(replaceSessionRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("replace_session", replaceSessionRaw, "boolean"))
+				}
+				replaceSession = &v
+			}
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewTransferInPayload(sourceHost, code, redirect, replaceSession)
 
 		return payload, nil
 	}

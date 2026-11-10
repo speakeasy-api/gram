@@ -37,7 +37,9 @@ const (
 // Run replaces the data for spec's tenant while holding the shared advisory
 // lock. The Postgres seed runs in one transaction, so a failed run leaves the
 // previous data in place; each statement in it gets its own statement
-// timeout. The ClickHouse seed then deletes both source rows and
+// timeout. Once it commits, the tenant's upstream auth is migrated to typed
+// auth clients by the staff migration's own backfills and checked complete
+// (migrateUpstreamAuth). The ClickHouse seed then deletes both source rows and
 // materialized-view targets before its inserts incrementally repopulate the
 // summaries.
 //
@@ -49,14 +51,21 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		return err
 	}
 
+	// The advisory lock holds one connection for the whole run, and the
+	// upstream auth backfills acquire another while it is held.
+	if db.Config().MaxConns < 2 {
+		return fmt.Errorf("demo seed needs a postgres pool of at least 2 connections, got %d", db.Config().MaxConns)
+	}
+
 	conn, err := db.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire postgres connection: %w", err)
 	}
 
 	const lockName = "gram-demo-seed"
-	var locked bool
-	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock(hashtext($1))", lockName).Scan(&locked); err != nil {
+	lockQueries := repo.New(conn)
+	locked, err := lockQueries.TryAcquireSeedLock(ctx, lockName)
+	if err != nil {
 		// Cancellation can surface after PostgreSQL acquired the session lock.
 		// Destroy the uncertain session instead of returning it to the pool.
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)
@@ -74,8 +83,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)
 		defer cancel()
 
-		var unlocked bool
-		unlockErr := conn.QueryRow(unlockCtx, "SELECT pg_advisory_unlock(hashtext($1))", lockName).Scan(&unlocked)
+		unlocked, unlockErr := lockQueries.ReleaseSeedLock(unlockCtx, lockName)
 		if unlockErr == nil && unlocked {
 			conn.Release()
 			return
@@ -96,6 +104,11 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	}
 	logger.InfoContext(ctx, "demo seed applied to postgres")
 
+	if err := migrateUpstreamAuth(ctx, logger, db, spec.OrgID); err != nil {
+		return fmt.Errorf("migrate demo seed upstream auth: %w", err)
+	}
+	logger.InfoContext(ctx, "demo seed upstream auth migrated")
+
 	if err := s.runClickHouse(ctx, ch); err != nil {
 		return fmt.Errorf("apply demo seed to clickhouse: %w", err)
 	}
@@ -114,7 +127,7 @@ type txBeginner interface {
 // failed run leaves the previous data in place. It returns the seeder, whose
 // clock the ClickHouse seed reuses.
 func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, spec Spec) (*seeder, error) {
-	s := &seeder{spec: spec, q: nil, logger: logger, now: time.Time{}}
+	s := &seeder{spec: spec, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		s.q = repo.New(tx)
 		if err := s.runPostgres(ctx); err != nil {

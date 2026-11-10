@@ -31,8 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -52,8 +50,6 @@ type Service struct {
 	tracer       trace.Tracer
 	db           *pgxpool.Pool
 	repo         *repo.Queries
-	externalmcp  *externalmcpRepo.Queries
-	catalog      *externalmcp.CatalogService
 	auth         *auth.Auth
 	authz        *authz.Engine
 	assets       *assetsRepo.Queries
@@ -77,25 +73,17 @@ func NewService(
 	assetStorage assets.BlobStore,
 	posthog *posthog.Posthog,
 	siteURL *url.URL,
-	mcpRegistryClient *externalmcp.RegistryClient,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	catalogs ...*externalmcp.CatalogService,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deployments"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
-
-	catalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
-	if len(catalogs) > 0 && catalogs[0] != nil {
-		catalog = catalogs[0]
-	}
 
 	return &Service{
 		logger:       logger,
 		tracer:       tracer,
 		db:           db,
 		repo:         repo.New(db),
-		externalmcp:  externalmcpRepo.New(db),
 		auth:         auth.New(logger, db, sessions, authzEngine),
 		authz:        authzEngine,
 		assets:       assetsRepo.New(db),
@@ -104,7 +92,6 @@ func NewService(
 		temporalEnv:  temporalEnv,
 		posthog:      posthog,
 		siteURL:      siteURL,
-		catalog:      catalog,
 		audit:        auditLogger,
 		Service:      annotations.Service[gen.Service, gen.Auther]{},
 	}
@@ -474,34 +461,8 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		})
 	}
 
-	newExternalMCPs := make([]upsertExternalMCP, 0, len(form.ExternalMcps))
-	for _, add := range form.ExternalMcps {
-		registryID, err := conv.PtrToNullUUID(add.RegistryID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
-		}
-		newExternalMCPs = append(newExternalMCPs, upsertExternalMCP{
-			registryID:              registryID,
-			name:                    add.Name,
-			slug:                    string(add.Slug),
-			registryServerSpecifier: add.RegistryServerSpecifier,
-			selectedRemotes:         add.SelectedRemotes,
-		})
-	}
-
-	// Existing keys identify accepted work, not a fresh catalog selection.
-	_, existingErr := tx.GetDeploymentByIdempotencyKey(ctx, repo.GetDeploymentByIdempotencyKeyParams{IdempotencyKey: form.IdempotencyKey, ProjectID: projectID})
-	if existingErr != nil && !errors.Is(existingErr, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, existingErr, "error reading deployment").LogError(ctx, logger)
-	}
-	if errors.Is(existingErr, pgx.ErrNoRows) {
-		if err := s.admitExternalMCPSelections(ctx, organizationID, authCtx.OrganizationSlug, newExternalMCPs, nil, nil); err != nil {
-			return nil, err
-		}
-	}
-
-	if len(newPackages) == 0 && len(newOpenAPIAssets) == 0 && len(newFunctions) == 0 && len(newExternalMCPs) == 0 {
-		return nil, oops.E(oops.CodeInvalid, nil, "at least one openapi document, functions file, package, or external mcp is required").LogError(ctx, logger)
+	if len(newPackages) == 0 && len(newOpenAPIAssets) == 0 && len(newFunctions) == 0 {
+		return nil, oops.E(oops.CodeInvalid, nil, "at least one openapi document, functions file, or package is required").LogError(ctx, logger)
 	}
 
 	newID, err := createDeployment(
@@ -520,7 +481,6 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		newOpenAPIAssets,
 		newFunctions,
 		newPackages,
-		newExternalMCPs,
 	)
 	if err != nil {
 		return nil, err
@@ -685,31 +645,15 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		packagesToExclude = append(packagesToExclude, id)
 	}
 
-	externalMCPsToUpsert := make([]upsertExternalMCP, 0, len(form.UpsertExternalMcps))
-	for _, add := range form.UpsertExternalMcps {
-		registryID, err := conv.PtrToNullUUID(add.RegistryID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
-		}
-		externalMCPsToUpsert = append(externalMCPsToUpsert, upsertExternalMCP{
-			registryID:              registryID,
-			name:                    add.Name,
-			slug:                    string(add.Slug),
-			registryServerSpecifier: add.RegistryServerSpecifier,
-			selectedRemotes:         add.SelectedRemotes,
-		})
-	}
-
-	externalMCPsToExclude := make([]string, 0, len(form.ExcludeExternalMcps))
-	externalMCPsToExclude = append(externalMCPsToExclude, form.ExcludeExternalMcps...)
-
 	packagesChanged := len(packagesToUpsert) > 0 || len(packagesToExclude) > 0
 	openapiChanged := len(openapiv3ToUpsert) > 0 || len(openapiv3ToExclude) > 0
 	functionsChanged := len(functionsToUpsert) > 0 || len(functionsToExclude) > 0
-	externalMCPsChanged := len(externalMCPsToUpsert) > 0 || len(externalMCPsToExclude) > 0
+	// Excluding an external MCP still yields a new deployment, which drops the
+	// attachments the latest deployment carries.
+	externalMCPsExcluded := len(form.ExcludeExternalMcps) > 0
 
-	if !packagesChanged && !openapiChanged && !functionsChanged && !externalMCPsChanged {
-		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset, package, or external mcp to upsert or exclude is required").LogError(ctx, logger)
+	if !packagesChanged && !openapiChanged && !functionsChanged && !externalMCPsExcluded {
+		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset or package to upsert or exclude is required").LogError(ctx, logger)
 	}
 
 	var cloneID uuid.UUID
@@ -719,9 +663,6 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	switch {
 	// 1️⃣ Project has no deployments, we need to create an initial one instead of cloning
 	case errors.Is(err, pgx.ErrNoRows), latestDeploymentID == uuid.Nil:
-		if err := s.admitExternalMCPSelections(ctx, organizationID, authCtx.OrganizationSlug, externalMCPsToUpsert, nil, nil); err != nil {
-			return nil, err
-		}
 		newID, err := createDeployment(
 			ctx, s.tracer, logger, tx,
 			IdempotencyKey(nil),
@@ -738,7 +679,6 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			openapiv3ToUpsert,
 			functionsToUpsert,
 			packagesToUpsert,
-			externalMCPsToUpsert,
 		)
 		if err != nil {
 			return nil, err
@@ -763,27 +703,15 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			return nil, err
 		}
 
-		if len(externalMCPsToUpsert) > 0 {
-			persisted, err := tx.ListDeploymentExternalMCPs(ctx, latestDeploymentID)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error reading existing external mcp attachments")
-			}
-			if err := s.admitExternalMCPSelections(ctx, organizationID, authCtx.OrganizationSlug, externalMCPsToUpsert, persisted, externalMCPsToExclude); err != nil {
-				return nil, err
-			}
-		}
-
 		newID, err := cloneDeployment(
 			ctx, s.tracer, logger, tx,
 			ProjectID(projectID), DeploymentID(latestDeploymentID),
 			openapiv3ToUpsert,
 			functionsToUpsert,
 			packagesToUpsert,
-			externalMCPsToUpsert,
 			openapiv3ToExclude,
 			functionsToExclude,
 			packagesToExclude,
-			externalMCPsToExclude,
 		)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").LogError(ctx, logger)
@@ -851,7 +779,9 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	return &gen.EvolveResult{Deployment: dep}, nil
 }
 
-func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*gen.RedeployResult, error) {
+// PrepareRedeploy clones and audits a project snapshot in the caller transaction.
+// The caller must commit before processing; this method starts no workflows.
+func (s *Service) PrepareRedeploy(ctx context.Context, dbtx pgx.Tx, payload *gen.RedeployPayload) (*types.Deployment, error) {
 	span := trace.SpanFromContext(ctx)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -862,7 +792,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		return nil, err
 	}
 
-	if payload.DeploymentID == "" {
+	if payload == nil || payload.DeploymentID == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "deployment id is required").LogError(ctx, s.logger)
 	}
 
@@ -872,32 +802,61 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()), attr.SlogOrganizationID(organizationID))
 	span.SetAttributes(attr.ProjectID(projectID.String()))
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error {
-		return dbtx.Rollback(ctx)
-	})
-
-	tx := s.repo.WithTx(dbtx)
-
 	deploymentID, err := uuid.Parse(payload.DeploymentID)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid deployment id").LogError(ctx, logger)
 	}
 
+	return prepareRedeploy(ctx, s.tracer, logger, s.audit, dbtx, redeployRequest{
+		OrganizationID:     organizationID,
+		ProjectID:          projectID,
+		SourceDeploymentID: deploymentID,
+		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:   authCtx.Email,
+	})
+}
+
+// redeployRequest names the deployment to clone and who is cloning it.
+type redeployRequest struct {
+	// OrganizationID owns the project; it scopes the audit entry.
+	OrganizationID string
+
+	// ProjectID must own SourceDeploymentID.
+	ProjectID uuid.UUID
+
+	// SourceDeploymentID is the deployment cloned.
+	SourceDeploymentID uuid.UUID
+
+	// Actor is who the audit entry names.
+	Actor urn.Principal
+
+	// ActorDisplayName is how the audit entry renders Actor.
+	ActorDisplayName *string
+}
+
+// prepareRedeploy clones a deployment and records the audit entry in the
+// caller's transaction. Authorizing the caller is the caller's job.
+func prepareRedeploy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, auditLogger *audit.Logger, dbtx pgx.Tx, req redeployRequest) (*types.Deployment, error) {
+	if dbtx == nil {
+		return nil, oops.E(oops.CodeInvalid, nil, "transaction is required").LogError(ctx, logger)
+	}
+
+	span := trace.SpanFromContext(ctx)
+	tx := repo.New(dbtx)
+
+	if _, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(req.ProjectID), mv.DeploymentID(req.SourceDeploymentID)); err != nil {
+		return nil, err
+	}
+
 	newID, err := cloneDeployment(
-		ctx, s.tracer, logger, tx,
-		ProjectID(projectID), DeploymentID(deploymentID),
+		ctx, tracer, logger, tx,
+		ProjectID(req.ProjectID), DeploymentID(req.SourceDeploymentID),
 		[]upsertOpenAPIv3{},
 		[]upsertFunctions{},
 		[]upsertPackage{},
-		[]upsertExternalMCP{},
 		[]uuid.UUID{},
 		[]uuid.UUID{},
 		[]uuid.UUID{},
-		[]string{},
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").LogError(ctx, logger)
@@ -911,38 +870,77 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 	logger = logger.With(attr.SlogDeploymentID(newID.String()))
 	span.SetAttributes(attr.DeploymentID(newID.String()))
 
-	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(newID))
+	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(req.ProjectID), mv.DeploymentID(newID))
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.audit.LogDeploymentRedeploy(ctx, dbtx, audit.LogDeploymentRedeployEvent{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
+	if err := auditLogger.LogDeploymentRedeploy(ctx, dbtx, audit.LogDeploymentRedeployEvent{
+		OrganizationID: req.OrganizationID,
+		ProjectID:      req.ProjectID,
 
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
+		Actor:            req.Actor,
+		ActorDisplayName: req.ActorDisplayName,
 		ActorSlug:        nil,
 
 		DeploymentURN: urn.NewDeployment(newID),
 
-		SourceDeploymentURN: urn.NewDeployment(deploymentID),
+		SourceDeploymentURN: urn.NewDeployment(req.SourceDeploymentID),
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").LogError(ctx, logger)
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").LogError(ctx, logger)
+	return dep, nil
+}
+
+// ProcessRedeploy reads a committed deployment and processes it if still created.
+// It never clones; repeated dispatch uses the existing deployment workflow ID.
+func (s *Service) ProcessRedeploy(ctx context.Context, deploymentID string) (*gen.RedeployResult, error) {
+	return s.processRedeploy(ctx, deploymentID, false, nil)
+}
+
+// DispatchRedeploy starts processing without waiting for the workflow. Promotion
+// must still match expectedActive; uuid.Nil means no active deployment existed.
+func (s *Service) DispatchRedeploy(ctx context.Context, deploymentID string, expectedActive uuid.UUID) (*gen.RedeployResult, error) {
+	return s.processRedeploy(ctx, deploymentID, true, &expectedActive)
+}
+
+func (s *Service) processRedeploy(ctx context.Context, deploymentID string, nonBlocking bool, expectedActive *uuid.UUID) (*gen.RedeployResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	status := dep.Status
-	if status == "created" {
-		s, err := s.startDeployment(ctx, logger, projectID, newID, dep, false)
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(deploymentID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid deployment id").LogError(ctx, s.logger)
+	}
+
+	projectID := *authCtx.ProjectID
+	logger := s.logger.With(
+		attr.SlogProjectID(projectID.String()),
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogDeploymentID(id.String()),
+	)
+
+	dep, err := mv.DescribeDeployment(ctx, logger, s.repo, mv.ProjectID(projectID), mv.DeploymentID(id))
+	if err != nil {
+		return nil, err
+	}
+
+	if dep == nil {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	if dep.Status == "created" {
+		status, err := startDeploymentWithExpectedActive(ctx, s.temporalEnv, logger, projectID, id, dep, nonBlocking, expectedActive)
 		if err != nil {
 			return nil, err
 		}
-
-		status = s
 		if status == "" {
 			return nil, oops.E(oops.CodeInvariantViolation, nil, "unable to resolve deployment status").LogError(ctx, logger)
 		}
@@ -950,9 +948,41 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		dep.Status = status
 	}
 
-	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, *authCtx.ProjectSlug, "redeploy", dep, nil)
+	projectSlug := ""
+	if authCtx.ProjectSlug != nil {
+		projectSlug = *authCtx.ProjectSlug
+	}
+	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, projectSlug, "redeploy", dep, nil)
 
 	return &gen.RedeployResult{Deployment: dep}, nil
+}
+
+func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*gen.RedeployResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error {
+		return dbtx.Rollback(ctx)
+	})
+
+	dep, err := s.PrepareRedeploy(ctx, dbtx, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").LogError(ctx, s.logger)
+	}
+
+	return s.ProcessRedeploy(ctx, dep.ID)
 }
 
 type resolvedPackage struct {
@@ -1028,9 +1058,13 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 }
 
 func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment, nonBlocking bool) (string, error) {
+	return startDeploymentWithExpectedActive(ctx, s.temporalEnv, logger, projectID, deploymentID, dep, nonBlocking, nil)
+}
+
+func startDeploymentWithExpectedActive(ctx context.Context, temporalEnv *temporal.Environment, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment, nonBlocking bool, expectedActive *uuid.UUID) (string, error) {
 	defer func() {
 		logger.InfoContext(ctx, "starting project-scoped functions reaper")
-		_, err := background.ExecuteProjectFunctionsReaperWorkflow(ctx, s.temporalEnv, projectID)
+		_, err := background.ExecuteProjectFunctionsReaperWorkflow(ctx, temporalEnv, projectID)
 		if err != nil && !temporalSDK.IsWorkflowExecutionAlreadyStartedError(err) {
 			logger.ErrorContext(
 				ctx, "failed to start project-scoped functions reaper workflow",
@@ -1039,10 +1073,11 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 		}
 	}()
 
-	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, s.temporalEnv, background.ProcessDeploymentWorkflowParams{
-		ProjectID:      projectID,
-		DeploymentID:   deploymentID,
-		IdempotencyKey: conv.PtrValOr(dep.IdempotencyKey, ""),
+	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, temporalEnv, background.ProcessDeploymentWorkflowParams{
+		ProjectID:                  projectID,
+		DeploymentID:               deploymentID,
+		IdempotencyKey:             conv.PtrValOr(dep.IdempotencyKey, ""),
+		ExpectedActiveDeploymentID: expectedActive,
 	})
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "error starting deployment").LogError(ctx, logger)

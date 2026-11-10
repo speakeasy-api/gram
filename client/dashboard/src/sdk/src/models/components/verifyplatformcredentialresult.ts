@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const IdentitySource = {
 /**
  * How the identity was resolved. Lets the caller tell an in-cluster attached identity apart from local Application Default Credentials or an impersonated service account.
  */
-export type IdentitySource = ClosedEnum<typeof IdentitySource>;
+export type IdentitySource = OpenEnum<typeof IdentitySource>;
 
 /**
  * Result of a live 'who am I' probe against a platform credential's resolved identity.
@@ -45,9 +46,10 @@ export type VerifyPlatformCredentialResult = {
 };
 
 /** @internal */
-export const IdentitySource$inboundSchema: z.ZodMiniEnum<
-  typeof IdentitySource
-> = z.enum(IdentitySource);
+export const IdentitySource$inboundSchema: z.ZodMiniType<
+  IdentitySource,
+  unknown
+> = openEnums.inboundSchema(IdentitySource);
 
 /** @internal */
 export const VerifyPlatformCredentialResult$inboundSchema: z.ZodMiniType<

@@ -177,7 +177,7 @@ func TestServePlatformToolset_DeniedAndMissingInvalidBodiesMatch(t *testing.T) {
 	token := mintAssistantToken(t, ti, authCtx, otherID)
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	for _, revision := range []string{"", mcpversions.Version20251125, mcpversions.Version20260728} {
 		for _, tc := range []struct {
@@ -261,7 +261,7 @@ func TestServePlatformToolset_AttachedFailuresAreJSONRPCErrors(t *testing.T) {
 
 	_, ti := newTestMCPService(t)
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	for _, tc := range []struct {
 		name   string
@@ -522,13 +522,16 @@ func toolsListBody() []byte {
 	return body
 }
 
-func servePlatformHTTP(t *testing.T, ti *testInstance, slug string, body []byte, token string) (*httptest.ResponseRecorder, error) {
+func servePlatformHTTP(t *testing.T, ti *testInstance, slug string, body []byte, token string, projectSlug ...string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 
 	req := httptest.NewRequest(http.MethodPost, "/platform/mcp/"+slug, bytes.NewReader(body))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
+	if len(projectSlug) > 0 {
+		req.Header.Set("Gram-Project", projectSlug[0])
+	}
 
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("toolsetSlug", slug)

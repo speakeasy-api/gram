@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const UnknownSkillActivationReason = {
 /**
  * Why exact version attribution failed.
  */
-export type UnknownSkillActivationReason = ClosedEnum<
+export type UnknownSkillActivationReason = OpenEnum<
   typeof UnknownSkillActivationReason
 >;
 
@@ -59,9 +60,10 @@ export type UnknownSkillActivation = {
 };
 
 /** @internal */
-export const UnknownSkillActivationReason$inboundSchema: z.ZodMiniEnum<
-  typeof UnknownSkillActivationReason
-> = z.enum(UnknownSkillActivationReason);
+export const UnknownSkillActivationReason$inboundSchema: z.ZodMiniType<
+  UnknownSkillActivationReason,
+  unknown
+> = openEnums.inboundSchema(UnknownSkillActivationReason);
 
 /** @internal */
 export const UnknownSkillActivation$inboundSchema: z.ZodMiniType<

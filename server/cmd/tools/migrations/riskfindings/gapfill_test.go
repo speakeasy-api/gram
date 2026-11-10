@@ -9,6 +9,51 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 )
 
+func TestMatchKeyIgnoresSpanOffsetsOnlyForJudgeSources(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		source        string
+		ignoreOffsets bool
+	}{
+		{source: "prompt_injection", ignoreOffsets: true},
+		{source: "llm_judge", ignoreOffsets: true},
+		{source: "presidio", ignoreOffsets: false},
+		{source: "gitleaks", ignoreOffsets: false},
+		{source: "custom", ignoreOffsets: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.source, func(t *testing.T) {
+			t.Parallel()
+
+			postgres := FindingRow{
+				ChatMessageID:     "message",
+				RiskPolicyID:      "policy",
+				RiskPolicyVersion: 2,
+				Source:            tt.source,
+				RuleID:            "rule",
+				StartPos:          12,
+				EndPos:            316,
+			}
+			clickHouse := findingMatchKey{
+				chatMessageID:     "message",
+				riskPolicyID:      "policy",
+				riskPolicyVersion: 2,
+				source:            tt.source,
+				ruleID:            "rule",
+				startPos:          40,
+				endPos:            290,
+			}.normalized()
+
+			require.Equal(t, tt.ignoreOffsets, postgres.matchKey() == clickHouse)
+
+			otherRule := postgres
+			otherRule.RuleID = "other"
+			require.NotEqual(t, clickHouse, otherRule.matchKey())
+		})
+	}
+}
+
 func TestClickHouseStateWins(t *testing.T) {
 	t.Parallel()
 

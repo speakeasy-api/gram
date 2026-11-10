@@ -88,13 +88,24 @@ func (s *Service) ListDelegableGrants(ctx context.Context, payload *gen.ListDele
 		if err != nil {
 			return fmt.Errorf("load delegable owner policy: %w", err)
 		}
+		// Carrying keeps a wildcard that one blocked server overlaps, such as
+		// "every server in the project" for an owner blocked from one of them.
+		// A key that stores the wildcard reaches servers added after it is
+		// issued; one that stores today's servers never does.
+		discover := runtimepolicy.DelegableGrantsFor
+		if payload.CarryExclusions {
+			discover = runtimepolicy.DelegableGrantsWithExclusionsFor
+		}
 		seen := make(map[string]struct{})
 		for _, constraint := range constraints {
-			grants, err := runtimepolicy.DelegableGrants(agentPolicy, ownerPolicy, human.grants, constraint)
+			grants, err := discover(human.Auth.UserID, agentPolicy, ownerPolicy, human.grants, constraint)
 			if err != nil {
 				return fmt.Errorf("derive delegable grants: %w", err)
 			}
 			for _, grant := range grants {
+				if !runtimepolicy.IsIssuableScope(grant.Scope) {
+					continue
+				}
 				encoded, err := json.Marshal(grant.Selector)
 				if err != nil {
 					return fmt.Errorf("encode delegable selector: %w", err)

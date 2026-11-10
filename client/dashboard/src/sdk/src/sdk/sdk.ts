@@ -18,6 +18,7 @@ import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
 import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
+import { AuthClients } from "./authclients.js";
 import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
@@ -32,6 +33,8 @@ import { External } from "./external.js";
 import { ExternalCredentials } from "./externalcredentials.js";
 import { ExternalKeys } from "./externalkeys.js";
 import { Features } from "./features.js";
+import { GatewaySessions } from "./gatewaysessions.js";
+import { HiddenMcpServers } from "./hiddenmcpservers.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
 import { Identity } from "./identity.js";
@@ -183,6 +186,11 @@ export class Gram extends ClientSDK {
     return (this._auth ??= new Auth(this._options));
   }
 
+  private _authClients?: AuthClients;
+  get authClients(): AuthClients {
+    return (this._authClients ??= new AuthClients(this._options));
+  }
+
   private _businessMemories?: BusinessMemories;
   get businessMemories(): BusinessMemories {
     return (this._businessMemories ??= new BusinessMemories(this._options));
@@ -248,6 +256,16 @@ export class Gram extends ClientSDK {
   private _externalKeys?: ExternalKeys;
   get externalKeys(): ExternalKeys {
     return (this._externalKeys ??= new ExternalKeys(this._options));
+  }
+
+  private _gatewaySessions?: GatewaySessions;
+  get gatewaySessions(): GatewaySessions {
+    return (this._gatewaySessions ??= new GatewaySessions(this._options));
+  }
+
+  private _hiddenMcpServers?: HiddenMcpServers;
+  get hiddenMcpServers(): HiddenMcpServers {
+    return (this._hiddenMcpServers ??= new HiddenMcpServers(this._options));
   }
 
   private _hooks?: Hooks;

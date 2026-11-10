@@ -9,19 +9,26 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
+// errMemberToolsetDenied reports a hosted member whose own private toolset the
+// caller may not connect to. It is a refusal, not a failure to evaluate one.
+var errMemberToolsetDenied = errors.New("member toolset connect denied")
+
 // derivedMemberAuth reports whether a derived gateway can authenticate the
 // member, and whether that takes the upstream OAuth token a person gets by
-// connecting it through the gateway. It checks capability, not whether a
-// person has connected yet: an issuer-backed OAuth member stays supported so
-// they can connect it.
-func (s *Service) derivedMemberAuth(ctx context.Context, member metaMember) (supported bool, needsOAuth bool, err error) {
-	oauth := member.remoteSessionIssuerID.Valid
+// connecting it through the gateway, by memberNeedsSignIn. It checks
+// capability, not whether a person has connected yet: an OAuth member stays
+// supported so they can connect it. A member whose private toolset the caller
+// may not connect to returns errMemberToolsetDenied.
+func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, member metaMember) (supported bool, needsOAuth bool, err error) {
+	oauth := memberNeedsSignIn(member)
 	if member.backend != metaMemberBackendHosted {
 		if !member.remoteServerID.Valid {
 			return true, oauth, nil
@@ -37,6 +44,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, member metaMember) (sup
 				StaticValue:            row.Value.String,
 				ValueFromRequestHeader: row.ValueFromRequestHeader.String,
 				IsRequired:             row.IsRequired,
+				IsSecret:               row.IsSecret,
 			})
 		}
 		supported, needsOAuth := remoteMemberAuth(headers, oauth)
@@ -53,14 +61,23 @@ func (s *Service) derivedMemberAuth(ctx context.Context, member metaMember) (sup
 	case err != nil:
 		return false, false, fmt.Errorf("load member auth toolset: %w", err)
 	}
+	hosting, _, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
+	if err != nil {
+		return false, false, fmt.Errorf("load member auth hosting state: %w", err)
+	}
 	// Same rules as loadMemberToolset. Derived gateways always have a
 	// signed-in caller.
-	if member.serverID == toolset.ID && !toolset.McpEnabled {
+	if member.serverID == toolset.ID && !hosting.Enabled {
 		return false, false, nil
 	}
-	allowed, err := s.memberToolsetConnectAllowed(ctx, true, &toolset)
-	if err != nil || !allowed {
+	// Admission runs this for every member, so it records no authorization
+	// check; a call that names the member records it (findNamedMember).
+	allowed, err := s.memberToolsetConnectAllowed(authz.WithoutChallenges(ctx), shadow, shadowSurface, true, &toolset, hosting.Public)
+	if err != nil {
 		return false, false, err
+	}
+	if !allowed {
+		return false, false, errMemberToolsetDenied
 	}
 
 	environment := toolset.DefaultEnvironmentSlug.String
@@ -86,7 +103,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, member metaMember) (sup
 	inputs.toolset = toolset.Slug
 	inputs.environment = environment
 	inputs.authenticated = true
-	satisfied, err := s.checkToolsetSecurity(ctx, &toolset, toolset.McpIsPublic, &inputs)
+	satisfied, err := s.checkToolsetSecurity(ctx, &toolset, hosting.Public, &inputs)
 	if err != nil || satisfied || !oauth {
 		return satisfied, false, err
 	}
@@ -96,7 +113,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, member metaMember) (sup
 		securityKeys:          nil,
 		Token:                 "gateway-oauth-capability",
 	}}
-	satisfied, err = s.checkToolsetSecurity(ctx, &toolset, toolset.McpIsPublic, &inputs)
+	satisfied, err = s.checkToolsetSecurity(ctx, &toolset, hosting.Public, &inputs)
 	return satisfied, satisfied, err
 }
 

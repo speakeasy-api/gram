@@ -17,14 +17,31 @@ func InvalidCheck(scope Scope, resourceID string) error {
 	return &InvalidCheckError{
 		Scope:      scope,
 		ResourceID: resourceID,
+		Reason:     "",
 		cause:      ErrInvalidCheck,
 	}
+}
+
+func invalidCheckReason(scope Scope, resourceID, reason string) error {
+	return &InvalidCheckError{Scope: scope, ResourceID: resourceID, Reason: reason, cause: ErrInvalidCheck}
 }
 
 func Denied(scope Scope, selector Selector) error {
 	return &DeniedError{
 		Scope:    scope,
 		Selector: selector,
+		Blocked:  false,
+		cause:    ErrDenied,
+	}
+}
+
+// deniedByBlock is a refusal an explicit block grant produced. The caller may
+// already hold Scope, so granting it again would not lift the refusal.
+func deniedByBlock(scope Scope, selector Selector) error {
+	return &DeniedError{
+		Scope:    scope,
+		Selector: selector,
+		Blocked:  true,
 		cause:    ErrDenied,
 	}
 }
@@ -32,7 +49,9 @@ func Denied(scope Scope, selector Selector) error {
 type DeniedError struct {
 	Scope    Scope
 	Selector Selector
-	cause    error
+	// Blocked is set when a block grant, not a missing grant, refused the check.
+	Blocked bool
+	cause   error
 }
 
 func (e *DeniedError) Error() string {
@@ -46,10 +65,15 @@ func (e *DeniedError) Unwrap() error {
 type InvalidCheckError struct {
 	Scope      Scope
 	ResourceID string
-	cause      error
+	// Reason says why the check is malformed when the resource id is fine.
+	Reason string
+	cause  error
 }
 
 func (e *InvalidCheckError) Error() string {
+	if e.Reason != "" {
+		return fmt.Sprintf("authz check for scope %q is invalid: %s", e.Scope, e.Reason)
+	}
 	if e.ResourceID == WildcardResource {
 		return fmt.Sprintf("authz check for scope %q requires a specific resource id", e.Scope)
 	}

@@ -60,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -72,11 +73,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
-	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
@@ -144,6 +141,7 @@ type Activities struct {
 	deployFunctionRunners            *activities.DeployFunctionRunners
 	reapFlyApps                      *activities.ReapFlyApps
 	weeklyUsageSummary               *activities.WeeklyUsageSummary
+	directoryReviewEmails            *activities.DirectoryReviewEmails
 	refreshOpenRouterKey             *activities.RefreshOpenRouterKey
 	setOpenRouterSpendCap            *activities.SetOpenRouterSpendCap
 	reconcilePaygOpenRouterChatKey   *activities.ReconcilePaygOpenRouterChatKey
@@ -224,7 +222,6 @@ func NewActivities(
 	functionsDeployer functions.Deployer,
 	functionsVersion functions.RunnerVersion,
 	ragService *rag.ToolsetVectorStore,
-	mcpRegistryClient *externalmcp.RegistryClient,
 	mcpCatalog *externalmcp.CatalogService,
 	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
@@ -235,10 +232,7 @@ func NewActivities(
 	cacheAdapter cache.Cache,
 	emailService *email.Service,
 	assistantsCore *assistants.ServiceCore,
-	piiScanner risk_analysis.PIIScanner,
 	piScanner *promptinjection.Scanner,
-	customRuleScanner *customruleanalyzer.Scanner,
-	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	workosClient activities.WorkOSClient,
 	productFeatures *productfeatures.Client,
@@ -247,7 +241,6 @@ func NewActivities(
 	publishers *Publishers,
 	celEng *celenv.Engine,
 	judgeRateLimiter *ratelimit.Limiter,
-	builtinPresets *presetlib.Library,
 	trialEmailsService *trialemails.Service,
 	trialFixtureHandler activities.TrialFixtureHandler,
 	githubEvidenceToken string,
@@ -258,6 +251,7 @@ func NewActivities(
 	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
 	remoteSessionEnricher *remotesessions.SessionEnricher,
 	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
+	connections *mcpconnectionattempts.Recorder,
 	startupSeeds []activities.StartupSeed,
 	signInEpochs signins.EpochRaiser,
 ) *Activities {
@@ -272,11 +266,6 @@ func NewActivities(
 		meterProvider,
 		db,
 		assetStorage,
-		piiScanner,
-		piScanner,
-		shadowMCPClient,
-		telemetryRepo,
-		ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate,
 		features,
 		publishers.PresidioAnalysis,
 		publishers.GitleaksAnalysis,
@@ -286,11 +275,7 @@ func NewActivities(
 		publishers.LLMAnalysis,
 		publishers.ToolCallAnalysis,
 		publishers.AccountIdentityAnalysis,
-		customRuleScanner,
 		celEng,
-		builtinPresets,
-		NewShadowMCPPolicyBypassChecker(logger, db),
-		riskRecorder,
 		llmAnalyzerEnabled,
 	)
 	if err != nil {
@@ -331,6 +316,8 @@ func NewActivities(
 				remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher),
 				remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher),
 				remotesessions.WithRefreshTokenEndpointAssertionSigner(remoteSessionAssertionSigner),
+				remotesessions.WithRefreshConnectionRecorder(connections),
+				remotesessions.WithRefreshFeatureFlags(features),
 			),
 		)
 	}
@@ -432,11 +419,12 @@ func NewActivities(
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
-		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpCatalog),
+		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, orgHosts),
+		directoryReviewEmails:            activities.NewDirectoryReviewEmails(logger, db, emailService, orgHosts),
 		refreshOpenRouterKey:             activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		setOpenRouterSpendCap:            activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
 		reconcilePaygOpenRouterChatKey:   activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
@@ -623,6 +611,14 @@ func (a *Activities) ProcessWorkOSUserEvents(ctx context.Context, params activit
 
 func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, status string) (*activities.TransitionDeploymentResult, error) {
 	return a.transitionDeployment.Do(ctx, projectID, deploymentID, status)
+}
+
+func (a *Activities) CompleteDeploymentWithExpectedActive(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, expectedActive uuid.UUID) (*activities.TransitionDeploymentResult, error) {
+	result, err := a.transitionDeployment.CompleteWithExpectedActive(ctx, projectID, deploymentID, expectedActive)
+	if err != nil {
+		return nil, fmt.Errorf("complete deployment with active snapshot guard: %w", err)
+	}
+	return result, nil
 }
 
 func (a *Activities) ProcessDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID) error {

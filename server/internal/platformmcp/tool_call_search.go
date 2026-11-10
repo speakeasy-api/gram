@@ -147,7 +147,7 @@ type SearchToolCallsInput struct {
 	Window           string                    `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d. When a cursor is supplied the interval comes from the cursor and this must still name the window the cursor was minted for"`
 	ToolNameContains string                    `json:"tool_name_contains,omitempty" jsonschema:"case-sensitive text the tool name must contain"`
 	ErrorContains    string                    `json:"error_contains,omitempty" jsonschema:"case-sensitive text the recorded error message must contain; only calls that failed with an error message can match"`
-	Outcome          string                    `json:"outcome,omitempty" jsonschema:"optional outcome filter: success, failure, blocked, or pending"`
+	Outcome          string                    `json:"outcome,omitempty" jsonschema:"optional outcome filter: success, failure, blocked, or pending; pending means no result was reported; a call still pending ten minutes after it started most likely ended without reporting one, and Tool logs show it as Unknown"`
 	MCPID            string                    `json:"mcp_id,omitempty" jsonschema:"optional configured MCP ID, as returned by find_mcp or get_mcp, to narrow to one server; matches only calls the platform tied to that server, never calls an app merely reported under a matching name"`
 	UserReference    string                    `json:"user_reference,omitempty" jsonschema:"optional person reference from a previous search_tool_calls row in this project, or from list_mcp_usage_users when the same mcp_id and window are supplied"`
 	Attributes       []ToolCallAttributeFilter `json:"attributes,omitempty" jsonschema:"optional attribute filters, at most 5, combined with AND; discover keys with list_attribute_keys. A system key is refused when it identifies a person, in which case narrow to one person with user_reference instead, and when it carries tool content or an HTTP header. An @-prefixed custom key is the project's own integration data and allows every operator, whatever it is named"`
@@ -284,7 +284,7 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		return SearchToolCallsOutput{}, err
 	}
 
-	matchers, err := s.toolCallSearchMatchers(ctx, search.projectID)
+	matchers, err := s.toolCallSearchMatchers(ctx, principal.OrganizationID, search.projectID)
 	if err != nil {
 		return SearchToolCallsOutput{}, err
 	}
@@ -301,6 +301,7 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		MetaMCPMatchers:    matchers.meta,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: server.hostedToolsetSlugs,
+		MCPServerIDs:       nil,
 		MCPServerTargetIDs: server.mcpServerTargetIDs,
 		// Never set from a configured server: a shadow row is named by the
 		// calling app, so selecting one by name would fold an unrelated
@@ -686,7 +687,7 @@ type toolUsageMatchers struct {
 	meta    []telemetryrepo.MetaMCPMatcher
 }
 
-func (s *DiagnosticsService) toolCallSearchMatchers(ctx context.Context, projectID string) (toolUsageMatchers, error) {
+func (s *DiagnosticsService) toolCallSearchMatchers(ctx context.Context, organizationID string, projectID string) (toolUsageMatchers, error) {
 	// Without Postgres the rows still list, but hook-observed calls cannot be
 	// folded onto the configured servers and are reported as the calling app
 	// named them.
@@ -701,7 +702,7 @@ func (s *DiagnosticsService) toolCallSearchMatchers(ctx context.Context, project
 	if err != nil {
 		return toolUsageMatchers{}, fmt.Errorf("load tool call search matchers: %w", err)
 	}
-	meta, err := telemetrysvc.LoadMetaMCPMatchers(ctx, s.db, parsedProject)
+	meta, err := telemetrysvc.LoadMetaMCPMatchers(ctx, s.db, s.authz, organizationID, parsedProject)
 	if err != nil {
 		return toolUsageMatchers{}, fmt.Errorf("load tool call search gateway matchers: %w", err)
 	}

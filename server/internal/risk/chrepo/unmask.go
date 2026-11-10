@@ -25,6 +25,18 @@ type ListRiskFindingsForUnmaskParams struct {
 	IDs            []uuid.UUID
 }
 
+// ListPolicyFilterSweepCandidatesParams scopes one ascending candidate page.
+type ListPolicyFilterSweepCandidatesParams struct {
+	OrganizationID string
+	ProjectID      string
+	PolicyID       string
+	From           time.Time
+	To             time.Time
+	CursorTime     time.Time
+	CursorID       uuid.UUID
+	Limit          int
+}
+
 // ListRiskFindingSpansForRecallParams scopes recall masking to one chat.
 type ListRiskFindingSpansForRecallParams struct {
 	OrganizationID string
@@ -202,6 +214,70 @@ func (q *Queries) ListRiskFindingsForUnmask(ctx context.Context, p ListRiskFindi
 	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query risk findings for reveal: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanRiskFindingUnmaskRows(rows)
+}
+
+// GetPolicyFilterSweepCursorTime resolves the immutable created_at component
+// needed to resume the ClickHouse sweep's (created_at, id) keyset.
+func (q *Queries) GetPolicyFilterSweepCursorTime(ctx context.Context, organizationID, projectID string, id uuid.UUID) (time.Time, error) {
+	rows, err := q.conn.Query(ctx, `
+		SELECT created_at
+		FROM risk_findings
+		WHERE organization_id = ? AND project_id = ? AND id = ?
+		LIMIT 1
+	`, organizationID, projectID, id)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("query policy filter sweep cursor: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return time.Time{}, fmt.Errorf("read policy filter sweep cursor: %w", err)
+		}
+		return time.Time{}, fmt.Errorf("policy filter sweep cursor %s not found", id)
+	}
+	var createdAt time.Time
+	if err := rows.Scan(&createdAt); err != nil {
+		return time.Time{}, fmt.Errorf("scan policy filter sweep cursor: %w", err)
+	}
+	return createdAt, nil
+}
+
+// ListPolicyFilterSweepCandidates returns the latest live, non-shadow copy per
+// finding in ascending (created_at, id) order.
+func (q *Queries) ListPolicyFilterSweepCandidates(ctx context.Context, p ListPolicyFilterSweepCandidatesParams) ([]RiskFindingUnmaskRow, error) {
+	if p.Limit <= 0 {
+		return []RiskFindingUnmaskRow{}, nil
+	}
+	inner := sq.Select(riskFindingRevealLatestColumns...).
+		From("risk_findings").
+		Where("organization_id = ?", p.OrganizationID).
+		Where("project_id = ?", p.ProjectID).
+		Where(notShadowCond).
+		Where("created_at >= ?", p.From).
+		Where("created_at < ?", p.To)
+	if p.PolicyID != "" {
+		inner = inner.Where("risk_policy_id = ?", p.PolicyID)
+	}
+
+	outer := sq.Select(riskFindingRevealColumns...).
+		FromSelect(inner, "latest").
+		Where("rn = 1").
+		Where("dead_letter_reason = ''").
+		Where(liveStateCond).
+		Where("(created_at, id) > (?, ?)", p.CursorTime, p.CursorID).
+		OrderBy("created_at ASC", "id ASC").
+		Suffix("LIMIT ?", p.Limit)
+
+	query, args, err := outer.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build policy filter sweep query: %w", err)
+	}
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query policy filter sweep candidates: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	return scanRiskFindingUnmaskRows(rows)

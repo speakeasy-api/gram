@@ -223,7 +223,7 @@ func (s *ManagementService) StartOnboardingSetup(ctx context.Context, _ *platfor
 		return nil, s.mapOnboardingError(err)
 	}
 	if isBrowserCatalogProviderKey(candidate.ProviderKey) || candidate.ProviderKey == directRemoteProviderKey {
-		setupURL, err := s.registrations.DashboardSetupURL(ctx, principal, IssueSetupHandoffInput{ProjectSlug: projection.SelectedProject.Slug, RegistrationID: projection.Workflow.SelectedRegistrationID.String(), ProviderKey: candidate.ProviderKey, CatalogRef: candidate.CatalogRef})
+		setupURL, err := s.registrations.DashboardSetupURL(ctx, principal, IssueSetupHandoffInput{ProjectSlug: projection.SelectedProject.Slug, RegistrationID: projection.Workflow.SelectedRegistrationID.String(), ProviderKey: candidate.ProviderKey, CatalogRef: candidate.CatalogRef, NextAction: ""})
 		if err != nil {
 			return nil, s.mapOnboardingError(err)
 		}
@@ -547,7 +547,7 @@ func (s *ManagementService) currentDistribution(ctx context.Context, authCtx *co
 	// The dashboard onboarding surface asks about the project's default plugin,
 	// which is the plugin its own action distributes to. Naming a target is the
 	// agent-facing tools' concern.
-	distribution, err := s.distributions.Current(ctx, principal, projection.SelectedProject.Slug, "")
+	distribution, err := s.distributions.Current(ctx, principal, projection.SelectedProject.Slug, uuid.Nil, "")
 	if err != nil {
 		return Distribution{}, false
 	}

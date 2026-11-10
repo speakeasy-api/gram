@@ -1,11 +1,5 @@
-import {
-  ExternalLink,
-  Loader2,
-  Plus,
-  SaveIcon,
-  Trash2,
-  XIcon,
-} from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
+import { ExternalLink, Plus, SaveIcon, Trash2, XIcon } from "lucide-react";
 import {
   Field,
   FieldDescription,
@@ -23,7 +17,9 @@ import {
   patchMcpEndpointInCache,
   useRootMcpEndpointMutation,
 } from "@/hooks/useRootMcpEndpoint";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ServerUsageConfirmation } from "@/components/mcp-server-usage/ServerUsageConfirmation";
+import { useServerUsageConfirmation } from "@/components/mcp-server-usage/useServerUsageConfirmation";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 
 import { Badge } from "@/components/ui/Badge";
@@ -46,12 +42,18 @@ import { getServerURL } from "@/lib/utils";
 import { toast } from "sonner";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
 import { useDeleteMcpEndpointMutation } from "@gram/client/react-query/deleteMcpEndpoint.js";
+import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useMcpEndpointSlugValidation } from "../../../useMcpEndpointSlugValidation";
 import { useOrgRoutes } from "@/routes";
 import { usePrivateMcpServerUrls } from "@/hooks/usePrivateMcpServerUrls";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
+import { isCanonicalHostedWrapper } from "../../../MCPServerDetailsRouting";
+import { useFollowRenamedServer } from "../../../useFollowRenamedServer";
+import { useNetworkIngress } from "@gram/client/react-query/networkIngress.js";
+import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 
 const ADDRESS_INPUT_GROUP_CLASSNAME = "";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
@@ -64,6 +66,10 @@ export const MCP_SERVER_URL_SECTION_ID = "server-url";
 export type EndpointBackendRef =
   | { mcpServerId: string }
   | { metaMcpServerId: string };
+
+function backendServerId(backend: EndpointBackendRef): string | undefined {
+  return "mcpServerId" in backend ? backend.mcpServerId : undefined;
+}
 
 function generateAddressSuffix() {
   let suffix = "";
@@ -90,13 +96,54 @@ export function ServerUrlSection({
   subject?: "server" | "gateway";
   mcpServer?: McpServer | MetaMcpServer;
 }): JSX.Element {
-  const { domains } = useCustomDomains();
+  const {
+    domains,
+    isLoading: isLoadingDomains,
+    isError: domainsError,
+  } = useCustomDomains();
   const orgRoutes = useOrgRoutes();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
   const privateMode =
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
+  const hostedServerId =
+    mcpServer && isCanonicalHostedWrapper(mcpServer) ? mcpServer.id : undefined;
+  // Older servers rename a hosted server to its address, so the settings route follows the server after a write.
+  const client = useSdkClient();
+  const serverQueryClient = useQueryClient();
+  const followRenamedServer = useFollowRenamedServer();
+  const followHostedServer = useCallback(async () => {
+    if (!hostedServerId) return;
+    try {
+      followRenamedServer(await client.mcpServers.get({ id: hostedServerId }));
+    } catch {
+      followRenamedServer({ id: hostedServerId });
+    }
+    await Promise.all([
+      invalidateAllGetMcpServer(serverQueryClient, { refetchType: "all" }),
+      invalidateAllMcpServers(serverQueryClient, { refetchType: "all" }),
+    ]);
+  }, [client, followRenamedServer, hostedServerId, serverQueryClient]);
+  // A private hosted server only takes addresses in its ingress namespace, which the server enforces.
+  const { canManageIngress } = useNetworkIngressRollout();
+  const hostedPrivate = !!hostedServerId && privateMode;
+  const ingressQuery = useNetworkIngress(undefined, undefined, {
+    enabled: hostedPrivate && canManageIngress,
+    retry: false,
+    throwOnError: false,
+  });
+  const ingress = ingressQuery.data?.ingress;
+  const canAddAt = useCallback(
+    (customDomainId: string | undefined) => {
+      if (!hostedPrivate) return true;
+      if (!ingress) return false;
+      return ingress.endpointNamespaceKind === "platform"
+        ? !customDomainId
+        : customDomainId === ingress.customDomainId;
+    },
+    [hostedPrivate, ingress],
+  );
   const {
     privateMcpUrls,
     privateInstallPageUrls,
@@ -104,8 +151,13 @@ export function ServerUrlSection({
     isError: privateUrlsError,
   } = usePrivateMcpServerUrls(mcpServer, endpoints);
 
-  const platformEndpoint = useMemo(
-    () => endpoints.find((e) => !e.customDomainId),
+  // A custom-domain alias the Speakeasy domain still serves for existing clients.
+  const legacyPlatformSlug =
+    hostedServerId && mcpServer && "legacyPlatformSlug" in mcpServer
+      ? mcpServer.legacyPlatformSlug
+      : undefined;
+  const platformEndpoints = useMemo(
+    () => endpoints.filter((e) => !e.customDomainId),
     [endpoints],
   );
   const customDomainEndpoints = useMemo(
@@ -116,6 +168,57 @@ export function ServerUrlSection({
     () => domains.filter((d): d is CustomDomain => d != null),
     [domains],
   );
+  // New addresses go only on a verified, activated domain; existing rows on any domain stay listed.
+  const addableDomains = useMemo(
+    () =>
+      availableDomains.filter(
+        (d) => d.verified && d.activated && canAddAt(d.id),
+      ),
+    [availableDomains, canAddAt],
+  );
+  // An enabled hosted server cannot lose its last address that can serve; it must be disabled first.
+  const mustDisableBeforeLastRemoval =
+    !!hostedServerId && mcpServer?.visibility !== "disabled";
+  // A private-only hosted server serves only on its ingress namespace. Until the ingress is known, every address counts.
+  const privateOnlyIngress =
+    hostedServerId &&
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly
+      ? ingress
+      : undefined;
+  // Only addresses that can serve count toward the last one: the platform, or a verified, activated domain.
+  // Every address counts while domains load or fail to load, so a removal is never left unconfirmed.
+  const servableIds = useMemo(
+    () =>
+      new Set(
+        endpoints
+          .filter((e) =>
+            privateOnlyIngress
+              ? privateOnlyIngress.endpointNamespaceKind === "platform"
+                ? !e.customDomainId
+                : e.customDomainId === privateOnlyIngress.customDomainId
+              : true,
+          )
+          .filter(
+            (e) =>
+              isLoadingDomains ||
+              domainsError ||
+              !e.customDomainId ||
+              availableDomains.some(
+                (d) => d.id === e.customDomainId && d.verified && d.activated,
+              ),
+          )
+          .map((e) => e.id),
+      ),
+    [
+      endpoints,
+      availableDomains,
+      isLoadingDomains,
+      domainsError,
+      privateOnlyIngress,
+    ],
+  );
+  const isLast = (endpoint: McpEndpoint) =>
+    servableIds.size === 1 && servableIds.has(endpoint.id);
 
   const [addingPlatform, setAddingPlatform] = useState(false);
   const [addingCustom, setAddingCustom] = useState(false);
@@ -141,6 +244,17 @@ export function ServerUrlSection({
           description={description}
           actionLabel={actionLabel}
           onAction={onAction}
+        />
+      );
+    } else if (addableDomains.length === 0) {
+      customAddressEmptyState = (
+        <SettingsInlineEmptyState
+          title="No custom address"
+          description={
+            hostedPrivate
+              ? "Private network access keeps this server's addresses on its ingress namespace."
+              : "No verified, activated custom domain is available."
+          }
         />
       );
     } else {
@@ -175,21 +289,57 @@ export function ServerUrlSection({
             </Text>
           ) : (
             <FieldGroup className="gap-6">
-              {/* Hosted (platform) address: at most one. */}
+              {/* Hosted (platform) addresses. */}
               <Field>
                 <FieldLabel>Hosted Address</FieldLabel>
-                {platformEndpoint ? (
+                {legacyPlatformSlug && (
+                  <LegacyAddressRow slug={legacyPlatformSlug} />
+                )}
+                {platformEndpoints.map((endpoint) => (
                   <AddressRow
+                    key={endpoint.id}
                     backend={backend}
-                    endpoint={platformEndpoint}
-                    isLastEndpoint={endpoints.length === 1}
+                    endpoint={endpoint}
+                    isLastEndpoint={isLast(endpoint)}
+                    servable={servableIds.has(endpoint.id)}
+                    serverName={mcpServer?.name}
+                    mustDisableFirst={mustDisableBeforeLastRemoval}
+                    onSaved={followHostedServer}
                   />
+                ))}
+                {platformEndpoints.length > 0 || legacyPlatformSlug ? (
+                  addingPlatform ? (
+                    <NewPlatformAddressRow
+                      backend={backend}
+                      onCreated={followHostedServer}
+                      onClose={() => setAddingPlatform(false)}
+                    />
+                  ) : (
+                    hostedServerId &&
+                    canAddAt(undefined) && (
+                      <RequireScope scope="mcp:write" level="component">
+                        <div>
+                          <Button
+                            variant="secondary"
+                            aria-label="Add hosted address"
+                            onClick={() => setAddingPlatform(true)}
+                          >
+                            <Button.LeftIcon>
+                              <Plus className="size-4" />
+                            </Button.LeftIcon>
+                            <Button.Text>Add</Button.Text>
+                          </Button>
+                        </div>
+                      </RequireScope>
+                    )
+                  )
                 ) : addingPlatform ? (
                   <NewPlatformAddressRow
                     backend={backend}
+                    onCreated={followHostedServer}
                     onClose={() => setAddingPlatform(false)}
                   />
-                ) : (
+                ) : canAddAt(undefined) ? (
                   <RequireScope scope="mcp:write" level="component">
                     <SettingsInlineEmptyState
                       title="No hosted address"
@@ -198,6 +348,11 @@ export function ServerUrlSection({
                       onAction={() => setAddingPlatform(true)}
                     />
                   </RequireScope>
+                ) : (
+                  <SettingsInlineEmptyState
+                    title="No hosted address"
+                    description="Private network access keeps this server's addresses on its ingress namespace."
+                  />
                 )}
                 <FieldDescription>
                   Hosted under a Speakeasy domain. Configured here even when
@@ -216,21 +371,28 @@ export function ServerUrlSection({
                     backend={backend}
                     endpoint={endpoint}
                     domains={availableDomains}
-                    isLastEndpoint={endpoints.length === 1}
+                    isLastEndpoint={isLast(endpoint)}
+                    servable={servableIds.has(endpoint.id)}
+                    serverName={mcpServer?.name}
+                    mustDisableFirst={mustDisableBeforeLastRemoval}
                     canManageDomainRoot={canManageDomains}
+                    hosted={!!hostedServerId}
+                    onSaved={followHostedServer}
                   />
                 ))}
                 {addingCustom && (
                   <NewCustomAddressRow
                     backend={backend}
-                    domains={availableDomains}
+                    domains={addableDomains}
+                    hosted={!!hostedServerId}
+                    onCreated={followHostedServer}
                     onClose={() => setAddingCustom(false)}
                   />
                 )}
                 {customAddressEmptyState}
                 {!addingCustom &&
                   customDomainEndpoints.length > 0 &&
-                  availableDomains.length > 0 && (
+                  addableDomains.length > 0 && (
                     <RequireScope scope="mcp:write" level="component">
                       <div>
                         <Button
@@ -323,13 +485,26 @@ function AddressRow({
   endpoint,
   domains,
   isLastEndpoint,
+  servable = true,
+  serverName,
+  mustDisableFirst = false,
   canManageDomainRoot = false,
+  hosted = false,
+  onSaved,
 }: {
   backend: EndpointBackendRef;
   endpoint: McpEndpoint;
   domains?: CustomDomain[];
   isLastEndpoint: boolean;
+  /** Whether clients can reach the server on this address at all; changing
+   * one that cannot serve cuts nobody off, so it skips the usage check. */
+  servable?: boolean;
+  /** Typed to confirm a rename or removal when the usage preview fails. */
+  serverName?: string;
+  mustDisableFirst?: boolean;
   canManageDomainRoot?: boolean;
+  hosted?: boolean;
+  onSaved?: () => Promise<void>;
 }) {
   const { orgSlug } = useSlugs();
   // Platform endpoints must carry the `${orgSlug}-` prefix. It's folded into
@@ -353,13 +528,22 @@ function AddressRow({
   const fullSlug = `${slugPrefix}${suffix.trim()}`;
 
   const queryClient = useQueryClient();
+  // Set while a rename or removal waits for the usage confirmation. Only MCP
+  // servers have a usage preview; gateway addresses change directly.
+  const [pendingChange, setPendingChange] = useState<
+    "rename" | "remove" | null
+  >(null);
+  const usageServerId = servable ? backendServerId(backend) : undefined;
   const update = useUpdateMcpEndpointMutation({
     onSuccess: async (updated) => {
+      setPendingChange(null);
       patchMcpEndpointInCache(queryClient, updated);
+      await onSaved?.();
       await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address updated");
     },
     onError: (error) => {
+      setPendingChange(null);
       toast.error(
         error instanceof Error ? error.message : "Failed to update address",
       );
@@ -369,11 +553,13 @@ function AddressRow({
   const remove = useDeleteMcpEndpointMutation({
     onSuccess: async () => {
       setConfirmRemoveOpen(false);
+      setPendingChange(null);
       await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address removed");
     },
     onError: (error) => {
       setConfirmRemoveOpen(false);
+      setPendingChange(null);
       toast.error(
         error instanceof Error ? error.message : "Failed to remove address",
       );
@@ -383,6 +569,8 @@ function AddressRow({
     fullSlug,
     endpoint.customDomainId ?? null,
     endpoint.slug,
+    hosted,
+    backendServerId(backend),
   );
 
   const dirty = fullSlug !== endpoint.slug;
@@ -429,12 +617,18 @@ function AddressRow({
             size="md"
             variant="primary"
             disabled={!dirty || !!slugError || update.isPending}
-            onClick={handleSave}
+            onClick={() => {
+              if (usageServerId) {
+                setPendingChange("rename");
+                return;
+              }
+              handleSave();
+            }}
             aria-label={update.isPending ? "Saving address" : "Save address"}
           >
             <Button.Icon>
               {update.isPending ? (
-                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                <Spinner className="mr-0 size-4" />
               ) : (
                 <SaveIcon aria-hidden="true" className="size-4" />
               )}
@@ -444,7 +638,13 @@ function AddressRow({
             variant="destructive-secondary"
             className="border border-destructive/40 bg-transparent hover:border-destructive"
             disabled={remove.isPending}
+            aria-label="Remove address"
             onClick={() => {
+              // Disable-first refusals keep their own dialog.
+              if (usageServerId && !(isLastEndpoint && mustDisableFirst)) {
+                setPendingChange("remove");
+                return;
+              }
               if (isLastEndpoint) {
                 setConfirmRemoveOpen(true);
                 return;
@@ -502,9 +702,143 @@ function AddressRow({
       <RemoveLastAddressDialog
         isOpen={confirmRemoveOpen}
         isLoading={remove.isPending}
+        mustDisableFirst={mustDisableFirst}
         onClose={() => setConfirmRemoveOpen(false)}
         onConfirm={() => remove.mutate({ request: { id: endpoint.id } })}
       />
+      {usageServerId && (
+        <AddressChangeDialog
+          change={pendingChange}
+          mcpServerId={usageServerId}
+          serverName={serverName}
+          currentUrl={`${baseUrlPrefix}${endpoint.slug}`}
+          nextUrl={`${baseUrlPrefix}${fullSlug}`}
+          isLastEndpoint={isLastEndpoint}
+          isLoading={update.isPending || remove.isPending}
+          onClose={() => setPendingChange(null)}
+          onConfirm={() => {
+            if (pendingChange === "rename") handleSave();
+            else remove.mutate({ request: { id: endpoint.id } });
+          }}
+        />
+      )}
+    </Field>
+  );
+}
+
+// Renaming or removing an address cuts off every client configured with it,
+// so both wait for the operator to see who is connected and type the
+// server's name.
+function AddressChangeDialog({
+  change,
+  mcpServerId,
+  serverName,
+  currentUrl,
+  nextUrl,
+  isLastEndpoint,
+  isLoading,
+  onClose,
+  onConfirm,
+}: {
+  change: "rename" | "remove" | null;
+  mcpServerId: string;
+  serverName?: string;
+  currentUrl: string;
+  nextUrl: string;
+  isLastEndpoint: boolean;
+  isLoading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const isOpen = change !== null;
+  const usage = useServerUsageConfirmation({
+    mcpServerId,
+    serverName,
+    open: isOpen,
+  });
+  const renaming = change === "rename";
+  let title = "Remove this address?";
+  if (renaming) title = "Change this address?";
+  else if (isLastEndpoint) title = "Remove this server's only address?";
+
+  return (
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Dialog.Content className="max-w-2xl!">
+        <Dialog.Header>
+          <Dialog.Title>{title}</Dialog.Title>
+          <Dialog.Description>
+            {renaming ? (
+              <>
+                Clients configured with{" "}
+                <span className="font-mono break-all">{currentUrl}</span> will
+                stop connecting until they are updated to{" "}
+                <span className="font-mono break-all">{nextUrl}</span>.
+              </>
+            ) : (
+              <>
+                Clients configured with{" "}
+                <span className="font-mono break-all">{currentUrl}</span> will
+                no longer be able to connect.
+                {isLastEndpoint &&
+                  " This is the server's last address, so it can't be added to plugins until you create a new one."}
+              </>
+            )}
+          </Dialog.Description>
+        </Dialog.Header>
+        <ServerUsageConfirmation state={usage} disabled={isLoading} />
+        <Text small muted>
+          Connection counts cover every address of this server.
+        </Text>
+        <Dialog.Footer>
+          <Button variant="secondary" disabled={isLoading} onClick={onClose}>
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+          <Button
+            variant="destructive-primary"
+            disabled={isLoading || !usage.canConfirm}
+            onClick={onConfirm}
+          >
+            {isLoading && (
+              <Button.LeftIcon>
+                <Spinner className="mr-0 size-4" />
+              </Button.LeftIcon>
+            )}
+            <Button.Text>
+              {renaming
+                ? isLoading
+                  ? "Saving"
+                  : "Change address"
+                : isLoading
+                  ? "Removing"
+                  : "Remove address"}
+            </Button.Text>
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
+function LegacyAddressRow({ slug }: { slug: string }): JSX.Element {
+  const url = `${getServerURL()}/mcp/${slug}`;
+  return (
+    <Field className="gap-2">
+      <div className="border-border flex items-center gap-2 border px-3 py-2">
+        <Text className="min-w-0 flex-1 break-all font-mono text-sm">
+          {url}
+        </Text>
+        <CopyButton text={url} size="xs" tooltip="Copy hosted address" />
+      </div>
+      <Text muted small>
+        An older Speakeasy address with the same name as your custom address.
+        Clients that already use it connect here while this server is enabled
+        and public access is on.
+      </Text>
     </Field>
   );
 }
@@ -562,14 +896,36 @@ function ConfirmDomainRootDialog({
 function RemoveLastAddressDialog({
   isOpen,
   isLoading,
+  mustDisableFirst,
   onClose,
   onConfirm,
 }: {
   isOpen: boolean;
   isLoading: boolean;
+  mustDisableFirst: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  if (mustDisableFirst) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>Disable this server first</Dialog.Title>
+            <Dialog.Description>
+              This is the last address clients can reach this server on. Disable
+              the server before you remove it, or add another address first.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Button variant="secondary" onClick={onClose}>
+              <Button.Text>Close</Button.Text>
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    );
+  }
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <Dialog.Content className="max-w-md">
@@ -592,7 +948,7 @@ function RemoveLastAddressDialog({
           >
             {isLoading && (
               <Button.LeftIcon>
-                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                <Spinner className="mr-0 size-4" />
               </Button.LeftIcon>
             )}
             <Button.Text>
@@ -607,9 +963,11 @@ function RemoveLastAddressDialog({
 
 function NewPlatformAddressRow({
   backend,
+  onCreated,
   onClose,
 }: {
   backend: EndpointBackendRef;
+  onCreated?: () => Promise<void>;
   onClose: () => void;
 }) {
   const [suffix, setSuffix] = useState(generateAddressSuffix);
@@ -618,7 +976,13 @@ function NewPlatformAddressRow({
   const { orgSlug } = useSlugs();
   const slugPrefix = orgSlug ? `${orgSlug}-` : "";
   const fullSlug = `${slugPrefix}${suffix.trim()}`;
-  const slugError = useMcpEndpointSlugValidation(fullSlug, null);
+  const slugError = useMcpEndpointSlugValidation(
+    fullSlug,
+    null,
+    undefined,
+    false,
+    backendServerId(backend),
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -634,6 +998,7 @@ function NewPlatformAddressRow({
           slug: fullSlug,
         },
       });
+      await onCreated?.();
       await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address added");
       onClose();
@@ -675,7 +1040,7 @@ function NewPlatformAddressRow({
         >
           <Button.Icon>
             {submitting ? (
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
             ) : (
               <SaveIcon aria-hidden="true" className="size-4" />
             )}
@@ -703,10 +1068,14 @@ function NewPlatformAddressRow({
 function NewCustomAddressRow({
   backend,
   domains,
+  hosted = false,
+  onCreated,
   onClose,
 }: {
   backend: EndpointBackendRef;
   domains: CustomDomain[];
+  hosted?: boolean;
+  onCreated?: () => Promise<void>;
   onClose: () => void;
 }) {
   const customDomain = domains[0];
@@ -714,7 +1083,13 @@ function NewCustomAddressRow({
   const [slug, setSlug] = useState("");
   const queryClient = useQueryClient();
   const client = useSdkClient();
-  const slugError = useMcpEndpointSlugValidation(slug.trim(), domainId || null);
+  const slugError = useMcpEndpointSlugValidation(
+    slug.trim(),
+    domainId || null,
+    undefined,
+    hosted,
+    backendServerId(backend),
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -732,6 +1107,7 @@ function NewCustomAddressRow({
           customDomainId: domainId,
         },
       });
+      await onCreated?.();
       await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address added");
       onClose();
@@ -771,7 +1147,7 @@ function NewCustomAddressRow({
         >
           <Button.Icon>
             {submitting ? (
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
             ) : (
               <SaveIcon aria-hidden="true" className="size-4" />
             )}

@@ -5,14 +5,16 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Switch } from "@/components/ui/Switch";
 import { useOrganization } from "@/contexts/Auth";
+import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { AdminSection } from "./AdminSection";
 import { PlatformAdminGate } from "./PlatformAdminGate";
 import {
-  GROUP_ORDER,
-  SCOPE_DEFS,
+  loadCatalog,
+  saveCatalog,
+  reconcileState,
   defaultScopeState,
   loadCachedResources,
   loadState,
@@ -48,9 +50,54 @@ export default function PlatformAdminRbacOverride(): JSX.Element {
   );
 }
 
-function RbacOverrideEditor(): JSX.Element {
+export function RbacOverrideEditor(): JSX.Element {
   const [state, setState] = useState<OverrideState>(loadState);
+  const [catalog, setCatalog] = useState(loadCatalog);
+  const [storageError, setStorageError] = useState(false);
+  const {
+    data: scopesData,
+    isError: catalogError,
+    isPending: catalogPending,
+  } = useListScopes(undefined, undefined, {
+    throwOnError: false,
+    retry: false,
+  });
   const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!scopesData) return;
+    try {
+      const previous = loadState();
+      const nextCatalog = saveCatalog(scopesData.scopes);
+      const next = reconcileState(previous, nextCatalog);
+      saveState(next);
+      setCatalog(nextCatalog);
+      setState(next);
+      setStorageError(false);
+      if (
+        next.enabled &&
+        Object.keys(next.scopes).length !== Object.keys(previous.scopes).length
+      ) {
+        void queryClient.invalidateQueries();
+      }
+      window.dispatchEvent(new Event("rbac-override-change"));
+    } catch {
+      setStorageError(true);
+    }
+  }, [scopesData, queryClient]);
+  // Persist before invalidation can issue requests, not in a later effect.
+  const updateState = useCallback(
+    (update: (previous: OverrideState) => OverrideState) => {
+      try {
+        const next = update(loadState());
+        saveState(next);
+        setState(next);
+        setStorageError(false);
+      } catch {
+        setStorageError(true);
+      }
+    },
+    [],
+  );
   const organization = useOrganization();
   const liveProjects = (organization?.projects ?? []).map((project) => ({
     id: project.id,
@@ -93,10 +140,6 @@ function RbacOverrideEditor(): JSX.Element {
     state.enabled && cached ? cached.projects : liveProjects;
   const mcpResources = state.enabled && cached ? cached.mcps : liveMcps;
 
-  useEffect(() => {
-    saveState(state);
-  }, [state]);
-
   const invalidate = useCallback(() => {
     setTimeout(() => {
       void queryClient.invalidateQueries();
@@ -105,13 +148,13 @@ function RbacOverrideEditor(): JSX.Element {
   }, [queryClient]);
 
   const toggleEnabled = useCallback(() => {
-    setState((prev) => ({ ...prev, enabled: !prev.enabled }));
+    updateState((prev) => ({ ...prev, enabled: !prev.enabled }));
     invalidate();
-  }, [invalidate]);
+  }, [invalidate, updateState]);
 
   const toggleScope = useCallback(
     (scope: string) => {
-      setState((prev) => {
+      updateState((prev) => {
         const existing = prev.scopes[scope] ?? {
           enabled: true,
           resources: null,
@@ -120,18 +163,26 @@ function RbacOverrideEditor(): JSX.Element {
           ...prev,
           scopes: {
             ...prev.scopes,
-            [scope]: { ...existing, enabled: !existing.enabled },
+            [scope]: {
+              ...existing,
+              enabled: !existing.enabled,
+              // Recovery must restore access to the active organization too.
+              resources:
+                scope === "org:read" && !existing.enabled
+                  ? null
+                  : existing.resources,
+            },
           },
         };
       });
       if (state.enabled) invalidate();
     },
-    [state.enabled, invalidate],
+    [state.enabled, invalidate, updateState],
   );
 
   const setScopeResources = useCallback(
     (scope: string, resources: string[] | null) => {
-      setState((prev) => {
+      updateState((prev) => {
         const existing = prev.scopes[scope] ?? {
           enabled: true,
           resources: null,
@@ -146,17 +197,31 @@ function RbacOverrideEditor(): JSX.Element {
       });
       if (state.enabled) invalidate();
     },
-    [state.enabled, invalidate],
+    [state.enabled, invalidate, updateState],
   );
 
   // Remounts the resource MultiSelects (which only take a defaultValue) when
   // Reset wipes their selections out from under them.
   const [resetCount, setResetCount] = useState(0);
   const reset = () => {
-    setState({ enabled: false, scopes: defaultScopeState() });
+    updateState(() => ({ enabled: false, scopes: defaultScopeState() }));
     setResetCount((count) => count + 1);
     invalidate();
   };
+
+  // Retain visibility of saved selections even on a cold, denied catalog fetch.
+  const knownSlugs = new Set(catalog.map((scope) => scope.slug));
+  const displayedCatalog = [
+    ...catalog,
+    ...Object.keys(state.scopes)
+      .filter((slug) => !knownSlugs.has(slug))
+      .map((slug) => ({
+        slug,
+        resourceType: "Saved scopes",
+        description: "Saved selection; catalog metadata unavailable",
+        visibility: "user_visible",
+      })),
+  ];
 
   const activeCount = Object.values(state.scopes).filter(
     (s) => s.enabled,
@@ -172,7 +237,7 @@ function RbacOverrideEditor(): JSX.Element {
             </span>
             {state.enabled && (
               <Badge variant="warning" size="sm">
-                {activeCount}/{SCOPE_DEFS.length} scopes
+                {activeCount}/{Object.keys(state.scopes).length} scopes
               </Badge>
             )}
           </div>
@@ -189,6 +254,22 @@ function RbacOverrideEditor(): JSX.Element {
         </div>
       </AdminSection>
 
+      {storageError && (
+        <p role="alert">
+          Unable to save the override. Allow browser storage or free space, then
+          retry. Your previous selections remain active.
+        </p>
+      )}
+      {(catalogError || catalogPending) && (
+        <p role="status" className="text-muted-foreground text-sm">
+          {catalogError
+            ? "Scope catalog unavailable."
+            : "Loading scope catalog."}{" "}
+          Saved selections and cached scopes are preserved. The catalog requires
+          org:read. Enable org:read below to restore access for the active
+          organization, or disable the override.
+        </p>
+      )}
       <div
         className={
           state.enabled
@@ -196,13 +277,22 @@ function RbacOverrideEditor(): JSX.Element {
             : "space-y-8 pointer-events-none opacity-40"
         }
       >
-        {GROUP_ORDER.map((group) => {
-          const scopes = SCOPE_DEFS.filter((s) => s.resourceType === group.key);
+        {Array.from(
+          new Set(displayedCatalog.map((scope) => scope.resourceType)),
+        ).map((group) => {
+          const scopes = displayedCatalog.filter(
+            (scope) => scope.resourceType === group,
+          );
           return (
-            <AdminSection key={group.key} title={group.label}>
+            <AdminSection
+              key={group}
+              title={
+                group === "org" ? "Organization" : group.replaceAll("_", " ")
+              }
+            >
               <div className="divide-border divide-y">
                 {scopes.map((def) => {
-                  const scopeState = state.scopes[def.scope] ?? {
+                  const scopeState = state.scopes[def.slug] ?? {
                     enabled: true,
                     resources: null,
                   };
@@ -224,12 +314,12 @@ function RbacOverrideEditor(): JSX.Element {
                   }
 
                   return (
-                    <div key={def.scope} className="px-4 py-3">
+                    <div key={def.slug} className="px-4 py-3">
                       <label className="flex cursor-pointer items-center gap-3">
                         <Checkbox
                           checked={scopeState.enabled}
-                          onCheckedChange={() => toggleScope(def.scope)}
-                          aria-label={`Toggle ${def.scope}`}
+                          onCheckedChange={() => toggleScope(def.slug)}
+                          aria-label={`Toggle ${def.slug}`}
                         />
                         <span
                           className={`font-mono text-sm ${
@@ -238,7 +328,7 @@ function RbacOverrideEditor(): JSX.Element {
                               : "text-muted-foreground line-through"
                           }`}
                         >
-                          {def.label}
+                          {def.slug}
                         </span>
                         {isRestricted && scopeState.enabled && (
                           <Badge variant="information" size="sm">
@@ -253,7 +343,7 @@ function RbacOverrideEditor(): JSX.Element {
                       {scopeState.enabled && knownResources.length > 0 && (
                         <div className="mt-2 pl-7">
                           <MultiSelect
-                            key={`${def.scope}-${resetCount}`}
+                            key={`${def.slug}-${resetCount}`}
                             options={knownResources.map((r) => ({
                               label: r.label,
                               value: r.id,
@@ -261,7 +351,7 @@ function RbacOverrideEditor(): JSX.Element {
                             defaultValue={scopeState.resources ?? []}
                             onValueChange={(resources) =>
                               setScopeResources(
-                                def.scope,
+                                def.slug,
                                 resources.length > 0 ? resources : null,
                               )
                             }

@@ -2,6 +2,7 @@ package anthropicinference
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -46,7 +47,6 @@ func TestServiceDeniesToolCallFrameBeforeToolsRun(t *testing.T) {
 	require.NotEmpty(t, scanner.inputs)
 	require.Equal(t, "user-example", scanner.userIDs[0])
 	require.Empty(t, store.saved, "the next prompt frame archives the tool calls")
-	require.Nil(t, store.accepted, "a tool call frame never moves the checkpoint")
 }
 
 func TestServiceScansEachToolCallAsAToolRequest(t *testing.T) {
@@ -66,7 +66,6 @@ func TestServiceScansEachToolCallAsAToolRequest(t *testing.T) {
 	}, scanner.inputs)
 	require.Equal(t, []string{"anthropic-inference:tool-call-request-example:0", "anthropic-inference:tool-call-request-example:1"}, scanner.operationIDs)
 	require.Empty(t, store.saved)
-	require.Nil(t, store.accepted)
 }
 
 func TestServiceDeniesToolCallFrameThatCannotBeScannedInTime(t *testing.T) {
@@ -88,10 +87,16 @@ func TestServicePropagatesToolCallScannerErrors(t *testing.T) {
 	require.ErrorContains(t, err, "evaluate inference policy")
 }
 
+type failingActorStore struct{ memoryStore }
+
+func (s *failingActorStore) ResolveActor(context.Context, Config, Frame) (string, error) {
+	return "", errors.New("actor lookup unavailable")
+}
+
 func TestServiceAllowsToolCallFrameWithoutToolCalls(t *testing.T) {
 	t.Parallel()
 	scanner := &recordingScanner{}
-	service := &Service{logger: testenv.NewLogger(t), store: &memoryStore{}, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), store: &failingActorStore{}, scanner: scanner}
 	frame := toolCallFrame()
 	frame.Messages = []Message{textMessage("assistant", "no calls")}
 	verdict, err := service.Process(t.Context(), Config{}, frame)

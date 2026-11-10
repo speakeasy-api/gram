@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ShadowMCPDispositionPicker } from "@/components/shadow-mcp/ShadowMCPDispositionPicker";
@@ -60,13 +61,13 @@ import {
   Check,
   Code,
   Info,
-  Loader2,
   Shield,
   ThumbsDown,
   ThumbsUp,
   TriangleAlert,
   X,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   type ReactNode,
   useDeferredValue,
@@ -85,6 +86,7 @@ import {
 } from "./PolicyStart";
 import {
   clearPolicyStartSession,
+  supportsPolicyEditing,
   invalidEmailDomains,
   draftMCPScopeValue,
   type PolicyDraft,
@@ -108,10 +110,11 @@ import {
   type ShadowMCPDecisionConflict,
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
+import { ApprovalPolicyEditor } from "./ApprovalPolicyEditor";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import { PolicyScopeModeCards } from "./PolicyScopeModeCards";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { Skeleton, SkeletonParagraph } from "@/components/ui/Skeleton";
 import {
   initialPolicyMCPScopeValue,
   policyMCPScopeComplete,
@@ -150,6 +153,7 @@ import {
   allCategories,
   categoriesToPayload,
   categoryLevelDetectors,
+  detectionPolicyAction,
   mcpCompatibleAction,
   normalizeCategoriesForMode,
   parseApprovedEmailDomains,
@@ -259,6 +263,7 @@ const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
   warn: "Warn",
   block: "Block",
   quarantine: "Quarantine",
+  require_approval: "Require approval",
 };
 
 // Mock title summarization from the guardrail prompt (a real impl would use the
@@ -283,7 +288,48 @@ export default function PolicyDetail(): JSX.Element {
 
 /** The editor a stored policy opens in. Shadow AI is a presentation of the
  *  blocking Shadow MCP policy, so that policy opens the Shadow AI editor. */
-function PolicyEditorFor({ policy }: { policy: RiskPolicy }): JSX.Element {
+export function PolicyEditorFor({
+  policy,
+}: {
+  policy: RiskPolicy;
+}): JSX.Element {
+  if (policy.action === "require_approval") {
+    return <ApprovalPolicyEditor policy={policy} />;
+  }
+  if (!supportsPolicyEditing(policy))
+    return (
+      <Stack gap={6}>
+        <Page.Section.Title>{policy.name}</Page.Section.Title>
+        {policy.prompt && (
+          <Text className="whitespace-pre-wrap">{policy.prompt}</Text>
+        )}
+        <dl className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <dt className="text-eyebrow">Action</dt>
+            <dd>
+              {enumPresentation(POLICY_ACTION_LABEL, policy.action, "Unknown")}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-eyebrow">Status</dt>
+            <dd>{policy.enabled ? "Enabled" : "Disabled"}</dd>
+          </div>
+        </dl>
+        <Alert>
+          <AlertDescription>
+            This policy uses settings this dashboard cannot safely edit. Refresh
+            the page to check for an update.
+          </AlertDescription>
+        </Alert>
+        <Button
+          variant="secondary"
+          className="self-start"
+          onClick={() => window.location.reload()}
+        >
+          <Button.Text>Refresh page</Button.Text>
+        </Button>
+      </Stack>
+    );
   if (policy.policyType === "prompt_based") {
     return <PromptPolicyEditor policy={policy} />;
   }
@@ -310,14 +356,8 @@ function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
           }
         />
       </Page.Header>
-      <Page.Body>
-        {isLoading || !policy ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-          </div>
-        ) : (
-          <PolicyEditorFor policy={policy} />
-        )}
+      <Page.Body isLoading={isLoading || !policy}>
+        {policy && <PolicyEditorFor policy={policy} />}
       </Page.Body>
     </Page>
   );
@@ -346,6 +386,7 @@ function NewPolicyFrame({ children }: { children: ReactNode }): JSX.Element {
 
 function PolicyNewContent(): JSX.Element {
   const [kind] = useQueryState("kind");
+  const toolApprovals = useFeatureFlag(FEATURE_FLAGS.toolApprovals).status;
   const [category] = useQueryState("category");
   const location = useLocation();
   const draft = readPolicyDraft(location.state);
@@ -380,6 +421,17 @@ function PolicyNewContent(): JSX.Element {
     return (
       <NewPolicyFrame>
         <ShadowAIPolicyEditor policy={null} />
+      </NewPolicyFrame>
+    );
+  }
+  // With the flag off, a stale link to the approval editor opens the chooser.
+  if (
+    kind === "approval" &&
+    (toolApprovals === "enabled" || toolApprovals === "loading")
+  ) {
+    return (
+      <NewPolicyFrame>
+        <ApprovalPolicyEditor policy={null} />
       </NewPolicyFrame>
     );
   }
@@ -427,7 +479,9 @@ function PromptPolicyEditor({
     policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
   );
   const [action, setAction] = useState<PolicyAction>(() => {
-    const initial = policy?.action ?? draft?.action ?? "flag";
+    const initial = detectionPolicyAction(
+      policy?.action ?? draft?.action ?? "flag",
+    );
     return mcpScope.mode === "mcp" ? mcpCompatibleAction(initial) : initial;
   });
   const updateMCPScope = (next: PolicyMCPScopeValue) => {
@@ -1000,7 +1054,7 @@ function InspectMatrix({
   if (categoriesQuery.isLoading) {
     return (
       <Text small muted className="flex items-center gap-2">
-        <Loader2 className="size-4 animate-spin" />
+        <Spinner className="mr-0" />
         Loading inspection surfaces...
       </Text>
     );
@@ -1630,7 +1684,7 @@ export const LLM_ANALYZER_NOTICE =
 
 function LlmAnalyzerNotice(): JSX.Element {
   return (
-    <Alert variant="info" alignTop>
+    <Alert variant="info">
       <AlertDescription>{LLM_ANALYZER_NOTICE}</AlertDescription>
     </Alert>
   );
@@ -2566,9 +2620,14 @@ function SessionReview({
               onSelect={setSelectedIdState}
             />
           ) : chatsLoading ? (
-            <Text small muted className="block px-3 py-6 text-center">
-              Loading sessions…
-            </Text>
+            <div className="p-3">
+              <Skeleton label="Loading sessions">
+                <div className="h-12 w-full" />
+                <div className="h-12 w-full" />
+                <div className="h-12 w-full" />
+                <div className="h-12 w-full" />
+              </Skeleton>
+            </div>
           ) : chats.length === 0 ? (
             <Text small muted className="block px-3 py-6 text-center">
               No sessions match your search.
@@ -2619,7 +2678,7 @@ function ReevaluatingIndicator({
 
   return (
     <div className="border-border bg-muted/30 text-muted-foreground flex h-9 items-center gap-1.5 border px-2.5">
-      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      <Spinner className="mr-0 h-3.5 w-3.5" />
       <Text small muted>
         Re-evaluating…
       </Text>
@@ -2790,7 +2849,7 @@ function JudgeSessionBanner({
   if (fetching && !evalResult) {
     return (
       <div className="border-border bg-muted/30 flex items-start gap-3 border-b px-4 py-3">
-        <Loader2 className="text-muted-foreground mt-0.5 size-4 shrink-0 animate-spin" />
+        <Spinner className="text-muted-foreground mt-0.5 mr-0 shrink-0" />
         <div className="min-w-0">
           <Text small className="font-medium">
             Judge is evaluating this session
@@ -2948,6 +3007,7 @@ function SessionTranscript({
     () => ({
       dimNonRisk: false,
       userLabel: headerChat ? sessionUserLabel(headerChat) : undefined,
+      openClawSession: headerChat?.source?.trim().toLowerCase() === "openclaw",
       rowDecoration: (messageIds) => {
         const matched = messageIds
           .map((id) => verdictByMessage.get(id))
@@ -3029,9 +3089,9 @@ function SessionTranscript({
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {transcript.isLoading ? (
-            <Text small muted className="block p-6 text-center">
-              Loading transcript…
-            </Text>
+            <div className="p-6">
+              <SkeletonParagraph label="Loading transcript" />
+            </div>
           ) : transcript.isError ? (
             <Text small muted className="block p-6 text-center">
               Failed to load transcript.

@@ -10,6 +10,7 @@ import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	gen "github.com/speakeasy-api/gram/server/gen/cli_auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -25,6 +26,7 @@ func TestAuthorize_MemberSessionSucceeds(t *testing.T) {
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	require.NoError(t, err)
@@ -39,6 +41,24 @@ func TestAuthorize_MemberSessionSucceeds(t *testing.T) {
 	require.True(t, strings.HasPrefix(redeemed.AccessToken, "gram_local_"))
 	require.Equal(t, mockidp.MockUserEmail, redeemed.UserEmail)
 	require.NotEmpty(t, redeemed.ProjectSlug)
+}
+
+// Organization membership, not org:read, authorizes self-service enrollment.
+func TestAuthorize_MemberWithoutGrantsSucceeds(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = authztest.WithExactGrants(t, ctx)
+	_, challenge := pkcePair(t)
+
+	authorized, err := ti.service.Authorize(ctx, &gen.AuthorizePayload{
+		CodeChallenge:       challenge,
+		CodeChallengeMethod: "S256",
+		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
+		SessionToken:        nil,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, authorized.Code)
 }
 
 // An admin impersonating the active org via a support session is refused.
@@ -56,6 +76,7 @@ func TestAuthorize_ImpersonatingAdminSupportSessionBlocked(t *testing.T) {
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -78,6 +99,7 @@ func TestAuthorize_AdminWithSupportSessionElsewhereOnOwnOrgSucceeds(t *testing.T
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	require.NoError(t, err)
@@ -99,6 +121,7 @@ func TestAuthorize_NonAdminWithSupportOrgSucceeds(t *testing.T) {
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	require.NoError(t, err)
@@ -123,6 +146,7 @@ func TestAuthorize_ImpersonatedUserSessionBlocked(t *testing.T) {
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -174,6 +198,7 @@ func TestAuthorize_DemoOrgSessionBlocked(t *testing.T) {
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)

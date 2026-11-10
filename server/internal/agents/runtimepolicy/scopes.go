@@ -15,8 +15,13 @@ const (
 	RuntimeScopeRegistryVersion2 RuntimeScopeRegistryVersion = 2
 	RuntimeScopeRegistryVersion3 RuntimeScopeRegistryVersion = 3
 	RuntimeScopeRegistryVersion4 RuntimeScopeRegistryVersion = 4
+	RuntimeScopeRegistryVersion5 RuntimeScopeRegistryVersion = 5
 
-	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion4
+	RuntimeScopeRegistryVersion6 RuntimeScopeRegistryVersion = 6
+
+	RuntimeScopeRegistryVersion7 RuntimeScopeRegistryVersion = 7
+
+	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion7
 )
 
 // RuntimeScopeLifecycle distinguishes active scope registrations from retained
@@ -70,11 +75,12 @@ func retiredRuntimeScope() runtimeScopeDefinition {
 // runtimeScopeDefinitions is the application-owned overlay that determines
 // which authorization scopes agent direct and delegated policy may use.
 var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
-	authz.ScopeRoot:                    activeRuntimeScope(),
-	authz.ScopeOrgRead:                 activeRuntimeScope(),
-	authz.ScopeOrgBlockedRead:          activeRuntimeScope(),
-	authz.ScopeOrgAdmin:                activeRuntimeScope(),
-	authz.ScopeOrgBlockedAdmin:         activeRuntimeScope(),
+	authz.ScopeRoot:           activeRuntimeScope(),
+	authz.ScopeOrgRead:        safeRuntimeScopeSince(RuntimeScopeRegistryVersion7),
+	authz.ScopeOrgBlockedRead: safeRuntimeScopeSince(RuntimeScopeRegistryVersion7),
+	authz.ScopeOrgAdmin:       activeRuntimeScope(),
+	// Exclusions only restrict authority; org:blocked_read also implies the admin exclusion.
+	authz.ScopeOrgBlockedAdmin:         safeRuntimeScopeSince(RuntimeScopeRegistryVersion7),
 	authz.ScopeProjectRead:             safeRuntimeScope(),
 	authz.ScopeProjectBlockedRead:      safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopeProjectWrite:            safeRuntimeScope(),
@@ -85,6 +91,8 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeMCPBlockedWrite:         safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopeMCPConnect:              safeRuntimeScope(),
 	authz.ScopeMCPBlockedConnect:       safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
+	authz.ScopeMCPAuth:                 safeRuntimeScopeSince(RuntimeScopeRegistryVersion5),
+	authz.ScopeMCPBlockedAuth:          safeRuntimeScopeSince(RuntimeScopeRegistryVersion5),
 	authz.ScopeEnvironmentRead:         safeRuntimeScope(),
 	authz.ScopeEnvironmentBlockedRead:  safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopeEnvironmentWrite:        safeRuntimeScope(),
@@ -104,6 +112,7 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeRiskPolicyBlock:         activeRuntimeScope(),
 	authz.ScopeChatRead:                activeRuntimeScope(),
 	authz.ScopeChatWrite:               activeRuntimeScope(),
+	authz.ScopeInferenceExecute:        safeRuntimeScopeSince(RuntimeScopeRegistryVersion6),
 	authz.ScopeLogRead:                 activeRuntimeScope(),
 	authz.ScopeAgentRead:               activeRuntimeScope(),
 	authz.ScopeAgentWrite:              activeRuntimeScope(),

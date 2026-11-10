@@ -22,18 +22,38 @@ import (
 // hosts composite dashboard operations that configure a single MCP server's
 // identity in one atomic call.
 type Service interface {
-	// Manage exact remote session attachments for an agent. Requires an ordinary
-	// human session, agent authorization authority and ownership of the upstream
-	// session. Never returns credentials.
+	// Refresh an agent attachment through one exact browser OAuth attempt.
+	// Requires an ordinary human with agent write permission and ownership of the
+	// attached connection. The one-time attempt is bound to the caller, agent,
+	// issuer and original attachment; completion never selects a different sign-in.
+	BeginBindingRefresh(context.Context, *BeginBindingRefreshPayload) (res *BindingRefreshAttempt, err error)
+	// Refresh an agent attachment through one exact browser OAuth attempt.
+	// Requires an ordinary human with agent write permission and ownership of the
+	// attached connection. The one-time attempt is bound to the caller, agent,
+	// issuer and original attachment; completion never selects a different sign-in.
+	CompleteBindingRefresh(context.Context, *CompleteBindingRefreshPayload) (res *BindingRefreshResult, err error)
+	// Manage exact remote session attachments for an agent. Reads require agent
+	// authorization or write permission. Changes require an ordinary human session
+	// and agent write permission. Attachment requires ownership of the upstream
+	// session; editors can remove any assignment. Never returns credentials.
 	ListBindings(context.Context, *ListBindingsPayload) (res *ListBindingsResult, err error)
-	// Manage exact remote session attachments for an agent. Requires an ordinary
-	// human session, agent authorization authority and ownership of the upstream
-	// session. Never returns credentials.
+	// Manage exact remote session attachments for an agent. Reads require agent
+	// authorization or write permission. Changes require an ordinary human session
+	// and agent write permission. Attachment requires ownership of the upstream
+	// session; editors can remove any assignment. Never returns credentials.
 	AttachBinding(context.Context, *AttachBindingPayload) (res *PrincipalRemoteSessionBinding, err error)
-	// Manage exact remote session attachments for an agent. Requires an ordinary
-	// human session, agent authorization authority and ownership of the upstream
-	// session. Never returns credentials.
+	// Manage exact remote session attachments for an agent. Reads require agent
+	// authorization or write permission. Changes require an ordinary human session
+	// and agent write permission. Attachment requires ownership of the upstream
+	// session; editors can remove any assignment. Never returns credentials.
 	DetachBinding(context.Context, *DetachBindingPayload) (err error)
+	// Initialize a directly Remote MCP-backed server and discover all tools using
+	// the signed-in user's saved authorization. Never executes tools. A provider
+	// tab returning is not evidence of authorization. Requires an ordinary
+	// dashboard session and mcp:connect on the exact server; API keys are refused.
+	// Requires the staff-managed provider_setup organization feature, disabled by
+	// default; unavailable organizations receive HTTP 404.
+	TestServerConnection(context.Context, *TestServerConnectionPayload) (res *ServerConnectionTestResult, err error)
 	// Atomically configure identity for a Remote MCP-backed MCP server. The
 	// complete plan selects or creates a project Remote Identity Provider and
 	// links an existing client, creates a manual client, or automatically prefers
@@ -56,12 +76,33 @@ type Service interface {
 	// otherwise project:write. Servers the caller cannot read are counted in
 	// hidden_server_count and never named.
 	GetServerIdentityImpact(context.Context, *GetServerIdentityImpactPayload) (res *ServerIdentityImpactResult, err error)
+	// List the upstream OAuth clients an MCP server is associated with. An
+	// association is a per-server configuration fact: one client can serve several
+	// servers, and server_count reports how many live servers share each client,
+	// since editing or rotating a shared client changes every one of them.
+	// Associations are recorded ahead of the serving path that will read them;
+	// until then the server keeps signing in through its user session issuer's
+	// bindings. Requires mcp:read on the server.
+	ListServerClientAssociations(context.Context, *ListServerClientAssociationsPayload) (res *ListServerClientAssociationsResult, err error)
+	// Remove one MCP server's association with an upstream OAuth client. The
+	// client and its associations with other servers are untouched. When the
+	// server is the only consumer of its user session issuer, the association
+	// follows the issuer's client binding: with upstream auth enforcement off,
+	// detach returns a conflict (409) and you must turn off User Identity on the
+	// server instead; with enforcement on, detach retires only the
+	// backfill-derived typed auth-client link and keeps the association. In this
+	// sole-consumer case, repeating detach returns not found (404). For other
+	// servers, detach removes the association (or records an exclusion for an
+	// unclaimed client bound to the server's issuer) and synchronizes the
+	// backfill-derived typed links. Administrator-owned typed links are untouched.
+	// Requires mcp:write on the server.
+	DetachServerClientAssociation(context.Context, *DetachServerClientAssociationPayload) (err error)
 	// List remote_sessions in the caller's project. Supplying both principal_id
 	// and user_session_issuer_id instead lists only the ordinary human caller's
 	// eligible sessions for an agent they own, without requiring project read
 	// permission. Both filters must be supplied together. access_token_encrypted
 	// and refresh_token_encrypted are never returned — only metadata
-	// (access_expires_at, refresh_expires_at, scopes).
+	// (access_expires_at, refresh_expires_at, authorization_expires_at, scopes).
 	ListRemoteSessions(context.Context, *ListRemoteSessionsPayload) (res *ListRemoteSessionsResult, err error)
 	// Count the distinct people (user subjects) holding a live remote_session
 	// minted through one remote_session_client. Scoped like listRemoteSessions:
@@ -94,7 +135,7 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [13]string{"beginBindingRefresh", "completeBindingRefresh", "listBindings", "attachBinding", "detachBinding", "testServerConnection", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listServerClientAssociations", "detachServerClientAssociation", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
 
 // AttachBindingPayload is the payload type of the remoteSessions service
 // attachBinding method.
@@ -104,6 +145,32 @@ type AttachBindingPayload struct {
 	RemoteSessionID     string
 	SessionToken        *string
 	ProjectSlugInput    *string
+}
+
+// BeginBindingRefreshPayload is the payload type of the remoteSessions service
+// beginBindingRefresh method.
+type BeginBindingRefreshPayload struct {
+	PrincipalID         string
+	UserSessionIssuerID string
+	BindingID           string
+	SessionToken        *string
+	ProjectSlugInput    *string
+}
+
+// BindingRefreshAttempt is the result type of the remoteSessions service
+// beginBindingRefresh method.
+type BindingRefreshAttempt struct {
+	AttemptID string
+}
+
+// BindingRefreshResult is the result type of the remoteSessions service
+// completeBindingRefresh method.
+type BindingRefreshResult struct {
+	// Whether this popup committed an exact grant and replaced the attachment.
+	// False means no matching callback completed; the attempt is consumed without
+	// changing the attachment.
+	Completed bool
+	Binding   *PrincipalRemoteSessionBinding
 }
 
 // CommitServerIdentityConfigurationPayload is the payload type of the
@@ -116,6 +183,10 @@ type CommitServerIdentityConfigurationPayload struct {
 	McpServerID string
 	// An existing Remote Identity Provider visible to the target project.
 	ProviderID *string
+	// Refuse a save if the user session issuer also serves another MCP server.
+	// Setup screens must set this to avoid changing shared sign-in bindings.
+	// Explicitly assign a dedicated issuer before retrying.
+	TargetServerOnly *bool
 	// A new project-scoped Remote Identity Provider to create.
 	CreateProvider *CreateRemoteSessionIssuerForm
 	// How to provide the OAuth client.
@@ -129,6 +200,17 @@ type CommitServerIdentityConfigurationPayload struct {
 	// when the provider supports one and falls back to dynamic client
 	// registration; dcr always uses dynamic client registration.
 	RegistrationMethod *string
+	// Replace the selected provider's client already bound to the user session
+	// issuer, rather than reuse it or be refused. Everyone signed in through the
+	// old client must sign in again, on this server and every other server that
+	// uses it. The other servers move to the new client. Refused when a gateway or
+	// a server that is not directly Remote MCP-backed shares the issuer, or when a
+	// server using the client is in another project.
+	ReplaceClient *bool
+	// With replace_client, exactly the other MCP servers that use the client being
+	// replaced, as getServerIdentityImpact listed them. The commit is refused if
+	// they no longer match.
+	ReplaceClientServerIds []string
 }
 
 // CommitServerIdentityConfigurationResult is the result type of the
@@ -158,6 +240,16 @@ type CommitServerIdentityConfigurationResult struct {
 	// Completed DCR failure. Mutually exclusive with status and
 	// manual_setup_required=true.
 	Failure *ServerIdentityRegistrationFailure
+}
+
+// CompleteBindingRefreshPayload is the payload type of the remoteSessions
+// service completeBindingRefresh method.
+type CompleteBindingRefreshPayload struct {
+	PrincipalID         string
+	UserSessionIssuerID string
+	AttemptID           string
+	SessionToken        *string
+	ProjectSlugInput    *string
 }
 
 // CountRemoteSessionsPayload is the payload type of the remoteSessions service
@@ -289,6 +381,18 @@ type DetachBindingPayload struct {
 	ProjectSlugInput    *string
 }
 
+// DetachServerClientAssociationPayload is the payload type of the
+// remoteSessions service detachServerClientAssociation method.
+type DetachServerClientAssociationPayload struct {
+	// The MCP server.
+	McpServerID string
+	// The associated remote session client.
+	RemoteSessionClientID string
+	SessionToken          *string
+	ApikeyToken           *string
+	ProjectSlugInput      *string
+}
+
 // GetServerIdentityImpactPayload is the payload type of the remoteSessions
 // service getServerIdentityImpact method.
 type GetServerIdentityImpactPayload struct {
@@ -306,6 +410,11 @@ type GetServerIdentityImpactPayload struct {
 	ProviderID *string
 	// An existing client being bound. Omit for a new client.
 	ClientID *string
+	// Preview replacing the provider's bound client, as
+	// commitServerIdentityConfiguration's replace_client does. The servers that
+	// use it are listed with the resignin impact, and that list is what the commit
+	// must confirm. Only with change replace and mcp_server_id.
+	ReplaceClient *bool
 }
 
 // ListBindingsPayload is the payload type of the remoteSessions service
@@ -351,6 +460,29 @@ type ListRemoteSessionsResult struct {
 	NextCursor *string
 }
 
+// ListServerClientAssociationsPayload is the payload type of the
+// remoteSessions service listServerClientAssociations method.
+type ListServerClientAssociationsPayload struct {
+	// The MCP server.
+	McpServerID      string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListServerClientAssociationsResult is the result type of the remoteSessions
+// service listServerClientAssociations method.
+type ListServerClientAssociationsResult struct {
+	// The server's associated upstream OAuth clients, oldest first.
+	Associations []*ServerClientAssociation
+	// The remote_session_client_id of each client bound to the server's user
+	// session issuer that its callers need to sign in through. These are its
+	// associated clients, or when it has none, the bound clients no other server
+	// claims and it has not explicitly detached. Empty when the server requires no
+	// upstream sign-in.
+	RequiredClientIds []string
+}
+
 // PrincipalRemoteSessionBinding is the result type of the remoteSessions
 // service attachBinding method.
 type PrincipalRemoteSessionBinding struct {
@@ -373,6 +505,44 @@ type RevokeRemoteSessionPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// One upstream OAuth client an MCP server is associated with. Client secrets
+// are never returned.
+type ServerClientAssociation struct {
+	// The associated remote session client.
+	RemoteSessionClientID string
+	// The provider-issued client_id.
+	ClientID string
+	// The client's remote session issuer: the upstream authorization server it
+	// signs in with.
+	RemoteSessionIssuerID string
+	// Display name of the remote session issuer, if set.
+	IssuerName *string
+	// Slug of the remote session issuer.
+	IssuerSlug string
+	// The remote session issuer's issuer identifier.
+	IssuerURL string
+	// Who owns the client.
+	Scope string
+	// How many live MCP servers are associated with this client, including this
+	// one.
+	ServerCount int64
+	// When the association was recorded.
+	AssociatedAt string
+}
+
+// ServerConnectionTestResult is the result type of the remoteSessions service
+// testServerConnection method.
+type ServerConnectionTestResult struct {
+	// Live result of this test, never a persisted completion record.
+	Status string
+	// Stable, credential-free reason suitable for choosing a recovery action.
+	Code string
+	// Safe message for display in the failed setup step.
+	Message string
+	// Tools discovered, present only after every tools/list page succeeds.
+	ToolCount *int
 }
 
 // Configuration for a newly-created project remote-session client. Manual mode
@@ -402,6 +572,13 @@ type ServerIdentityImpactResult struct {
 	// the change touches an organization-level client this counts every such
 	// server on the issuer, affected or not.
 	HiddenServerCount int
+	// With change detach and mcp_server_id, the clients only that server uses,
+	// which leaving User Identity unbinds from the issuer.
+	DetachClientIds []string
+	// With change detach and mcp_server_id, the clients other consumers also use.
+	// They stay bound, and leaving User Identity only removes that server's
+	// association with them.
+	ReleaseClientIds []string
 }
 
 // An MCP server or gateway a proposed binding change affects.
@@ -436,6 +613,15 @@ type ServerIdentityRegistrationFailure struct {
 	ProviderMessage *string
 	// Optional upstream HTTP status.
 	HTTPStatus *int
+}
+
+// TestServerConnectionPayload is the payload type of the remoteSessions
+// service testServerConnection method.
+type TestServerConnectionPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Exact MCP server to test.
+	McpServerID string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

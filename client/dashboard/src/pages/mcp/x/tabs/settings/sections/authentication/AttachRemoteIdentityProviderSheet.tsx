@@ -19,6 +19,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
@@ -36,7 +37,7 @@ import {
 } from "@/lib/sources";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import type { CreateRemoteSessionIssuerForm } from "@gram/client/models/components/createremotesessionissuerform.js";
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
@@ -706,9 +707,7 @@ export function AttachRemoteIdentityProviderSheet({
   let clientSectionBody: JSX.Element;
   if (mode === "select" && selectedIssuerId && isLoadingIssuerClients) {
     clientSectionBody = (
-      <Text muted small>
-        Loading clients…
-      </Text>
+      <Skeleton label="Loading clients" className="h-9 w-full" />
     );
   } else if (effectiveClientMode === "select") {
     clientSectionBody = (
@@ -1154,6 +1153,12 @@ function SelectExistingClientFields({
             {clients.map((candidate) => (
               <SelectItem key={candidate.id} value={candidate.id}>
                 {remoteSessionClientDisplayName(candidate)}
+                {/* Names aren't unique, so keep the ID that tells two apart. */}
+                {candidate.displayName && (
+                  <span className="text-muted-foreground ml-2 font-mono text-xs">
+                    {candidate.clientId}
+                  </span>
+                )}
               </SelectItem>
             ))}
           </SelectContent>

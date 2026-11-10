@@ -103,6 +103,8 @@ type DirectoryUser struct {
 	DirectoryID      string
 	OrganizationID   string
 	Email            string
+	FirstName        string
+	LastName         string
 	State            string // "active", "inactive"
 	CustomAttributes json.RawMessage
 	CreatedAt        string
@@ -145,6 +147,8 @@ func (wc *Client) listDirectoryUsers(ctx context.Context, directoryID, groupID s
 				DirectoryID:      u.DirectoryID,
 				OrganizationID:   u.OrganizationID,
 				Email:            u.Email,
+				FirstName:        u.FirstName,
+				LastName:         u.LastName,
 				State:            string(u.State),
 				CustomAttributes: u.CustomAttributes,
 				CreatedAt:        u.CreatedAt,

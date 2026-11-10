@@ -26,6 +26,7 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 		if err == nil {
 			return
 		}
+		err = answerOutage(r.Context(), logger, w, err)
 
 		mcpID := mcpjsonrpc.NullID()
 		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok && rpcCtx.ID.IsSet() {
@@ -169,6 +170,17 @@ const (
 	MCPErrorDataCodeToolCallsPaused MCPErrorDataCode = "mcp_tool_calls_paused"
 )
 
+// MCPErrorDataReason is a stable machine-readable reason a request was
+// answered with an error instead of its result.
+type MCPErrorDataReason string
+
+const (
+	// MCPErrorDataReasonServerShutdown identifies a request the server stopped
+	// serving because it is shutting down. The client can send it to another
+	// replica when the error data marks it retryable.
+	MCPErrorDataReasonServerShutdown MCPErrorDataReason = "server_shutdown"
+)
+
 // MCPErrorData is the shared typed data envelope for MCP JSON-RPC errors.
 type MCPErrorData struct {
 	// Code identifies application-specific failures outside the MCP
@@ -188,6 +200,29 @@ type MCPErrorData struct {
 	// capability name and each value its capability object (e.g.
 	// {"elicitation": {}}).
 	RequiredCapabilities map[string]json.RawMessage `json:"requiredCapabilities,omitempty"`
+
+	// Reason identifies why the request was answered with an error instead of
+	// its result.
+	Reason MCPErrorDataReason `json:"reason,omitempty"`
+
+	// Retryable reports whether the request can safely be sent again. Nil
+	// leaves it unstated; a pointer keeps an explicit false on the wire.
+	Retryable *bool `json:"retryable,omitempty"`
+}
+
+// NewServerShutdownErrorData returns the data of the JSON-RPC error that
+// answers a request the server stopped serving because it is shutting down.
+// retryable reports whether the request can safely be sent again: a
+// tools/call may already have run, so callers never mark one retryable.
+func NewServerShutdownErrorData(retryable bool) *MCPErrorData {
+	return &MCPErrorData{
+		Code:                 "",
+		Supported:            nil,
+		Requested:            "",
+		RequiredCapabilities: nil,
+		Reason:               MCPErrorDataReasonServerShutdown,
+		Retryable:            &retryable,
+	}
 }
 
 // NewMissingRequiredClientCapabilityError builds the MCP 2026-07-28
@@ -206,6 +241,8 @@ func NewMissingRequiredClientCapabilityError(id mcpjsonrpc.ID, required map[stri
 			Supported:            nil,
 			Requested:            "",
 			RequiredCapabilities: maps.Clone(required),
+			Reason:               "",
+			Retryable:            nil,
 		},
 	}
 }

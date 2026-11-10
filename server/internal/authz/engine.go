@@ -1,10 +1,12 @@
 package authz
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -32,6 +34,8 @@ type EngineOpts struct {
 	// Omission disables them rather than falling back to user authorization,
 	// which would hand a machine the user:all grant set.
 	AdmitWorkloadSession WorkloadSessionAdmitter
+	// AdmitWorkloadSessionInTx must be configured for atomic workload issuance.
+	AdmitWorkloadSessionInTx WorkloadSessionTxAdmitter
 }
 
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
@@ -42,6 +46,7 @@ type Engine struct {
 	admitPrincipalCredential         PrincipalCredentialAdmitter
 	admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 	admitWorkloadSession             WorkloadSessionAdmitter
+	admitWorkloadSessionInTx         WorkloadSessionTxAdmitter
 	logger                           *slog.Logger
 	db                               *pgxpool.Pool
 	challengeLoggingEnabled          ChallengeLoggingEnabled
@@ -60,11 +65,13 @@ func NewEngine(
 	var admitPrincipalCredential PrincipalCredentialAdmitter
 	var admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 	var admitWorkloadSession WorkloadSessionAdmitter
+	var admitWorkloadSessionInTx WorkloadSessionTxAdmitter
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
 		admitPrincipalCredential = opts[0].AdmitPrincipalCredential
 		admitPrincipalCredentialWithDBTX = opts[0].AdmitPrincipalCredentialWithDBTX
 		admitWorkloadSession = opts[0].AdmitWorkloadSession
+		admitWorkloadSessionInTx = opts[0].AdmitWorkloadSessionInTx
 	}
 
 	authzLogger := logger.With(attr.SlogComponent("authz"))
@@ -73,6 +80,7 @@ func NewEngine(
 		admitPrincipalCredential:         admitPrincipalCredential,
 		admitPrincipalCredentialWithDBTX: admitPrincipalCredentialWithDBTX,
 		admitWorkloadSession:             admitWorkloadSession,
+		admitWorkloadSessionInTx:         admitWorkloadSessionInTx,
 		logger:                           authzLogger,
 		db:                               db,
 		challengeLoggingEnabled:          challengeLogging,
@@ -207,6 +215,9 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return err
 	}
 	if !enforce {
+		if !all(checks, unenforcedAllows) {
+			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
+		}
 		return nil
 	}
 	if len(checks) == 0 {
@@ -218,7 +229,14 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 
-	return e.evaluateRequired(ctx, authorization, checks...)
+	// Only the caller's own refusal is explained to the client: a probe of
+	// some other principal's grants (EvaluateLoadedGrants) says nothing about
+	// what the caller lacks.
+	if err := e.evaluateRequired(ctx, authorization, checks...); err != nil {
+		recordDenial(ctx, err)
+		return e.mapError(ctx, err)
+	}
+	return nil
 }
 
 // EvaluateLoadedGrants evaluates explicit grants against checks without
@@ -231,12 +249,18 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
 		return oops.C(oops.CodeForbidden)
 	}
-	return e.evaluateRequired(ctx, loadedGrantAuthorization(grants), checks...)
+	if err := e.evaluateRequired(ctx, loadedGrantAuthorization(grants), checks...); err != nil {
+		return e.mapError(ctx, err)
+	}
+	return nil
 }
 
+// evaluateRequired returns the engine's own error types; callers map them
+// with mapError once they have decided whether the refusal is theirs to
+// explain.
 func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthorization, checks ...Check) error {
 	if len(checks) == 0 {
-		return e.mapError(ctx, ErrNoChecks)
+		return ErrNoChecks
 	}
 
 	matches := make([]grantMatch, 0, len(checks))
@@ -253,7 +277,7 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, err)
+			return err
 		}
 
 		evaluation, err := authorization.evaluate(check)
@@ -269,7 +293,7 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, err)
+			return err
 		}
 		if evaluation.Grant == nil {
 			reason := authzrepo.ReasonScopeUnsatisfied
@@ -290,7 +314,10 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, Denied(check.Scope, check.selector()))
+			if evaluation.Denied {
+				return deniedByBlock(check.Scope, check.selector())
+			}
+			return Denied(check.Scope, check.selector())
 		}
 		matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 	}
@@ -315,6 +342,9 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return err
 	}
 	if !enforce {
+		if len(checks) > 0 && !slices.ContainsFunc(checks, unenforcedAllows) {
+			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
+		}
 		return nil
 	}
 	if len(checks) == 0 {
@@ -344,7 +374,8 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	}
 
 	anyDenied := false
-	for _, check := range checks {
+	blocked := make([]bool, len(checks))
+	for i, check := range checks {
 		evaluation, err := authorization.evaluate(check)
 		if err != nil {
 			challengeLogger{
@@ -362,6 +393,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		}
 		if evaluation.Denied {
 			anyDenied = true
+			blocked[i] = true
 			continue
 		}
 		if evaluation.Grant != nil {
@@ -398,7 +430,78 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
 	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+	// The alternatives are equivalent to the handler but not to the person
+	// asking for access: explain the one that grants the least.
+	if suggested, ok := leastPrivilegedAlternative(checks, blocked); ok {
+		recordDenial(ctx, Denied(suggested.Scope, suggested.selector()))
+	}
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
+}
+
+// resourceKindBreadth orders resource kinds by how much a grant on one covers:
+// an organization holds projects, a project holds everything else.
+func resourceKindBreadth(check Check) int {
+	kind := check.ResourceKind
+	if kind == "" {
+		kind = ResourceKindForScope(check.Scope)
+	}
+	switch kind {
+	case ResourceKindOrg:
+		return 2
+	case ResourceKindProject:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// leastPrivilegedAlternative picks, among the checks a RequireAny offered, the
+// one a client should ask to be granted. Alternatives a block refused are left
+// out, since granting them again changes nothing. Of the rest, a scope that
+// satisfies fewer of the other alternatives is narrower, then a scope checked
+// on a smaller kind of resource, then one that satisfies fewer scopes overall;
+// the handler's own order breaks any remaining tie.
+func leastPrivilegedAlternative(checks []Check, blocked []bool) (Check, bool) {
+	type ranked struct {
+		check   Check
+		covers  int
+		breadth int
+		implies int
+		index   int
+	}
+	candidates := make([]ranked, 0, len(checks))
+	for i, check := range checks {
+		if blocked[i] {
+			continue
+		}
+		closure := ScopeImplicationClosure(check.Scope)
+		covers := 0
+		for j, other := range checks {
+			if j != i && slices.Contains(closure, other.Scope) {
+				covers++
+			}
+		}
+		candidates = append(candidates, ranked{
+			check:   check,
+			covers:  covers,
+			breadth: resourceKindBreadth(check),
+			implies: len(closure),
+			index:   i,
+		})
+	}
+	if len(candidates) == 0 {
+		var none Check
+		return none, false
+	}
+	best := slices.MinFunc(candidates, func(a, b ranked) int {
+		return cmp.Or(
+			cmp.Compare(a.covers, b.covers),
+			cmp.Compare(a.breadth, b.breadth),
+			cmp.Compare(a.implies, b.implies),
+			cmp.Compare(a.index, b.index),
+		)
+	})
+	return best.check, true
 }
 
 // Evaluate reports whether the caller satisfies every check, WITHOUT recording an
@@ -410,8 +513,8 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 // "denial" on every members' page load and mislead admins into granting a scope
 // that was never actually required.
 //
-// Returns true when RBAC is not enforced for the request (matching Require's
-// short-circuit). A non-nil error is returned only for genuine evaluation
+// When RBAC is not enforced it returns true unless a check is an auth-client
+// check, which is always denied there (matching Require's short-circuit). A non-nil error is returned only for genuine evaluation
 // failures (missing prepared grants, invalid check); a merely unsatisfied check
 // yields (false, nil).
 func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
@@ -420,7 +523,7 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 		return false, err
 	}
 	if !enforce {
-		return true, nil
+		return all(checks, unenforcedAllows), nil
 	}
 	if len(checks) == 0 {
 		return false, e.mapError(ctx, ErrNoChecks)
@@ -448,7 +551,8 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 }
 
 // Filter evaluates each check and returns the resource IDs of those the caller
-// is authorized for. When RBAC is not enforced all resource IDs are returned.
+// is authorized for. When RBAC is not enforced all resource IDs are returned
+// except those of auth-client checks, which are omitted.
 func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
@@ -456,9 +560,11 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	}
 
 	if !enforce {
-		ids := make([]string, len(checks))
-		for i, c := range checks {
-			ids[i] = c.ResourceID
+		ids := make([]string, 0, len(checks))
+		for _, c := range checks {
+			if unenforcedAllows(c) {
+				ids = append(ids, c.ResourceID)
+			}
 		}
 		return ids, nil
 	}
@@ -549,7 +655,8 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 // where every check carries the same toolset/server ResourceID and per-tool
 // granularity lives in the Tool dimension.
 //
-// When RBAC is not enforced every entry is true. An empty input returns an
+// When RBAC is not enforced every entry is true except auth-client checks,
+// which are false. An empty input returns an
 // empty slice, no log. A single challenge-log entry is emitted for the batch
 // (same as [Filter]); per-check logs are intentionally avoided so callers can
 // safely use this with large input sets like a full tools/list.
@@ -561,8 +668,8 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 
 	if !enforce {
 		out := make([]bool, len(checks))
-		for i := range out {
-			out[i] = true
+		for i, c := range checks {
+			out[i] = unenforcedAllows(c)
 		}
 		return out, nil
 	}
@@ -701,6 +808,16 @@ func enforcedWithoutSession(ctx context.Context) bool {
 	return ok && surface == contextvalues.ActingSurfacePlatformMCP
 }
 
+// unenforcedAllows reports whether check passes where RBAC is not enforced.
+// Skipping evaluation never grants auth client use.
+func unenforcedAllows(check Check) bool {
+	return !check.isAuthClientCheck()
+}
+
+func all(checks []Check, ok func(Check) bool) bool {
+	return !slices.ContainsFunc(checks, func(c Check) bool { return !ok(c) })
+}
+
 func validateInput(c Check) error {
 	switch c.ResourceID {
 	case "":
@@ -708,7 +825,7 @@ func validateInput(c Check) error {
 	case WildcardResource:
 		return InvalidCheck(c.Scope, c.ResourceID)
 	default:
-		return nil
+		return validateAuthClientCheck(c)
 	}
 }
 

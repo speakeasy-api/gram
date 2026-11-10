@@ -78,7 +78,7 @@ func newPlatformHostMux(t *testing.T, ti *testInstance) (http.Handler, platformH
 	mux.Use(mcpSecurity)
 	mux.Use(customdomains.Middleware(ti.logger, ti.conn, platformHostChecklistEnvironment, ti.serverURL, platformHosts))
 	mux.Use(middleware.SessionMiddleware)
-	mcp.Attach(mux, ti.service, metadataService)
+	mcp.Attach(mux, ti.service.Service, metadataService)
 
 	canonical := platformHostTarget{host: ti.serverURL.Host, baseURL: strings.TrimSuffix(ti.serverURL.String(), "/")}
 	extra := platformHostTarget{host: platformHostChecklistExtraHost, baseURL: platformHosts[platformHostChecklistExtraHost]}
@@ -288,7 +288,7 @@ func TestPlatformHostMountsPerClientIDPCallback(t *testing.T) {
 	missing := serveOnHost(t, handler, http.MethodGet, canonical.host, path, nil, crossSite)
 	require.Equal(t, http.StatusBadRequest, missing.Code, "the handler, not the router, rejects a stateless callback")
 	unknown := serveOnHost(t, handler, http.MethodGet, canonical.host, path+"?"+url.Values{"state": {uuid.NewString()}, "code": {"idp-code"}}.Encode(), nil, crossSite)
-	require.Equal(t, http.StatusUnauthorized, unknown.Code)
+	require.Equal(t, http.StatusBadRequest, unknown.Code)
 	nested := serveOnHost(t, handler, http.MethodGet, canonical.host, path+"/extra", nil, crossSite)
 	require.Equal(t, http.StatusNotFound, nested.Code)
 }

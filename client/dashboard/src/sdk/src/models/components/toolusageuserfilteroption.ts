@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -22,7 +23,7 @@ export const UserKind = {
 /**
  * Tool usage user identity kind
  */
-export type UserKind = ClosedEnum<typeof UserKind>;
+export type UserKind = OpenEnum<typeof UserKind>;
 
 /**
  * Tool usage user filter option with usage in the selected time window
@@ -47,9 +48,8 @@ export type ToolUsageUserFilterOption = {
 };
 
 /** @internal */
-export const UserKind$inboundSchema: z.ZodMiniEnum<typeof UserKind> = z.enum(
-  UserKind,
-);
+export const UserKind$inboundSchema: z.ZodMiniType<UserKind, unknown> =
+  openEnums.inboundSchema(UserKind);
 
 /** @internal */
 export const ToolUsageUserFilterOption$inboundSchema: z.ZodMiniType<

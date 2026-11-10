@@ -3,6 +3,9 @@
 #MISE description="Install SSL certs for local development."
 #MISE hide=true
 #USAGE flag "--extra-hosts <hosts>" env="GRAM_SSL_EXTRA_HOSTS" default="" help="Comma-separated additional certificate DNS names and IP addresses."
+#USAGE flag "--provider <provider>" env="GRAM_TLS_PROVIDER" default="mkcert" help="Certificate source: mkcert (local CA) or tailscale (this machine's Tailnet certificate)." {
+#USAGE   choices "mkcert" "tailscale"
+#USAGE }
 
 set -euo pipefail
 
@@ -14,9 +17,9 @@ extract_hostname() {
   local url="$1"
   # Remove protocol
   url="${url#*://}"
-  # Remove everything after the first slash (path)
-  url="${url%%/*}"
-  # Remove port number
+  # Keep the authority, then remove userinfo and the port.
+  url="${url%%[/?#]*}"
+  url="${url##*@}"
   url="${url%%:*}"
   echo "$url"
 }
@@ -38,24 +41,17 @@ ensure_dir() {
 
 is_https() {
   case "$1" in
-    https://*) return 0 ;;
+    [hH][tT][tT][pP][sS]://*) return 0 ;;
     *) return 1 ;;
   esac
 }
 
 detect_tls() {
-  is_https "$GRAM_SERVER_URL" || is_https "$GRAM_SITE_URL"
-}
-
-show_urls() {
-  printf "\t%s: %s\n\t%s: %s\n" \
-    GRAM_SERVER_URL "$GRAM_SERVER_URL" \
-    GRAM_SITE_URL "$GRAM_SITE_URL" >&2;
+  is_https "$GRAM_SERVER_URL" || is_https "$GRAM_SITE_URL" || is_https "${GRAM_DEVIDP_EXTERNAL_URL:-}"
 }
 
 turn_off_tls() {
   echo "No https endpoints: skipping TLS"
-  show_urls
 
   mise set --file mise.local.toml GRAM_SSL_CERT_FILE=
   mise set --file mise.local.toml GRAM_SSL_KEY_FILE=
@@ -64,10 +60,32 @@ turn_off_tls() {
 
 turn_on_tls() {
   echo "Found https endpoints: enabling TLS"
-  show_urls
 
   mise set --file mise.local.toml GRAM_SSL_CERT_FILE="{{config_root}}/local/ssl/certs/local.pem"
   mise set --file mise.local.toml GRAM_SSL_KEY_FILE="{{config_root}}/local/ssl/keys/local-key.pem"
+  mise set --file mise.local.toml GRAM_HTTP_SCHEME=https
+}
+
+use_tailscale_cert() {
+  local name url host
+  # The Tailscale certificate covers only the machine's Tailnet DNS name, so
+  # every HTTPS endpoint has to use it.
+  for name in GRAM_SERVER_URL GRAM_SITE_URL GRAM_DEVIDP_EXTERNAL_URL \
+    GRAM_ADMIN_SERVER_URL GRAM_ADMIN_BACKEND_URL; do
+    url="${!name:-}"
+    is_https "$url" || continue
+    host="$(extract_hostname "$url")"
+    if [ "$host" != "${GRAM_HOST:-}" ]; then
+      echo "error: $name uses $host, but the Tailscale certificate only covers GRAM_HOST (${GRAM_HOST:-unset})." >&2
+      echo "Run \`mise run zero:tailscale --force\`, or set GRAM_TLS_PROVIDER=mkcert in mise.local.toml." >&2
+      exit 1
+    fi
+  done
+
+  echo "Found https endpoints: using the Tailscale certificate for $GRAM_HOST"
+  mise run tls:tailscale --domain "$GRAM_HOST"
+  mise set --file mise.local.toml GRAM_SSL_CERT_FILE="{{config_root}}/local/ssl/tailscale/cert.pem"
+  mise set --file mise.local.toml GRAM_SSL_KEY_FILE="{{config_root}}/local/ssl/tailscale/key.pem"
   mise set --file mise.local.toml GRAM_HTTP_SCHEME=https
 }
 
@@ -86,6 +104,7 @@ trust_local_ca() {
       echo "Quick recommendation: for fast local development, switch to HTTP to avoid browser certificate warnings:" >&2
       echo "  mise set --file mise.local.toml GRAM_SERVER_URL=http://localhost:8080" >&2
       echo "  mise set --file mise.local.toml GRAM_SITE_URL=http://localhost:5173" >&2
+      echo "  mise set --file mise.local.toml GRAM_DEVIDP_EXTERNAL_URL=http://localhost:${GRAM_DEVIDP_PORT:-35291}" >&2
       echo "Then re-run ./zero and use http://localhost:5173 in your browser." >&2
       echo "" >&2
     fi
@@ -206,9 +225,10 @@ NODE
 }
 
 cert_names() {
-  local site_host server_host extra_hosts
+  local site_host server_host devidp_host extra_hosts
   site_host="$(extract_hostname "$GRAM_SITE_URL")"
   server_host="$(extract_hostname "$GRAM_SERVER_URL")"
+  devidp_host="$(extract_hostname "${GRAM_DEVIDP_EXTERNAL_URL:-}")"
   extra_hosts="$(extra_cert_names)" || return 1
 
   # host.docker.internal lets local assistant runtime containers dial the
@@ -217,6 +237,7 @@ cert_names() {
     printf "%s\n" \
       "$site_host" \
       "$server_host" \
+      "$devidp_host" \
       "localhost" \
       "host.docker.internal" \
       "127.0.0.1" \
@@ -255,6 +276,10 @@ gen_keypair() {
 main() {
   local hosts
   if ! detect_tls; then turn_off_tls && exit 0; fi
+  if [ "${usage_provider:-${GRAM_TLS_PROVIDER:-mkcert}}" = tailscale ]; then
+    use_tailscale_cert
+    exit 0
+  fi
 
   check_command mkcert
   hosts="$(cert_names)"

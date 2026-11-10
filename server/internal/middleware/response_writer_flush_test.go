@@ -32,6 +32,7 @@ func TestResponseWriterWrappersForwardFlush(t *testing.T) {
 		"logging.responseWriter":              newResponseWriter(inner),
 		"admin_security.adminCookieRewriter":  &adminCookieRewriter{ResponseWriter: inner, domain: "example.com", wroteHeader: false},
 		"clear_site_data.clearSiteDataWriter": &clearSiteDataWriter{ResponseWriter: inner, wroteHeader: false},
+		"denial_headers.denialWriter":         &denialWriter{ResponseWriter: inner, recorded: nil, wroteHeader: false},
 	}
 
 	for name, w := range wrappers {

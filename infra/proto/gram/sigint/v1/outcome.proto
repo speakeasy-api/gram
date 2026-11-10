@@ -60,6 +60,10 @@ message Outcome {
     // Speakeasy conversation UUID, not the source system's session identifier.
     string conversation_id = 1;
     Role role = 2;
+    int32 generation = 3;
+    int64 sequence = 4;
+    string capture_kind = 5;
+    string original_message_id = 6;
   }
   // Mirrors Reading.ToolCall.
   message ToolCall {

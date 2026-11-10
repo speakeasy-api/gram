@@ -47,6 +47,11 @@ func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http
 	if assertion == "" {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "assertion is required")
 	}
+	// A session for every server on the issuer targets no one server, so a
+	// per-server choice cannot be honored here; refuse it rather than ignore it.
+	if len(r.PostForm[tokenParamUpstreamAuthClient]) > 0 {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, tokenParamUpstreamAuthClient+" is accepted only on a token request for one MCP server")
+	}
 
 	shared := issuer.authorizationServer
 	urls, err := shared.urls()
@@ -67,7 +72,7 @@ func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http
 	if _, _, err := subject.Workload(); err != nil {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("assertion_subject_invalid", err))
 	}
-	version := runtimepolicy.CurrentDelegatedPolicyVersion
+	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	delegatedGrants, err := encodeIssuerWorkloadSessionPolicy(shared.projectID, version)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode issuer workload session policy").LogError(ctx, logger)
@@ -88,10 +93,15 @@ func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http
 		projectID = &shared.projectID
 	}
 	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{
+		client: nil, beforeCommit: nil,
 		presented:  presented,
 		credential: credential,
 		projectID:  projectID,
 		endpoint:   nil,
+		// A session for every server on the issuer targets no one server, so
+		// its choices are decided when they are recorded.
+		choosesUpstream:      false,
+		requestedAuthClients: nil,
 		session: workloadSessionIssuance(workloadSessionTarget{
 			userSessionIssuerID: shared.issuerID,
 			projectID:           shared.projectID,

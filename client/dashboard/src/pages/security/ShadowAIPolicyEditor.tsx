@@ -1,3 +1,5 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import { RiskPolicyShadowMcpDisposition } from "@gram/client/models/components/riskpolicy.js";
 import { Card } from "@/components/ui/Card";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
@@ -272,9 +274,11 @@ export function ShadowAIPolicyEditor({
   const latest = useRef({ rows, draft });
   latest.current = { rows, draft };
 
-  const disposition: ShadowMCPDisposition =
+  const disposition: ShadowMCPDisposition = requireKnownEnumValue(
+    RiskPolicyShadowMcpDisposition,
     policy?.shadowMcpDisposition ??
-    (policy ? "block_all" : SHADOW_AI_DISPOSITION);
+      (policy ? "block_all" : SHADOW_AI_DISPOSITION),
+  );
 
   const dirty =
     policy !== null &&

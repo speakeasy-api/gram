@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { ModelSelect } from "@/components/model-select";
@@ -8,15 +9,15 @@ import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { AVAILABLE_MODELS } from "@/lib/models";
-import { Assistant } from "@gram/client/models/components/assistant.js";
-import { UpdateAssistantForm } from "@gram/client/models/components/updateassistantform.js";
+import type { Assistant } from "@gram/client/models/components/assistant.js";
+import type { UpdateAssistantForm } from "@gram/client/models/components/updateassistantform.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Row, Section } from "./PanelSection";
+import { AssistantRuntimeSettings } from "./AssistantRuntimeSettings";
 
 type OverviewDraft = {
   name: string;
@@ -152,7 +153,7 @@ export function AssistantOverviewSettings({
           disabled={update.isPending}
         >
           {update.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <Spinner className="mr-0 h-3 w-3" label="Saving" />
           ) : (
             "Save"
           )}
@@ -183,6 +184,11 @@ export function AssistantOverviewSettings({
           onUpdated={onUpdated}
         />
       </Row>
+      <AssistantRuntimeSettings
+        assistant={assistant}
+        canWrite={canWrite}
+        onUpdated={onUpdated}
+      />
       <Row label="Name">
         {editing ? (
           <Input

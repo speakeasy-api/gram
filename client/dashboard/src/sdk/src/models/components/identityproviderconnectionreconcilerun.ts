@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -24,7 +25,7 @@ export const ErrorT = {
 /**
  * Typed reason when the run failed. rate_limited and okta_unreachable are retried before being recorded; superseded means a newer run applied first; discarded means the connection stopped being verified during the run; interrupted means the worker died.
  */
-export type ErrorT = ClosedEnum<typeof ErrorT>;
+export type ErrorT = OpenEnum<typeof ErrorT>;
 
 /**
  * running, succeeded, or failed.
@@ -37,7 +38,7 @@ export const IdentityProviderConnectionReconcileRunStatus = {
 /**
  * running, succeeded, or failed.
  */
-export type IdentityProviderConnectionReconcileRunStatus = ClosedEnum<
+export type IdentityProviderConnectionReconcileRunStatus = OpenEnum<
   typeof IdentityProviderConnectionReconcileRunStatus
 >;
 
@@ -81,15 +82,13 @@ export type IdentityProviderConnectionReconcileRun = {
 };
 
 /** @internal */
-export const ErrorT$inboundSchema: z.ZodMiniEnum<typeof ErrorT> = z.enum(
-  ErrorT,
-);
+export const ErrorT$inboundSchema: z.ZodMiniType<ErrorT, unknown> = openEnums
+  .inboundSchema(ErrorT);
 
 /** @internal */
 export const IdentityProviderConnectionReconcileRunStatus$inboundSchema:
-  z.ZodMiniEnum<typeof IdentityProviderConnectionReconcileRunStatus> = z.enum(
-    IdentityProviderConnectionReconcileRunStatus,
-  );
+  z.ZodMiniType<IdentityProviderConnectionReconcileRunStatus, unknown> =
+    openEnums.inboundSchema(IdentityProviderConnectionReconcileRunStatus);
 
 /** @internal */
 export const IdentityProviderConnectionReconcileRun$inboundSchema:

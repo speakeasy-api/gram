@@ -136,6 +136,58 @@ func TestListChatsReportsTheRowsAssistant(t *testing.T) {
 	require.Equal(t, 1, output.TotalMatches)
 }
 
+// A channel session has no assistant record, so the agent recorded at capture
+// is the only actor the listing can report for it. The human participants of
+// such a session stay masked, as they do for every other chat: naming a
+// non-human principal must not widen what the tool discloses about people.
+func TestListChatsReportsTheActingAgent(t *testing.T) {
+	t.Parallel()
+
+	principal := registrationServicePrincipal()
+	chatID := uuid.New()
+	agentID := uuid.New()
+	row := chatListRow(chatID, chatListTestNow.Add(-time.Hour), "user_1", "", "", 1)
+	row.AgentID = uuid.NullUUID{UUID: agentID, Valid: true}
+	row.AgentName = pgtype.Text{String: "Release assistant", Valid: true}
+	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{row}, params: nil, err: nil, countParams: nil, count: 0}
+	service, _ := newChatMetadataService(t, reader, allowBudget())
+
+	output, err := service.List(t.Context(), principal, ListChatsInput{
+		ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: "",
+	})
+	require.NoError(t, err)
+	require.Len(t, output.Chats, 1)
+	require.Equal(t, agentID.String(), output.Chats[0].AgentID)
+	require.Equal(t, "Release assistant", output.Chats[0].AgentName)
+	require.Empty(t, output.Chats[0].AssistantID, "a channel session has no assistant to report")
+	require.Empty(t, output.Chats[0].AssistantName)
+	require.NotEmpty(t, output.Chats[0].MaskedIdentity, "the person is still masked")
+	require.NotContains(t, output.Chats[0].MaskedIdentity, "user_1")
+}
+
+// An agent deleted since capture resolves to no name. The id is still reported,
+// so the session keeps an actor in its history rather than losing it.
+func TestListChatsReportsADeletedAgentsIDAlone(t *testing.T) {
+	t.Parallel()
+
+	principal := registrationServicePrincipal()
+	chatID := uuid.New()
+	agentID := uuid.New()
+	row := chatListRow(chatID, chatListTestNow.Add(-time.Hour), "user_1", "", "", 1)
+	row.AgentID = uuid.NullUUID{UUID: agentID, Valid: true}
+	row.AgentName = pgtype.Text{String: "", Valid: false}
+	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{row}, params: nil, err: nil, countParams: nil, count: 0}
+	service, _ := newChatMetadataService(t, reader, allowBudget())
+
+	output, err := service.List(t.Context(), principal, ListChatsInput{
+		ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: "",
+	})
+	require.NoError(t, err)
+	require.Len(t, output.Chats, 1)
+	require.Equal(t, agentID.String(), output.Chats[0].AgentID)
+	require.Empty(t, output.Chats[0].AgentName)
+}
+
 // One row per chat is the query's guarantee and the unit every count relies
 // on. A page that breaks it is refused rather than served with counts that no
 // longer mean chats.

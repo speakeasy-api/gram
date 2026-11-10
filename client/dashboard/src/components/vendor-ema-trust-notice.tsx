@@ -9,7 +9,7 @@ export function VendorEmaTrustNotice({
   issuerUrl?: string;
 }): JSX.Element {
   return (
-    <Alert variant="info" alignTop>
+    <Alert variant="info">
       <Text small>
         Each vendor must also enable enterprise-managed authorization in its own
         admin console and trust your identity provider&apos;s issuer

@@ -28,9 +28,67 @@ var hookDeviceHeaderAttrs = map[string]attribute.Key{
 	wire.HeaderDeviceHarness:        attr.HookDeviceHarnessKey,
 	wire.HeaderDeviceHarnessVariant: attr.HookDeviceHarnessVariantKey,
 	wire.HeaderDeviceHarnessVersion: attr.HookDeviceHarnessVersionKey,
+	wire.HeaderDeviceInstallRoute:   attr.HookDeviceInstallRouteKey,
+	wire.HeaderDeviceFailOpen:       attr.HookDeviceFailOpenKey,
+	wire.HeaderDeviceDebugLog:       attr.HookDeviceDebugLogKey,
+	wire.HeaderDeviceSpoolDepth:     attr.HookDeviceSpoolDepthKey,
 }
 
 type hookDeviceContextKey struct{}
+
+type hookEndpointGenerationContextKey struct{}
+
+// Values of the gram.hook.endpoint_generation attribute.
+const (
+	// HookEndpointGenerationLegacyUnkeyed is a retired per-tool endpoint
+	// called without an API key or device token, so it can't be tied to an
+	// org by its credentials.
+	HookEndpointGenerationLegacyUnkeyed = "legacy_unkeyed"
+	// HookEndpointGenerationLegacyKeyed is a retired per-tool endpoint called
+	// with an API key or device token.
+	HookEndpointGenerationLegacyKeyed = "legacy_keyed"
+	// HookEndpointGenerationIngestScript is hooks.ingest from a bash/curl
+	// sender rather than the speakeasy-hooks binary.
+	HookEndpointGenerationIngestScript = "ingest_script"
+	// HookEndpointGenerationIngestBinary is hooks.ingest from the
+	// speakeasy-hooks binary.
+	HookEndpointGenerationIngestBinary = "ingest_binary"
+)
+
+// hookEndpointGeneration classifies a hook request by the endpoint it hit
+// and how it authenticated. It returns "" for routes that carry no hook
+// events. hooks.ingest senders without the binary version header are
+// classified as scripts here; the ingest handler can still recognise a
+// binary from the envelope (see HookEndpointGenerationIngestBinary).
+func hookEndpointGeneration(r *http.Request) string {
+	switch r.URL.Path {
+	case "/rpc/hooks.ingest":
+		if SanitizeDeviceValue(r.Header.Get(wire.HeaderDeviceBinaryVersion)) != "" {
+			return HookEndpointGenerationIngestBinary
+		}
+		return HookEndpointGenerationIngestScript
+	case "/rpc/hooks.claude", "/rpc/hooks.cursor", "/rpc/hooks.codex":
+		if r.Header.Get("Gram-Key") != "" || r.Header.Get("Authorization") != "" {
+			return HookEndpointGenerationLegacyKeyed
+		}
+		return HookEndpointGenerationLegacyUnkeyed
+	default:
+		return ""
+	}
+}
+
+// HookEndpointGeneration returns the endpoint generation HookDeviceTelemetry
+// recorded for the current hook request, or "" when there is none.
+func HookEndpointGeneration(ctx context.Context) string {
+	generation, _ := ctx.Value(hookEndpointGenerationContextKey{}).(string)
+	return generation
+}
+
+// WithHookEndpointGeneration overrides the endpoint generation on ctx, for
+// events written outside the request that delivered them.
+func WithHookEndpointGeneration(ctx context.Context, generation string) context.Context {
+	return context.WithValue(ctx, hookEndpointGenerationContextKey{}, generation)
+}
 
 // HookDeviceAttributes returns the machine details (OS, arch, binary build,
 // harness) the speakeasy-hooks binary reported on the current hook request,
@@ -63,7 +121,7 @@ func HookDeviceTelemetry(next http.Handler) http.Handler {
 		// allocate nothing.
 		var device map[attr.Key]string
 		for header, key := range hookDeviceHeaderAttrs {
-			v := sanitizeDeviceHeader(r.Header.Get(header))
+			v := SanitizeDeviceValue(r.Header.Get(header))
 			if v == "" {
 				continue
 			}
@@ -72,8 +130,15 @@ func HookDeviceTelemetry(next http.Handler) http.Handler {
 			}
 			device[key] = v
 		}
+		ctx := r.Context()
 		if device != nil {
-			r = r.WithContext(context.WithValue(r.Context(), hookDeviceContextKey{}, device))
+			ctx = context.WithValue(ctx, hookDeviceContextKey{}, device)
+		}
+		if generation := hookEndpointGeneration(r); generation != "" {
+			ctx = WithHookEndpointGeneration(ctx, generation)
+		}
+		if ctx != r.Context() {
+			r = r.WithContext(ctx)
 		}
 
 		span := trace.SpanFromContext(r.Context())
@@ -98,12 +163,13 @@ func HookDeviceTelemetry(next http.Handler) http.Handler {
 	})
 }
 
-// sanitizeDeviceHeader bounds an untrusted device-reported header value before
-// it becomes an attribute: trimmed, capped in length, and rejected outright
-// if it carries anything beyond printable ASCII. The cap is applied in bytes
-// before any decoding, so an oversized header costs no allocation; for the
-// printable-ASCII values that survive, bytes and characters are the same.
-func sanitizeDeviceHeader(v string) string {
+// SanitizeDeviceValue bounds an untrusted device-reported value (a header or a
+// report body field) before it becomes an attribute: trimmed, capped in
+// length, and rejected outright if it carries anything beyond printable
+// ASCII. The cap is applied in bytes before any decoding, so an oversized
+// value costs no allocation; for the printable-ASCII values that survive,
+// bytes and characters are the same.
+func SanitizeDeviceValue(v string) string {
 	v = strings.TrimSpace(v)
 	if len(v) > maxDeviceHeaderLen {
 		v = v[:maxDeviceHeaderLen]

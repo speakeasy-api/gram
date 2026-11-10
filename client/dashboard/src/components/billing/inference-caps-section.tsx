@@ -1,3 +1,5 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import { SetSpendCapRequestBodyKeyType } from "@gram/client/models/components/setspendcaprequestbody.js";
 import { InferenceCapControl } from "@/components/billing/inference-cap-control";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { useInferenceCapsMode } from "@/components/billing/inference-caps-mode";
@@ -318,7 +320,11 @@ function InferenceCaps({
     const caps = sortInferenceCaps(data);
     // The transient lock is one state shared by the whole section, so the first
     // control with a field to lock is the one that explains it.
-    const announcer = caps.find((cap) => !cap.disabled)?.keyType;
+    const announcer = caps.find(
+      (cap) =>
+        !cap.disabled &&
+        isKnownEnumValue(SetSpendCapRequestBodyKeyType, cap.keyType),
+    )?.keyType;
 
     return (
       <Stack gap={8}>

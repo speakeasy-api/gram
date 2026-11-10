@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { SlackWorkspaces } from "./slack-workspaces/SlackWorkspaces";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 
@@ -19,8 +20,10 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { ExternalLink, FolderSync, Globe, Loader2, Lock } from "lucide-react";
+import { ExternalLink, FolderSync, Globe, Lock } from "lucide-react";
 import { toast } from "sonner";
+
+import { DirectoryPeopleSummary } from "@/pages/identities/DirectoryPeopleSummary";
 
 import { DirectoryRoleMappings } from "./identity-provider/DirectoryRoleMappings";
 import { IdentityProviders } from "./identity-provider/IdentityProviders";
@@ -151,7 +154,7 @@ function WorkOSPortalButton({
       >
         {generatePortalLink.isPending && (
           <Button.LeftIcon>
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Spinner className="mr-0" />
           </Button.LeftIcon>
         )}
         {label}
@@ -510,20 +513,23 @@ function SingleSignOnTab(): JSX.Element {
         hideCard={showRoleMappings}
         below={
           scimActive && (
-            // "section" renders nothing for non-admins, so the admin-only
-            // listing is never requested.
-            <RequireScope scope="org:admin" level="section">
-              <DirectoryRoleMappings
-                footerAction={
-                  <WorkOSPortalButton
-                    intent="dsync"
-                    errorFallback="Failed to open the directory connection"
-                    label="Manage connection"
-                    external
-                  />
-                }
-              />
-            </RequireScope>
+            <>
+              <DirectoryPeopleSummary className="my-4 text-sm" />
+              {/* "section" renders nothing for non-admins, so the admin-only
+                  listing is never requested. */}
+              <RequireScope scope="org:admin" level="section">
+                <DirectoryRoleMappings
+                  footerAction={
+                    <WorkOSPortalButton
+                      intent="dsync"
+                      errorFallback="Failed to open the directory connection"
+                      label="Manage connection"
+                      external
+                    />
+                  }
+                />
+              </RequireScope>
+            </>
           )
         }
       />

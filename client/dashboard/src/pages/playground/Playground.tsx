@@ -1,3 +1,8 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import {
+  UpdatePromptTemplateFormEngine,
+  UpdatePromptTemplateFormKind,
+} from "@gram/client/models/components/updateprompttemplateform.js";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
@@ -15,15 +20,13 @@ import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
-  useTelemetry,
 } from "@/contexts/Telemetry";
 import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
 import { DEFAULT_MODEL } from "@/lib/models";
-import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
-import { Tool } from "@/lib/toolTypes";
+import type { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useHideInsightsDock } from "@/components/insights-context";
-import { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
+import type { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
 import { queryKeyInstance } from "@gram/client/react-query/instance.js";
 import {
   queryKeyListToolsets,
@@ -40,7 +43,8 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { ChatProvider } from "./ChatContext";
 import { useChatContext } from "./useChatContext";
-import { EditToolDialog, ToolUpdatePayload } from "./EditToolDialog";
+import type { ToolUpdatePayload } from "./EditToolDialog";
+import { EditToolDialog } from "./EditToolDialog";
 import { ManageToolsDialog } from "./ManageToolsDialog";
 import { PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
@@ -89,10 +93,6 @@ function usePlaygroundServers(): {
   const { data: mcpServersData, isLoading: isLoadingMcpServers } =
     useMcpServers();
 
-  const telemetry = useTelemetry();
-  const tunneledEnabled =
-    telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG) === true;
-
   const servers = useMemo<PlaygroundServerRef[]>(() => {
     const toolsetServers: PlaygroundServerRef[] = (
       toolsetsData?.toolsets ?? []
@@ -116,29 +116,29 @@ function usePlaygroundServers(): {
       }));
 
     // Tunneled servers serve at the same /mcp/<slug> path and are the same
-    // McpServer view as remote; they only reach the picker when the flag is on.
+    // McpServer view as remote.
     // Public tunneled servers serve anonymously: the backend 404s every issuer
     // surface even though the issuer column is populated, so drop the issuer id
     // here to keep the playground off the mint/connect path.
-    const tunneledServers: PlaygroundServerRef[] = tunneledEnabled
-      ? (mcpServersData?.mcpServers ?? [])
-          .filter((server) => !!server.tunneledMcpServerId)
-          .map((server) => ({
-            kind: "tunneled",
-            key: mcpServerKey(server.id),
-            name: server.name ?? server.slug ?? "Tunneled MCP server",
-            mcpServerId: server.id,
-            userSessionIssuerId:
-              server.visibility === "public"
-                ? undefined
-                : server.userSessionIssuerId,
-          }))
-      : [];
+    const tunneledServers: PlaygroundServerRef[] = (
+      mcpServersData?.mcpServers ?? []
+    )
+      .filter((server) => !!server.tunneledMcpServerId)
+      .map((server) => ({
+        kind: "tunneled",
+        key: mcpServerKey(server.id),
+        name: server.name ?? server.slug ?? "Tunneled MCP server",
+        mcpServerId: server.id,
+        userSessionIssuerId:
+          server.visibility === "public"
+            ? undefined
+            : server.userSessionIssuerId,
+      }));
 
     return [...toolsetServers, ...remoteServers, ...tunneledServers].sort(
       (a, b) => a.name.localeCompare(b.name),
     );
-  }, [toolsetsData, mcpServersData, tunneledEnabled]);
+  }, [toolsetsData, mcpServersData]);
 
   return { servers, isLoading: isLoadingToolsets || isLoadingMcpServers };
 }
@@ -529,6 +529,11 @@ function ToolsetPanel({
         updatePromptTemplateForm: {
           ...tool,
           ...updates,
+          engine: requireKnownEnumValue(
+            UpdatePromptTemplateFormEngine,
+            tool.engine,
+          ),
+          kind: requireKnownEnumValue(UpdatePromptTemplateFormKind, tool.kind),
         },
       });
       await invalidateTemplate(queryClient, [{ name: tool.name }]);
@@ -637,7 +642,9 @@ function ToolsetPanel({
             await handleToolUpdate(editingTool, updates);
             toast.success("Tool updated");
           } catch (err) {
-            toast.error("Failed to update tool");
+            toast.error(
+              err instanceof Error ? err.message : "Failed to update tool",
+            );
             throw err;
           }
         }}

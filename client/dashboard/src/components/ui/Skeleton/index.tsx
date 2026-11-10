@@ -29,11 +29,21 @@ export interface SkeletonProps {
    * The class name to apply to each child.
    */
   className?: string;
+  /**
+   * What is loading. Set it when the skeleton stands in for content, so screen
+   * readers announce it as a loading status.
+   */
+  label?: string;
+}
+
+function statusProps(label: string | undefined) {
+  return label ? { role: "status", "aria-label": label } : {};
 }
 
 export function Skeleton({
   children,
   className,
+  label,
 }: SkeletonProps): React.JSX.Element {
   // Childless usage is the common case in app code — a single bar sized purely
   // by `className`. Rendering it without the flex column wrapper keeps it
@@ -41,6 +51,7 @@ export function Skeleton({
   if (children === undefined) {
     return (
       <div
+        {...statusProps(label)}
         className={cn(
           "skeleton block h-5 text-transparent select-none",
           className,
@@ -50,7 +61,10 @@ export function Skeleton({
   }
 
   return (
-    <div className="flex w-full flex-col items-start gap-2.5 select-none">
+    <div
+      {...statusProps(label)}
+      className="flex w-full flex-col items-start gap-2.5 select-none"
+    >
       {Children.toArray(children).map((child, index) => {
         if (typeof child === "string") {
           return (
@@ -76,58 +90,51 @@ export function Skeleton({
   );
 }
 
-/** A five-row placeholder shaped like a three-column data table. */
-export function SkeletonTable(): React.JSX.Element {
-  const columns: Column<{ a: string }>[] = [
-    {
-      header: "Name",
-      key: "1",
-      render: () => (
-        <Skeleton>
-          <div className="h-6 w-full" />
-        </Skeleton>
-      ),
-      width: "0.25fr",
-    },
-    {
-      header: "Name",
-      key: "2",
-      render: () => (
-        <Skeleton>
-          <div className="h-6 w-full" />
-        </Skeleton>
-      ),
-      width: "0.5fr",
-    },
-    {
-      header: "Name",
-      key: "3",
-      render: () => (
-        <Skeleton>
-          <div className="h-6 w-full" />
-        </Skeleton>
-      ),
-    },
-  ];
+/**
+ * A five-row placeholder shaped like a data table. Pass `columns` (one grid
+ * width per column) to match the table it stands in for.
+ */
+export function SkeletonTable({
+  className,
+  label,
+  columns: widths = ["0.25fr", "0.5fr", "1fr"],
+}: {
+  className?: string;
+  columns?: Column<{ a: string }>["width"][];
+} & Pick<SkeletonProps, "label"> = {}): React.JSX.Element {
+  const columns: Column<{ a: string }>[] = widths.map((width, i) => ({
+    header: "",
+    key: String(i),
+    render: () => (
+      <Skeleton>
+        <div className="h-6 w-full" />
+      </Skeleton>
+    ),
+    width,
+  }));
 
   return (
-    <Table
-      columns={columns}
-      data={[{ a: "a" }, { a: "b" }, { a: "c" }, { a: "d" }, { a: "e" }]}
-      rowKey={(row) => row.a}
-      hideHeader
-    />
+    <div {...statusProps(label)}>
+      <Table
+        columns={columns}
+        data={[{ a: "a" }, { a: "b" }, { a: "c" }, { a: "d" }, { a: "e" }]}
+        rowKey={(row) => row.a}
+        hideHeader
+        className={className}
+      />
+    </div>
   );
 }
 
 /** Placeholder for a block of prose; the last line is deliberately short. */
 export function SkeletonParagraph({
   lines = 3,
+  label,
 }: {
   lines?: number;
-}): React.JSX.Element {
+} & Pick<SkeletonProps, "label">): React.JSX.Element {
   return (
-    <Skeleton>
+    <Skeleton label={label}>
       {Array.from({ length: lines - 1 }).map((_, i) => (
         <div key={i} className="h-4 w-full" />
       ))}
@@ -139,9 +146,10 @@ export function SkeletonParagraph({
 /** Placeholder for a code block: gutter numbers plus varied line lengths. */
 export function SkeletonCode({
   lines = 24,
+  label,
 }: {
   lines?: number;
-}): React.JSX.Element {
+} & Pick<SkeletonProps, "label">): React.JSX.Element {
   const importLines = Math.floor(lines / 4);
   const codeLines = lines - importLines;
 
@@ -177,7 +185,7 @@ export function SkeletonCode({
   };
 
   return (
-    <div className="border p-4">
+    <div {...statusProps(label)} className="border p-4">
       <Stack gap={2}>
         {Array.from({ length: importLines }).map((_, i) => (
           <CodeLine key={`import-${i}`} width="w-36" />

@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import SkillsList from "./SkillsList";
 
 const testState = vi.hoisted(() => ({
@@ -89,42 +90,8 @@ vi.mock("nuqs", () => ({
   useQueryState: () => [null, vi.fn()],
 }));
 vi.mock("./ArchiveSkillDialog", () => ({ ArchiveSkillDialog: () => null }));
-vi.mock("react-router", () => ({
-  Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
-  Navigate: () => null,
-  useNavigate: () => vi.fn(),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    skills: {
-      href: () => "/skills",
-      detail: { href: (id: string) => `/skills/${id}` },
-    },
-    policyCenter: {
-      new: {
-        Link: ({
-          children,
-          queryParams,
-        }: {
-          children: ReactNode;
-          queryParams: Record<string, string>;
-        }) => (
-          <a href={`/risk-policies/new?${new URLSearchParams(queryParams)}`}>
-            {children}
-          </a>
-        ),
-      },
-      detail: {
-        Link: ({
-          children,
-          params,
-        }: {
-          children: ReactNode;
-          params: string[];
-        }) => <a href={`/risk-policies/${params[0]}`}>{children}</a>,
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
   invalidateAllRiskListPolicies: testState.invalidatePolicies,
@@ -304,13 +271,7 @@ vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({
-    children,
-    scope,
-  }: {
-    children: ReactNode;
-    scope: string;
-  }) =>
+  RequireScope: ({ children, scope }: { children: ReactNode; scope: string }) =>
     scope === "org:admin" && !testState.adminAllowed ? null : <>{children}</>,
 }));
 vi.mock("@/components/ui/Tooltip", () => ({
@@ -395,15 +356,15 @@ vi.mock("@/components/ui/Table", () => ({
     ) => void;
   }) => {
     const sortableColumns = columns.filter((column) => column.sortable);
-    const nextSort = (column: (typeof columns)[number]) => {
-      if (sort?.id !== column.key) {
-        return { id: column.key, direction: "asc" as const };
-      }
-      if (sort.direction === "asc") {
-        return { id: column.key, direction: "desc" as const };
-      }
-      return null;
-    };
+    // Two states, as the real Table has: a sorted column toggles ascending
+    // and descending and never returns to unsorted.
+    const nextSort = (column: (typeof columns)[number]) => ({
+      id: column.key,
+      direction:
+        sort?.id === column.key && sort.direction === "asc"
+          ? ("desc" as const)
+          : ("asc" as const),
+    });
 
     return (
       <div>
@@ -424,9 +385,7 @@ vi.mock("@/components/ui/Table", () => ({
           const action =
             direction === "asc"
               ? `Sort by ${label} descending`
-              : direction === "desc"
-                ? `Clear sort for ${label}`
-                : `Sort by ${label} ascending`;
+              : `Sort by ${label} ascending`;
           return (
             <button
               data-sortable-id={column.key}
@@ -539,7 +498,7 @@ describe("SkillsList pagination surfaces", () => {
   it("sends the accessible-by selection to the skills request", () => {
     testState.accessibleBy = ["user_a", "user_b"];
 
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(testState.skillRequests).toContainEqual(
       expect.objectContaining({ accessibleBy: ["user_a", "user_b"] }),
@@ -551,7 +510,7 @@ describe("SkillsList pagination surfaces", () => {
     testState.accessibleBy = ["user_a"];
     testState.reachableSkillIds = { user_a: ["skill_1", "skill_3"] };
 
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(screen.getByText("Example 1")).toBeTruthy();
     expect(screen.getByText("Example 3")).toBeTruthy();
@@ -560,7 +519,7 @@ describe("SkillsList pagination surfaces", () => {
   });
 
   it("requests only list-visible insight metrics", () => {
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(testState.insightRequests).toContainEqual(
       expect.objectContaining({
@@ -571,11 +530,11 @@ describe("SkillsList pagination surfaces", () => {
   });
 
   it("links admins to prompt injection policy setup", () => {
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     const link = screen.getByRole("link", { name: "Set up scanning" });
     expect(link.getAttribute("href")).toBe(
-      "/risk-policies/new?kind=standard&category=prompt_injection",
+      "/org/projects/project/risk-policies/new?kind=standard&category=prompt_injection",
     );
   });
 
@@ -588,16 +547,18 @@ describe("SkillsList pagination surfaces", () => {
       },
     ];
 
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     const link = screen.getByRole("link", { name: "View policy" });
-    expect(link.getAttribute("href")).toBe("/risk-policies/policy_pi");
+    expect(link.getAttribute("href")).toBe(
+      "/org/projects/project/risk-policies/policy_pi",
+    );
   });
 
   it("does not load policy configuration for non-admin skill readers", () => {
     testState.adminAllowed = false;
 
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(screen.queryByText("Set up prompt injection scanning")).toBeNull();
     expect(testState.policyHookCalls).toBe(0);
@@ -606,7 +567,7 @@ describe("SkillsList pagination surfaces", () => {
   it("shows a retry when prompt injection policy status fails to load", () => {
     testState.policyError = new Error("policy request failed");
 
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(
       screen.getByText("Unable to load prompt injection policy"),
@@ -618,7 +579,7 @@ describe("SkillsList pagination surfaces", () => {
   });
 
   it("refreshes prompt injection policy status with the skills page", () => {
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
 
@@ -628,7 +589,7 @@ describe("SkillsList pagination surfaces", () => {
   });
 
   it("shows only the compact skills table columns", () => {
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(
       Array.from(
@@ -662,7 +623,7 @@ describe("SkillsList pagination surfaces", () => {
   });
 
   it("sorts the approved columns through header controls without a toolbar sort", () => {
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(
       screen
@@ -681,13 +642,13 @@ describe("SkillsList pagination surfaces", () => {
     ).toBeNull();
   });
 
-  it("sorts the current server page by skill and clears back to backend order", () => {
+  it("opens on the backend's order and sorts the current server page by skill", () => {
     testState.skills = [
       { ...makeSkills(1)[0], id: "zulu", displayName: "Zulu" },
       { ...makeSkills(1)[0], id: "alpha", displayName: "Alpha" },
       { ...makeSkills(1)[0], id: "mike", displayName: "Mike" },
     ];
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(renderedSkillNames()).toEqual(["Zulu", "Alpha", "Mike"]);
     fireEvent.click(
@@ -698,10 +659,13 @@ describe("SkillsList pagination surfaces", () => {
       screen.getByRole("button", { name: "Sort by Skill descending" }),
     );
     expect(renderedSkillNames()).toEqual(["Zulu", "Mike", "Alpha"]);
+    // Back to ascending rather than to no sort at all: the column keeps an
+    // order, and the list opens on the server's own order instead of needing
+    // a click that gets back to it.
     fireEvent.click(
-      screen.getByRole("button", { name: "Clear sort for Skill" }),
+      screen.getByRole("button", { name: "Sort by Skill ascending" }),
     );
-    expect(renderedSkillNames()).toEqual(["Zulu", "Alpha", "Mike"]);
+    expect(renderedSkillNames()).toEqual(["Alpha", "Mike", "Zulu"]);
     expect(testState.metricSkillRequests).toEqual([]);
   });
 
@@ -731,7 +695,7 @@ describe("SkillsList pagination surfaces", () => {
         ],
       },
     };
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -781,7 +745,7 @@ describe("SkillsList pagination surfaces", () => {
         ],
       },
     };
-    const { rerender } = render(<SkillsList />);
+    const { rerender } = render(<SkillsList />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -807,7 +771,7 @@ describe("SkillsList pagination surfaces", () => {
   });
 
   it("keeps an active header sort when search resets pagination", () => {
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -827,7 +791,7 @@ describe("SkillsList pagination surfaces", () => {
   });
 
   it("keeps an active header sort when filters reset pagination", () => {
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -847,13 +811,13 @@ describe("SkillsList pagination surfaces", () => {
   });
 
   it("requests suggestion pages with the exact supported limit", () => {
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(testState.suggestionRequests[0]).toEqual({ limit: 50 });
   });
 
   it("pages rendered rows and resets to the first page when search changes", async () => {
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
     expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
     expect(screen.getByText("Example 0")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
@@ -871,7 +835,7 @@ describe("SkillsList pagination surfaces", () => {
     testState.hasNextPage = true;
     testState.isFetchNextPageError = true;
     testState.error = new Error("next page failed");
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
     fireEvent.click(
       screen.getByRole("button", {
         name: "Sort by Activations (30d) ascending",
@@ -894,7 +858,7 @@ describe("SkillsList pagination surfaces", () => {
     testState.hasNextPage = true;
     testState.isFetchNextPageError = true;
     testState.error = new Error("next page failed");
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
     fireEvent.click(screen.getByRole("button", { name: "Apply search" }));
     fireEvent.click(
       screen.getByRole("button", {
@@ -909,7 +873,7 @@ describe("SkillsList pagination surfaces", () => {
   });
 
   it("hides unknown activations when none exist", () => {
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(screen.queryByText("Unknown activations")).toBeNull();
     expect(
@@ -928,7 +892,7 @@ describe("SkillsList pagination surfaces", () => {
         seenAt: new Date("2026-07-16T00:00:00Z"),
       },
     ];
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       screen.getByRole("button", { name: "View unknown activations" }),
@@ -938,7 +902,7 @@ describe("SkillsList pagination surfaces", () => {
 
   it("only drains skill pages when a metric sort is selected", async () => {
     testState.hasNextPage = true;
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(testState.fetchNextPage).not.toHaveBeenCalled();
     expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
@@ -957,7 +921,7 @@ describe("SkillsList pagination surfaces", () => {
   it("shows and retries an insights failure without hiding loaded skills", () => {
     testState.insightsData = undefined;
     testState.insightsError = new Error("insights unavailable");
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(screen.getByText("Unable to load skill insights")).toBeTruthy();
     expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
@@ -969,7 +933,7 @@ describe("SkillsList pagination surfaces", () => {
     testState.hasNextPage = true;
     testState.insightsData = undefined;
     testState.insightsError = new Error("insights unavailable");
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -990,7 +954,7 @@ describe("SkillsList pagination surfaces", () => {
       { ...makeSkills(1)[0], id: "mike", displayName: "Mike" },
       ...makeSkills(48),
     ];
-    const { rerender } = render(<SkillsList />);
+    const { rerender } = render(<SkillsList />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -1032,7 +996,7 @@ describe("SkillsList pagination surfaces", () => {
     testState.suggestions = [makeSuggestion(0)];
     testState.suggestionTotal = 2;
     testState.suggestionHasNextPage = true;
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(screen.getByText("Suggested edit")).toBeTruthy();
     await waitFor(() =>
@@ -1044,7 +1008,7 @@ describe("SkillsList pagination surfaces", () => {
     testState.suggestions = [makeSuggestion(0)];
     testState.suggestionTotal = 2;
     testState.suggestionError = new Error("suggestions unavailable");
-    render(<SkillsList />);
+    render(<SkillsList />, { wrapper: MemoryRouter });
 
     expect(screen.getByText("suggestions unavailable")).toBeTruthy();
     fireEvent.click(

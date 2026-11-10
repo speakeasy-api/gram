@@ -3351,22 +3351,29 @@ func NewTransferInGatewayErrorResponseBody(res *goa.ServiceError) *TransferInGat
 }
 
 // NewCallbackPayload builds a auth service callback endpoint payload.
-func NewCallbackPayload(code string, state *string) *auth.CallbackPayload {
+func NewCallbackPayload(code *string, error_ *string, state *string) *auth.CallbackPayload {
 	v := &auth.CallbackPayload{}
 	v.Code = code
+	v.Error = error_
 	v.State = state
 
 	return v
 }
 
 // NewLoginPayload builds a auth service login endpoint payload.
-func NewLoginPayload(redirect *string, orgName *string, partnerCode *string, email *string, supportHandoff *string) *auth.LoginPayload {
+func NewLoginPayload(redirect *string, orgName *string, partnerCode *string, email *string, supportHandoff *string, utmSource *string, utmMedium *string, utmCampaign *string, utmTerm *string, utmContent *string, analyticsSessionID *string) *auth.LoginPayload {
 	v := &auth.LoginPayload{}
 	v.Redirect = redirect
 	v.OrgName = orgName
 	v.PartnerCode = partnerCode
 	v.Email = email
 	v.SupportHandoff = supportHandoff
+	v.UtmSource = utmSource
+	v.UtmMedium = utmMedium
+	v.UtmCampaign = utmCampaign
+	v.UtmTerm = utmTerm
+	v.UtmContent = utmContent
+	v.AnalyticsSessionID = analyticsSessionID
 
 	return v
 }
@@ -3437,11 +3444,12 @@ func NewTransferOutPayload(targetHost *string, nonce *string, redirect *string, 
 }
 
 // NewTransferInPayload builds a auth service transferIn endpoint payload.
-func NewTransferInPayload(sourceHost *string, code *string, redirect *string) *auth.TransferInPayload {
+func NewTransferInPayload(sourceHost *string, code *string, redirect *string, replaceSession *bool) *auth.TransferInPayload {
 	v := &auth.TransferInPayload{}
 	v.SourceHost = sourceHost
 	v.Code = code
 	v.Redirect = redirect
+	v.ReplaceSession = replaceSession
 
 	return v
 }

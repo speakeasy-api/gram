@@ -10,6 +10,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/speakeasy-api/agenthooks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,12 +70,13 @@ func startIdentitySocket(t *testing.T, status int, body string) string {
 	return socket
 }
 
-// isolateInstalledAgent hides machine-wide speakeasyd installs for the test.
-// Without it a real daemon at /usr/local/bin (as on any enrolled developer
-// machine) answers the exec tier and the assertion reads that machine's
-// identity instead of the fixture's.
+// isolateInstalledAgent hides machine-wide speakeasyd installs, and any under
+// the developer's XDG_STATE_HOME, for the test. Without it a real daemon at
+// /usr/local/bin (as on any enrolled developer machine) answers the exec tier
+// and the assertion reads that machine's identity instead of the fixture's.
 func isolateInstalledAgent(t *testing.T) {
 	t.Helper()
+	t.Setenv("XDG_STATE_HOME", "")
 	previous := machineWideAgentPaths
 	machineWideAgentPaths = nil
 	t.Cleanup(func() { machineWideAgentPaths = previous })
@@ -162,6 +164,33 @@ func TestDeviceAgentEmailFindsAgentOffPATH(t *testing.T) {
 
 	require.Contains(t, deviceAgentCommands(), agent)
 	require.Equal(t, "managed@example.com", deviceAgentEmail(t.Context()))
+}
+
+func TestDeviceAgentCommandsFindsXDGStateInstall(t *testing.T) {
+	// The dashboard's Linux setup installs both binaries into
+	// ~/.local/state/speakeasy/bin, off PATH and apart from the SDK
+	// generator's ~/.speakeasy folder.
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		t.Skip("XDG state install location is Linux-only")
+	}
+	isolateInstalledAgent(t)
+	home := t.TempDir()
+	stateHome := t.TempDir()
+	defaultAgent := filepath.Join(home, ".local", "state", "speakeasy", "bin", "speakeasyd")
+	xdgAgent := filepath.Join(stateHome, "speakeasy", "bin", "speakeasyd")
+	for _, agent := range []string{defaultAgent, xdgAgent} {
+		require.NoError(t, os.MkdirAll(filepath.Dir(agent), 0o755))
+		require.NoError(t, os.WriteFile(agent, []byte("#!/bin/sh\n"), 0o700))
+	}
+
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+
+	commands := deviceAgentCommands()
+	require.Contains(t, commands, xdgAgent)
+	require.Contains(t, commands, defaultAgent)
 }
 
 func TestTopLevelPayloadEmailIgnoresNestedValues(t *testing.T) {
@@ -311,4 +340,57 @@ func writeCodexExtension(t *testing.T, home, editorDir, version string) string {
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
 	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o700))
 	return path
+}
+
+// noClaudeAccount isolates the test from the developer's own Claude session:
+// no device agent answers, and neither the env var nor a config file names an
+// account until the test sets one.
+func noClaudeAccount(t *testing.T) string {
+	t.Helper()
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	t.Setenv("CLAUDE_CODE_USER_EMAIL", "")
+	config := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", config)
+	return config
+}
+
+func TestResolveUserEmailReadsClaudeAccountInCowork(t *testing.T) {
+	claude := &agenthooks.Event{Provider: agenthooks.ProviderClaudeCode}
+
+	t.Run("env var", func(t *testing.T) {
+		noClaudeAccount(t)
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "remote_cowork")
+		t.Setenv("CLAUDE_CODE_USER_EMAIL", "cowork@example.com")
+		require.Equal(t, "cowork@example.com", resolveUserEmail(t.Context(), claude))
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		config := noClaudeAccount(t)
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "remote_cowork")
+		require.NoError(t, os.WriteFile(filepath.Join(config, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"file@example.com"}}`), 0o600))
+		require.Equal(t, "file@example.com", resolveUserEmail(t.Context(), claude))
+	})
+
+	t.Run("invalid env var falls back to the config file", func(t *testing.T) {
+		config := noClaudeAccount(t)
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "remote_cowork")
+		t.Setenv("CLAUDE_CODE_USER_EMAIL", "not-an-email")
+		require.NoError(t, os.WriteFile(filepath.Join(config, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"file@example.com"}}`), 0o600))
+		require.Equal(t, "file@example.com", resolveUserEmail(t.Context(), claude))
+	})
+
+	t.Run("invalid values are ignored", func(t *testing.T) {
+		config := noClaudeAccount(t)
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "remote_cowork")
+		t.Setenv("CLAUDE_CODE_USER_EMAIL", "not-an-email")
+		require.NoError(t, os.WriteFile(filepath.Join(config, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"also-not"}}`), 0o600))
+		require.Empty(t, resolveUserEmail(t.Context(), claude))
+	})
+
+	t.Run("outside Cowork", func(t *testing.T) {
+		noClaudeAccount(t)
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
+		t.Setenv("CLAUDE_CODE_USER_EMAIL", "cowork@example.com")
+		require.Empty(t, resolveUserEmail(t.Context(), claude))
+	})
 }

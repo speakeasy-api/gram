@@ -54,7 +54,7 @@ func TestEvaluateGrantCheck_rootGrantNotSelfExcluded(t *testing.T) {
 		t.Run(string(tc.scope), func(t *testing.T) {
 			t.Parallel()
 
-			eval, err := evaluateGrantCheck(grants, Check{Scope: tc.scope, ResourceKind: "", ResourceID: tc.resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal})
+			eval, err := evaluateGrantCheck(grants, Check{Scope: tc.scope, ResourceKind: "", ResourceID: tc.resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""})
 			require.NoError(t, err)
 			require.False(t, eval.Denied)
 			require.NotNil(t, eval.Grant)
@@ -69,8 +69,8 @@ func TestGrantExpressionEvaluate_differenceWorksForGenericChecks(t *testing.T) {
 		NewGrant(ScopeProjectRead, "proj_123"),
 		NewGrant(ScopeProjectWrite, "proj_123"),
 	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
-	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
 
 	result, err := GrantDifference{
 		Base:      GrantCheck{Check: readCheck, Instance: nil},
@@ -88,8 +88,8 @@ func TestGrantExpressionEvaluate_differenceKeepsNonMatchingSetKey(t *testing.T) 
 		NewGrant(ScopeProjectRead, "proj_123"),
 		NewGrant(ScopeProjectWrite, "proj_123"),
 	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
-	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
 
 	result, err := GrantDifference{
 		Base: GrantCheck{
@@ -113,9 +113,9 @@ func TestGrantExpressionEvaluate_nestedDifferencePreservesExclusionReason(t *tes
 		NewGrant(ScopeProjectRead, "proj_123"),
 		NewGrant(ScopeProjectWrite, "proj_123"),
 	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
-	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
-	otherCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_other", Dimensions: nil, selectorMatch: selectorMatchNormal}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	otherCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_other", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
 	instance := Selector{SelectorKeyResourceKind: ResourceKindProject, SelectorKeyResourceID: "proj_123"}
 
 	result, err := GrantDifference{
@@ -143,22 +143,24 @@ func TestGrantExpressionEvaluate_projectWriteBlocklistSubtractsProductionSelecto
 	}
 
 	result, err := expressionForCheck(Check{
-		Scope:         ScopeProjectWrite,
-		ResourceKind:  "",
-		ResourceID:    projectID,
-		Dimensions:    nil,
-		selectorMatch: selectorMatchNormal,
+		Scope:           ScopeProjectWrite,
+		ResourceKind:    "",
+		ResourceID:      projectID,
+		Dimensions:      nil,
+		selectorMatch:   selectorMatchNormal,
+		representedUser: "",
 	}).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 
 	result, err = expressionForCheck(Check{
-		Scope:         ScopeProjectWrite,
-		ResourceKind:  "",
-		ResourceID:    "project_other",
-		Dimensions:    nil,
-		selectorMatch: selectorMatchNormal,
+		Scope:           ScopeProjectWrite,
+		ResourceKind:    "",
+		ResourceID:      "project_other",
+		Dimensions:      nil,
+		selectorMatch:   selectorMatchNormal,
+		representedUser: "",
 	}).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)
@@ -175,11 +177,12 @@ func TestGrantExpressionEvaluate_projectReadBlocklistSubtractsProjectWrite(t *te
 	}
 
 	result, err := expressionForCheck(Check{
-		Scope:         ScopeProjectWrite,
-		ResourceKind:  "",
-		ResourceID:    projectID,
-		Dimensions:    nil,
-		selectorMatch: selectorMatchNormal,
+		Scope:           ScopeProjectWrite,
+		ResourceKind:    "",
+		ResourceID:      projectID,
+		Dimensions:      nil,
+		selectorMatch:   selectorMatchNormal,
+		representedUser: "",
 	}).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
@@ -210,11 +213,12 @@ func TestGrantExpressionEvaluate_mcpWriteBlocklistSubtractsProductionSelector(t 
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
 
 	result, err = expressionForCheck(Check{
-		Scope:         ScopeMCPWrite,
-		ResourceKind:  "",
-		ResourceID:    "dimensionless_probe",
-		Dimensions:    nil,
-		selectorMatch: selectorMatchNormal,
+		Scope:           ScopeMCPWrite,
+		ResourceKind:    "",
+		ResourceID:      "dimensionless_probe",
+		Dimensions:      nil,
+		selectorMatch:   selectorMatchNormal,
+		representedUser: "",
 	}).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)
@@ -262,11 +266,12 @@ func TestGrantExpressionEvaluate_mcpConnectBlocklistLeavesMCPWrite(t *testing.T)
 	}
 
 	write := Check{
-		Scope:         ScopeMCPWrite,
-		ResourceKind:  "",
-		ResourceID:    serverID,
-		Dimensions:    nil,
-		selectorMatch: selectorMatchNormal,
+		Scope:           ScopeMCPWrite,
+		ResourceKind:    "",
+		ResourceID:      serverID,
+		Dimensions:      nil,
+		selectorMatch:   selectorMatchNormal,
+		representedUser: "",
 	}
 	result, err := expressionForCheck(write).Evaluate(grants)
 	require.NoError(t, err)

@@ -25,12 +25,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	gatewaymcp "github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/memberbindings"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -45,10 +48,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 )
 
 type Service struct {
 	tracerProvider           trace.TracerProvider
+	codeModeSelection        codemode.SelectionGate
 	tracer                   trace.Tracer
 	logger                   *slog.Logger
 	db                       *pgxpool.Pool
@@ -60,6 +66,8 @@ type Service struct {
 	distributionAdmission    *admission.Guard
 	publisher                plugins.PluginPublishSignaler
 	publicationRequests      plugins.PublicationRequests
+	// revoker handles grants orphaned when a deleted gateway releases its issuer.
+	revoker *remotesessions.UpstreamRevoker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -74,11 +82,15 @@ func NewService(
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	networkAccessEligibility networkaccess.EligibilityChecker,
+	codeModeSelection codemode.SelectionGate,
+	revoker *remotesessions.UpstreamRevoker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("metamcp"))
 
 	return &Service{
 		tracerProvider:           tracerProvider,
+		codeModeSelection:        codeModeSelection,
+		revoker:                  revoker,
 		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
 		logger:                   logger,
 		db:                       db,
@@ -212,7 +224,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return mv.BuildMetaMcpServerView(created), nil
+	return withGatewayCapabilities(mv.BuildMetaMcpServerView(created), s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID)), nil
 }
 
 func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpServerPayload) (*types.MetaMcpServer, error) {
@@ -242,7 +254,7 @@ func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpS
 		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildMetaMcpServerView(row), nil
+	return withGatewayCapabilities(mv.BuildMetaMcpServerView(row), s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID)), nil
 }
 
 func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaMcpServersPayload) (*gen.ListMetaMcpServersResult, error) {
@@ -263,7 +275,12 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 		return nil, oops.E(oops.CodeUnexpected, err, "list meta mcp servers").LogError(ctx, s.logger)
 	}
 
-	return &gen.ListMetaMcpServersResult{MetaMcpServers: mv.BuildMetaMcpServerListView(rows)}, nil
+	views := mv.BuildMetaMcpServerListView(rows)
+	codeModeAllowed := s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID)
+	for _, view := range views {
+		withGatewayCapabilities(view, codeModeAllowed)
+	}
+	return &gen.ListMetaMcpServersResult{MetaMcpServers: views}, nil
 }
 
 func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMetaMcpServerPayload) (*types.MetaMcpServer, error) {
@@ -308,6 +325,13 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, logger)
 	}
+	preflightDiscovery := gatewaymcp.ResolveDiscoveryMode(unlocked.DiscoveryMode)
+	// Evaluate external gates before taking project/row locks or a transaction connection.
+	if payload.DiscoveryMode != nil && *payload.DiscoveryMode != string(preflightDiscovery) &&
+		*payload.DiscoveryMode == string(gatewaymcp.DiscoveryModeCode) && !s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID) {
+		return nil, oops.E(oops.CodeForbidden, nil, "gateway code mode is not available")
+	}
+
 	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
 	if err != nil {
 		if payload.NetworkAccessMode == nil {
@@ -345,15 +369,21 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "lock meta mcp server").LogError(ctx, logger)
 	}
 
+	// Reject a changed baseline instead of using a gate evaluated for another mode.
+	if payload.DiscoveryMode != nil && gatewaymcp.ResolveDiscoveryMode(existing.DiscoveryMode) != preflightDiscovery {
+		return nil, oops.E(oops.CodeConflict, nil, "gateway discovery mode changed concurrently; retry the update")
+	}
+
 	// Defensive issuer wiring, mirroring create: an omitted issuer preserves
 	// the existing one (matching UpdateMCPServer's COALESCE) and a gateway
 	// that would end up issuer-less gets one minted, so no update path can
-	// strand a gateway in the anonymous trap.
+	// strand a gateway in the anonymous trap. It also keeps every Code Mode
+	// gateway signed in: anonymous callers never get Code Mode.
 	if !issuerID.Valid {
 		issuerID = existing.UserSessionIssuerID
 	}
 	if !issuerID.Valid {
-		issuerID, err = mcpservers.MintServerUserSessionIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, payload.Name)
+		issuerID, err = serverissuer.Mint(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, payload.Name)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "mint meta mcp issuer").LogError(ctx, logger)
 		}
@@ -420,15 +450,25 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		if ierr != nil {
 			return nil, oops.E(oops.CodeUnexpected, ierr, "list member provider identities").LogError(ctx, logger)
 		}
+		// The members' provider clients were bound to the old issuer for this
+		// gateway, which no longer signs in through it.
+		if existing.UserSessionIssuerID.Valid {
+			previous := memberbindings.Gateway{ID: existing.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, UserSessionIssuerID: existing.UserSessionIssuerID.UUID}
+			for _, identity := range identities {
+				if err := memberbindings.DetachProvider(ctx, dbtx, logger, previous, identity.McpServerID, identity.RemoteSessionIssuerID); err != nil {
+					return nil, oops.E(oops.CodeUnexpected, err, "unbind member provider client from previous issuer").LogError(ctx, logger)
+				}
+			}
+		}
 		for _, identity := range identities {
-			if lerr := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, identity.RemoteSessionIssuerID.UUID); lerr != nil {
+			if lerr := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, identity.RemoteSessionIssuerID); lerr != nil {
 				return nil, oops.E(oops.CodeUnexpected, lerr, "lock remote session issuer for client binding").LogError(ctx, logger)
 			}
 			if _, aerr := txRepo.AutoAttachMemberProviderClient(ctx, repo.AutoAttachMemberProviderClientParams{
 				GatewayIssuerID: issuerID.UUID,
 				ProjectID:       *authCtx.ProjectID,
-				MemberIssuerID:  identity.UserSessionIssuerID.UUID,
-				RemoteIssuerID:  identity.RemoteSessionIssuerID.UUID,
+				MemberServerID:  identity.McpServerID,
+				RemoteIssuerID:  identity.RemoteSessionIssuerID,
 			}); aerr != nil {
 				return nil, oops.E(oops.CodeUnexpected, aerr, "attach member provider client").LogError(ctx, logger)
 			}
@@ -467,7 +507,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, false)
 
-	return afterView, nil
+	return withGatewayCapabilities(afterView, s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID)), nil
 }
 
 // UpdateMetaMCPServerNetworkAccessModeInTransaction changes only an existing
@@ -491,11 +531,11 @@ func UpdateMetaMCPServerNetworkAccessModeInTransaction(ctx context.Context, tx p
 	if err != nil {
 		return repo.MetaMcpServer{}, fmt.Errorf("lock gateway: %w", err)
 	}
-	updated, err := tx.Exec(ctx, `UPDATE meta_mcp_servers SET network_access_mode = $1, updated_at = clock_timestamp() WHERE id = $2 AND organization_id = $3 AND project_id = $4 AND deleted IS FALSE`, networkaccess.Storage(mode), serverID, organizationID, projectID)
+	updated, err := queries.UpdateMetaMCPServerNetworkAccessMode(ctx, repo.UpdateMetaMCPServerNetworkAccessModeParams{NetworkAccessMode: networkaccess.Storage(mode), ID: serverID, OrganizationID: organizationID, ProjectID: projectID})
 	if err != nil {
 		return repo.MetaMcpServer{}, fmt.Errorf("update gateway network access mode: %w", err)
 	}
-	if updated.RowsAffected() != 1 {
+	if updated != 1 {
 		return repo.MetaMcpServer{}, pgx.ErrNoRows
 	}
 	after, err := queries.GetMetaMCPServer(ctx, repo.GetMetaMCPServerParams{ID: serverID, OrganizationID: organizationID, ProjectID: projectID})
@@ -555,6 +595,11 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	// The members' associations are pruned before commit, which needs the
+	// project's writer scope ahead of every row lock.
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock upstream client writer scope").LogError(ctx, logger)
+	}
 	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
 	}
@@ -688,9 +733,27 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete meta mcp server").LogError(ctx, logger)
 	}
+	// The members bound their provider clients to the gateway's issuer, and the
+	// gateway may have been the issuer's last user, as a deleted MCP server can be.
+	var orphanCreds []remotesessions.RevokedCredentials
+	if existing.UserSessionIssuerID.Valid {
+		gateway := memberbindings.Gateway{ID: existing.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, UserSessionIssuerID: existing.UserSessionIssuerID.UUID}
+		for _, member := range members {
+			if err := memberbindings.DetachServerProvider(ctx, dbtx, logger, gateway, member.McpServerID); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "unbind gateway member provider client").LogError(ctx, logger)
+			}
+		}
+		orphanCreds, err = lifecycle.ReleaseUnownedIssuer(ctx, dbtx, s.revoker, s.audit, lifecycle.ReleaseActor{
+			Principal:   actor,
+			DisplayName: authCtx.Email,
+		}, authCtx.ActiveOrganizationID, *authCtx.ProjectID, existing.UserSessionIssuerID.UUID)
+		if err != nil {
+			return err //nolint:wrapcheck // oops errors pass through.
+		}
+	}
 	// The admission lock taken above precedes the gateway row lock, as the
 	// risk policy cleanup requires.
-	deletedPolicies, err := policylifecycle.NewCleaner(s.tracerProvider, s.audit).SoftDeleteForMCPServer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, deleted.ID, policylifecycle.Actor{
+	policyCleanup, err := policylifecycle.NewCleaner(s.tracerProvider, s.audit).SoftDeleteForMCPServer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, deleted.ID, policylifecycle.Actor{
 		Principal:   actor,
 		DisplayName: authCtx.Email,
 		Slug:        nil,
@@ -711,6 +774,12 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		return oops.E(oops.CodeUnexpected, err, "log meta mcp server deletion").LogError(ctx, logger)
 	}
 
+	// The gateway's members left with it, so the associations its issuer
+	// served them go now, as removing each member would.
+	if err := upstreamclients.ReconcileInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, nil); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "prune gateway members' upstream clients").LogError(ctx, logger)
+	}
+
 	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "enqueue gateway publication").LogError(ctx, logger)
 	}
@@ -718,9 +787,16 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// The denormalized issuer column of servers sharing the gateway's issuer
+	// is restamped after commit, like every client binding writer's.
+	if existing.UserSessionIssuerID.Valid {
+		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{existing.UserSessionIssuerID.UUID})
+	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, len(detached) > 0)
+	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
+	s.revoker.RevokeAllDetached(ctx, orphanCreds)
 	resultsCleaner := background.TemporalRiskPolicyResultsCleaner{TemporalEnv: s.temporalEnv, Logger: logger}
-	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, deletedPolicies)
+	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, policyCleanup.Deleted)
 	if err := s.reconcileCustomDomains(ctx, rootDomainIDs(rootEndpoints)); err != nil {
 		return err
 	}
@@ -821,7 +897,7 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	AfterMembershipCommit(ctx, logger, s.db, s.publisher, actor, meta, added.IssuerWired)
+	AfterMembershipCommit(ctx, logger, s.db, s.publisher, actor, meta)
 
 	return mv.BuildMetaMcpMemberViewFromParts(added.Member, added.Server), nil
 }
@@ -916,6 +992,11 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	// RemoveMember prunes the member's associations, which needs the project's
+	// writer scope ahead of every row lock.
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock upstream client writer scope").LogError(ctx, logger)
+	}
 
 	existing, err := repo.New(dbtx).LockMetaMCPMember(ctx, repo.LockMetaMCPMemberParams{
 		ID:        memberID,
@@ -941,7 +1022,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	}
 
 	actor := actorFromAuthContext(authCtx)
-	_, issuerWired, err := s.writer().RemoveMember(ctx, dbtx, actor, meta, memberID)
+	_, err = s.writer().RemoveMember(ctx, dbtx, actor, meta, memberID)
 	if err != nil {
 		return gatewayWriteError(ctx, logger, err, "remove meta mcp member")
 	}
@@ -952,7 +1033,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	AfterMembershipCommit(ctx, logger, s.db, s.publisher, actor, meta, issuerWired)
+	AfterMembershipCommit(ctx, logger, s.db, s.publisher, actor, meta)
 
 	return nil
 }

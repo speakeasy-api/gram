@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -14,23 +15,28 @@ import {
 } from "./riskdetectionscope.js";
 import { RiskMCPScope, RiskMCPScope$inboundSchema } from "./riskmcpscope.js";
 import {
+  RiskPolicyApprovalConfig,
+  RiskPolicyApprovalConfig$inboundSchema,
+} from "./riskpolicyapprovalconfig.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$inboundSchema,
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
+ * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export const RiskPolicyAction = {
   Flag: "flag",
   Warn: "warn",
   Block: "block",
   Quarantine: "quarantine",
+  RequireApproval: "require_approval",
 } as const;
 /**
- * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
+ * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
-export type RiskPolicyAction = ClosedEnum<typeof RiskPolicyAction>;
+export type RiskPolicyAction = OpenEnum<typeof RiskPolicyAction>;
 
 /**
  * Policy audience type: everyone or targeted.
@@ -42,7 +48,7 @@ export const RiskPolicyAudienceType = {
 /**
  * Policy audience type: everyone or targeted.
  */
-export type RiskPolicyAudienceType = ClosedEnum<typeof RiskPolicyAudienceType>;
+export type RiskPolicyAudienceType = OpenEnum<typeof RiskPolicyAudienceType>;
 
 /**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
@@ -54,7 +60,7 @@ export const RiskPolicyPolicyType = {
 /**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
  */
-export type RiskPolicyPolicyType = ClosedEnum<typeof RiskPolicyPolicyType>;
+export type RiskPolicyPolicyType = OpenEnum<typeof RiskPolicyPolicyType>;
 
 /**
  * Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
@@ -66,15 +72,16 @@ export const RiskPolicyShadowMcpDisposition = {
 /**
  * Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
  */
-export type RiskPolicyShadowMcpDisposition = ClosedEnum<
+export type RiskPolicyShadowMcpDisposition = OpenEnum<
   typeof RiskPolicyShadowMcpDisposition
 >;
 
 export type RiskPolicy = {
   /**
-   * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
+   * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
    */
   action: RiskPolicyAction;
+  approvalConfig?: RiskPolicyApprovalConfig | undefined;
   /**
    * For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty means the domain rule is inert.
    */
@@ -172,30 +179,35 @@ export type RiskPolicy = {
 };
 
 /** @internal */
-export const RiskPolicyAction$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyAction
-> = z.enum(RiskPolicyAction);
+export const RiskPolicyAction$inboundSchema: z.ZodMiniType<
+  RiskPolicyAction,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyAction);
 
 /** @internal */
-export const RiskPolicyAudienceType$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyAudienceType
-> = z.enum(RiskPolicyAudienceType);
+export const RiskPolicyAudienceType$inboundSchema: z.ZodMiniType<
+  RiskPolicyAudienceType,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyAudienceType);
 
 /** @internal */
-export const RiskPolicyPolicyType$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyPolicyType
-> = z.enum(RiskPolicyPolicyType);
+export const RiskPolicyPolicyType$inboundSchema: z.ZodMiniType<
+  RiskPolicyPolicyType,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyPolicyType);
 
 /** @internal */
-export const RiskPolicyShadowMcpDisposition$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyShadowMcpDisposition
-> = z.enum(RiskPolicyShadowMcpDisposition);
+export const RiskPolicyShadowMcpDisposition$inboundSchema: z.ZodMiniType<
+  RiskPolicyShadowMcpDisposition,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyShadowMcpDisposition);
 
 /** @internal */
 export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
   .pipe(
     z.object({
       action: z._default(RiskPolicyAction$inboundSchema, "flag"),
+      approval_config: z.optional(RiskPolicyApprovalConfig$inboundSchema),
       approved_email_domains: z.optional(z.array(z.string())),
       audience_principal_urns: z.array(z.string()),
       audience_type: z._default(
@@ -235,6 +247,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "approval_config": "approvalConfig",
         "approved_email_domains": "approvedEmailDomains",
         "audience_principal_urns": "audiencePrincipalUrns",
         "audience_type": "audienceType",

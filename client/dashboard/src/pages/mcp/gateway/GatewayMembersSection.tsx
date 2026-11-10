@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Page } from "@/components/page-layout";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { RequireScope } from "@/components/require-scope";
@@ -13,8 +14,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   ServerPickerSheet,
@@ -45,7 +44,6 @@ import {
   Code,
   FileCode,
   Globe,
-  Loader2,
   Plus,
   Server,
   Trash2,
@@ -194,7 +192,9 @@ function MemberNameCell({ row }: { row: MemberRow }): JSX.Element {
       <div className="flex min-w-0 flex-col">
         {row.server ? (
           <Link
-            to={routes.mcp.x.overview.href(mcpServerRouteParam(row.server))}
+            to={routes.mcp.details.overview.href(
+              mcpServerRouteParam(row.server),
+            )}
             className="truncate font-medium hover:underline"
           >
             {name}
@@ -645,7 +645,7 @@ export function GatewayMembersSection({
             >
               {mutating && (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               )}
               <Button.Text>Remove server</Button.Text>
@@ -692,7 +692,6 @@ export function AddServersSheet({
 }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const telemetry = useTelemetry();
   const { hasScope, isLoading: permissionsLoading } = useRBAC();
   const canWrite = !permissionsLoading && hasScope("mcp:write", gatewayId);
   const canCreate = !permissionsLoading && hasScope("mcp:write", projectId);
@@ -781,22 +780,18 @@ export function AddServersSheet({
         encodeURIComponent(gatewayId),
       allowed: canCreate,
     },
-    ...(telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG)
-      ? [
-          {
-            label: "Reachable through a tunnel",
-            description:
-              "Connect a server running inside your own network through a tunnel.",
-            Icon: Cable,
-            group: "Recommended",
-            href:
-              routes.mcp.add.tunneled.href() +
-              "?attachToGateway=" +
-              encodeURIComponent(gatewayId),
-            allowed: canCreate,
-          },
-        ]
-      : []),
+    {
+      label: "Reachable through a tunnel",
+      description:
+        "Connect a server running inside your own network through a tunnel.",
+      Icon: Cable,
+      group: "Recommended",
+      href:
+        routes.mcp.add.tunneled.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
+      allowed: canCreate,
+    },
     {
       label: "From your API",
       description: "Upload an OpenAPI document to generate tools.",
@@ -820,21 +815,17 @@ export function AddServersSheet({
         encodeURIComponent(gatewayId),
       allowed: canCreate,
     },
-    ...(telemetry.isFeatureEnabled("gram-functions")
-      ? [
-          {
-            label: "Write custom code",
-            description: "Create tools with TypeScript functions.",
-            Icon: Code,
-            group: "Advanced",
-            href:
-              routes.mcp.add.function.href() +
-              "?attachToGateway=" +
-              encodeURIComponent(gatewayId),
-            allowed: canWriteProject && canCreate,
-          },
-        ]
-      : []),
+    {
+      label: "Write custom code",
+      description: "Create tools with TypeScript functions.",
+      Icon: Code,
+      group: "Advanced",
+      href:
+        routes.mcp.add.function.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
+      allowed: canWriteProject && canCreate,
+    },
   ];
   const creationAllowed = creationOptions.some((option) => option.allowed);
   return (

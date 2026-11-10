@@ -6,6 +6,9 @@ import type { PluginAssignment } from "@gram/client/models/components/pluginassi
 import type { Role } from "@gram/client/models/components/role.js";
 import { Users } from "lucide-react";
 import { PluginAssignmentRow } from "./PluginAssignmentRow";
+import { InstallModeBadge } from "./InstallModeBadge";
+import { PrincipalIconTile } from "./PrincipalIconTile";
+import { MEMBERS_ROW_KEY, rowInstallMode } from "./install-modes";
 import {
   individualMemberFacepile,
   isIndividualMemberPrincipal,
@@ -31,6 +34,18 @@ export function PluginAssignmentsList({
   );
 
   const facepileMembers = individualMemberFacepile(assignments, memberByUrn);
+  const memberAssignments = assignments.filter((a) =>
+    isIndividualMemberPrincipal(a.principalUrn),
+  );
+  const membersMode = rowInstallMode(
+    {
+      key: MEMBERS_ROW_KEY,
+      principalUrns: memberAssignments.map((a) => a.principalUrn),
+    },
+    Object.fromEntries(
+      memberAssignments.map((a) => [a.principalUrn, a.installMode]),
+    ),
+  );
 
   return (
     <div className="border-border divide-border divide-y border px-4">
@@ -38,6 +53,7 @@ export function PluginAssignmentsList({
         <PluginAssignmentRow
           key={assignment.id}
           urn={assignment.principalUrn}
+          installMode={assignment.installMode}
           roleByUrn={roleByUrn}
           memberByUrn={memberByUrn}
           audienceByUrn={audienceByUrn}
@@ -48,9 +64,7 @@ export function PluginAssignmentsList({
         // line up; the face-stack sits at the row's trailing edge where its
         // variable width can't shift the text column.
         <div className="flex items-center gap-3 py-3">
-          <div className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center">
-            <Users className="h-4 w-4" />
-          </div>
+          <PrincipalIconTile icon={Users} />
           <div className="min-w-0 flex-1">
             <Text as="div" className="truncate font-medium">
               {facepileMembers.length}{" "}
@@ -61,6 +75,7 @@ export function PluginAssignmentsList({
             </Text>
           </div>
           <MemberFacepile members={facepileMembers} />
+          <InstallModeBadge mode={membersMode} />
         </div>
       )}
     </div>

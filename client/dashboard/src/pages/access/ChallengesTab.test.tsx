@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -39,11 +40,17 @@ vi.mock("./useChallengeRowColumns", () => ({
   useChallengeRowColumns: () => [],
 }));
 
+// The agent roster names the agent rows. Stubbed because the real hook takes
+// a query client, and these cases are about the table's loading states.
+vi.mock("@/hooks/useReadableAgents", () => ({
+  useReadableAgents: () => ({ data: [], isError: false }),
+}));
+
 vi.mock("@/components/ui/Skeleton", () => ({
   SkeletonTable: () => <div data-testid="skeleton-table" />,
 }));
 
-import { ChallengesTab } from "./ChallengesTab";
+import { ChallengesTab, OutcomeBadge } from "./ChallengesTab";
 
 afterEach(cleanup);
 
@@ -140,3 +147,13 @@ describe("ChallengesTab loading state", () => {
     expect(screen.queryByTestId("skeleton-table")).toBeNull();
   });
 });
+
+it.each(["future_outcome", "__proto__", "constructor"])(
+  "renders unknown outcome %s without claiming success",
+  (outcome) => {
+    render(<OutcomeBadge outcome={unrecognized(outcome)} />);
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.queryByText("Allowed")).toBeNull();
+    expect(screen.queryByText("Denied")).toBeNull();
+  },
+);

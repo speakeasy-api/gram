@@ -23,9 +23,11 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"regexp/syntax"
 	"slices"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 
@@ -173,12 +175,39 @@ type Variable struct {
 	PatternMessage string `yaml:"pattern_message"`
 }
 
-// Subject is the access rule an entry produces.
+// Subject is the access rule an entry produces by default.
 type Subject struct {
 	// Template is the subject, with {key} placeholders for rule-tier
 	// variables. For a wildcard rule it is the stem, and must end on a
 	// delimiter of the platform's subject format so it cannot run into a
 	// neighboring value.
+	Template string `yaml:"template"`
+
+	// Wildcard makes the rule the filled template followed by "*".
+	Wildcard bool `yaml:"wildcard"`
+
+	// Label names the default rule where the operator chooses between it and
+	// its alternatives. Required when there are any.
+	Label string `yaml:"label"`
+
+	// Alternatives are other rules the operator may choose instead, such as
+	// one branch of a repository rather than all of it. Each is validated
+	// exactly as the default is.
+	Alternatives []SubjectAlternative `yaml:"alternatives"`
+}
+
+// SubjectAlternative is an access rule an entry offers in place of its
+// default subject.
+type SubjectAlternative struct {
+	// Key identifies the choice within the entry.
+	Key string `yaml:"key"`
+
+	// Label is what the operator chooses it by.
+	Label string `yaml:"label"`
+
+	// Template is the subject, with {key} placeholders for rule-tier
+	// variables; for a wildcard rule, the stem. It is held to the same rules
+	// as the default's.
 	Template string `yaml:"template"`
 
 	// Wildcard makes the rule the filled template followed by "*".
@@ -252,12 +281,6 @@ type Step struct {
 	Blocks []Block `yaml:"blocks"`
 }
 
-// Setup is an entry's guided setup.
-type Setup struct {
-	// Steps run in order: collect steps, the create step, then connect steps.
-	Steps []Step `yaml:"steps"`
-}
-
 // Platform is one catalog entry.
 type Platform struct {
 	// Key identifies the entry permanently: it is written onto the rows the
@@ -288,10 +311,6 @@ type Platform struct {
 
 	// Subject is the access rule the entry produces.
 	Subject Subject `yaml:"subject"`
-
-	// Setup is the guided setup. Without one, the entry is listed as coming
-	// soon and cannot be opened.
-	Setup *Setup `yaml:"setup"`
 }
 
 // Source provides the catalog. Files are the only source today; a staff-edited
@@ -430,12 +449,6 @@ func validate(p Platform) error {
 	if err := validateSubject(p.Subject, variables); err != nil {
 		return err
 	}
-
-	if p.Setup != nil {
-		if err := validateSetup(*p.Setup, variables); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -522,77 +535,168 @@ func validateTemplate(field, template string, variables map[string]Variable, tie
 }
 
 func validateSubject(s Subject, variables map[string]Variable) error {
-	if strings.TrimSpace(s.Template) == "" {
-		return errors.New("subject.template is required")
-	}
-	if strings.Contains(s.Template, "*") {
-		return errors.New(`subject.template must not contain "*"; set wildcard instead`)
-	}
-	if err := validateTemplate("subject.template", s.Template, variables, TierRule); err != nil {
+	if err := validateSubjectTemplate("subject.template", s.Template, s.Wildcard, variables); err != nil {
 		return err
 	}
-	if s.Wildcard {
-		if !strings.ContainsAny(s.Template[len(s.Template)-1:], stemDelimiters) {
-			return fmt.Errorf("subject.template must end on one of %q to be a wildcard stem", stemDelimiters)
+	if len(s.Alternatives) == 0 {
+		return nil
+	}
+	if strings.TrimSpace(s.Label) == "" {
+		return errors.New("subject.label is required when there are alternatives")
+	}
+
+	// A saved rule is read back as the choice of its match kind whose
+	// template it fits, a wildcard rule by its stem, so no subject may fit
+	// two of them. The check is conservative: it also refuses choices it
+	// cannot show apart, such as a wildcard stem that extends another.
+	type choice struct {
+		name     string
+		template string
+		wildcard bool
+	}
+	choices := []choice{{name: "the default", template: s.Template, wildcard: s.Wildcard}}
+	keys := make(map[string]bool, len(s.Alternatives))
+	for _, alternative := range s.Alternatives {
+		if !variableKeyPattern.MatchString(alternative.Key) {
+			return fmt.Errorf("subject alternative key %q must be lowercase snake_case", alternative.Key)
 		}
-		if strings.HasSuffix(s.Template, "}") {
-			return errors.New("a wildcard subject.template must not end on a variable")
+		if keys[alternative.Key] {
+			return fmt.Errorf("subject alternative %q is declared twice", alternative.Key)
 		}
+		keys[alternative.Key] = true
+		if strings.TrimSpace(alternative.Label) == "" {
+			return fmt.Errorf("subject alternative %q: label is required", alternative.Key)
+		}
+		field := fmt.Sprintf("subject alternative %q template", alternative.Key)
+		if err := validateSubjectTemplate(field, alternative.Template, alternative.Wildcard, variables); err != nil {
+			return err
+		}
+		for _, other := range choices {
+			if other.wildcard == alternative.Wildcard && !templatesDisjoint(other.template, alternative.Template, variables) {
+				return fmt.Errorf("subject alternative %q could match the same subject as %s: their text must differ where no variable can reach", alternative.Key, other.name)
+			}
+		}
+		choices = append(choices, choice{name: fmt.Sprintf("alternative %q", alternative.Key), template: alternative.Template, wildcard: alternative.Wildcard})
 	}
 	return nil
 }
 
-func validateSetup(setup Setup, variables map[string]Variable) error {
-	if len(setup.Steps) == 0 {
-		return errors.New("setup has no steps")
-	}
+// templateToken is one piece of a template: literal text, or the key of the
+// variable a placeholder names.
+type templateToken struct {
+	literal  string
+	variable string
+}
 
-	order := map[Phase]int{PhaseCollect: 0, PhaseCreate: 1, PhaseConnect: 2}
-	ids := make(map[string]bool, len(setup.Steps))
-	creates := 0
+func templateTokens(template string) []templateToken {
+	var tokens []templateToken
 	last := 0
-	for _, step := range setup.Steps {
-		rank, ok := order[step.Phase]
-		if !ok {
-			return fmt.Errorf("step %q: unknown phase %q", step.ID, step.Phase)
+	for _, match := range placeholderPattern.FindAllStringSubmatchIndex(template, -1) {
+		if match[0] > last {
+			tokens = append(tokens, templateToken{literal: template[last:match[0]], variable: ""})
 		}
-		if rank < last {
-			return fmt.Errorf("step %q: steps must run collect, then create, then connect", step.ID)
-		}
-		last = rank
-		if step.Phase == PhaseCreate {
-			creates++
-		}
-		if !keyPattern.MatchString(step.ID) {
-			return fmt.Errorf("step id %q must be lowercase words joined by hyphens", step.ID)
-		}
-		if ids[step.ID] {
-			return fmt.Errorf("step id %q is used twice", step.ID)
-		}
-		ids[step.ID] = true
-		if strings.TrimSpace(step.Title) == "" {
-			return fmt.Errorf("step %q: title is required", step.ID)
-		}
-		for i, block := range step.Blocks {
-			if err := validateBlock(block, platformBlocks, variables); err != nil {
-				return fmt.Errorf("step %q block %d: %w", step.ID, i+1, err)
+		tokens = append(tokens, templateToken{literal: "", variable: template[match[2]:match[3]]})
+		last = match[1]
+	}
+	if last < len(template) {
+		tokens = append(tokens, templateToken{literal: template[last:], variable: ""})
+	}
+	return tokens
+}
+
+// templatesDisjoint reports whether no subject can fit both templates, which
+// share a match kind. It is conservative: true only when, after identical
+// leading tokens, their literals differ with neither a prefix of the other,
+// and each shared variable refuses the first character of the literal after
+// it, so both templates read a subject up to that literal the same way.
+func templatesDisjoint(a, b string, variables map[string]Variable) bool {
+	ta, tb := templateTokens(a), templateTokens(b)
+	// The shared variable whose end the next literal fixes.
+	pending := ""
+	for i := 0; i < len(ta) && i < len(tb); i++ {
+		x, y := ta[i], tb[i]
+		if x.variable != "" || y.variable != "" {
+			if x != y || pending != "" {
+				return false
 			}
-			// Refused rather than ignored, so a form control's setting written
-			// into a platform cannot look like it took effect.
-			if block.Field != "" || block.Placeholder != "" || block.Multiline || block.ReadOnly || block.Format != "" {
-				return fmt.Errorf("step %q block %d: field, placeholder, multiline, read_only and format belong to custom flows", step.ID, i+1)
+			pending = x.variable
+			continue
+		}
+		if pending != "" {
+			for _, literal := range []string{x.literal, y.literal} {
+				first, _ := utf8.DecodeRuneInString(literal)
+				if variableMayHold(variables[pending], first) {
+					return false
+				}
 			}
+			pending = ""
+		}
+		if x.literal != y.literal {
+			return !strings.HasPrefix(x.literal, y.literal) && !strings.HasPrefix(y.literal, x.literal)
 		}
 	}
-	if creates != 1 {
-		return fmt.Errorf("setup must have exactly one create step, found %d", creates)
+	// One is the other followed by more, or they are the same.
+	return false
+}
+
+// variableMayHold reports whether a value of v could contain r, from the
+// characters its pattern names. It errs towards true.
+func variableMayHold(v Variable, r rune) bool {
+	re, err := syntax.Parse(v.Pattern, syntax.Perl)
+	if err != nil {
+		return true
+	}
+	return patternMayHold(re, r)
+}
+
+func patternMayHold(re *syntax.Regexp, r rune) bool {
+	switch re.Op {
+	case syntax.OpLiteral:
+		for _, literal := range re.Rune {
+			if literal == r || (re.Flags&syntax.FoldCase != 0 && strings.EqualFold(string(literal), string(r))) {
+				return true
+			}
+		}
+		return false
+	case syntax.OpCharClass:
+		for i := 0; i+1 < len(re.Rune); i += 2 {
+			if re.Rune[i] <= r && r <= re.Rune[i+1] {
+				return true
+			}
+		}
+		return false
+	case syntax.OpAnyCharNotNL:
+		return r != '\n'
+	case syntax.OpAnyChar:
+		return true
+	default:
+		return slices.ContainsFunc(re.Sub, func(sub *syntax.Regexp) bool { return patternMayHold(sub, r) })
+	}
+}
+
+// validateSubjectTemplate holds one subject template to the rules every rule
+// an entry produces must meet. field names it in the error.
+func validateSubjectTemplate(field, template string, wildcard bool, variables map[string]Variable) error {
+	if strings.TrimSpace(template) == "" {
+		return fmt.Errorf("%s is required", field)
+	}
+	if strings.Contains(template, "*") {
+		return fmt.Errorf(`%s must not contain "*"; set wildcard instead`, field)
+	}
+	if err := validateTemplate(field, template, variables, TierRule); err != nil {
+		return err
+	}
+	if wildcard {
+		if !strings.ContainsAny(template[len(template)-1:], stemDelimiters) {
+			return fmt.Errorf("%s must end on one of %q to be a wildcard stem", field, stemDelimiters)
+		}
+		if strings.HasSuffix(template, "}") {
+			return fmt.Errorf("a wildcard %s must not end on a variable", field)
+		}
 	}
 	return nil
 }
 
-// validateBlock checks one block against the rules every context shares, after
-// refusing a type the context does not allow. variables are the keys a field
-// block may collect.
 func validateBlock(b Block, allowed []BlockType, variables map[string]Variable) error {
 	known := slices.Contains(platformBlocks, b.Type) || slices.Contains(customFlowBlocks, b.Type)
 	if known && !slices.Contains(allowed, b.Type) {

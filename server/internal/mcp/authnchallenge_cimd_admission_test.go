@@ -23,6 +23,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -31,8 +32,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -40,7 +41,7 @@ import (
 // setIssuerAdmissionMode writes an explicit admission mode onto the toolset's
 // issuer. Passing an empty mode leaves the column NULL, which is the state a
 // freshly-created issuer is in.
-func setIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, mode admission.Mode) {
+func setIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, mode admission.Mode) {
 	t.Helper()
 
 	if mode == "" {
@@ -60,21 +61,11 @@ func setIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance,
 // absence the application has to interpret. Tests covering an unconfigured
 // issuer start here; clearIssuerAdmissionMode covers the older rows that
 // predate the create default.
-func seedFreshIssuerToolset(t *testing.T, ctx context.Context, ti *testInstance) toolsets_repo.Toolset {
+func seedFreshIssuerToolset(t *testing.T, ctx context.Context, ti *testInstance) hostedToolset {
 	t.Helper()
 
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 
 	issuer, err := usersessions_repo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 		ID:        toolset.UserSessionIssuerID.UUID,
@@ -91,7 +82,7 @@ func seedFreshIssuerToolset(t *testing.T, ctx context.Context, ti *testInstance)
 // every row created before the create query wrote a mode explicitly. It has
 // no management API equivalent on purpose: this reproduces stored history,
 // not something an operator can do.
-func clearIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset) {
+func clearIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset) {
 	t.Helper()
 
 	err := testrepo.New(ti.conn).SetUserSessionIssuerCIMDAdmissionMode(ctx, testrepo.SetUserSessionIssuerCIMDAdmissionModeParams{
@@ -128,7 +119,7 @@ func admissionDecisionPoints(t *testing.T, reader *sdkmetric.ManualReader) map[a
 
 // allowCustomCimdURL adds an issuer-specific allowed CIMD document URL,
 // the operator-side remedy for a client the catalog does not cover.
-func allowCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, clientID string) {
+func allowCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, clientID string) {
 	t.Helper()
 
 	row, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuerCimdClient(ctx, usersessions_repo.CreateUserSessionIssuerCimdClientParams{
@@ -145,7 +136,7 @@ func allowCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, too
 
 // revokeCustomCimdURL soft-deletes an issuer's custom CIMD URL, the
 // operator action whose blast radius the /token asymmetry bounds.
-func revokeCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, clientID string) {
+func revokeCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, clientID string) {
 	t.Helper()
 
 	rows, err := usersessions_repo.New(ti.conn).ListUserSessionIssuerCimdClientsByIssuerID(ctx, usersessions_repo.ListUserSessionIssuerCimdClientsByIssuerIDParams{
@@ -172,7 +163,12 @@ func revokeCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, to
 
 func requireAuthorizeErrorDescription(t *testing.T, w *httptest.ResponseRecorder, wantSubstring string) {
 	t.Helper()
+	body := oauthtest.RequireAuthorizationErrorPage(t, w, http.StatusBadRequest)
+	require.Contains(t, body.Description, wantSubstring)
+}
 
+func requireTokenErrorDescription(t *testing.T, w *httptest.ResponseRecorder, wantSubstring string) {
+	t.Helper()
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.Contains(t, body["error_description"], wantSubstring)
@@ -305,7 +301,7 @@ func TestCIMDAdmission_PresetsDeniesUnknownURLWithoutFetching(t *testing.T) {
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 	require.Zero(t, ds.requests.Load(), "a denied client_id must not cost an outbound document fetch")
 }
 
@@ -335,7 +331,7 @@ func TestCIMDAdmission_DefaultAdmitsWhatPresetsRefuses(t *testing.T) {
 	require.Positive(t, ds.requests.Load(), "an admitted client_id reaches the document fetch")
 
 	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 
 	// A URL the issuer does list is admitted under both, so the difference
 	// above is the mode and not the configuration.
@@ -361,7 +357,7 @@ func TestCIMDAdmission_PresetsDenialIsActionable(t *testing.T) {
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 	requireAuthorizeErrorDescription(t, w, "not permitted by the server's client policy")
 	require.NotContains(t, w.Body.String(), "unknown client_id")
 }
@@ -399,7 +395,7 @@ func TestCIMDAdmission_CustomURLIsPerIssuer(t *testing.T) {
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 	require.Zero(t, ds.requests.Load(), "another issuer's allowance must not admit this one")
 
 	// The neighbour that DOES allow it is admitted, proving the row exists
@@ -421,7 +417,7 @@ func TestCIMDAdmission_DisabledDeniesEverything(t *testing.T) {
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 	requireAuthorizeErrorDescription(t, w, "does not accept client ID metadata documents")
 	require.Zero(t, ds.requests.Load())
 }
@@ -452,7 +448,7 @@ func TestCIMDAdmission_UnrecognizedModeFailsClosed(t *testing.T) {
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 	require.Zero(t, ds.requests.Load())
 }
 
@@ -596,7 +592,7 @@ func TestCIMDAdmission_ExplicitConfidentialAuthMethodStillRejected(t *testing.T)
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 }
 
 // doCIMDToken posts an authorization_code exchange for a CIMD client. The
@@ -653,9 +649,9 @@ func TestCIMDAdmission_TokenRejectsWhenDisabled(t *testing.T) {
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeDisabled)
 
 	w := doCIMDToken(t, ti, mcpSlug, ds.clientID)
-	require.Equal(t, http.StatusUnauthorized, w.Code)
-	requireTokenOAuthError(t, w, "invalid_client")
-	requireAuthorizeErrorDescription(t, w, "does not accept client ID metadata documents")
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	requireTokenOAuthError(t, w, "unauthorized_client")
+	requireTokenErrorDescription(t, w, "does not accept client ID metadata documents")
 }
 
 // TestCIMDAdmission_TokenAllowsWhenPresetsNoLongerListsClient is the other
@@ -683,7 +679,7 @@ func TestCIMDAdmission_TokenAllowsWhenPresetsNoLongerListsClient(t *testing.T) {
 
 	// De-list the client. New authorize flows are now denied...
 	revokeCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
-	requireAuthorizeOAuthError(t, doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t))), http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t))), http.StatusBadRequest, "invalid_client")
 
 	// ...but the token leg must not be, or removing a URL would revoke live
 	// sessions rather than stopping new ones.
@@ -706,4 +702,23 @@ func fetchASMetadata(t *testing.T, ti *testInstance, mcpSlug string) map[string]
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
 	return metadata
+}
+
+func TestCIMDAdmission_RefreshRejectsWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, ds, toolset := newTestCIMDService(t)
+	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeOpen)
+
+	// Establish the CIMD client row while the issuer still admits it.
+	mcpSlug := toolset.McpSlug.String
+	require.Equal(t, http.StatusFound, doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t))).Code)
+
+	// Now flip the off switch. The row still exists and is still public.
+	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeDisabled)
+
+	w := postForm(t, ti, mcpSlug, "token", url.Values{"grant_type": {"refresh_token"}, "client_id": {ds.clientID}, "refresh_token": {"unused-refresh-token"}})
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	requireTokenOAuthError(t, w, "invalid_grant")
+	requireTokenErrorDescription(t, w, "does not accept client ID metadata documents")
 }

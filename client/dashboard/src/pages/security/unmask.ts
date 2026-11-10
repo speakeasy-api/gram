@@ -1,3 +1,4 @@
+import { useRiskContentRestricted } from "./use-risk-content-restricted";
 import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -69,11 +70,12 @@ export function useUnmaskedMatch(resultId: string): {
   evidenceNotStored: boolean;
   reveal: () => void;
 } {
+  const restricted = useRiskContentRestricted();
   const { mutate, isPending, isError } = useRiskUnmaskResultMutation();
   const [value, setValue] = useState<string | null>(null);
   const [evidenceNotStored, setEvidenceNotStored] = useState(false);
   const reveal = useCallback(() => {
-    if (value !== null || evidenceNotStored || isPending) return;
+    if (restricted || value !== null || evidenceNotStored || isPending) return;
     mutate(
       { request: { riskIDRequestBody: { id: resultId } } },
       {
@@ -86,6 +88,12 @@ export function useUnmaskedMatch(resultId: string): {
         },
       },
     );
-  }, [mutate, resultId, value, evidenceNotStored, isPending]);
-  return { value, evidenceNotStored, isLoading: isPending, isError, reveal };
+  }, [mutate, resultId, value, evidenceNotStored, isPending, restricted]);
+  return {
+    value: restricted ? null : value,
+    evidenceNotStored,
+    isLoading: isPending,
+    isError,
+    reveal,
+  };
 }

@@ -221,7 +221,7 @@ func (s *ShadowDecisionService) charge(principal Principal) func(context.Context
 func shadowDecisionAudiences(input []PluginAssignmentSummaryResult) []ShadowDecisionAudience {
 	result := make([]ShadowDecisionAudience, 0, len(input))
 	for _, item := range input {
-		result = append(result, ShadowDecisionAudience(item))
+		result = append(result, ShadowDecisionAudience{Kind: item.Kind, DisplayName: item.DisplayName, MemberCount: item.MemberCount})
 	}
 	return result
 }

@@ -66,6 +66,13 @@ func AudienceAttribute() {
 	MaxLength(512)
 }
 
+// UpdateAudienceAttribute allows an explicit empty string to clear the audience.
+// Omitted values leave it unchanged; creation still uses AudienceAttribute.
+func UpdateAudienceAttribute() {
+	Pattern("^[!-~]*$")
+	MaxLength(512)
+}
+
 // Companion endpoint: POST /oauth/proxy-register. The dashboard mints the
 // client_id/client_secret it hands to createRemoteSessionClient by running
 // Dynamic Client Registration against the upstream provider through that
@@ -725,6 +732,29 @@ var _ = Service("organizationRemoteSessionClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RotateOrganizationRemoteSessionClient"}`)
 	})
 
+	Method("duplicateClient", func() {
+		Description("Create a new standalone remote_session_client with a copy of an existing client's configuration in the caller's organization. The copy keeps the source's issuer, project, credential owner, authentication settings, key set, scopes, audience, and callback, and by default reuses its client_id and stored secret, so no secret is re-entered. A client metadata document (CIMD) client gets a new hosted document and client_id. To give the copy its own upstream registration instead, register one through /oauth/proxy-register and pass the returned credentials; this is refused for credential_owner self clients. A private_key_jwt client that is not a CIMD client cannot be duplicated, because the provider knows only the source's key set URL. The source is unchanged and the copy has no user_session_issuer attachments. Clients managed by an identity provider connection cannot be duplicated. Requires org:admin.")
+
+		Payload(func() {
+			Extend(DuplicateOrganizationRemoteSessionClientForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionClients.duplicate")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "duplicateOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "duplicate")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DuplicateOrganizationRemoteSessionClient"}`)
+	})
+
 	Method("deleteClient", func() {
 		Description("Soft-delete a remote_session_client in the caller's organization. Cascades to the remote_sessions minted against it. Requires org:admin.")
 
@@ -842,13 +872,20 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 	Attribute("id", String, "The remote_session_client id.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("client_id", String, "Correct the client_id registered with the issuer. Refused for Client ID Metadata Document (CIMD) clients and clients managed by an identity provider connection. A changed value revokes every remote session obtained through the client, so each user must reconnect. Omit to leave unchanged.", func() {
+		MinLength(1)
+	})
+	Attribute("display_name", String, "Replace the client's display name. Pass an empty string to clear it so the client shows its client_id. Omit to leave unchanged.", func() {
+		MaxLength(200)
+	})
 	Attribute("client_secret", String, "Rotate the client secret. Speakeasy re-encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", tokenEndpointAuthMethodEnum)
 	Attribute("token_endpoint_auth_audience_format", String, "Change the aud claim format used in private_key_jwt assertions. Omit to leave unchanged.", tokenEndpointAuthAudienceFormatEnum)
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
 	})
-	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", AudienceAttribute)
+	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Pass an empty string to clear it. Omit to leave unchanged.", UpdateAudienceAttribute)
+	Attribute("forward_client_name", Boolean, "Send the connecting MCP client's self-reported name to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions. Omit to leave unchanged.")
 	Attribute("legacy_callback_url", Boolean, "Platform admins only. Set true to run the client in compatibility mode with the legacy callback URL, or false to migrate it to the current callback URL once that URL is registered with the identity provider. Omit to leave unchanged.")
 
 	Required("id")
@@ -926,6 +963,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		})
 	})
 	Attribute("client_id", String, "The client_id used to identify this client at the issuer's token and authorization endpoints.")
+	Attribute("display_name", String, "Administrator-chosen name for the client. Null when unset, in which case the client is shown by its client_id.")
 	Attribute("client_id_metadata_uri", String, "When set, the client is in Client ID Metadata Document (CIMD) mode: Speakeasy hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.")
 	Attribute("client_id_issued_at", String, func() {
 		Format(FormatDateTime)
@@ -949,6 +987,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	})
 	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")
 	Attribute("audience", String, "Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.")
+	Attribute("forward_client_name", Boolean, "Whether the connecting MCP client's self-reported name is sent to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions.")
 	Attribute("legacy_callback_url", Boolean, "Whether the client was registered upstream with the legacy callback URL. The authorize leg then sends that URL and a JSON state instead of the current callback. Cleared when the client is rotated.")
 	Attribute("credential_owner", String, "Who the upstream access credential belongs to. subject means each caller connects their own upstream account; self means the client holds one credential for itself, obtained with the client_credentials grant, that every caller shares.", credentialOwnerEnum)
 	Attribute("callback_url", String, "The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients and on clients with credential_owner self, which have no callback.", func() {
@@ -964,7 +1003,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "legacy_callback_url", "credential_owner", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "legacy_callback_url", "forward_client_name", "credential_owner", "created_at", "updated_at")
 })
 
 var NewClientCallbackURLResult = Type("NewClientCallbackUrlResult", func() {

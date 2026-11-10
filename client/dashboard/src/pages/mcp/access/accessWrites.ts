@@ -18,6 +18,7 @@ import {
 } from "./accessRows";
 import {
   ruleId,
+  supportsAudienceEditing,
   withAdded,
   withRule,
   withoutPrincipal,
@@ -206,6 +207,43 @@ export function revokeScopeWrite(
 }
 
 /**
+ * Unset one scope on this server. This row's own grant and own block for the
+ * scope are both dropped and nothing is written in their place, so this row
+ * no longer decides the scope here.
+ */
+export function clearScopeWrite(
+  direct: AudienceRule[],
+  row: AccessRow,
+  scope: ScopeKey,
+  resourceName?: string,
+): AudienceWrite {
+  const label = SCOPE_ROWS.find((line) => line.key === scope)?.label ?? scope;
+  const entries = withoutRules(direct, [
+    ruleId({ principalUrn: row.principalUrn, level: scope }),
+    ruleId({ principalUrn: row.principalUrn, level: BLOCK_LEVEL[scope] }),
+  ]);
+  const cleared = `Cleared ${row.displayName}'s ${label.toLowerCase()} setting on ${serverLabel(resourceName)}.`;
+  // The list shows a row for each principal with a rule here or one covering
+  // every server. Clearing the last of them takes the row off the list, which
+  // the admin would otherwise go looking for.
+  const staysListed =
+    entries.some((rule) => rule.principalUrn === row.principalUrn) ||
+    SCOPE_ROWS.some(({ key }) =>
+      [...row.cells[key].grants, ...row.cells[key].blocks].some(
+        (rule) =>
+          rule.principalUrn === row.principalUrn &&
+          rule.appliesTo === "all_resources",
+      ),
+    );
+  return {
+    entries,
+    message: staysListed
+      ? cleared
+      : `${cleared} ${row.displayName} has nothing else set here and is no longer listed.`,
+  };
+}
+
+/**
  * Limit connect to some tools. When this row's own rule is the only thing
  * granting it, that rule is rewritten narrower. When anything else grants it
  * too, narrowing has to be a subtraction: a block naming everything the
@@ -218,6 +256,9 @@ export function narrowWrite(
   toolCatalog: ToolSelectionTool[] | undefined,
   resourceName?: string,
 ): AudienceWrite {
+  if (!supportsAudienceEditing(direct)) {
+    throw new Error("These access rules are not supported by this version.");
+  }
   const base = narrowingBase(direct, row, next);
   const server = serverLabel(resourceName);
   const label = narrowingLabel(next).toLowerCase();
@@ -402,7 +443,7 @@ export function revokeRowWrite(
     };
   }
   return {
-    entries: SCOPE_ROWS.reduce<AudienceRule[]>(
+    entries: SCOPE_ROWS.reduce<SetResourceAudienceEntry[]>(
       (entries, { key }) =>
         withRule(entries, row.principalUrn, BLOCK_LEVEL[key]),
       cleared,
@@ -477,8 +518,14 @@ export function narrowingSeed(
     : [...new Set(cell.grants.flatMap((grant) => grant.dispositions ?? []))];
   const dispositions = granted.filter(
     (disposition) =>
-      (reachableTools(cell, [{ name: "", annotations: [disposition] }]) ?? [])
-        .length > 0,
+      (
+        reachableTools(cell, [
+          {
+            name: "",
+            annotations: DISPOSITIONS.filter((known) => known === disposition),
+          },
+        ]) ?? []
+      ).length > 0,
   );
   return { tools: [], dispositions };
 }

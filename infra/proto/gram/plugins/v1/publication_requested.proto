@@ -10,6 +10,9 @@ message PublicationRequested {
   string organization_id = 1;
   string project_id = 2;
   string created_by_user_id = 3;
+  // Also publish the pending changes of plugins whose auto sync is off, as a
+  // manual sync does.
+  bool include_paused_plugins = 4;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {seconds: 604800}

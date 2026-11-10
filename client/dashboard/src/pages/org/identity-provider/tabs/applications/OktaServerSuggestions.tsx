@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -20,6 +21,12 @@ import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useOrganization } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
+import { useIsDarkTheme } from "@/lib/theme";
+import { useListMCPCatalog, type CatalogServer } from "@/pages/catalog/hooks";
+import {
+  resolveCatalogLogo,
+  type CatalogLogoServer,
+} from "@/pages/catalog/logo";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { OktaServerSuggestion } from "@gram/client/models/components/oktaserversuggestion.js";
 import { useDismissOktaServerSuggestionMutation } from "@gram/client/react-query/dismissOktaServerSuggestion.js";
@@ -66,6 +73,17 @@ export function OktaServerSuggestions(): JSX.Element {
   const [filter, setFilter] = useState<Filter>("open");
   const [projectSlug, setProjectSlug] = useState(
     organization.projects[0]?.slug ?? "",
+  );
+  const catalog = useListMCPCatalog(undefined, undefined, {
+    projectSlug,
+    enabled: projectSlug !== "",
+    throwOnError: false,
+  });
+  const catalogByName = new Map(
+    ((catalog.data?.servers ?? []) as CatalogServer[]).map((server) => [
+      server.registrySpecifier,
+      server,
+    ]),
   );
   const [adding, setAdding] = useState<OktaServerSuggestion | null>(null);
   const suggestions = useOktaServerSuggestions(
@@ -174,6 +192,7 @@ export function OktaServerSuggestions(): JSX.Element {
             <li key={suggestion.registryEntryId}>
               <SuggestionCard
                 suggestion={suggestion}
+                meta={catalogByName.get(suggestion.serverName)?.meta}
                 busy={busy}
                 canAdd={
                   projectSlug !== "" && isSuggestionInstallable(suggestion)
@@ -194,7 +213,12 @@ export function OktaServerSuggestions(): JSX.Element {
       )}
       {adding && (
         <AddServerDialog
-          servers={[suggestionToCatalogServer(adding)]}
+          servers={[
+            {
+              ...suggestionToCatalogServer(adding),
+              meta: catalogByName.get(adding.serverName)?.meta ?? {},
+            },
+          ]}
           open
           onOpenChange={(open) => {
             if (!open) setAdding(null);
@@ -209,6 +233,7 @@ export function OktaServerSuggestions(): JSX.Element {
 
 function SuggestionCard({
   suggestion,
+  meta,
   busy,
   canAdd,
   onAdd,
@@ -216,13 +241,17 @@ function SuggestionCard({
   onRestore,
 }: {
   suggestion: OktaServerSuggestion;
+  meta?: CatalogServer["meta"];
   busy: boolean;
   canAdd: boolean;
   onAdd: () => void;
   onDismiss: () => void;
   onRestore: () => void;
 }): JSX.Element {
-  const badge = STATE_BADGE[suggestion.state];
+  const badge = enumPresentation(STATE_BADGE, suggestion.state, {
+    variant: "neutral",
+    label: "Unknown",
+  });
   const installable = isSuggestionInstallable(suggestion);
   const name = suggestion.title ?? suggestion.serverName;
   const apps = primaryFirst(
@@ -234,7 +263,14 @@ function SuggestionCard({
   return (
     <Card className="h-full">
       <div className="flex items-center gap-3">
-        <SuggestionIcon name={name} iconUrl={suggestion.iconUrl} />
+        <SuggestionIcon
+          name={name}
+          server={{
+            registrySpecifier: suggestion.serverName,
+            iconUrl: suggestion.iconUrl,
+            meta,
+          }}
+        />
         <Card.Title className="min-w-0 flex-1 truncate">{name}</Card.Title>
         {suggestion.state !== "open" && (
           <Badge variant={badge.variant} size="sm" className="shrink-0">
@@ -338,23 +374,24 @@ function SuggestionCard({
 /** Vendor icon tile; falls back to the first letter when there is no icon or it fails to load. */
 function SuggestionIcon({
   name,
-  iconUrl,
+  server,
 }: {
   name: string;
-  iconUrl: string | undefined;
+  server: CatalogLogoServer;
 }): JSX.Element {
-  const [failed, setFailed] = useState(false);
+  const logo = resolveCatalogLogo(server, useIsDarkTheme() ? "dark" : "light");
+  const [failedSrc, setFailedSrc] = useState<string>();
   return (
     <span
       aria-hidden="true"
       className="flex size-8 shrink-0 items-center justify-center border bg-card text-sm font-semibold text-muted-foreground"
     >
-      {iconUrl && !failed ? (
+      {logo.src && logo.src !== failedSrc ? (
         <img
-          src={iconUrl}
+          src={logo.src}
           alt=""
-          className="size-5 object-contain"
-          onError={() => setFailed(true)}
+          className={`size-5 object-contain ${logo.className}`}
+          onError={() => setFailedSrc(logo.src)}
         />
       ) : (
         name.charAt(0).toUpperCase()

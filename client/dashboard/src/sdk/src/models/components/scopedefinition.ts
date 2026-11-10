@@ -5,9 +5,34 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * How the dashboard groups the permission. Differs from resource_type where one resource type carries several permission families: plugins and tool logs are checked against a project but are not project permissions.
+ */
+export const ScopeDefinitionCategory = {
+  Org: "org",
+  Project: "project",
+  Mcp: "mcp",
+  McpAuthClient: "mcp_auth_client",
+  Environment: "environment",
+  Skill: "skill",
+  Plugin: "plugin",
+  Assistant: "assistant",
+  RiskPolicy: "risk_policy",
+  Session: "session",
+  Inference: "inference",
+  Log: "log",
+  Agent: "agent",
+  Workload: "workload",
+} as const;
+/**
+ * How the dashboard groups the permission. Differs from resource_type where one resource type carries several permission families: plugins and tool logs are checked against a project but are not project permissions.
+ */
+export type ScopeDefinitionCategory = OpenEnum<typeof ScopeDefinitionCategory>;
 
 /**
  * The scope used to store exception rules for this scope.
@@ -20,13 +45,14 @@ export const ExclusionScope = {
   McpBlockedRead: "mcp:blocked_read",
   McpBlockedWrite: "mcp:blocked_write",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentBlockedWrite: "environment:blocked_write",
   SkillBlockedRead: "skill:blocked_read",
   SkillBlockedWrite: "skill:blocked_write",
+  PluginBlockedWrite: "plugin:blocked_write",
   AssistantBlockedRead: "assistant:blocked_read",
   AssistantBlockedWrite: "assistant:blocked_write",
-  PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyBypass: "risk_policy:bypass",
   WorkloadBlockedRead: "workload:blocked_read",
   WorkloadBlockedWrite: "workload:blocked_write",
@@ -34,7 +60,7 @@ export const ExclusionScope = {
 /**
  * The scope used to store exception rules for this scope.
  */
-export type ExclusionScope = ClosedEnum<typeof ExclusionScope>;
+export type ExclusionScope = OpenEnum<typeof ExclusionScope>;
 
 /**
  * The type of resource this scope applies to.
@@ -48,13 +74,28 @@ export const ResourceType = {
   Assistant: "assistant",
   RiskPolicy: "risk_policy",
   Chat: "chat",
+  Inference: "inference",
   Agent: "agent",
   Workload: "workload",
+  McpAuthClient: "mcp_auth_client",
 } as const;
 /**
  * The type of resource this scope applies to.
  */
-export type ResourceType = ClosedEnum<typeof ResourceType>;
+export type ResourceType = OpenEnum<typeof ResourceType>;
+
+/**
+ * Why the scope is sensitive. Absent when sensitive is false.
+ */
+export const Sensitivity = {
+  Conversations: "conversations",
+  ToolLogs: "tool_logs",
+  DestructiveAdmin: "destructive_admin",
+} as const;
+/**
+ * Why the scope is sensitive. Absent when sensitive is false.
+ */
+export type Sensitivity = OpenEnum<typeof Sensitivity>;
 
 /**
  * Unique scope identifier.
@@ -64,6 +105,8 @@ export const Slug = {
   OrgBlockedRead: "org:blocked_read",
   OrgAdmin: "org:admin",
   OrgBlockedAdmin: "org:blocked_admin",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
   ProjectRead: "project:read",
   ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",
@@ -74,6 +117,8 @@ export const Slug = {
   McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpAuth: "mcp:auth",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentRead: "environment:read",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
@@ -82,17 +127,18 @@ export const Slug = {
   SkillBlockedRead: "skill:blocked_read",
   SkillWrite: "skill:write",
   SkillBlockedWrite: "skill:blocked_write",
+  PluginWrite: "plugin:write",
+  PluginBlockedWrite: "plugin:blocked_write",
   AssistantRead: "assistant:read",
   AssistantBlockedRead: "assistant:blocked_read",
   AssistantWrite: "assistant:write",
   AssistantBlockedWrite: "assistant:blocked_write",
-  PluginWrite: "plugin:write",
-  PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  InferenceExecute: "inference:execute",
   LogRead: "log:read",
   AgentRead: "agent:read",
   AgentWrite: "agent:write",
@@ -102,13 +148,11 @@ export const Slug = {
   WorkloadBlockedRead: "workload:blocked_read",
   WorkloadWrite: "workload:write",
   WorkloadBlockedWrite: "workload:blocked_write",
-  OrgDeviceAgentSync: "org:device_agent_sync",
-  OrgHooksIngest: "org:hooks_ingest",
 } as const;
 /**
  * Unique scope identifier.
  */
-export type Slug = ClosedEnum<typeof Slug>;
+export type Slug = OpenEnum<typeof Slug>;
 
 /**
  * Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -120,7 +164,7 @@ export const ScopeDefinitionVisibility = {
 /**
  * Whether this scope is a first-class permission or an internal storage/evaluation scope.
  */
-export type ScopeDefinitionVisibility = ClosedEnum<
+export type ScopeDefinitionVisibility = OpenEnum<
   typeof ScopeDefinitionVisibility
 >;
 
@@ -130,7 +174,11 @@ export type ScopeDefinition = {
    */
   agentEligible: boolean;
   /**
-   * What this scope protects.
+   * How the dashboard groups the permission. Differs from resource_type where one resource type carries several permission families: plugins and tool logs are checked against a project but are not project permissions.
+   */
+  category: ScopeDefinitionCategory;
+  /**
+   * What a holder of this scope can do and, where it matters, what the scope does not include.
    */
   description: string;
   /**
@@ -138,13 +186,29 @@ export type ScopeDefinition = {
    */
   exclusionScope?: ExclusionScope | undefined;
   /**
+   * Short name for the permission as people see it, e.g. "View tool logs".
+   */
+  label: string;
+  /**
    * The type of resource this scope applies to.
    */
   resourceType: ResourceType;
   /**
+   * Whether granting this scope exposes other members' private activity or allows destructive administration. Clients warn before granting it.
+   */
+  sensitive: boolean;
+  /**
+   * Why the scope is sensitive. Absent when sensitive is false.
+   */
+  sensitivity?: Sensitivity | undefined;
+  /**
    * Unique scope identifier.
    */
   slug: Slug;
+  /**
+   * User-visible scopes a grant of this scope also satisfies, one step down: org:admin also satisfies org:read. Empty when the scope implies nothing else.
+   */
+  subScopes: Array<string>;
   /**
    * Whether this scope is a first-class permission or an internal storage/evaluation scope.
    */
@@ -152,21 +216,34 @@ export type ScopeDefinition = {
 };
 
 /** @internal */
-export const ExclusionScope$inboundSchema: z.ZodMiniEnum<
-  typeof ExclusionScope
-> = z.enum(ExclusionScope);
+export const ScopeDefinitionCategory$inboundSchema: z.ZodMiniType<
+  ScopeDefinitionCategory,
+  unknown
+> = openEnums.inboundSchema(ScopeDefinitionCategory);
 
 /** @internal */
-export const ResourceType$inboundSchema: z.ZodMiniEnum<typeof ResourceType> = z
-  .enum(ResourceType);
+export const ExclusionScope$inboundSchema: z.ZodMiniType<
+  ExclusionScope,
+  unknown
+> = openEnums.inboundSchema(ExclusionScope);
 
 /** @internal */
-export const Slug$inboundSchema: z.ZodMiniEnum<typeof Slug> = z.enum(Slug);
+export const ResourceType$inboundSchema: z.ZodMiniType<ResourceType, unknown> =
+  openEnums.inboundSchema(ResourceType);
 
 /** @internal */
-export const ScopeDefinitionVisibility$inboundSchema: z.ZodMiniEnum<
-  typeof ScopeDefinitionVisibility
-> = z.enum(ScopeDefinitionVisibility);
+export const Sensitivity$inboundSchema: z.ZodMiniType<Sensitivity, unknown> =
+  openEnums.inboundSchema(Sensitivity);
+
+/** @internal */
+export const Slug$inboundSchema: z.ZodMiniType<Slug, unknown> = openEnums
+  .inboundSchema(Slug);
+
+/** @internal */
+export const ScopeDefinitionVisibility$inboundSchema: z.ZodMiniType<
+  ScopeDefinitionVisibility,
+  unknown
+> = openEnums.inboundSchema(ScopeDefinitionVisibility);
 
 /** @internal */
 export const ScopeDefinition$inboundSchema: z.ZodMiniType<
@@ -175,10 +252,15 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     agent_eligible: z.boolean(),
+    category: ScopeDefinitionCategory$inboundSchema,
     description: z.string(),
     exclusion_scope: z.optional(ExclusionScope$inboundSchema),
+    label: z.string(),
     resource_type: ResourceType$inboundSchema,
+    sensitive: z.boolean(),
+    sensitivity: z.optional(Sensitivity$inboundSchema),
     slug: Slug$inboundSchema,
+    sub_scopes: z.array(z.string()),
     visibility: ScopeDefinitionVisibility$inboundSchema,
   }),
   z.transform((v) => {
@@ -186,6 +268,7 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
       "agent_eligible": "agentEligible",
       "exclusion_scope": "exclusionScope",
       "resource_type": "resourceType",
+      "sub_scopes": "subScopes",
     });
   }),
 );

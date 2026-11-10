@@ -1,3 +1,5 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import { SetSpendCapRequestBodyKeyType as KnownSetSpendCapRequestBodyKeyType } from "@gram/client/models/components/setspendcaprequestbody.js";
 import { InferenceCapMeter } from "@/components/billing/inference-cap-meter";
 import { BookingCalendarLink } from "@/pages/demo/components/booking-calendar/BookingCalendarLink";
 import {
@@ -95,7 +97,14 @@ export function InferenceCapControl({
     // the anchor sits on the whole control: whichever variant this organization
     // gets, the link lands on the cap it named. `scroll-mt` clears the sticky
     // page header.
-    <div id={inferenceCapAnchor(cap.keyType)} className="scroll-mt-24">
+    <div
+      id={
+        isKnownEnumValue(KnownSetSpendCapRequestBodyKeyType, cap.keyType)
+          ? inferenceCapAnchor(cap.keyType)
+          : undefined
+      }
+      className="scroll-mt-24"
+    >
       {controlFor(cap, locked, refetching, announcesLock)}
     </div>
   );
@@ -107,6 +116,14 @@ function controlFor(
   refetching: boolean,
   announcesLock: boolean,
 ): JSX.Element {
+  if (!isKnownEnumValue(KnownSetSpendCapRequestBodyKeyType, cap.keyType)) {
+    return (
+      <CapReadOnly
+        cap={cap}
+        note="Refresh the page before editing this unsupported inference cap."
+      />
+    );
+  }
   if (cap.disabled) return <CapReadOnly cap={cap} note={DISABLED_NOTE} />;
 
   // Nothing writable here, so the mutation is never mounted — the lock holds
@@ -150,7 +167,7 @@ function LockedCapField({ cap }: { cap: InferenceSpendCap }): JSX.Element {
         />
       </Stack>
       <Button type="button" disabled>
-        {`SAVE ${label.toUpperCase()}`}
+        {`Save ${label.toLowerCase()}`}
       </Button>
     </Stack>
   );
@@ -270,7 +287,11 @@ function CapForm({
     // that holds if a submission reaches the form some other way. It refuses
     // before the amount is judged: a form that isn't accepting a save has
     // nothing to say about what is in the field.
-    if (locked) return;
+    if (
+      locked ||
+      !isKnownEnumValue(KnownSetSpendCapRequestBodyKeyType, cap.keyType)
+    )
+      return;
 
     setSubmitted(true);
     if (validationError !== null) return;
@@ -342,7 +363,7 @@ function CapForm({
         </Stack>
         <Stack direction="horizontal" align="center" gap={3}>
           <Button type="submit" disabled={mutation.isPending || locked}>
-            {mutation.isPending ? "SAVING..." : `SAVE ${label.toUpperCase()}`}
+            {mutation.isPending ? "Saving..." : `Save ${label.toLowerCase()}`}
           </Button>
           <CapFormFeedback
             label={label}

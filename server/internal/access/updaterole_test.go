@@ -1,6 +1,7 @@
 package access
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -226,6 +228,51 @@ func TestService_UpdateRole_SystemRole_AllowsGrantEdit(t *testing.T) {
 	ti.roles.AssertNotCalled(t, "UpdateRole", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
+func TestService_UpdateRole_RemovingUnrestrictedGrantRemovesLegacyWildcardRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
+	narrow := &gen.RoleGrant{Scope: string(authz.ScopeMCPWrite), Selectors: []*gen.Selector{{ResourceKind: "mcp", ResourceID: "server-1"}}}
+	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: roleID, AddGrants: []*gen.RoleGrant{narrow}})
+	require.NoError(t, err)
+
+	// Unrestricted rows in shapes older writers stored: a wildcard kind, and
+	// a kind with no resource_id, which the grant matcher reads as "*". The
+	// editor shows them as "All servers", so removing that must delete them.
+	principal, err := urn.ParsePrincipal(role.PrincipalUrn)
+	require.NoError(t, err)
+	for _, selectors := range []string{`{"resource_kind":"*","resource_id":"*"}`, `{"resource_kind":"mcp"}`} {
+		_, err = repo.New(ti.conn).UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PrincipalUrn:   principal,
+			Scope:          string(authz.ScopeMCPWrite),
+			Selectors:      []byte(selectors),
+		})
+		require.NoError(t, err)
+	}
+
+	role, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID:           roleID,
+		RemoveGrants: []*gen.RoleGrant{{Scope: string(authz.ScopeMCPWrite)}},
+	})
+	require.NoError(t, err)
+
+	var remaining []string
+	for _, g := range role.Grants {
+		if g.Scope != string(authz.ScopeMCPWrite) {
+			continue
+		}
+		for _, sel := range g.Selectors {
+			remaining = append(remaining, sel.ResourceKind+"/"+sel.ResourceID)
+		}
+	}
+	require.Equal(t, []string{"mcp/server-1"}, remaining, "only the narrower grant should survive removing all servers")
+}
+
 func TestService_UpdateRole_SystemRole_AdminMustKeepOrgAdmin(t *testing.T) {
 	t.Parallel()
 
@@ -265,6 +312,93 @@ func TestService_UpdateRole_SystemRole_AdminOrgAdminEmptySelectorAddRejected(t *
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "the Admin role must keep the org:admin permission")
+}
+
+func TestService_UpdateRole_RevokedAssistantGrantsStayRevoked(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, ti.conn, orgID))
+
+	customRoleID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_custom", "Custom Builder", "custom-builder", ""))
+	customPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+customRoleID)
+	seedGrant(t, ctx, ti.conn, orgID, customPrincipal, authz.ScopeAssistantRead, authz.WildcardResource)
+
+	// GetAssistant and SendMessage both require assistant:read on the
+	// assistant within its project; update and delete require assistant:write.
+	readCheck := authz.AssistantCheck(authz.ScopeAssistantRead, "assistant_1", "project_1")
+	writeCheck := authz.AssistantCheck(authz.ScopeAssistantWrite, "assistant_1", "project_1")
+	member := urn.NewPrincipal(urn.PrincipalTypeUser, "ordinary_member")
+
+	for _, tc := range []struct {
+		name      string
+		roleID    func() string
+		principal func(roleID string) urn.Principal
+		remove    []*gen.RoleGrant
+		checks    []authz.Check
+	}{
+		{
+			name:      "member",
+			roleID:    func() string { return globalRoleID(t, ctx, ti, authz.SystemRoleMember) },
+			principal: func(id string) urn.Principal { return urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+id) },
+			remove:    []*gen.RoleGrant{{Scope: string(authz.ScopeAssistantRead), Selectors: nil}},
+			checks:    []authz.Check{readCheck},
+		},
+		{
+			name:      "admin",
+			roleID:    func() string { return globalRoleID(t, ctx, ti, authz.SystemRoleAdmin) },
+			principal: func(id string) urn.Principal { return urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+id) },
+			remove:    []*gen.RoleGrant{{Scope: string(authz.ScopeAssistantRead), Selectors: nil}, {Scope: string(authz.ScopeAssistantWrite), Selectors: nil}},
+			checks:    []authz.Check{readCheck, writeCheck},
+		},
+		{
+			name:      "custom",
+			roleID:    func() string { return customRoleID },
+			principal: func(string) urn.Principal { return customPrincipal },
+			remove:    []*gen.RoleGrant{{Scope: string(authz.ScopeAssistantRead), Selectors: nil}},
+			checks:    []authz.Check{readCheck},
+		},
+	} {
+		roleID := tc.roleID()
+		principals := []urn.Principal{member, tc.principal(roleID)}
+
+		grants, err := authz.LoadGrants(ctx, ti.conn, orgID, principals)
+		require.NoError(t, err)
+		for _, check := range tc.checks {
+			allowed, err := authz.GrantsAuthorize(grants, check)
+			require.NoError(t, err)
+			require.True(t, allowed, "%s role must start with %s", tc.name, check.Scope)
+		}
+
+		role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: roleID, RemoveGrants: tc.remove})
+		require.NoError(t, err)
+		for _, grant := range role.Grants {
+			require.NotEqual(t, authz.ResourceKindAssistant, authz.ResourceKindForScope(authz.Scope(grant.Scope)), "%s role view must not list %s", tc.name, grant.Scope)
+		}
+
+		// Load twice: effective authority must match the stored grants on
+		// every request, not only the first one after the edit.
+		for range 2 {
+			grants, err = authz.LoadGrants(ctx, ti.conn, orgID, principals)
+			require.NoError(t, err)
+			for _, check := range tc.checks {
+				allowed, err := authz.GrantsAuthorize(grants, check)
+				require.NoError(t, err)
+				require.False(t, allowed, "%s role must not regain revoked %s", tc.name, check.Scope)
+			}
+		}
+	}
+}
+
+func globalRoleID(t *testing.T, ctx context.Context, ti *testInstance, slug string) string {
+	t.Helper()
+
+	role, err := repo.New(ti.conn).GetGlobalRoleBySlug(ctx, slug)
+	require.NoError(t, err)
+	return role.ID.String()
 }
 
 func TestService_UpdateRole_SystemRole_AuditLog(t *testing.T) {

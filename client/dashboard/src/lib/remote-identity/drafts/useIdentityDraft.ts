@@ -1,3 +1,4 @@
+import { invalidateIdentityConfiguration } from "../queries/invalidateIdentityConfiguration";
 import { useSdkClient } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
 import {
@@ -7,23 +8,17 @@ import {
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
-import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
-import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
-import { invalidateSharedIssuerImpact } from "@/lib/remote-identity/model/upstreamRepointing";
 import { queryKeyRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import {
-  invalidateAllRemoteSessionIssuers,
   useRemoteSessionIssuers,
   useRemoteSessionIssuersInfinite,
 } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import {
-  invalidateAllRemoteSessionsCount,
-  useRemoteSessionsCount,
-} from "@gram/client/react-query/remoteSessionsCount.js";
+import { useRemoteSessionsCount } from "@gram/client/react-query/remoteSessionsCount.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   advertisedScopes,
@@ -283,6 +278,16 @@ export type UserIdentityDraft = {
   clientsLoading: boolean;
   /** A discovered provider's capabilities are still being read. */
   capabilitiesLoading: boolean;
+  discoveryStatus: "idle" | "loading" | "error" | "ready";
+  discoveryError: string | null;
+  retryDiscovery: () => void;
+  issuerEditorOpen: boolean;
+  issuerEditorText: string;
+  issuerEditorError: string | null;
+  issuerEditorValidated: boolean;
+  setIssuerEditorText: (value: string) => void;
+  discoverIssuer: () => void;
+  resetIssuer: () => void;
 
   /** The server has a client and the operator has not cleared it. */
   connected: boolean;
@@ -298,7 +303,7 @@ export type UserIdentityDraft = {
   /** Back out of clearing and keep the connected client. */
   cancelClear: () => void;
 
-  choice: RegistrationChoice;
+  choice: RegistrationChoice | null;
   selectChoice: (choice: RegistrationChoice) => void;
   existingAvailable: boolean;
   automaticAvailable: boolean;
@@ -330,8 +335,12 @@ export type UserIdentityDraft = {
   canSave: boolean;
   /** The operator changed the selection, whether or not it can be saved yet. */
   pendingChange: boolean;
-  /** Resolves true when the commit landed; failures are already on screen. */
-  save: () => Promise<boolean>;
+  /**
+   * Resolves true when the commit landed; failures are already on screen.
+   * replaceClientServerIds confirms the other servers a replacement moves, as
+   * the impact preview listed them.
+   */
+  save: (replaceClientServerIds?: string[]) => Promise<boolean>;
   saving: boolean;
 };
 
@@ -376,6 +385,17 @@ export function useUserIdentityDraft({
   const [localStatus, setLocalStatus] = useState<UserIdentityStatus>({
     kind: "idle",
   });
+  const commitStarted = useRef(false);
+  const selectionRevision = useRef(0);
+  const resetChoice = (): void => {
+    setChoicePick(null);
+    setExistingPick(null);
+    setRegistrationMethod("cimd");
+    setClientId("");
+    setClientSecret("");
+    setScopes([]);
+    setLocalStatus({ kind: "idle" });
+  };
 
   // The menu lists each tier on its own, searched and paged on the server:
   // the platform catalog is far larger than any page, and a single mixed
@@ -431,7 +451,59 @@ export function useUserIdentityDraft({
       !matchedIssuer &&
       !linkedIssuerId,
   );
-  const discoveredIssuerUrl = prm.metadata?.authorizationServers?.[0] ?? null;
+  const advertisedIssuer =
+    prm.metadata?.authorizationServers?.[0]?.trim() || null;
+  // Only a named issuer can change what the upstream advertises. A probe that
+  // is disabled or loading has no answer, and a failed one reads the same as an
+  // upstream advertising nothing, so none of them may discard what the operator
+  // typed: a background refetch or a passing upstream failure would wipe it.
+  const advertisementSource = JSON.stringify([
+    mcpServerId,
+    remoteMcpServerId,
+    upstreamUrl,
+  ]);
+  const [advertisement, setAdvertisement] = useState({
+    source: advertisementSource,
+    issuer: advertisedIssuer,
+  });
+  const newSource = advertisement.source !== advertisementSource;
+  if (
+    newSource ||
+    (advertisedIssuer && advertisement.issuer !== advertisedIssuer)
+  ) {
+    setAdvertisement({
+      source: advertisementSource,
+      issuer: advertisedIssuer,
+    });
+  }
+  const issuerContext = JSON.stringify([
+    advertisementSource,
+    newSource || advertisedIssuer ? advertisedIssuer : advertisement.issuer,
+  ]);
+  const [correction, setCorrection] = useState({
+    context: issuerContext,
+    applied: null as string | null,
+    text: advertisedIssuer ?? "",
+    open: false,
+    edited: false,
+    error: null as string | null,
+  });
+  if (correction.context !== issuerContext) {
+    setCorrection({
+      context: issuerContext,
+      applied: null,
+      text: advertisedIssuer ?? "",
+      open: false,
+      edited: false,
+      error: null,
+    });
+    setProviderPick(null);
+    resetChoice();
+    selectionRevision.current++;
+  }
+  const discoveredIssuerUrl =
+    (correction.context === issuerContext ? correction.applied : null) ??
+    advertisedIssuer;
   // An advertised provider is new only when no issuer the project can see
   // shares its host. Held (not offered) until that lookup answers.
   const discoveredHost = hostOf(discoveredIssuerUrl);
@@ -510,8 +582,15 @@ export function useUserIdentityDraft({
     prm.status === "unavailable";
 
   const defaultProviderId =
-    linkedIssuerId ?? matchedIssuer?.id ?? discovered?.id ?? null;
-  const selectedProviderId = providerPick ?? defaultProviderId;
+    linkedIssuerId ??
+    matchedIssuer?.id ??
+    knownDiscoveredIssuer?.id ??
+    discovered?.id ??
+    null;
+  const selectedProviderId =
+    providerPick === DISCOVERED_PROVIDER_ID && !discovered
+      ? defaultProviderId
+      : (providerPick ?? defaultProviderId);
   const selectedIssuer = issuers.find(
     (issuer) => issuer.id === selectedProviderId,
   );
@@ -630,21 +709,43 @@ export function useUserIdentityDraft({
     queryKey: ["remote-session-issuer-metadata", discoveredIssuerUrl],
     queryFn: async () => {
       if (!discoveredIssuerUrl) throw new Error("no discovered issuer");
-      return await client.remoteSessionIssuers.fetchMetadata({
+      const metadata = await client.remoteSessionIssuers.fetchMetadata({
         fetchIssuerMetadataRequestBody: { issuer: discoveredIssuerUrl },
       });
+      if (!metadata || metadata.issuer !== discoveredIssuerUrl) {
+        throw new Error("OAuth metadata did not match the requested issuer.");
+      }
+      return metadata;
     },
     enabled: enabled && !!selectedDiscovered && !!discoveredIssuerUrl,
     throwOnError: false,
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
-  const discoveredMetadata = selectedDiscovered
-    ? (discoveredMetadataQuery.data ?? null)
-    : null;
-  // Nothing is claimed while the answer is outstanding.
-  const capabilitiesLoading =
-    !!selectedDiscovered && discoveredMetadataQuery.isLoading;
+  const discoveryStatus = !selectedDiscovered
+    ? "idle"
+    : discoveredMetadataQuery.isFetching
+      ? "loading"
+      : discoveredMetadataQuery.isError
+        ? "error"
+        : discoveredMetadataQuery.data?.issuer === discoveredIssuerUrl
+          ? "ready"
+          : "idle";
+  // Once discovery fails the form stays until the operator is done with it, so
+  // a refetch reading "loading" cannot take it away mid-edit.
+  if (discoveryStatus === "error" && !correction.open) {
+    setCorrection((current) => ({ ...current, open: true }));
+  }
+  const discoveredMetadata =
+    discoveryStatus === "ready" ? discoveredMetadataQuery.data! : null;
+  const discoveryError =
+    discoveryStatus === "error"
+      ? discoveredMetadataQuery.error instanceof ServiceError &&
+        discoveredMetadataQuery.error.data$.message.trim()
+        ? discoveredMetadataQuery.error.data$.message
+        : "Could not discover OAuth metadata. Try again."
+      : null;
+  const capabilitiesLoading = discoveryStatus === "loading";
 
   let support: AutomaticSupport = { cimd: false, dcr: false };
   if (selectedDiscovered && discoveredMetadata) {
@@ -658,12 +759,18 @@ export function useUserIdentityDraft({
 
   // Reusing a client beats registering another, and registering beats asking
   // for credentials by hand. A pick the provider no longer allows falls back.
-  let defaultChoice: RegistrationChoice = "manual";
+  let defaultChoice: RegistrationChoice | null =
+    selectedDiscovered && discoveryStatus !== "ready" ? null : "manual";
   if (existingAvailable) defaultChoice = "existing";
   else if (automaticAvailable) defaultChoice = "auto";
-  let choice: RegistrationChoice = choicePick ?? defaultChoice;
+  let choice = choicePick ?? defaultChoice;
   if (choice === "existing" && !existingAvailable) choice = defaultChoice;
-  if (choice === "auto" && !automaticAvailable) choice = defaultChoice;
+  if (
+    choice === "auto" &&
+    !automaticAvailable &&
+    (!selectedDiscovered || discoveryStatus === "ready")
+  )
+    choice = defaultChoice;
 
   const existingClient =
     choice === "existing"
@@ -693,21 +800,30 @@ export function useUserIdentityDraft({
     [resourceScopes, issuerScopes],
   );
 
-  const resetChoice = (): void => {
-    setChoicePick(null);
-    setExistingPick(null);
-    setRegistrationMethod("cimd");
-    // Manual credentials are issued by one provider and meaningless to the
-    // next, so they leave with it rather than being saved under its successor.
-    setClientId("");
-    setClientSecret("");
-    setScopes([]);
-    setLocalStatus({ kind: "idle" });
+  const applyIssuer = (issuer: string): void => {
+    if (commitStarted.current || !selectedDiscovered) return;
+    setCorrection({
+      ...correction,
+      applied: issuer,
+      text: issuer,
+      open: true,
+      edited: false,
+      error: null,
+    });
+    if (issuer === discoveredIssuerUrl) {
+      void discoveredMetadataQuery.refetch();
+    } else {
+      selectionRevision.current++;
+      setProviderPick(DISCOVERED_PROVIDER_ID);
+      resetChoice();
+    }
   };
 
   // A client belongs to exactly one provider, so choosing a provider clears
   // the client choice and any outcome from the previous one.
   const selectProvider = (id: string | null): void => {
+    if (commitStarted.current) return;
+    selectionRevision.current++;
     // Seed the by-id lookup with the record the menu already holds, so the
     // pick stays named once the menu's search moves on.
     const picked = issuers.find((issuer) => issuer.id === id);
@@ -721,21 +837,77 @@ export function useUserIdentityDraft({
     resetChoice();
   };
 
-  const commit = useMutation({
-    mutationFn: async () => {
-      if (!selected) throw new Error("choose an identity provider");
+  const latestSelection = useRef({
+    selectedProviderId: selected?.id ?? null,
+    discoveredIssuerUrl,
+    enabled,
+    mcpServerId,
+    remoteMcpServerId,
+    issuerContext,
+  });
+  latestSelection.current = {
+    selectedProviderId: selected?.id ?? null,
+    discoveredIssuerUrl,
+    enabled,
+    mcpServerId,
+    remoteMcpServerId,
+    issuerContext,
+  };
 
-      // A discovered provider is created from what the upstream publishes, so
-      // read its metadata now and send the whole record with the commit.
+  const commit = useMutation({
+    mutationFn: async ({
+      revision,
+      replaceClientServerIds,
+    }: {
+      revision: number;
+      replaceClientServerIds: string[];
+    }) => {
+      if (!selected) throw new Error("choose an identity provider");
+      if (!choice) throw new Error("Choose a registration method.");
+      const assertCurrentSelection = () => {
+        const latest = latestSelection.current;
+        if (
+          !latest.enabled ||
+          selectionRevision.current !== revision ||
+          latest.issuerContext !== issuerContext ||
+          latest.selectedProviderId !== selectedProviderId ||
+          latest.discoveredIssuerUrl !== discoveredIssuerUrl ||
+          latest.mcpServerId !== mcpServerId ||
+          latest.remoteMcpServerId !== remoteMcpServerId
+        ) {
+          throw new Error(
+            "The selected provider changed. Save again to retry.",
+          );
+        }
+      };
+      assertCurrentSelection();
+
+      // Query updates can arrive before React renders. Check the live cache
+      // before creating a provider, not just the metadata captured by render.
+      const assertCurrentDiscovery = () => {
+        const query = queryClient.getQueryState<RemoteSessionIssuerDraft>([
+          "remote-session-issuer-metadata",
+          discoveredIssuerUrl,
+        ]);
+        if (
+          discoveryStatus !== "ready" ||
+          !discoveredMetadata ||
+          query?.status !== "success" ||
+          query.fetchStatus !== "idle" ||
+          query.data !== discoveredMetadata ||
+          query.data.issuer !== discoveredIssuerUrl
+        ) {
+          throw new Error(
+            "Discover OAuth metadata before saving this provider.",
+          );
+        }
+      };
       let createProvider = undefined;
       let providerId: string | undefined = selectedIssuer?.id;
       let draft: RemoteSessionIssuerDraft | null = null;
       if (selectedDiscovered && discoveredIssuerUrl) {
-        draft =
-          discoveredMetadata ??
-          (await client.remoteSessionIssuers.fetchMetadata({
-            fetchIssuerMetadataRequestBody: { issuer: discoveredIssuerUrl },
-          }));
+        assertCurrentDiscovery();
+        draft = discoveredMetadata!;
         providerId = undefined;
         createProvider = {
           issuer: discoveredIssuerUrl,
@@ -800,21 +972,33 @@ export function useUserIdentityDraft({
         };
       }
 
-      return await client.remoteSessions.commitServerIdentityConfiguration({
-        commitServerIdentityConfigurationForm: {
-          mcpServerId,
-          providerId,
-          createProvider,
-          clientMode: choice,
-          existingClientId: existingClient?.id,
-          clientConfiguration,
-          // Only sent when it changes something: CIMD is the server default.
-          registrationMethod:
-            choice === "auto" && methodChoiceAvailable
-              ? registrationMethod
-              : undefined,
-        },
-      });
+      assertCurrentSelection();
+      if (selectedDiscovered) assertCurrentDiscovery();
+      commitStarted.current = true;
+      try {
+        return await client.remoteSessions.commitServerIdentityConfiguration({
+          commitServerIdentityConfigurationForm: {
+            mcpServerId,
+            providerId,
+            createProvider,
+            clientMode: choice,
+            existingClientId: existingClient?.id,
+            clientConfiguration,
+            // Only sent when it changes something: CIMD is the server default.
+            registrationMethod:
+              choice === "auto" && methodChoiceAvailable
+                ? registrationMethod
+                : undefined,
+            // Clearing the connection is the administrator asking for a new
+            // client, which automatic registration would otherwise not do.
+            replaceClient: cleared && !sameAsConnected ? true : undefined,
+            replaceClientServerIds:
+              cleared && !sameAsConnected ? replaceClientServerIds : undefined,
+          },
+        });
+      } finally {
+        commitStarted.current = false;
+      }
     },
     onSuccess: async (result) => {
       const providerName = selected?.name ?? "The provider";
@@ -841,13 +1025,7 @@ export function useUserIdentityDraft({
       setCleared(false);
       resetChoice();
       setLocalStatus({ kind: "done" });
-      await Promise.all([
-        invalidateAllRemoteSessionClients(queryClient),
-        invalidateAllRemoteSessionIssuers(queryClient),
-        invalidateAllRemoteSessionsCount(queryClient),
-        invalidateAllGetRemoteMcpServerScopes(queryClient),
-        invalidateSharedIssuerImpact(queryClient),
-      ]);
+      await invalidateIdentityConfiguration(queryClient);
     },
     onError: (error: unknown) => {
       // The reachable case is an operator with mcp:write but not
@@ -872,7 +1050,7 @@ export function useUserIdentityDraft({
     status = { kind: "done" };
   }
 
-  let choiceComplete = true;
+  let choiceComplete = choice !== null;
   if (choice === "existing")
     choiceComplete = !!existingClient && !sameAsConnected;
   if (choice === "manual") choiceComplete = clientId.trim() !== "";
@@ -886,6 +1064,7 @@ export function useUserIdentityDraft({
     !!selected &&
     !connected &&
     !providerLoadFailed &&
+    (!selectedDiscovered || discoveryStatus === "ready") &&
     !capabilitiesLoading &&
     // Saving before the client list lands would miss an existing client and
     // register a duplicate in its place.
@@ -910,6 +1089,64 @@ export function useUserIdentityDraft({
 
     clientsLoading,
     capabilitiesLoading,
+    discoveryStatus,
+    discoveryError,
+    retryDiscovery: () => {
+      if (
+        !commitStarted.current &&
+        selectedDiscovered &&
+        !discoveredMetadataQuery.isFetching
+      ) {
+        void discoveredMetadataQuery.refetch();
+      }
+    },
+    issuerEditorOpen: correction.open,
+    issuerEditorText: correction.text,
+    issuerEditorError: correction.error,
+    issuerEditorValidated:
+      discoveryStatus === "ready" &&
+      !correction.edited &&
+      !correction.error &&
+      correction.text.trim() === discoveredIssuerUrl,
+    setIssuerEditorText: (text) => {
+      if (!commitStarted.current)
+        setCorrection((current) => ({
+          ...current,
+          text,
+          edited: true,
+          error: null,
+        }));
+    },
+    discoverIssuer: () => {
+      if (commitStarted.current || !selectedDiscovered) return;
+      const issuer = correction.text.trim();
+      try {
+        const url = new URL(issuer);
+        if (
+          !/^https?:\/\//i.test(issuer) ||
+          /[\s\\]/.test(issuer) ||
+          /^https?:\/\/[^/?#]*@/i.test(issuer) ||
+          !secureEndpoint(issuer) ||
+          !url.hostname ||
+          url.username ||
+          url.password ||
+          issuer.includes("?") ||
+          issuer.includes("#")
+        )
+          throw new Error("invalid issuer");
+      } catch {
+        setCorrection({
+          ...correction,
+          error:
+            "Enter an absolute HTTPS issuer URL (HTTP is allowed only for loopback), without user information, a query, or a fragment.",
+        });
+        return;
+      }
+      applyIssuer(issuer);
+    },
+    resetIssuer: () => {
+      if (advertisedIssuer) applyIssuer(advertisedIssuer);
+    },
 
     connected,
     connectedClient,
@@ -958,12 +1195,15 @@ export function useUserIdentityDraft({
     status,
     canSave,
     pendingChange,
-    save: async (): Promise<boolean> => {
+    save: async (replaceClientServerIds: string[] = []): Promise<boolean> => {
       // Awaitable so callers can sequence work after it. onError has already
       // put the failure on screen, so the rejection is swallowed here rather
       // than surfacing twice or escaping as an unhandled rejection.
       try {
-        await runCommit();
+        await runCommit({
+          revision: selectionRevision.current,
+          replaceClientServerIds,
+        });
         return true;
       } catch {
         /* reported by onError */

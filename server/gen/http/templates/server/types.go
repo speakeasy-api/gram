@@ -2760,8 +2760,8 @@ func ValidateCreateTemplateRequestBody(body *CreateTemplateRequestBody) (err err
 		}
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "prompt" || *body.Kind == "higher_order_tool") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"prompt", "higher_order_tool"}))
+		if !(*body.Kind == "prompt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"prompt"}))
 		}
 	}
 	if len(body.ToolsHint) > 20 {
@@ -2788,8 +2788,8 @@ func ValidateUpdateTemplateRequestBody(body *UpdateTemplateRequestBody) (err err
 		}
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "prompt" || *body.Kind == "higher_order_tool") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"prompt", "higher_order_tool"}))
+		if !(*body.Kind == "prompt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"prompt"}))
 		}
 	}
 	if len(body.ToolsHint) > 20 {
@@ -2831,8 +2831,8 @@ func ValidateRenderTemplateRequestBody(body *RenderTemplateRequestBody) (err err
 		}
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "prompt" || *body.Kind == "higher_order_tool") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"prompt", "higher_order_tool"}))
+		if !(*body.Kind == "prompt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"prompt"}))
 		}
 	}
 	return

@@ -123,6 +123,29 @@ func TestAttributeFault(t *testing.T) {
 			wantScope:  FaultScopeUnknown,
 		},
 		{
+			// The tool ran and reported failure; no status names a party.
+			name:       "tool errors alone are indeterminate and say so",
+			server:     outcomeTotals{Total: 20, Success: 5, Failed: 15},
+			wantFault:  FaultIndeterminate,
+			wantReason: reasonToolErrorDominant,
+			wantScope:  FaultScopeUnknown,
+		},
+		{
+			// Tool errors do not dilute a status-classified majority.
+			name:       "server errors still point upstream alongside more tool errors",
+			server:     outcomeTotals{Total: 30, Success: 5, ServerError: 10, Failed: 15},
+			wantFault:  FaultProvider,
+			wantReason: reasonServerErrorDominant,
+			wantScope:  FaultScopeUnknown,
+		},
+		{
+			name:       "unauthorized majority survives tool errors",
+			server:     outcomeTotals{Total: 11, Unauthorized: 5, Failed: 6},
+			wantFault:  FaultGramConfiguration,
+			wantReason: reasonUnauthorizedDominant,
+			wantScope:  FaultScopeUnknown,
+		},
+		{
 			// Everything in the organization fails the same way, so this
 			// server's own configuration is not what distinguishes it.
 			name:         "organization-wide unauthorized pattern is not this server's configuration",

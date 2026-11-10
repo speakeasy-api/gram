@@ -188,7 +188,7 @@ func runPinnedFederatedLogin(t *testing.T, recorded, wantOrigin string, throughR
 		for _, host := range []string{ti.serverURL.Host, platformHostChecklistExtraHost, platformHostChecklistExtraHost + ":9443"} {
 			headers := http.Header{"X-Forwarded-Host": {callback.Host}, "X-Forwarded-Proto": {"https"}, "Cookie": {callback.Header.Get("Cookie")}}
 			rejected := serveOnHost(t, router, http.MethodGet, host, callback.URL.RequestURI(), nil, headers)
-			require.Equal(t, http.StatusUnauthorized, rejected.Code, host)
+			require.Equal(t, http.StatusBadRequest, rejected.Code, host)
 			_, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+id)
 			require.NoError(t, err, "misrouted callback must preserve state on %s", host)
 			require.Zero(t, provider.exchangeCount())

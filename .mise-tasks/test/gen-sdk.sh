@@ -6,7 +6,7 @@ set -euo pipefail
 
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
-mkdir -p "$tmpdir/repo/.speakeasy" "$tmpdir/bin"
+mkdir -p "$tmpdir/repo/.speakeasy" "$tmpdir/repo/hooks/sdk" "$tmpdir/bin"
 cp .mise-tasks/gen/sdk.sh "$tmpdir/repo/sdk.sh"
 
 cd "$tmpdir/repo"
@@ -43,6 +43,7 @@ printf '%s\n' "$*" >>"$SPEAKEASY_LOG"
 
 if [[ "$1" == "run" ]]; then
   grep -q 'removeUnused: true' .speakeasy/workflow.yaml
+  source=""
   while [[ $# -gt 0 ]]; do
     if [[ "$1" == "--source" ]]; then
       source=$2
@@ -51,6 +52,7 @@ if [[ "$1" == "run" ]]; then
     shift
   done
   case "$source" in
+    "") exit 0 ;;
     Gram-Internal) cp internal.yaml internal-output.yaml ;;
     Gram-Admin) cp admin.yaml admin-output.yaml ;;
     *) exit 1 ;;
@@ -76,3 +78,26 @@ if PATH="$tmpdir/bin:$PATH" usage_check=true bash ./sdk.sh >/dev/null 2>&1; then
   exit 1
 fi
 test "$(cat internal-output.yaml)" = internal
+
+# Generation must preserve the Go compile/lint checks when the generator's
+# incompatible built-in pipeline is skipped, and propagate a linter failure.
+cat >"$tmpdir/bin/go" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$GO_LOG"
+if [[ "$1" == "run" && "${FAIL_STATICCHECK:-false}" == "true" ]]; then
+  exit 1
+fi
+EOF
+chmod +x "$tmpdir/bin/go"
+export GO_LOG="$tmpdir/go.log"
+PATH="$tmpdir/bin:$PATH" usage_check=false bash ./sdk.sh
+grep -q -- '--skip-compile' "$SPEAKEASY_LOG"
+grep -q '^mod tidy$' "$GO_LOG"
+grep -q '^build ./\.\.\.$' "$GO_LOG"
+grep -q '^test -run=XXX_SHOULD_NEVER_MATCH_XXX ./\.\.\.$' "$GO_LOG"
+grep -q '^run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ' "$GO_LOG"
+if PATH="$tmpdir/bin:$PATH" usage_check=false FAIL_STATICCHECK=true bash ./sdk.sh; then
+  echo "Expected SDK Staticcheck failure to fail generation" >&2
+  exit 1
+fi

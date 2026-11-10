@@ -1,0 +1,263 @@
+# Remote MCP catalogue promotion
+
+Staff review healthy remote MCP deployments and publish explicitly approved
+provider metadata into the shared catalogue from the admin dashboard or Admin
+MCP. Publishing records the catalogue entry and pending setup-guide delivery
+atomically. Staff track qualification and guide progress in the admin workflow.
+
+## Configure delivery
+
+Configure the process running the shared worker (`worker`, or `start` when it
+runs the worker) with these environment values:
+
+| Variable                                 | Purpose                                                                                                                                                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GRAM_CATALOG_GUIDES_GITHUB_TOKEN`       | GitHub App installation token or fine-grained PAT with repository access, Issues read/write, Contents read and Pull requests read on the guide repository. Operators manage expiry and rotation. |
+| `GRAM_CATALOG_GUIDES_GITHUB_REPOSITORY`  | Guide repository, default `speakeasy-api/mcp-setup-docs`.                                                                                                                                        |
+| `GRAM_CATALOG_PROMOTION_DELIVERY_PAUSED` | Set `true` to suspend external guide writes while retaining pending jobs, candidate discovery, and progress metrics. Defaults to `false`.                                                        |
+
+The GitHub token is environment-only; there is no command-line token flag.
+The admin, MCP, and private ingress processes do not consume these delivery
+settings or construct the GitHub delivery client. Provision the token only to
+the intended shared worker process.
+
+Use a token whose writes trigger Actions. Actions' built-in `GITHUB_TOKEN`
+suppresses most follow-on workflow events and is unsuitable for this integration.
+The repository needs its `guide:draft` label, enabled **Guide draft** workflow,
+`OPENROUTER_API_KEY`, and configured publisher credentials. Missing or invalid
+credentials never count as queued delivery.
+
+Widen an existing token to Contents read and Pull requests read before deploying
+the existing-guide checks. A delivery stops at `docs_not_configured` when a
+lookup it needs is refused, and needs a staff retry once the token is fixed.
+Without Contents read, that is every delivery without an earlier request issue.
+Without Pull requests read, it is only deliveries whose guide is not already on
+the default branch: a published guide is recorded as `existing_guide` before the
+PR lookup runs. No guide request is filed while a lookup fails.
+
+Ship generated database migrations in a separate migration-only PR and apply
+them before merging and deploying the API and worker change. Configure external
+delivery only in the intended shared worker. Local and preview environments
+should leave credentials unset and set delivery paused. Every public guide
+request comes from a staff-approved promotion.
+
+The delivery pause switch takes effect when workers restart with the updated
+configuration. Roll it out to every worker polling the shared queue. To halt
+an already-running batch, cancel that Temporal workflow as well; its heartbeats
+allow cancellation to reach blocked requests. An external request already
+accepted by GitHub cannot be undone by cancellation. Reconciliation recovers
+its receipt on the next permitted attempt.
+
+## Staff UI and MCP
+
+The admin catalogue workflow opens on active candidates, newest first by discovery
+creation time, with status filters for all candidates, rejected, archived, and
+published entries. Reject and Archive remove unpublished candidates from the active
+queue and suspend automatic qualification until Restore. These actions preserve the
+source and are distinct from unpublishing a catalogue entry. Restore requires fresh
+eligibility before publication. Each change checks the reviewed curation revision.
+
+The review form suggests an editable title, catalogue name, guide slug, shared
+endpoint, authentication, and observed documentation URL where available. Source
+metadata is untrusted and may be private: staff must check each value and explicitly
+confirm it is suitable for public distribution. Credentials, query strings, fragments,
+and arbitrary endpoint paths are not suggested. Descriptions and missing official
+documentation references require staff input; the form does not invent them.
+Suggestions never overwrite edits on refresh. Guide status and retry information
+remain visible through the Published filter after promotion.
+
+When the shared endpoint matches exactly one existing setup guide, the form
+suggests that guide's slug. Under the slug field, the form shows one of three
+messages as the slug is edited:
+
+- **Neutral note:** the slug is the guide for this server's endpoint.
+  Publishing links to that guide and requests no new one, which is expected.
+- **Amber warning:** another guide already uses the slug. Publishing would
+  still link to that guide and request no new one, so keep the slug only if it
+  is the same provider.
+- **Muted hint:** no guide uses the slug, so publishing requests a new guide.
+  The hint names the pinned guides version.
+
+The check uses the guides embedded in the server (`setupguides.PinnedVersion`),
+so it can lag the docs repository's `main`; delivery rechecks GitHub before
+requesting a guide. Admin MCP promotion runs the same exact-slug check and
+reports it in the `setup_guide` receipt field after publishing, with only two
+messages: any slug that already belongs to a guide gets the warning wording,
+including this server's own endpoint guide, and a free slug gets the
+pinned-version note. Neither blocks publication, so check the slug with the
+user before promoting.
+
+Enable staff Admin MCP using `GRAM_ADMIN_MCP_ENABLED` and its independent
+`GRAM_ADMIN_MCP_SIGNING_KEY`. For writes, set `GRAM_ADMIN_MCP_WRITES_ENABLED=true`,
+which exposes every write the server implements whose optional dependencies are
+available.
+Write tools apply immediately. There is no server-side preview or approval, so
+the agent must show the exact change and get your explicit confirmation before
+calling one.
+
+Admin MCP uses the same business service and canonical targets as the dashboard.
+`list_registry_promotion_candidates` accepts the same status filters and returns
+newest-first pages. Use `curate_registry_promotion_candidate` to reject, archive, or
+restore an exact candidate.
+Private source-derived suggestions are confined to the staff review form; Admin MCP
+retains bounded evidence and requires independently supplied public metadata.
+Retrying documentation changes only the delivery attempt state, never the
+approved public metadata or catalogue publication. Completed guide receipts
+remain completed. Retained promotions can be recovered after their source
+project is deleted; organization, promotion ID, and delivery revision remain
+checked against the stored receipt.
+
+Platform MCP assessment: shared catalogue publication and guide recovery remain
+staff capabilities. Customer Platform MCP remains a consumer through existing
+catalogue discovery tools and native catalogue rollout rules. No customer
+publishing or recovery tool is added.
+
+Demo seed assessment: one synthetic, ineligible candidate is seeded with
+organization-scoped cleanup and postflight checks. The demo organization is
+excluded from qualification. The fixture does not publish a global entry or
+create a guide request.
+
+## Eligibility and public review
+
+Qualification observes the last 14 days after the latest source configuration
+change. A candidate needs at least 10 successful direct calls across two UTC
+days, activity within 48 hours, and no observed errors or unknown outcomes.
+Missing or disabled telemetry does not demonstrate health. Custom connection
+headers and disabled deployments are ineligible. Evidence must be refreshed
+within 15 minutes before promotion.
+
+Staff supplies the public provider identity, title, description, endpoint,
+documentation URL, guide slug, and authentication mode (`none` or `oauth`).
+The catalogue publishes the provider identity, title, description, endpoint, and
+documentation URL. The guide slug and authentication mode go to the guide factory.
+Do not include customer identifiers, private endpoints, credentials, connection
+headers, or customer-specific instructions.
+Verify the endpoint and setup information against public primary sources.
+The approved endpoint must match the observed deployment. Credentials, URL
+query strings, private hostnames, and unsupported ports are rejected. Source
+credentials and private display names are never copied automatically.
+
+Promotion excludes endpoints already in the native catalogue and serializes
+competing promotions of the same endpoint. Existing manual registry creation
+retains its support for entries or versions sharing an endpoint and does not
+participate in promotion endpoint locking. Avoid creating a manual entry while
+promoting the same provider. Existing native catalogue rollout remains unchanged.
+
+## Guide lifecycle and recovery
+
+1. Promotion atomically publishes a catalogue entry and records pending delivery.
+2. The dispatcher reconciles a GitHub issue by stable public guide slug. An
+   earlier request issue always wins, including while its factory PR is open.
+3. Without one, it checks the default branch for `guides/<slug>/meta.yaml`. If
+   present, it records `existing_guide` with a link to the guide and files nothing.
+   GitHub also answers 404 when the token lacks Contents read, so a missing file
+   only counts as absent once the `guides` directory reads successfully.
+4. Otherwise it looks for an open PR changing any file under `guides/<slug>/`. If
+   one exists, it records `guide_in_review` with a link to the PR and files nothing.
+5. Otherwise it creates the issue, then separately adds `guide:draft`.
+6. The existing factory researches, drafts, reviews, validates, and opens a PR.
+7. A maintainer reviews and merges the PR; existing repository workflows publish it.
+
+The checks exist because the factory researches and rewrites a whole guide on
+every trigger. A guide written outside promotion (for example, alongside the
+catalogue change itself) must use the same slug staff choose at promotion, or
+promotion requests a second guide. The review form's slug warning helps staff
+pick the existing slug.
+
+`existing_guide` is final: promotion never refreshes an existing guide. Refreshes
+go through the setup docs repository's `guide:stale` sweep. `guide_in_review`
+rechecks the PR daily without counting as a failure. When the PR merges, the next
+check records `existing_guide`. When it closes unmerged, the next check files a
+request as normal. A PR still open 14 days after it was first seen becomes
+`needs_attention` with `docs_guide_pr_stalled`. Merge or close it, then retry. A
+retry restarts the 14-day clock.
+
+`queued` means the factory accepted the issue trigger. It does not mean the guide
+has been generated, merged, or published. Follow the linked issue and factory
+workflow for subsequent progress. Factory runs marked `guide:blocked` require
+operator input through the existing repository process. The dispatcher checks
+historical label events because the factory removes the trigger while processing;
+it does not automatically repeat a previously triggered factory run.
+
+Transient failures use persisted delayed retries, starting at one hour with
+exponential backoff. Five consecutive failed or interrupted attempts require
+staff attention. Each attempt is bounded, and a failed record moves behind other
+due work. Rate-limit responses defer the next attempt until at least the
+provider's retry time; manual retry cannot bypass this delay. Invalid
+configuration, conflicting metadata, and other permanent failures become
+`needs_attention`. Resolve the
+underlying problem, then explicitly retry from the admin UI or Admin MCP.
+Success receipts are never cleared by retrying another attempt.
+
+Guide issue reconciliation scans at most 100 pages of 100 issues, events or open
+PRs, and also obeys the attempt deadline. Reaching a history limit blocks creation to
+avoid duplicates; large repositories may require indexed reconciliation.
+The changed-files check is the exception. GitHub lists at most 3000 changed
+files per PR, and a larger PR only counts as changing a guide when one of the
+listed files is in that guide's folder. An open guide PR whose folder only
+appears after the first 3000 files is missed, so a duplicate request can be
+filed. That trade-off keeps one oversized, unrelated PR from blocking every new
+guide request while it stays open. The worker caches each open PR's changed
+guide folders by head commit, so later checks list files only for new or
+updated PRs.
+An issue with the same marker but a different body requires manual reconciliation.
+Preserve the original body and put factory questions and answers in comments.
+
+A crash after GitHub accepts a write but before Postgres saves its receipt is
+recovered by issue/label reconciliation. Database locking serializes effects
+for a promotion; public guide slugs are unique. Operator retry preserves the
+same public identity and does not repeat catalogue publication.
+
+## Scheduling, bounds, and monitoring
+
+One shared-worker schedule runs hourly, with overlapping runs skipped and a
+bounded catch-up window. Each tick has two activities: candidate discovery and
+guide dispatch. Delivery still runs if discovery fails. Activities attempt once
+per tick; persisted due times control later attempts. Preview queues do not
+register the shared schedule. There are no per-tenant workflows or per-call signals.
+
+Each activity selects at most 50 records with a three-minute batch deadline.
+Source checks have a ten-second deadline and guide attempts have a 45-second
+deadline, so one slow record cannot consume the full activity timeout. A
+five-second independent cleanup budget preserves attempt receipts during
+cancellation. Heartbeats carry no tenant
+information. Durable database receipts, rather than heartbeat payloads, determine
+what work remains after restart.
+
+Progress gauges are exported through the existing Temporal metrics handler:
+
+- `catalog_promotion_pending_docs`: guide requests waiting for automatic delivery, excluding those waiting on an open guide PR.
+- `catalog_promotion_needs_attention`: requests needing staff intervention.
+- `catalog_promotion_oldest_pending_seconds`: age of the oldest request awaiting automatic delivery, excluding those waiting on an open guide PR.
+- `catalog_promotion_guide_in_review`: requests waiting on an open guide PR.
+- `catalog_promotion_last_discovery_timestamp_seconds`: latest persisted discovery attempt.
+- `catalog_promotion_discovery_failures`: sources whose latest discovery failed.
+- `catalog_promotion_delivery_paused`: whether this worker has delivery paused.
+- `catalog_promotion_batch_failures`: failed activity batches, tagged by phase.
+
+Alert on sustained backlog age, any requests needing attention, and stale
+discovery when sources exist. A successful workflow alone does not establish
+that every source qualified or every guide was generated. Metric-read failures
+fail the dispatch activity rather than silently reporting success. These metric
+signals ship with the implementation; deployment-specific alert rules must be
+configured in the monitoring system.
+
+Temporal actions/month: about 720 starts + 1,440 activities = 2,160 per shared
+namespace, plus delivered heartbeats for active batches. A conservative ceiling
+before SDK throttling is approximately 46,800 actions if both activities consume
+their full ten-minute timeout every hour (one initial heartbeat plus one every
+20 seconds). Normal budgeted batches cost less. The schedule count is fixed;
+database and telemetry work scales with the bounded batch of remote deployments.
+A fleet of 500 sources requires roughly ten hourly discovery batches, with more
+time when failures or record deadlines exhaust the batch budget.
+
+## Rollout verification
+
+Run domain, transport, Temporal, admin MCP, and UI tests without production
+credentials. In staging, use a public test provider and dedicated guide repository.
+Verify one catalogue entry, one guide issue and factory run, visible retry state,
+and recovery after a lost response. Confirm pausing preserves pending jobs and
+resuming does not repeat completed effects. Confirm the eventual guide PR before
+enabling production delivery. Promote one slug that already has a guide and
+confirm no issue is filed (`existing_guide`). Promote one slug with an open guide
+PR and confirm `guide_in_review`, then `existing_guide` after the PR merges.

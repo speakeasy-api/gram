@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { parse, View, Warn, type Spec } from "vega";
 import { expressionInterpreter } from "vega-interpreter";

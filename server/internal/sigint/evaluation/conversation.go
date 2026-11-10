@@ -77,6 +77,9 @@ func (h *ConversationHandler) eligible(ctx context.Context, m *conversationv1.Me
 	if m.GetRole() != conversationv1.MessageEvent_ROLE_USER && m.GetRole() != conversationv1.MessageEvent_ROLE_ASSISTANT {
 		return false
 	}
+	if kind := m.GetCaptureKind(); kind != "" && kind != "original" {
+		return false
+	}
 	for _, id := range []string{m.GetId(), m.GetMessageId(), m.GetConversationId(), m.GetProjectId()} {
 		parsed, err := uuid.Parse(id)
 		if err != nil || parsed == uuid.Nil {
@@ -177,6 +180,9 @@ func (h *ConversationHandler) evaluate(ctx context.Context, m *conversationv1.Me
 	if p.Role != "user" && p.Role != "assistant" {
 		return nil
 	}
+	if !m.HasCaptureKind() && p.Generation > 0 {
+		return nil
+	}
 	history, _ := h.messages.(HistorySource)
 	return h.evaluator.Evaluate(ctx, &conversationInput{message: m, stored: row, blobs: h.blobs, history: history})
 }
@@ -206,6 +212,12 @@ func (in *conversationInput) Event() Event {
 	p := in.stored
 	messageContext := &sigintv1.Reading_ConversationMessage{}
 	messageContext.SetConversationId(m.GetConversationId())
+	messageContext.SetGeneration(p.Generation)
+	messageContext.SetSequence(p.Seq)
+	messageContext.SetCaptureKind(m.GetCaptureKind())
+	if m.HasOriginalMessageId() {
+		messageContext.SetOriginalMessageId(m.GetOriginalMessageId())
+	}
 	messageContext.SetRole(sigintv1.Reading_ConversationMessage_ROLE_USER)
 	if p.Role == "assistant" {
 		messageContext.SetRole(sigintv1.Reading_ConversationMessage_ROLE_ASSISTANT)

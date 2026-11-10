@@ -51,7 +51,7 @@ func registerDataExportRouteToggleTools(reg *Registrar, service *DataExportRoute
 			"The pause reaches the export relays within about a minute, so data can keep flowing briefly; for a destination that includes sensitive fields it stops on the next batch.",
 		// Pausing discards the data produced while the route is paused, which
 		// cannot be recovered by resuming, so the hint says destructive.
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)},
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)},
 	}, meta, pause)
 	addTool(reg, &mcp.Tool{
 		Name:  resumeDataExportToolName,
@@ -62,7 +62,7 @@ func registerDataExportRouteToggleTools(reg *Registrar, service *DataExportRoute
 			dataExportToggleScopeNote + dataExportToggleDataNote +
 			"The resume reaches the export relays within about a minute for every destination, so the first batches after it can still be dropped. " +
 			"A route cannot be resumed, and nothing is changed, when it has no destination, when its destination was deleted, or when its destination's stored configuration (endpoint, sensitive-data setting, or headers) can no longer be used; this applies even if the route is already on. The refusal names which, and the destination has to be repaired in the dashboard.",
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}, meta, resume)
 }
 

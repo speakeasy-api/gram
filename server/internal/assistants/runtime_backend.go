@@ -11,7 +11,12 @@ import (
 // runTurnRequest bundles everything a backend needs to deliver one turn to
 // the runner's /threads/{thread_id}/turn endpoint.
 type runTurnRequest struct {
-	ThreadID uuid.UUID
+	ThreadID               uuid.UUID
+	EventID                uuid.UUID
+	EventAttempt           int
+	CanonicalUserMessageID uuid.UUID
+	// Model is the persisted assistant choice, not a guest default.
+	Model string
 
 	// IdempotencyKey deduplicates redelivered turns; the runner serializes
 	// admissions per key.
@@ -23,6 +28,9 @@ type runTurnRequest struct {
 
 	// Prompt is the turn's user input text.
 	Prompt string
+
+	// SourceInstructions is control-plane context for this thread and turn only.
+	SourceInstructions string
 
 	// InputParts optionally attaches structured content (e.g. image_url
 	// parts with data: URIs) that the runner folds into the turn's user
@@ -36,6 +44,7 @@ type runTurnRequest struct {
 }
 
 type RuntimeBackend interface {
+	runtimeProtocol
 	Backend() string
 	SupportsBackend(backend string) bool
 	// ServerURL returns the public base URL the runner uses to reach the
@@ -55,16 +64,6 @@ type RuntimeBackend interface {
 	// idle clock so an in-flight turn is never interrupted — a busy runtime
 	// is skipped and the next admission's Ensure picks the upgrade up lazily.
 	RecycleImage(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendRecycleResult, error)
-	// RunTurn delivers a turn to the runner backing `runtime`. The call
-	// lands on /threads/{thread_id}/turn so the runner can dispatch to the
-	// right per-thread tokio task.
-	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, turn runTurnRequest) error
-	// InterruptTurn asks the runner to stop the turn in flight on a thread.
-	// Reports whether the runner had a live task to stop: false means the
-	// turn never reached this runtime or has already finished, which is a
-	// normal outcome of a stop pressed on the boundary, not a failure.
-	InterruptTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID) (bool, error)
-	Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error)
 	// Stop halts the active runtime so it can be re-admitted later. Backends
 	// may keep persisted state (e.g. local volumes) intact for warm reuse.
 	Stop(ctx context.Context, runtime assistantRuntimeRecord) error
