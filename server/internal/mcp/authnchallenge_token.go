@@ -1602,6 +1602,7 @@ func (s *Service) rotateRefreshToken(
 		UpstreamClientPicks:    nil,
 		AuthClientPicks:        nil,
 		Catalog:                nil,
+		TypedChoices:           false, // Rotation retains the existing credential's choices.
 	}, logger)
 	if err != nil {
 		return true, err
