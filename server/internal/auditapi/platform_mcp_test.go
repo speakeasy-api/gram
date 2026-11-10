@@ -52,6 +52,10 @@ func TestPlatformMCPAuditSelfPaginationAndDetails(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "self", page.Visibility)
 	require.Len(t, page.Logs, 50)
+	require.Len(t, page.Seqs, len(page.Logs))
+	cursor, err := audit.DecodeCursor(*page.NextCursor)
+	require.NoError(t, err)
+	require.Equal(t, cursor.Seq, page.Seqs[len(page.Seqs)-1])
 	require.NotNil(t, page.NextCursor)
 	for i, entry := range page.Logs {
 		require.Equal(t, ids[54-i], entry.ID)

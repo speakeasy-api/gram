@@ -62,6 +62,9 @@ type PlatformMCPAuditPage struct {
 	// Logs retains the customer API's full detail projection.
 	Logs []*gen.AuditLog
 
+	// Seqs aligns with Logs and permits byte-bounded consumers to continue after any entry.
+	Seqs []int64
+
 	// NextCursor continues after the last returned event without retaining authority.
 	NextCursor *string
 }
@@ -141,5 +144,9 @@ func (s *Service) ListPlatformMCPAuditLogs(ctx context.Context, request Platform
 	if err != nil {
 		return nil, err
 	}
-	return &PlatformMCPAuditPage{Visibility: visibility, Logs: page.Logs, NextCursor: page.NextCursor}, nil
+	seqs := make([]int64, len(page.Logs))
+	for i := range page.Logs {
+		seqs[i] = rows[i].Seq
+	}
+	return &PlatformMCPAuditPage{Visibility: visibility, Logs: page.Logs, Seqs: seqs, NextCursor: page.NextCursor}, nil
 }

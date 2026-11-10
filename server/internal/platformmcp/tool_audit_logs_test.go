@@ -132,7 +132,7 @@ func TestCustomerAuditToolTransport(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, result.IsError)
 	}
-	reader.page = &auditapi.PlatformMCPAuditPage{Visibility: "self", Logs: []*gen.AuditLog{{}}, NextCursor: new(audit.EncodeCursor(audit.CategoryConfiguration, 10, "event"))}
+	reader.page = &auditapi.PlatformMCPAuditPage{Visibility: "self", Logs: []*gen.AuditLog{{}}, Seqs: []int64{11}, NextCursor: new(audit.EncodeCursor(audit.CategoryConfiguration, 10, "event"))}
 	bounded, err := customerAuditOutput(testPrincipal().OrganizationID, reader.page)
 	require.NoError(t, err)
 	encoded, err = json.Marshal(bounded)
@@ -149,6 +149,21 @@ func TestCustomerAuditToolTransport(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.IsError)
 	require.Nil(t, result.StructuredContent)
+	require.Len(t, result.Content, 1)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	var oversized struct {
+		Code       string `json:"code"`
+		Message    string `json:"message"`
+		NextCursor string `json:"next_cursor"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(text.Text), &oversized))
+	require.Equal(t, "page_too_large", oversized.Code)
+	require.NotEmpty(t, oversized.Message)
+	cursor, err := audit.DecodeCursor(oversized.NextCursor)
+	require.NoError(t, err)
+	require.EqualValues(t, 11, cursor.Seq)
+
 	reader.err = fmt.Errorf("private backend cause")
 	result, err = session.CallTool(t.Context(), &mcp.CallToolParams{Name: live.Name, Arguments: map[string]any{}})
 	require.NoError(t, err)
@@ -185,7 +200,7 @@ func TestCustomerAuditCompletePageValidation(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, output.Entries, count)
 	}
-	page := &auditapi.PlatformMCPAuditPage{Visibility: "self", Logs: []*gen.AuditLog{{SubjectID: ""}}, NextCursor: new(audit.EncodeCursor(audit.CategoryConfiguration, 10, "event"))}
+	page := &auditapi.PlatformMCPAuditPage{Visibility: "self", Logs: []*gen.AuditLog{{SubjectID: ""}}, Seqs: []int64{11}, NextCursor: new(audit.EncodeCursor(audit.CategoryConfiguration, 10, "event"))}
 	output, err := customerAuditOutput("organization", page)
 	require.NoError(t, err)
 	encoded, err := json.Marshal(output)
@@ -342,5 +357,96 @@ func TestCustomerAuditTransportFilterGuards(t *testing.T) {
 				require.Nil(t, result.StructuredContent)
 			}
 		})
+	}
+}
+
+func TestCustomerAuditByteBoundedPrefix(t *testing.T) {
+	t.Parallel()
+	for _, hasMore := range []bool{false, true} {
+		t.Run(fmt.Sprint(hasMore), func(t *testing.T) {
+			t.Parallel()
+			page := &auditapi.PlatformMCPAuditPage{Visibility: "organization"}
+			for i := range 30 {
+				page.Logs = append(page.Logs, &gen.AuditLog{ID: fmt.Sprint(i), AfterSnapshot: json.RawMessage(`{"description":"` + strings.Repeat("x", 3000) + `"}`)})
+				page.Seqs = append(page.Seqs, int64(100-i))
+			}
+			if hasMore {
+				page.NextCursor = new(audit.EncodeCursor(audit.CategoryConfiguration, 71, "29"))
+			}
+			seen := 0
+			for len(page.Logs) > 0 {
+				output, err := customerAuditOutput("organization", page)
+				require.NoError(t, err)
+				require.NotEmpty(t, output.Entries)
+				encoded, err := json.Marshal(output)
+				require.NoError(t, err)
+				require.LessOrEqual(t, len(encoded), 64*1024)
+				n := len(output.Entries)
+				for i, entry := range output.Entries {
+					require.Equal(t, page.Logs[i].ID, entry.ID)
+					require.JSONEq(t, string(page.Logs[i].AfterSnapshot), string(entry.AfterSnapshot))
+				}
+				if n < len(page.Logs) {
+					require.NotNil(t, output.NextCursor)
+					cursor, err := audit.DecodeCursor(*output.NextCursor)
+					require.NoError(t, err)
+					require.Equal(t, page.Seqs[n-1], cursor.Seq)
+					// Even one additional complete entry would exceed the limit.
+					larger := output
+					larger.Entries = append(append([]auditLogEntry{}, output.Entries...), auditLogEntry{ID: page.Logs[n].ID, AfterSnapshot: page.Logs[n].AfterSnapshot})
+					larger.NextCursor = new(audit.EncodeCursor(audit.CategoryConfiguration, page.Seqs[n], page.Logs[n].ID))
+					encoded, err = json.Marshal(larger)
+					require.NoError(t, err)
+					require.Greater(t, len(encoded), 64*1024)
+				} else {
+					require.Equal(t, page.NextCursor, output.NextCursor)
+				}
+				seen += n
+				page.Logs, page.Seqs = page.Logs[n:], page.Seqs[n:]
+			}
+			require.Equal(t, 30, seen)
+		})
+	}
+}
+
+func TestCustomerAuditOversizedEntryContinuation(t *testing.T) {
+	t.Parallel()
+	page := &auditapi.PlatformMCPAuditPage{
+		Visibility: "self", Seqs: []int64{100, 90},
+		Logs: []*gen.AuditLog{{ID: "oversized", AfterSnapshot: json.RawMessage(`"` + strings.Repeat("x", 64*1024) + `"`)}, {ID: "older"}},
+	}
+	output, err := customerAuditOutput("organization", page)
+	var refusal *ToolRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.Empty(t, output.Entries)
+	var payload struct {
+		Code, Message string
+		NextCursor    string `json:"next_cursor"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &payload))
+	require.Equal(t, "page_too_large", payload.Code)
+	require.NotEmpty(t, payload.Message)
+	cursor, err := audit.DecodeCursor(payload.NextCursor)
+	require.NoError(t, err)
+	require.EqualValues(t, 100, cursor.Seq)
+	page.Logs, page.Seqs = page.Logs[1:], page.Seqs[1:]
+	output, err = customerAuditOutput("organization", page)
+	require.NoError(t, err)
+	require.Equal(t, "older", output.Entries[0].ID)
+	require.Nil(t, output.NextCursor)
+}
+
+func TestCustomerAuditInvalidRequestJSON(t *testing.T) {
+	t.Parallel()
+	for _, input := range []listAuditLogEntriesInput{
+		{Cursor: "invalid"}, {ProjectID: "invalid"}, {ActorID: " padded"}, {From: "invalid"},
+	} {
+		_, err := parseCustomerAuditFilter(input)
+		var refusal *ToolRefusalError
+		require.ErrorAs(t, err, &refusal)
+		var payload map[string]string
+		require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &payload))
+		require.Equal(t, "invalid_request", payload["code"])
+		require.NotEmpty(t, payload["message"])
 	}
 }
