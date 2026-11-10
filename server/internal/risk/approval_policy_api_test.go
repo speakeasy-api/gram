@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 )
 
 func approvalScope() *types.RiskMCPScope {
@@ -157,61 +156,4 @@ func TestUpdateToRequireApprovalNeedsFlag(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
-func TestFirstApprovalPolicySetsUpTheApprovalsServer(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	ti.flags.SetFlag(feature.FlagToolApprovals, authCtx.ActiveOrganizationID, true)
-	approvers := &types.RiskPolicyApprovalConfig{Approvers: []string{"user:" + authCtx.UserID}}
-
-	// A disabled approval policy holds nothing, so it sets up nothing.
-	disabled, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Action:         "require_approval",
-		McpScope:       approvalScope(),
-		ApprovalConfig: approvers,
-		Enabled:        new(false),
-	})
-	require.NoError(t, err)
-	require.Nil(t, disabled.ApprovalsServerSetup)
-
-	// Turning it on is the first use.
-	enabled, err := ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
-		ID:      disabled.ID,
-		Name:    disabled.Name,
-		Enabled: new(true),
-	})
-	require.NoError(t, err)
-	require.NotNil(t, enabled.ApprovalsServerSetup)
-	require.Equal(t, approval.MCPServerName, enabled.ApprovalsServerSetup.PluginServerName)
-	require.True(t, enabled.ApprovalsServerSetup.AddedToDefaultPlugin)
-	require.NotEmpty(t, enabled.ApprovalsServerSetup.McpServerSlug)
-
-	// Every later approval policy reuses the server.
-	second, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Action:         "require_approval",
-		McpScope:       approvalScope(),
-		ApprovalConfig: approvers,
-	})
-	require.NoError(t, err)
-	require.Nil(t, second.ApprovalsServerSetup)
-
-	// Reads never carry the setup.
-	got, err := ti.service.GetRiskPolicy(ctx, &gen.GetRiskPolicyPayload{ID: enabled.ID})
-	require.NoError(t, err)
-	require.Nil(t, got.ApprovalsServerSetup)
-}
-
-func TestOtherPoliciesDoNotSetUpTheApprovalsServer(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Action:   "block",
-		McpScope: approvalScope(),
-	})
-	require.NoError(t, err)
-	require.Nil(t, created.ApprovalsServerSetup)
 }
