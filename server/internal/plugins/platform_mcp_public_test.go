@@ -96,7 +96,6 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 	var meta claudePluginMeta
 	require.NoError(t, json.Unmarshal(files["speakeasy/.claude-plugin/plugin.json"], &meta))
 	require.Equal(t, "0."+platformMCPGeneratorVersion+".17", meta.Version, "the CI counter must reach the manifest so installs refresh")
-	require.Equal(t, "https://www.speakeasy.com/privacy-policy", meta.PrivacyPolicyURL, "the Claude plugin directory warns when the listing has no privacy policy")
 }
 
 // The public repository is world-readable, so nothing org-derived or secret may
@@ -169,6 +168,7 @@ func TestLocalPlatformMCPFilesTargetsLocalServer(t *testing.T) {
 	var meta claudePluginMeta
 	require.NoError(t, json.Unmarshal(files["speakeasy/.claude-plugin/plugin.json"], &meta))
 	require.Equal(t, "0."+platformMCPGeneratorVersion+".42", meta.Version)
+	require.Equal(t, "https://www.speakeasy.com/privacy-policy", meta.PrivacyPolicyURL, "the Claude plugin directory warns when the listing has no privacy policy")
 
 	var claude marketplaceManifest
 	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &claude))
