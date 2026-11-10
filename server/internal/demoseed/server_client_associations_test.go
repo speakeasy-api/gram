@@ -24,9 +24,9 @@ func TestLocalServerClientAssociations(t *testing.T) {
 
 // Every seeded proxied server whose issuer binds an upstream client carries
 // the association it is meant to use, so the backfill has nothing to decide.
-// GitHub and DeepWiki share the workforce issuer with the EMA services and
-// Notion but have no evidence for any of their clients, so they use none.
-// DeepWiki is public and needs no sign-in at all.
+// GitHub and DeepWiki share the workforce issuer with the EMA services but
+// have no evidence for any of their clients, so they use none. Notion has its
+// own issuer and no seeded client. DeepWiki is public and needs no sign-in.
 func testServerClientAssociations(t *testing.T, spec Spec) {
 	t.Helper()
 	ctx := t.Context()
