@@ -93,19 +93,21 @@ function OktaPermissions(): JSX.Element {
           />
         </Section>
       )}
-      <Section title="Assign people">
-        <InProvider
-          actions={[
-            <>
-              Open the <strong>Assignments</strong> tab.
-            </>,
-            <>Assign the people or groups who should use this app.</>,
-          ]}
-        />
-        <p className="mt-3 text-sm text-muted-foreground">
-          People keep their existing Okta permissions.
-        </p>
-      </Section>
+      {s.values.appChoice === "existing" && (
+        <Section title="Assign people">
+          <InProvider
+            actions={[
+              <>
+                Open the <strong>Assignments</strong> tab.
+              </>,
+              <>Assign the people or groups who should use this app.</>,
+            ]}
+          />
+          <p className="mt-3 text-sm text-muted-foreground">
+            People keep their existing Okta permissions.
+          </p>
+        </Section>
+      )}
     </>
   );
 }
@@ -250,6 +252,14 @@ export function OktaTask(): JSX.Element {
           <>
             Add the URL below to <strong>Sign-in redirect URIs</strong>.
           </>,
+          ...(s.values.appChoice === "new"
+            ? [
+                <>
+                  In <strong>Assignments</strong>, select the people or groups
+                  who can use this app.
+                </>,
+              ]
+            : []),
           <>Save the app.</>,
         ]}
       />

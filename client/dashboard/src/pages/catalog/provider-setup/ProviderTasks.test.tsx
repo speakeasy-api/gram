@@ -782,7 +782,7 @@ it.each(["web", "native"])(
         .getByRole("link", { name: "Scope-to-tool guide" })
         .getAttribute("href"),
     ).toContain("scope-based-tool-loading");
-    expect(screen.getByText(/Assign the people or groups/)).toBeDefined();
+    expect(screen.queryByText(/Assign the people or groups/)).toBeNull();
   },
 );
 
@@ -854,12 +854,19 @@ it.each(["web", "native"])(
     const view = render(<OktaTaskFixture step="app" appType={appType} />);
     expect(screen.getByText("Create App Integration")).toBeDefined();
     expect(screen.getByText("App integration name")).toBeDefined();
+    const instructions =
+      screen.getByText("In Okta").parentElement!.textContent!;
+    expect(instructions.indexOf("In Assignments, select")).toBeGreaterThan(-1);
+    expect(instructions.indexOf("In Assignments, select")).toBeLessThan(
+      instructions.indexOf("Save the app."),
+    );
     view.rerender(
       <OktaTaskFixture step="app" appType={appType} appChoice="existing" />,
     );
     expect(screen.queryByText("Create App Integration")).toBeNull();
     expect(screen.queryByText("App integration name")).toBeNull();
     expect(screen.getByText(/Keep any redirect URIs/)).toBeDefined();
+    expect(screen.queryByText(/select the people or groups/)).toBeNull();
   },
 );
 
@@ -870,7 +877,7 @@ it("shows refresh-token actions only when offline_access is selected", () => {
   expect(
     screen.getByRole("heading", { name: "Grant API scopes" }),
   ).toBeDefined();
-  expect(screen.getByRole("heading", { name: "Assign people" })).toBeDefined();
+  expect(screen.queryByRole("heading", { name: "Assign people" })).toBeNull();
   view.rerender(
     <OktaTaskFixture
       step="permissions"
@@ -881,6 +888,17 @@ it("shows refresh-token actions only when offline_access is selected", () => {
   expect(screen.getByLabelText("Scopes to grant").getAttribute("value")).toBe(
     "okta.users.read",
   );
+});
+
+it("keeps later assignment instructions only for existing Okta apps", () => {
+  const view = render(
+    <OktaTaskFixture step="permissions" appChoice="existing" />,
+  );
+  expect(screen.getByRole("heading", { name: "Assign people" })).toBeDefined();
+  expect(screen.getByText(/Assign the people or groups/)).toBeDefined();
+  view.rerender(<OktaTaskFixture step="permissions" appChoice="new" />);
+  expect(screen.queryByRole("heading", { name: "Assign people" })).toBeNull();
+  expect(screen.queryByText(/Assign the people or groups/)).toBeNull();
 });
 
 it("keeps credential instructions specific to the selected app and hides them after saving", () => {
