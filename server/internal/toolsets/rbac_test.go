@@ -200,6 +200,22 @@ func TestToolsets_RBAC_CloneToolset_HonorsProjectScopedAuthorization(t *testing.
 			allowed: false,
 		},
 		{
+			name: "org-wide write and read without project dimension",
+			grants: func(string) []authz.Grant {
+				return []authz.Grant{
+					authz.NewGrantWithSelector(authz.ScopeMCPWrite, authz.Selector{
+						authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+						authz.SelectorKeyResourceID:   authz.WildcardResource,
+					}),
+					authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{
+						authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+						authz.SelectorKeyResourceID:   authz.WildcardResource,
+					}),
+				}
+			},
+			allowed: true,
+		},
+		{
 			name: "write and read bound to its project",
 			grants: func(projectID string) []authz.Grant {
 				return []authz.Grant{
