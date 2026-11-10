@@ -310,8 +310,9 @@ function StepRail(): JSX.Element {
     >
       <ol className="flex flex-wrap gap-x-[18px] gap-y-3 lg:block">
         {steps(s).map((step, index) => {
-          const completed =
-            step.id === "credentials" ? s.saved : s.done.includes(step.id);
+          let completed = s.done.includes(step.id);
+          if (step.id === "credentials") completed = s.saved;
+          if (step.id === "test") completed = s.tested;
           return (
             <li
               key={step.id}

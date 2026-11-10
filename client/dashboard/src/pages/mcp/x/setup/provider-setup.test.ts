@@ -32,6 +32,27 @@ describe("Salesforce source-bound progress", () => {
     expect(restored.configChanged).toBe(true);
     expect(restored.step).toBe("credentials");
   });
+  it("retains the server and environment when only the saved domain is invalid", () => {
+    const state = initialState("salesforce");
+    state.configChanged = true;
+    state.sourceFingerprint = baseline;
+    Object.assign(state.values, {
+      environment: "sandbox",
+      salesforceServer: "data360",
+      salesforceDomain: "example.my.salesforce.com",
+    });
+    saveProviderProgress("sf-invalid-domain", state);
+    const restored = loadProviderProgress(
+      "salesforce",
+      "sf-invalid-domain",
+      initialState("salesforce").values,
+      baseline,
+    );
+    expect(restored.values.environment).toBe("sandbox");
+    expect(restored.values.salesforceServer).toBe("data360");
+    expect(restored.values.salesforceDomain).toBe("");
+    expect(restored.saved).toBe(false);
+  });
   it.each([false, true])(
     "uses the current source when its baseline changes (pending=%s)",
     (pending) => {

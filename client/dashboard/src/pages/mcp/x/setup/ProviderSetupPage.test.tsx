@@ -176,6 +176,25 @@ it.each(["slack", "github", "salesforce"])(
 function validate() {
   act(() => mocks.dispatch({ type: "connection", tested: true }));
 }
+it.each(["slack", "github", "salesforce"])(
+  "keeps the %s final step marker in sync with connection testing",
+  (provider) => {
+    mocks.provider = provider;
+    render(<Setup />);
+    const step = screen.getByRole("button", { name: /Connect and test$/ });
+    expect(step.textContent).toMatch(/^\d+Connect and test$/);
+    validate();
+    expect(step.textContent).toBe("Connect and test");
+    act(() =>
+      mocks.dispatch({
+        type: "field",
+        field: "clientId",
+        value: "replacement",
+      }),
+    );
+    expect(step.textContent).toMatch(/^\d+Connect and test$/);
+  },
+);
 beforeEach(() => {
   mocks.headers = [];
   vi.resetAllMocks();

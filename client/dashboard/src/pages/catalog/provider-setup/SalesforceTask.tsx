@@ -1,5 +1,6 @@
 import { useNewRemoteSessionClientCallbackUrl } from "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js";
 import { Layers, ShieldCheck, ShieldCog, CopyPlus } from "lucide-react";
+import { Alert } from "@/components/ui/Alert";
 import { useSetup } from "./setup-context";
 import {
   AppChoice,
@@ -27,6 +28,19 @@ export function SalesforceTask(): JSX.Element {
   const { s, live } = useSetup();
   const existing = s.values.appChoice === "existing";
   const connection = salesforceConnection(s.values);
+  const installationUrl = salesforceAppInstallationUrl(
+    s.values.environment,
+    s.values.salesforceDomain,
+  );
+  const invalidDomain =
+    s.values.salesforceDomain.trim() &&
+    !salesforceMyDomain(s.values.salesforceDomain, s.values.environment);
+  const domainCorrection = invalidDomain ? (
+    <Alert variant="error">
+      Enter a valid Salesforce domain for the selected org type.{" "}
+      <Correction step="salesforce-org">Review Salesforce domain</Correction>
+    </Alert>
+  ) : null;
   const callback = useNewRemoteSessionClientCallbackUrl(undefined, undefined, {
     throwOnError: false,
   });
@@ -177,6 +191,7 @@ export function SalesforceTask(): JSX.Element {
     case "app":
       return (
         <>
+          {domainCorrection}
           <AppChoice
             descriptions={[
               "Register a new External Client App in your Salesforce org.",
@@ -187,6 +202,7 @@ export function SalesforceTask(): JSX.Element {
             title="Open Salesforce"
             label="Open Salesforce"
             href={connection?.issuer}
+            disabled={!connection}
           />
           <InProvider
             actions={[
@@ -321,13 +337,12 @@ export function SalesforceTask(): JSX.Element {
     case "install":
       return (
         <>
+          {domainCorrection}
           <ExternalAction
             title="Install Speakeasy’s Salesforce app"
             label="Open Salesforce installation"
-            href={salesforceAppInstallationUrl(
-              s.values.environment,
-              s.values.salesforceDomain,
-            )}
+            href={installationUrl}
+            disabled={!installationUrl}
           />
           <InProvider
             actions={[

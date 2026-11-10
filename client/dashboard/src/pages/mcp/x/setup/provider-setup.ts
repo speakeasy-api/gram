@@ -194,12 +194,13 @@ export function loadProviderProgress(
         (values.appChoice === "new" || values.appChoice === "existing")
       )
         initial.values.appChoice = values.appChoice;
-      if (!salesforceConnection(initial.values)) {
+      if (!salesforceConnection({ ...initial.values, salesforceDomain: "" })) {
         initial.values.environment = defaults?.environment ?? "production";
         initial.values.salesforceServer =
           defaults?.salesforceServer ?? "sobject-reads";
-        initial.values.salesforceDomain = defaults?.salesforceDomain ?? "";
       }
+      if (!salesforceConnection(initial.values))
+        initial.values.salesforceDomain = "";
     }
     // Resolve branch-specific steps after restoring choices.
     const validSteps = steps(initial).map((step) => step.id);

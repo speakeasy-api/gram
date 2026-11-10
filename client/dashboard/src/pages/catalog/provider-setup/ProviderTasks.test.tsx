@@ -327,6 +327,29 @@ it("keeps standard production login when My Domain is blank", async () => {
     screen.getByRole("link", { name: "Open Salesforce" }).getAttribute("href"),
   ).toBe("https://login.salesforce.com");
 });
+it.each(["app", "install"])(
+  "offers domain correction for an invalid Salesforce domain on %s",
+  async (step) => {
+    const user = userEvent.setup();
+    render(
+      <SalesforceFixture
+        step={step}
+        path={step === "install" ? "support" : "own"}
+        salesforceDomain="example--uat.sandbox.my.salesforce.com"
+      />,
+    );
+    const label =
+      step === "install" ? "Open Salesforce installation" : "Open Salesforce";
+    expect(screen.getByRole("button", { name: label })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Review Salesforce domain" }),
+    );
+    expect(screen.getByLabelText("Salesforce Domain (optional)")).toBeDefined();
+  },
+);
 it("uses the real Salesforce callback and native scopes", () => {
   render(<SalesforceFixture step="oauth" />);
   expect(screen.getByLabelText("Callback URL")).toHaveProperty(
