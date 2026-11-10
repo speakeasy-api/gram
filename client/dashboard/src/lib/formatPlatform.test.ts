@@ -57,8 +57,14 @@ describe("formatPlatform", () => {
     expect(formatPlatform("microsoft-copilot")).toBe("Microsoft Copilot");
   });
 
+  it("labels Kit sources consistently", () => {
+    for (const source of ["kit", "Kit", "KIT", "ahp-harness:kit"]) {
+      expect(formatPlatform(source)).toBe("Kit");
+    }
+  });
+
   it("preserves a literal prefix in an arbitrary harness name", () => {
-    expect(formatPlatform("ahp-harness:kit")).toBe("Ahp Harness:kit");
+    expect(formatPlatform("ahp-harness:custom")).toBe("Ahp Harness:custom");
   });
 
   it("title-cases unknown delimited sources", () => {

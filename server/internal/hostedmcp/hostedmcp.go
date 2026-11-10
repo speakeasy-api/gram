@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -27,8 +28,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
 )
 
 // NoServerMessage is returned when a write names a toolset that has no canonical MCP server.
@@ -293,10 +296,17 @@ type DeleteResult struct {
 
 	// DeletedRiskPolicies are lifecycle-bound policies whose results need cleanup.
 	DeletedRiskPolicies []uuid.UUID
+
+	// OrphanedCredentials are the grants the released issuer took with it,
+	// for RFC 7009 revocation once the transaction commits.
+	OrphanedCredentials []remotesessions.RevokedCredentials
 }
 
-// Delete tombstones a deleted toolset's canonical wrapper.
-func Delete(ctx context.Context, tx pgx.Tx, tracerProvider trace.TracerProvider, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) (DeleteResult, error) {
+// Delete tombstones a deleted toolset's canonical wrapper. When the wrapper was
+// the last user of its project user session issuer, the issuer is released
+// with it (see lifecycle.ReleaseUnownedIssuer), and the grants it took with it
+// are returned in the result for revocation once the transaction commits.
+func Delete(ctx context.Context, tx pgx.Tx, logger *slog.Logger, tracerProvider trace.TracerProvider, auditLogger *audit.Logger, revoker *remotesessions.UpstreamRevoker, actor Actor, toolset toolsetsrepo.Toolset) (DeleteResult, error) {
 	if auditLogger == nil || !tombstone.ActorPresent(ctx, actor.UserID) {
 		return DeleteResult{}, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
 	}
@@ -317,7 +327,7 @@ func Delete(ctx context.Context, tx pgx.Tx, tracerProvider trace.TracerProvider,
 	}
 	tombstoned, err := tombstone.Tombstone(ctx, tx, auditLogger, locked, tombstone.Input{
 		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, ActorUserID: actor.UserID, ActorEmail: actor.Email,
-		ActorSystem: "", TracerProvider: tracerProvider,
+		ActorSystem: "", TracerProvider: tracerProvider, Logger: logger,
 	})
 	if err != nil {
 		return DeleteResult{}, oops.E(oops.CodeUnexpected, err, "delete hosted MCP server")
@@ -329,9 +339,22 @@ func Delete(ctx context.Context, tx pgx.Tx, tracerProvider trace.TracerProvider,
 	}); err != nil {
 		return DeleteResult{}, oops.E(oops.CodeUnexpected, err, "audit hosted MCP deletion")
 	}
+	// The wrapper may have been its issuer's last user, as a deleted MCP
+	// server can be.
+	var orphaned []remotesessions.RevokedCredentials
+	if tombstoned.Server.UserSessionIssuerID.Valid {
+		orphaned, err = lifecycle.ReleaseUnownedIssuer(ctx, tx, revoker, auditLogger, lifecycle.ReleaseActor{
+			Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, actor.UserID),
+			DisplayName: actor.Email,
+		}, toolset.OrganizationID, toolset.ProjectID, tombstoned.Server.UserSessionIssuerID.UUID)
+		if err != nil {
+			return DeleteResult{}, err //nolint:wrapcheck // oops errors pass through.
+		}
+	}
 	return DeleteResult{
 		RootDomainIDs:       tombstone.RootDomainIDs(locked.RootEndpoints),
 		DeletedRiskPolicies: tombstoned.DeletedRiskPolicies,
+		OrphanedCredentials: orphaned,
 	}, nil
 }
 

@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/Popover";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
-import { Plugin } from "@gram/client/models/components/plugin.js";
-import { PluginServer } from "@gram/client/models/components/pluginserver.js";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
+import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import {
   invalidateAllPlugins,
@@ -33,7 +33,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { StatusBanner } from "@/components/status-banner";
 import { InstallInstructionsDialog } from "@/pages/plugins/InstallInstructionsDialog";
-import { HostedServerRef } from "./MCPOverviewTab";
+import type { HostedServerRef } from "./MCPOverviewTab";
 import { Spinner } from "@/components/ui/Spinner";
 
 function serverMatchesRef(server: PluginServer, ref: HostedServerRef): boolean {

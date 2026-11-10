@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils.ts";
-import { ProjectEntry } from "@gram/client/models/components/projectentry.js";
+import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 import React from "react";
 
 import { getGradientColors } from "@/components/gradient-colors";

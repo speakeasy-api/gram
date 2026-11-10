@@ -13,7 +13,7 @@ Turn "stop agents deleting anything in production" into a reviewed policy: map t
 
 - Use the executing client's authenticated Platform MCP connection. Installing this skill or signing in to the dashboard does not establish MCP authorization.
 - Policy writes need `org:admin` in the connected organization and require an explicit project slug. Do not silently choose the Default project; a request that explicitly names it is sufficient.
-- Never request or expose credentials. If authentication or permissions fail, stop and ask the user to reconnect or obtain access through the approved setup flow.
+- Never request or expose credentials. If authentication fails, stop and follow the `platform-sign-in` workflow to sign this client in. If permissions fail, stop and ask the user to obtain access through the approved setup flow.
 - This skill creates one policy. It does not edit existing policies, create exclusions, or change MCP configuration.
 
 ## Workflow

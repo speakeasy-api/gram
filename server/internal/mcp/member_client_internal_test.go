@@ -477,7 +477,7 @@ func TestMemberClientFailurePreservesClientCredentialRenewalRemedy(t *testing.T)
 		{name: "token endpoint unreachable", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, &remotesessions.TokenEndpointError{Transport: true}), want: "because its provider isn't available right now", discovery: true, retryable: true},
 		{name: "timed out outage", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, context.DeadlineExceeded), want: "Retry shortly", discovery: true, retryable: false},
 		{name: "rate limited outage", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, &remotesessions.TokenEndpointError{StatusCode: http.StatusTooManyRequests}), want: "Retry shortly", discovery: true, retryable: false},
-		{name: "misconfigured", err: remotesessions.ErrClientCredentialMisconfigured, want: "contact the MCP server administrator", discovery: false, retryable: false},
+		{name: "misconfigured", err: remotesessions.ErrClientCredentialMisconfigured, want: "Ask an admin of the server's project to fix the server's credential", discovery: false, retryable: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

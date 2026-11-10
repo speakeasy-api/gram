@@ -30,10 +30,8 @@ import { AssetsTabContent } from "./AssetsTabContent";
 import { FailedSourcesSection } from "./FailedSourcesSection";
 import { LogsTabContent } from "./LogsTabContent";
 import { ToolsTabContent } from "./ToolsTabContent";
-import {
-  DeploymentPageSearchParams,
-  useDeploymentSearchParams,
-} from "./use-deployment-search-params";
+import type { DeploymentPageSearchParams } from "./use-deployment-search-params";
+import { useDeploymentSearchParams } from "./use-deployment-search-params";
 
 export default function DeploymentPage(): JSX.Element {
   const { deploymentId } = useParams();

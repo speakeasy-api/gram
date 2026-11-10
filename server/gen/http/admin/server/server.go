@@ -82,8 +82,10 @@ type Server struct {
 	UpdateSupportMatrix                     http.Handler
 	GetSupportCoverage                      http.Handler
 	DescribeMcpServerHealth                 http.Handler
+	SetMcpServerScopePin                    http.Handler
 	GetMcpServerToolCalls                   http.Handler
 	GetHookClients                          http.Handler
+	GetOrganizationHookFleet                http.Handler
 	ListRegistryPromotionCandidates         http.Handler
 	GetRegistryPromotionCandidate           http.Handler
 	PromoteRegistryCandidate                http.Handler
@@ -114,6 +116,7 @@ type Server struct {
 	ListSignupOffers                        http.Handler
 	CreateSignupOffer                       http.Handler
 	UpdateSignupOffer                       http.Handler
+	ListPlatformMcpFeedback                 http.Handler
 	GetStripeSubscriptionCandidate          http.Handler
 	SetStripeSubscription                   http.Handler
 	ListCustomerUsage                       http.Handler
@@ -124,6 +127,8 @@ type Server struct {
 	DisableUpstreamAuthEnforcement          http.Handler
 	BackfillMcpAuthGrants                   http.Handler
 	BackfillMcpConnectGrants                http.Handler
+	GetProjectRedeployPreview               http.Handler
+	RedeployProject                         http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -214,8 +219,10 @@ func New(
 			{"UpdateSupportMatrix", "POST", "/admin/supportMatrix.update"},
 			{"GetSupportCoverage", "GET", "/admin/supportCoverage.get"},
 			{"DescribeMcpServerHealth", "GET", "/admin/project.mcpServerHealth"},
+			{"SetMcpServerScopePin", "POST", "/admin/project.setMcpServerScopePin"},
 			{"GetMcpServerToolCalls", "GET", "/admin/project.mcpServerToolCalls"},
 			{"GetHookClients", "GET", "/admin/hookClients.get"},
+			{"GetOrganizationHookFleet", "GET", "/admin/organizationHookFleet.get"},
 			{"ListRegistryPromotionCandidates", "GET", "/admin/registry.promotionCandidates"},
 			{"GetRegistryPromotionCandidate", "POST", "/admin/registry.promotionCandidate"},
 			{"PromoteRegistryCandidate", "POST", "/admin/registry.promoteCandidate"},
@@ -246,6 +253,7 @@ func New(
 			{"ListSignupOffers", "GET", "/admin/signupOffers"},
 			{"CreateSignupOffer", "POST", "/admin/signupOffers.create"},
 			{"UpdateSignupOffer", "POST", "/admin/signupOffers.update"},
+			{"ListPlatformMcpFeedback", "GET", "/admin/platformMcpFeedback.list"},
 			{"GetStripeSubscriptionCandidate", "GET", "/admin/organization.stripeSubscriptionCandidate"},
 			{"SetStripeSubscription", "POST", "/admin/organization.setStripeSubscription"},
 			{"ListCustomerUsage", "GET", "/admin/organizations.customerUsage"},
@@ -256,6 +264,8 @@ func New(
 			{"DisableUpstreamAuthEnforcement", "POST", "/admin/upstreamOAuthMigration.disableEnforcement"},
 			{"BackfillMcpAuthGrants", "POST", "/admin/mcpAuthGrants.backfill"},
 			{"BackfillMcpConnectGrants", "POST", "/admin/mcpConnectGrants.backfill"},
+			{"GetProjectRedeployPreview", "GET", "/admin/project.redeployPreview"},
+			{"RedeployProject", "POST", "/admin/project.redeploy"},
 		},
 		Login:                                   NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                                NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -318,8 +328,10 @@ func New(
 		UpdateSupportMatrix:                     NewUpdateSupportMatrixHandler(e.UpdateSupportMatrix, mux, decoder, encoder, errhandler, formatter),
 		GetSupportCoverage:                      NewGetSupportCoverageHandler(e.GetSupportCoverage, mux, decoder, encoder, errhandler, formatter),
 		DescribeMcpServerHealth:                 NewDescribeMcpServerHealthHandler(e.DescribeMcpServerHealth, mux, decoder, encoder, errhandler, formatter),
+		SetMcpServerScopePin:                    NewSetMcpServerScopePinHandler(e.SetMcpServerScopePin, mux, decoder, encoder, errhandler, formatter),
 		GetMcpServerToolCalls:                   NewGetMcpServerToolCallsHandler(e.GetMcpServerToolCalls, mux, decoder, encoder, errhandler, formatter),
 		GetHookClients:                          NewGetHookClientsHandler(e.GetHookClients, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationHookFleet:                NewGetOrganizationHookFleetHandler(e.GetOrganizationHookFleet, mux, decoder, encoder, errhandler, formatter),
 		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesHandler(e.ListRegistryPromotionCandidates, mux, decoder, encoder, errhandler, formatter),
 		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateHandler(e.GetRegistryPromotionCandidate, mux, decoder, encoder, errhandler, formatter),
 		PromoteRegistryCandidate:                NewPromoteRegistryCandidateHandler(e.PromoteRegistryCandidate, mux, decoder, encoder, errhandler, formatter),
@@ -350,6 +362,7 @@ func New(
 		ListSignupOffers:                        NewListSignupOffersHandler(e.ListSignupOffers, mux, decoder, encoder, errhandler, formatter),
 		CreateSignupOffer:                       NewCreateSignupOfferHandler(e.CreateSignupOffer, mux, decoder, encoder, errhandler, formatter),
 		UpdateSignupOffer:                       NewUpdateSignupOfferHandler(e.UpdateSignupOffer, mux, decoder, encoder, errhandler, formatter),
+		ListPlatformMcpFeedback:                 NewListPlatformMcpFeedbackHandler(e.ListPlatformMcpFeedback, mux, decoder, encoder, errhandler, formatter),
 		GetStripeSubscriptionCandidate:          NewGetStripeSubscriptionCandidateHandler(e.GetStripeSubscriptionCandidate, mux, decoder, encoder, errhandler, formatter),
 		SetStripeSubscription:                   NewSetStripeSubscriptionHandler(e.SetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 		ListCustomerUsage:                       NewListCustomerUsageHandler(e.ListCustomerUsage, mux, decoder, encoder, errhandler, formatter),
@@ -360,6 +373,8 @@ func New(
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementHandler(e.DisableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsHandler(e.BackfillMcpAuthGrants, mux, decoder, encoder, errhandler, formatter),
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsHandler(e.BackfillMcpConnectGrants, mux, decoder, encoder, errhandler, formatter),
+		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewHandler(e.GetProjectRedeployPreview, mux, decoder, encoder, errhandler, formatter),
+		RedeployProject:                         NewRedeployProjectHandler(e.RedeployProject, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -429,8 +444,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateSupportMatrix = m(s.UpdateSupportMatrix)
 	s.GetSupportCoverage = m(s.GetSupportCoverage)
 	s.DescribeMcpServerHealth = m(s.DescribeMcpServerHealth)
+	s.SetMcpServerScopePin = m(s.SetMcpServerScopePin)
 	s.GetMcpServerToolCalls = m(s.GetMcpServerToolCalls)
 	s.GetHookClients = m(s.GetHookClients)
+	s.GetOrganizationHookFleet = m(s.GetOrganizationHookFleet)
 	s.ListRegistryPromotionCandidates = m(s.ListRegistryPromotionCandidates)
 	s.GetRegistryPromotionCandidate = m(s.GetRegistryPromotionCandidate)
 	s.PromoteRegistryCandidate = m(s.PromoteRegistryCandidate)
@@ -461,6 +478,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListSignupOffers = m(s.ListSignupOffers)
 	s.CreateSignupOffer = m(s.CreateSignupOffer)
 	s.UpdateSignupOffer = m(s.UpdateSignupOffer)
+	s.ListPlatformMcpFeedback = m(s.ListPlatformMcpFeedback)
 	s.GetStripeSubscriptionCandidate = m(s.GetStripeSubscriptionCandidate)
 	s.SetStripeSubscription = m(s.SetStripeSubscription)
 	s.ListCustomerUsage = m(s.ListCustomerUsage)
@@ -471,6 +489,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DisableUpstreamAuthEnforcement = m(s.DisableUpstreamAuthEnforcement)
 	s.BackfillMcpAuthGrants = m(s.BackfillMcpAuthGrants)
 	s.BackfillMcpConnectGrants = m(s.BackfillMcpConnectGrants)
+	s.GetProjectRedeployPreview = m(s.GetProjectRedeployPreview)
+	s.RedeployProject = m(s.RedeployProject)
 }
 
 // MethodNames returns the methods served.
@@ -539,8 +559,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateSupportMatrixHandler(mux, h.UpdateSupportMatrix)
 	MountGetSupportCoverageHandler(mux, h.GetSupportCoverage)
 	MountDescribeMcpServerHealthHandler(mux, h.DescribeMcpServerHealth)
+	MountSetMcpServerScopePinHandler(mux, h.SetMcpServerScopePin)
 	MountGetMcpServerToolCallsHandler(mux, h.GetMcpServerToolCalls)
 	MountGetHookClientsHandler(mux, h.GetHookClients)
+	MountGetOrganizationHookFleetHandler(mux, h.GetOrganizationHookFleet)
 	MountListRegistryPromotionCandidatesHandler(mux, h.ListRegistryPromotionCandidates)
 	MountGetRegistryPromotionCandidateHandler(mux, h.GetRegistryPromotionCandidate)
 	MountPromoteRegistryCandidateHandler(mux, h.PromoteRegistryCandidate)
@@ -571,6 +593,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListSignupOffersHandler(mux, h.ListSignupOffers)
 	MountCreateSignupOfferHandler(mux, h.CreateSignupOffer)
 	MountUpdateSignupOfferHandler(mux, h.UpdateSignupOffer)
+	MountListPlatformMcpFeedbackHandler(mux, h.ListPlatformMcpFeedback)
 	MountGetStripeSubscriptionCandidateHandler(mux, h.GetStripeSubscriptionCandidate)
 	MountSetStripeSubscriptionHandler(mux, h.SetStripeSubscription)
 	MountListCustomerUsageHandler(mux, h.ListCustomerUsage)
@@ -581,6 +604,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDisableUpstreamAuthEnforcementHandler(mux, h.DisableUpstreamAuthEnforcement)
 	MountBackfillMcpAuthGrantsHandler(mux, h.BackfillMcpAuthGrants)
 	MountBackfillMcpConnectGrantsHandler(mux, h.BackfillMcpConnectGrants)
+	MountGetProjectRedeployPreviewHandler(mux, h.GetProjectRedeployPreview)
+	MountRedeployProjectHandler(mux, h.RedeployProject)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -3878,6 +3903,59 @@ func NewDescribeMcpServerHealthHandler(
 	})
 }
 
+// MountSetMcpServerScopePinHandler configures the mux to serve the "admin"
+// service "setMcpServerScopePin" endpoint.
+func MountSetMcpServerScopePinHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/project.setMcpServerScopePin", f)
+}
+
+// NewSetMcpServerScopePinHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "setMcpServerScopePin" endpoint.
+func NewSetMcpServerScopePinHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetMcpServerScopePinRequest(mux, decoder)
+		encodeResponse = EncodeSetMcpServerScopePinResponse(encoder)
+		encodeError    = EncodeSetMcpServerScopePinError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setMcpServerScopePin")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountGetMcpServerToolCallsHandler configures the mux to serve the "admin"
 // service "getMcpServerToolCalls" endpoint.
 func MountGetMcpServerToolCallsHandler(mux goahttp.Muxer, h http.Handler) {
@@ -3961,6 +4039,60 @@ func NewGetHookClientsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getHookClients")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationHookFleetHandler configures the mux to serve the "admin"
+// service "getOrganizationHookFleet" endpoint.
+func MountGetOrganizationHookFleetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organizationHookFleet.get", f)
+}
+
+// NewGetOrganizationHookFleetHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getOrganizationHookFleet"
+// endpoint.
+func NewGetOrganizationHookFleetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationHookFleetRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationHookFleetResponse(encoder)
+		encodeError    = EncodeGetOrganizationHookFleetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationHookFleet")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -5595,6 +5727,60 @@ func NewUpdateSignupOfferHandler(
 	})
 }
 
+// MountListPlatformMcpFeedbackHandler configures the mux to serve the "admin"
+// service "listPlatformMcpFeedback" endpoint.
+func MountListPlatformMcpFeedbackHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/platformMcpFeedback.list", f)
+}
+
+// NewListPlatformMcpFeedbackHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "listPlatformMcpFeedback"
+// endpoint.
+func NewListPlatformMcpFeedbackHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListPlatformMcpFeedbackRequest(mux, decoder)
+		encodeResponse = EncodeListPlatformMcpFeedbackResponse(encoder)
+		encodeError    = EncodeListPlatformMcpFeedbackError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listPlatformMcpFeedback")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountGetStripeSubscriptionCandidateHandler configures the mux to serve the
 // "admin" service "getStripeSubscriptionCandidate" endpoint.
 func MountGetStripeSubscriptionCandidateHandler(mux goahttp.Muxer, h http.Handler) {
@@ -6109,6 +6295,113 @@ func NewBackfillMcpConnectGrantsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "backfillMcpConnectGrants")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetProjectRedeployPreviewHandler configures the mux to serve the
+// "admin" service "getProjectRedeployPreview" endpoint.
+func MountGetProjectRedeployPreviewHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/project.redeployPreview", f)
+}
+
+// NewGetProjectRedeployPreviewHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getProjectRedeployPreview"
+// endpoint.
+func NewGetProjectRedeployPreviewHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetProjectRedeployPreviewRequest(mux, decoder)
+		encodeResponse = EncodeGetProjectRedeployPreviewResponse(encoder)
+		encodeError    = EncodeGetProjectRedeployPreviewError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getProjectRedeployPreview")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRedeployProjectHandler configures the mux to serve the "admin" service
+// "redeployProject" endpoint.
+func MountRedeployProjectHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/project.redeploy", f)
+}
+
+// NewRedeployProjectHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "redeployProject" endpoint.
+func NewRedeployProjectHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRedeployProjectRequest(mux, decoder)
+		encodeResponse = EncodeRedeployProjectResponse(encoder)
+		encodeError    = EncodeRedeployProjectError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "redeployProject")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

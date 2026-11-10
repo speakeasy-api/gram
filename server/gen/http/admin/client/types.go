@@ -421,6 +421,20 @@ type UpdateSupportMatrixRequestBody struct {
 	Draft    *SupportDraftRequestBody `form:"draft" json:"draft" xml:"draft"`
 }
 
+// SetMcpServerScopePinRequestBody is the type of the "admin" service
+// "setMcpServerScopePin" endpoint HTTP request body.
+type SetMcpServerScopePinRequestBody struct {
+	// Organization the project must belong to. A project outside it is reported as
+	// not found.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The mcp_servers row ID.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The new pin. Trimmed and de-duplicated; an empty list clears the pin.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+}
+
 // GetRegistryPromotionCandidateRequestBody is the type of the "admin" service
 // "getRegistryPromotionCandidate" endpoint HTTP request body.
 type GetRegistryPromotionCandidateRequestBody struct {
@@ -642,6 +656,17 @@ type BackfillMcpConnectGrantsRequestBody struct {
 	// Only copy grants created before this time. Set it to when read and write
 	// stopped implying connect, so grants written since are left alone.
 	CreatedBefore *string `form:"created_before,omitempty" json:"created_before,omitempty" xml:"created_before,omitempty"`
+}
+
+// RedeployProjectRequestBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP request body.
+type RedeployProjectRequestBody struct {
+	// Exact organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Exact project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// active_deployment_id from getProjectRedeployPreview.
+	ExpectedActiveDeploymentID string `form:"expected_active_deployment_id" json:"expected_active_deployment_id" xml:"expected_active_deployment_id"`
 }
 
 // GetSessionResponseBody is the type of the "admin" service "getSession"
@@ -905,6 +930,9 @@ type GetProjectResponseBody struct {
 	ToolsetCount *int `form:"toolset_count,omitempty" json:"toolset_count,omitempty" xml:"toolset_count,omitempty"`
 	// Total number of deployments in the project.
 	DeploymentCount *int `form:"deployment_count,omitempty" json:"deployment_count,omitempty" xml:"deployment_count,omitempty"`
+	// The deployment the project currently serves. Absent when no deployment has
+	// completed.
+	ActiveDeploymentID *string `form:"active_deployment_id,omitempty" json:"active_deployment_id,omitempty" xml:"active_deployment_id,omitempty"`
 	// Number of active HTTP tool definitions in the project.
 	HTTPToolCount *int `form:"http_tool_count,omitempty" json:"http_tool_count,omitempty" xml:"http_tool_count,omitempty"`
 	// Number of active environments in the project.
@@ -2218,8 +2246,31 @@ type DescribeMcpServerHealthResponseBody struct {
 	// issuer.
 	LegacyAuth        *string                                            `form:"legacy_auth,omitempty" json:"legacy_auth,omitempty" xml:"legacy_auth,omitempty"`
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuerResponseBody `form:"user_session_issuer,omitempty" json:"user_session_issuer,omitempty" xml:"user_session_issuer,omitempty"`
+	// Set only when a remote MCP server backs the server.
+	ResourceScopes *AdminMcpServerResourceScopesResponseBody `form:"resource_scopes,omitempty" json:"resource_scopes,omitempty" xml:"resource_scopes,omitempty"`
 	// How the server reaches its upstream. Omitted for toolset-only servers.
 	UpstreamAuth *AdminMcpServerHealthUpstreamAuthResponseBody `form:"upstream_auth,omitempty" json:"upstream_auth,omitempty" xml:"upstream_auth,omitempty"`
+}
+
+// SetMcpServerScopePinResponseBody is the type of the "admin" service
+// "setMcpServerScopePin" endpoint HTTP response body.
+type SetMcpServerScopePinResponseBody struct {
+	// The upstream URL the protected resource is keyed by.
+	ResourceURL *string `form:"resource_url,omitempty" json:"resource_url,omitempty" xml:"resource_url,omitempty"`
+	// Scopes pinned on the resource. Empty when there is no pin.
+	PinnedScopes []string `form:"pinned_scopes,omitempty" json:"pinned_scopes,omitempty" xml:"pinned_scopes,omitempty"`
+	// Whether the resource's advertised scopes are known from a fresh RFC 9728
+	// read.
+	AdvertisedScopesKnown *bool `form:"advertised_scopes_known,omitempty" json:"advertised_scopes_known,omitempty" xml:"advertised_scopes_known,omitempty"`
+	// The RFC 9728 scopes_supported the resource advertises. Absent when unknown.
+	AdvertisedScopes []string `form:"advertised_scopes,omitempty" json:"advertised_scopes,omitempty" xml:"advertised_scopes,omitempty"`
+	// Scopes named by the resource's last WWW-Authenticate challenge.
+	ChallengeScopes []string `form:"challenge_scopes,omitempty" json:"challenge_scopes,omitempty" xml:"challenge_scopes,omitempty"`
+	// Other live MCP servers in the project with the same upstream URL. A pin
+	// applies to all of them.
+	SharedServerCount *int `form:"shared_server_count,omitempty" json:"shared_server_count,omitempty" xml:"shared_server_count,omitempty"`
+	// Remote session clients bound to the server's user session issuer.
+	Clients []*AdminMcpServerResourceScopeClientResponseBody `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
 }
 
 // GetMcpServerToolCallsResponseBody is the type of the "admin" service
@@ -2256,6 +2307,43 @@ type GetHookClientsResponseBody struct {
 	Inference []*AdminInferenceHookCellResponseBody `form:"inference,omitempty" json:"inference,omitempty" xml:"inference,omitempty"`
 	// The device agent version grid. Empty for days before versions were recorded.
 	DeviceAgents []*AdminDeviceAgentCellResponseBody `form:"device_agents,omitempty" json:"device_agents,omitempty" xml:"device_agents,omitempty"`
+}
+
+// GetOrganizationHookFleetResponseBody is the type of the "admin" service
+// "getOrganizationHookFleet" endpoint HTTP response body.
+type GetOrganizationHookFleetResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Length of the window in days.
+	WindowDays *int `form:"window_days,omitempty" json:"window_days,omitempty" xml:"window_days,omitempty"`
+	// Start of the window. Counts cover the whole UTC day it falls on.
+	Since *string `form:"since,omitempty" json:"since,omitempty" xml:"since,omitempty"`
+	// The hooks release Speakeasy currently ships. Versions below it are behind.
+	LatestVersion *string `form:"latest_version,omitempty" json:"latest_version,omitempty" xml:"latest_version,omitempty"`
+	// The oldest supported hooks version. Versions below it are unsupported.
+	// Absent when no minimum is set.
+	MinimumVersion *string `form:"minimum_version,omitempty" json:"minimum_version,omitempty" xml:"minimum_version,omitempty"`
+	// Days without traffic after which an install counts as quiet.
+	QuietAfterDays *int `form:"quiet_after_days,omitempty" json:"quiet_after_days,omitempty" xml:"quiet_after_days,omitempty"`
+	// True when the organization has more installs than the response holds.
+	// Breakdowns then cover only the installs returned.
+	Truncated *bool `form:"truncated,omitempty" json:"truncated,omitempty" xml:"truncated,omitempty"`
+	// Installs returned. Not the organization's full install count when truncated
+	// is true.
+	TotalInstalls *int64 `form:"total_installs,omitempty" json:"total_installs,omitempty" xml:"total_installs,omitempty"`
+	// Returned installs that have gone quiet. Only a window longer than
+	// quiet_after_days can return quiet installs.
+	QuietInstalls *int64 `form:"quiet_installs,omitempty" json:"quiet_installs,omitempty" xml:"quiet_installs,omitempty"`
+	// Hook events sent to the legacy endpoints in the window.
+	LegacyEvents *int64 `form:"legacy_events,omitempty" json:"legacy_events,omitempty" xml:"legacy_events,omitempty"`
+	// Installs per version, newest version first.
+	Versions []*AdminHookFleetVersionResponseBody `form:"versions,omitempty" json:"versions,omitempty" xml:"versions,omitempty"`
+	// Installs per install route, largest first.
+	Routes []*AdminHookFleetBucketResponseBody `form:"routes,omitempty" json:"routes,omitempty" xml:"routes,omitempty"`
+	// Installs and events per endpoint generation, largest first.
+	Generations []*AdminHookFleetBucketResponseBody `form:"generations,omitempty" json:"generations,omitempty" xml:"generations,omitempty"`
+	// Installs, most recently seen first.
+	Installs []*AdminHookFleetInstallResponseBody `form:"installs,omitempty" json:"installs,omitempty" xml:"installs,omitempty"`
 }
 
 // ListRegistryPromotionCandidatesResponseBody is the type of the "admin"
@@ -2719,6 +2807,13 @@ type UpdateSignupOfferResponseBody struct {
 	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// ListPlatformMcpFeedbackResponseBody is the type of the "admin" service
+// "listPlatformMcpFeedback" endpoint HTTP response body.
+type ListPlatformMcpFeedbackResponseBody struct {
+	// Feedback reports, newest first.
+	Feedback []*AdminPlatformMCPFeedbackResponseBody `form:"feedback,omitempty" json:"feedback,omitempty" xml:"feedback,omitempty"`
+}
+
 // GetStripeSubscriptionCandidateResponseBody is the type of the "admin"
 // service "getStripeSubscriptionCandidate" endpoint HTTP response body.
 type GetStripeSubscriptionCandidateResponseBody struct {
@@ -2961,6 +3056,39 @@ type BackfillMcpConnectGrantsResponseBody struct {
 	// How many mcp:connect grants provisioned by the default auth permission
 	// backfill became explicit grants.
 	TakenOver *int64 `form:"taken_over,omitempty" json:"taken_over,omitempty" xml:"taken_over,omitempty"`
+}
+
+// GetProjectRedeployPreviewResponseBody is the type of the "admin" service
+// "getProjectRedeployPreview" endpoint HTTP response body.
+type GetProjectRedeployPreviewResponseBody struct {
+	// Organization that owns the project.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Project ID.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Project name.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Deployment a redeploy would clone. Send it back as
+	// expected_active_deployment_id.
+	ActiveDeploymentID *string `form:"active_deployment_id,omitempty" json:"active_deployment_id,omitempty" xml:"active_deployment_id,omitempty"`
+	// OpenAPI sources that would be processed again.
+	OpenapiAssets *int `form:"openapi_assets,omitempty" json:"openapi_assets,omitempty" xml:"openapi_assets,omitempty"`
+	// Function sources whose runners would be deployed again.
+	FunctionAssets *int `form:"function_assets,omitempty" json:"function_assets,omitempty" xml:"function_assets,omitempty"`
+	// Packages carried into the new deployment.
+	Packages *int `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
+	// External MCP sources the new deployment would drop.
+	ExternalMcps *int `form:"external_mcps,omitempty" json:"external_mcps,omitempty" xml:"external_mcps,omitempty"`
+}
+
+// RedeployProjectResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body.
+type RedeployProjectResponseBody struct {
+	// Project ID.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Deployment that was cloned.
+	SourceDeploymentID *string `form:"source_deployment_id,omitempty" json:"source_deployment_id,omitempty" xml:"source_deployment_id,omitempty"`
+	// New deployment. It becomes active only if processing succeeds.
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -14682,6 +14810,192 @@ type DescribeMcpServerHealthGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SetMcpServerScopePinUnauthorizedResponseBody is the type of the "admin"
+// service "setMcpServerScopePin" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetMcpServerScopePinUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinForbiddenResponseBody is the type of the "admin" service
+// "setMcpServerScopePin" endpoint HTTP response body for the "forbidden" error.
+type SetMcpServerScopePinForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinBadRequestResponseBody is the type of the "admin"
+// service "setMcpServerScopePin" endpoint HTTP response body for the
+// "bad_request" error.
+type SetMcpServerScopePinBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinNotFoundResponseBody is the type of the "admin" service
+// "setMcpServerScopePin" endpoint HTTP response body for the "not_found" error.
+type SetMcpServerScopePinNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinConflictResponseBody is the type of the "admin" service
+// "setMcpServerScopePin" endpoint HTTP response body for the "conflict" error.
+type SetMcpServerScopePinConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinUnsupportedMediaResponseBody is the type of the "admin"
+// service "setMcpServerScopePin" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetMcpServerScopePinUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinInvalidResponseBody is the type of the "admin" service
+// "setMcpServerScopePin" endpoint HTTP response body for the "invalid" error.
+type SetMcpServerScopePinInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinInvariantViolationResponseBody is the type of the
+// "admin" service "setMcpServerScopePin" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetMcpServerScopePinInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinUnexpectedResponseBody is the type of the "admin"
+// service "setMcpServerScopePin" endpoint HTTP response body for the
+// "unexpected" error.
+type SetMcpServerScopePinUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinGatewayErrorResponseBody is the type of the "admin"
+// service "setMcpServerScopePin" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetMcpServerScopePinGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetMcpServerToolCallsUnauthorizedResponseBody is the type of the "admin"
 // service "getMcpServerToolCalls" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -15037,6 +15351,196 @@ type GetHookClientsUnexpectedResponseBody struct {
 // GetHookClientsGatewayErrorResponseBody is the type of the "admin" service
 // "getHookClients" endpoint HTTP response body for the "gateway_error" error.
 type GetHookClientsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationHookFleetUnauthorizedResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetOrganizationHookFleetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationHookFleetForbiddenResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "forbidden" error.
+type GetOrganizationHookFleetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationHookFleetBadRequestResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "bad_request" error.
+type GetOrganizationHookFleetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationHookFleetNotFoundResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "not_found" error.
+type GetOrganizationHookFleetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationHookFleetConflictResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "conflict" error.
+type GetOrganizationHookFleetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationHookFleetUnsupportedMediaResponseBody is the type of the
+// "admin" service "getOrganizationHookFleet" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetOrganizationHookFleetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationHookFleetInvalidResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "invalid" error.
+type GetOrganizationHookFleetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationHookFleetInvariantViolationResponseBody is the type of the
+// "admin" service "getOrganizationHookFleet" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetOrganizationHookFleetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationHookFleetUnexpectedResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "unexpected" error.
+type GetOrganizationHookFleetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationHookFleetGatewayErrorResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetOrganizationHookFleetGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -20699,6 +21203,196 @@ type UpdateSignupOfferGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListPlatformMcpFeedbackUnauthorizedResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListPlatformMcpFeedbackUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformMcpFeedbackForbiddenResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "forbidden" error.
+type ListPlatformMcpFeedbackForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformMcpFeedbackBadRequestResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "bad_request" error.
+type ListPlatformMcpFeedbackBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformMcpFeedbackNotFoundResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "not_found" error.
+type ListPlatformMcpFeedbackNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformMcpFeedbackConflictResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "conflict" error.
+type ListPlatformMcpFeedbackConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformMcpFeedbackUnsupportedMediaResponseBody is the type of the
+// "admin" service "listPlatformMcpFeedback" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListPlatformMcpFeedbackUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformMcpFeedbackInvalidResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "invalid" error.
+type ListPlatformMcpFeedbackInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformMcpFeedbackInvariantViolationResponseBody is the type of the
+// "admin" service "listPlatformMcpFeedback" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListPlatformMcpFeedbackInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformMcpFeedbackUnexpectedResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "unexpected" error.
+type ListPlatformMcpFeedbackUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformMcpFeedbackGatewayErrorResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListPlatformMcpFeedbackGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetStripeSubscriptionCandidateUnavailableResponseBody is the type of the
 // "admin" service "getStripeSubscriptionCandidate" endpoint HTTP response body
 // for the "unavailable" error.
@@ -22644,6 +23338,378 @@ type BackfillMcpConnectGrantsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetProjectRedeployPreviewUnauthorizedResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetProjectRedeployPreviewUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetProjectRedeployPreviewForbiddenResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "forbidden" error.
+type GetProjectRedeployPreviewForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetProjectRedeployPreviewBadRequestResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "bad_request" error.
+type GetProjectRedeployPreviewBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetProjectRedeployPreviewNotFoundResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "not_found" error.
+type GetProjectRedeployPreviewNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetProjectRedeployPreviewConflictResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "conflict" error.
+type GetProjectRedeployPreviewConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetProjectRedeployPreviewUnsupportedMediaResponseBody is the type of the
+// "admin" service "getProjectRedeployPreview" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetProjectRedeployPreviewUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetProjectRedeployPreviewInvalidResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "invalid" error.
+type GetProjectRedeployPreviewInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetProjectRedeployPreviewInvariantViolationResponseBody is the type of the
+// "admin" service "getProjectRedeployPreview" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetProjectRedeployPreviewInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetProjectRedeployPreviewUnexpectedResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "unexpected" error.
+type GetProjectRedeployPreviewUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetProjectRedeployPreviewGatewayErrorResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetProjectRedeployPreviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RedeployProjectUnauthorizedResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "unauthorized" error.
+type RedeployProjectUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RedeployProjectForbiddenResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "forbidden" error.
+type RedeployProjectForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RedeployProjectBadRequestResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "bad_request" error.
+type RedeployProjectBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RedeployProjectNotFoundResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "not_found" error.
+type RedeployProjectNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RedeployProjectConflictResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "conflict" error.
+type RedeployProjectConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RedeployProjectUnsupportedMediaResponseBody is the type of the "admin"
+// service "redeployProject" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RedeployProjectUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RedeployProjectInvalidResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "invalid" error.
+type RedeployProjectInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RedeployProjectInvariantViolationResponseBody is the type of the "admin"
+// service "redeployProject" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RedeployProjectInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RedeployProjectUnexpectedResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "unexpected" error.
+type RedeployProjectUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RedeployProjectGatewayErrorResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "gateway_error" error.
+type RedeployProjectGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -23435,6 +24501,43 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 	ValidationStatusCounts map[string]int64 `form:"validation_status_counts,omitempty" json:"validation_status_counts,omitempty" xml:"validation_status_counts,omitempty"`
 }
 
+// AdminMcpServerResourceScopesResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerResourceScopesResponseBody struct {
+	// The upstream URL the protected resource is keyed by.
+	ResourceURL *string `form:"resource_url,omitempty" json:"resource_url,omitempty" xml:"resource_url,omitempty"`
+	// Scopes pinned on the resource. Empty when there is no pin.
+	PinnedScopes []string `form:"pinned_scopes,omitempty" json:"pinned_scopes,omitempty" xml:"pinned_scopes,omitempty"`
+	// Whether the resource's advertised scopes are known from a fresh RFC 9728
+	// read.
+	AdvertisedScopesKnown *bool `form:"advertised_scopes_known,omitempty" json:"advertised_scopes_known,omitempty" xml:"advertised_scopes_known,omitempty"`
+	// The RFC 9728 scopes_supported the resource advertises. Absent when unknown.
+	AdvertisedScopes []string `form:"advertised_scopes,omitempty" json:"advertised_scopes,omitempty" xml:"advertised_scopes,omitempty"`
+	// Scopes named by the resource's last WWW-Authenticate challenge.
+	ChallengeScopes []string `form:"challenge_scopes,omitempty" json:"challenge_scopes,omitempty" xml:"challenge_scopes,omitempty"`
+	// Other live MCP servers in the project with the same upstream URL. A pin
+	// applies to all of them.
+	SharedServerCount *int `form:"shared_server_count,omitempty" json:"shared_server_count,omitempty" xml:"shared_server_count,omitempty"`
+	// Remote session clients bound to the server's user session issuer.
+	Clients []*AdminMcpServerResourceScopeClientResponseBody `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
+}
+
+// AdminMcpServerResourceScopeClientResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerResourceScopeClientResponseBody struct {
+	// The remote session client ID.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Which source decides the client's requested scopes.
+	ScopeSource *string `form:"scope_source,omitempty" json:"scope_source,omitempty" xml:"scope_source,omitempty"`
+	// The scopes a login would request.
+	RequestedScopes []string `form:"requested_scopes,omitempty" json:"requested_scopes,omitempty" xml:"requested_scopes,omitempty"`
+	// Pinned scopes the MCP server does not advertise. They are still requested.
+	UnadvertisedPinnedScopes []string `form:"unadvertised_pinned_scopes,omitempty" json:"unadvertised_pinned_scopes,omitempty" xml:"unadvertised_pinned_scopes,omitempty"`
+	// Whether a pin, if set, decides this client's request: the client owns the
+	// resource and neither its own scopes nor a challenge outranks the pin.
+	PinWouldDecide *bool `form:"pin_would_decide,omitempty" json:"pin_would_decide,omitempty" xml:"pin_would_decide,omitempty"`
+}
+
 // AdminMcpServerHealthUpstreamAuthResponseBody is used to define fields on
 // response body types.
 type AdminMcpServerHealthUpstreamAuthResponseBody struct {
@@ -23550,6 +24653,62 @@ type AdminDeviceAgentCellResponseBody struct {
 	// Machines whose agent polled on this day, by the last version each reported
 	// that day.
 	Machines *int64 `form:"machines,omitempty" json:"machines,omitempty" xml:"machines,omitempty"`
+}
+
+// AdminHookFleetVersionResponseBody is used to define fields on response body
+// types.
+type AdminHookFleetVersionResponseBody struct {
+	// The hooks binary version, or empty for installs with no version.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// How the version compares to the release Speakeasy ships.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Installs whose latest version is this one.
+	Installs *int64 `form:"installs,omitempty" json:"installs,omitempty" xml:"installs,omitempty"`
+}
+
+// AdminHookFleetBucketResponseBody is used to define fields on response body
+// types.
+type AdminHookFleetBucketResponseBody struct {
+	// The route or endpoint generation. Empty when unknown.
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Installs whose latest value is this one.
+	Installs *int64 `form:"installs,omitempty" json:"installs,omitempty" xml:"installs,omitempty"`
+	// Hook events sent with this value across every install. Zero for routes.
+	Events *int64 `form:"events,omitempty" json:"events,omitempty" xml:"events,omitempty"`
+}
+
+// AdminHookFleetInstallResponseBody is used to define fields on response body
+// types.
+type AdminHookFleetInstallResponseBody struct {
+	// The project the install reports to. Empty for traffic that named no project.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The user the install reports as. Empty when the install sent no identity.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// The machine's hostname. Empty when the install sent none.
+	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// The agent the hooks run in, such as claude, codex or cursor.
+	Harness *string `form:"harness,omitempty" json:"harness,omitempty" xml:"harness,omitempty"`
+	// The hooks binary version. Empty for the legacy curl hooks and for installs
+	// that sent no version.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// How the version compares to the release Speakeasy ships.
+	VersionStatus *string `form:"version_status,omitempty" json:"version_status,omitempty" xml:"version_status,omitempty"`
+	// The hooks endpoint the install last sent to: legacy_unkeyed, legacy_keyed,
+	// ingest_script or ingest_binary. Empty for delivery failure reports only.
+	EndpointGeneration *string `form:"endpoint_generation,omitempty" json:"endpoint_generation,omitempty" xml:"endpoint_generation,omitempty"`
+	// How the hooks were installed, such as marketplace or download. Empty when
+	// unknown.
+	InstallRoute *string `form:"install_route,omitempty" json:"install_route,omitempty" xml:"install_route,omitempty"`
+	// First hook in the window.
+	FirstSeen *string `form:"first_seen,omitempty" json:"first_seen,omitempty" xml:"first_seen,omitempty"`
+	// Most recent hook.
+	LastSeen *string `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
+	// Hook events recorded in the window.
+	Events *int64 `form:"events,omitempty" json:"events,omitempty" xml:"events,omitempty"`
+	// Delivery failures the install reported in the window.
+	Errors *int64 `form:"errors,omitempty" json:"errors,omitempty" xml:"errors,omitempty"`
+	// True when the install has sent nothing for quiet_after_days or longer.
+	Quiet *bool `form:"quiet,omitempty" json:"quiet,omitempty" xml:"quiet,omitempty"`
 }
 
 // AdminRegistryPromotionCandidateResponseBody is used to define fields on
@@ -23808,6 +24967,42 @@ type AdminSignupOfferResponseBody struct {
 	Enabled               *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// AdminPlatformMCPFeedbackResponseBody is used to define fields on response
+// body types.
+type AdminPlatformMCPFeedbackResponseBody struct {
+	// The feedback ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The organization name. Absent when the organization no longer exists.
+	OrganizationName *string `form:"organization_name,omitempty" json:"organization_name,omitempty" xml:"organization_name,omitempty"`
+	// The organization slug. Absent when the organization no longer exists.
+	OrganizationSlug *string `form:"organization_slug,omitempty" json:"organization_slug,omitempty" xml:"organization_slug,omitempty"`
+	// The session subject that sent the feedback.
+	SubjectUrn *string `form:"subject_urn,omitempty" json:"subject_urn,omitempty" xml:"subject_urn,omitempty"`
+	// The email of the user who sent the feedback. Absent when the user no longer
+	// exists.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// The feedback category.
+	Category *string `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
+	// The optional rating from 1 through 5.
+	Rating *int `form:"rating,omitempty" json:"rating,omitempty" xml:"rating,omitempty"`
+	// The optional success outcome.
+	Success *bool `form:"success,omitempty" json:"success,omitempty" xml:"success,omitempty"`
+	// The optional Platform MCP tool the feedback is about.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// The optional failure or readiness category.
+	FailureCategory *string `form:"failure_category,omitempty" json:"failure_category,omitempty" xml:"failure_category,omitempty"`
+	// The optional free-form note.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
+	// The delivery state of the stored row.
+	DeliveryState *string `form:"delivery_state,omitempty" json:"delivery_state,omitempty" xml:"delivery_state,omitempty"`
+	// When the feedback was sent.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the stored row is deleted.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
 // AdminCustomerUsageResponseBody is used to define fields on response body
@@ -24547,6 +25742,25 @@ func NewUpdateSupportMatrixRequestBody(p *admin.UpdateSupportMatrixPayload) *Upd
 	return body
 }
 
+// NewSetMcpServerScopePinRequestBody builds the HTTP request body from the
+// payload of the "setMcpServerScopePin" endpoint of the "admin" service.
+func NewSetMcpServerScopePinRequestBody(p *admin.SetMcpServerScopePinPayload) *SetMcpServerScopePinRequestBody {
+	body := &SetMcpServerScopePinRequestBody{
+		OrganizationID: p.OrganizationID,
+		ProjectID:      p.ProjectID,
+		McpServerID:    p.McpServerID,
+	}
+	if p.Scopes != nil {
+		body.Scopes = make([]string, len(p.Scopes))
+		for i, val := range p.Scopes {
+			body.Scopes[i] = val
+		}
+	} else {
+		body.Scopes = []string{}
+	}
+	return body
+}
+
 // NewGetRegistryPromotionCandidateRequestBody builds the HTTP request body
 // from the payload of the "getRegistryPromotionCandidate" endpoint of the
 // "admin" service.
@@ -24846,6 +26060,17 @@ func NewDisableUpstreamAuthEnforcementRequestBody(p *admin.DisableUpstreamAuthEn
 func NewBackfillMcpConnectGrantsRequestBody(p *admin.BackfillMcpConnectGrantsPayload) *BackfillMcpConnectGrantsRequestBody {
 	body := &BackfillMcpConnectGrantsRequestBody{
 		CreatedBefore: p.CreatedBefore,
+	}
+	return body
+}
+
+// NewRedeployProjectRequestBody builds the HTTP request body from the payload
+// of the "redeployProject" endpoint of the "admin" service.
+func NewRedeployProjectRequestBody(p *admin.RedeployProjectPayload) *RedeployProjectRequestBody {
+	body := &RedeployProjectRequestBody{
+		OrganizationID:             p.OrganizationID,
+		ProjectID:                  p.ProjectID,
+		ExpectedActiveDeploymentID: p.ExpectedActiveDeploymentID,
 	}
 	return body
 }
@@ -26683,6 +27908,7 @@ func NewGetProjectAdminProjectDetailOK(body *GetProjectResponseBody) *admin.Admi
 		FunctionsRunnerVersion: body.FunctionsRunnerVersion,
 		ToolsetCount:           *body.ToolsetCount,
 		DeploymentCount:        *body.DeploymentCount,
+		ActiveDeploymentID:     body.ActiveDeploymentID,
 		HTTPToolCount:          *body.HTTPToolCount,
 		EnvironmentCount:       *body.EnvironmentCount,
 		APIKeyCount:            *body.APIKeyCount,
@@ -35634,6 +36860,9 @@ func NewDescribeMcpServerHealthAdminMcpServerHealthOK(body *DescribeMcpServerHea
 	if body.UserSessionIssuer != nil {
 		v.UserSessionIssuer = unmarshalAdminMcpServerHealthUserSessionIssuerResponseBodyToAdminAdminMcpServerHealthUserSessionIssuer(body.UserSessionIssuer)
 	}
+	if body.ResourceScopes != nil {
+		v.ResourceScopes = unmarshalAdminMcpServerResourceScopesResponseBodyToAdminAdminMcpServerResourceScopes(body.ResourceScopes)
+	}
 	if body.UpstreamAuth != nil {
 		v.UpstreamAuth = unmarshalAdminMcpServerHealthUpstreamAuthResponseBodyToAdminAdminMcpServerHealthUpstreamAuth(body.UpstreamAuth)
 	}
@@ -35779,6 +37008,190 @@ func NewDescribeMcpServerHealthUnexpected(body *DescribeMcpServerHealthUnexpecte
 // NewDescribeMcpServerHealthGatewayError builds a admin service
 // describeMcpServerHealth endpoint gateway_error error.
 func NewDescribeMcpServerHealthGatewayError(body *DescribeMcpServerHealthGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinAdminMcpServerResourceScopesOK builds a "admin"
+// service "setMcpServerScopePin" endpoint result from a HTTP "OK" response.
+func NewSetMcpServerScopePinAdminMcpServerResourceScopesOK(body *SetMcpServerScopePinResponseBody) *admin.AdminMcpServerResourceScopes {
+	v := &admin.AdminMcpServerResourceScopes{
+		ResourceURL:           *body.ResourceURL,
+		AdvertisedScopesKnown: *body.AdvertisedScopesKnown,
+		SharedServerCount:     *body.SharedServerCount,
+	}
+	v.PinnedScopes = make([]string, len(body.PinnedScopes))
+	for i, val := range body.PinnedScopes {
+		v.PinnedScopes[i] = val
+	}
+	if body.AdvertisedScopes != nil {
+		v.AdvertisedScopes = make([]string, len(body.AdvertisedScopes))
+		for i, val := range body.AdvertisedScopes {
+			v.AdvertisedScopes[i] = val
+		}
+	}
+	v.ChallengeScopes = make([]string, len(body.ChallengeScopes))
+	for i, val := range body.ChallengeScopes {
+		v.ChallengeScopes[i] = val
+	}
+	v.Clients = make([]*admin.AdminMcpServerResourceScopeClient, len(body.Clients))
+	for i, val := range body.Clients {
+		if val == nil {
+			v.Clients[i] = nil
+			continue
+		}
+		v.Clients[i] = unmarshalAdminMcpServerResourceScopeClientResponseBodyToAdminAdminMcpServerResourceScopeClient(val)
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinUnauthorized builds a admin service
+// setMcpServerScopePin endpoint unauthorized error.
+func NewSetMcpServerScopePinUnauthorized(body *SetMcpServerScopePinUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinForbidden builds a admin service setMcpServerScopePin
+// endpoint forbidden error.
+func NewSetMcpServerScopePinForbidden(body *SetMcpServerScopePinForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinBadRequest builds a admin service
+// setMcpServerScopePin endpoint bad_request error.
+func NewSetMcpServerScopePinBadRequest(body *SetMcpServerScopePinBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinNotFound builds a admin service setMcpServerScopePin
+// endpoint not_found error.
+func NewSetMcpServerScopePinNotFound(body *SetMcpServerScopePinNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinConflict builds a admin service setMcpServerScopePin
+// endpoint conflict error.
+func NewSetMcpServerScopePinConflict(body *SetMcpServerScopePinConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinUnsupportedMedia builds a admin service
+// setMcpServerScopePin endpoint unsupported_media error.
+func NewSetMcpServerScopePinUnsupportedMedia(body *SetMcpServerScopePinUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinInvalid builds a admin service setMcpServerScopePin
+// endpoint invalid error.
+func NewSetMcpServerScopePinInvalid(body *SetMcpServerScopePinInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinInvariantViolation builds a admin service
+// setMcpServerScopePin endpoint invariant_violation error.
+func NewSetMcpServerScopePinInvariantViolation(body *SetMcpServerScopePinInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinUnexpected builds a admin service
+// setMcpServerScopePin endpoint unexpected error.
+func NewSetMcpServerScopePinUnexpected(body *SetMcpServerScopePinUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinGatewayError builds a admin service
+// setMcpServerScopePin endpoint gateway_error error.
+func NewSetMcpServerScopePinGatewayError(body *SetMcpServerScopePinGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -36149,6 +37562,207 @@ func NewGetHookClientsUnexpected(body *GetHookClientsUnexpectedResponseBody) *go
 // NewGetHookClientsGatewayError builds a admin service getHookClients endpoint
 // gateway_error error.
 func NewGetHookClientsGatewayError(body *GetHookClientsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationHookFleetAdminHookFleetResultOK builds a "admin" service
+// "getOrganizationHookFleet" endpoint result from a HTTP "OK" response.
+func NewGetOrganizationHookFleetAdminHookFleetResultOK(body *GetOrganizationHookFleetResponseBody) *admin.AdminHookFleetResult {
+	v := &admin.AdminHookFleetResult{
+		OrganizationID: *body.OrganizationID,
+		WindowDays:     *body.WindowDays,
+		Since:          *body.Since,
+		LatestVersion:  *body.LatestVersion,
+		MinimumVersion: body.MinimumVersion,
+		QuietAfterDays: *body.QuietAfterDays,
+		Truncated:      *body.Truncated,
+		TotalInstalls:  *body.TotalInstalls,
+		QuietInstalls:  *body.QuietInstalls,
+		LegacyEvents:   *body.LegacyEvents,
+	}
+	v.Versions = make([]*admin.AdminHookFleetVersion, len(body.Versions))
+	for i, val := range body.Versions {
+		if val == nil {
+			v.Versions[i] = nil
+			continue
+		}
+		v.Versions[i] = unmarshalAdminHookFleetVersionResponseBodyToAdminAdminHookFleetVersion(val)
+	}
+	v.Routes = make([]*admin.AdminHookFleetBucket, len(body.Routes))
+	for i, val := range body.Routes {
+		if val == nil {
+			v.Routes[i] = nil
+			continue
+		}
+		v.Routes[i] = unmarshalAdminHookFleetBucketResponseBodyToAdminAdminHookFleetBucket(val)
+	}
+	v.Generations = make([]*admin.AdminHookFleetBucket, len(body.Generations))
+	for i, val := range body.Generations {
+		if val == nil {
+			v.Generations[i] = nil
+			continue
+		}
+		v.Generations[i] = unmarshalAdminHookFleetBucketResponseBodyToAdminAdminHookFleetBucket(val)
+	}
+	v.Installs = make([]*admin.AdminHookFleetInstall, len(body.Installs))
+	for i, val := range body.Installs {
+		if val == nil {
+			v.Installs[i] = nil
+			continue
+		}
+		v.Installs[i] = unmarshalAdminHookFleetInstallResponseBodyToAdminAdminHookFleetInstall(val)
+	}
+
+	return v
+}
+
+// NewGetOrganizationHookFleetUnauthorized builds a admin service
+// getOrganizationHookFleet endpoint unauthorized error.
+func NewGetOrganizationHookFleetUnauthorized(body *GetOrganizationHookFleetUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationHookFleetForbidden builds a admin service
+// getOrganizationHookFleet endpoint forbidden error.
+func NewGetOrganizationHookFleetForbidden(body *GetOrganizationHookFleetForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationHookFleetBadRequest builds a admin service
+// getOrganizationHookFleet endpoint bad_request error.
+func NewGetOrganizationHookFleetBadRequest(body *GetOrganizationHookFleetBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationHookFleetNotFound builds a admin service
+// getOrganizationHookFleet endpoint not_found error.
+func NewGetOrganizationHookFleetNotFound(body *GetOrganizationHookFleetNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationHookFleetConflict builds a admin service
+// getOrganizationHookFleet endpoint conflict error.
+func NewGetOrganizationHookFleetConflict(body *GetOrganizationHookFleetConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationHookFleetUnsupportedMedia builds a admin service
+// getOrganizationHookFleet endpoint unsupported_media error.
+func NewGetOrganizationHookFleetUnsupportedMedia(body *GetOrganizationHookFleetUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationHookFleetInvalid builds a admin service
+// getOrganizationHookFleet endpoint invalid error.
+func NewGetOrganizationHookFleetInvalid(body *GetOrganizationHookFleetInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationHookFleetInvariantViolation builds a admin service
+// getOrganizationHookFleet endpoint invariant_violation error.
+func NewGetOrganizationHookFleetInvariantViolation(body *GetOrganizationHookFleetInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationHookFleetUnexpected builds a admin service
+// getOrganizationHookFleet endpoint unexpected error.
+func NewGetOrganizationHookFleetUnexpected(body *GetOrganizationHookFleetUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationHookFleetGatewayError builds a admin service
+// getOrganizationHookFleet endpoint gateway_error error.
+func NewGetOrganizationHookFleetGatewayError(body *GetOrganizationHookFleetGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -41394,6 +43008,172 @@ func NewUpdateSignupOfferGatewayError(body *UpdateSignupOfferGatewayErrorRespons
 	return v
 }
 
+// NewListPlatformMcpFeedbackResultOK builds a "admin" service
+// "listPlatformMcpFeedback" endpoint result from a HTTP "OK" response.
+func NewListPlatformMcpFeedbackResultOK(body *ListPlatformMcpFeedbackResponseBody) *admin.ListPlatformMcpFeedbackResult {
+	v := &admin.ListPlatformMcpFeedbackResult{}
+	v.Feedback = make([]*admin.AdminPlatformMCPFeedback, len(body.Feedback))
+	for i, val := range body.Feedback {
+		if val == nil {
+			v.Feedback[i] = nil
+			continue
+		}
+		v.Feedback[i] = unmarshalAdminPlatformMCPFeedbackResponseBodyToAdminAdminPlatformMCPFeedback(val)
+	}
+
+	return v
+}
+
+// NewListPlatformMcpFeedbackUnauthorized builds a admin service
+// listPlatformMcpFeedback endpoint unauthorized error.
+func NewListPlatformMcpFeedbackUnauthorized(body *ListPlatformMcpFeedbackUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformMcpFeedbackForbidden builds a admin service
+// listPlatformMcpFeedback endpoint forbidden error.
+func NewListPlatformMcpFeedbackForbidden(body *ListPlatformMcpFeedbackForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformMcpFeedbackBadRequest builds a admin service
+// listPlatformMcpFeedback endpoint bad_request error.
+func NewListPlatformMcpFeedbackBadRequest(body *ListPlatformMcpFeedbackBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformMcpFeedbackNotFound builds a admin service
+// listPlatformMcpFeedback endpoint not_found error.
+func NewListPlatformMcpFeedbackNotFound(body *ListPlatformMcpFeedbackNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformMcpFeedbackConflict builds a admin service
+// listPlatformMcpFeedback endpoint conflict error.
+func NewListPlatformMcpFeedbackConflict(body *ListPlatformMcpFeedbackConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformMcpFeedbackUnsupportedMedia builds a admin service
+// listPlatformMcpFeedback endpoint unsupported_media error.
+func NewListPlatformMcpFeedbackUnsupportedMedia(body *ListPlatformMcpFeedbackUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformMcpFeedbackInvalid builds a admin service
+// listPlatformMcpFeedback endpoint invalid error.
+func NewListPlatformMcpFeedbackInvalid(body *ListPlatformMcpFeedbackInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformMcpFeedbackInvariantViolation builds a admin service
+// listPlatformMcpFeedback endpoint invariant_violation error.
+func NewListPlatformMcpFeedbackInvariantViolation(body *ListPlatformMcpFeedbackInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformMcpFeedbackUnexpected builds a admin service
+// listPlatformMcpFeedback endpoint unexpected error.
+func NewListPlatformMcpFeedbackUnexpected(body *ListPlatformMcpFeedbackUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformMcpFeedbackGatewayError builds a admin service
+// listPlatformMcpFeedback endpoint gateway_error error.
+func NewListPlatformMcpFeedbackGatewayError(body *ListPlatformMcpFeedbackGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetStripeSubscriptionCandidateAdminStripeSubscriptionCandidateOK builds a
 // "admin" service "getStripeSubscriptionCandidate" endpoint result from a HTTP
 // "OK" response.
@@ -43157,6 +44937,336 @@ func NewBackfillMcpConnectGrantsUnexpected(body *BackfillMcpConnectGrantsUnexpec
 // NewBackfillMcpConnectGrantsGatewayError builds a admin service
 // backfillMcpConnectGrants endpoint gateway_error error.
 func NewBackfillMcpConnectGrantsGatewayError(body *BackfillMcpConnectGrantsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetProjectRedeployPreviewAdminProjectRedeployPreviewOK builds a "admin"
+// service "getProjectRedeployPreview" endpoint result from a HTTP "OK"
+// response.
+func NewGetProjectRedeployPreviewAdminProjectRedeployPreviewOK(body *GetProjectRedeployPreviewResponseBody) *admin.AdminProjectRedeployPreview {
+	v := &admin.AdminProjectRedeployPreview{
+		OrganizationID:     *body.OrganizationID,
+		ProjectID:          *body.ProjectID,
+		ProjectName:        *body.ProjectName,
+		ActiveDeploymentID: *body.ActiveDeploymentID,
+		OpenapiAssets:      *body.OpenapiAssets,
+		FunctionAssets:     *body.FunctionAssets,
+		Packages:           *body.Packages,
+		ExternalMcps:       *body.ExternalMcps,
+	}
+
+	return v
+}
+
+// NewGetProjectRedeployPreviewUnauthorized builds a admin service
+// getProjectRedeployPreview endpoint unauthorized error.
+func NewGetProjectRedeployPreviewUnauthorized(body *GetProjectRedeployPreviewUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetProjectRedeployPreviewForbidden builds a admin service
+// getProjectRedeployPreview endpoint forbidden error.
+func NewGetProjectRedeployPreviewForbidden(body *GetProjectRedeployPreviewForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetProjectRedeployPreviewBadRequest builds a admin service
+// getProjectRedeployPreview endpoint bad_request error.
+func NewGetProjectRedeployPreviewBadRequest(body *GetProjectRedeployPreviewBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetProjectRedeployPreviewNotFound builds a admin service
+// getProjectRedeployPreview endpoint not_found error.
+func NewGetProjectRedeployPreviewNotFound(body *GetProjectRedeployPreviewNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetProjectRedeployPreviewConflict builds a admin service
+// getProjectRedeployPreview endpoint conflict error.
+func NewGetProjectRedeployPreviewConflict(body *GetProjectRedeployPreviewConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetProjectRedeployPreviewUnsupportedMedia builds a admin service
+// getProjectRedeployPreview endpoint unsupported_media error.
+func NewGetProjectRedeployPreviewUnsupportedMedia(body *GetProjectRedeployPreviewUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetProjectRedeployPreviewInvalid builds a admin service
+// getProjectRedeployPreview endpoint invalid error.
+func NewGetProjectRedeployPreviewInvalid(body *GetProjectRedeployPreviewInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetProjectRedeployPreviewInvariantViolation builds a admin service
+// getProjectRedeployPreview endpoint invariant_violation error.
+func NewGetProjectRedeployPreviewInvariantViolation(body *GetProjectRedeployPreviewInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetProjectRedeployPreviewUnexpected builds a admin service
+// getProjectRedeployPreview endpoint unexpected error.
+func NewGetProjectRedeployPreviewUnexpected(body *GetProjectRedeployPreviewUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetProjectRedeployPreviewGatewayError builds a admin service
+// getProjectRedeployPreview endpoint gateway_error error.
+func NewGetProjectRedeployPreviewGatewayError(body *GetProjectRedeployPreviewGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRedeployProjectAdminProjectRedeployResultOK builds a "admin" service
+// "redeployProject" endpoint result from a HTTP "OK" response.
+func NewRedeployProjectAdminProjectRedeployResultOK(body *RedeployProjectResponseBody) *admin.AdminProjectRedeployResult {
+	v := &admin.AdminProjectRedeployResult{
+		ProjectID:          *body.ProjectID,
+		SourceDeploymentID: *body.SourceDeploymentID,
+		DeploymentID:       *body.DeploymentID,
+	}
+
+	return v
+}
+
+// NewRedeployProjectUnauthorized builds a admin service redeployProject
+// endpoint unauthorized error.
+func NewRedeployProjectUnauthorized(body *RedeployProjectUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRedeployProjectForbidden builds a admin service redeployProject endpoint
+// forbidden error.
+func NewRedeployProjectForbidden(body *RedeployProjectForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRedeployProjectBadRequest builds a admin service redeployProject endpoint
+// bad_request error.
+func NewRedeployProjectBadRequest(body *RedeployProjectBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRedeployProjectNotFound builds a admin service redeployProject endpoint
+// not_found error.
+func NewRedeployProjectNotFound(body *RedeployProjectNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRedeployProjectConflict builds a admin service redeployProject endpoint
+// conflict error.
+func NewRedeployProjectConflict(body *RedeployProjectConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRedeployProjectUnsupportedMedia builds a admin service redeployProject
+// endpoint unsupported_media error.
+func NewRedeployProjectUnsupportedMedia(body *RedeployProjectUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRedeployProjectInvalid builds a admin service redeployProject endpoint
+// invalid error.
+func NewRedeployProjectInvalid(body *RedeployProjectInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRedeployProjectInvariantViolation builds a admin service redeployProject
+// endpoint invariant_violation error.
+func NewRedeployProjectInvariantViolation(body *RedeployProjectInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRedeployProjectUnexpected builds a admin service redeployProject endpoint
+// unexpected error.
+func NewRedeployProjectUnexpected(body *RedeployProjectUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRedeployProjectGatewayError builds a admin service redeployProject
+// endpoint gateway_error error.
+func NewRedeployProjectGatewayError(body *RedeployProjectGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -44997,9 +47107,48 @@ func ValidateDescribeMcpServerHealthResponseBody(body *DescribeMcpServerHealthRe
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.ResourceScopes != nil {
+		if err2 := ValidateAdminMcpServerResourceScopesResponseBody(body.ResourceScopes); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.UpstreamAuth != nil {
 		if err2 := ValidateAdminMcpServerHealthUpstreamAuthResponseBody(body.UpstreamAuth); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinResponseBody runs the validations defined on
+// SetMcpServerScopePinResponseBody
+func ValidateSetMcpServerScopePinResponseBody(body *SetMcpServerScopePinResponseBody) (err error) {
+	if body.ResourceURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_url", "body"))
+	}
+	if body.PinnedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pinned_scopes", "body"))
+	}
+	if body.AdvertisedScopesKnown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("advertised_scopes_known", "body"))
+	}
+	if body.ChallengeScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_scopes", "body"))
+	}
+	if body.SharedServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("shared_server_count", "body"))
+	}
+	if body.Clients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("clients", "body"))
+	}
+	if body.ResourceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource_url", *body.ResourceURL, goa.FormatURI))
+	}
+	for _, e := range body.Clients {
+		if e != nil {
+			if err2 := ValidateAdminMcpServerResourceScopeClientResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -45085,6 +47234,82 @@ func ValidateGetHookClientsResponseBody(body *GetHookClientsResponseBody) (err e
 	for _, e := range body.DeviceAgents {
 		if e != nil {
 			if err2 := ValidateAdminDeviceAgentCellResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetOrganizationHookFleetResponseBody runs the validations defined on
+// GetOrganizationHookFleetResponseBody
+func ValidateGetOrganizationHookFleetResponseBody(body *GetOrganizationHookFleetResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.WindowDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_days", "body"))
+	}
+	if body.Since == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("since", "body"))
+	}
+	if body.LatestVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("latest_version", "body"))
+	}
+	if body.QuietAfterDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("quiet_after_days", "body"))
+	}
+	if body.Truncated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("truncated", "body"))
+	}
+	if body.TotalInstalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_installs", "body"))
+	}
+	if body.QuietInstalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("quiet_installs", "body"))
+	}
+	if body.LegacyEvents == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_events", "body"))
+	}
+	if body.Versions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("versions", "body"))
+	}
+	if body.Routes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("routes", "body"))
+	}
+	if body.Generations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generations", "body"))
+	}
+	if body.Installs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("installs", "body"))
+	}
+	if body.Since != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.since", *body.Since, goa.FormatDateTime))
+	}
+	for _, e := range body.Versions {
+		if e != nil {
+			if err2 := ValidateAdminHookFleetVersionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Routes {
+		if e != nil {
+			if err2 := ValidateAdminHookFleetBucketResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Generations {
+		if e != nil {
+			if err2 := ValidateAdminHookFleetBucketResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Installs {
+		if e != nil {
+			if err2 := ValidateAdminHookFleetInstallResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -46082,6 +48307,22 @@ func ValidateUpdateSignupOfferResponseBody(body *UpdateSignupOfferResponseBody) 
 	return
 }
 
+// ValidateListPlatformMcpFeedbackResponseBody runs the validations defined on
+// ListPlatformMcpFeedbackResponseBody
+func ValidateListPlatformMcpFeedbackResponseBody(body *ListPlatformMcpFeedbackResponseBody) (err error) {
+	if body.Feedback == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("feedback", "body"))
+	}
+	for _, e := range body.Feedback {
+		if e != nil {
+			if err2 := ValidateAdminPlatformMCPFeedbackResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateGetStripeSubscriptionCandidateResponseBody runs the validations
 // defined on GetStripeSubscriptionCandidateResponseBody
 func ValidateGetStripeSubscriptionCandidateResponseBody(body *GetStripeSubscriptionCandidateResponseBody) (err error) {
@@ -46423,6 +48664,51 @@ func ValidateBackfillMcpConnectGrantsResponseBody(body *BackfillMcpConnectGrants
 	}
 	if body.TakenOver == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taken_over", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectRedeployPreviewResponseBody runs the validations defined
+// on GetProjectRedeployPreviewResponseBody
+func ValidateGetProjectRedeployPreviewResponseBody(body *GetProjectRedeployPreviewResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if body.ActiveDeploymentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_deployment_id", "body"))
+	}
+	if body.OpenapiAssets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("openapi_assets", "body"))
+	}
+	if body.FunctionAssets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("function_assets", "body"))
+	}
+	if body.Packages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("packages", "body"))
+	}
+	if body.ExternalMcps == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("external_mcps", "body"))
+	}
+	return
+}
+
+// ValidateRedeployProjectResponseBody runs the validations defined on
+// RedeployProjectResponseBody
+func ValidateRedeployProjectResponseBody(body *RedeployProjectResponseBody) (err error) {
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.SourceDeploymentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_deployment_id", "body"))
+	}
+	if body.DeploymentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
 	}
 	return
 }
@@ -61674,6 +63960,246 @@ func ValidateDescribeMcpServerHealthGatewayErrorResponseBody(body *DescribeMcpSe
 	return
 }
 
+// ValidateSetMcpServerScopePinUnauthorizedResponseBody runs the validations
+// defined on setMcpServerScopePin_unauthorized_response_body
+func ValidateSetMcpServerScopePinUnauthorizedResponseBody(body *SetMcpServerScopePinUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinForbiddenResponseBody runs the validations
+// defined on setMcpServerScopePin_forbidden_response_body
+func ValidateSetMcpServerScopePinForbiddenResponseBody(body *SetMcpServerScopePinForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinBadRequestResponseBody runs the validations
+// defined on setMcpServerScopePin_bad_request_response_body
+func ValidateSetMcpServerScopePinBadRequestResponseBody(body *SetMcpServerScopePinBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinNotFoundResponseBody runs the validations
+// defined on setMcpServerScopePin_not_found_response_body
+func ValidateSetMcpServerScopePinNotFoundResponseBody(body *SetMcpServerScopePinNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinConflictResponseBody runs the validations
+// defined on setMcpServerScopePin_conflict_response_body
+func ValidateSetMcpServerScopePinConflictResponseBody(body *SetMcpServerScopePinConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinUnsupportedMediaResponseBody runs the
+// validations defined on setMcpServerScopePin_unsupported_media_response_body
+func ValidateSetMcpServerScopePinUnsupportedMediaResponseBody(body *SetMcpServerScopePinUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinInvalidResponseBody runs the validations defined
+// on setMcpServerScopePin_invalid_response_body
+func ValidateSetMcpServerScopePinInvalidResponseBody(body *SetMcpServerScopePinInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinInvariantViolationResponseBody runs the
+// validations defined on setMcpServerScopePin_invariant_violation_response_body
+func ValidateSetMcpServerScopePinInvariantViolationResponseBody(body *SetMcpServerScopePinInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinUnexpectedResponseBody runs the validations
+// defined on setMcpServerScopePin_unexpected_response_body
+func ValidateSetMcpServerScopePinUnexpectedResponseBody(body *SetMcpServerScopePinUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinGatewayErrorResponseBody runs the validations
+// defined on setMcpServerScopePin_gateway_error_response_body
+func ValidateSetMcpServerScopePinGatewayErrorResponseBody(body *SetMcpServerScopePinGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetMcpServerToolCallsUnauthorizedResponseBody runs the validations
 // defined on getMcpServerToolCalls_unauthorized_response_body
 func ValidateGetMcpServerToolCallsUnauthorizedResponseBody(body *GetMcpServerToolCallsUnauthorizedResponseBody) (err error) {
@@ -62134,6 +64660,248 @@ func ValidateGetHookClientsUnexpectedResponseBody(body *GetHookClientsUnexpected
 // ValidateGetHookClientsGatewayErrorResponseBody runs the validations defined
 // on getHookClients_gateway_error_response_body
 func ValidateGetHookClientsGatewayErrorResponseBody(body *GetHookClientsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationHookFleetUnauthorizedResponseBody runs the
+// validations defined on getOrganizationHookFleet_unauthorized_response_body
+func ValidateGetOrganizationHookFleetUnauthorizedResponseBody(body *GetOrganizationHookFleetUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationHookFleetForbiddenResponseBody runs the validations
+// defined on getOrganizationHookFleet_forbidden_response_body
+func ValidateGetOrganizationHookFleetForbiddenResponseBody(body *GetOrganizationHookFleetForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationHookFleetBadRequestResponseBody runs the validations
+// defined on getOrganizationHookFleet_bad_request_response_body
+func ValidateGetOrganizationHookFleetBadRequestResponseBody(body *GetOrganizationHookFleetBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationHookFleetNotFoundResponseBody runs the validations
+// defined on getOrganizationHookFleet_not_found_response_body
+func ValidateGetOrganizationHookFleetNotFoundResponseBody(body *GetOrganizationHookFleetNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationHookFleetConflictResponseBody runs the validations
+// defined on getOrganizationHookFleet_conflict_response_body
+func ValidateGetOrganizationHookFleetConflictResponseBody(body *GetOrganizationHookFleetConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationHookFleetUnsupportedMediaResponseBody runs the
+// validations defined on
+// getOrganizationHookFleet_unsupported_media_response_body
+func ValidateGetOrganizationHookFleetUnsupportedMediaResponseBody(body *GetOrganizationHookFleetUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationHookFleetInvalidResponseBody runs the validations
+// defined on getOrganizationHookFleet_invalid_response_body
+func ValidateGetOrganizationHookFleetInvalidResponseBody(body *GetOrganizationHookFleetInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationHookFleetInvariantViolationResponseBody runs the
+// validations defined on
+// getOrganizationHookFleet_invariant_violation_response_body
+func ValidateGetOrganizationHookFleetInvariantViolationResponseBody(body *GetOrganizationHookFleetInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationHookFleetUnexpectedResponseBody runs the validations
+// defined on getOrganizationHookFleet_unexpected_response_body
+func ValidateGetOrganizationHookFleetUnexpectedResponseBody(body *GetOrganizationHookFleetUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationHookFleetGatewayErrorResponseBody runs the
+// validations defined on getOrganizationHookFleet_gateway_error_response_body
+func ValidateGetOrganizationHookFleetGatewayErrorResponseBody(body *GetOrganizationHookFleetGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -69438,6 +72206,248 @@ func ValidateUpdateSignupOfferGatewayErrorResponseBody(body *UpdateSignupOfferGa
 	return
 }
 
+// ValidateListPlatformMcpFeedbackUnauthorizedResponseBody runs the validations
+// defined on listPlatformMcpFeedback_unauthorized_response_body
+func ValidateListPlatformMcpFeedbackUnauthorizedResponseBody(body *ListPlatformMcpFeedbackUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformMcpFeedbackForbiddenResponseBody runs the validations
+// defined on listPlatformMcpFeedback_forbidden_response_body
+func ValidateListPlatformMcpFeedbackForbiddenResponseBody(body *ListPlatformMcpFeedbackForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformMcpFeedbackBadRequestResponseBody runs the validations
+// defined on listPlatformMcpFeedback_bad_request_response_body
+func ValidateListPlatformMcpFeedbackBadRequestResponseBody(body *ListPlatformMcpFeedbackBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformMcpFeedbackNotFoundResponseBody runs the validations
+// defined on listPlatformMcpFeedback_not_found_response_body
+func ValidateListPlatformMcpFeedbackNotFoundResponseBody(body *ListPlatformMcpFeedbackNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformMcpFeedbackConflictResponseBody runs the validations
+// defined on listPlatformMcpFeedback_conflict_response_body
+func ValidateListPlatformMcpFeedbackConflictResponseBody(body *ListPlatformMcpFeedbackConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformMcpFeedbackUnsupportedMediaResponseBody runs the
+// validations defined on
+// listPlatformMcpFeedback_unsupported_media_response_body
+func ValidateListPlatformMcpFeedbackUnsupportedMediaResponseBody(body *ListPlatformMcpFeedbackUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformMcpFeedbackInvalidResponseBody runs the validations
+// defined on listPlatformMcpFeedback_invalid_response_body
+func ValidateListPlatformMcpFeedbackInvalidResponseBody(body *ListPlatformMcpFeedbackInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformMcpFeedbackInvariantViolationResponseBody runs the
+// validations defined on
+// listPlatformMcpFeedback_invariant_violation_response_body
+func ValidateListPlatformMcpFeedbackInvariantViolationResponseBody(body *ListPlatformMcpFeedbackInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformMcpFeedbackUnexpectedResponseBody runs the validations
+// defined on listPlatformMcpFeedback_unexpected_response_body
+func ValidateListPlatformMcpFeedbackUnexpectedResponseBody(body *ListPlatformMcpFeedbackUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformMcpFeedbackGatewayErrorResponseBody runs the validations
+// defined on listPlatformMcpFeedback_gateway_error_response_body
+func ValidateListPlatformMcpFeedbackGatewayErrorResponseBody(body *ListPlatformMcpFeedbackGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetStripeSubscriptionCandidateUnavailableResponseBody runs the
 // validations defined on
 // getStripeSubscriptionCandidate_unavailable_response_body
@@ -71952,6 +74962,488 @@ func ValidateBackfillMcpConnectGrantsGatewayErrorResponseBody(body *BackfillMcpC
 	return
 }
 
+// ValidateGetProjectRedeployPreviewUnauthorizedResponseBody runs the
+// validations defined on getProjectRedeployPreview_unauthorized_response_body
+func ValidateGetProjectRedeployPreviewUnauthorizedResponseBody(body *GetProjectRedeployPreviewUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectRedeployPreviewForbiddenResponseBody runs the validations
+// defined on getProjectRedeployPreview_forbidden_response_body
+func ValidateGetProjectRedeployPreviewForbiddenResponseBody(body *GetProjectRedeployPreviewForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectRedeployPreviewBadRequestResponseBody runs the validations
+// defined on getProjectRedeployPreview_bad_request_response_body
+func ValidateGetProjectRedeployPreviewBadRequestResponseBody(body *GetProjectRedeployPreviewBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectRedeployPreviewNotFoundResponseBody runs the validations
+// defined on getProjectRedeployPreview_not_found_response_body
+func ValidateGetProjectRedeployPreviewNotFoundResponseBody(body *GetProjectRedeployPreviewNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectRedeployPreviewConflictResponseBody runs the validations
+// defined on getProjectRedeployPreview_conflict_response_body
+func ValidateGetProjectRedeployPreviewConflictResponseBody(body *GetProjectRedeployPreviewConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectRedeployPreviewUnsupportedMediaResponseBody runs the
+// validations defined on
+// getProjectRedeployPreview_unsupported_media_response_body
+func ValidateGetProjectRedeployPreviewUnsupportedMediaResponseBody(body *GetProjectRedeployPreviewUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectRedeployPreviewInvalidResponseBody runs the validations
+// defined on getProjectRedeployPreview_invalid_response_body
+func ValidateGetProjectRedeployPreviewInvalidResponseBody(body *GetProjectRedeployPreviewInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectRedeployPreviewInvariantViolationResponseBody runs the
+// validations defined on
+// getProjectRedeployPreview_invariant_violation_response_body
+func ValidateGetProjectRedeployPreviewInvariantViolationResponseBody(body *GetProjectRedeployPreviewInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectRedeployPreviewUnexpectedResponseBody runs the validations
+// defined on getProjectRedeployPreview_unexpected_response_body
+func ValidateGetProjectRedeployPreviewUnexpectedResponseBody(body *GetProjectRedeployPreviewUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectRedeployPreviewGatewayErrorResponseBody runs the
+// validations defined on getProjectRedeployPreview_gateway_error_response_body
+func ValidateGetProjectRedeployPreviewGatewayErrorResponseBody(body *GetProjectRedeployPreviewGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRedeployProjectUnauthorizedResponseBody runs the validations defined
+// on redeployProject_unauthorized_response_body
+func ValidateRedeployProjectUnauthorizedResponseBody(body *RedeployProjectUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRedeployProjectForbiddenResponseBody runs the validations defined on
+// redeployProject_forbidden_response_body
+func ValidateRedeployProjectForbiddenResponseBody(body *RedeployProjectForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRedeployProjectBadRequestResponseBody runs the validations defined
+// on redeployProject_bad_request_response_body
+func ValidateRedeployProjectBadRequestResponseBody(body *RedeployProjectBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRedeployProjectNotFoundResponseBody runs the validations defined on
+// redeployProject_not_found_response_body
+func ValidateRedeployProjectNotFoundResponseBody(body *RedeployProjectNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRedeployProjectConflictResponseBody runs the validations defined on
+// redeployProject_conflict_response_body
+func ValidateRedeployProjectConflictResponseBody(body *RedeployProjectConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRedeployProjectUnsupportedMediaResponseBody runs the validations
+// defined on redeployProject_unsupported_media_response_body
+func ValidateRedeployProjectUnsupportedMediaResponseBody(body *RedeployProjectUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRedeployProjectInvalidResponseBody runs the validations defined on
+// redeployProject_invalid_response_body
+func ValidateRedeployProjectInvalidResponseBody(body *RedeployProjectInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRedeployProjectInvariantViolationResponseBody runs the validations
+// defined on redeployProject_invariant_violation_response_body
+func ValidateRedeployProjectInvariantViolationResponseBody(body *RedeployProjectInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRedeployProjectUnexpectedResponseBody runs the validations defined
+// on redeployProject_unexpected_response_body
+func ValidateRedeployProjectUnexpectedResponseBody(body *RedeployProjectUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRedeployProjectGatewayErrorResponseBody runs the validations defined
+// on redeployProject_gateway_error_response_body
+func ValidateRedeployProjectGatewayErrorResponseBody(body *RedeployProjectGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAdminOrganizationMemberResponseBody runs the validations defined on
 // AdminOrganizationMemberResponseBody
 func ValidateAdminOrganizationMemberResponseBody(body *AdminOrganizationMemberResponseBody) (err error) {
@@ -73248,6 +76740,66 @@ func ValidateAdminMcpServerHealthRemoteSessionsResponseBody(body *AdminMcpServer
 	return
 }
 
+// ValidateAdminMcpServerResourceScopesResponseBody runs the validations
+// defined on AdminMcpServerResourceScopesResponseBody
+func ValidateAdminMcpServerResourceScopesResponseBody(body *AdminMcpServerResourceScopesResponseBody) (err error) {
+	if body.ResourceURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_url", "body"))
+	}
+	if body.PinnedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pinned_scopes", "body"))
+	}
+	if body.AdvertisedScopesKnown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("advertised_scopes_known", "body"))
+	}
+	if body.ChallengeScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_scopes", "body"))
+	}
+	if body.SharedServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("shared_server_count", "body"))
+	}
+	if body.Clients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("clients", "body"))
+	}
+	if body.ResourceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource_url", *body.ResourceURL, goa.FormatURI))
+	}
+	for _, e := range body.Clients {
+		if e != nil {
+			if err2 := ValidateAdminMcpServerResourceScopeClientResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminMcpServerResourceScopeClientResponseBody runs the validations
+// defined on AdminMcpServerResourceScopeClientResponseBody
+func ValidateAdminMcpServerResourceScopeClientResponseBody(body *AdminMcpServerResourceScopeClientResponseBody) (err error) {
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ScopeSource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope_source", "body"))
+	}
+	if body.RequestedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requested_scopes", "body"))
+	}
+	if body.UnadvertisedPinnedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unadvertised_pinned_scopes", "body"))
+	}
+	if body.PinWouldDecide == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pin_would_decide", "body"))
+	}
+	if body.ScopeSource != nil {
+		if !(*body.ScopeSource == "client_scope" || *body.ScopeSource == "challenge_scope" || *body.ScopeSource == "resource_pin" || *body.ScopeSource == "live_resource" || *body.ScopeSource == "cached_resource" || *body.ScopeSource == "issuer_override" || *body.ScopeSource == "issuer_omitted" || *body.ScopeSource == "issuer_catalogue" || *body.ScopeSource == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope_source", *body.ScopeSource, []any{"client_scope", "challenge_scope", "resource_pin", "live_resource", "cached_resource", "issuer_override", "issuer_omitted", "issuer_catalogue", "none"}))
+		}
+	}
+	return
+}
+
 // ValidateAdminMcpServerHealthUpstreamAuthResponseBody runs the validations
 // defined on AdminMcpServerHealthUpstreamAuthResponseBody
 func ValidateAdminMcpServerHealthUpstreamAuthResponseBody(body *AdminMcpServerHealthUpstreamAuthResponseBody) (err error) {
@@ -73440,6 +76992,97 @@ func ValidateAdminDeviceAgentCellResponseBody(body *AdminDeviceAgentCellResponse
 	}
 	if body.Day != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.day", *body.Day, goa.FormatDate))
+	}
+	return
+}
+
+// ValidateAdminHookFleetVersionResponseBody runs the validations defined on
+// AdminHookFleetVersionResponseBody
+func ValidateAdminHookFleetVersionResponseBody(body *AdminHookFleetVersionResponseBody) (err error) {
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Installs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("installs", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "current" || *body.Status == "behind" || *body.Status == "unsupported" || *body.Status == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"current", "behind", "unsupported", "unknown"}))
+		}
+	}
+	return
+}
+
+// ValidateAdminHookFleetBucketResponseBody runs the validations defined on
+// AdminHookFleetBucketResponseBody
+func ValidateAdminHookFleetBucketResponseBody(body *AdminHookFleetBucketResponseBody) (err error) {
+	if body.Value == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
+	}
+	if body.Installs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("installs", "body"))
+	}
+	if body.Events == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("events", "body"))
+	}
+	return
+}
+
+// ValidateAdminHookFleetInstallResponseBody runs the validations defined on
+// AdminHookFleetInstallResponseBody
+func ValidateAdminHookFleetInstallResponseBody(body *AdminHookFleetInstallResponseBody) (err error) {
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.UserEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
+	}
+	if body.Hostname == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
+	}
+	if body.Harness == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("harness", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.VersionStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_status", "body"))
+	}
+	if body.EndpointGeneration == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_generation", "body"))
+	}
+	if body.InstallRoute == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("install_route", "body"))
+	}
+	if body.FirstSeen == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("first_seen", "body"))
+	}
+	if body.LastSeen == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_seen", "body"))
+	}
+	if body.Events == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("events", "body"))
+	}
+	if body.Errors == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("errors", "body"))
+	}
+	if body.Quiet == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("quiet", "body"))
+	}
+	if body.VersionStatus != nil {
+		if !(*body.VersionStatus == "current" || *body.VersionStatus == "behind" || *body.VersionStatus == "unsupported" || *body.VersionStatus == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.version_status", *body.VersionStatus, []any{"current", "behind", "unsupported", "unknown"}))
+		}
+	}
+	if body.FirstSeen != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen", *body.FirstSeen, goa.FormatDateTime))
+	}
+	if body.LastSeen != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen", *body.LastSeen, goa.FormatDateTime))
 	}
 	return
 }
@@ -73902,6 +77545,42 @@ func ValidateAdminSignupOfferResponseBody(body *AdminSignupOfferResponseBody) (e
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminPlatformMCPFeedbackResponseBody runs the validations defined on
+// AdminPlatformMCPFeedbackResponseBody
+func ValidateAdminPlatformMCPFeedbackResponseBody(body *AdminPlatformMCPFeedbackResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.SubjectUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject_urn", "body"))
+	}
+	if body.Category == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("category", "body"))
+	}
+	if body.DeliveryState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("delivery_state", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.ExpiresAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expires_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
 	}
 	return
 }

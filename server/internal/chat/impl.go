@@ -854,6 +854,65 @@ func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPaylo
 	return &gen.ListSourcesResult{Sources: canonicalizeSources(raws)}, nil
 }
 
+// CountByUser ranks users by agent session count. It applies listChats'
+// visibility scope and unfiltered population, so the dashboard's per-user
+// counts and total line up with the Agent Sessions list they drill into.
+func (s *Service) CountByUser(ctx context.Context, payload *gen.CountByUserPayload) (*gen.CountChatsByUserResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	var fromTime, toTime pgtype.Timestamptz
+	if payload.From != nil {
+		t, err := time.Parse(time.RFC3339, *payload.From)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid from timestamp").LogError(ctx, s.logger)
+		}
+		fromTime = pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}
+	}
+	if payload.To != nil {
+		t, err := time.Parse(time.RFC3339, *payload.To)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid to timestamp").LogError(ctx, s.logger)
+		}
+		toTime = pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}
+	}
+
+	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil, withOwnedAgentSessions)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.repo.CountChatsByUser(ctx, repo.CountChatsByUserParams{
+		ProjectID:      *authCtx.ProjectID,
+		ExternalUserID: visibility.ExternalUserID,
+		UserID:         visibility.UserID,
+		OwnedAgentIds:  visibility.ScopedAgentIDs,
+		FromTime:       fromTime,
+		ToTime:         toTime,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count chats by user").LogError(ctx, s.logger)
+	}
+
+	var total int64
+	users := make([]*gen.ChatUserSessionCount, 0, min(len(rows), payload.Limit))
+	for _, row := range rows {
+		total += row.ChatCount
+		if len(users) < payload.Limit {
+			users = append(users, &gen.ChatUserSessionCount{
+				UserID:      row.UserID,
+				Email:       row.Email,
+				DisplayName: row.DisplayName,
+				Count:       int(row.ChatCount),
+			})
+		}
+	}
+
+	return &gen.CountChatsByUserResult{Users: users, Total: int(total)}, nil
+}
+
 // ListSessionLinks resolves session-lineage edges (session portability moves)
 // touching the requested chats, in either direction. Dangling edges — a
 // continuation whose session id was unknowable at move time — come back with

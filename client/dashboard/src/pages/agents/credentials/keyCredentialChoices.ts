@@ -28,6 +28,38 @@ export async function keyCredentialChoices(
   sdk: Gram,
   picks: KeyCredentialPick[],
 ): Promise<AgentKeyAuthClientChoice[]> {
+  const plan = await keyCredentialPlan(sdk, picks, { askWhenAccounts: false });
+  if (plan.undecided.length > 0) {
+    throw new Error(
+      `Choose which credential the key uses on ${plan.undecided.map((pick) => pick.name).join(", ")}.`,
+    );
+  }
+  return plan.choices;
+}
+
+/**
+ * An explicit pick of the account connected for the agent, on a server that
+ * also offers shared credentials. It records no choice, as no pick does, but
+ * says the reader made it.
+ */
+export const ACCOUNT_CHOICE = "account";
+
+/**
+ * The credential choices for picks whose credential is decided, and the picks
+ * still to decide, by the rules `keyCredentialChoices` describes. With
+ * `askWhenAccounts`, a server that offers accounts and shared credentials is
+ * also undecided until the account or a shared credential is picked, for a
+ * page that asks before the key is extended rather than defaulting to the
+ * account.
+ */
+export async function keyCredentialPlan<P extends KeyCredentialPick>(
+  sdk: Gram,
+  picks: P[],
+  { askWhenAccounts }: { askWhenAccounts: boolean },
+): Promise<{
+  choices: AgentKeyAuthClientChoice[];
+  undecided: P[];
+}> {
   const offered = await Promise.all(
     picks
       .filter((pick) => pick.kind === "Remote" || pick.kind === "Tunneled")
@@ -49,34 +81,46 @@ export async function keyCredentialChoices(
   // A pick the server no longer offers counts as no pick.
   const picked = ({ pick, ids }: (typeof offered)[number]) =>
     !!pick.authClientId && ids.includes(pick.authClientId);
-  const sole = await Promise.all(
-    offered
-      .filter(
-        (entry) => !entry.noAuth && entry.ids.length === 1 && !picked(entry),
-      )
+  const account = ({ pick }: (typeof offered)[number]) =>
+    pick.authClientId === ACCOUNT_CHOICE;
+  const open = offered.filter(
+    (entry) =>
+      !entry.noAuth &&
+      entry.ids.length > 0 &&
+      !picked(entry) &&
+      !account(entry),
+  );
+  const withAccounts = await Promise.all(
+    open
+      .filter((entry) => entry.ids.length === 1 || askWhenAccounts)
       .map(async (entry) => ({
         entry,
         accounts: await offersAccounts(sdk, entry.pick),
       })),
   );
-  const unchosen = [
-    ...offered.filter(
-      (entry) => !entry.noAuth && entry.ids.length > 1 && !picked(entry),
-    ),
-    ...sole.filter(({ accounts }) => !accounts).map(({ entry }) => entry),
-  ];
-  if (unchosen.length > 0) {
-    throw new Error(
-      `Choose which credential the key uses on ${unchosen.map(({ pick }) => pick.name).join(", ")}.`,
-    );
-  }
-  return offered.flatMap((entry) =>
-    picked(entry)
-      ? [{ mcpServerId: entry.pick.id, authClientId: entry.pick.authClientId! }]
-      : entry.noAuth
-        ? [{ mcpServerId: entry.pick.id }]
-        : [],
+  const accountsFor = (entry: (typeof offered)[number]) =>
+    withAccounts.find((candidate) => candidate.entry === entry)?.accounts ??
+    false;
+  // Several shared credentials always need a pick. One needs it unless the
+  // server also offers accounts, which serve the key when nothing is picked.
+  const undecided = open.filter(
+    (entry) => entry.ids.length > 1 || askWhenAccounts || !accountsFor(entry),
   );
+  return {
+    choices: offered.flatMap((entry) =>
+      picked(entry)
+        ? [
+            {
+              mcpServerId: entry.pick.id,
+              authClientId: entry.pick.authClientId!,
+            },
+          ]
+        : entry.noAuth
+          ? [{ mcpServerId: entry.pick.id }]
+          : [],
+    ),
+    undecided: undecided.map((entry) => entry.pick),
+  };
 }
 
 /**

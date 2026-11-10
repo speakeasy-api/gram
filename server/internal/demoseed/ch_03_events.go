@@ -165,6 +165,14 @@ func (s *seeder) chTelemetryChecks() []chCheck {
 			settings: "",
 			msg:      "demo seed postflight: agent-sent hook calls missing",
 		},
+		// The staff hooks fleet view reads one install per machine.
+		{
+			cond: `(SELECT count() FROM (SELECT 1 FROM hook_install_summaries
+   WHERE organization_id = @org
+   GROUP BY gram_project_id, user_email, hostname, harness)) != 7`,
+			settings: "",
+			msg:      "demo seed postflight: expected 7 hooks fleet installs",
+		},
 		{
 			cond:     `(SELECT uniqExact(chat_id) FROM chat_session_summaries WHERE gram_project_id = toUUID(@proj)) < 180`,
 			settings: "",

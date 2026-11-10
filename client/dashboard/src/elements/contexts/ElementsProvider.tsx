@@ -29,11 +29,11 @@ import { describeStreamError } from "@/elements/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
 import elementsSystemPrompt from "@/elements/prompts/system.txt?raw";
-import { ElementsConfig, Model } from "@/elements/types";
-import { Plugin } from "@/elements/types/plugins";
+import type { ElementsConfig, Model } from "@/elements/types";
+import type { Plugin } from "@/elements/types/plugins";
+import type { AssistantTool } from "@assistant-ui/react";
 import {
   AssistantRuntimeProvider,
-  AssistantTool,
   type AttachmentAdapter,
   useAuiState,
   useRemoteThreadListRuntime,
@@ -48,23 +48,22 @@ import {
   QueryClientContext,
   QueryClientProvider,
 } from "@tanstack/react-query";
+import type { LanguageModel, ToolSet } from "ai";
 import {
   convertToModelMessages,
   createUIMessageStream,
   lastAssistantMessageIsCompleteWithToolCalls,
-  LanguageModel,
   smoothStream,
   isStepCount,
   streamText,
-  ToolSet,
   toUIMessageStream,
   type ChatTransport,
   type UIMessage,
 } from "ai";
 
 type UIMessagePart = UIMessage["parts"][number];
+import type { ReactNode } from "react";
 import {
-  ReactNode,
   useCallback,
   useContext,
   useEffect,

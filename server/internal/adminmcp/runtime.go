@@ -71,6 +71,12 @@ type ProjectReader interface {
 	GetProject(context.Context, *gen.GetProjectPayload) (*gen.AdminProjectDetail, error)
 }
 
+// ProjectRedeployPreviewReader extends the admin service reads with what a
+// project redeploy would act on.
+type ProjectRedeployPreviewReader interface {
+	GetProjectRedeployPreview(context.Context, *gen.GetProjectRedeployPreviewPayload) (*gen.AdminProjectRedeployPreview, error)
+}
+
 // ConfigurationReader exposes the dashboard's organization configuration reads.
 type ConfigurationReader interface {
 	GetOrganizationFeaturesStrict(context.Context, string) (*gen.ProductFeatures, error)
@@ -127,6 +133,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	registryReader, _ := reader.(RegistryReader)
 	serverHealthReader, _ := reader.(MCPServerHealthReader)
 	providerHealthReader, _ := reader.(ProviderHealthReader)
+	hookFleetReader, _ := reader.(HookFleetReader)
 	var promotions *catalogpromotion.Service
 	if provider, ok := reader.(interface {
 		CatalogPromotionService() *catalogpromotion.Service
@@ -134,10 +141,13 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 		promotions = provider.CatalogPromotionService()
 	}
 	runtime := &Runtime{catalogPromotions: promotions, authenticator: authenticator, server: server, resourceURL: resourceURL}
-	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, reader != nil && filteredActivityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, projectReader != nil && serverHealthReader != nil, providerHealthReader != nil, runtime)
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, reader != nil && filteredActivityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, projectReader != nil && serverHealthReader != nil, providerHealthReader != nil, hookFleetReader != nil, runtime)
 	registerOrganizationTools(server, reader)
 	registerUserTools(server, userReader)
 	registerProjectTools(server, reader, projectReader)
+	if previews, ok := reader.(ProjectRedeployPreviewReader); ok {
+		registerProjectRedeployPreviewTool(server, reader, previews)
+	}
 	registerConfigurationTools(server, reader, configurationReader)
 	registerActivityTools(server, reader, activityReader)
 	registerAuditLogTools(server, reader, filteredActivityReader)
@@ -158,6 +168,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	registerCatalogPromotionTools(server, promotionReader)
 	registerServerHealthTools(server, reader, projectReader, serverHealthReader)
 	registerProviderHealthTools(server, providerHealthReader)
+	registerHookFleetTools(server, reader, hookFleetReader)
 	return runtime
 }
 

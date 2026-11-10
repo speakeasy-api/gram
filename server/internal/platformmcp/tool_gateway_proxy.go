@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 )
 
 // These tools let a person use the MCP servers their organization gateway
@@ -169,7 +170,9 @@ func (s *GatewayProxyService) call(ctx context.Context, principal Principal, too
 	if err != nil {
 		return zero, err
 	}
-	if !gateway.Available {
+	// The organization issuer signs people in to the gateway's own URL. This
+	// caller is already signed in, so the gateway serves them without one.
+	if !gateway.Available && !orggateway.Unavailability(gateway.UnavailableReason).LacksSingleIssuer() {
 		return zero, gatewayProxyUnavailable("Your organization gateway is not available (" + gateway.UnavailableReason + "). " + gateway.NextAction)
 	}
 	raw, err := json.Marshal(arguments)

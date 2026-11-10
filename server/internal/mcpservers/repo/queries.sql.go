@@ -722,22 +722,6 @@ source_annotations AS (
   JOIN active_deployment ad ON ad.id = f.deployment_id
   WHERE f.project_id = $2
     AND f.deleted IS FALSE
-  UNION ALL
-  SELECT
-    e.tool_urn,
-    e.name AS tool_name,
-    e.read_only_hint,
-    e.destructive_hint,
-    e.idempotent_hint,
-    e.open_world_hint
-  FROM latest_toolset_version tv
-  JOIN external_mcp_tool_definitions e ON e.tool_urn = ANY(tv.tool_urns)
-  JOIN external_mcp_attachments a ON a.id = e.external_mcp_attachment_id
-  JOIN active_deployment ad ON ad.id = a.deployment_id
-  WHERE e.deleted IS FALSE
-    AND a.deleted IS FALSE
-    AND e.type <> 'proxy'
-    AND e.name IS NOT NULL
 ),
 varied_annotations AS (
   SELECT
@@ -932,33 +916,98 @@ func (q *Queries) ListLiveMCPServerIDsInOrganization(ctx context.Context, arg Li
 	return items, nil
 }
 
-const listMCPServerConsentConfigurations = `-- name: ListMCPServerConsentConfigurations :many
-SELECT m.id, m.project_id,
-       encode(sha256(convert_to(jsonb_build_object(
-           'remote', m.remote_mcp_server_id, 'url', r.url,
-           'transport', r.transport_type,
-           'tunnel', m.tunneled_mcp_server_id, 'resource', t.resource_identifier,
-           'toolset', m.toolset_id, 'environment', m.environment_id,
-           'variation', m.tool_variations_group_id,
-           'issuer', m.remote_session_issuer_id,
-           'visibility', m.visibility, 'network', m.network_access_mode,
-           'requires_auth', m.requires_upstream_auth,
-           'headers', COALESCE((
-               SELECT jsonb_agg(jsonb_build_array(h.name, h.value,
-                          h.value_from_request_header, h.is_required, h.is_secret)
-                                ORDER BY h.name, h.id)
-               FROM remote_mcp_server_headers AS h
-               WHERE h.remote_mcp_server_id = r.id AND h.deleted IS FALSE
-           ), '[]'::jsonb)
-       )::text, 'UTF8')), 'hex')::text AS configuration_hash
+const listMCPServerAssociationProviders = `-- name: ListMCPServerAssociationProviders :one
+SELECT ARRAY(
+           SELECT DISTINCT c.remote_session_issuer_id
+           FROM mcp_server_remote_session_clients AS a
+           JOIN remote_session_clients AS c
+             ON c.id = a.remote_session_client_id
+            AND c.deleted IS FALSE
+            AND (c.project_id = a.project_id
+                 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+           JOIN remote_session_issuers AS provider
+             ON provider.id = c.remote_session_issuer_id
+            AND provider.deleted IS FALSE
+            AND (provider.project_id = a.project_id
+                 OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+           WHERE a.mcp_server_id = m.id
+             AND a.deleted IS FALSE
+       )::uuid[] AS association_provider_ids
 FROM mcp_servers AS m
-JOIN projects AS p ON p.id = m.project_id
- AND p.organization_id = $1::text AND p.deleted IS FALSE
-LEFT JOIN remote_mcp_servers AS r ON r.id = m.remote_mcp_server_id
- AND r.project_id = m.project_id AND r.deleted IS FALSE
-LEFT JOIN tunneled_mcp_servers AS t ON t.id = m.tunneled_mcp_server_id
- AND t.project_id = m.project_id AND t.deleted IS FALSE
-WHERE m.id = ANY($2::uuid[]) AND m.deleted IS FALSE
+WHERE m.id = $1 AND m.project_id = $2 AND m.deleted IS FALSE
+`
+
+type ListMCPServerAssociationProvidersParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The distinct live providers an MCP server's live client associations name.
+func (q *Queries) ListMCPServerAssociationProviders(ctx context.Context, arg ListMCPServerAssociationProvidersParams) ([]uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, listMCPServerAssociationProviders, arg.ID, arg.ProjectID)
+	var association_provider_ids []uuid.UUID
+	err := row.Scan(&association_provider_ids)
+	return association_provider_ids, err
+}
+
+const listMCPServerConsentConfigurations = `-- name: ListMCPServerConsentConfigurations :many
+WITH servers AS (
+    SELECT m.id, m.project_id, m.toolset_id, m.remote_session_issuer_id,
+           jsonb_build_object(
+               'remote', m.remote_mcp_server_id, 'url', r.url,
+               'transport', r.transport_type,
+               'tunnel', m.tunneled_mcp_server_id, 'resource', t.resource_identifier,
+               'toolset', m.toolset_id, 'environment', m.environment_id,
+               'variation', m.tool_variations_group_id,
+               'visibility', m.visibility, 'network', m.network_access_mode,
+               'requires_auth', m.requires_upstream_auth,
+               'headers', COALESCE((
+                   SELECT jsonb_agg(jsonb_build_array(h.name, h.value,
+                              h.value_from_request_header, h.is_required, h.is_secret)
+                                    ORDER BY h.name, h.id)
+                   FROM remote_mcp_server_headers AS h
+                   WHERE h.remote_mcp_server_id = r.id AND h.deleted IS FALSE
+               ), '[]'::jsonb)
+           ) AS base,
+           ARRAY(
+               SELECT DISTINCT c.remote_session_issuer_id
+               FROM mcp_server_remote_session_clients AS a
+               JOIN remote_session_clients AS c
+                 ON c.id = a.remote_session_client_id
+                AND c.deleted IS FALSE
+                AND (c.project_id = a.project_id
+                     OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+               JOIN remote_session_issuers AS provider
+                 ON provider.id = c.remote_session_issuer_id
+                AND provider.deleted IS FALSE
+                AND (provider.project_id = a.project_id
+                     OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+               WHERE a.mcp_server_id = m.id
+                 AND a.deleted IS FALSE
+           )::uuid[] AS association_provider_ids
+    FROM mcp_servers AS m
+    JOIN projects AS p ON p.id = m.project_id
+     AND p.organization_id = $1::text AND p.deleted IS FALSE
+    LEFT JOIN remote_mcp_servers AS r ON r.id = m.remote_mcp_server_id
+     AND r.project_id = m.project_id AND r.deleted IS FALSE
+    LEFT JOIN tunneled_mcp_servers AS t ON t.id = m.tunneled_mcp_server_id
+     AND t.project_id = m.project_id AND t.deleted IS FALSE
+    WHERE m.id = ANY($2::uuid[]) AND m.deleted IS FALSE
+)
+SELECT id, project_id,
+       encode(sha256(convert_to(
+           (base || jsonb_build_object('issuer', remote_session_issuer_id))::text, 'UTF8')), 'hex')::text AS configuration_hash,
+       encode(sha256(convert_to(
+           (base || jsonb_build_object('issuer',
+               CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END))::text, 'UTF8')), 'hex')::text AS association_configuration_hash,
+       encode(sha256(convert_to(
+           (CASE WHEN toolset_id IS NULL THEN base
+                 ELSE base || jsonb_build_object('issuer', remote_session_issuer_id) END)::text, 'UTF8')), 'hex')::text AS typed_configuration_hash,
+       encode(sha256(convert_to(
+           (CASE WHEN toolset_id IS NULL THEN base
+                 ELSE base || jsonb_build_object('issuer',
+                     CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END) END)::text, 'UTF8')), 'hex')::text AS typed_association_configuration_hash
+FROM servers
 `
 
 type ListMCPServerConsentConfigurationsParams struct {
@@ -967,13 +1016,28 @@ type ListMCPServerConsentConfigurationsParams struct {
 }
 
 type ListMCPServerConsentConfigurationsRow struct {
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
-	ConfigurationHash string
+	ID                                uuid.UUID
+	ProjectID                         uuid.UUID
+	ConfigurationHash                 string
+	AssociationConfigurationHash      string
+	TypedConfigurationHash            string
+	TypedAssociationConfigurationHash string
 }
 
 // Hash stored routing configuration in one tenant-scoped read. Header secrets
 // remain ciphertext; tool definitions are deliberately outside this boundary.
+//
+// configuration_hash takes the upstream issuer from the column and
+// association_configuration_hash from the server's associations: their one
+// provider, or null with several or none. jsonb stores its keys sorted, so
+// adding the issuer to the rest renders the same text as building every key
+// at once.
+//
+// The typed hashes are what an approval is compared on where typed auth
+// clients choose upstream authentication: they leave out a proxied server's
+// upstream issuer, which decides nothing there, so resynchronizing it changes
+// nothing an approval covers. A hosted server is still routed by that issuer,
+// so its typed hashes cover it.
 func (q *Queries) ListMCPServerConsentConfigurations(ctx context.Context, arg ListMCPServerConsentConfigurationsParams) ([]ListMCPServerConsentConfigurationsRow, error) {
 	rows, err := q.db.Query(ctx, listMCPServerConsentConfigurations, arg.OrganizationID, arg.McpServerIds)
 	if err != nil {
@@ -983,7 +1047,14 @@ func (q *Queries) ListMCPServerConsentConfigurations(ctx context.Context, arg Li
 	var items []ListMCPServerConsentConfigurationsRow
 	for rows.Next() {
 		var i ListMCPServerConsentConfigurationsRow
-		if err := rows.Scan(&i.ID, &i.ProjectID, &i.ConfigurationHash); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ConfigurationHash,
+			&i.AssociationConfigurationHash,
+			&i.TypedConfigurationHash,
+			&i.TypedAssociationConfigurationHash,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1288,7 +1359,9 @@ JOIN projects AS p ON p.id = m.project_id
 WHERE p.organization_id = $1
   AND m.deleted IS FALSE
   AND p.deleted IS FALSE
-  -- Same live-toolset rule as ListMCPServersByProjectID.
+  -- Same retired approvals server and live-toolset rules as
+  -- ListMCPServersByProjectID.
+  AND m.builtin_backend IS NULL
   AND (
     m.toolset_id IS NULL
     OR EXISTS (
@@ -1348,6 +1421,7 @@ SELECT ms.id, ms.project_id, ms.name, ms.slug, ms.environment_id, ms.user_sessio
 FROM mcp_servers ms
 WHERE ms.project_id = $1
   AND ms.deleted IS FALSE
+  AND ms.builtin_backend IS NULL
   AND (
     ms.toolset_id IS NULL
     OR EXISTS (
@@ -1370,7 +1444,9 @@ type ListMCPServersByProjectIDParams struct {
 	UnproxiedMcpServerID uuid.NullUUID
 }
 
-// A toolset-backed row whose toolset is deleted serves nothing, so it is not listed.
+// A toolset-backed row whose toolset is deleted serves nothing, so it is not
+// listed. Neither is a retired approvals server (builtin_backend), which the
+// gateway answers as not found until a cleanup migration deletes it.
 func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServersByProjectIDParams) ([]McpServer, error) {
 	rows, err := q.db.Query(ctx, listMCPServersByProjectID,
 		arg.ProjectID,
@@ -1597,6 +1673,22 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    ARRAY(
+        SELECT DISTINCT c.remote_session_issuer_id
+        FROM mcp_server_remote_session_clients AS a
+        JOIN remote_session_clients AS c
+          ON c.id = a.remote_session_client_id
+         AND c.deleted IS FALSE
+         AND (c.project_id = a.project_id
+              OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+        JOIN remote_session_issuers AS provider
+          ON provider.id = c.remote_session_issuer_id
+         AND provider.deleted IS FALSE
+         AND (provider.project_id = a.project_id
+              OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+        WHERE a.mcp_server_id = s.id
+          AND a.deleted IS FALSE
+    )::uuid[] AS mcp_server_association_provider_ids,
     COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier,
     EXISTS (
       SELECT 1 FROM unnest(latest.tool_urns) AS u(urn)
@@ -1627,22 +1719,23 @@ ORDER BY s.project_id, s.slug
 `
 
 type ListServableMCPServersByOrganizationIDRow struct {
-	McpServerID                    uuid.UUID
-	McpServerProjectID             uuid.UUID
-	McpServerProjectSlug           string
-	McpServerName                  pgtype.Text
-	McpServerSlug                  pgtype.Text
-	McpServerVisibility            string
-	McpServerNetworkAccessMode     pgtype.Text
-	McpServerToolsetID             uuid.NullUUID
-	McpServerRemoteMcpServerID     uuid.NullUUID
-	McpServerTunneledMcpServerID   uuid.NullUUID
-	McpServerUnproxiedMcpServerID  uuid.NullUUID
-	McpServerEnvironmentID         uuid.NullUUID
-	McpServerToolVariationsGroupID uuid.NullUUID
-	McpServerRemoteSessionIssuerID uuid.NullUUID
-	TunneledResourceIdentifier     string
-	HasPlatformTool                bool
+	McpServerID                     uuid.UUID
+	McpServerProjectID              uuid.UUID
+	McpServerProjectSlug            string
+	McpServerName                   pgtype.Text
+	McpServerSlug                   pgtype.Text
+	McpServerVisibility             string
+	McpServerNetworkAccessMode      pgtype.Text
+	McpServerToolsetID              uuid.NullUUID
+	McpServerRemoteMcpServerID      uuid.NullUUID
+	McpServerTunneledMcpServerID    uuid.NullUUID
+	McpServerUnproxiedMcpServerID   uuid.NullUUID
+	McpServerEnvironmentID          uuid.NullUUID
+	McpServerToolVariationsGroupID  uuid.NullUUID
+	McpServerRemoteSessionIssuerID  uuid.NullUUID
+	McpServerAssociationProviderIds []uuid.UUID
+	TunneledResourceIdentifier      string
+	HasPlatformTool                 bool
 }
 
 // Candidate members for a gateway whose membership is derived rather than
@@ -1669,6 +1762,8 @@ type ListServableMCPServersByOrganizationIDRow struct {
 // reduce it to one flag would scale with toolset size. Ordered by project then
 // slug: a derived gateway has no operator-authored order, and slugs are unique
 // only within a project, so the pair is what makes the listing stable.
+// association_provider_ids are the distinct live providers of the member's
+// live client associations.
 func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, organizationID string) ([]ListServableMCPServersByOrganizationIDRow, error) {
 	rows, err := q.db.Query(ctx, listServableMCPServersByOrganizationID, organizationID)
 	if err != nil {
@@ -1693,6 +1788,7 @@ func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, or
 			&i.McpServerEnvironmentID,
 			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
+			&i.McpServerAssociationProviderIds,
 			&i.TunneledResourceIdentifier,
 			&i.HasPlatformTool,
 		); err != nil {
@@ -1825,16 +1921,6 @@ SELECT
         WHERE pt.project_id = t.project_id
           AND pt.deleted IS FALSE
           AND pt.tool_urn = ANY(lv.tool_urns)
-      )
-      + (
-        SELECT COUNT(*)
-        FROM external_mcp_tool_definitions x
-        JOIN external_mcp_attachments e ON e.id = x.external_mcp_attachment_id
-        WHERE e.deployment_id = ad.id
-          AND e.deleted IS FALSE
-          AND x.deleted IS FALSE
-          AND x.tool_urn = ANY(lv.tool_urns)
-          AND x.tool_urn NOT LIKE 'tools:externalmcp:%:proxy'
       )
     )::bigint AS tool_count
   , ARRAY(
@@ -2147,12 +2233,43 @@ WITH resolved AS (
            ON i.id = c.remote_session_issuer_id
           AND i.deleted IS FALSE
     GROUP BY input.user_session_issuer_id
+), associated AS (
+    SELECT server.id,
+           resolved.remote_session_issuer_id AS resolved_issuer_id,
+           ARRAY(
+               SELECT DISTINCT c.remote_session_issuer_id
+               FROM mcp_server_remote_session_clients AS a
+               JOIN remote_session_clients AS c
+                 ON c.id = a.remote_session_client_id
+                AND c.deleted IS FALSE
+                AND (c.project_id = a.project_id
+                     OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+               JOIN remote_session_issuers AS provider
+                 ON provider.id = c.remote_session_issuer_id
+                AND provider.deleted IS FALSE
+                AND (provider.project_id = a.project_id
+                     OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+               WHERE a.mcp_server_id = server.id
+                 AND a.deleted IS FALSE
+           )::uuid[] AS association_provider_ids
+    FROM resolved
+    JOIN mcp_servers AS server
+      ON server.user_session_issuer_id = resolved.user_session_issuer_id
+     AND server.project_id = $1::uuid
+), derived AS (
+    -- Associations decide when there are any: one provider stamps it, several
+    -- leave it NULL. With none, the issuer's bindings decide.
+    SELECT id,
+           CASE WHEN cardinality(association_provider_ids) = 0 THEN resolved_issuer_id
+                WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1]
+           END AS remote_session_issuer_id
+    FROM associated
 )
 UPDATE mcp_servers AS s
-SET remote_session_issuer_id = resolved.remote_session_issuer_id,
+SET remote_session_issuer_id = derived.remote_session_issuer_id,
     updated_at = clock_timestamp()
-FROM resolved
-WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
+FROM derived
+WHERE s.id = derived.id
   AND s.project_id = $1::uuid
   -- Belt and suspenders on the caller's org/project pair agreeing.
   AND EXISTS (SELECT 1
@@ -2160,7 +2277,7 @@ WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
               WHERE p.id = s.project_id
                 AND p.organization_id = $2::text)
   AND s.deleted IS FALSE
-  AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id
+  AND s.remote_session_issuer_id IS DISTINCT FROM derived.remote_session_issuer_id
 `
 
 type ResyncMCPServerRemoteSessionIssuersParams struct {
@@ -2169,9 +2286,12 @@ type ResyncMCPServerRemoteSessionIssuersParams struct {
 	UserSessionIssuerIds []uuid.UUID
 }
 
-// Recomputes mcp_servers.remote_session_issuer_id from the live client
-// bindings on each named user session issuer. Exactly one distinct remote
-// issuer stamps it; none or several leave it NULL and readers fail closed.
+// Recomputes mcp_servers.remote_session_issuer_id for the servers on each named
+// user session issuer. A server with a live client association takes its one
+// provider, or NULL with several. A server with none falls back to the live
+// client bindings on its issuer: exactly one distinct remote issuer stamps it,
+// none or several leave it NULL and readers fail closed. The fallback only
+// feeds readers of this column and goes away with it.
 //
 // Best effort: runs post-commit outside the mutating transaction, so it takes
 // no advisory lock and a raced run merely leaves a stale value, which the
@@ -2186,7 +2306,10 @@ type ResyncMCPServerRemoteSessionIssuersParams struct {
 // pinned to the caller's own project — a foreign id derives no row and writes
 // nothing — and only that project's servers are written. Organization-level
 // clients of the caller's organization count toward the derivation, matching
-// what the attach surface permits.
+// what the attach surface permits. An association counts only through a live
+// client and provider visible to the association's own project, its
+// organization, or globally, the tiers the resolver admits; foreign keys pin
+// the association to the server's project and organization.
 func (q *Queries) ResyncMCPServerRemoteSessionIssuers(ctx context.Context, arg ResyncMCPServerRemoteSessionIssuersParams) (int64, error) {
 	result, err := q.db.Exec(ctx, resyncMCPServerRemoteSessionIssuers, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerIds)
 	if err != nil {

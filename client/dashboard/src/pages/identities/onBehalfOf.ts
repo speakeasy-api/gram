@@ -50,3 +50,45 @@ export function onBehalfOfPeople(
   }
   return [...people.values()];
 }
+
+/**
+ * How an agent signs in to one MCP server, as its Permissions tab tells it:
+ * with named people's own connections, or with a shared credential that acts
+ * for no one.
+ */
+export type ServerOnBehalfOf =
+  /** The server or its connection is still being read. */
+  | { kind: "checking" }
+  /** No person's connection: a shared credential, or no sign-in at all. */
+  | { kind: "shared" }
+  | { kind: "people"; people: OnBehalfOfPerson[] }
+  /** The server asks for a person's connection and none is assigned. */
+  | { kind: "missing" }
+  | { kind: "error" }
+  /** No server the dashboard can list goes by this id. */
+  | { kind: "unknown" };
+
+/**
+ * Whom an agent acts for on a server, from the server's listing and the
+ * connection assigned to the agent there. A server with no user session
+ * issuer asks no one to sign in, so whatever credential it has is shared.
+ */
+export function serverOnBehalfOf(
+  server: { issuerId?: string } | undefined,
+  connection: ServerConnection | undefined,
+  inventoryLoading: boolean,
+  now: number = Date.now(),
+): ServerOnBehalfOf {
+  if (!server) {
+    return inventoryLoading ? { kind: "checking" } : { kind: "unknown" };
+  }
+  if (!connection) {
+    return server.issuerId ? { kind: "checking" } : { kind: "shared" };
+  }
+  if (connection.status === "checking") return { kind: "checking" };
+  if (connection.status === "error") return { kind: "error" };
+  if (connection.status === "missing") return { kind: "missing" };
+  const people = onBehalfOfPeople(connection, now);
+  if (people.length === 0) return { kind: "shared" };
+  return { kind: "people", people };
+}

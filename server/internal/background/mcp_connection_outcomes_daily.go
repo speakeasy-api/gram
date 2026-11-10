@@ -34,15 +34,16 @@ const (
 	mcpConnectionOutcomesConcurrency = 4
 
 	// A day reads up to nine days of raw events and writes a few hundred rows. Real
-	// builds take seconds, but each read may run up to 10 minutes.
-	mcpConnectionOutcomesBuildTimeout     = 12 * time.Minute
+	// builds take seconds, but every read may run up to its full limit, and a stored
+	// mismatch publishes twice, so the timeout covers every read plus the writes.
+	mcpConnectionOutcomesBuildTimeout     = dailyoutcomes.ReadsPerBuild*dailyoutcomes.ReadTimeout + 5*time.Minute
 	mcpConnectionOutcomesBuildMaxAttempts = 3
 
 	// The build heartbeats every 30 seconds, so a dead worker is retried within two minutes.
 	mcpConnectionOutcomesBuildHeartbeatTimeout = 2 * time.Minute
 
-	// Planning reads two small columns, under the same 10-minute read limit.
-	mcpConnectionOutcomesPlanTimeout   = 11 * time.Minute
+	// Planning makes two reads, each under the same read limit.
+	mcpConnectionOutcomesPlanTimeout   = dailyoutcomes.ReadsPerBuild*dailyoutcomes.ReadTimeout + time.Minute
 	mcpConnectionOutcomesDayRunTimeout = mcpConnectionOutcomesBuildMaxAttempts*mcpConnectionOutcomesBuildTimeout + 10*time.Minute
 
 	// A backfill runs about seven waves of days one after another.

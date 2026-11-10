@@ -232,6 +232,11 @@ type Service interface {
 	// counts (admin view, no auth scoping). Tool calls come from
 	// getMcpServerToolCalls.
 	DescribeMcpServerHealth(context.Context, *DescribeMcpServerHealthPayload) (res *AdminMcpServerHealth, err error)
+	// Sets or clears the scopes pinned on the protected resource behind a
+	// remote-backed MCP server (admin view, no auth scoping). The pin applies to
+	// every live server in the project with the same upstream URL. Audited as the
+	// staff member.
+	SetMcpServerScopePin(context.Context, *SetMcpServerScopePinPayload) (res *AdminMcpServerResourceScopes, err error)
 	// Reads one MCP server's tool call outcomes and series over a window (admin
 	// view, no auth scoping). Returns logging:disabled without reading telemetry
 	// when the organization's logs are off.
@@ -240,6 +245,10 @@ type Service interface {
 	// binary version) each organization's new sessions use per day, inference hook
 	// traffic per Claude app, and device agent versions per day.
 	GetHookClients(context.Context, *GetHookClientsPayload) (res *AdminHookClientsResult, err error)
+	// The hooks installs of one organization: which versions, install routes and
+	// endpoints its users' machines use, which machines have gone quiet, and how
+	// much traffic still reaches the legacy endpoints.
+	GetOrganizationHookFleet(context.Context, *GetOrganizationHookFleetPayload) (res *AdminHookFleetResult, err error)
 	// List observed remote MCP candidates and durable promotion delivery status.
 	// Active excludes endpoints already in the catalogue; candidate includes all
 	// unpublished active entries. No source URLs or credentials are returned.
@@ -324,6 +333,8 @@ type Service interface {
 	// Edit, enable or disable a signup offer. Existing accepted promotion
 	// applications are unchanged.
 	UpdateSignupOffer(context.Context, *UpdateSignupOfferPayload) (res *AdminSignupOffer, err error)
+	// List the newest Platform MCP feedback reports across every organization.
+	ListPlatformMcpFeedback(context.Context, *ListPlatformMcpFeedbackPayload) (res *ListPlatformMcpFeedbackResult, err error)
 	// Returns eligible live Stripe subscription details before linking it to a
 	// free, PAYG, or unconverted enterprise trial organization with a matching
 	// Stripe customer.
@@ -374,6 +385,13 @@ type Service interface {
 	// organization, ahead of read and write no longer implying connect. Never
 	// removes access. Safe to run more than once.
 	BackfillMcpConnectGrants(context.Context, *BackfillMcpConnectGrantsPayload) (res *AdminBackfillMCPConnectGrantsResult, err error)
+	// Returns what redeploying a project would act on, for review before
+	// redeployProject.
+	GetProjectRedeployPreview(context.Context, *GetProjectRedeployPreviewPayload) (res *AdminProjectRedeployPreview, err error)
+	// Clones a project's active deployment and starts processing it. Refuses when
+	// the active deployment is no longer the one reviewed. The new deployment
+	// becomes active only if processing succeeds.
+	RedeployProject(context.Context, *RedeployProjectPayload) (res *AdminProjectRedeployResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -396,7 +414,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [103]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants"}
+var MethodNames = [108]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject"}
 
 type AdminAuditLog struct {
 	// Internal staff-only audit activity; persisted but never published to the
@@ -596,6 +614,97 @@ type AdminHookClientsResult struct {
 	DeviceAgents []*AdminDeviceAgentCell
 }
 
+// Installs and events for one value of a breakdown.
+type AdminHookFleetBucket struct {
+	// The route or endpoint generation. Empty when unknown.
+	Value string
+	// Installs whose latest value is this one.
+	Installs int64
+	// Hook events sent with this value across every install. Zero for routes.
+	Events int64
+}
+
+// One hooks install: a project, user, machine and harness. Version, generation
+// and route are the latest the install sent.
+type AdminHookFleetInstall struct {
+	// The project the install reports to. Empty for traffic that named no project.
+	ProjectID string
+	// The user the install reports as. Empty when the install sent no identity.
+	UserEmail string
+	// The machine's hostname. Empty when the install sent none.
+	Hostname string
+	// The agent the hooks run in, such as claude, codex or cursor.
+	Harness string
+	// The hooks binary version. Empty for the legacy curl hooks and for installs
+	// that sent no version.
+	Version string
+	// How the version compares to the release Speakeasy ships.
+	VersionStatus string
+	// The hooks endpoint the install last sent to: legacy_unkeyed, legacy_keyed,
+	// ingest_script or ingest_binary. Empty for delivery failure reports only.
+	EndpointGeneration string
+	// How the hooks were installed, such as marketplace or download. Empty when
+	// unknown.
+	InstallRoute string
+	// First hook in the window.
+	FirstSeen string
+	// Most recent hook.
+	LastSeen string
+	// Hook events recorded in the window.
+	Events int64
+	// Delivery failures the install reported in the window.
+	Errors int64
+	// True when the install has sent nothing for quiet_after_days or longer.
+	Quiet bool
+}
+
+// AdminHookFleetResult is the result type of the admin service
+// getOrganizationHookFleet method.
+type AdminHookFleetResult struct {
+	// The organization ID.
+	OrganizationID string
+	// Length of the window in days.
+	WindowDays int
+	// Start of the window. Counts cover the whole UTC day it falls on.
+	Since string
+	// The hooks release Speakeasy currently ships. Versions below it are behind.
+	LatestVersion string
+	// The oldest supported hooks version. Versions below it are unsupported.
+	// Absent when no minimum is set.
+	MinimumVersion *string
+	// Days without traffic after which an install counts as quiet.
+	QuietAfterDays int
+	// True when the organization has more installs than the response holds.
+	// Breakdowns then cover only the installs returned.
+	Truncated bool
+	// Installs returned. Not the organization's full install count when truncated
+	// is true.
+	TotalInstalls int64
+	// Returned installs that have gone quiet. Only a window longer than
+	// quiet_after_days can return quiet installs.
+	QuietInstalls int64
+	// Hook events sent to the legacy endpoints in the window.
+	LegacyEvents int64
+	// Installs per version, newest version first.
+	Versions []*AdminHookFleetVersion
+	// Installs per install route, largest first.
+	Routes []*AdminHookFleetBucket
+	// Installs and events per endpoint generation, largest first.
+	Generations []*AdminHookFleetBucket
+	// Installs, most recently seen first.
+	Installs []*AdminHookFleetInstall
+}
+
+// Installs on one hooks version.
+type AdminHookFleetVersion struct {
+	// The hooks binary version, or empty for installs with no version.
+	Version string
+	// How the version compares to the release Speakeasy ships.
+	Status string
+	// Installs whose latest version is this one.
+	Installs int64
+}
+
 // One (organization, day, surface) cell of the inference hook grid.
 type AdminInferenceHookCell struct {
 	// The organization ID.
@@ -751,6 +860,8 @@ type AdminMcpServerHealth struct {
 	// issuer.
 	LegacyAuth        *string
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuer
+	// Set only when a remote MCP server backs the server.
+	ResourceScopes *AdminMcpServerResourceScopes
 	// How the server reaches its upstream. Omitted for toolset-only servers.
 	UpstreamAuth *AdminMcpServerHealthUpstreamAuth
 }
@@ -954,6 +1065,43 @@ type AdminMcpServerHealthUserSessions struct {
 	LastIssuedAt *string
 	// Sessions whose refresh deadline has not passed.
 	Live int64
+}
+
+// What a login through one remote session client bound to the server would
+// request now.
+type AdminMcpServerResourceScopeClient struct {
+	// The remote session client ID.
+	ClientID string
+	// Which source decides the client's requested scopes.
+	ScopeSource string
+	// The scopes a login would request.
+	RequestedScopes []string
+	// Pinned scopes the MCP server does not advertise. They are still requested.
+	UnadvertisedPinnedScopes []string
+	// Whether a pin, if set, decides this client's request: the client owns the
+	// resource and neither its own scopes nor a challenge outranks the pin.
+	PinWouldDecide bool
+}
+
+// AdminMcpServerResourceScopes is the result type of the admin service
+// setMcpServerScopePin method.
+type AdminMcpServerResourceScopes struct {
+	// The upstream URL the protected resource is keyed by.
+	ResourceURL string
+	// Scopes pinned on the resource. Empty when there is no pin.
+	PinnedScopes []string
+	// Whether the resource's advertised scopes are known from a fresh RFC 9728
+	// read.
+	AdvertisedScopesKnown bool
+	// The RFC 9728 scopes_supported the resource advertises. Absent when unknown.
+	AdvertisedScopes []string
+	// Scopes named by the resource's last WWW-Authenticate challenge.
+	ChallengeScopes []string
+	// Other live MCP servers in the project with the same upstream URL. A pin
+	// applies to all of them.
+	SharedServerCount int
+	// Remote session clients bound to the server's user session issuer.
+	Clients []*AdminMcpServerResourceScopeClient
 }
 
 // Tool calls in one bucket of the series.
@@ -1273,6 +1421,42 @@ type AdminPaygBillingSummary struct {
 	EstimatedTotalUsd      string
 }
 
+// One feedback report a user sent through the Platform MCP
+// send_platform_mcp_feedback tool.
+type AdminPlatformMCPFeedback struct {
+	// The feedback ID.
+	ID string
+	// The organization ID.
+	OrganizationID string
+	// The organization name. Absent when the organization no longer exists.
+	OrganizationName *string
+	// The organization slug. Absent when the organization no longer exists.
+	OrganizationSlug *string
+	// The session subject that sent the feedback.
+	SubjectUrn string
+	// The email of the user who sent the feedback. Absent when the user no longer
+	// exists.
+	UserEmail *string
+	// The feedback category.
+	Category string
+	// The optional rating from 1 through 5.
+	Rating *int
+	// The optional success outcome.
+	Success *bool
+	// The optional Platform MCP tool the feedback is about.
+	ToolName *string
+	// The optional failure or readiness category.
+	FailureCategory *string
+	// The optional free-form note.
+	Note *string
+	// The delivery state of the stored row.
+	DeliveryState string
+	// When the feedback was sent.
+	CreatedAt string
+	// When the stored row is deleted.
+	ExpiresAt string
+}
+
 // Project summary surfaced to admin operators.
 type AdminProject struct {
 	// The ID of the project
@@ -1308,6 +1492,9 @@ type AdminProjectDetail struct {
 	ToolsetCount int
 	// Total number of deployments in the project.
 	DeploymentCount int
+	// The deployment the project currently serves. Absent when no deployment has
+	// completed.
+	ActiveDeploymentID *string
 	// Number of active HTTP tool definitions in the project.
 	HTTPToolCount int
 	// Number of active environments in the project.
@@ -1318,6 +1505,39 @@ type AdminProjectDetail struct {
 	AssistantCount int
 	CreatedAt      string
 	UpdatedAt      string
+}
+
+// AdminProjectRedeployPreview is the result type of the admin service
+// getProjectRedeployPreview method.
+type AdminProjectRedeployPreview struct {
+	// Organization that owns the project.
+	OrganizationID string
+	// Project ID.
+	ProjectID string
+	// Project name.
+	ProjectName string
+	// Deployment a redeploy would clone. Send it back as
+	// expected_active_deployment_id.
+	ActiveDeploymentID string
+	// OpenAPI sources that would be processed again.
+	OpenapiAssets int
+	// Function sources whose runners would be deployed again.
+	FunctionAssets int
+	// Packages carried into the new deployment.
+	Packages int
+	// External MCP sources the new deployment would drop.
+	ExternalMcps int
+}
+
+// AdminProjectRedeployResult is the result type of the admin service
+// redeployProject method.
+type AdminProjectRedeployResult struct {
+	// Project ID.
+	ProjectID string
+	// Deployment that was cloned.
+	SourceDeploymentID string
+	// New deployment. It becomes active only if processing succeeds.
+	DeploymentID string
 }
 
 // AdminRegistryEntry is the result type of the admin service getRegistryEntry
@@ -2345,6 +2565,16 @@ type GetOrganizationFeaturesPayload struct {
 	OrganizationID    string
 }
 
+// GetOrganizationHookFleetPayload is the payload type of the admin service
+// getOrganizationHookFleet method.
+type GetOrganizationHookFleetPayload struct {
+	AdminSessionToken *string
+	// Organization to report on.
+	OrganizationID string
+	// Window in days.
+	WindowDays int
+}
+
 // GetOrganizationOnboardingPlaybookPayload is the payload type of the admin
 // service getOrganizationOnboardingPlaybook method.
 type GetOrganizationOnboardingPlaybookPayload struct {
@@ -2389,6 +2619,16 @@ type GetProjectPayload struct {
 	// is reported as not found. Optional, because the global project lookup has no
 	// organization to scope by.
 	OrganizationIDOrSlug *string
+}
+
+// GetProjectRedeployPreviewPayload is the payload type of the admin service
+// getProjectRedeployPreview method.
+type GetProjectRedeployPreviewPayload struct {
+	AdminSessionToken *string
+	// Exact organization ID.
+	OrganizationID string
+	// Exact project ID.
+	ProjectID string
 }
 
 // GetRegistryEntryPayload is the payload type of the admin service
@@ -2720,6 +2960,21 @@ type ListOrganizationsPayload struct {
 	Page *int
 }
 
+// ListPlatformMcpFeedbackPayload is the payload type of the admin service
+// listPlatformMcpFeedback method.
+type ListPlatformMcpFeedbackPayload struct {
+	AdminSessionToken *string
+	// Maximum number of reports to return.
+	Limit int
+}
+
+// ListPlatformMcpFeedbackResult is the result type of the admin service
+// listPlatformMcpFeedback method.
+type ListPlatformMcpFeedbackResult struct {
+	// Feedback reports, newest first.
+	Feedback []*AdminPlatformMCPFeedback
+}
+
 // ListProjectMcpServersPayload is the payload type of the admin service
 // listProjectMcpServers method.
 type ListProjectMcpServersPayload struct {
@@ -2979,6 +3234,18 @@ type RearmTrialPayload struct {
 	Days int
 }
 
+// RedeployProjectPayload is the payload type of the admin service
+// redeployProject method.
+type RedeployProjectPayload struct {
+	AdminSessionToken *string
+	// Exact organization ID.
+	OrganizationID string
+	// Exact project ID.
+	ProjectID string
+	// active_deployment_id from getProjectRedeployPreview.
+	ExpectedActiveDeploymentID string
+}
+
 // RefreshGlobalIssuerMetadataPayload is the payload type of the admin service
 // refreshGlobalIssuerMetadata method.
 type RefreshGlobalIssuerMetadataPayload struct {
@@ -3070,6 +3337,21 @@ type SetInferenceKeyMonthlyLimitPayload struct {
 	OrganizationID    string
 	KeyType           string
 	MonthlyCredits    int
+}
+
+// SetMcpServerScopePinPayload is the payload type of the admin service
+// setMcpServerScopePin method.
+type SetMcpServerScopePinPayload struct {
+	AdminSessionToken *string
+	// Organization the project must belong to. A project outside it is reported as
+	// not found.
+	OrganizationID string
+	// Project ID.
+	ProjectID string
+	// The mcp_servers row ID.
+	McpServerID string
+	// The new pin. Trimmed and de-duplicated; an empty list clears the pin.
+	Scopes []string
 }
 
 // SetOrganizationChatAnalysisSettingsPayload is the payload type of the admin

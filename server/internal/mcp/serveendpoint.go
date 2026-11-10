@@ -175,11 +175,11 @@ func (s *Service) serveResolvedMCPEndpoint(
 	s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, mcpServer.ID, uuid.Nil, "")
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
 
-	// A first-party backend authorizes each call itself and is never
-	// risk-scanned, so it is dispatched before the issuer gate and the scan,
-	// and authenticates its callers on its own path.
+	// Speakeasy no longer serves the approvals server, the only server with a
+	// first-party backend. Its rows stay until a cleanup migration deletes
+	// them, and answer as not found until then.
 	if mcpServer.BuiltinBackend.Valid {
-		return s.serveBuiltinBackend(w, r, logger, mcpEndpoint, mcpServer, mcpRouteBase)
+		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
 	}
 
 	var prepared *preparedMCPRequest
@@ -864,6 +864,7 @@ func (s *Service) agentKeyUngatedUpstream(
 		request:                r,
 		agentKeyClients:        nil,
 		checkedRegistration:    false,
+		serverAssociation:      nil,
 	}
 	token, err := s.resolveDirectUpstreamToken(ctx, w, logger, authentication, upstreamResource, mcpServer.TunneledMcpServerID.Valid, mcpServer.RemoteSessionIssuerID)
 	if err != nil {
@@ -1169,47 +1170,44 @@ func (s *Service) authorizeProxyBackendAccess(
 ) (context.Context, error) {
 	// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), projectID.String())
-	authorized, err := s.requireProxyBackendAccess(ctx, logger, connect, mcpServer)
-	shadowCtx := ctx
-	if authorized != nil {
-		shadowCtx = authorized
-	}
-	s.newMandatoryShadow(shadowCtx, organizationID).shadowRequireServer(shadowCtx, surface, err, mandatoryVisibility(mcpServer.Visibility == mcpservers.VisibilityPublic), connect)
+	prepared, err := s.prepareProxyBackendAccess(ctx, logger, mcpServer.Visibility)
 	if err != nil {
+		s.newMandatoryShadow(ctx, organizationID).shadowRequireServer(ctx, surface, err, mandatoryVisibility(mcpServer.Visibility == mcpservers.VisibilityPublic), connect)
 		return nil, err
 	}
-	return authorized, nil
+	refusal, err := s.memberConnectDecision(prepared, s.newMandatoryShadow(prepared, organizationID), surface, mcpServer.Visibility, connect)
+	if err != nil {
+		return nil, fmt.Errorf("authorize MCP server access: %w", err)
+	}
+	if refusal != nil {
+		serverName := ""
+		if mcpServer.Name.Valid {
+			serverName = mcpServer.Name.String
+		}
+		return nil, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(refusal, s.requestAccessURL(prepared, mcpServer.ID.String(), serverName)))
+	}
+	return prepared, nil
 }
 
-func (s *Service) requireProxyBackendAccess(
-	ctx context.Context,
-	logger *slog.Logger,
-	connect authz.Check,
-	mcpServer *mcpserversrepo.McpServer,
-) (context.Context, error) {
-	switch mcpServer.Visibility {
+// prepareProxyBackendAccess loads grants for a private backend, which the
+// connect check needs. A public backend needs none, and an unknown visibility
+// fails closed.
+func (s *Service) prepareProxyBackendAccess(ctx context.Context, logger *slog.Logger, visibility string) (context.Context, error) {
+	switch visibility {
 	case mcpservers.VisibilityPrivate:
-		var prepErr error
-		ctx, prepErr = s.authz.PrepareContext(ctx)
-		if prepErr != nil {
-			var shareable *oops.ShareableError
-			if errors.As(prepErr, &shareable) && shareable.Code != oops.CodeUnexpected {
-				return nil, fmt.Errorf("principal credential admission: %w", prepErr)
-			}
-			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
+		prepared, err := s.authz.PrepareContext(ctx)
+		if err == nil {
+			return prepared, nil
 		}
-		if err := s.authz.Require(ctx, connect); err != nil {
-			serverName := ""
-			if mcpServer.Name.Valid {
-				serverName = mcpServer.Name.String
-			}
-			return ctx, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, mcpServer.ID.String(), serverName)))
+		var shareable *oops.ShareableError
+		if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
+			return nil, fmt.Errorf("principal credential admission: %w", err)
 		}
-		return ctx, nil
+		return nil, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, logger)
 	case mcpservers.VisibilityPublic:
 		return ctx, nil
 	default:
-		return nil, oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", visibility).LogError(ctx, logger)
 	}
 }
 

@@ -14,8 +14,8 @@ import {
   GatewayDispatchLink,
   GatewayTargetLink,
 } from "@/components/observe/GatewayDispatchLink";
+import type { FilterChip } from "@/components/observe/ObserveFilterBar";
 import {
-  FilterChip,
   type ObserveStatusFilterValue,
   type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
@@ -81,10 +81,13 @@ import {
 import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
 import { formatPlatform } from "@/lib/formatPlatform";
+import { useStalePendingRerender } from "@/lib/toolCallStatus";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { type DateRangePreset } from "@/elements";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
+import type { OptionTypes } from "@gram/client/models/components/gettoolusagefilteroptionspayload";
+import { telemetryReadRetry } from "./telemetryReadRetry";
 import { telemetryGetToolUsageTargetTimeSeries } from "@gram/client/funcs/telemetryGetToolUsageTargetTimeSeries";
 import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetToolUsageTotals";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
@@ -94,6 +97,7 @@ import type { TelemetryLogRecord } from "@gram/client/models/components/telemetr
 import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
 import type { ToolUsageTotals } from "@gram/client/models/components/toolusagetotals.js";
 import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
+import { getToolLogStatusConfig } from "./toolLogStatus";
 import { Operator } from "@gram/client/models/components/logfilter";
 import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -154,6 +158,14 @@ export type LogsToolsScope = {
 
 /** Facets that pick identities, which a scoped view has already chosen. */
 const IDENTITY_FACETS = new Set(["role", "user", "agent"]);
+// Every filter option group but the users (which carries the agents too),
+// for a view whose identity facets are hidden.
+const SCOPED_FILTER_OPTION_TYPES: OptionTypes[] = [
+  "hosted_servers",
+  "shadow_servers",
+  "gateways",
+  "clients",
+];
 
 export function LogsTools({
   scope,
@@ -357,15 +369,28 @@ export function LogsTools({
   // The server counts each facet under every applied filter but its own, so
   // picking an agent narrows the users and servers on offer while the other
   // agents stay selectable beside it.
+  // Embedded on an identity's page the user and agent facets are hidden, so
+  // the read asks for the other groups alone. Each group is a full pass over
+  // the window on the server, and the user groups are the widest: they drop
+  // the identity scope to list everyone else.
+  const filterOptionTypes = scope ? SCOPED_FILTER_OPTION_TYPES : undefined;
   const { data: filterOptionsData } = useQuery({
-    queryKey: ["tool-usage-filter-options", ...narrowedQueryKey],
+    queryKey: [
+      "tool-usage-filter-options",
+      ...narrowedQueryKey,
+      filterOptionTypes ?? null,
+    ],
     queryFn: () =>
       unwrapAsync(
         telemetryGetToolUsageFilterOptions(client, {
-          getToolUsageFilterOptionsPayload: narrowedPayload,
+          getToolUsageFilterOptionsPayload: {
+            ...narrowedPayload,
+            optionTypes: filterOptionTypes,
+          },
         }),
       ),
     enabled: !roleFilterPending,
+    retry: telemetryReadRetry,
     // Holds the rail in place while the narrowed counts load, rather than
     // emptying every group under the pointer.
     placeholderData: keepPreviousData,
@@ -377,6 +402,7 @@ export function LogsTools({
   const {
     data: timeSeriesData,
     isPending: timeSeriesPending,
+    isError: timeSeriesFailed,
     refetch: refetchTimeSeries,
   } = useQuery({
     queryKey: ["tool-usage-target-time-series", ...narrowedQueryKey],
@@ -387,6 +413,7 @@ export function LogsTools({
         }),
       ),
     enabled: !roleFilterPending,
+    retry: telemetryReadRetry,
     // Narrowing a facet asks the same question of a smaller set. Dropping the
     // shape while the new one loads collapses the panel and jumps the page
     // under the pointer; the previous one holds its place instead, and the
@@ -791,7 +818,11 @@ export function LogsTools({
   // The window's real totals, not a count of what has been scrolled into view.
   // Same query key Insights uses, so arriving from a deep link paints these
   // immediately from its cache.
-  const { data: totalsData, refetch: refetchTotals } = useQuery({
+  const {
+    data: totalsData,
+    isError: totalsFailed,
+    refetch: refetchTotals,
+  } = useQuery({
     queryKey: ["tool-usage-totals", ...narrowedQueryKey],
     queryFn: () =>
       unwrapAsync(
@@ -800,6 +831,7 @@ export function LogsTools({
         }),
       ),
     enabled: !roleFilterPending,
+    retry: telemetryReadRetry,
     // Same reason as the series above: the tiles keep their numbers rather
     // than blinking to em dashes and back.
     placeholderData: keepPreviousData,
@@ -835,6 +867,7 @@ export function LogsTools({
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
       enabled: !roleFilterPending,
+      retry: telemetryReadRetry,
       // The rows hold too: an empty table between two filter states reads as
       // "no results" for as long as the fetch takes.
       placeholderData: keepPreviousData,
@@ -1032,8 +1065,12 @@ export function LogsTools({
             error={displayError}
             traces={traces}
             totals={totalsData?.totals}
+            totalsFailed={totalsFailed}
+            onRetryTotals={() => void refetchTotals()}
             timeSeries={timeSeriesData?.targetTimeSeries ?? []}
             timeSeriesPending={timeSeriesPending}
+            timeSeriesFailed={timeSeriesFailed}
+            onRetryTimeSeries={() => void refetchTimeSeries()}
             facetGroups={visibleFacetGroups}
             embedded={!!scope}
             defaultTypes={defaultTypes}
@@ -1281,8 +1318,12 @@ function LogsToolsContent({
   from,
   to,
   totals,
+  totalsFailed,
+  onRetryTotals,
   timeSeries,
   timeSeriesPending,
+  timeSeriesFailed,
+  onRetryTimeSeries,
   facetGroups,
   onFacetToggle,
   onFacetClearGroup,
@@ -1339,8 +1380,15 @@ function LogsToolsContent({
   from: Date;
   to: Date;
   totals: ToolUsageTotals | undefined;
+  /** The totals read failed: the summary says so rather than showing dashes
+   * or the last window's numbers as if they were current. */
+  totalsFailed: boolean;
+  onRetryTotals: () => void;
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
   timeSeriesPending: boolean;
+  /** The series read failed: the strip says so instead of drawing no calls. */
+  timeSeriesFailed: boolean;
+  onRetryTimeSeries: () => void;
   facetGroups: FacetGroup[];
   onFacetToggle: (groupId: string, value: string, next: boolean) => void;
   onFacetClearGroup: (groupId: string) => void;
@@ -1359,6 +1407,9 @@ function LogsToolsContent({
   const [summaryOpen, setSummaryOpen] = useSummaryPanelOpen();
   const [railWidth, setRailWidth] = useRailWidth();
   const stripHeight = useIsShortViewport() ? 40 : 56;
+  // Maximised, the strip takes the panel's full width and the stats sit in a
+  // row above it, at every breakpoint rather than only below 2xl.
+  const [timelineMaximised, setTimelineMaximised] = useState(false);
 
   const rail = (
     <LogsFacetRail
@@ -1465,8 +1516,35 @@ function LogsToolsContent({
             </button>
             {summaryOpen && (
               <>
-                <div className="border-border flex flex-col border-t 2xl:flex-row">
-                  <div className="divide-border border-border grid shrink-0 grid-cols-2 divide-x sm:grid-cols-5 max-2xl:border-b 2xl:border-r">
+                {totalsFailed && (
+                  <div
+                    role="alert"
+                    className="border-border text-muted-foreground flex items-center gap-3 border-t px-4 py-2 text-sm"
+                  >
+                    Could not load the totals for this window.
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      onClick={onRetryTotals}
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                )}
+                <div
+                  className={cn(
+                    "border-border flex flex-col border-t",
+                    !timelineMaximised && "2xl:flex-row",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "divide-border border-border grid shrink-0 grid-cols-2 divide-x sm:grid-cols-5",
+                      timelineMaximised
+                        ? "border-b"
+                        : "max-2xl:border-b 2xl:border-r",
+                    )}
+                  >
                     <SummaryStat
                       label="Tool calls"
                       value={
@@ -1529,12 +1607,18 @@ function LogsToolsContent({
                     <LogsTimelineStrip
                       height={stripHeight}
                       loading={timeSeriesPending}
+                      failed={timeSeriesFailed}
+                      onRetry={onRetryTimeSeries}
                       timeSeries={timeSeries}
                       from={from}
                       to={to}
                       onRangeSelect={onRangeSelect}
                       onResetRange={onResetRange}
                       isZoomed={isZoomed}
+                      maximised={timelineMaximised}
+                      onToggleMaximised={() =>
+                        setTimelineMaximised(!timelineMaximised)
+                      }
                     />
                   </div>
                 </div>
@@ -1994,7 +2078,14 @@ function LogsToolsTraceRow({
     trace.targetType,
   ]);
 
-  const statusConfig = getStatusConfig(trace);
+  // A pending call turns Unknown after a while; re-render then so the label
+  // does not wait for an unrelated update.
+  useStalePendingRerender(
+    trace.hookStatus === "pending"
+      ? Number(BigInt(trace.startTimeUnixNano) / 1_000_000n)
+      : undefined,
+  );
+  const statusConfig = getToolLogStatusConfig(trace);
   const targetConfig = getTargetConfig(trace.targetType);
   const skillsOverMcpEnabled = useSkillsOverMcpEnabled();
   const skillChannel = skillsOverMcpEnabled ? skillLoadChannel(trace) : null;
@@ -2290,52 +2381,4 @@ function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
         badgeClassName: "bg-muted text-muted-foreground",
       };
   }
-}
-
-// Status renders as a plain mono word: color only where attention is due
-// (error red, blocked orange); success and pending stay muted ink.
-function getStatusConfig(trace: ToolUsageTraceSummary): {
-  className: string;
-  dotClassName: string;
-  label: string;
-} | null {
-  const ok = {
-    className: "text-muted-foreground",
-    dotClassName: "bg-emerald-500",
-    label: "Success",
-  };
-  const failed = {
-    className: "text-destructive",
-    dotClassName: "bg-rose-500",
-    label: "Error",
-  };
-
-  if (trace.hookStatus) {
-    switch (trace.hookStatus) {
-      case "blocked":
-        // Blocked is the same answer to "did this call run" — it did not — but
-        // it is the policy working rather than something broken, so it takes
-        // amber and leaves red to mean failure.
-        return { ...failed, dotClassName: "bg-amber-500", label: "Blocked" };
-      case "failure":
-        return failed;
-      case "success":
-        return ok;
-      case "pending":
-        return {
-          className: "text-muted-foreground",
-          dotClassName: "bg-muted-foreground/30",
-          label: "Pending",
-        };
-      default:
-        return null;
-    }
-  }
-
-  if (trace.httpStatusCode !== undefined) {
-    if (trace.httpStatusCode >= 400) return failed;
-    if (trace.httpStatusCode >= 200 && trace.httpStatusCode < 400) return ok;
-  }
-
-  return null;
 }

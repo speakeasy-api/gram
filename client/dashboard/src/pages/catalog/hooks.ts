@@ -2,8 +2,13 @@ import { useCallback, useMemo } from "react";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 
 import type { DeploymentExternalMCP } from "@gram/client/models/components/deploymentexternalmcp.js";
-import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
+import type { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
 import {
+  listedMcpServers,
+  type ListedMcpServer,
+} from "@/components/mcp/mcp-server-kind";
+import {
+  catalogInstances,
   catalogServerInstallState,
   liveCatalogExternalMcp,
   normalizedUrlSet,
@@ -107,6 +112,8 @@ export function useListMCPCatalog(
 export function useCatalogInstallations(projectSlug?: string): {
   installState: (server: CatalogServer) => CatalogInstallState;
   liveExternalMcp: (server: CatalogServer) => DeploymentExternalMCP | undefined;
+  /** Undefined until every lookup has data. */
+  instances: (server: CatalogServer) => ListedMcpServer[] | undefined;
 } {
   const routeProject = useProjectSlugForRequests();
   const gramProject = projectSlug || routeProject;
@@ -208,5 +215,50 @@ export function useCatalogInstallations(projectSlug?: string): {
     ],
   );
 
-  return { installState, liveExternalMcp };
+  const remoteUrlById = useMemo(
+    () =>
+      new Map(
+        (remoteQuery.data?.remoteMcpServers ?? []).map((s) => [s.id, s.url]),
+      ),
+    [remoteQuery.data?.remoteMcpServers],
+  );
+  const unproxiedUrlById = useMemo(
+    () =>
+      new Map(
+        (unproxiedQuery.data?.unproxiedMcpServers ?? []).map((s) => [
+          s.id,
+          s.url,
+        ]),
+      ),
+    [unproxiedQuery.data?.unproxiedMcpServers],
+  );
+  const listed = useMemo(
+    () => listedMcpServers(serversQuery.data?.mcpServers ?? []),
+    [serversQuery.data?.mcpServers],
+  );
+  const instances = useCallback(
+    (server: CatalogServer) => {
+      if (
+        !ready.remote ||
+        !ready.unproxied ||
+        !ready.servers ||
+        !ready.deployment
+      ) {
+        return undefined;
+      }
+      const matched = new Set(
+        catalogInstances(
+          server,
+          listed.map((entry) => entry.server),
+          remoteUrlById,
+          unproxiedUrlById,
+          externalMcps ?? [],
+        ),
+      );
+      return listed.filter((entry) => matched.has(entry.server));
+    },
+    [ready, listed, remoteUrlById, unproxiedUrlById, externalMcps],
+  );
+
+  return { installState, liveExternalMcp, instances };
 }

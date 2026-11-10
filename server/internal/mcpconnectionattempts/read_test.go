@@ -140,3 +140,36 @@ func TestReadAttemptsNeedsBothEndsOfThePeopleRange(t *testing.T) {
 		require.Error(t, ReadAttempts(t.Context(), ch, filter, func(AttemptSummary) {}))
 	}
 }
+
+func TestReadAttemptsConnectedOnly(t *testing.T) {
+	t.Parallel()
+	ch, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	org := "org-" + uuid.NewString()
+	day := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)
+	scope := ServerScope(org, uuid.New(), uuid.New(), AppDCR)
+	connected, failed, open := AttemptAt(uuid.New(), day.Add(time.Hour), scope), AttemptAt(uuid.New(), day.Add(time.Hour), scope), AttemptAt(uuid.New(), day.Add(time.Hour), scope)
+	var rows []Row
+	for _, step := range []struct {
+		attempt Attempt
+		what    Happened
+		final   bool
+	}{
+		{connected, ResultCodeIssued, true},
+		{failed, CodeInvalidGrant, true},
+		{open, ResultAccepted, false},
+	} {
+		row, err := RowAt(step.attempt, StepInboundToken, step.what, step.final, day.Add(time.Hour+time.Minute))
+		require.NoError(t, err)
+		rows = append(rows, row)
+	}
+	require.NoError(t, AppendRows(t.Context(), ch, rows))
+
+	filter := AttemptFilter{StartedFrom: day, StartedBefore: day.AddDate(0, 0, 1), OrganizationID: org, ConnectedOnly: true}
+	var ids []uuid.UUID
+	require.NoError(t, ReadAttempts(t.Context(), ch, filter, func(s AttemptSummary) {
+		require.Equal(t, OutcomeConnected, s.End(time.Now()).Outcome)
+		ids = append(ids, s.AttemptID)
+	}))
+	require.Equal(t, []uuid.UUID{connected.ID()}, ids)
+}

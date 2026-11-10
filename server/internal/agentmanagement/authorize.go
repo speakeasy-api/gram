@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -317,7 +318,7 @@ func (a *Authorizer) Permissions(ctx context.Context, human HumanContext, agent 
 }
 
 func ownsUnblockedAgent(human HumanContext, agent repo.Agent) bool {
-	return human.Auth != nil && agent.OwnerUserID == human.Auth.UserID && !agent.OwnerReassignmentRequiredAt.Valid
+	return human.Auth != nil && agents.OwnsUnblocked(human.Auth.UserID, agent.OwnerUserID, agent.OwnerReassignmentRequiredAt)
 }
 
 func scopeForOwnerPredicate(predicate OwnerPredicate) (authz.Scope, bool) {

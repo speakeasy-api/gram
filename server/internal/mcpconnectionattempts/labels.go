@@ -49,6 +49,8 @@ var knownProviderHosts = map[string]struct{}{
 	"mcp.paypal.com":            {},
 	"mcp.squareup.com":          {},
 	"app.getgram.ai":            {},
+	"id.speakeasy.com":          {},
+	"ai.speakeasy.com":          {},
 }
 
 // IsAppKind reports whether an app_key names a kind of app rather than an app.

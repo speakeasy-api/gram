@@ -18393,11 +18393,12 @@ func NewRequestAccessPayload(body *RequestAccessRequestBody, apikeyToken *string
 
 // NewListChallengesPayload builds a access service listChallenges endpoint
 // payload.
-func NewListChallengesPayload(outcome *string, principalUrn *string, scope *string, projectID *string, resolved *bool, ids []string, from *string, to *string, limit int, offset int, apikeyToken *string, sessionToken *string) *access.ListChallengesPayload {
+func NewListChallengesPayload(outcome *string, principalUrn *string, scope *string, excludeScopes []string, projectID *string, resolved *bool, ids []string, from *string, to *string, limit int, offset int, apikeyToken *string, sessionToken *string) *access.ListChallengesPayload {
 	v := &access.ListChallengesPayload{}
 	v.Outcome = outcome
 	v.PrincipalUrn = principalUrn
 	v.Scope = scope
+	v.ExcludeScopes = excludeScopes
 	v.ProjectID = projectID
 	v.Resolved = resolved
 	v.Ids = ids

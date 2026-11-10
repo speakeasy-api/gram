@@ -28,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
@@ -1693,7 +1692,7 @@ func TestHandleConsentGet_LegacyToolsetUsesAllToolsConsent(t *testing.T) {
 	require.NotContains(t, consentApproveButtonTag(t, page), "disabled", "unrestricted consent remains available")
 }
 
-func TestHandleConsentGet_ModernToolsetWithoutProxyShowsToolPicker(t *testing.T) {
+func TestHandleConsentGet_ModernToolsetShowsToolPicker(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
@@ -1705,31 +1704,6 @@ func TestHandleConsentGet_ModernToolsetWithoutProxyShowsToolPicker(t *testing.T)
 	page := modernConsentGetPage(t, ctx, ti, endpointSlug, stateID)
 	require.Contains(t, page, "consent-tools-root")
 	require.Contains(t, consentApproveButtonTag(t, page), "disabled", "island owns enabling the approve button")
-}
-
-func TestHandleConsentGet_ModernMixedToolsetWithProxyUsesAllToolsConsent(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	proxyConfig := setupToolsetWithExternalMCP(
-		t,
-		ctx,
-		ti,
-		"https://upstream.invalid/mcp",
-		externalmcp_types.TransportTypeStreamableHTTP,
-		"consent-proxy-"+uuid.NewString()[:8],
-	)
-	addOrdinaryToolToExternalMCPToolset(t, ctx, ti, proxyConfig)
-	proxyToolset := proxyConfig.toolset
-	endpointSlug := "modern-proxy-" + uuid.NewString()
-	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, proxyToolset.ProjectID, proxyToolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuer.ID)
-	stateID, _ := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
-
-	page := modernConsentGetPage(t, ctx, ti, endpointSlug, stateID)
-	require.NotContains(t, page, "consent-tools-root")
-	require.NotContains(t, page, "Tool access")
-	require.NotContains(t, consentApproveButtonTag(t, page), "disabled", "unrestricted consent remains available")
 }
 
 func TestHandleConsentGet_CustomDomainLockdownHidesModernToolsetPicker(t *testing.T) {

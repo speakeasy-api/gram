@@ -25,7 +25,7 @@ WHERE organization_id = @org_id::text;
 -- name: PostflightSecurityOnboardingInvalid :one
 SELECT (
   (SELECT preset FROM organization_onboarding WHERE organization_id = @org_id::text) IS DISTINCT FROM 'security'
-  OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = @org_id::text AND hidden_at IS NULL) <> 9
+  OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = @org_id::text AND hidden_at IS NULL) <> 8
   OR EXISTS (SELECT 1 FROM organization_setup_tasks WHERE organization_id = @org_id::text
     AND ((task_key IN ('anthropic-admin-controls', 'platform-mcp')) IS DISTINCT FROM (hidden_at IS NOT NULL)))
 )::boolean AS invalid;
@@ -409,18 +409,6 @@ WHERE l.project_id = @project_id::uuid AND l.deleted IS FALSE
   AND (l.target_kind = 'organization_gateway'
     OR (l.target_kind = 'mcp_server' AND ms.id IS NOT NULL)
     OR (l.target_kind = 'meta_mcp_server' AND mm.id IS NOT NULL));
-
--- The approval policy is only usable when the approvals server it points
--- agents at has an endpoint and sits in the Default plugin.
-
--- name: PostflightCountApprovalsServers :one
-SELECT count(*)
-FROM mcp_servers s
-JOIN mcp_endpoints e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
-JOIN plugin_servers ps ON ps.mcp_server_id = s.id AND ps.deleted IS FALSE
-JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = s.project_id AND p.is_default IS TRUE AND p.deleted IS FALSE
-WHERE s.project_id = @project_id::uuid AND s.builtin_backend = 'approvals'
-  AND s.deleted IS FALSE;
 
 -- A hosted toolset's canonical wrapper mirrors the toolset's name and tool
 -- variations group, and serves from at least one endpoint.

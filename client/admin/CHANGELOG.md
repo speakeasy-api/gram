@@ -1,5 +1,23 @@
 # admin
 
+## 0.12.0
+
+### Minor Changes
+
+- fe756cd: Staff can redeploy a project's active deployment from the organization's Projects page and through Admin MCP.
+- 954c4a9: Staff can now view and set an MCP server's pinned login scopes from the admin dashboard's MCP server page, and `describe_mcp_server_health` reports them. Customer Identity settings no longer show pinned or requested scopes.
+
+### Patch Changes
+
+- 846b422: Staff Admin MCP write tools now apply changes directly instead of through stored proposals and browser approval. Each tool is named after its operation, for example `set_organization_feature`. The server instructions and tool descriptions require agents to get explicit user confirmation before every change, and the staff event trail now records each write's operation and target.
+- 3041d9b: The setup wizard has a new Set up Claude Desktop group with two cards.
+  
+  - **Register Speakeasy's plugins in Claude** walks syncing the plugin marketplace in Claude.ai, marking the observability plugin Required, choosing how MCP plugins install, and allowing Speakeasy in Claude's network egress settings. Claude Desktop runs only plugins registered on the Claude organization, not a copy the device agent installs.
+  - **Add Claude organization instructions** gives the organization instruction that moves every conversation in Claude's unified view into Cowork, where the observability plugin captures it, and explains how to check it. It shows only for Claude Team: Enterprise captures Claude sessions through the Compliance API and inference hooks.
+  
+  Both cards complete on their own once the first Cowork transcript arrives. Set up Anthropic admin controls now covers Claude Code server-managed settings, Cowork native monitoring and the Organization Gateway, and its traffic check points Cowork to Agent Sessions. Setup cards can now name the plans they need, so a card shows only when the organization's recorded stack has one of them. The support matrix gains a Cowork organization instructions method, and the Anthropic Enterprise Rollout preset includes the new group.
+- e613d5a: The setup wizard no longer has a separate Create marketplace card or a Distribute MCP servers group. Distribute MCP servers is now a single card that publishes the plugin marketplace and lets you choose the servers to distribute, as every card that needs the marketplace already does. Saved onboarding playbooks that listed the group or the old card move to Distribute MCP servers when the server starts, and older setup links to either one open Distribute MCP servers. The Managed MCP Distribution preset lists the card instead of the group.
+
 ## 0.11.0
 
 ### Minor Changes

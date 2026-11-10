@@ -30,8 +30,8 @@ type StaffOAuth struct {
 }
 
 // NewStaffOAuth builds the staff OAuth handlers. The zero WriteConfig keeps
-// every connection read-only: consent refuses admin:write unless at least one
-// write operation is switched on.
+// every connection read-only: consent refuses admin:write unless writes are
+// switched on.
 func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cache, verifier adminSessionVerifier, cipher *encryption.Client, signer *sessiontokens.Signer, writes WriteConfig, logger *slog.Logger) (*StaffOAuth, error) {
 	if baseURL == nil || baseURL.Scheme != "https" || baseURL.Host == "" || (baseURL.Path != "" && baseURL.Path != "/") || db == nil || challengeCache == nil || verifier == nil || cipher == nil || signer == nil {
 		return nil, errors.New("staff OAuth configuration is incomplete")
@@ -68,7 +68,7 @@ func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cach
 }
 
 func (s *StaffOAuth) scopesSupported() []string {
-	if s.writes.WritesAvailable() {
+	if s.writes.Enabled {
 		return []string{ScopeRead, ScopeWrite}
 	}
 	return []string{ScopeRead}

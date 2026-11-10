@@ -39,8 +39,12 @@ const (
 	// day24h is one UTC day.
 	day24h = 24 * time.Hour
 
-	// readTimeoutSeconds lifts the connection's 60-second limit for reads over nine days of events.
-	readTimeoutSeconds = 600
+	// ReadTimeout lifts the connection's 60-second limit for one read over nine days of
+	// events. A build makes ReadsPerBuild such reads, so its activity timeout covers them all.
+	ReadTimeout = 10 * time.Minute
+
+	// ReadsPerBuild is how many ReadTimeout reads one BuildDay or DaysToBuild can make.
+	ReadsPerBuild = 2
 
 	// readMemoryBytes caps one read. Up to four days build at once.
 	readMemoryBytes = 2 << 30 // 2 GiB
@@ -140,7 +144,7 @@ func rebuildUntil(day time.Time) time.Time {
 // readContext lifts the connection's query time limit and caps memory for the job's reads.
 func readContext(ctx context.Context) context.Context {
 	return clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
-		"max_execution_time": readTimeoutSeconds,
+		"max_execution_time": int(ReadTimeout / time.Second),
 		"max_memory_usage":   readMemoryBytes,
 	}))
 }
@@ -233,7 +237,16 @@ func (b *Builder) BuildDay(ctx context.Context, day, now time.Time) (Result, err
 	if err := b.checkRawWhole(day); err != nil {
 		return Result{Rows: 0, Attempts: 0, Swapped: false}, err
 	}
-	return b.publish(ctx, day, rows, totalsOf(rows))
+	result, err := b.publish(ctx, day, rows, totalsOf(rows))
+	if errors.Is(err, ErrStoredMismatch) {
+		// The swap went in but the stored day is wrong: a replica that had not yet seen
+		// the staging insert, or an overlapping build of the same day. Publish once more
+		// so a wrong day is not left in place. A day still wrong after every attempt
+		// stays wrong until a later run rebuilds it, or for good once its rebuild window ends.
+		b.logger.WarnContext(ctx, "stored connection outcomes day did not match its build, publishing again", attr.SlogValueString(day.Format(time.DateOnly)), attr.SlogError(err))
+		result, err = b.publish(ctx, day, rows, totalsOf(rows))
+	}
+	return result, err
 }
 
 // checkRawWhole refuses a day whose raw events may already be partly expired by the wall clock.
@@ -250,7 +263,7 @@ func (b *Builder) outcomes(ctx context.Context, day, now time.Time) ([]DayRow, e
 	var failures []mcpconnectionattempts.AttemptSummary
 	dayFilter := mcpconnectionattempts.AttemptFilter{
 		StartedFrom: day, StartedBefore: day.Add(day24h), OrganizationID: "", ExcludeOrganizationIDs: mcpconnectionattempts.ExcludedOrganizations(),
-		ProjectID: uuid.Nil, ServerID: "", PeopleFailingFrom: time.Time{}, PeopleFailingBefore: time.Time{},
+		ProjectID: uuid.Nil, ServerID: "", PeopleFailingFrom: time.Time{}, PeopleFailingBefore: time.Time{}, ConnectedOnly: false,
 	}
 	err := mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, dayFilter, func(a mcpconnectionattempts.AttemptSummary) {
 		e := a.End(now)
@@ -269,6 +282,7 @@ func (b *Builder) outcomes(ctx context.Context, day, now time.Time) ([]DayRow, e
 		successFilter := dayFilter
 		successFilter.StartedBefore = day.Add(day24h + mcpconnectionattempts.FixLookahead)
 		successFilter.PeopleFailingFrom, successFilter.PeopleFailingBefore = day, day.Add(day24h)
+		successFilter.ConnectedOnly = true
 		err = mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, successFilter, func(a mcpconnectionattempts.AttemptSummary) { candidates = append(candidates, a) })
 		if err != nil {
 			return nil, fmt.Errorf("read successes: %w", err)
