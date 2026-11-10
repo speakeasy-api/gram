@@ -2661,3 +2661,23 @@ VALUES (@id, @project_id, 'Speakeasy Approvals', @slug, 'approvals', 'private');
 SELECT count(*)
 FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = @remote_session_client_id;
+
+-- name: GetRemoteMCPServerURLFixture :one
+-- Reads a remote MCP server's name and upstream URL.
+SELECT name, url FROM remote_mcp_servers WHERE id = @id AND deleted IS FALSE;
+
+-- name: ListRemoteSessionTokensFixture :many
+-- Reads the stored, encrypted tokens of a client's live remote sessions.
+SELECT id, access_token_encrypted, refresh_token_encrypted::text AS refresh_token_encrypted, auto_refresh
+FROM remote_sessions
+WHERE remote_session_client_id = @remote_session_client_id
+  AND deleted IS FALSE AND access_expires_at > clock_timestamp()
+ORDER BY id;
+
+-- name: GetAuthClientHeaderFixture :one
+-- Reads an auth client header's stored value and secrecy.
+SELECT value, is_secret FROM mcp_auth_client_headers WHERE id = @id;
+
+-- name: GetEnvironmentEntryFixture :one
+-- Reads one environment entry by environment and name.
+SELECT value, is_secret FROM environment_entries WHERE environment_id = @environment_id AND name = @name;

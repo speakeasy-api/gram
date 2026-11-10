@@ -136,6 +136,17 @@ needs and the shared demo org must never have:
   Playground's MCP App: a Speakeasy Function zipped in-memory from
   `server/internal/demoseed/mcpapp/` and hung off the seeded deployment, so the
   demo org never gets a functions deployment production would have to run.
+- **Working upstream servers.** The stack starts a throwaway MCP fixture
+  server (`mcp-fixture/`, pitchfork daemon `mcp-fixture`, `GRAM_MCP_FIXTURE_URL`).
+  It is its own OAuth 2.1 server (sign in by picking an email; dynamic
+  registration, client ID metadata documents, PKCE, refresh rotation), takes
+  the checked-in shared token `fixtureauth.SharedToken`, and stubs the demo
+  API document. `local_mcp_fixture.go` points the local org at it: Linear
+  becomes the **Per-User OAuth Server** with real fixture tokens on its seeded
+  sign-ins, GitHub becomes the **Shared or Own Token Server**, and the
+  generated toolsets get an `ACME_SERVER_URL` system environment. All three
+  work right after `mise run seed`. The public demo org keeps its
+  display-only values: prod cannot reach localhost.
 
 The fixtures are idempotent, and everything they write is either upserted by a
 fixed id or cascades from the seeded deployment/project, so a reseed rolls
