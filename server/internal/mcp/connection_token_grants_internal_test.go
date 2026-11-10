@@ -190,7 +190,7 @@ func TestAssistantClientCredentialsLogsOffRecordsNothing(t *testing.T) {
 
 	rec := mcpconnectionattemptstest.NewLogsOff(t)
 	c := newAssistantGrantCase(t, rec.Recorder, func(context.Context, AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error) {
-		return AssistantWorkloadToken{AssistantID: uuid.New(), AccessToken: "opaque-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
+		return AssistantWorkloadToken{AssistantID: uuid.New(), AgentID: uuid.New(), AccessToken: "opaque-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
 	})
 
 	require.Equal(t, http.StatusOK, c.post(t, assistantGrantForm).Code)
@@ -222,9 +222,9 @@ func TestAssistantClientCredentialsTokenWithoutAgentRecordsOurError(t *testing.T
 		return AssistantWorkloadToken{AssistantID: uuid.New(), AccessToken: "opaque-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
 	})
 
-	require.Equal(t, http.StatusOK, c.post(t, assistantGrantForm).Code, "the response is unchanged")
+	require.Equal(t, http.StatusInternalServerError, c.post(t, assistantGrantForm).Code, "a token naming no agent is never written")
 	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError)
-	require.Equal(t, "agent_missing", row.SubReason)
+	require.Equal(t, "issued_token_invalid", row.SubReason)
 	require.Len(t, rec.Rows(), 1)
 }
 

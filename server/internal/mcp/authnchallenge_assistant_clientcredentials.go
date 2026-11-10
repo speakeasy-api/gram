@@ -142,7 +142,7 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 		return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "workload token issuance unavailable")
 	}
 	lifetime := time.Until(result.ExpiresAt)
-	if result.AssistantID == uuid.Nil || result.AccessToken == "" || lifetime < time.Second || lifetime > 15*time.Minute {
+	if result.AssistantID == uuid.Nil || result.AgentID == uuid.Nil || result.AccessToken == "" || lifetime < time.Second || lifetime > 15*time.Minute {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("issued_token_invalid"))
 		return writeTokenError(ctx, w, logger, http.StatusInternalServerError, "server_error", "workload token issuance unavailable")
 	}
@@ -160,11 +160,6 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 	if err := writeTokenSuccess(ctx, w, logger, body); err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("response_not_written"))
 		return err
-	}
-	// A token naming no agent is our issuer's fault; the response stays as issued.
-	if result.AgentID == uuid.Nil {
-		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("agent_missing"))
-		return nil
 	}
 	t.Succeed(ctx, mcpconnectionattempts.ResultSignedIn)
 	return nil
