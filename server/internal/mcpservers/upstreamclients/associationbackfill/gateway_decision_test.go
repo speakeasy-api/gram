@@ -65,6 +65,7 @@ func TestDecideGatewayExistingOutboundAssociations(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := DecideGateway(tt.rows)
 			require.Equal(t, tt.outcome, result.Outcome)
 			require.Equal(t, tt.outcome == GatewayOutcomeConfigured, result.Outcome.Covered())
