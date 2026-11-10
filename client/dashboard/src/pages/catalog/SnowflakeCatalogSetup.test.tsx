@@ -10,6 +10,7 @@ import { useSetup } from "./provider-setup/setup-context";
 import { initialState, type State } from "./provider-setup/state";
 import {
   providerProgressKey,
+  providerSourceFingerprint,
   saveProviderProgress,
 } from "@/pages/mcp/x/setup/provider-setup";
 
@@ -321,12 +322,31 @@ describe("Snowflake catalog draft lifecycle (mocked API)", () => {
       key + ":installation",
       JSON.stringify({ remoteId: "remote", serverId: "server" }),
     );
-    api.get.mockResolvedValueOnce({ ...server, platformEndpointSlug: null });
-    api.endpoint.mockResolvedValueOnce(undefined);
+    let endpointCreated = false;
+    api.get.mockImplementation(async () => ({
+      ...server,
+      platformEndpointSlug: endpointCreated
+        ? server.platformEndpointSlug
+        : null,
+    }));
+    api.endpoint
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(async () => {
+        endpointCreated = true;
+        return { slug: server.platformEndpointSlug };
+      });
     show();
     await screen.findByText(/Couldn’t load your saved/);
     await userEvent.click(screen.getByText("Retry load"));
     await waitFor(() => expect(api.live).toHaveBeenCalled());
+    expect(api.endpoint).toHaveBeenCalledTimes(2);
+    for (const attempt of [1, 2])
+      expect(api.endpoint).toHaveBeenNthCalledWith(
+        attempt,
+        expect.anything(),
+        expect.objectContaining({ id: server.id }),
+        "example",
+      );
     expect(api.remote).not.toHaveBeenCalled();
     expect(api.create).not.toHaveBeenCalled();
     expect(api.next).not.toHaveBeenCalled();
@@ -343,11 +363,9 @@ describe("Snowflake catalog draft lifecycle (mocked API)", () => {
       JSON.stringify({
         remoteId: "remote",
         serverId: "server",
-        sourceFingerprint: JSON.stringify([
-          "remote",
-          "https://previous.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
-          "",
-        ]),
+        sourceFingerprint: providerSourceFingerprint("remote", {
+          url: "https://previous.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
+        }),
       }),
     );
     show();

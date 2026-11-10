@@ -11,6 +11,7 @@ import {
   type State,
 } from "@/pages/catalog/provider-setup/state";
 import { ProviderSetupPage } from "./ProviderSetupPage";
+import { providerSourceFingerprint } from "./provider-setup";
 
 const mocks = vi.hoisted(() => ({
   fire: Object.assign(vi.fn<(options: Record<string, unknown>) => void>(), {
@@ -348,6 +349,24 @@ describe("provider setup completion celebration", () => {
   });
 });
 
+it("hands the native Snowflake source values and fingerprint into retained progress", () => {
+  mocks.provider = "snowflake";
+  render(<Setup />);
+  expect(mocks.loadProgress).toHaveBeenCalledWith(
+    "snowflake",
+    expect.any(String),
+    {
+      host: "https://example.snowflakecomputing.com",
+      database: "APP",
+      schema: "PUBLIC",
+      serverName: "MCP",
+    },
+    providerSourceFingerprint(server.remoteMcpServerId!, {
+      url: "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
+    }),
+  );
+});
+
 describe("Salesforce instance header entry", () => {
   it.each(["duplicate", "secret", "request"])(
     "shows actionable %s header errors before entering setup",
@@ -400,22 +419,4 @@ it("allows Salesforce installation instructions but disables Continue at the sup
   expect(next().disabled).toBe(false);
 });
 
-it("hands the native Snowflake source values and fingerprint into retained progress", () => {
-  mocks.provider = "snowflake";
-  render(<Setup />);
-  expect(mocks.loadProgress).toHaveBeenCalledWith(
-    "snowflake",
-    expect.any(String),
-    {
-      host: "https://example.snowflakecomputing.com",
-      database: "APP",
-      schema: "PUBLIC",
-      serverName: "MCP",
-    },
-    JSON.stringify([
-      server.remoteMcpServerId,
-      "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
-      "",
-    ]),
-  );
-});
+

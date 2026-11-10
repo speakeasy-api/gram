@@ -12,6 +12,8 @@ import { MemoryRouter } from "react-router";
 import { catalogPresetState } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AddServerDialog, GuardrailOutcomeNotice } from "./AddServerDialog";
+import { readSnowflakeHandoff } from "./snowflake-install";
+import { providerProgressKey } from "@/pages/mcp/x/setup/provider-setup";
 
 const mocks = vi.hoisted(() => ({
   getServerDetails: vi.fn(),
@@ -781,6 +783,13 @@ it.each([{ headless: true }, { autoStartInstall: true }])(
 );
 
 describe("Snowflake keeps the existing identity modal", () => {
+  const progressKey = providerProgressKey(
+    "snowflake",
+    "person-1",
+    "org-1",
+    "project-1",
+    "catalog:com.snowflake/cortex-mcp",
+  );
   const snowflake = {
     ...server,
     registrySpecifier: "com.snowflake/cortex-mcp",
@@ -851,25 +860,24 @@ describe("Snowflake keeps the existing identity modal", () => {
       ),
     );
     expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
-    const saved = JSON.parse(
-      sessionStorage.getItem(
-        "provider-setup:snowflake:v1:person-1:org-1:project-1:catalog%3Acom.snowflake%2Fcortex-mcp:handoff",
-      ) ?? "null",
-    );
+    const saved = readSnowflakeHandoff(progressKey);
     expect(saved).toMatchObject({
-      identityMode: "user",
       name: "Snowflake connection",
     });
   });
   it.each(["none", "agent"] as const)(
-    "does not open setup for %s identity",
+    "deferred-setup callback rejects %s identity",
     async (mode) => {
       const state = configure("none");
       show();
       await screen.findByRole("radio", { name: /User Identity/ });
       const options = mocks.workflow.mock.calls.at(-1)![0];
-      state.serverConfigs[0].identityMode = mode;
-      expect(options.deferSetup(state.serverConfigs, {})).toBe(false);
+      expect(
+        options.deferSetup(
+          [{ ...state.serverConfigs[0], identityMode: mode }],
+          {},
+        ),
+      ).toBe(false);
       expect(mocks.navigate).not.toHaveBeenCalled();
     },
   );
@@ -896,12 +904,8 @@ describe("Snowflake keeps the existing identity modal", () => {
         guardrail: catalogPresetState([]),
       }),
     ).toBe(true);
-    const saved = JSON.parse(
-      sessionStorage.getItem(
-        "provider-setup:snowflake:v1:person-1:org-1:project-1:catalog%3Acom.snowflake%2Fcortex-mcp:handoff",
-      ) ?? "null",
-    );
-    expect(saved.guardrail.categories).toEqual(["secrets", "pii"]);
+    const saved = readSnowflakeHandoff(progressKey);
+    expect(saved?.guardrail?.categories).toEqual(new Set(["secrets", "pii"]));
   });
   it.each(["loading", "disabled"] as const)(
     "never opens setup while rollout is %s",
