@@ -203,6 +203,24 @@ AND ds.status = 'completed'
 ORDER BY d.seq DESC
 LIMIT 1;
 
+-- name: GetInFlightDeploymentAfter :one
+-- A newer deployment of the project that has not finished processing.
+SELECT d.id
+FROM deployments d
+INNER JOIN LATERAL (
+  SELECT ds.status
+  FROM deployment_statuses ds
+  WHERE ds.deployment_id = d.id
+  ORDER BY ds.seq DESC
+  LIMIT 1
+) latest ON TRUE
+WHERE d.project_id = @project_id
+  AND d.seq > (SELECT a.seq FROM deployments a WHERE a.id = @after_deployment_id)
+  AND d.created_at > @created_after::timestamptz
+  AND latest.status IN ('created', 'pending')
+ORDER BY d.seq DESC
+LIMIT 1;
+
 -- name: GetDeploymentByIdempotencyKey :one
 WITH latest_status as (
     SELECT deployment_id, status
@@ -730,39 +748,6 @@ INSERT INTO functions_access (
   , @bearer_format
 )
 RETURNING id;
-
--- name: UpsertDeploymentExternalMCP :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
-VALUES (@deployment_id, @registry_id, @name, @slug, @registry_server_specifier, @selected_remotes)
-ON CONFLICT (deployment_id, slug) WHERE deleted IS FALSE
-DO UPDATE SET
-  registry_id = EXCLUDED.registry_id,
-  name = EXCLUDED.name,
-  registry_server_specifier = EXCLUDED.registry_server_specifier,
-  selected_remotes = EXCLUDED.selected_remotes,
-  updated_at = clock_timestamp()
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at;
-
--- name: ListDeploymentExternalMCPs :many
-SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at
-FROM external_mcp_attachments
-WHERE deployment_id = @deployment_id AND deleted IS FALSE
-ORDER BY created_at ASC;
-
--- name: CloneDeploymentExternalMCPs :many
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
-SELECT
-  @clone_deployment_id
-  , current.registry_id
-  , current.name
-  , current.slug
-  , current.registry_server_specifier
-  , current.selected_remotes
-FROM external_mcp_attachments as current
-WHERE current.deployment_id = @original_deployment_id
-  AND current.deleted IS FALSE
-  AND current.slug <> ALL (@excluded_slugs::text[])
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes;
 
 -- name: InsertDeployment :one
 -- Inserts a minimal deployment row and returns its ID without the conflict

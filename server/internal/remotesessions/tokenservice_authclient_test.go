@@ -113,7 +113,7 @@ func TestResolveClientAccessTokens_StillRequiresTheSignInLink(t *testing.T) {
 	subject := urn.NewUserSubject("ac-legacy-link-user")
 	f.consent(t, subject, f.signInA, f.clientID, "token-from-a")
 
-	_, err := f.mgr.ResolveClientAccessTokens(ctx, f.projectID, f.organizationID, f.signInB, subject, f.clientID, false)
+	_, err := f.mgr.ResolveClientAccessTokens(ctx, remotesessions.RefreshAttribution{}, f.projectID, f.organizationID, f.signInB, subject, f.clientID, false)
 	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound)
 }
 
@@ -243,7 +243,7 @@ func TestResolveAuthClientAccessTokens_SharedClientsOnOneIssuerEachResolve(t *te
 
 	// Both clients on one upstream issuer under one sign-in trip the legacy
 	// resolver's uniqueness invariant.
-	_, err := f.mgr.ResolveAccessTokens(ctx, f.projectID, f.organizationID, f.signInA, subject)
+	_, err := f.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, f.projectID, f.organizationID, f.signInA, subject)
 	require.Error(t, err)
 
 	first, err := f.mgr.ResolveAuthClientAccessTokens(ctx, f.request(subject, f.clientID))

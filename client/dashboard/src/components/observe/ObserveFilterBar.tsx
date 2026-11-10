@@ -58,7 +58,9 @@ const STATUS_TYPES: Array<{ label: string; value: ObserveStatusFilterValue }> =
     { label: "Error", value: "error" },
     { label: "Success", value: "success" },
     { label: "Blocked", value: "blocked" },
-    { label: "Pending", value: "pending" },
+    // The filter matches every call with no result: still running (Pending)
+    // or long ended without one (Unknown).
+    { label: "Pending or unknown", value: "pending" },
   ];
 
 // Server, User and the date range are the most-used dimensions, so they pin as

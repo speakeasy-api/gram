@@ -1,5 +1,6 @@
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Combobox } from "@/components/ui/Combobox";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -27,16 +28,18 @@ import {
   serverLabel,
 } from "@/lib/auth-clients";
 import { useAllAuthClients } from "@/lib/useAllAuthClients";
-import { useAllRemoteSessionClients } from "@/lib/remote-identity";
+import { IssuerLogo } from "@/lib/remote-identity";
 import { cn } from "@/lib/utils";
-import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import { useRoutes } from "@/routes";
 import type { AuthClient } from "@gram/client/models/components/authclient.js";
 import { CreateAuthClientRequestBodyClientType } from "@gram/client/models/components/createauthclientrequestbody.js";
 import { useAttachAuthClientToMcpServerMutation } from "@gram/client/react-query/attachAuthClientToMcpServer.js";
 import { useCreateAuthClientMutation } from "@gram/client/react-query/createAuthClient.js";
+import { useSdkClient } from "@/contexts/Sdk";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { invalidateAuthClientQueries } from "./authClientQueries";
@@ -47,6 +50,9 @@ import {
   newHeaderDraft,
   type HeaderDraft,
 } from "./credentialHeaders";
+import { PersonalSignInFields } from "./PersonalSignInFields";
+import { usePersonalSignInDraft } from "./usePersonalSignInDraft";
+import { useSignInChoices } from "./useSignInChoices";
 
 /** What the administrator is adding: one of the new kinds, or a reuse. */
 type Choice =
@@ -73,10 +79,13 @@ const NEW_KIND_TYPE: Record<
   remote_session: CreateAuthClientRequestBodyClientType.RemoteSession,
 };
 
-/** The registration owner each signed-in kind needs. */
-const REGISTRATION_OWNER: Partial<Record<Choice, "self" | "subject">> = {
+/**
+ * The kinds that pick a stored registration to authenticate through. A
+ * personal sign-in is not one of them: it always gets a registration of its
+ * own, because a person holds one upstream grant per registration.
+ */
+const REGISTRATION_OWNER: Partial<Record<Choice, "self">> = {
   service_account: "self",
-  remote_session: "subject",
 };
 
 function initialHeaders(choice: Choice): HeaderDraft[] {
@@ -97,21 +106,30 @@ function initialHeaders(choice: Choice): HeaderDraft[] {
  * another server already uses, or a new one. Reusing keeps one credential, so
  * a later rotation changes every server at once; that is the first option
  * because it is usually what the administrator wants.
+ *
+ * Sign-ins for people's own accounts are the exception and are never reused:
+ * a person holds one upstream grant per sign-in, so a second server on the
+ * same one could replace the grant the first obtained. Each gets a sign-in of
+ * its own, from scratch or started from a stored one's settings.
  */
 export function AddCredentialSheet({
   mcpServerId,
   projectId,
+  remoteMcpServerId,
   tunneled,
   onOpenChange,
 }: {
   mcpServerId: string;
   projectId: string;
+  /** Lets the sign-in list narrow to the upstream's authorization servers. */
+  remoteMcpServerId: string | undefined;
   /** Tunneled servers are sent no credential headers. */
   tunneled: boolean;
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const routes = useRoutes();
+  const sdk = useSdkClient();
   const [picked, setPicked] = useState<Choice | null>(null);
   const [existingId, setExistingId] = useState("");
   const [name, setName] = useState("");
@@ -122,6 +140,7 @@ export function AddCredentialSheet({
   const reusable = useAllAuthClients();
   const candidates = (reusable.data ?? []).filter(
     (client) =>
+      client.clientType !== "remote_session" &&
       !client.servers.some((server) => server.id === mcpServerId) &&
       (!client.projectId || client.projectId === projectId) &&
       !(tunneled && isHeadersOnly(client.clientType)),
@@ -134,11 +153,38 @@ export function AddCredentialSheet({
     picked ?? (offersExisting ? "existing" : "service_account");
 
   const owner = REGISTRATION_OWNER[choice];
-  const registrations = useAllRemoteSessionClients({}, { enabled: !!owner });
-  const registrationOptions = registrations.items.filter(
-    (registration) => registration.credentialOwner === owner,
+  const signIns = useSignInChoices(owner, remoteMcpServerId);
+  const signIn = signIns.choices.find(
+    (candidate) => candidate.registration.id === registrationId,
   );
-  const registration = registrationOptions.find((r) => r.id === registrationId);
+  const registration = signIn?.registration;
+  const personal = usePersonalSignInDraft({
+    remoteMcpServerId,
+    enabled: choice === "remote_session",
+  });
+  // A sign-in made for an attempt whose credential then failed to save. A
+  // retry of the same form reuses it; anything else discards it, so a failed
+  // save leaves nothing behind.
+  const madeSignIn = useRef<{
+    signature: string;
+    client: RemoteSessionClient;
+  } | null>(null);
+  const discardMadeSignIn = () => {
+    const made = madeSignIn.current;
+    madeSignIn.current = null;
+    if (!made) return;
+    void sdk.remoteSessionClients
+      .delete({ id: made.client.id })
+      .catch(() => undefined);
+  };
+
+  // A choice the narrower list leaves out must not come back later unseen.
+  const toggleShowAll = () => {
+    if (signIns.showAll && !signIns.matching.some((c) => c === signIn)) {
+      setRegistrationId("");
+    }
+    signIns.setShowAll(!signIns.showAll);
+  };
 
   const done = (message: string) => {
     toast.success(message);
@@ -153,11 +199,20 @@ export function AddCredentialSheet({
     onSuccess: (client) => done(`${client.name} added`),
     onError: (error) => toast.error(readableError(error)),
   });
-  const pending = attach.isPending || create.isPending;
+  const [makingSignIn, setMakingSignIn] = useState(false);
+  const pending = attach.isPending || create.isPending || makingSignIn;
+
+  const close = () => {
+    // A save in flight may be about to use the sign-in made for it.
+    if (pending) return;
+    discardMadeSignIn();
+    onOpenChange(false);
+  };
 
   const choose = (next: Choice) => {
     setPicked(next);
     setRegistrationId("");
+    signIns.setShowAll(false);
     setHeaders(initialHeaders(next));
   };
 
@@ -172,7 +227,52 @@ export function AddCredentialSheet({
         ? "Give the credential a name people will recognize."
         : owner && !registration
           ? "Choose the sign-in it uses."
-          : headerDraftProblem(NEW_KIND_TYPE[choice], headers);
+          : choice === "remote_session"
+            ? personal.problem
+            : headerDraftProblem(NEW_KIND_TYPE[choice], headers);
+
+  const submitPersonal = async () => {
+    setMakingSignIn(true);
+    let signIn: RemoteSessionClient;
+    try {
+      if (madeSignIn.current?.signature !== personal.signature) {
+        discardMadeSignIn();
+        madeSignIn.current = {
+          signature: personal.signature,
+          client: await personal.create(),
+        };
+        void invalidateAllRemoteSessionClients(queryClient);
+      }
+      signIn = madeSignIn.current.client;
+    } catch (error) {
+      toast.error(
+        readableError(error instanceof Error ? error : new Error("")),
+      );
+      return;
+    } finally {
+      setMakingSignIn(false);
+    }
+    create.mutate(
+      {
+        request: {
+          createAuthClientRequestBody: {
+            clientType: NEW_KIND_TYPE.remote_session,
+            name: name.trim(),
+            projectId: signIn.projectId || undefined,
+            remoteSessionClientId: signIn.id,
+            headers: [],
+            mcpServerIds: [mcpServerId],
+          },
+        },
+      },
+      {
+        // The credential owns the sign-in now.
+        onSuccess: () => {
+          madeSignIn.current = null;
+        },
+      },
+    );
+  };
 
   const submit = () => {
     if (problem) return;
@@ -185,6 +285,10 @@ export function AddCredentialSheet({
           },
         },
       });
+      return;
+    }
+    if (choice === "remote_session") {
+      void submitPersonal();
       return;
     }
     // A registration confined to a project makes the credential that
@@ -209,7 +313,7 @@ export function AddCredentialSheet({
   };
 
   return (
-    <Sheet open onOpenChange={onOpenChange}>
+    <Sheet open onOpenChange={(open) => (open ? onOpenChange(true) : close())}>
       <SheetContent
         side="right"
         className="flex w-[560px] flex-col sm:max-w-[560px]"
@@ -233,7 +337,7 @@ export function AddCredentialSheet({
                 value="existing"
                 selected={choice}
                 label="Existing credential"
-                description="Share one another server uses instead of making a copy. Changing or rotating it later changes every server that uses it."
+                description="Share a service account or stored credential another server uses instead of making a copy. Changing or rotating it later changes every server that uses it. Sign-ins for people's own accounts are not shared: add one below."
               />
             ) : null}
             {NEW_KINDS.filter((kind) => !(tunneled && isHeadersOnly(kind))).map(
@@ -299,23 +403,27 @@ export function AddCredentialSheet({
                 />
               </div>
 
-              {owner ? (
+              {choice === "remote_session" ? (
+                <PersonalSignInFields draft={personal} />
+              ) : owner ? (
                 <div className="space-y-2">
                   <Label htmlFor="credential-registration">Sign-in</Label>
-                  {registrations.isLoading ? (
+                  {signIns.isLoading ? (
                     <Text muted small>
                       Loading sign-ins…
                     </Text>
-                  ) : registrations.isError ? (
+                  ) : signIns.isError ? (
                     <FieldError>
                       Sign-ins could not be loaded. Refresh the page to try
                       again.
                     </FieldError>
-                  ) : registrationOptions.length === 0 ? (
+                  ) : signIns.choices.length === 0 ? (
                     <Alert variant="info" inline>
-                      {owner === "self"
-                        ? "No sign-in that gets its own token is registered yet. "
-                        : "No sign-in for people's own accounts is registered yet. "}
+                      No sign-in that gets its own token is registered
+                      {signIns.upstreamIssuers
+                        ? ` with ${signIns.upstreamIssuers}`
+                        : ""}
+                      {" yet. "}
                       Register one in{" "}
                       <Link
                         className="font-medium underline underline-offset-2"
@@ -326,25 +434,68 @@ export function AddCredentialSheet({
                       , then come back.
                     </Alert>
                   ) : (
-                    <Select
-                      value={registrationId}
-                      onValueChange={setRegistrationId}
+                    <Combobox
+                      id="credential-registration"
+                      items={signIns.choices.map((choice) => ({
+                        value: choice.registration.id,
+                        label: choice.label,
+                        description: choice.description,
+                        keywords: [choice.description],
+                        icon: (
+                          <IssuerLogo
+                            logoAssetId={choice.issuer?.logoAssetId}
+                            name={choice.label}
+                            size="sm"
+                          />
+                        ),
+                      }))}
+                      selected={registrationId}
+                      onSelectionChange={(item) =>
+                        setRegistrationId(item.value)
+                      }
+                      searchPlaceholder="Search sign-ins…"
+                      emptyMessage="No sign-ins match."
+                      className="w-full justify-between"
+                      contentClassName="w-[min(500px,calc(100vw-2rem))]"
                     >
-                      <SelectTrigger
-                        id="credential-registration"
-                        className="w-full"
-                      >
-                        <SelectValue placeholder="Choose a sign-in" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {registrationOptions.map((option) => (
-                          <SelectItem key={option.id} value={option.id}>
-                            {remoteSessionClientDisplayName(option)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      {signIn ? (
+                        <span className="flex min-w-0 items-center gap-2">
+                          <IssuerLogo
+                            logoAssetId={signIn.issuer?.logoAssetId}
+                            name={signIn.label}
+                            size="sm"
+                          />
+                          <span className="truncate">{signIn.label}</span>
+                          <span className="text-muted-foreground truncate font-normal">
+                            {signIn.description}
+                          </span>
+                        </span>
+                      ) : (
+                        "Choose a sign-in"
+                      )}
+                    </Combobox>
                   )}
+                  {!signIns.isLoading &&
+                  !signIns.isError &&
+                  signIns.upstreamIssuers &&
+                  (signIns.hiddenCount > 0 || signIns.showAll) ? (
+                    <Text muted small className="block">
+                      {signIns.showAll
+                        ? "Showing every sign-in, including ones for other services. "
+                        : signIns.choices.length > 0
+                          ? `Showing sign-ins for ${signIns.upstreamIssuers}, as named by the upstream. `
+                          : ""}
+                      <button
+                        type="button"
+                        className="font-medium underline underline-offset-2"
+                        onClick={toggleShowAll}
+                      >
+                        {signIns.showAll
+                          ? `Show only ${signIns.upstreamIssuers}`
+                          : "Show all"}
+                      </button>
+                    </Text>
+                  ) : null}
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
@@ -382,11 +533,7 @@ export function AddCredentialSheet({
               {problem}
             </Text>
           ) : null}
-          <Button
-            variant="secondary"
-            onClick={() => onOpenChange(false)}
-            disabled={pending}
-          >
+          <Button variant="secondary" onClick={close} disabled={pending}>
             <Button.Text>Cancel</Button.Text>
           </Button>
           <Button

@@ -4,12 +4,14 @@
 
 import { accessApplyDirectoryRoleSetup } from "../funcs/accessApplyDirectoryRoleSetup.js";
 import { accessCreateRole } from "../funcs/accessCreateRole.js";
+import { accessCreateTemporaryGrant } from "../funcs/accessCreateTemporaryGrant.js";
 import { accessDeleteDirectoryRoleMapping } from "../funcs/accessDeleteDirectoryRoleMapping.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessExplainResourceAccess } from "../funcs/accessExplainResourceAccess.js";
 import { accessGetDirectoryReviewSettings } from "../funcs/accessGetDirectoryReviewSettings.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
+import { accessListAgentPolicyScopes } from "../funcs/accessListAgentPolicyScopes.js";
 import { accessListAIDetections } from "../funcs/accessListAIDetections.js";
 import { accessListAIDetectionUsers } from "../funcs/accessListAIDetectionUsers.js";
 import { accessListAudienceOptions } from "../funcs/accessListAudienceOptions.js";
@@ -28,11 +30,14 @@ import { accessListScopes } from "../funcs/accessListScopes.js";
 import { accessListShadowMCPInventory } from "../funcs/accessListShadowMCPInventory.js";
 import { accessListShadowMCPInventoryServersForUser } from "../funcs/accessListShadowMCPInventoryServersForUser.js";
 import { accessListShadowMCPInventoryUsers } from "../funcs/accessListShadowMCPInventoryUsers.js";
+import { accessListTemporaryGrants } from "../funcs/accessListTemporaryGrants.js";
 import { accessPreviewDirectoryRoleSetup } from "../funcs/accessPreviewDirectoryRoleSetup.js";
+import { accessRenewTemporaryGrant } from "../funcs/accessRenewTemporaryGrant.js";
 import { accessRequestAccess } from "../funcs/accessRequestAccess.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessResolveDirectoryReviewItem } from "../funcs/accessResolveDirectoryReviewItem.js";
 import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveShadowMCPInventoryRequest.js";
+import { accessRevokeTemporaryGrant } from "../funcs/accessRevokeTemporaryGrant.js";
 import { accessSetAIToolDecision } from "../funcs/accessSetAIToolDecision.js";
 import { accessSetDirectoryRoleMappings } from "../funcs/accessSetDirectoryRoleMappings.js";
 import { accessSetResourceAudience } from "../funcs/accessSetResourceAudience.js";
@@ -48,6 +53,7 @@ import { DirectoryReviewSettings } from "../models/components/directoryreviewset
 import { DirectoryRoleMapping } from "../models/components/directoryrolemapping.js";
 import { DirectoryRoleSetupPreviewResult } from "../models/components/directoryrolesetuppreviewresult.js";
 import { ExplainResourceAccessResult } from "../models/components/explainresourceaccessresult.js";
+import { ListAgentPolicyScopesResult } from "../models/components/listagentpolicyscopesresult.js";
 import { ListAIDetectionsResult } from "../models/components/listaidetectionsresult.js";
 import { ListAIDetectionUsersResult } from "../models/components/listaidetectionusersresult.js";
 import { ListAudienceOptionsResult } from "../models/components/listaudienceoptionsresult.js";
@@ -62,6 +68,7 @@ import { ListRolesResult } from "../models/components/listrolesresult.js";
 import { ListScopesResult } from "../models/components/listscopesresult.js";
 import { ListShadowMCPInventoryResult } from "../models/components/listshadowmcpinventoryresult.js";
 import { ListShadowMCPInventoryUsersResult } from "../models/components/listshadowmcpinventoryusersresult.js";
+import { ListTemporaryGrantsResult } from "../models/components/listtemporarygrantsresult.js";
 import { ListUserGrantsResult } from "../models/components/listusergrantsresult.js";
 import { RequestAccessResult } from "../models/components/requestaccessresult.js";
 import { ResolveChallengesResult } from "../models/components/resolvechallengesresult.js";
@@ -72,6 +79,7 @@ import { SetAIToolDecisionResult } from "../models/components/setaitooldecisionr
 import { ShadowMCPInventoryServer } from "../models/components/shadowmcpinventoryserver.js";
 import { ShadowMCPInventoryURLState } from "../models/components/shadowmcpinventoryurlstate.js";
 import { SyncDirectoryGroupsResult } from "../models/components/syncdirectorygroupsresult.js";
+import { TemporaryGrant } from "../models/components/temporarygrant.js";
 import {
   ApplyDirectoryRoleSetupRequest,
   ApplyDirectoryRoleSetupSecurity,
@@ -80,6 +88,10 @@ import {
   CreateRoleRequest,
   CreateRoleSecurity,
 } from "../models/operations/createrole.js";
+import {
+  CreateTemporaryGrantRequest,
+  CreateTemporaryGrantSecurity,
+} from "../models/operations/createtemporarygrant.js";
 import {
   DeleteDirectoryRoleMappingRequest,
   DeleteDirectoryRoleMappingSecurity,
@@ -104,6 +116,10 @@ import {
   GetShadowMCPInventoryServerRequest,
   GetShadowMCPInventoryServerSecurity,
 } from "../models/operations/getshadowmcpinventoryserver.js";
+import {
+  ListAgentPolicyScopesRequest,
+  ListAgentPolicyScopesSecurity,
+} from "../models/operations/listagentpolicyscopes.js";
 import {
   ListAIDetectionsRequest,
   ListAIDetectionsSecurity,
@@ -177,9 +193,17 @@ import {
   ListShadowMCPInventoryUsersSecurity,
 } from "../models/operations/listshadowmcpinventoryusers.js";
 import {
+  ListTemporaryGrantsRequest,
+  ListTemporaryGrantsSecurity,
+} from "../models/operations/listtemporarygrants.js";
+import {
   PreviewDirectoryRoleSetupRequest,
   PreviewDirectoryRoleSetupSecurity,
 } from "../models/operations/previewdirectoryrolesetup.js";
+import {
+  RenewTemporaryGrantRequest,
+  RenewTemporaryGrantSecurity,
+} from "../models/operations/renewtemporarygrant.js";
 import {
   RequestAccessRequest,
   RequestAccessSecurity,
@@ -196,6 +220,10 @@ import {
   ResolveShadowMCPInventoryRequestRequest,
   ResolveShadowMCPInventoryRequestSecurity,
 } from "../models/operations/resolveshadowmcpinventoryrequest.js";
+import {
+  RevokeTemporaryGrantRequest,
+  RevokeTemporaryGrantSecurity,
+} from "../models/operations/revoketemporarygrant.js";
 import {
   SetAIToolDecisionRequest,
   SetAIToolDecisionSecurity,
@@ -262,6 +290,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Role> {
     return unwrapAsync(accessCreateRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createTemporaryGrant access
+   *
+   * @remarks
+   * Give one principal (a member, role, agent, or everyone) a scope on a resource or activity boundary until a deadline, without changing role assignments. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the principal already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.
+   */
+  async createTemporaryGrant(
+    request: CreateTemporaryGrantRequest,
+    security?: CreateTemporaryGrantSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<TemporaryGrant> {
+    return unwrapAsync(accessCreateTemporaryGrant(
       this,
       request,
       security,
@@ -414,6 +461,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListAIDetectionsResult> {
     return unwrapAsync(accessListAIDetections(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listAgentPolicyScopes access
+   *
+   * @remarks
+   * List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.
+   */
+  async listAgentPolicyScopes(
+    request?: ListAgentPolicyScopesRequest | undefined,
+    security?: ListAgentPolicyScopesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAgentPolicyScopesResult> {
+    return unwrapAsync(accessListAgentPolicyScopes(
       this,
       request,
       security,
@@ -726,6 +792,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * listTemporaryGrants access
+   *
+   * @remarks
+   * List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.
+   */
+  async listTemporaryGrants(
+    request: ListTemporaryGrantsRequest,
+    security?: ListTemporaryGrantsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListTemporaryGrantsResult> {
+    return unwrapAsync(accessListTemporaryGrants(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * previewDirectoryRoleSetup access
    *
    * @remarks
@@ -737,6 +822,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<DirectoryRoleSetupPreviewResult> {
     return unwrapAsync(accessPreviewDirectoryRoleSetup(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * renewTemporaryGrant access
+   *
+   * @remarks
+   * Move an active temporary grant's deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.
+   */
+  async renewTemporaryGrant(
+    request: RenewTemporaryGrantRequest,
+    security?: RenewTemporaryGrantSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<TemporaryGrant> {
+    return unwrapAsync(accessRenewTemporaryGrant(
       this,
       request,
       security,
@@ -813,6 +917,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryURLState> {
     return unwrapAsync(accessResolveShadowMCPInventoryRequest(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * revokeTemporaryGrant access
+   *
+   * @remarks
+   * End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the principal's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given directly to themselves.
+   */
+  async revokeTemporaryGrant(
+    request: RevokeTemporaryGrantRequest,
+    security?: RevokeTemporaryGrantSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<TemporaryGrant> {
+    return unwrapAsync(accessRevokeTemporaryGrant(
       this,
       request,
       security,

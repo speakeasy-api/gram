@@ -95,13 +95,17 @@ type AccessRoleMutationSummary struct {
 type CreateMCPAccessRoleOutput struct {
 	Role           AccessRoleMutationSummary `json:"role"`
 	Reconciliation string                    `json:"reconciliation" jsonschema:"pending: provider sync was requested after the commit; rate_limited or unavailable: this replay did not request provider sync again because the retry allowance is spent or could not be checked"`
-	Receipt        RiskMutationToolReceipt   `json:"receipt"`
+	// SensitiveScopesAdded names the sensitive permissions the write gave
+	// the role, as the audit log records them; absent when it added none.
+	SensitiveScopesAdded []string                `json:"sensitive_scopes_added,omitempty" jsonschema:"sensitive permissions this write gave the role that it did not hold before; absent when none"`
+	Receipt              RiskMutationToolReceipt `json:"receipt"`
 }
 
 type UpdateMCPAccessRoleOutput struct {
-	Role           AccessRoleMutationSummary `json:"role"`
-	Reconciliation string                    `json:"reconciliation"`
-	Receipt        RiskMutationToolReceipt   `json:"receipt"`
+	Role                 AccessRoleMutationSummary `json:"role"`
+	Reconciliation       string                    `json:"reconciliation"`
+	SensitiveScopesAdded []string                  `json:"sensitive_scopes_added,omitempty" jsonschema:"sensitive permissions this write gave the role that it did not hold before; absent when none"`
+	Receipt              RiskMutationToolReceipt   `json:"receipt"`
 }
 
 // AccessRoleMutationBackend matches the transaction-scoped access manager API.
@@ -190,7 +194,7 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 		if err != nil {
 			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(err)
 		}
-		return s.receiptResult(result.Role, result.Slug, "created", "pending")
+		return s.receiptResult(nil, result.Role, result.Slug, "created", "pending")
 	})
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
@@ -208,7 +212,7 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
 	}
-	return CreateMCPAccessRoleOutput{Role: summary, Reconciliation: result.Reconciliation, Receipt: riskMutationToolReceipt(receipt)}, nil
+	return CreateMCPAccessRoleOutput{Role: summary, Reconciliation: result.Reconciliation, SensitiveScopesAdded: result.SensitiveScopesAdded, Receipt: riskMutationToolReceipt(receipt)}, nil
 }
 
 func (s *AccessRoleMutationService) Update(ctx context.Context, principal Principal, input UpdateMCPAccessRoleInput) (UpdateMCPAccessRoleOutput, error) {
@@ -287,7 +291,7 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
 		}
 		delivery = reconciliation
-		return s.receiptResult(result.After, result.Slug, "updated", "complete")
+		return s.receiptResult(current, result.After, result.Slug, "updated", "complete")
 	})
 	if err != nil {
 		return UpdateMCPAccessRoleOutput{}, err
@@ -303,7 +307,7 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 	if err != nil {
 		return UpdateMCPAccessRoleOutput{}, err
 	}
-	return UpdateMCPAccessRoleOutput{Role: summary, Reconciliation: result.Reconciliation, Receipt: riskMutationToolReceipt(receipt)}, nil
+	return UpdateMCPAccessRoleOutput{Role: summary, Reconciliation: result.Reconciliation, SensitiveScopesAdded: result.SensitiveScopesAdded, Receipt: riskMutationToolReceipt(receipt)}, nil
 }
 
 func (s *AccessRoleMutationService) admit(ctx context.Context, principal Principal, projectID string) (ResolvedProject, string, error) {
@@ -450,7 +454,10 @@ func accessRoleRulesToGenGrants(rules []normalizedMCPAccessRoleRule, projectID u
 	return grants
 }
 
-func (s *AccessRoleMutationService) receiptResult(state *accessgen.Role, roleSlug, category, reconciliation string) (AccessRoleMutationReceiptResult, error) {
+// receiptResult records the role as written. before is the role as read in
+// the same transaction, or nil for a creation, so the receipt can name the
+// sensitive permissions the write added the way the audit log does.
+func (s *AccessRoleMutationService) receiptResult(before, state *accessgen.Role, roleSlug, category, reconciliation string) (AccessRoleMutationReceiptResult, error) {
 	if state == nil || state.IsSystem || uuid.Validate(state.ID) != nil || roleSlug == "" {
 		return AccessRoleMutationReceiptResult{}, accessRoleMutationUnavailable(errors.New("unsafe role backend result"))
 	}
@@ -458,9 +465,14 @@ func (s *AccessRoleMutationService) receiptResult(state *accessgen.Role, roleSlu
 	if err != nil {
 		return AccessRoleMutationReceiptResult{}, accessRoleMutationUnavailable(err)
 	}
+	var beforeGrants []*accessgen.RoleGrant
+	if before != nil {
+		beforeGrants = before.Grants
+	}
 	return AccessRoleMutationReceiptResult{
 		RoleID: state.ID, RoleSlug: roleSlug, Name: state.Name, Description: state.Description, Version: version,
 		MCPAccess: summarizeMCPConnect(state.Grants), ResultCategory: category, Reconciliation: reconciliation,
+		SensitiveScopesAdded: authz.SensitiveScopesAdded(roleGrantScopes(beforeGrants), roleGrantScopes(state.Grants)),
 	}, nil
 }
 

@@ -17,6 +17,11 @@ import (
 
 func newBrowserCatalogRegistrationHarness(t *testing.T, ctx context.Context, conn *pgxpool.Pool, providerKey string) (Principal, ResolvedProject, *Registrar) {
 	t.Helper()
+	return newBrowserCatalogRegistrationHarnessWithAuthSetup(t, ctx, conn, providerKey, "")
+}
+
+func newBrowserCatalogRegistrationHarnessWithAuthSetup(t *testing.T, ctx context.Context, conn *pgxpool.Pool, providerKey, authSetup string) (Principal, ResolvedProject, *Registrar) {
+	t.Helper()
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	store, err := NewRegistrationStore(conn)
@@ -24,7 +29,7 @@ func newBrowserCatalogRegistrationHarness(t *testing.T, ctx context.Context, con
 	dashboardURL, err := url.Parse("https://dashboard.example.test")
 	require.NoError(t, err)
 	registrations := newRegistrationService(testCatalog{details: CatalogDetails{
-		CatalogCandidate: CatalogCandidate{Name: "Reviewed MCP", ProviderKey: providerKey, CatalogRef: "app.example/mcp", SetupIntent: "dashboard_source_settings"},
+		CatalogCandidate: CatalogCandidate{Name: "Reviewed MCP", ProviderKey: providerKey, CatalogRef: "app.example/mcp", SetupIntent: "dashboard_source_settings", AuthSetup: authSetup},
 		Transport:        "streamable-http",
 		remoteURL:        "https://reviewed.example.test/mcp",
 	}}, &testRegistrationGate{enabled: true}, store).WithDashboardURL(dashboardURL)
@@ -55,7 +60,7 @@ func TestCatalogRegistrationToolReturnsDashboardSetupURLForBrowserCatalogServer(
 	})
 	require.NoError(t, err)
 	require.Equal(t, "continue_dashboard_setup", registered.NextAction)
-	require.Regexp(t, `^https://dashboard\.example\.test/.+/settings#authentication$`, registered.DashboardSetupURL)
+	require.Regexp(t, `^https://dashboard\.example\.test/.+/settings\?setup=oauth-client#authentication$`, registered.DashboardSetupURL)
 }
 
 // Deleting the MCP server in the dashboard leaves its catalogue registration
@@ -105,7 +110,7 @@ func TestCatalogRegistrationToolReAddsBrowserCatalogServerAfterDashboardDelete(t
 	require.NotEqual(t, first.RegistrationID, second.RegistrationID, "the stale registration must be replaced, not reused")
 	require.False(t, second.AlreadyRegistered, "a server re-added after deletion is new")
 	require.Equal(t, "continue_dashboard_setup", second.NextAction)
-	require.Regexp(t, `^https://dashboard\.example\.test/.+/settings#authentication$`, second.DashboardSetupURL)
+	require.Regexp(t, `^https://dashboard\.example\.test/.+/settings\?setup=oauth-client#authentication$`, second.DashboardSetupURL)
 }
 
 // Over MCP, a registration result carries the card in _meta and keeps the same
@@ -153,6 +158,64 @@ func TestCatalogRegistrationToolResultCarriesServerCard(t *testing.T) {
 	require.Contains(t, card, "Project <code>"+project.Slug+"</code>")
 	require.Contains(t, card, "Finish setup")
 	require.Contains(t, card, `href="`+output.DashboardSetupURL+`"`)
+}
+
+// A catalogue server whose OAuth client is set up automatically has only the
+// user's sign-in left, so its card offers Connect rather than dashboard setup.
+// One that needs no sign-in has nothing required left and offers no button.
+func TestCatalogRegistrationToolCardShowsTheRequiredStepLeft(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		authSetup  string
+		nextAction string
+		label      string
+	}{
+		{"dcr", nextActionConnectSignIn, "Connect"},
+		{"none", nextActionReady, ""},
+	} {
+		t.Run(tc.authSetup, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_card_"+tc.authSetup)
+			require.NoError(t, err)
+
+			providerKey := "browser-catalog-registry-" + uuid.NewString()
+			principal, project, reg := newBrowserCatalogRegistrationHarnessWithAuthSetup(t, ctx, conn, providerKey, tc.authSetup)
+			reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+			reg.server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+				return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+					return next(contextWithPrincipal(ctx, principal), method, req)
+				}
+			})
+
+			result, err := connectTestClient(t, reg.server).CallTool(ctx, &mcp.CallToolParams{Name: "register_catalog_mcp", Arguments: map[string]any{
+				"project_slug":    project.Slug,
+				"provider_key":    providerKey,
+				"catalog_ref":     "app.example/mcp",
+				"idempotency_key": "browser-catalog-card-" + tc.authSetup,
+			}})
+			require.NoError(t, err)
+			require.False(t, result.IsError)
+
+			structured, err := json.Marshal(result.StructuredContent)
+			require.NoError(t, err)
+			var output RegisterCatalogMCPToolOutput
+			require.NoError(t, json.Unmarshal(structured, &output))
+			require.Equal(t, tc.nextAction, output.NextAction)
+
+			card, ok := result.Meta[cardMetaKey].(string)
+			require.True(t, ok)
+			require.NotContains(t, card, "Finish setup")
+			if tc.label == "" {
+				require.NotContains(t, card, `href="`)
+				return
+			}
+			require.Contains(t, card, tc.label)
+			require.Contains(t, card, `href="`+output.DashboardSetupURL+`"`)
+		})
+	}
 }
 
 func TestCatalogRegistrationToolReportsAServerAlreadyInTheProject(t *testing.T) {

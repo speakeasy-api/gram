@@ -1,7 +1,7 @@
 import { firstPartyConnectUrl, getServerURL } from "@/lib/utils";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { mcpUrlSuffix } from "@/hooks/useToolsetUrl";
 import { isKnownEnumValue } from "@/lib/enum";
 import { McpServerVisibility } from "@gram/client/models/components/mcpserver.js";
@@ -61,39 +61,43 @@ function platformMcpUrl(path: string): string {
   return new URL(`/mcp/${path}`, getServerURL() || window.location.origin).href;
 }
 
-export function useServerInventory(): ServerInventory {
+export function useServerInventory({
+  lookupOnly = false,
+}: {
+  /**
+   * Only what finding a server by id needs. Skips the activity counts and
+   * upstream URLs, which only the provisioning listing shows.
+   */
+  lookupOnly?: boolean;
+} = {}): ServerInventory {
   const organization = useOrganization();
+  const { user } = useSession();
   const sdk = useSdkClient();
-  const activity = useQueries({
-    queries: (organization.projects ?? [])
-      .filter((project) => project.slug)
-      .map((project) => ({
-        queryKey: ["agent-server-activity", organization.id, project.id],
-        queryFn: ({ signal }: { signal: AbortSignal }) =>
-          sdk.telemetry.getMcpServerActivity(
-            {
-              gramProject: project.slug,
-              getMcpServerActivityPayload: { recentWindowDays: 1 },
-            },
-            undefined,
-            { signal },
-          ),
-        retry: false,
-        throwOnError: false,
-        staleTime: 60_000,
-      })),
+  // One org-wide read rather than one per project: an organization with many
+  // projects otherwise sent a burst of parallel telemetry reads.
+  const activity = useQuery({
+    // Per caller: the server filters it to the projects they can read.
+    queryKey: ["agent-server-activity", organization.id, user.id],
+    queryFn: ({ signal }) =>
+      sdk.telemetry.getOrgMcpServerActivity(
+        { getMcpServerActivityPayload: { recentWindowDays: 1 } },
+        undefined,
+        { signal },
+      ),
+    enabled: !lookupOnly,
+    retry: false,
+    throwOnError: false,
+    staleTime: 60_000,
   });
   const calls = new Map<string, number>();
-  (organization.projects ?? [])
-    .filter((project) => project.slug)
-    .forEach((project, index) => {
-      for (const row of activity[index]?.data?.activity ?? []) {
-        calls.set(
-          `${project.id}:${row.targetType}:${row.targetId}`,
-          row.recentToolCalls,
-        );
-      }
-    });
+  for (const project of activity.data?.projects ?? []) {
+    for (const row of project.activity) {
+      calls.set(
+        `${project.projectId}:${row.targetType}:${row.targetId}`,
+        row.recentToolCalls,
+      );
+    }
+  }
   const toolsets = useListToolsetsForOrg(undefined, undefined, {
     retry: false,
     throwOnError: false,
@@ -112,6 +116,7 @@ export function useServerInventory(): ServerInventory {
           sdk.remoteMcp.listServers({ gramProject: project.slug }, undefined, {
             signal,
           }),
+        enabled: !lookupOnly,
         retry: false,
         throwOnError: false,
         staleTime: 60_000,
@@ -216,11 +221,9 @@ export function useServerInventory(): ServerInventory {
       ),
   ];
 
+  // A project the read could not answer for stays unmeasured, not zero.
   const measuredProjects = new Set(
-    (organization.projects ?? [])
-      .filter((project) => project.slug)
-      .filter((_, index) => activity[index]?.data !== undefined)
-      .map((project) => project.id),
+    (activity.data?.projects ?? []).map((project) => project.projectId),
   );
   for (const server of inventory) {
     server.recentToolCalls = measuredProjects.has(server.projectId)
@@ -241,8 +244,10 @@ export function useServerInventory(): ServerInventory {
     refetch: () => {
       void toolsets.refetch();
       void servers.refetch();
+      // refetch() runs even a disabled query.
+      if (lookupOnly) return;
       for (const query of remoteSources) void query.refetch();
-      for (const query of activity) void query.refetch();
+      void activity.refetch();
     },
   };
 }

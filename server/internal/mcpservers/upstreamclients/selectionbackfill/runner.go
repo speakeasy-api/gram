@@ -194,6 +194,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 					PickedMcpServerIds:  []uuid.UUID{},
 					PickedClientIds:     []uuid.UUID{},
 					PickedAuthClientIds: nil,
+					ScopeMcpServerIds:   nil,
 				})
 				if err != nil {
 					return report, fmt.Errorf("record selections for credential %s: %w", credential.CredentialID, err)

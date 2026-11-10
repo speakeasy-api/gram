@@ -53,6 +53,15 @@ const toastError = vi.hoisted(() => vi.fn());
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: toastSuccess, error: toastError }),
 }));
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    tasks: [],
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     isLoading: state.loading,
@@ -80,36 +89,27 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-a" }),
   useProject: () => ({ id: "project-a", slug: "project-a" }),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    plugins: {
-      href: () => "/plugins",
-      detail: {
-        overview: { href: (id: string) => `/plugins/${id}/overview` },
-        servers: { href: (id: string) => `/plugins/${id}/servers` },
-        skills: { href: (id: string) => `/plugins/${id}/skills` },
-        assignments: { href: (id: string) => `/plugins/${id}/assignments` },
-        settings: { href: (id: string) => `/plugins/${id}/settings` },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({}),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project-a" }),
 }));
 vi.mock("@/components/command-palette/recentlyVisited", () => ({
   useRecentLabelOverride: () => {},
 }));
-vi.mock("@/components/page-layout", async (importOriginal) => {
-  const { Page: ActualPage } =
-    await importOriginal<typeof import("@/components/page-layout")>();
+vi.mock("@/components/page-layout", async () => {
+  // Not importOriginal: loading the real page-layout here hands RequireScope
+  // (imported back through the page header) the real Page instead of this mock.
+  const { Toolbar } = await import("@/components/ui/Toolbar");
   const Container = ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   );
   return {
     Page: Object.assign(Container, {
-      Toolbar: ActualPage.Toolbar,
+      Toolbar,
       Header: Object.assign(Container, { Breadcrumbs: () => null }),
       Body: Container,
     }),
+    useInPageFrame: () => true,
   };
 });
 vi.mock("./use-plugin-assignments-visible", () => ({
@@ -200,7 +200,9 @@ function OpenPlugin({ id }: { id: string }) {
   return (
     <button
       type="button"
-      onClick={() => void navigate(`/plugins/${id}/settings`)}
+      onClick={() =>
+        void navigate(`/org/projects/project-a/plugins/${id}/settings`)
+      }
     >
       Open {id}
     </button>
@@ -223,12 +225,19 @@ function renderAdmin(
   return render(
     <TooltipProvider>
       <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter initialEntries={[`/plugins/plugin-a/${section}`]}>
+        <MemoryRouter
+          initialEntries={[
+            `/org/projects/project-a/plugins/plugin-a/${section}`,
+          ]}
+        >
           {outside}
           <Routes>
-            <Route path="/plugins" element={<h1>Plugins</h1>} />
             <Route
-              path="/plugins/:pluginId/:section"
+              path="/org/projects/project-a/plugins"
+              element={<h1>Plugins</h1>}
+            />
+            <Route
+              path="/org/projects/project-a/plugins/:pluginId/:section"
               element={<PluginDetail />}
             />
           </Routes>
@@ -388,8 +397,8 @@ describe("plugin detail permission boundary", () => {
 
   it("does not mount either query tree until grants are loaded", () => {
     state.loading = true;
-    const { container } = render(<PluginDetail />);
-    expect(container.innerHTML).toBe("");
+    render(<PluginDetail />);
+    expect(screen.getByRole("status", { name: "Loading" })).toBeTruthy();
     expect(adminQuery).not.toHaveBeenCalled();
   });
   it("mounts admin detail but not assignment queries for org readers", () => {

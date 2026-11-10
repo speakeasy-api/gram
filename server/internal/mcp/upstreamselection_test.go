@@ -425,3 +425,30 @@ func TestUpstreamClientSelection_RecordsTypedConsentPicks(t *testing.T) {
 	require.Equal(t, uuid.NullUUID{UUID: staticToken, Valid: true}, byServer[headerServer.ID].AuthClientID)
 	require.False(t, byServer[headerServer.ID].RegistrationID.Valid)
 }
+
+func TestUpstreamClientSelection_EmptyScopeRecordsNothing(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSelectionFixture(t)
+	issuerID := createUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
+	upstream := newRecordingUpstream(t, "ping")
+	slug := "empty-scope-" + uuid.NewString()
+	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
+	subject := createTestUser(t, ctx, f.ti, "scope-user-"+uuid.NewString())
+	jti := uuid.NewString()
+	persistTestUserSession(t, f.ti, issuerID, subject, jti)
+	q := usersessions_repo.New(f.ti.conn)
+	session, err := q.GetUserSessionPolicyByJTI(ctx, usersessions_repo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuerID, Jti: jti})
+	require.NoError(t, err)
+	params := usersessions_repo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: issuerID, CredentialKind: upstreamclients.CredentialKindUserSession,
+		CredentialID: session.CredentialID, Source: upstreamclients.SelectionSourceIssuance,
+		ScopeMcpServerIds: []uuid.UUID{},
+	}
+	n, err := q.RecordUpstreamClientSelections(ctx, params)
+	require.NoError(t, err)
+	require.Zero(t, n)
+	params.ScopeMcpServerIds = []uuid.UUID{server.ID}
+	n, err = q.RecordUpstreamClientSelections(ctx, params)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n, "the empty scope, rather than an ineligible server, prevented recording")
+}

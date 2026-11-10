@@ -114,7 +114,7 @@ func TestProviderRequestsChatWrite(t *testing.T) {
 	p := protocolProvider(t, nil, "TEXAMPLE01")
 	authorizeURL, err := url.Parse(p.AuthorizationURL("synthetic-state", ""))
 	require.NoError(t, err)
-	require.Equal(t, "users:read,users:read.email,chat:write", authorizeURL.Query().Get("scope"))
+	require.Equal(t, "users:read,users:read.email,chat:write,app_mentions:read,im:history", authorizeURL.Query().Get("scope"))
 }
 
 func TestProviderConnectsWithoutChatWrite(t *testing.T) {

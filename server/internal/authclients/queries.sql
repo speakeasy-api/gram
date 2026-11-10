@@ -223,6 +223,22 @@ WHERE msac.mcp_server_id = @mcp_server_id
   AND msac.deleted IS FALSE
 ORDER BY ac.name, ac.id;
 
+-- name: ListServerBackfillAuthClients :many
+-- Only links derived by backfill; administrator-owned links are independent.
+SELECT ac.*
+FROM mcp_server_auth_clients msac
+JOIN mcp_auth_clients ac
+  ON ac.id = msac.auth_client_id
+ AND ac.organization_id = msac.organization_id
+ AND ac.deleted IS FALSE
+WHERE msac.mcp_server_id = @mcp_server_id
+  AND msac.project_id = @project_id
+  AND msac.organization_id = @organization_id
+  AND msac.deleted IS FALSE
+  AND msac.source = 'backfill'
+  AND ac.source = 'backfill'
+ORDER BY ac.name, ac.id;
+
 -- name: GetAuthClientRegistration :one
 -- An OAuth registration a new remote_session or service_account client may
 -- name: live, with a live issuer, and in the client's project, shared across

@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/Tabs";
 import { cn } from "@/lib/utils";
 import { MCPAssignments } from "../access/MCPAssignments";
-import { GatewayAccessReview } from "./GatewayAccessReview";
 import { GatewayActivitySection } from "./gateway/GatewayActivitySection";
 import { SpeakeasyMark } from "@/components/mcp/OrganizationGatewayCard";
 import {
@@ -75,7 +74,6 @@ function OrganizationGatewayContent({
   const { hasScope, isLoading: permissionsLoading } = useRBAC();
   const canManage =
     !permissionsLoading && hasScope("org:admin", organizationId);
-  const [reviewing, setReviewing] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedTab = searchParams.get("tab");
   const setTab = (value: string) =>
@@ -153,12 +151,7 @@ function OrganizationGatewayContent({
                   </Text>
                   <OrganizationGatewaySwitch
                     on={isOn}
-                    setOn={(enabled, options) => {
-                      if (enabled) {
-                        setReviewing(true);
-                        setTab("assignments");
-                      } else setOn(false, options);
-                    }}
+                    setOn={setOn}
                     isPending={isPending}
                   />
                 </div>
@@ -222,20 +215,7 @@ function OrganizationGatewayContent({
           </TabsContent>
           <TabsContent value="assignments" className="mt-6">
             <RequireScope scope="org:admin" level="section">
-              {reviewing &&
-              isOn === false &&
-              !!features.data &&
-              !features.error ? (
-                <GatewayAccessReview
-                  isPending={isPending}
-                  onCancel={() => setReviewing(false)}
-                  onEnable={() =>
-                    setOn(true, { onSuccess: () => setReviewing(false) })
-                  }
-                />
-              ) : (
-                <MCPAssignments />
-              )}
+              <MCPAssignments />
             </RequireScope>
           </TabsContent>
         </Tabs>
@@ -281,8 +261,8 @@ function GatewayBody({
     return (
       <Alert variant="warning">
         <AlertDescription>
-          Organization Gateway is off. An organization admin must review MCP
-          assignments before enabling this endpoint for the team.
+          Organization Gateway is off. An organization admin can turn it on for
+          the team. Reviewing MCP assignments first is recommended.
         </AlertDescription>
       </Alert>
     );

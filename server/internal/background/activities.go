@@ -60,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -212,6 +213,7 @@ func NewActivities(
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
 	expectedARecords []netip.Addr,
+	customDomainTargetSuffix string,
 	siteURL *url.URL,
 	orgHosts *orghost.Resolver,
 	billingTracker billing.Tracker,
@@ -221,7 +223,6 @@ func NewActivities(
 	functionsDeployer functions.Deployer,
 	functionsVersion functions.RunnerVersion,
 	ragService *rag.ToolsetVectorStore,
-	mcpRegistryClient *externalmcp.RegistryClient,
 	mcpCatalog *externalmcp.CatalogService,
 	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
@@ -251,6 +252,7 @@ func NewActivities(
 	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
 	remoteSessionEnricher *remotesessions.SessionEnricher,
 	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
+	connections *mcpconnectionattempts.Recorder,
 	startupSeeds []activities.StartupSeed,
 	signInEpochs signins.EpochRaiser,
 ) *Activities {
@@ -315,6 +317,8 @@ func NewActivities(
 				remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher),
 				remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher),
 				remotesessions.WithRefreshTokenEndpointAssertionSigner(remoteSessionAssertionSigner),
+				remotesessions.WithRefreshConnectionRecorder(connections),
+				remotesessions.WithRefreshFeatureFlags(features),
 			),
 		)
 	}
@@ -407,7 +411,7 @@ func NewActivities(
 		getOktaApplicationSyncCandidates: activities.NewGetOktaApplicationSyncCandidates(oktaApplicationSyncer),
 		runOktaApplicationSync:           activities.NewRunOktaApplicationSync(oktaApplicationSyncer),
 		customDomainIngress:              activities.NewCustomDomainIngress(logger, db, k8sClient),
-		customDomainHealth:               activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, emailService, orgHosts, guardianPolicy),
+		customDomainHealth:               activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, customDomainTargetSuffix, emailService, orgHosts),
 		fireOpenRouterCreditsMetrics:     activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:      activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:         activities.NewFirePlatformUsageMetrics(logger, billingTracker),
@@ -416,7 +420,7 @@ func NewActivities(
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
-		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpCatalog),
+		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
@@ -428,7 +432,7 @@ func NewActivities(
 		reconcileTrialConversionKeys:     activities.NewReconcileEnterpriseTrialConversionKeys(logger, conversionPolicyReconciler),
 		transitionDeployment:             activities.NewTransitionDeployment(logger, db),
 		validateDeployment:               activities.NewValidateDeployment(logger, db, billingRepo),
-		verifyCustomDomain:               activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME, expectedARecords),
+		verifyCustomDomain:               activities.NewVerifyCustomDomain(logger, db, auditLogger),
 		generateToolsetEmbeddings:        activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
 		listToolsetsForIndexing:          activities.NewListToolsetsForIndexing(db),
 		dispatchTrigger:                  activities.NewDispatchTrigger(triggerApp),

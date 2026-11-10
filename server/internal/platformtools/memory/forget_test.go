@@ -28,7 +28,6 @@ func TestForgetTool_RequiresAssistantPrincipal(t *testing.T) {
 	err := tool.Call(ctx, toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"x"}`), &bytes.Buffer{})
@@ -70,7 +69,6 @@ func TestForgetTool_HappyPathReturnsID(t *testing.T) {
 	err := tool.Call(ctx, toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"the","tags":["t"]}`), &out)
@@ -125,7 +123,6 @@ func TestForgetTool_AmbiguousReturnsCandidates(t *testing.T) {
 	err := tool.Call(ctx, toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"thing"}`), &out)
@@ -168,7 +165,6 @@ func TestForgetTool_NoMatchReturnsReason(t *testing.T) {
 	err := tool.Call(ctx, toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"absent"}`), &out)

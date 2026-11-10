@@ -1039,6 +1039,7 @@ func validateHeaderWrite(name string, value *string, valueFromRequestHeader *str
 
 	check := proxy.ConfiguredHeader{
 		IsRequired:             false,
+		IsSecret:               isSecret,
 		Name:                   headerName,
 		StaticValue:            conv.PtrValOr(value, ""),
 		ValueFromRequestHeader: conv.PtrValOr(source, ""),

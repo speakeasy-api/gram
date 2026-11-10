@@ -77,6 +77,7 @@ func (l *Logger) logAuthClientChange(ctx context.Context, dbtx repo.DBTX, action
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -131,6 +132,7 @@ func (l *Logger) logAuthClientServerChange(ctx context.Context, dbtx repo.DBTX, 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -184,6 +186,7 @@ func (l *Logger) LogAuthClientAudienceUpdate(ctx context.Context, dbtx repo.DBTX
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

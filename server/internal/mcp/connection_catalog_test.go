@@ -28,8 +28,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -57,6 +60,8 @@ type catalogUpstream struct {
 	future      atomic.Bool
 	tools       int
 	callHeader  atomic.Value
+	// callAuthorization is the Authorization header of the last tools/call.
+	callAuthorization atomic.Value
 	// holdNextList parks the next tools/list until its release closes.
 	holdNextList atomic.Pointer[catalogListHold]
 }
@@ -115,6 +120,7 @@ func newCatalogUpstream(t *testing.T, tools int) *catalogUpstream {
 			result = map[string]any{"tools": tools}
 		case "tools/call":
 			upstream.callHeader.Store(r.Header.Get("X-Typed-Key"))
+			upstream.callAuthorization.Store(r.Header.Get("Authorization"))
 			upstream.calls.Add(1)
 			result = map[string]any{"content": []map[string]any{{"type": "text", "text": "executed live"}}}
 		case "ping":
@@ -300,7 +306,7 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer.ID, Jti: claims.ID})
 				require.NoError(t, err)
 				require.NoError(t, fixtures.SwapUpstreamAuthClientFixture(ctx, authclientfixtures.SwapUpstreamAuthClientFixtureParams{AuthClientID: uuid.NullUUID{UUID: replacement, Valid: true}, CredentialID: session.ID, McpServerID: serverID}))
-				require.Contains(t, call(), "authentication changed")
+				require.Contains(t, call(), `The sign-in for the \"source\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`)
 				require.Equal(t, before, upstream.requests.Load(), "a different typed client cannot inherit approval")
 			})
 		}
@@ -337,7 +343,7 @@ func TestGatewayConsentAmbiguousTypedClientRequiresSetup(t *testing.T) {
 	require.Zero(t, upstream.requests.Load(), "an ambiguous typed choice never reaches an upstream through legacy auth")
 }
 
-func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, client usersessionsrepo.UserSessionClient, gatewayID uuid.UUID, slug string, mode toolfilter.CatalogMode, discovery metamcp.DiscoveryMode, tools []string) catalogConnection {
+func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, client usersessionsrepo.UserSessionClient, gatewayID uuid.UUID, slug string, mode toolfilter.CatalogMode, discovery metamcp.DiscoveryMode, tools []string, annotations ...string) catalogConnection {
 	t.Helper()
 	stateID, csrf := seedGatewayConsentChallenge(t, ctx, ti, issuerID, client, gatewayID, slug)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
@@ -348,6 +354,10 @@ func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, 
 	if tools != nil {
 		form.Set("tool_filtering", "on")
 		form["tools"] = tools
+	}
+	if len(annotations) > 0 {
+		form.Set("tool_filtering", "on")
+		form["tool_annotations"] = annotations
 	}
 	// The approval arrives from the person's browser, which carries no
 	// Speakeasy request authentication; the challenge names the person.
@@ -448,12 +458,7 @@ func TestConnectionCatalogCachedDiscoveryNeverContactsUpstream(t *testing.T) {
 						require.Len(t, listed.Result.Tools, 1)
 						require.Empty(t, listed.Result.NextCursor)
 					} else {
-						require.Len(t, listed.Result.Tools, 100)
-						page, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{"cursor": listed.Result.NextCursor}), connection.token, nil)
-						require.NoError(t, err)
-						listed.Result.NextCursor = ""
-						require.NoError(t, json.Unmarshal(page.Body.Bytes(), &listed))
-						require.Len(t, listed.Result.Tools, 50)
+						require.Len(t, listed.Result.Tools, 150)
 						require.Empty(t, listed.Result.NextCursor)
 					}
 				}
@@ -815,9 +820,11 @@ func TestConnectionCatalogProtocolLoadCost(t *testing.T) {
 				response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, method, params), connection.token, nil)
 				require.NoError(t, err)
 				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-				require.Zero(t, counted.loads.Load(), "protocol setup does not read the catalog")
+				// Initialize reads the record once to name only approved servers.
+				require.Equal(t, int32(1), counted.loads.Load(), "initialize reads the catalog once and ping not at all")
 				require.LessOrEqual(t, ti.conn.Stat().AcquireCount()-before, int64(20), "protocol setup DB work is independent of the catalog size")
 			}
+			counted.loads.Store(0)
 			beforeDB := ti.conn.Stat().AcquireCount()
 			response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
 			require.NoError(t, err)
@@ -933,6 +940,19 @@ func TestConnectionCatalogProgressiveListsOnlySelectedServers(t *testing.T) {
 	require.NotContains(t, listed, `\"slug\":\"other\"`)
 	require.Contains(t, callGatewayTool(t, ti, slug, specific.token, "describe_server", map[string]any{"server": "other"}), "unknown server")
 	require.Contains(t, callGatewayTool(t, ti, slug, all.token, "list_servers", map[string]any{}), `\"slug\":\"other\"`)
+
+	instructions := func(token string) string {
+		response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, mcpversions.MethodInitialize, map[string]any{"protocolVersion": mcpversions.Version20250326}), token, nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var result struct {
+			Instructions string `json:"instructions"`
+		}
+		require.NoError(t, json.Unmarshal(decodeRPCResponse(t, response)["result"], &result))
+		return result.Instructions
+	}
+	require.True(t, strings.HasPrefix(instructions(specific.token), `Tools from these servers: "Chosen".`+"\n\n"), "a connection names only the servers it approved")
+	require.True(t, strings.HasPrefix(instructions(all.token), `Tools from these servers: "Chosen", "Other".`+"\n\n"))
 }
 
 func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T) {
@@ -985,17 +1005,26 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	require.NotContains(t, listed.Body.String(), `"name":"source--tool_000"`)
 	require.Equal(t, before, upstream.requests.Load())
 	require.Zero(t, replacement.requests.Load())
-	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), "configuration changed")
+	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), `The settings for the \"source\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`)
 	require.Zero(t, replacement.calls.Load())
 	status, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "connection_status", "arguments": map[string]any{}}), progressive.token, nil)
 	require.NoError(t, err)
-	require.Contains(t, status.Body.String(), "configuration changed")
+	require.Contains(t, status.Body.String(), "The settings for this server changed since you approved it.")
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
 	beforeCode := strings.Count(logs.String(), "gateway consent validation failed")
 	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
 	require.Equal(t, beforeCode+1, strings.Count(logs.String(), "gateway consent validation failed"), "all helpers share one diagnostic per stale member")
 	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
 	require.Equal(t, beforeCode+2, strings.Count(logs.String(), "gateway consent validation failed"), "a new execution has its own diagnostic scope")
 	require.True(t, codeChecked.Load())
+	// Each execution's refused call writes one row; describe writes none.
+	require.Len(t, rec.Rows(), 2)
+	for _, row := range rec.Rows() {
+		require.Equal(t, mcpconnectionattempts.CodeConsentNotApproved.String(), row.Reason)
+		require.Equal(t, "configuration_changed", row.SubReason)
+		require.Equal(t, memberID.String(), row.MemberID)
+	}
 	require.Zero(t, replacement.calls.Load())
 }
 
@@ -1018,8 +1047,14 @@ func TestConnectionCatalogTransportChangeRequiresConsent(t *testing.T) {
 	require.NotEqual(t, "sse", remote.TransportType)
 	_, err = remotemcprepo.New(ti.conn).UpdateServer(ctx, remotemcprepo.UpdateServerParams{ID: remote.ID, ProjectID: remote.ProjectID, Name: remote.Name, Slug: remote.Slug, TransportType: "sse", Url: remote.Url})
 	require.NoError(t, err)
-	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), "configuration changed")
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), `The settings for the \"source\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`)
 	require.Zero(t, upstream.calls.Load())
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeConsentNotApproved)
+	require.Equal(t, "configuration_changed", row.SubReason)
+	require.Equal(t, memberID.String(), row.MemberID)
+	require.Len(t, rec.Rows(), 1)
 }
 
 // A cached connection reports the members its consent did not approve,
@@ -1152,4 +1187,31 @@ func TestGatewayConsentPreselectsProgressiveWhenSavedCodeModeUnavailable(t *test
 	require.Contains(t, page, `<option value="progressive" selected>Progressive</option>`)
 	require.NotContains(t, page, `<option value="code_mode"`)
 	require.Contains(t, page, "The code runtime is unavailable. Progressive discovery is available for this connection.")
+}
+
+// Initial issuance must not create choices for a second gateway merely because
+// both gateways use the same inbound issuer.
+func TestConnectionCatalogChoicesStayWithinApprovedGateway(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "catalog-scope-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+	other := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "other-"+uuid.NewString(), issuer.ID)
+	upstream := newCatalogUpstream(t, 1)
+	approvedID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Approved", "approved", 1, upstream.url)
+	unrelatedID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, other.ID, "Unrelated", "unrelated", 1, upstream.url)
+	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
+	require.NoError(t, err)
+	session, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer.ID, Jti: claims.ID})
+	require.NoError(t, err)
+	choices, err := upstreamclientsrepo.New(ti.conn).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
+		OrganizationID: auth.ActiveOrganizationID, CredentialKind: upstreamclients.CredentialKindUserSession,
+		CredentialID: session.CredentialID, McpServerIds: []uuid.UUID{approvedID, unrelatedID},
+	})
+	require.NoError(t, err)
+	require.Len(t, choices, 1)
+	require.Equal(t, approvedID, choices[0].McpServerID)
 }

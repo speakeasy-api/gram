@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { ChatSessionLink } from "@gram/client/models/components/chatsessionlink.js";
 import { groupSubsessions, summarizeLineage } from "./sessionLinks";

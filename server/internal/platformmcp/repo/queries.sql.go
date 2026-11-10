@@ -1378,6 +1378,16 @@ func (q *Queries) ExpireActivePlatformMCPOnboardingWorkflow(ctx context.Context,
 	return result.RowsAffected(), nil
 }
 
+const expirePlatformMCPFeedbackFixture = `-- name: ExpirePlatformMCPFeedbackFixture :exec
+UPDATE platform_mcp_feedback SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1
+`
+
+// Test fixture: backdates retention to simulate expiry.
+func (q *Queries) ExpirePlatformMCPFeedbackFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expirePlatformMCPFeedbackFixture, id)
+	return err
+}
+
 const getActivePlatformMCPCatalogRegistration = `-- name: GetActivePlatformMCPCatalogRegistration :one
 SELECT id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at, deleted_at, deleted
 FROM platform_mcp_catalog_registrations
@@ -1900,7 +1910,7 @@ func (q *Queries) GetLatestRedeemedPlatformMCPSetupHandoff(ctx context.Context, 
 }
 
 const getOwnedChatForRecall = `-- name: GetOwnedChatForRecall :one
-SELECT c.id, c.external_chat_id, c.title, c.cwd, c.updated_at, c.project_id
+SELECT c.id, c.external_chat_id, c.title, c.title_manually_set, c.cwd, c.updated_at, c.project_id
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE c.id = $1
@@ -1917,12 +1927,13 @@ type GetOwnedChatForRecallParams struct {
 }
 
 type GetOwnedChatForRecallRow struct {
-	ID             uuid.UUID
-	ExternalChatID pgtype.Text
-	Title          pgtype.Text
-	Cwd            pgtype.Text
-	UpdatedAt      pgtype.Timestamptz
-	ProjectID      uuid.UUID
+	ID               uuid.UUID
+	ExternalChatID   pgtype.Text
+	Title            pgtype.Text
+	TitleManuallySet bool
+	Cwd              pgtype.Text
+	UpdatedAt        pgtype.Timestamptz
+	ProjectID        uuid.UUID
 }
 
 func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatForRecallParams) (GetOwnedChatForRecallRow, error) {
@@ -1932,6 +1943,7 @@ func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatFor
 		&i.ID,
 		&i.ExternalChatID,
 		&i.Title,
+		&i.TitleManuallySet,
 		&i.Cwd,
 		&i.UpdatedAt,
 		&i.ProjectID,
@@ -1940,7 +1952,7 @@ func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatFor
 }
 
 const getPlatformChatSearchChat = `-- name: GetPlatformChatSearchChat :one
-SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title
+SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title, c.title_manually_set
 FROM chats c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
 WHERE c.id = $2 AND c.project_id = $3 AND c.organization_id = $1
@@ -1954,15 +1966,21 @@ type GetPlatformChatSearchChatParams struct {
 }
 
 type GetPlatformChatSearchChatRow struct {
-	ID          uuid.UUID
-	OwnerUserID string
-	Title       string
+	ID               uuid.UUID
+	OwnerUserID      string
+	Title            string
+	TitleManuallySet bool
 }
 
 func (q *Queries) GetPlatformChatSearchChat(ctx context.Context, arg GetPlatformChatSearchChatParams) (GetPlatformChatSearchChatRow, error) {
 	row := q.db.QueryRow(ctx, getPlatformChatSearchChat, arg.OrganizationID, arg.ChatID, arg.ProjectID)
 	var i GetPlatformChatSearchChatRow
-	err := row.Scan(&i.ID, &i.OwnerUserID, &i.Title)
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerUserID,
+		&i.Title,
+		&i.TitleManuallySet,
+	)
 	return i, err
 }
 
@@ -2658,6 +2676,38 @@ func (q *Queries) GetPlatformMCPFeedbackByIdempotencyKey(ctx context.Context, ar
 	return i, err
 }
 
+const getPlatformMCPFeedbackFixture = `-- name: GetPlatformMCPFeedbackFixture :one
+SELECT organization_id, connection_id, connection_generation, rating, note, delivery_state, expires_at
+FROM platform_mcp_feedback
+WHERE id = $1
+`
+
+type GetPlatformMCPFeedbackFixtureRow struct {
+	OrganizationID       string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	Rating               pgtype.Int4
+	Note                 pgtype.Text
+	DeliveryState        string
+	ExpiresAt            pgtype.Timestamptz
+}
+
+// Test fixture: reads stored feedback columns that no production query returns.
+func (q *Queries) GetPlatformMCPFeedbackFixture(ctx context.Context, id uuid.UUID) (GetPlatformMCPFeedbackFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPFeedbackFixture, id)
+	var i GetPlatformMCPFeedbackFixtureRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.Rating,
+		&i.Note,
+		&i.DeliveryState,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const getPlatformMCPInstallTarget = `-- name: GetPlatformMCPInstallTarget :one
 SELECT
     m.name,
@@ -2711,7 +2761,7 @@ func (q *Queries) GetPlatformMCPInstallTarget(ctx context.Context, arg GetPlatfo
 }
 
 const getPlatformMCPInventoryItem = `-- name: GetPlatformMCPInventoryItem :one
-SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
+SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
 FROM (
     SELECT
         m.id AS mcp_server_id,
@@ -2725,7 +2775,6 @@ FROM (
         m.tunneled_mcp_server_id,
         m.toolset_id,
         m.unproxied_mcp_server_id,
-        m.builtin_backend,
         COALESCE(remote.url, '') AS upstream_url,
         COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
         COALESCE(registration.source_kind, '') AS source_kind,
@@ -2780,6 +2829,7 @@ FROM (
     WHERE m.id = $6
       AND m.project_id = $7
       AND m.deleted IS FALSE
+      AND m.builtin_backend IS NULL
 ) AS inventory
 `
 
@@ -2805,7 +2855,6 @@ type GetPlatformMCPInventoryItemRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
-	BuiltinBackend                  pgtype.Text
 	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
@@ -2844,7 +2893,6 @@ func (q *Queries) GetPlatformMCPInventoryItem(ctx context.Context, arg GetPlatfo
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
-		&i.BuiltinBackend,
 		&i.UpstreamUrl,
 		&i.RegistrationID,
 		&i.SourceKind,
@@ -3391,6 +3439,98 @@ func (q *Queries) GetPlatformMCPReadiness(ctx context.Context, arg GetPlatformMC
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getPlatformMCPRegistrationAwaitingSignIn = `-- name: GetPlatformMCPRegistrationAwaitingSignIn :one
+SELECT registration.id, registration.catalog_provider, project.slug AS project_slug
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_servers AS server
+  ON server.id = registration.mcp_server_id
+ AND server.project_id = registration.project_id
+ AND server.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
+WHERE registration.mcp_server_id = $1
+  AND registration.organization_id = $2
+  AND registration.project_id = $3
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+  AND cardinality(ARRAY(
+      -- The distinct live providers the server's live client associations name.
+      SELECT DISTINCT c.remote_session_issuer_id
+      FROM mcp_server_remote_session_clients AS a
+      JOIN remote_session_clients AS c
+        ON c.id = a.remote_session_client_id
+       AND c.deleted IS FALSE
+       AND (c.project_id = a.project_id
+            OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+      JOIN remote_session_issuers AS provider
+        ON provider.id = c.remote_session_issuer_id
+       AND provider.deleted IS FALSE
+       AND (provider.project_id = a.project_id
+            OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+      WHERE a.mcp_server_id = server.id
+        AND a.project_id = registration.project_id
+        AND a.organization_id = registration.organization_id
+        AND a.deleted IS FALSE
+  )::uuid[]) = 0
+ORDER BY registration.id
+LIMIT 1
+`
+
+type GetPlatformMCPRegistrationAwaitingSignInParams struct {
+	McpServerID    uuid.NullUUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPRegistrationAwaitingSignInRow struct {
+	ID              uuid.UUID
+	CatalogProvider string
+	ProjectSlug     string
+}
+
+// The live registration behind an MCP server whose sign-in provider is not
+// connected yet, so the consent page can connect it before it lists sign-in
+// options. No row once the server has a sign-in provider.
+func (q *Queries) GetPlatformMCPRegistrationAwaitingSignIn(ctx context.Context, arg GetPlatformMCPRegistrationAwaitingSignInParams) (GetPlatformMCPRegistrationAwaitingSignInRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPRegistrationAwaitingSignIn, arg.McpServerID, arg.OrganizationID, arg.ProjectID)
+	var i GetPlatformMCPRegistrationAwaitingSignInRow
+	err := row.Scan(&i.ID, &i.CatalogProvider, &i.ProjectSlug)
+	return i, err
+}
+
+const getPlatformMCPRegistrationConnectSlug = `-- name: GetPlatformMCPRegistrationConnectSlug :one
+SELECT endpoint.slug
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_endpoints AS endpoint
+  ON endpoint.id = registration.mcp_endpoint_id
+ AND endpoint.project_id = registration.project_id
+ AND endpoint.mcp_server_id = registration.mcp_server_id
+ AND endpoint.custom_domain_id IS NULL
+ AND endpoint.deleted IS FALSE
+WHERE registration.id = $1
+  AND registration.organization_id = $2
+  AND registration.project_id = $3
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+`
+
+type GetPlatformMCPRegistrationConnectSlugParams struct {
+	RegistrationID uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// The platform endpoint slug a live registration's consent page is served at.
+// Custom-domain endpoints have no platform consent page, so they return no row.
+func (q *Queries) GetPlatformMCPRegistrationConnectSlug(ctx context.Context, arg GetPlatformMCPRegistrationConnectSlugParams) (string, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPRegistrationConnectSlug, arg.RegistrationID, arg.OrganizationID, arg.ProjectID)
+	var slug string
+	err := row.Scan(&slug)
+	return slug, err
 }
 
 const getPlatformMCPRegistrationLogo = `-- name: GetPlatformMCPRegistrationLogo :one
@@ -4996,7 +5136,7 @@ func (q *Queries) ListHeadlessCallerClients(ctx context.Context, arg ListHeadles
 
 const listOwnedChatSessionsForRecall = `-- name: ListOwnedChatSessionsForRecall :many
 
-SELECT c.id, c.external_chat_id, c.title, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
+SELECT c.id, c.external_chat_id, c.title, c.title_manually_set, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
 FROM chats c
 JOIN projects p ON p.id = c.project_id
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
@@ -5015,15 +5155,16 @@ type ListOwnedChatSessionsForRecallParams struct {
 }
 
 type ListOwnedChatSessionsForRecallRow struct {
-	ID             uuid.UUID
-	ExternalChatID pgtype.Text
-	Title          pgtype.Text
-	Summary        pgtype.Text
-	Cwd            pgtype.Text
-	UpdatedAt      pgtype.Timestamptz
-	ProjectID      uuid.UUID
-	ProjectName    string
-	ProjectSlug    string
+	ID               uuid.UUID
+	ExternalChatID   pgtype.Text
+	Title            pgtype.Text
+	TitleManuallySet bool
+	Summary          pgtype.Text
+	Cwd              pgtype.Text
+	UpdatedAt        pgtype.Timestamptz
+	ProjectID        uuid.UUID
+	ProjectName      string
+	ProjectSlug      string
 }
 
 // Session recall (list_my_sessions / continue_session). Every read below
@@ -5052,6 +5193,7 @@ func (q *Queries) ListOwnedChatSessionsForRecall(ctx context.Context, arg ListOw
 			&i.ID,
 			&i.ExternalChatID,
 			&i.Title,
+			&i.TitleManuallySet,
 			&i.Summary,
 			&i.Cwd,
 			&i.UpdatedAt,
@@ -5421,7 +5563,7 @@ SELECT
     m.tunneled_mcp_server_id,
     m.toolset_id,
     m.unproxied_mcp_server_id,
-    m.builtin_backend,
+    m.user_session_issuer_id,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
@@ -5474,6 +5616,8 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) AS readiness ON TRUE
 WHERE m.deleted IS FALSE
+  -- A retired approvals server serves nothing until a cleanup migration deletes it.
+  AND m.builtin_backend IS NULL
   AND ($6::boolean OR m.id = ANY($7::uuid[]))
   AND ($8::uuid IS NULL OR m.project_id = $8::uuid)
   AND ($9::uuid IS NULL OR m.id > $9::uuid)
@@ -5548,7 +5692,7 @@ type ListPlatformMCPInventoryRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
-	BuiltinBackend                  pgtype.Text
+	UserSessionIssuerID             uuid.NullUUID
 	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
@@ -5604,7 +5748,7 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
-			&i.BuiltinBackend,
+			&i.UserSessionIssuerID,
 			&i.UpstreamUrl,
 			&i.RegistrationID,
 			&i.SourceKind,
@@ -5637,6 +5781,8 @@ JOIN projects AS project
  AND project.organization_id = $1
  AND project.deleted IS FALSE
 WHERE m.deleted IS FALSE
+  -- Same retired approvals server rule as ListPlatformMCPInventory.
+  AND m.builtin_backend IS NULL
   AND ($2::uuid IS NULL OR m.project_id = $2::uuid)
   AND ($3::uuid IS NULL OR m.id > $3::uuid)
   AND (
@@ -6538,6 +6684,60 @@ func (q *Queries) ListPlatformMCPProjectAssistants(ctx context.Context, arg List
 	return items, nil
 }
 
+const listPlatformMCPProjectCatalogServers = `-- name: ListPlatformMCPProjectCatalogServers :many
+SELECT r.id AS registration_id, r.catalog_provider, r.catalog_reference, s.id AS mcp_server_id, s.slug AS mcp_server_slug
+FROM platform_mcp_catalog_registrations r
+JOIN mcp_servers s ON s.id = r.mcp_server_id AND s.project_id = r.project_id AND s.deleted IS FALSE
+WHERE r.organization_id = $1
+  AND r.project_id = $2
+  AND r.status = 'registered'
+  AND r.deleted IS FALSE
+ORDER BY r.created_at DESC, r.id
+LIMIT 500
+`
+
+type ListPlatformMCPProjectCatalogServersParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListPlatformMCPProjectCatalogServersRow struct {
+	RegistrationID   uuid.UUID
+	CatalogProvider  string
+	CatalogReference string
+	McpServerID      uuid.UUID
+	McpServerSlug    pgtype.Text
+}
+
+// The catalog servers a project already has, so catalog result cards can say
+// which are added and link to each one. Every join is pinned to the
+// registration's organization and project.
+func (q *Queries) ListPlatformMCPProjectCatalogServers(ctx context.Context, arg ListPlatformMCPProjectCatalogServersParams) ([]ListPlatformMCPProjectCatalogServersRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPProjectCatalogServers, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPProjectCatalogServersRow
+	for rows.Next() {
+		var i ListPlatformMCPProjectCatalogServersRow
+		if err := rows.Scan(
+			&i.RegistrationID,
+			&i.CatalogProvider,
+			&i.CatalogReference,
+			&i.McpServerID,
+			&i.McpServerSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPProjectPlugins = `-- name: ListPlatformMCPProjectPlugins :many
 
 SELECT
@@ -7136,6 +7336,53 @@ func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListP
 	return items, nil
 }
 
+const listPlatformMCPServerNamesByResourceIDs = `-- name: ListPlatformMCPServerNamesByResourceIDs :many
+SELECT m.id AS mcp_server_id, m.toolset_id, COALESCE(m.name, m.slug, '')::text AS name
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND (m.id = ANY($2::uuid[]) OR m.toolset_id = ANY($2::uuid[]))
+ORDER BY (m.id = m.toolset_id) DESC NULLS LAST, m.created_at, m.id
+`
+
+type ListPlatformMCPServerNamesByResourceIDsParams struct {
+	OrganizationID string
+	ResourceIds    []uuid.UUID
+}
+
+type ListPlatformMCPServerNamesByResourceIDsRow struct {
+	McpServerID uuid.UUID
+	ToolsetID   uuid.NullUUID
+	Name        string
+}
+
+// Names the MCP servers that authorization checks name by resource ID: a
+// server's own ID, which its endpoint checks, or the toolset ID the
+// organization gateway checks for a toolset-backed server. A toolset's
+// canonical server comes first, then the oldest, so it names the toolset.
+func (q *Queries) ListPlatformMCPServerNamesByResourceIDs(ctx context.Context, arg ListPlatformMCPServerNamesByResourceIDsParams) ([]ListPlatformMCPServerNamesByResourceIDsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPServerNamesByResourceIDs, arg.OrganizationID, arg.ResourceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPServerNamesByResourceIDsRow
+	for rows.Next() {
+		var i ListPlatformMCPServerNamesByResourceIDsRow
+		if err := rows.Scan(&i.McpServerID, &i.ToolsetID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPServers = `-- name: ListPlatformMCPServers :many
 SELECT server.id, server.project_id, server.name, server.slug, server.visibility
 FROM mcp_servers AS server
@@ -7656,6 +7903,16 @@ func (q *Queries) MarkPlatformMCPConnectionReauthorizationRequired(ctx context.C
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const pingPlatformMCPDatabaseFixture = `-- name: PingPlatformMCPDatabaseFixture :exec
+SELECT 1
+`
+
+// Test fixture: proves a pooled connection is still healthy.
+func (q *Queries) PingPlatformMCPDatabaseFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, pingPlatformMCPDatabaseFixture)
+	return err
 }
 
 const platformMCPOperationReceiptInputClaimed = `-- name: PlatformMCPOperationReceiptInputClaimed :one
@@ -8829,6 +9086,7 @@ SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
        COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
        COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
        COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
+       c.title_manually_set AS chat_title_manually_set,
        COALESCE(c.user_id, '')::text AS owner_user_id,
        CASE WHEN octet_length(m.content) <= 131072 THEN m.content ELSE '' END::text AS content,
        CASE WHEN octet_length(m.tool_calls::text) <= 131072 THEN m.tool_calls END::jsonb AS tool_calls,
@@ -8849,7 +9107,11 @@ WHERE m.project_id = $1::uuid
        OR (octet_length(m.content) <= 131072 AND m.content ILIKE $8 ESCAPE '\')
        OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE $8 ESCAPE '\')
        OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE $8 ESCAPE '\')
-       OR c.title ILIKE $8 ESCAPE '\')
+       OR c.title ILIKE $8 ESCAPE '\'
+       -- A stored cron envelope is shown as "Cron: <job name>" (chattitle.Display),
+       -- so a search for the shown title matches it too.
+       OR (NOT c.title_manually_set
+           AND ('Cron: ' || substring(c.title from '^\s*\[cron:[0-9a-fA-F-]{36} ([^\]]+)')) ILIKE $8 ESCAPE '\'))
   AND ($9::text = ''
        OR ($10::text = '' AND m.user_id = $9)
        OR EXISTS (
@@ -8886,20 +9148,21 @@ type SearchPlatformChatMessagesParams struct {
 }
 
 type SearchPlatformChatMessagesRow struct {
-	ID          uuid.UUID
-	ChatID      uuid.UUID
-	Seq         int64
-	CreatedAt   pgtype.Timestamptz
-	Role        string
-	Generation  int32
-	Source      string
-	UserID      string
-	ChatTitle   string
-	OwnerUserID string
-	Content     string
-	ToolCalls   []byte
-	ContentRaw  []byte
-	Oversized   bool
+	ID                   uuid.UUID
+	ChatID               uuid.UUID
+	Seq                  int64
+	CreatedAt            pgtype.Timestamptz
+	Role                 string
+	Generation           int32
+	Source               string
+	UserID               string
+	ChatTitle            string
+	ChatTitleManuallySet bool
+	OwnerUserID          string
+	Content              string
+	ToolCalls            []byte
+	ContentRaw           []byte
+	Oversized            bool
 }
 
 // Literal substring search over captured messages in one project and interval,
@@ -8940,6 +9203,7 @@ func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlat
 			&i.Source,
 			&i.UserID,
 			&i.ChatTitle,
+			&i.ChatTitleManuallySet,
 			&i.OwnerUserID,
 			&i.Content,
 			&i.ToolCalls,

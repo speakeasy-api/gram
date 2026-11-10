@@ -83,6 +83,18 @@ type CreateRemoteSessionClientRequestBody struct {
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
 	// client_secret supplied by the caller. Speakeasy encrypts before persisting.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// An existing remote_session_client of the same issuer, visible to the
+	// project, whose upstream registration the new client reuses. The new client
+	// is an independent record with its own id: it copies the template's stored
+	// client_secret, unless client_secret is supplied, and the callback the
+	// template's registration lists. client_id must equal the template's.
+	// Sessions, grants, user_session_issuer attachments and MCP server
+	// associations are not copied, and the template is unchanged. Refused for a
+	// client metadata document client, a private_key_jwt client, a
+	// credential_owner self client, a client managed by an identity provider
+	// connection, a client the issuer has rejected, and a template whose stored
+	// secret has expired unless client_secret is supplied.
+	TemplateClientID *string `form:"template_client_id,omitempty" json:"template_client_id,omitempty" xml:"template_client_id,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -158,9 +170,13 @@ type UpdateRemoteSessionClientRequestBody struct {
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
 	// unchanged.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Replace the upstream OAuth audience sent for this client. Omit to leave
-	// unchanged.
+	// Replace the upstream OAuth audience sent for this client. Pass an empty
+	// string to clear it. Omit to leave unchanged.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Send the connecting MCP client's self-reported name to this provider as
+	// speakeasy_client_name on /authorize. Only sent for anonymous sessions. Omit
+	// to leave unchanged.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Platform admins only. Set true to run the client in compatibility mode with
 	// the legacy callback URL, or false to migrate it to the current callback URL
 	// once that URL is registered with the identity provider. Omit to leave
@@ -389,12 +405,20 @@ type CreateRemoteSessionClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -463,12 +487,20 @@ type CreateCimdResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -538,12 +570,20 @@ type UpdateRemoteSessionClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -613,12 +653,20 @@ type AttachUserSessionIssuerResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -688,12 +736,20 @@ type DetachUserSessionIssuerResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -762,12 +818,20 @@ type AttachKeySetResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -836,12 +900,20 @@ type DetachKeySetResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -927,12 +999,20 @@ type GetRemoteSessionClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -3705,12 +3785,20 @@ type RemoteSessionClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -3814,6 +3902,7 @@ func NewCreateRemoteSessionClientRequestBody(p *remotesessionclients.CreateRemot
 		RemoteSessionIssuerID:           p.RemoteSessionIssuerID,
 		ClientID:                        p.ClientID,
 		ClientSecret:                    p.ClientSecret,
+		TemplateClientID:                p.TemplateClientID,
 		TokenEndpointAuthMethod:         p.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: p.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 p.JSONWebKeySetID,
@@ -3877,6 +3966,7 @@ func NewUpdateRemoteSessionClientRequestBody(p *remotesessionclients.UpdateRemot
 		TokenEndpointAuthMethod:         p.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: p.TokenEndpointAuthAudienceFormat,
 		Audience:                        p.Audience,
+		ForwardClientName:               p.ForwardClientName,
 		LegacyCallbackURL:               p.LegacyCallbackURL,
 	}
 	if p.Scope != nil {
@@ -4511,7 +4601,9 @@ func NewCreateRemoteSessionClientRemoteSessionClientOK(body *CreateRemoteSession
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
 		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
@@ -4706,7 +4798,9 @@ func NewCreateCimdRemoteSessionClientOK(body *CreateCimdResponseBody) *types.Rem
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
 		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
@@ -4902,7 +4996,9 @@ func NewUpdateRemoteSessionClientRemoteSessionClientOK(body *UpdateRemoteSession
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
 		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
@@ -5098,7 +5194,9 @@ func NewAttachUserSessionIssuerRemoteSessionClientOK(body *AttachUserSessionIssu
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
 		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
@@ -5294,7 +5392,9 @@ func NewDetachUserSessionIssuerRemoteSessionClientOK(body *DetachUserSessionIssu
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
 		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
@@ -5489,7 +5589,9 @@ func NewAttachKeySetRemoteSessionClientOK(body *AttachKeySetResponseBody) *types
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
 		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
@@ -5699,7 +5801,9 @@ func NewDetachKeySetRemoteSessionClientOK(body *DetachKeySetResponseBody) *types
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
 		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
@@ -6239,7 +6343,9 @@ func NewGetRemoteSessionClientRemoteSessionClientOK(body *GetRemoteSessionClient
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
 		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
@@ -6735,6 +6841,9 @@ func ValidateCreateRemoteSessionClientResponseBody(body *CreateRemoteSessionClie
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
@@ -6774,6 +6883,9 @@ func ValidateCreateRemoteSessionClientResponseBody(body *CreateRemoteSessionClie
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
 	}
 	if body.CredentialOwner != nil {
 		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
@@ -6819,6 +6931,9 @@ func ValidateCreateCimdResponseBody(body *CreateCimdResponseBody) (err error) {
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
@@ -6858,6 +6973,9 @@ func ValidateCreateCimdResponseBody(body *CreateCimdResponseBody) (err error) {
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
 	}
 	if body.CredentialOwner != nil {
 		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
@@ -6903,6 +7021,9 @@ func ValidateUpdateRemoteSessionClientResponseBody(body *UpdateRemoteSessionClie
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
@@ -6942,6 +7063,9 @@ func ValidateUpdateRemoteSessionClientResponseBody(body *UpdateRemoteSessionClie
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
 	}
 	if body.CredentialOwner != nil {
 		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
@@ -6987,6 +7111,9 @@ func ValidateAttachUserSessionIssuerResponseBody(body *AttachUserSessionIssuerRe
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
@@ -7026,6 +7153,9 @@ func ValidateAttachUserSessionIssuerResponseBody(body *AttachUserSessionIssuerRe
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
 	}
 	if body.CredentialOwner != nil {
 		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
@@ -7071,6 +7201,9 @@ func ValidateDetachUserSessionIssuerResponseBody(body *DetachUserSessionIssuerRe
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
@@ -7110,6 +7243,9 @@ func ValidateDetachUserSessionIssuerResponseBody(body *DetachUserSessionIssuerRe
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
 	}
 	if body.CredentialOwner != nil {
 		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
@@ -7155,6 +7291,9 @@ func ValidateAttachKeySetResponseBody(body *AttachKeySetResponseBody) (err error
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
@@ -7194,6 +7333,9 @@ func ValidateAttachKeySetResponseBody(body *AttachKeySetResponseBody) (err error
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
 	}
 	if body.CredentialOwner != nil {
 		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
@@ -7239,6 +7381,9 @@ func ValidateDetachKeySetResponseBody(body *DetachKeySetResponseBody) (err error
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
@@ -7278,6 +7423,9 @@ func ValidateDetachKeySetResponseBody(body *DetachKeySetResponseBody) (err error
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
 	}
 	if body.CredentialOwner != nil {
 		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
@@ -7351,6 +7499,9 @@ func ValidateGetRemoteSessionClientResponseBody(body *GetRemoteSessionClientResp
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
@@ -7390,6 +7541,9 @@ func ValidateGetRemoteSessionClientResponseBody(body *GetRemoteSessionClientResp
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
 	}
 	if body.CredentialOwner != nil {
 		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
@@ -10908,6 +11062,9 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
 	if body.CredentialOwner == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
@@ -10947,6 +11104,9 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
 	}
 	if body.CredentialOwner != nil {
 		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {

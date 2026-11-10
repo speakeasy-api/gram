@@ -28,7 +28,8 @@ import { Button } from "@/components/ui/Button";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRBACScopeOverride } from "@/hooks/useRBACScopeOverride";
 import { Badge } from "@/components/ui/Badge";
-import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { dateTimeFormatters } from "@/lib/dates";
 import { useHideInsightsDock } from "@/components/insights-context";
@@ -643,10 +644,16 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     [agentsQuery.data],
   );
 
+  // The agents roster lists agents only; the people reads below would be
+  // requests whose every row it discards. Members stay: they name owners.
+  const peopleShown = kind === "person";
   const membersQuery = useMembers(undefined, undefined, {
     throwOnError: false,
   });
-  const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
+  const rolesQuery = useRoles(undefined, undefined, {
+    enabled: peopleShown,
+    throwOnError: false,
+  });
   // Usage is the only project-scoped read here, and it is what surfaces the
   // identities the directory has never heard of.
   //
@@ -657,6 +664,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const usageQuery = useQuery({
     queryKey: identityRosterQueryKey(organization.id, projectSlug),
     queryFn: () => fetchIdentityRoster(client, projectSlug),
+    enabled: peopleShown,
     throwOnError: false,
   });
   // The MDM fleet, read once and folded to a bucket per identity. It is not
@@ -666,7 +674,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const deviceCoverageQuery = useQuery({
     queryKey: deviceCoverageQueryKey(organization.id),
     queryFn: () => fetchDeviceCoverage(client),
-    enabled: canReadOrganization,
+    enabled: peopleShown && canReadOrganization,
     throwOnError: false,
   });
   const deviceCoverage = canReadOrganization
@@ -679,7 +687,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const directoryPeopleQuery = useQuery({
     queryKey: directoryPeopleQueryKey(organization.id),
     queryFn: () => fetchDirectoryPeople(client),
-    enabled: canAdminOrganization,
+    enabled: peopleShown && canAdminOrganization,
     throwOnError: false,
   });
   const directoryPeople = canAdminOrganization
@@ -692,19 +700,19 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   // in flight or one that never came back.
   const rosterLoading =
     membersQuery.isLoading ||
-    rolesQuery.isLoading ||
-    usageQuery.isLoading ||
-    (canReadOrganization && directoryPeopleQuery.isLoading) ||
+    (peopleShown &&
+      (rolesQuery.isLoading ||
+        usageQuery.isLoading ||
+        (canReadOrganization && directoryPeopleQuery.isLoading))) ||
     (agentsEnabled && agentsQuery.isLoading);
   const rosterFailed =
     membersQuery.isError ||
-    rolesQuery.isError ||
-    usageQuery.isError ||
+    (peopleShown && (rolesQuery.isError || usageQuery.isError)) ||
     (agentsEnabled && agentsQuery.isError);
   const retryRoster = () => {
     if (membersQuery.isError) void membersQuery.refetch();
-    if (rolesQuery.isError) void rolesQuery.refetch();
-    if (usageQuery.isError) void usageQuery.refetch();
+    if (peopleShown && rolesQuery.isError) void rolesQuery.refetch();
+    if (peopleShown && usageQuery.isError) void usageQuery.refetch();
     if (agentsEnabled && agentsQuery.isError) void agentsQuery.refetch();
   };
 
@@ -1138,46 +1146,8 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
           );
         },
       },
-      {
-        key: "actions",
-        header: "Actions",
-        width: "160px",
-        render: (identity) => {
-          const agentId = identity.registeredAgentId ?? "";
-          if (agentId === "") return null;
-          return (
-            // Stops the row's own click from firing underneath: the row opens
-            // the agent, and Edit is a different destination.
-            <div
-              className="flex items-center justify-end gap-2"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <Button asChild size="sm" variant="primary">
-                <Link to={routes.identities.agents.edit.href(agentId)}>
-                  Edit
-                </Link>
-              </Button>
-              <Button asChild size="sm" variant="secondary">
-                <Link
-                  to={routes.identities.detail.overview.href(
-                    encodeIdentityUrn(identityUrnForEmployee(identity)),
-                  )}
-                >
-                  View
-                </Link>
-              </Button>
-            </div>
-          );
-        },
-      },
     ],
-    [
-      agentsById,
-      platformsByAgent,
-      workloads.isSuccess,
-      workloads.isError,
-      routes,
-    ],
+    [agentsById, platformsByAgent, workloads.isSuccess, workloads.isError],
   );
   // One sorted list, split by what the row is. The filters above still narrow
   // both; the Kind column is dropped inside each table because the heading

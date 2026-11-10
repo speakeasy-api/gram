@@ -15,17 +15,7 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
   useProjectSlugForRequests: () => "project-example",
-  useSlugs: () => ({ projectSlug: "project-example" }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    identities: {
-      detail: {
-        overview: { href: () => "/overview" },
-        permissions: { href: () => "/permissions" },
-      },
-    },
-  }),
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "project-example" }),
 }));
 vi.mock("@/pages/identities/identityRoster", () => ({
   fetchRegisteredAgents: (...args: unknown[]) => mocks.fetchAgents(...args),
@@ -60,7 +50,8 @@ it("never reuses unrestricted action candidates while loading an override invent
       ),
     },
   );
-  await waitFor(() => expect(result.current).toHaveLength(2));
+  // The agent, its Agent sign-in and MCP sign-in tabs, and its permissions.
+  await waitFor(() => expect(result.current).toHaveLength(4));
 
   act(() => {
     saveState({
@@ -75,6 +66,7 @@ it("never reuses unrestricted action candidates while loading an override invent
   await waitFor(() =>
     expect(result.current.map((candidate) => candidate.id)).toEqual([
       "agent-identity:agent-example",
+      "agent-sign-in:agent-example",
     ]),
   );
 });

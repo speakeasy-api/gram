@@ -11,6 +11,7 @@ import (
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -83,6 +84,12 @@ func TestInferenceAccessRoleConfiguration(t *testing.T) {
 	require.Equal(t, "inference:execute", enabled.Scope)
 	require.Equal(t, project.ID.String(), enabled.ProjectID)
 	require.False(t, enabled.Receipt.Replayed)
+	// The result reports the receipt's sensitive scopes; inference:execute is
+	// not one, so the write names none.
+	inferenceEntry, ok := authz.ScopeEntryFor(authz.ScopeInferenceExecute)
+	require.True(t, ok)
+	require.False(t, inferenceEntry.Sensitive())
+	require.Nil(t, enabled.SensitiveScopesAdded)
 	replayed, err := service.ConfigureInference(ctx, principal, input)
 	require.NoError(t, err)
 	require.True(t, replayed.Receipt.Replayed)

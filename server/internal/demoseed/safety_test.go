@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
@@ -22,16 +24,17 @@ import (
 // It is an ordinary Spec, the same mechanism production uses to seed the local
 // development org, so the two cannot drift.
 var otherTenantSpec = Spec{
-	OrgID:       "org_gram_othr_workspace",
-	OrgSlug:     "acme-othr",
-	OrgName:     "Acme Othr Org",
-	UUIDPrefix:  "0ddba110",
-	UserPrefix:  "user_othr_",
-	EmailDomain: "@othr.getgram.ai",
-	NameSeed:    "gram-othr-",
-	GroupPrefix: "othr_grp_",
-	WorkOSOrgID: "workos_gram_othr_unlinked",
-	Marker:      "othr-seed",
+	CustomDomain: "mcp.other.example.com",
+	OrgID:        "org_gram_othr_workspace",
+	OrgSlug:      "acme-othr",
+	OrgName:      "Acme Othr Org",
+	UUIDPrefix:   "0ddba110",
+	UserPrefix:   "user_othr_",
+	EmailDomain:  "@othr.getgram.ai",
+	NameSeed:     "gram-othr-",
+	GroupPrefix:  "othr_grp_",
+	WorkOSOrgID:  "workos_gram_othr_unlinked",
+	Marker:       "othr-seed",
 }
 
 // TestDemoSeedSafety is the generic cross-table guard for the demo seed. With
@@ -65,9 +68,15 @@ func TestDemoSeedSafety(t *testing.T) {
 
 	// Provision the other tenant with the seed itself, including realistic MCP
 	// server dependents that the demo cleanup must not touch.
-	otherSeed, err := seedPostgres(ctx, logger, db, blob, otherTenantSpec)
+	otherSeed, err := seedPostgres(ctx, logger, db, blob, testenv.NewEncryptionClient(t), otherTenantSpec)
 	require.NoError(t, err)
 	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, otherTenantSpec.OrgID))
+	planted, err := repo.New(db).OrgPlantCustomDomainDependents(ctx, repo.OrgPlantCustomDomainDependentsParams{
+		OrgID: otherTenantSpec.OrgID, ProjectID: uuid.MustParse(otherTenantSpec.ProjectID()),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 3, planted, "fixture must include a root endpoint and two same-slug toolsets")
+
 	require.NoError(t, demoseedtest.PlantMCPServerDependents(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
 	))
@@ -123,7 +132,7 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.True(t, fixtureOutside, "fixture produced no clickhouse rows; the isolation check would be vacuous")
 
 	// First real seed run.
-	require.NoError(t, Run(ctx, logger, db, ch, blob, DefaultSpec()))
+	require.NoError(t, Run(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), DefaultSpec()))
 
 	pgAfter1, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
@@ -143,6 +152,12 @@ func TestDemoSeedSafety(t *testing.T) {
 	// Plant stray demo-scope rows: the next run must clean them up, restoring
 	// the exact per-table counts of the first run.
 	require.NoError(t, demoseedtest.TamperDemoRows(ctx, db, ch, constants.DemoOrganizationID, DefaultSpec().ProjectID()))
+	planted, err = repo.New(db).OrgPlantCustomDomainDependents(ctx, repo.OrgPlantCustomDomainDependentsParams{
+		OrgID: constants.DemoOrganizationID, ProjectID: uuid.MustParse(DefaultSpec().ProjectID()),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 3, planted, "reseed must remove both kinds of custom-domain dependents")
+
 	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
 		ctx, db, constants.DemoOrganizationID, DefaultSpec().ProjectID(),
 	)
@@ -151,7 +166,7 @@ func TestDemoSeedSafety(t *testing.T) {
 		"demo tamper fixture must plant one project-scoped onboarding milestone")
 
 	// Second real seed run.
-	require.NoError(t, Run(ctx, logger, db, ch, blob, DefaultSpec()))
+	require.NoError(t, Run(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), DefaultSpec()))
 
 	pgAfter2, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)

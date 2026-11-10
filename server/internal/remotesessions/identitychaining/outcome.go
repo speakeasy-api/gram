@@ -33,6 +33,9 @@ type Outcome struct {
 	// provider, so repeating the attempt could mint a duplicate grant.
 	Submitted bool `json:"submitted,omitempty"`
 
+	// Retained reports a saved sign-in paused for automatic retry.
+	Retained bool `json:"retained,omitempty"`
+
 	// Failures lists every provider's failure when more than one provider in
 	// the order was tried or skipped and none succeeded.
 	Failures []ProviderFailure `json:"failures,omitempty"`
@@ -45,6 +48,17 @@ type Outcome struct {
 // callers keep the interactive behavior they had without chaining.
 func (o Outcome) Applicable() bool {
 	return o.Reason != ReasonNotApplicable && o.Reason != ReasonBindingNotReady && o.Reason != ReasonProviderUnavailable
+}
+
+// SafeToRepeat reports a transient failure that is safe to repeat: one that
+// happened before any token request could have reached the provider. A
+// failure after submission is ambiguous, and repeating it could mint a
+// duplicate grant against the provider's quota, so it, a shared failure
+// answered from the cache, stale configuration and every provider rejection
+// are never repeated. Combined provider failures omit individual submission
+// details, so they cannot establish that repeating the whole chain is safe.
+func (o Outcome) SafeToRepeat() bool {
+	return o.Reason == ReasonTransientFailure && o.Retryable && !o.Cached && !o.Submitted && len(o.Failures) == 0
 }
 
 // Succeeded reports whether the attempt yielded a usable token.
@@ -70,7 +84,7 @@ func (o Outcome) ProviderRefusal() bool {
 }
 
 func newOutcome(stage Stage, reason Reason, confidence Confidence, retryable bool) Outcome {
-	return Outcome{Stage: stage, Reason: reason, Confidence: confidence, Retryable: retryable, Cached: false, Provider: "", Unavailable: "", Submitted: false, Failures: nil, providerDescription: ""}
+	return Outcome{Stage: stage, Reason: reason, Confidence: confidence, Retryable: retryable, Cached: false, Provider: "", Unavailable: "", Submitted: false, Retained: false, Failures: nil, providerDescription: ""}
 }
 
 var (

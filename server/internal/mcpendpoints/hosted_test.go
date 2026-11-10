@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -58,7 +59,8 @@ func newHostedAddressFixture(t *testing.T, accountType string) (context.Context,
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, ti.conn, ti.sessionManager, nil, authzEngine, audit.NewLogger(), nil, false)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), guardianPolicy, nil)
+	toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, ti.conn, ti.sessionManager, nil, authzEngine, audit.NewLogger(), nil, false, revoker)
 
 	created, err := toolsetsSvc.CreateToolset(ctx, &toolsetsgen.CreateToolsetPayload{Name: "Hosted address", ToolUrns: []string{}})
 	require.NoError(t, err)
@@ -472,7 +474,7 @@ func TestUpdateMcpEndpointHostedKeepsHealthDisabledDomain(t *testing.T) {
 		ConsecutiveFailures: pgtype.Int4{Int32: 5, Valid: true}, ID: domain.ID, OrganizationID: f.authCtx.ActiveOrganizationID,
 	})
 	require.NoError(t, err)
-	_, err = domains.DisableCustomDomainForHealth(ctx, customdomainsrepo.DisableCustomDomainForHealthParams{ID: domain.ID, OrganizationID: f.authCtx.ActiveOrganizationID})
+	_, err = domains.UpdateCustomDomain(ctx, customdomainsrepo.UpdateCustomDomainParams{ID: domain.ID, Verified: false, Activated: false, ProvisionerKind: domain.ProvisionerKind, IngressName: domain.IngressName, CertSecretName: domain.CertSecretName})
 	require.NoError(t, err)
 	placed := f.requireProjected(t, ctx)
 

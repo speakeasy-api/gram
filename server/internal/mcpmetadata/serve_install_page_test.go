@@ -2,6 +2,7 @@ package mcpmetadata_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -23,8 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
-	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -956,7 +955,84 @@ func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
 }
 
-func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T) {
+// seedToolWithHeaderSecurity deploys an HTTP tool on the toolset with one apiKey
+// security scheme per environment variable, so the install page has header
+// inputs to filter.
+func seedToolWithHeaderSecurity(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, envVars ...string) {
+	t.Helper()
+
+	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
+		ProjectID:      toolset.ProjectID,
+		OrganizationID: toolset.OrganizationID,
+		UserID:         "test-user",
+		IdempotencyKey: uuid.New().String(),
+	})
+	require.NoError(t, err)
+	err = deployments_repo.New(ti.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
+		DeploymentID: deploymentID,
+		Status:       "completed",
+	})
+	require.NoError(t, err)
+
+	requirements := make([]map[string][]string, 0, len(envVars))
+	for _, envVar := range envVars {
+		requirements = append(requirements, map[string][]string{envVar: {}})
+		_, err = deployments_repo.New(ti.conn).CreateHTTPSecurity(ctx, deployments_repo.CreateHTTPSecurityParams{
+			Key:                 envVar,
+			DeploymentID:        deploymentID,
+			ProjectID:           uuid.NullUUID{UUID: toolset.ProjectID, Valid: true},
+			Openapiv3DocumentID: uuid.NullUUID{},
+			Type:                pgtype.Text{String: "apiKey", Valid: true},
+			Name:                pgtype.Text{String: envVar, Valid: true},
+			InPlacement:         pgtype.Text{String: "header", Valid: true},
+			Scheme:              pgtype.Text{},
+			BearerFormat:        pgtype.Text{},
+			EnvVariables:        []string{envVar},
+			OauthTypes:          nil,
+			OauthFlows:          nil,
+		})
+		require.NoError(t, err)
+	}
+	security, err := json.Marshal(requirements)
+	require.NoError(t, err)
+
+	toolURN := urn.NewTool(urn.ToolKindHTTP, "test-api", uuid.New().String()[:8])
+	err = tools_repo.New(ti.conn).CreateHTTPToolDefinition(ctx, tools_repo.CreateHTTPToolDefinitionParams{
+		ProjectID:       toolset.ProjectID,
+		DeploymentID:    deploymentID,
+		ToolUrn:         toolURN,
+		Name:            "search_records",
+		UntruncatedName: pgtype.Text{},
+		Summary:         "Search records",
+		Description:     "Search records",
+		Tags:            []string{},
+		HttpMethod:      "GET",
+		Path:            "/api/records",
+		SchemaVersion:   "3.0.0",
+		Schema:          []byte(`{}`),
+		ServerEnvVar:    "TEST_SERVER_URL",
+		Security:        security,
+		HeaderSettings:  []byte(`{}`),
+		QuerySettings:   []byte(`{}`),
+		PathSettings:    []byte(`{}`),
+		ReadOnlyHint:    pgtype.Bool{},
+		DestructiveHint: pgtype.Bool{},
+		IdempotentHint:  pgtype.Bool{},
+		OpenWorldHint:   pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
+		ToolsetID:     toolset.ID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{toolURN},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+}
+
+func TestServeInstallPage_FiltersNonUserProvidedHeaders(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
 
@@ -965,80 +1041,12 @@ func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T
 	require.NotNil(t, authCtx.ProjectID)
 
 	projectID := *authCtx.ProjectID
-	orgID := authCtx.ActiveOrganizationID
 
-	mcpSlug := "external-mcp-filter-" + uuid.New().String()[:8]
+	mcpSlug := "header-filter-" + uuid.New().String()[:8]
 	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
-		name: "External MCP Filter Test", slug: mcpSlug, mcpSlug: mcpSlug, description: "public toolset proxying an external MCP server with header configs", visibility: mcpservers.VisibilityPublic,
+		name: "Header Filter Test", slug: mcpSlug, mcpSlug: mcpSlug, description: "public toolset with header configs", visibility: mcpservers.VisibilityPublic,
 	})
-
-	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
-		ProjectID:      projectID,
-		OrganizationID: orgID,
-		UserID:         "test-user",
-		IdempotencyKey: uuid.New().String(),
-	})
-	require.NoError(t, err)
-
-	err = deployments_repo.New(ti.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
-		DeploymentID: deploymentID,
-		Status:       "completed",
-	})
-	require.NoError(t, err)
-
-	externalmcpRepo := externalmcp_repo.New(ti.conn)
-	registryID, err := externalmcpRepo.CreateMCPRegistry(ctx, externalmcp_repo.CreateMCPRegistryParams{
-		Name: "test-registry-" + mcpSlug,
-		Url:  "https://mcp.example.com/glyphic",
-	})
-	require.NoError(t, err)
-	attachmentSlug := "glyphic"
-	attachment, err := externalmcpRepo.CreateExternalMCPAttachment(ctx, externalmcp_repo.CreateExternalMCPAttachmentParams{
-		DeploymentID:            deploymentID,
-		RegistryID:              uuid.NullUUID{UUID: registryID, Valid: true},
-		Name:                    "Glyphic MCP Server",
-		Slug:                    attachmentSlug,
-		RegistryServerSpecifier: "test-server",
-	})
-	require.NoError(t, err)
-
-	// header_definitions JSON shape matches the unexported externalMCPHeaderDefinition
-	// struct in server/internal/mv/toolset.go. extractExternalMCPHeaderDefinitions
-	// produces variable names by snake-casing "<attachmentSlug>_<headerName>", so the
-	// resulting names here are GLYPHIC_X_API_KEY, GLYPHIC_AUTHORIZATION, GLYPHIC_TRACE_ID.
-	headerDefsJSON := []byte(`[
-		{"name":"X-Api-Key","isRequired":true,"isSecret":true},
-		{"name":"Authorization","isRequired":true,"isSecret":true},
-		{"name":"Trace-Id","isRequired":true,"isSecret":false}
-	]`)
-
-	toolURNString := "tools:externalmcp:" + attachmentSlug + ":proxy"
-	_, err = externalmcpRepo.CreateExternalMCPToolDefinition(ctx, externalmcp_repo.CreateExternalMCPToolDefinitionParams{
-		ExternalMcpAttachmentID:    attachment.ID,
-		ToolUrn:                    toolURNString,
-		Type:                       "proxy",
-		RemoteUrl:                  "https://mcp.example.com/glyphic",
-		TransportType:              externalmcp_types.TransportTypeStreamableHTTP,
-		RequiresOauth:              false,
-		OauthVersion:               "none",
-		OauthAuthorizationEndpoint: pgtype.Text{},
-		OauthTokenEndpoint:         pgtype.Text{},
-		OauthRegistrationEndpoint:  pgtype.Text{},
-		OauthScopesSupported:       []string{},
-		HeaderDefinitions:          headerDefsJSON,
-	})
-	require.NoError(t, err)
-
-	toolURN, err := urn.ParseTool(toolURNString)
-	require.NoError(t, err)
-	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
-		ToolsetID:     toolset.ID,
-		Version:       1,
-		ToolUrns:      []urn.Tool{toolURN},
-		ResourceUrns:  []urn.Resource{},
-		PredecessorID: uuid.NullUUID{Valid: false},
-	})
-	require.NoError(t, err)
+	seedToolWithHeaderSecurity(t, ctx, ti, toolset, "ACME_X_API_KEY", "ACME_AUTHORIZATION", "ACME_TRACE_ID")
 
 	mcpRepo := mcpmetadata_repo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadataByMcpServerID(ctx, mcpmetadata_repo.UpsertMetadataByMcpServerIDParams{
@@ -1052,14 +1060,14 @@ func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T
 	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetadata_repo.UpsertEnvironmentConfigParams{
 		ProjectID:     projectID,
 		McpMetadataID: metadata.ID,
-		VariableName:  "GLYPHIC_X_API_KEY",
+		VariableName:  "ACME_X_API_KEY",
 		ProvidedBy:    "system",
 	})
 	require.NoError(t, err)
 	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetadata_repo.UpsertEnvironmentConfigParams{
 		ProjectID:     projectID,
 		McpMetadataID: metadata.ID,
-		VariableName:  "GLYPHIC_AUTHORIZATION",
+		VariableName:  "ACME_AUTHORIZATION",
 		ProvidedBy:    "none",
 	})
 	require.NoError(t, err)
@@ -1075,12 +1083,12 @@ func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T
 	require.Equal(t, http.StatusOK, installRR.Code)
 
 	body := installRR.Body.String()
-	assert.NotContains(t, body, "GLYPHIC_X_API_KEY",
-		"system-provided external MCP header must not appear in the install snippet")
-	assert.NotContains(t, body, "GLYPHIC_AUTHORIZATION",
-		"omitted external MCP header must not appear in the install snippet")
-	assert.Contains(t, body, "GLYPHIC_TRACE_ID",
-		"user-provided external MCP header (no env config) must still appear in the install snippet")
+	assert.NotContains(t, body, "ACME_X_API_KEY",
+		"system-provided header must not appear in the install snippet")
+	assert.NotContains(t, body, "ACME_AUTHORIZATION",
+		"omitted header must not appear in the install snippet")
+	assert.Contains(t, body, "ACME_TRACE_ID",
+		"user-provided header (no env config) must still appear in the install snippet")
 }
 
 // TestServeInstallPage_McpServer_RemoteBacked_PublicRenders confirms the
@@ -2375,69 +2383,11 @@ func TestServeInstallPage_ChatGPTDesktop_PublicWithHeaders(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	projectID := *authCtx.ProjectID
-	orgID := authCtx.ActiveOrganizationID
-
 	mcpSlug := "chatgpt-desktop-headers-" + uuid.New().String()[:8]
 	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
 		name: "Public ChatGPT Desktop Headers Toolset", slug: mcpSlug, mcpSlug: mcpSlug, description: "public toolset that needs a user-provided header", visibility: mcpservers.VisibilityPublic,
 	})
-
-	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
-		ProjectID:      projectID,
-		OrganizationID: orgID,
-		UserID:         "test-user",
-		IdempotencyKey: uuid.New().String(),
-	})
-	require.NoError(t, err)
-	err = deployments_repo.New(ti.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
-		DeploymentID: deploymentID,
-		Status:       "completed",
-	})
-	require.NoError(t, err)
-
-	externalmcpRepo := externalmcp_repo.New(ti.conn)
-	registryID, err := externalmcpRepo.CreateMCPRegistry(ctx, externalmcp_repo.CreateMCPRegistryParams{
-		Name: "test-registry-" + mcpSlug,
-		Url:  "https://mcp.example.com/acme",
-	})
-	require.NoError(t, err)
-	attachment, err := externalmcpRepo.CreateExternalMCPAttachment(ctx, externalmcp_repo.CreateExternalMCPAttachmentParams{
-		DeploymentID:            deploymentID,
-		RegistryID:              uuid.NullUUID{UUID: registryID, Valid: true},
-		Name:                    "Acme MCP Server",
-		Slug:                    "acme",
-		RegistryServerSpecifier: "test-server",
-	})
-	require.NoError(t, err)
-
-	toolURNString := "tools:externalmcp:acme:proxy"
-	_, err = externalmcpRepo.CreateExternalMCPToolDefinition(ctx, externalmcp_repo.CreateExternalMCPToolDefinitionParams{
-		ExternalMcpAttachmentID:    attachment.ID,
-		ToolUrn:                    toolURNString,
-		Type:                       "proxy",
-		RemoteUrl:                  "https://mcp.example.com/acme",
-		TransportType:              externalmcp_types.TransportTypeStreamableHTTP,
-		RequiresOauth:              false,
-		OauthVersion:               "none",
-		OauthAuthorizationEndpoint: pgtype.Text{},
-		OauthTokenEndpoint:         pgtype.Text{},
-		OauthRegistrationEndpoint:  pgtype.Text{},
-		OauthScopesSupported:       []string{},
-		HeaderDefinitions:          []byte(`[{"name":"X-Api-Key","isRequired":true,"isSecret":true}]`),
-	})
-	require.NoError(t, err)
-
-	toolURN, err := urn.ParseTool(toolURNString)
-	require.NoError(t, err)
-	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
-		ToolsetID:     toolset.ID,
-		Version:       1,
-		ToolUrns:      []urn.Tool{toolURN},
-		ResourceUrns:  []urn.Resource{},
-		PredecessorID: uuid.NullUUID{Valid: false},
-	})
-	require.NoError(t, err)
+	seedToolWithHeaderSecurity(t, ctx, ti, toolset, "ACME_X_API_KEY")
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -2445,7 +2395,7 @@ func TestServeInstallPage_ChatGPTDesktop_PublicWithHeaders(t *testing.T) {
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
-	err = ti.service.ServeInstallPage(rr, req)
+	err := ti.service.ServeInstallPage(rr, req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 

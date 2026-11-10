@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord";
 import type { ToolCallSummary } from "@gram/client/models/components/toolcallsummary";
