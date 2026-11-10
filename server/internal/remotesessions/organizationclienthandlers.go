@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -28,8 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -232,10 +231,7 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 // client's user session issuer links and those that offer it, each once.
 // Elsewhere they are the servers behind its links, whichever project owns them.
 func serversUsingClient(ctx context.Context, db repo.DBTX, organizationID string, clientID uuid.UUID) ([]repo.ListOrganizationMcpServersForClientRow, bool, error) {
-	enforced, err := productfeaturesrepo.New(db).IsFeatureEnabled(ctx, productfeaturesrepo.IsFeatureEnabledParams{
-		OrganizationID: organizationID,
-		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
-	})
+	enforced, err := authenforcement.ReadEnforced(ctx, db, organizationID)
 	if err != nil {
 		return nil, false, fmt.Errorf("read upstream auth enforcement: %w", err)
 	}

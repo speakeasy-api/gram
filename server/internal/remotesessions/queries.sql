@@ -3535,7 +3535,7 @@ ORDER BY m.id DESC;
 -- name: GetUserSessionIssuerOrganizationID :one
 -- The organization a sign-in belongs to. A deleted sign-in still names the
 -- organization a grant was consented in.
-SELECT COALESCE(p.organization_id, usi.organization_id)::text AS organization_id
+SELECT COALESCE(p.organization_id, usi.organization_id, '')::text AS organization_id
 FROM user_session_issuers AS usi
 LEFT JOIN projects AS p ON p.id = usi.project_id
 WHERE usi.id = @id;

@@ -527,7 +527,9 @@ type ClaimDueRemoteSessionRefreshCandidatesRow struct {
 // clients, a live, enabled offer of the client within that organization also
 // reaches two issuers, linked or not: the offering server's, and the sign-in the
 // grant was consented through, which is how a gateway login reaches a member's
-// registration. The offer is judged as serving judges it: the registration and
+// organization-level registration. A project-level registration still needs
+// the tenancy rule below, which an organization-tier sign-in does not meet, so
+// the sweep does not claim that grant. The offer is judged as serving judges it: the registration and
 // its provider are in the offering project's or organization's reach. Everything
 // else about eligibility is the same for these issuers. No agent attachment can
 // name one, because an attachment requires a link, so only a live Speakeasy
@@ -7340,7 +7342,7 @@ func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUse
 }
 
 const getUserSessionIssuerOrganizationID = `-- name: GetUserSessionIssuerOrganizationID :one
-SELECT COALESCE(p.organization_id, usi.organization_id)::text AS organization_id
+SELECT COALESCE(p.organization_id, usi.organization_id, '')::text AS organization_id
 FROM user_session_issuers AS usi
 LEFT JOIN projects AS p ON p.id = usi.project_id
 WHERE usi.id = $1

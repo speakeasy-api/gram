@@ -267,11 +267,15 @@ func TestConnectionRecoveryBindsACallbackOnAnotherHost(t *testing.T) {
 func TestConnectionRecoveryCompletesThroughTheOffer(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name   string
-		linked bool
+		name     string
+		linked   bool
+		sibling  bool
+		fallback bool
 	}{
-		{name: "no sign-in link", linked: false},
+		{name: "no sign-in link"},
 		{name: "a sign-in link", linked: true},
+		{name: "a sibling offers the same registration", sibling: true},
+		{name: "no upstream derives from offers", fallback: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -280,7 +284,15 @@ func TestConnectionRecoveryCompletesThroughTheOffer(t *testing.T) {
 			f := newConnectionRecoveryFixtureWithCallback(t, "", as.URL, nil)
 			signIn := createUserSessionIssuer(t, f.ctx, f.ti.conn, f.link.ProjectID)
 			f.link.UserSessionIssuerID = signIn
-			f.link.UpstreamResource = f.upstream
+			if !tc.fallback {
+				f.link.UpstreamResource = f.upstream
+			}
+			if tc.sibling {
+				remoteID, serverID := uuid.New(), uuid.New()
+				require.NoError(t, f.fixtures.SeedRemoteMCPServerFixture(f.ctx, authclientfixtures.SeedRemoteMCPServerFixtureParams{ID: remoteID, ProjectID: f.link.ProjectID, Url: "https://sibling.example.com/mcp"}))
+				require.NoError(t, f.fixtures.SeedMCPServerFixture(f.ctx, authclientfixtures.SeedMCPServerFixtureParams{ID: serverID, ProjectID: f.link.ProjectID, Slug: conv.ToPGText("sibling"), RemoteMcpServerID: conv.ToNullUUID(remoteID)}))
+				require.NoError(t, f.fixtures.SeedServerAuthClientLinkFixture(f.ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: f.link.ProjectID, OrganizationID: f.link.OrganizationID, McpServerID: serverID, AuthClientID: f.link.AuthClientID, Source: "admin"}))
+			}
 			q := remotesessions_repo.New(f.ti.conn)
 			if tc.linked {
 				require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(f.ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.link.RegistrationID, UserSessionIssuerID: signIn}))

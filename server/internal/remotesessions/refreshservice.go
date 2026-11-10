@@ -305,21 +305,12 @@ func (s *RefreshService) fallbackResourceForGrant(ctx context.Context, sess remo
 	if err != nil {
 		return "", fmt.Errorf("get grant organization: %w", err)
 	}
-	rows, err := q.ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
-		RemoteSessionClientIds: []uuid.UUID{sess.RemoteSessionClientID},
-		OrganizationID:         organizationID,
-	})
+	attachments, offered, err := loadClientAttachments(ctx, s.db, organizationID, []uuid.UUID{sess.RemoteSessionClientID})
 	if err != nil {
-		return "", fmt.Errorf("list mcp servers offering client: %w", err)
+		return "", fmt.Errorf("list mcp servers for grant client: %w", err)
 	}
-	offering := make([]string, 0, len(rows))
-	for _, row := range rows {
-		if row.Offered {
-			offering = append(offering, row.Resource)
-		}
-	}
-	if len(offering) > 0 {
-		return clientUpstreamResource(offering), nil
+	if offered[sess.RemoteSessionClientID] {
+		return clientUpstreamResource(attachments[sess.RemoteSessionClientID]), nil
 	}
 	return s.FallbackResourceForClient(ctx, sess.RemoteSessionClientID)
 }
@@ -361,12 +352,19 @@ func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, orga
 // use it, linked to their sign-in or not. A client with no offer keeps the
 // servers behind its links.
 func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]string, error) {
+	attachments, _, err := loadClientAttachments(ctx, db, organizationID, clientIDs)
+	return attachments, err
+}
+
+// loadClientAttachments also reports which clients have offers, so grant
+// refresh can preserve its client-wide fallback when no offer decides.
+func loadClientAttachments(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]string, map[uuid.UUID]bool, error) {
 	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
 		RemoteSessionClientIds: clientIDs,
 		OrganizationID:         organizationID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list mcp servers for bound clients: %w", err)
+		return nil, nil, fmt.Errorf("list mcp servers for bound clients: %w", err)
 	}
 	attachments := make(map[uuid.UUID][]string, len(clientIDs))
 	// Offered rows sort first for each client.
@@ -379,7 +377,7 @@ func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, org
 		}
 		attachments[row.ClientID] = append(attachments[row.ClientID], row.Resource)
 	}
-	return attachments, nil
+	return attachments, offered, nil
 }
 
 // resourceAmongSiblings decides clientID's resource at upstream from the

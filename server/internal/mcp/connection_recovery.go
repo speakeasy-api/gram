@@ -56,7 +56,7 @@ type connectionRecovery struct {
 	McpServerID         uuid.UUID `json:"mcp_server_id"`
 	McpSlug             string    `json:"mcp_slug"`
 	// UpstreamResource is the server's upstream, which the link's registration
-	// may claim as its resource when its own servers leave that open.
+	// uses as its resource for this exact offer.
 	UpstreamResource string    `json:"upstream_resource,omitempty"`
 	ServerName       string    `json:"server_name"`
 	AuthClientID     uuid.UUID `json:"auth_client_id"`
@@ -288,8 +288,8 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 
 // connectionRecoveryTypedLogin is what a link's login carries where typed auth
 // clients are enforced: the exact offer the link names, which authorizes the
-// login in place of a user session issuer link, and the resource the servers
-// offering the registration decide. Elsewhere it returns nil and no resource,
+// login in place of a user session issuer link, and the server's upstream
+// resource, falling back to its offers when absent. Elsewhere it returns nil and no resource,
 // and the login relies on the link. A refused login returns remotesessions.ErrTypedAuthorizationDenied
 // here, before the person signs in to the provider, as it would at the callback.
 func (s *Service) connectionRecoveryTypedLogin(ctx context.Context, recovery connectionRecovery, loginID string, subject urn.SessionSubject) (*remotesessions.TypedAuthorization, string, error) {
@@ -318,6 +318,9 @@ func (s *Service) connectionRecoveryTypedLogin(ctx context.Context, recovery con
 	}
 	if err := s.ValidateRemoteLoginTypedAuthorization(ctx, state); err != nil {
 		return nil, "", err
+	}
+	if recovery.UpstreamResource != "" {
+		return authorization, recovery.UpstreamResource, nil
 	}
 	offered, err := s.typedOfferedRegistrations(ctx, recovery.OrganizationID, []uuid.UUID{recovery.McpServerID})
 	if err != nil {
