@@ -700,16 +700,32 @@ func TestRecordUpstreamClientSelectionsFromTypedState(t *testing.T) {
 		require.True(t, f.namedAuthClient(credential, server).NoAuth)
 	})
 
-	t.Run("an offered EMA client keeps no-auth from being recorded", func(t *testing.T) {
+	t.Run("an offered EMA client is recorded only from an explicit pick", func(t *testing.T) {
 		t.Parallel()
 		f := newFixture(t)
 		issuer := f.projectIssuer()
 		server := f.server(issuer)
-		f.authClient("ema", f.client(issuer), server)
+		registration := f.client(issuer)
+		ema := f.authClient("ema", registration, server)
 
 		credential := f.session(issuer)
 		f.recordPickedFrom(issuer, credential, nil, true)
-		require.Empty(t, f.selections(credential))
+		require.Empty(t, f.selections(credential), "neither no-auth nor the EMA client is recorded without a pick")
+
+		n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+			UserSessionIssuerID: issuer,
+			CredentialKind:      upstreamclients.CredentialKindUserSession,
+			CredentialID:        credential,
+			Source:              upstreamclients.SelectionSourceIssuance,
+			PickedMcpServerIds:  []uuid.UUID{server},
+			PickedClientIds:     []uuid.UUID{registration},
+			PickedAuthClientIds: []uuid.UUID{ema},
+			TypedOnly:           true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
+		require.Equal(t, uuid.NullUUID{UUID: ema, Valid: true}, f.namedAuthClient(credential, server).AuthClientID, "an explicit pick records the EMA client")
 	})
 
 	t.Run("a registration two offered clients share is left to a pick", func(t *testing.T) {

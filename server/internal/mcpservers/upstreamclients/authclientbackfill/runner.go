@@ -641,7 +641,7 @@ func RunGrants(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 func runGrantsPhase(ctx context.Context, conn *pgxpool.Conn, opts Options) (Report, error) {
 	report := newReport(opts.Apply)
 	local := newReport(opts.Apply)
-	probe, err := clientsRecorded(ctx, conn, opts.OrganizationID)
+	probe, err := clientsRecorded(ctx, conn, opts.OrganizationID, opts.TypedOnly)
 	if err != nil {
 		return report, fmt.Errorf("check recorded auth clients: %w", err)
 	}
@@ -669,9 +669,10 @@ func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 }
 
 // clientsRecorded dry-runs every phase but grants, to tell whether key
-// policies written now would be complete.
-func clientsRecorded(ctx context.Context, db TxStarter, organizationID string) (Report, error) {
-	return runPhases(ctx, db, Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
+// policies written now would be complete. typedOnly is the run's own, so the
+// probe decides choices as the run does.
+func clientsRecorded(ctx context.Context, db TxStarter, organizationID string, typedOnly bool) (Report, error) {
+	return runPhases(ctx, db, Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: typedOnly}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
 }
 
 // sharedReady reports whether the recorded auth clients and links are current

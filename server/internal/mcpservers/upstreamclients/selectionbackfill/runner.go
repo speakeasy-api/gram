@@ -159,9 +159,6 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 	q := New(db)
 	sessions := usersessionsrepo.New(db)
 	cursor := uuid.Nil
-	// One run reads each organization's enforcement once, so a run with no
-	// organization decides every credential by its own organization.
-	enforcement := map[string]bool{}
 	for {
 		credentials, err := q.ListLiveUserSessionCredentials(ctx, ListLiveUserSessionCredentialsParams{
 			Cursor:         cursor,
@@ -175,13 +172,13 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			return report, nil
 		}
 		for _, credential := range credentials {
-			typedOnly, known := enforcement[credential.OrganizationID]
-			if !known {
-				typedOnly, err = authenforcement.ReadEnforced(ctx, db, credential.OrganizationID)
-				if err != nil {
-					return report, fmt.Errorf("read enforcement for credential %s: %w", credential.CredentialID, err)
-				}
-				enforcement[credential.OrganizationID] = typedOnly
+			// Read for each credential, right before its choices are decided,
+			// so a run that outlives an enforcement change writes the rest under
+			// the new state, and a run with no organization decides every
+			// credential by its own organization.
+			typedOnly, err := authenforcement.ReadEnforced(ctx, db, credential.OrganizationID)
+			if err != nil {
+				return report, fmt.Errorf("read enforcement for credential %s: %w", credential.CredentialID, err)
 			}
 			coverageParams := ListUpstreamClientSelectionCoverageParams{
 				UserSessionIssuerID: credential.UserSessionIssuerID,
