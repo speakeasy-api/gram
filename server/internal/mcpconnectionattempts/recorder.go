@@ -32,6 +32,8 @@ const (
 	meterSteps   = "mcp.connection.steps"
 	meterDropped = "mcp.connection.events.dropped"
 
+	meterReferenceTimeouts = "mcp.connection.references.timed_out"
+
 	insertStatement = `INSERT INTO %s (
 		organization_id, project_id, attempt_id, attempt_started_at, event_time,
 		server_kind, server_id, member_id, step, step_result, outcome, reason,
@@ -366,6 +368,9 @@ type Recorder struct {
 	steps       metric.Int64Counter
 	dropped     metric.Int64Counter
 
+	// referenceTimeouts counts references not shown because the logs check outran its wait.
+	referenceTimeouts metric.Int64Counter
+
 	queue        chan Row
 	stop         chan struct{}
 	done         chan struct{}
@@ -457,29 +462,37 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterDropped), attr.SlogError(err))
 	}
+	referenceTimeouts, err := meter.Int64Counter(meterReferenceTimeouts,
+		metric.WithDescription("MCP connection references not shown because the logs check was slower than its wait."),
+		metric.WithUnit("{reference}"))
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterReferenceTimeouts), attr.SlogError(err))
+	}
 
 	writerCtx, cancelWriter := context.WithCancel(context.Background())
 	r := &Recorder{
-		logger:       logger,
-		conn:         conn,
-		limiter:      newOnceLimiter(),
-		logsEnabled:  logsEnabled,
-		deviceKeys:   nil,
-		capture:      nil,
-		cfg:          cfg,
-		steps:        steps,
-		dropped:      dropped,
-		queue:        make(chan Row, cfg.queueSize),
-		stop:         make(chan struct{}),
-		done:         make(chan struct{}),
-		stopOnce:     sync.Once{},
-		writerCtx:    writerCtx,
-		cancelWriter: cancelWriter,
-		stopMu:       sync.RWMutex{},
-		stopped:      false,
-		lastDrop:     newDropCounters(),
-		unfinished:   atomic.Int64{},
-		dropTotals:   newDropCounters(),
+		logger:      logger,
+		conn:        conn,
+		limiter:     newOnceLimiter(),
+		logsEnabled: logsEnabled,
+		deviceKeys:  nil,
+		capture:     nil,
+		cfg:         cfg,
+		steps:       steps,
+		dropped:     dropped,
+
+		referenceTimeouts: referenceTimeouts,
+		queue:             make(chan Row, cfg.queueSize),
+		stop:              make(chan struct{}),
+		done:              make(chan struct{}),
+		stopOnce:          sync.Once{},
+		writerCtx:         writerCtx,
+		cancelWriter:      cancelWriter,
+		stopMu:            sync.RWMutex{},
+		stopped:           false,
+		lastDrop:          newDropCounters(),
+		unfinished:        atomic.Int64{},
+		dropTotals:        newDropCounters(),
 
 		insertFailing: atomic.Bool{},
 		referableOrgs: newReferableOrgs(),
@@ -498,26 +511,28 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 // writing it. Use mcpconnectionattemptstest rather than calling this.
 func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (bool, error)) *Recorder {
 	return &Recorder{
-		logger:       slog.New(slog.DiscardHandler),
-		conn:         nil,
-		limiter:      nil,
-		logsEnabled:  logsEnabled,
-		deviceKeys:   nil,
-		capture:      capture,
-		cfg:          config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0},
-		steps:        nil,
-		dropped:      nil,
-		queue:        nil,
-		stop:         nil,
-		done:         nil,
-		stopOnce:     sync.Once{},
-		writerCtx:    context.Background(),
-		cancelWriter: nil,
-		stopMu:       sync.RWMutex{},
-		stopped:      false,
-		lastDrop:     newDropCounters(),
-		unfinished:   atomic.Int64{},
-		dropTotals:   newDropCounters(),
+		logger:      slog.New(slog.DiscardHandler),
+		conn:        nil,
+		limiter:     nil,
+		logsEnabled: logsEnabled,
+		deviceKeys:  nil,
+		capture:     capture,
+		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0},
+		steps:       nil,
+		dropped:     nil,
+
+		referenceTimeouts: nil,
+		queue:             nil,
+		stop:              nil,
+		done:              nil,
+		stopOnce:          sync.Once{},
+		writerCtx:         context.Background(),
+		cancelWriter:      nil,
+		stopMu:            sync.RWMutex{},
+		stopped:           false,
+		lastDrop:          newDropCounters(),
+		unfinished:        atomic.Int64{},
+		dropTotals:        newDropCounters(),
 
 		insertFailing: atomic.Bool{},
 		referableOrgs: nil,
@@ -570,6 +585,8 @@ func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Hap
 // count; a held key evicted before then is lost as repeats_lost. It reports capture/queue
 // acceptance, not eventual persistence; held-back and rejected rows return false. A held-back
 // row still leaves a reference: every row folded together is stored under one id, the first's.
+// That row holds one held request's details, so its id names the failure, not which request
+// it was; rows with no known subject leave none, since different callers fold together.
 func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) bool {
 	return r.record(ctx, Begin(scope), step, what, true, limitOnce, opts)
 }
@@ -579,6 +596,13 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		return false
 	}
 	var row Row
+	referenced := false
+	// Runs last: a failure that leaves no id of its own still hides an earlier one.
+	defer func() {
+		if !referenced {
+			r.leaveReference(ctx, step, row.OrganizationID, uuid.Nil, what)
+		}
+	}()
 	// Recording must never panic a request.
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -606,12 +630,15 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		decision, stopped := r.admitOnce(row)
 		if stopped {
 			r.drop(ctx, dropShutdown, 1, nil)
-			r.leaveReference(ctx, step, row.OrganizationID, uuid.Nil, what)
 			return false
 		}
 		r.dropLostRepeats(ctx, decision.lost)
 		if !decision.allowed {
-			r.leaveReference(ctx, step, row.OrganizationID, decision.foldID, what)
+			// Callers with no known subject fold together, so the shared id isn't this caller's.
+			if onceKeyOf(row).subject != "" {
+				r.leaveReference(ctx, step, row.OrganizationID, decision.foldID, what)
+				referenced = true
+			}
 			return false
 		}
 		row.Repeats = decision.repeats
@@ -628,6 +655,7 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 			r.stampClient(&row)
 			r.capture(row)
 			r.leaveReference(ctx, step, row.OrganizationID, row.AttemptID, what)
+			referenced = true
 			return true
 		}
 		return false
@@ -635,10 +663,10 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 
 	if reason := r.enqueue(row); reason != "" {
 		r.drop(ctx, reason, events(row), nil)
-		r.leaveReference(ctx, step, row.OrganizationID, uuid.Nil, what)
 		return false
 	}
 	r.leaveReference(ctx, step, row.OrganizationID, row.AttemptID, what)
+	referenced = true
 	return true
 }
 
@@ -716,6 +744,9 @@ func (r *Recorder) logsAllowForReference(ctx context.Context, organizationID str
 		allowed, _ := result.Val.(bool)
 		return allowed
 	case <-timer.C:
+		if r.referenceTimeouts != nil {
+			r.referenceTimeouts.Add(ctx, 1)
+		}
 		return false
 	case <-ctx.Done():
 		return false

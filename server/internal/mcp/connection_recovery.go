@@ -232,7 +232,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	if errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
 		t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(err))
 		s.logger.InfoContext(ctx, "connection link refused: typed login not authorized", attr.SlogAuthClientID(recovery.AuthClientID.String()), attr.SlogError(err))
-		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryNoAccessPage)
+		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryNoAccessPage, contextvalues.ConnectionReferenceLine(ctx))
 	}
 	if err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)

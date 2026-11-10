@@ -183,4 +183,5 @@ func TestConnectionReference_ALostOrStalledClaimLeavesNone(t *testing.T) {
 	require.Empty(t, contextvalues.ConnectionReference(stalledCtx), "past the wait the error goes out with none")
 	close(stalled.release)
 	require.NoError(t, service.attemptEndings.drain(t.Context()))
+	require.Empty(t, contextvalues.ConnectionReference(stalledCtx), "an ending that lands after the wait leaves nothing behind")
 }

@@ -535,20 +535,32 @@ func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attem
 	if attempt.IsZero() {
 		return
 	}
+	wanted := contextvalues.ConnectionReferenceWanted(ctx) && mcpconnectionattempts.FailureWorthAReference(what)
 	claimed := make(chan struct{})
+	reference := ""
 	if !s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
 		defer close(claimed)
+		// Its own slot, so an ending accepted after the wait can't label a later error.
+		ctx = contextvalues.WithConnectionReferenceSlot(ctx)
 		s.claimAttemptEnding(ctx, logger, attempt, step, what, opts...)
+		reference = contextvalues.ConnectionReference(ctx)
 	}) {
+		if wanted {
+			contextvalues.SetConnectionReference(ctx, "")
+		}
 		return
 	}
-	// The row's acceptance leaves the reference; past the wait, the error goes out with none.
-	if contextvalues.ConnectionReferenceWanted(ctx) && mcpconnectionattempts.FailureWorthAReference(what) {
-		select {
-		case <-claimed:
-		case <-time.After(attemptEndingReferenceWait):
-		case <-ctx.Done():
-		}
+	if !wanted {
+		return
+	}
+	// The accepted row's id, or none past the wait.
+	select {
+	case <-claimed:
+		contextvalues.SetConnectionReference(ctx, reference)
+	case <-time.After(attemptEndingReferenceWait):
+		contextvalues.SetConnectionReference(ctx, "")
+	case <-ctx.Done():
+		contextvalues.SetConnectionReference(ctx, "")
 	}
 }
 

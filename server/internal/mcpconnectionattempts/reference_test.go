@@ -13,9 +13,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func withSlot(t *testing.T) context.Context {
@@ -185,6 +187,86 @@ func TestReference_ALogsOnAnswerExpiresWithTheFlush(t *testing.T) {
 	})
 }
 
+func TestReference_FailuresThatLeaveNoIDHideAnEarlierOne(t *testing.T) {
+	t.Parallel()
+
+	earlier := func(t *testing.T) context.Context {
+		t.Helper()
+		ctx := withSlot(t)
+		contextvalues.SetConnectionReference(ctx, uuid.NewString())
+		return ctx
+	}
+
+	t.Run("invalid row", func(t *testing.T) {
+		t.Parallel()
+		recorder := NewCapturing(func(Row) {}, logsOn)
+		ctx := earlier(t)
+		recorder.Step(ctx, Begin(testScope()), Step{}, CodeProviderUnreachable)
+		require.Empty(t, contextvalues.ConnectionReference(ctx))
+	})
+	t.Run("logs off", func(t *testing.T) {
+		t.Parallel()
+		recorder := NewCapturing(func(Row) {}, func(context.Context, string) (bool, error) { return false, nil })
+		ctx := earlier(t)
+		recorder.Once(ctx, testScope(), StepMCPRequest, CodeProviderUnreachable)
+		require.Empty(t, contextvalues.ConnectionReference(ctx))
+	})
+	t.Run("panic", func(t *testing.T) {
+		t.Parallel()
+		recorder := NewCapturing(func(Row) { panic("capture panicked") }, logsOn)
+		ctx := earlier(t)
+		recorder.Once(ctx, testScope(), StepMCPRequest, CodeProviderUnreachable)
+		require.Empty(t, contextvalues.ConnectionReference(ctx))
+	})
+}
+
+func TestReference_AnAnonymousFoldShowsNone(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.queueSize = 4096
+	recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
+	t.Cleanup(func() { _ = recorder.Shutdown(context.WithoutCancel(t.Context())) })
+
+	scope := testScope()
+	var shown []string
+	for range onceKeyBurst + 2 {
+		ctx := withSlot(t)
+		recorder.Once(ctx, scope, StepMCPRequest, CodeInvalidBearerToken)
+		shown = append(shown, contextvalues.ConnectionReference(ctx))
+	}
+	require.NotEmpty(t, shown[0], "an unfolded row is its own")
+	require.Empty(t, shown[onceKeyBurst], "folded callers with no known subject can't be told apart")
+	require.Empty(t, shown[onceKeyBurst+1])
+}
+
+func TestReference_ASlowLogsCheckIsCounted(t *testing.T) {
+	t.Parallel()
+
+	block := make(chan struct{})
+	check := &logsCheck{enabled: true, err: nil, block: block, panics: false, checks: atomic.Int64{}}
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	recorder := newTestRecorderWithLogs(t, conn, check.check, testConfig())
+	t.Cleanup(func() { close(block) })
+
+	require.False(t, recorder.logsAllowForReference(t.Context(), "org"))
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, recorder.reader.Collect(t.Context(), &collected))
+	var total int64
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if sum, ok := m.Data.(metricdata.Sum[int64]); ok && m.Name == meterReferenceTimeouts {
+				for _, point := range sum.DataPoints {
+					total += point.Value
+				}
+			}
+		}
+	}
+	require.Equal(t, int64(1), total)
+}
+
 func TestReference_NonFailuresLeaveNone(t *testing.T) {
 	t.Parallel()
 
@@ -271,10 +353,11 @@ func TestReference_AFoldedRequestShowsTheRowItFoldsInto(t *testing.T) {
 		recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
 		scope := testScope()
 
+		subject := urn.NewUserSubject("user-1")
 		var folded []string
 		for range onceKeyBurst + 3 {
 			ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
-			recorder.Once(ctx, scope, StepMCPRequest, CodeInvalidRemoteSession)
+			recorder.Once(ctx, scope, StepMCPRequest, CodeInvalidRemoteSession, Subject(&subject))
 			folded = append(folded, contextvalues.ConnectionReference(ctx))
 		}
 		require.NotEqual(t, folded[onceKeyBurst-1], folded[onceKeyBurst], "the burst's rows keep their own ids")
