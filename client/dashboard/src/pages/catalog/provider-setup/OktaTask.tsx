@@ -202,13 +202,15 @@ export function OktaTask(): JSX.Element {
           {
             value: "web",
             title: "Web app",
-            description: "Client ID and Client Secret, with PKCE.",
+            description:
+              "Recommended for Speakeasy, which manages the connection to Okta on its servers.",
             icon: AppWindow,
           },
           {
             value: "native",
             title: "Native app",
-            description: "Client ID only, with PKCE required.",
+            description:
+              "Typically used by desktop apps connecting directly to Okta. Choose this if you need to use a Native app registration with Speakeasy.",
             icon: Monitor,
           },
         ]}
