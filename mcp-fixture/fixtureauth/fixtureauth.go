@@ -169,6 +169,24 @@ func IssueTokens(issuer, resource, clientID, email string, scopes []string, acce
 	return TokenPair{AccessToken: access, AccessExpiresAt: accessExp, RefreshToken: refresh, RefreshExpires: refreshExp, Scope: scope}, nil
 }
 
+// RegisterClient mints the client id dynamic client registration would
+// return for a client with these redirect URIs. Registration is stateless:
+// the client id is a signed description of the client.
+func RegisterClient(issuer, name string, redirectURIs []string, now time.Time) (string, error) {
+	return Sign(Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    strings.TrimRight(issuer, "/"),
+			Subject:   "client",
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(10 * 365 * 24 * time.Hour)),
+			ID:        NewID(),
+		},
+		Kind:         KindClient,
+		RedirectURIs: redirectURIs,
+		ClientName:   name,
+	})
+}
+
 // OAuthResource is the resource identifier of the fixture's OAuth-protected
 // MCP endpoint for a fixture served at baseURL.
 func OAuthResource(baseURL string) string {

@@ -96,6 +96,13 @@ var (
 		"search_logs", "get_metrics", "query_db", "get_customer",
 		"list_deploys", "process_refund", "fetch_traces", "check_health",
 	}
+	// toolPaths are the operations' paths in openapi.yaml, so a call reaches
+	// the local MCP fixture's stub of the same document.
+	toolPaths = map[string]string{
+		"search_logs": "/logs/search", "get_metrics": "/metrics/get", "query_db": "/db/query",
+		"get_customer": "/customers/get", "list_deploys": "/deploys/list", "process_refund": "/refunds/process",
+		"fetch_traces": "/traces/fetch", "check_health": "/health/check",
+	}
 	auditActions = []string{
 		"toolset:create", "deployments:create", "api_key:create",
 		"toolset:update", "toolset:update", "plugin:publish",

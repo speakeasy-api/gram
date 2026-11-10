@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
@@ -69,6 +70,22 @@ func newDemoSeedCommand() *cli.Command {
 				Name:    "local-slack-email",
 				Usage:   "Your Slack account email, when it differs from your Speakeasy email",
 				EnvVars: []string{"GRAM_DEV_SLACK_EMAIL"},
+			},
+			&cli.StringFlag{
+				Name:    "local-mcp-fixture-url",
+				Usage:   "URL of the local MCP fixture server; seeded servers point at it so they work end to end",
+				EnvVars: []string{"GRAM_MCP_FIXTURE_URL"},
+			},
+			&cli.DurationFlag{
+				Name:    "local-mcp-fixture-access-token-ttl",
+				Usage:   "Lifetime of the fixture access tokens the local seed mints",
+				EnvVars: []string{"GRAM_MCP_FIXTURE_ACCESS_TOKEN_TTL"},
+				Value:   time.Hour,
+			},
+			&cli.StringFlag{
+				Name:    "server-url",
+				Usage:   "Speakeasy's own URL, which the local MCP fixture redirects sign-ins back to",
+				EnvVars: []string{"GRAM_SERVER_URL"},
 			},
 			&cli.StringFlag{
 				Name:    "environment",
@@ -167,12 +184,18 @@ func newDemoSeedCommand() *cli.Command {
 				slack.Slack = slackapi.NewClient("", guardian.NewDefaultPolicy(otel.GetTracerProvider()).Client())
 			}
 
+			fixture, err := localMCPFixtureOptions(c)
+			if err != nil {
+				return err
+			}
+
 			if err := demoseed.RunLocalFixtures(ctx, logger, db, blob, redisClient, demoseed.LocalFixturesOptions{
 				DeveloperEmail: c.String("local-user-email"),
 				SiteURL:        siteURL,
 				Environment:    c.String("environment"),
 				ObservedEnv:    observed,
 				Slack:          slack,
+				MCPFixture:     fixture,
 			}); err != nil {
 				return fmt.Errorf("apply local fixtures: %w", err)
 			}
@@ -184,4 +207,26 @@ func newDemoSeedCommand() *cli.Command {
 			return nil
 		},
 	}
+}
+
+// localMCPFixtureOptions reads the local MCP fixture settings. Without a
+// fixture URL the seeded servers stay display-only.
+func localMCPFixtureOptions(c *cli.Context) (demoseed.LocalMCPFixtureOptions, error) {
+	opts := demoseed.LocalMCPFixtureOptions{BaseURL: "", ServerURL: nil, AccessTokenTTL: c.Duration("local-mcp-fixture-access-token-ttl"), Encryption: nil}
+	base := c.String("local-mcp-fixture-url")
+	if base == "" || base == "unset" {
+		return opts, nil
+	}
+	serverURL, err := url.Parse(c.String("server-url"))
+	if err != nil || serverURL.Host == "" {
+		return opts, fmt.Errorf("the local MCP fixture needs GRAM_SERVER_URL: %q is not a URL", c.String("server-url"))
+	}
+	encryptionClient, err := encryption.New(c.String("encryption-key"))
+	if err != nil {
+		return opts, fmt.Errorf("create encryption client for the local MCP fixture tokens: %w", err)
+	}
+	opts.BaseURL = base
+	opts.ServerURL = serverURL
+	opts.Encryption = encryptionClient
+	return opts, nil
 }

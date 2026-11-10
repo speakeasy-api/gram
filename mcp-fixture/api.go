@@ -47,11 +47,7 @@ func apiStub() http.Handler {
 		}})
 	})
 	mux.HandleFunc("GET /customers/get", func(w http.ResponseWriter, r *http.Request) {
-		id := r.URL.Query().Get("id")
-		if id == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
-			return
-		}
+		id := param(r, "id", "cus_demo")
 		reply(w, r, map[string]any{"id": id, "name": "Jordan Example", "plan": "business", "status": "active", "open_tickets": 2})
 	})
 	mux.HandleFunc("GET /deploys/list", func(w http.ResponseWriter, r *http.Request) {
@@ -66,9 +62,13 @@ func apiStub() http.Handler {
 			Amount   float64 `json:"amount"`
 			Currency string  `json:"currency"`
 		}
-		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil || in.OrderID == "" || in.Amount <= 0 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "orderId and a positive amount are required"})
-			return
+		// The seeded tool sends no body; a demo refund stands in for it.
+		_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in)
+		if in.OrderID == "" {
+			in.OrderID = "ORD-1001"
+		}
+		if in.Amount <= 0 {
+			in.Amount = 25
 		}
 		if in.Currency == "" {
 			in.Currency = "USD"
