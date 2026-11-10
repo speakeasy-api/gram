@@ -19,7 +19,7 @@ import { AgentAPIKeys } from "./AgentAPIKeys";
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   revoke: vi.fn(),
-  onCreate: vi.fn(),
+  onCreate: vi.fn<() => void>(),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example" }),
