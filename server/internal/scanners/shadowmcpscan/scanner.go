@@ -445,18 +445,34 @@ func resolvedServerIdentity(prov telemetryrepo.MCPProvenance, serverPrefix strin
 }
 
 // recordedServerProvenance is the transport a recorded provenance row proves
-// for serverPrefix. The provenance is known only when the lookup returned a row
-// whose match is the bare tool-name prefix: senders write that value only after
-// loading the session inventory and finding no URL or command for the server.
-// A missing row, a failed lookup, or a row carrying any other value is unknown.
-// A recorded server identity beyond the name counts as a launch command.
+// for serverPrefix. A missing row or a failed lookup is unknown. A row is known
+// in one of two shapes, each written only after the sender loaded the session
+// inventory and found no URL or command for the server:
+//
+//   - the per-provider hooks record the bare tool-name prefix as the match;
+//   - canonical ingest records an agent built-in identity and no match, so a
+//     sibling event's URL or command always surfaces in the match or URL.
+//
+// A recorded server identity other than the name the row vouches for counts as
+// a launch command, so a mixed or unexpected identity never exempts.
 func recordedServerProvenance(prov telemetryrepo.MCPProvenance, provFound bool, serverPrefix string) shadowmcp.ServerProvenance {
-	if !provFound || serverPrefix == "" || strings.TrimSpace(prov.Match) != serverPrefix {
+	if !provFound || serverPrefix == "" {
+		return shadowmcp.UnknownServerProvenance()
+	}
+
+	match := strings.TrimSpace(prov.Match)
+	vouched := ""
+	switch builtinIdentity := strings.TrimSpace(prov.AgentBuiltinIdentity); {
+	case match == serverPrefix:
+		vouched = serverPrefix
+	case match == "" && builtinIdentity != "":
+		vouched = builtinIdentity
+	default:
 		return shadowmcp.UnknownServerProvenance()
 	}
 
 	command := ""
-	if identity := strings.TrimSpace(prov.ServerIdentity); identity != serverPrefix {
+	if identity := strings.TrimSpace(prov.ServerIdentity); identity != "" && identity != vouched {
 		command = identity
 	}
 	return shadowmcp.ServerProvenance{Known: true, URL: strings.TrimSpace(prov.ServerURL), Command: command}

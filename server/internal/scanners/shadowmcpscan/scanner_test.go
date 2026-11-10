@@ -870,6 +870,36 @@ func TestScanner_AgentBuiltinServers(t *testing.T) {
 			wantFlagged: false,
 		},
 		{
+			name:        "canonical built-in identity without a match is clean",
+			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "", ServerIdentity: "claude-in-chrome", HookSource: "claude", AgentBuiltinIdentity: "claude-in-chrome"}},
+			wantFlagged: false,
+		},
+		{
+			name:        "canonical built-in identity under a payload server name variant is clean",
+			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "", ServerIdentity: "Claude in Chrome", HookSource: "claude", AgentBuiltinIdentity: "Claude in Chrome"}},
+			wantFlagged: false,
+		},
+		{
+			name:        "canonical built-in identity with a sibling command match is flagged",
+			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "/usr/bin/node server.js", ServerURL: "", ServerIdentity: "claude-in-chrome", HookSource: "claude", AgentBuiltinIdentity: "claude-in-chrome"}},
+			wantFlagged: true,
+		},
+		{
+			name:        "canonical built-in identity with a different recorded identity is flagged",
+			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "", ServerIdentity: "npx some-mcp", HookSource: "claude", AgentBuiltinIdentity: "claude-in-chrome"}},
+			wantFlagged: true,
+		},
+		{
+			name:        "canonical built-in identity on an unlisted name is flagged",
+			toolName:    "mcp__ccd_custom__run",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "", ServerIdentity: "ccd_custom", HookSource: "claude", AgentBuiltinIdentity: "ccd_custom"}},
+			wantFlagged: true,
+		},
+		{
 			name:        "desktop app tool without provenance is flagged",
 			toolName:    "mcp__ccd_turn__wrap_up",
 			provenance:  map[string]telemetryrepo.MCPProvenance{},

@@ -94,14 +94,16 @@ func (s *Service) isCanonicalAgentBuiltinMCPServer(ctx context.Context, payload 
 	return shadowmcp.IsAgentBuiltinServer(serverName, inventoryServerProvenance(entries, serverName))
 }
 
-// canonicalAgentBuiltinMCPMatch returns the bare server name to record as a
-// canonical tool event's gram.mcp.match when the call targets an agent
-// built-in server that the same check as enforcement proves transport-less:
-// the payload states no URL or command and the session inventory loaded and
-// configures none. The findings scanner trusts that bare-prefix match as known
-// provenance. Any other call, including one whose inventory cannot be read,
-// returns "" and records no match, so the scanner stays fail-closed.
-func (s *Service) canonicalAgentBuiltinMCPMatch(ctx context.Context, payload *gen.IngestPayload) string {
+// canonicalAgentBuiltinIdentity returns the name-only server identity to record
+// as a canonical tool event's gram.mcp.agent_builtin_identity when the call
+// targets an agent built-in server that the same check as enforcement proves
+// transport-less: the payload states no URL or command and the session
+// inventory loaded and configures none. The value is the gram.tool_call.source
+// the same row records (the server name when it records none), so the findings
+// scanner can confirm the recorded identity is the one ingest verified. Any
+// other call, including one whose inventory cannot be read, returns "" and
+// records nothing, so the scanner stays fail-closed.
+func (s *Service) canonicalAgentBuiltinIdentity(ctx context.Context, payload *gen.IngestPayload) string {
 	rawToolName := canonicalToolName(payload)
 	if !toolref.IsMCPToolName(rawToolName) {
 		return ""
@@ -109,7 +111,7 @@ func (s *Service) canonicalAgentBuiltinMCPMatch(ctx context.Context, payload *ge
 	if !s.isCanonicalAgentBuiltinMCPServer(ctx, payload, rawToolName, canonicalShadowMCPEvidence(payload, rawToolName)) {
 		return ""
 	}
-	return toolref.MCPServerOf(rawToolName)
+	return conv.Default(canonicalTelemetryToolSource(payload), toolref.MCPServerOf(rawToolName))
 }
 
 // canonicalPayloadProvenance is the transport a canonical hook payload states

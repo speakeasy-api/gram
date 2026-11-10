@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -221,43 +222,74 @@ func (p builtinScanProvenance) LookupMCPProvenanceByToolCallID(context.Context, 
 	return p.rows, nil
 }
 
+// builtinScanEvent is one canonical hook event of a tool call.
+type builtinScanEvent struct {
+	eventType string
+	command   string
+}
+
 // TestCanonicalIngest_AgentBuiltinServerFindings: the findings scanner trusts a
 // built-in name only through the provenance row ingest records. A canonical
-// built-in call with a loaded session inventory records the bare server name as
-// gram.mcp.match and yields no finding; without an inventory it records no
-// match and the call is still reported, as is a stdio server borrowing the name.
+// built-in call with a loaded session inventory records the verified identity
+// as gram.mcp.agent_builtin_identity and yields no finding; without an
+// inventory it records nothing and the call is still reported, as is a stdio
+// server borrowing the name, even when only one event of the call carried the
+// command.
 func TestCanonicalIngest_AgentBuiltinServerFindings(t *testing.T) {
 	t.Parallel()
 
+	requested := []builtinScanEvent{{eventType: "tool.requested", command: ""}}
 	tests := []struct {
 		name        string
 		toolName    string
-		command     string
+		serverName  string
+		events      []builtinScanEvent
 		inventory   []MCPServerEntry
 		wantFinding bool
 	}{
 		{
 			name:        "built-in with a loaded inventory yields no finding",
 			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
+			events:      requested,
 			inventory:   []MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp"}},
 			wantFinding: false,
 		},
 		{
 			name:        "desktop app built-in with a loaded inventory yields no finding",
 			toolName:    "mcp__ccd_turn__wrap_up",
+			events:      requested,
+			inventory:   []MCPServerEntry{},
+			wantFinding: false,
+		},
+		{
+			name:        "built-in reported under a different payload server name yields no finding",
+			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
+			serverName:  "Claude in Chrome",
+			events:      requested,
 			inventory:   []MCPServerEntry{},
 			wantFinding: false,
 		},
 		{
 			name:        "built-in without a session inventory is reported",
 			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
+			events:      requested,
 			inventory:   nil,
 			wantFinding: true,
 		},
 		{
 			name:        "built-in name with a stdio command is reported",
 			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
-			command:     "npx some-mcp",
+			events:      []builtinScanEvent{{eventType: "tool.requested", command: "npx some-mcp"}},
+			inventory:   []MCPServerEntry{},
+			wantFinding: true,
+		},
+		{
+			name:     "built-in name with a command on one event only is reported",
+			toolName: "mcp__claude-in-chrome__tabs_context_mcp",
+			events: []builtinScanEvent{
+				{eventType: "tool.requested", command: "/usr/bin/node server.js"},
+				{eventType: "tool.completed", command: ""},
+			},
 			inventory:   []MCPServerEntry{},
 			wantFinding: true,
 		},
@@ -276,31 +308,47 @@ func TestCanonicalIngest_AgentBuiltinServerFindings(t *testing.T) {
 					sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), tc.inventory, sessionMCPListTTL))
 			}
 
-			serverName := mcpServerIdentityFromToolName(tc.toolName)
-			mcp := &gen.HookMCPData{ServerName: &serverName, ServerIdentity: &serverName}
-			if tc.command != "" {
-				mcp.Command = &tc.command
-				mcp.ServerIdentity = &tc.command
-			}
+			serverName := conv.Default(tc.serverName, mcpServerIdentityFromToolName(tc.toolName))
 			callID := "call-1"
-			payload := canonicalIngestPayload("claude", "tool.requested", sessionID)
-			payload.Data = &gen.HookIngestData{
-				ToolCall: &gen.HookToolCallData{ID: &callID, Name: &tc.toolName, Input: map[string]any{}},
-				Mcp:      mcp,
+
+			// Aggregate the call's rows the way the provenance query does: it
+			// admits a row only when it carries a match, a server URL, or a
+			// built-in identity, then keeps the max of each column.
+			var prov telemetryrepo.MCPProvenance
+			admitted := false
+			for _, event := range tc.events {
+				mcp := &gen.HookMCPData{ServerName: &serverName, ServerIdentity: &serverName}
+				if event.command != "" {
+					mcp.Command = &event.command
+					mcp.ServerIdentity = &event.command
+				}
+				payload := canonicalIngestPayload("claude", event.eventType, sessionID)
+				payload.Data = &gen.HookIngestData{
+					ToolCall: &gen.HookToolCallData{ID: &callID, Name: &tc.toolName, Input: map[string]any{}},
+					Mcp:      mcp,
+				}
+
+				rows := ti.service.canonicalTelemetryRows(ctx, payload, authCtx, &SessionMetadata{}, "claude", time.Now(), "")
+				require.NotEmpty(t, rows)
+
+				attrs := rows[0].attrs
+				match, _ := attrs[attr.MCPMatchKey].(string)
+				serverURL, _ := attrs[attr.MCPServerURLKey].(string)
+				builtinIdentity, _ := attrs[attr.MCPAgentBuiltinIdentityKey].(string)
+				source, _ := attrs[attr.ToolCallSourceKey].(string)
+				if match == "" && serverURL == "" && builtinIdentity == "" {
+					continue
+				}
+				admitted = true
+				prov.Match = max(prov.Match, match)
+				prov.ServerURL = max(prov.ServerURL, serverURL)
+				prov.ServerIdentity = max(prov.ServerIdentity, source)
+				prov.AgentBuiltinIdentity = max(prov.AgentBuiltinIdentity, builtinIdentity)
+				prov.HookSource = "claude"
 			}
-
-			rows := ti.service.canonicalTelemetryRows(ctx, payload, authCtx, &SessionMetadata{}, "claude", time.Now(), "")
-			require.NotEmpty(t, rows)
-
-			// The provenance query admits a row only when it carries a match
-			// or a server URL, and reads the tool call source as identity.
-			attrs := rows[0].attrs
-			match, _ := attrs[attr.MCPMatchKey].(string)
-			serverURL, _ := attrs[attr.MCPServerURLKey].(string)
-			source, _ := attrs[attr.ToolCallSourceKey].(string)
 			recorded := map[string]telemetryrepo.MCPProvenance{}
-			if match != "" || serverURL != "" {
-				recorded[callID] = telemetryrepo.MCPProvenance{Match: match, ServerURL: serverURL, ServerIdentity: source, HookSource: "claude"}
+			if admitted {
+				recorded[callID] = prov
 			}
 
 			scanner := shadowmcpscan.NewScanner(testenv.NewLogger(t), builtinScanValidator{}, builtinScanHosted{}, builtinScanProvenance{rows: recorded}, nil)

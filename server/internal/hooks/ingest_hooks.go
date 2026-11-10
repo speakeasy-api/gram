@@ -1420,8 +1420,8 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 		}
 	}
 	if _, matched := attrs[attr.MCPMatchKey]; !matched {
-		if server := s.canonicalAgentBuiltinMCPMatch(ctx, payload); server != "" {
-			attrs[attr.MCPMatchKey] = server
+		if identity := s.canonicalAgentBuiltinIdentity(ctx, payload); identity != "" {
+			attrs[attr.MCPAgentBuiltinIdentityKey] = identity
 		}
 	}
 	skill := canonicalSkillName(payload)
