@@ -236,7 +236,7 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 	}
 	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
 		if errors.Is(err, upstreamclients.ErrScopeChanged) {
-			return nil, err
+			return nil, err //nolint:wrapcheck // oops errors pass through.
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
 	}
@@ -662,7 +662,7 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuer
 	}
 	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
 		if errors.Is(err, upstreamclients.ErrScopeChanged) {
-			return err
+			return err //nolint:wrapcheck // oops errors pass through.
 		}
 		return oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
 	}

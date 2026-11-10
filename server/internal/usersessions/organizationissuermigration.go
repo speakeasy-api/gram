@@ -278,7 +278,7 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayl
 	}
 	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
 		if errors.Is(err, upstreamclients.ErrScopeChanged) {
-			return nil, err
+			return nil, err //nolint:wrapcheck // oops errors pass through.
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
 	}
