@@ -30,8 +30,6 @@ type GetInstanceResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The MCP servers that are relevant to the toolset
 	McpServers []*InstanceMcpServerResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
 }
@@ -228,8 +226,6 @@ type ToolResponseBody struct {
 	PromptTemplate *PromptTemplateResponseBody `form:"prompt_template,omitempty" json:"prompt_template,omitempty" xml:"prompt_template,omitempty"`
 	// The Platform tool definition
 	PlatformToolDefinition *PlatformToolDefinitionResponseBody `form:"platform_tool_definition,omitempty" json:"platform_tool_definition,omitempty" xml:"platform_tool_definition,omitempty"`
-	// The external MCP tool definition
-	ExternalMcpToolDefinition *ExternalMCPToolDefinitionResponseBody `form:"external_mcp_tool_definition,omitempty" json:"external_mcp_tool_definition,omitempty" xml:"external_mcp_tool_definition,omitempty"`
 }
 
 // HTTPToolDefinitionResponseBody is used to define fields on response body
@@ -523,75 +519,6 @@ type PlatformToolDefinitionResponseBody struct {
 	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
 }
 
-// ExternalMCPToolDefinitionResponseBody is used to define fields on response
-// body types.
-type ExternalMCPToolDefinitionResponseBody struct {
-	// Whether or not the tool is a proxy tool
-	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// The ID of the deployments_external_mcps record
-	DeploymentExternalMcpID string `form:"deployment_external_mcp_id" json:"deployment_external_mcp_id" xml:"deployment_external_mcp_id"`
-	// The ID of the deployment
-	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
-	// The ID of the MCP registry
-	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
-	// The specifier of the external MCP server (e.g.,
-	// 'io.modelcontextprotocol.anonymous/exa')
-	RegistrySpecifier string `form:"registry_specifier" json:"registry_specifier" xml:"registry_specifier"`
-	// The name of the external MCP server (e.g., exa)
-	RegistryServerName string `form:"registry_server_name" json:"registry_server_name" xml:"registry_server_name"`
-	// The slug used for tool prefixing (e.g., github)
-	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// The URL to connect to the MCP server
-	RemoteURL string `form:"remote_url" json:"remote_url" xml:"remote_url"`
-	// The transport type used to connect to the MCP server
-	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
-	// Whether the external MCP server requires OAuth authentication
-	RequiresOauth bool `form:"requires_oauth" json:"requires_oauth" xml:"requires_oauth"`
-	// OAuth version: '2.1' (MCP OAuth), '2.0' (legacy), or 'none'
-	OauthVersion string `form:"oauth_version" json:"oauth_version" xml:"oauth_version"`
-	// The OAuth authorization endpoint URL
-	OauthAuthorizationEndpoint *string `form:"oauth_authorization_endpoint,omitempty" json:"oauth_authorization_endpoint,omitempty" xml:"oauth_authorization_endpoint,omitempty"`
-	// The OAuth token endpoint URL
-	OauthTokenEndpoint *string `form:"oauth_token_endpoint,omitempty" json:"oauth_token_endpoint,omitempty" xml:"oauth_token_endpoint,omitempty"`
-	// The OAuth dynamic client registration endpoint URL
-	OauthRegistrationEndpoint *string `form:"oauth_registration_endpoint,omitempty" json:"oauth_registration_endpoint,omitempty" xml:"oauth_registration_endpoint,omitempty"`
-	// The OAuth scopes supported by the server
-	OauthScopesSupported []string `form:"oauth_scopes_supported,omitempty" json:"oauth_scopes_supported,omitempty" xml:"oauth_scopes_supported,omitempty"`
-	// The creation date of the tool.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// The last update date of the tool.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// The ID of the tool
-	ID string `form:"id" json:"id" xml:"id"`
-	// The URN of this tool
-	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
-	// The ID of the project
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The name of the tool
-	Name string `form:"name" json:"name" xml:"name"`
-	// The canonical name of the tool. Will be the same as the name if there is no
-	// variation.
-	CanonicalName string `form:"canonical_name" json:"canonical_name" xml:"canonical_name"`
-	// Description of the tool
-	Description string `form:"description" json:"description" xml:"description"`
-	// Version of the schema
-	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
-	// JSON schema for the request
-	Schema string `form:"schema" json:"schema" xml:"schema"`
-	// Confirmation mode for the tool
-	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
-	// Prompt for the confirmation
-	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
-	// Summarizer for the tool
-	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
-	// The original details of a tool, excluding any variations
-	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
-	// The variation details of a tool. Only includes explicitly varied fields.
-	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
-	// MCP tool annotations providing hints about tool behavior
-	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
-}
-
 // SecurityVariableResponseBody is used to define fields on response body types.
 type SecurityVariableResponseBody struct {
 	// The unique identifier of the security variable
@@ -634,23 +561,6 @@ type FunctionEnvironmentVariableResponseBody struct {
 	AuthInputType *string `form:"auth_input_type,omitempty" json:"auth_input_type,omitempty" xml:"auth_input_type,omitempty"`
 	// The environment variables
 	Name string `form:"name" json:"name" xml:"name"`
-}
-
-// ExternalMCPHeaderDefinitionResponseBody is used to define fields on response
-// body types.
-type ExternalMCPHeaderDefinitionResponseBody struct {
-	// The prefixed environment variable name (e.g., SLACK_X_API_KEY)
-	Name string `form:"name" json:"name" xml:"name"`
-	// The actual HTTP header name to send (e.g., X-Api-Key)
-	HeaderName string `form:"header_name" json:"header_name" xml:"header_name"`
-	// Description of the header
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Placeholder value for the header
-	Placeholder *string `form:"placeholder,omitempty" json:"placeholder,omitempty" xml:"placeholder,omitempty"`
-	// Whether the header is required
-	Required bool `form:"required" json:"required" xml:"required"`
-	// Whether the header value is secret
-	Secret bool `form:"secret" json:"secret" xml:"secret"`
 }
 
 // InstanceMcpServerResponseBody is used to define fields on response body
@@ -717,16 +627,6 @@ func NewGetInstanceResponseBody(res *instances.GetInstanceResult) *GetInstanceRe
 				continue
 			}
 			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
-		}
-	}
-	if res.ExternalMcpHeaderDefinitions != nil {
-		body.ExternalMcpHeaderDefinitions = make([]*ExternalMCPHeaderDefinitionResponseBody, len(res.ExternalMcpHeaderDefinitions))
-		for i, val := range res.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				body.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			body.ExternalMcpHeaderDefinitions[i] = marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(val)
 		}
 	}
 	if res.McpServers != nil {

@@ -3449,19 +3449,12 @@ type McpServerToolsetSummaryResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The toolset's description, if any
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Number of tools the toolset serves: deployment-backed tools (HTTP, function,
-	// external MCP) that resolve in the project's latest completed deployment,
-	// plus its prompt templates and registered platform tools. External MCP proxy
-	// tools are excluded.
+	// Number of tools the toolset serves: deployment-backed tools (HTTP and
+	// function) that resolve in the project's latest completed deployment, plus
+	// its prompt templates and registered platform tools.
 	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
 	// The toolset's tool selection mode
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
-	// The distinct slugs of the external MCP sources the toolset's configured
-	// tools come from, sorted
-	ExternalMcpSlugs []string `form:"external_mcp_slugs,omitempty" json:"external_mcp_slugs,omitempty" xml:"external_mcp_slugs,omitempty"`
-	// Whether every configured tool is an external MCP proxy tool, so the real
-	// tool count is unknown until a user signs in
-	ExternalMcpProxyOnly *bool `form:"external_mcp_proxy_only,omitempty" json:"external_mcp_proxy_only,omitempty" xml:"external_mcp_proxy_only,omitempty"`
 	// The ID of the external OAuth server attached to the toolset, if any
 	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
 	// The registry specifier the toolset originated from, if any
@@ -10713,12 +10706,6 @@ func ValidateMcpServerToolsetSummaryResponseBody(body *McpServerToolsetSummaryRe
 	}
 	if body.ToolSelectionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
-	}
-	if body.ExternalMcpSlugs == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("external_mcp_slugs", "body"))
-	}
-	if body.ExternalMcpProxyOnly == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("external_mcp_proxy_only", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

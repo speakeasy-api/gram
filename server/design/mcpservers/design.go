@@ -593,10 +593,8 @@ var McpServerToolsetSummary = Type("McpServerToolsetSummary", func() {
 	Attribute("slug", String, "The slug of the toolset")
 	Attribute("name", String, "The name of the toolset")
 	Attribute("description", String, "The toolset's description, if any")
-	Attribute("tool_count", Int, "Number of tools the toolset serves: deployment-backed tools (HTTP, function, external MCP) that resolve in the project's latest completed deployment, plus its prompt templates and registered platform tools. External MCP proxy tools are excluded.")
+	Attribute("tool_count", Int, "Number of tools the toolset serves: deployment-backed tools (HTTP and function) that resolve in the project's latest completed deployment, plus its prompt templates and registered platform tools.")
 	Attribute("tool_selection_mode", String, "The toolset's tool selection mode")
-	Attribute("external_mcp_slugs", ArrayOf(String), "The distinct slugs of the external MCP sources the toolset's configured tools come from, sorted")
-	Attribute("external_mcp_proxy_only", Boolean, "Whether every configured tool is an external MCP proxy tool, so the real tool count is unknown until a user signs in")
 	Attribute("external_oauth_server_id", String, "The ID of the external OAuth server attached to the toolset, if any", func() {
 		Format(FormatUUID)
 	})
@@ -605,7 +603,7 @@ var McpServerToolsetSummary = Type("McpServerToolsetSummary", func() {
 		Format(FormatUUID)
 	})
 
-	Required("id", "slug", "name", "tool_count", "tool_selection_mode", "external_mcp_slugs", "external_mcp_proxy_only")
+	Required("id", "slug", "name", "tool_count", "tool_selection_mode")
 })
 
 var ListMcpServersResult = Type("ListMcpServersResult", func() {

@@ -1,7 +1,6 @@
 package shared
 
 import (
-	extmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	. "goa.design/goa/v3/dsl"
 )
@@ -114,48 +113,6 @@ var FunctionToolDefinition = Type("FunctionToolDefinition", func() {
 	Required("deployment_id", "asset_id", "function_id", "runtime", "tags")
 })
 
-// ExternalMCPToolDefinition represents a proxy tool that unfolds to external MCP server tools at runtime
-var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
-	Meta("struct:pkg:path", "types")
-
-	Description("A proxy tool that references an external MCP server")
-
-	Extend(BaseToolAttributes)
-
-	Attribute("type", String, "Whether or not the tool is a proxy tool")
-
-	Attribute("deployment_external_mcp_id", String, "The ID of the deployments_external_mcps record")
-	Attribute("deployment_id", String, "The ID of the deployment")
-	Attribute("registry_id", String, "The ID of the MCP registry")
-	Attribute("registry_specifier", String, "The specifier of the external MCP server (e.g., 'io.modelcontextprotocol.anonymous/exa')")
-	Attribute("registry_server_name", String, "The name of the external MCP server (e.g., exa)")
-	Attribute("slug", String, "The slug used for tool prefixing (e.g., github)")
-	Attribute("remote_url", String, "The URL to connect to the MCP server")
-	Attribute("transport_type", String, func() {
-		Description("The transport type used to connect to the MCP server")
-		Enum(string(extmcptypes.TransportTypeStreamableHTTP), string(extmcptypes.TransportTypeSSE))
-	})
-	Attribute("requires_oauth", Boolean, "Whether the external MCP server requires OAuth authentication")
-
-	// OAuth metadata
-	Attribute("oauth_version", String, "OAuth version: '2.1' (MCP OAuth), '2.0' (legacy), or 'none'")
-	Attribute("oauth_authorization_endpoint", String, "The OAuth authorization endpoint URL")
-	Attribute("oauth_token_endpoint", String, "The OAuth token endpoint URL")
-	Attribute("oauth_registration_endpoint", String, "The OAuth dynamic client registration endpoint URL")
-	Attribute("oauth_scopes_supported", ArrayOf(String), "The OAuth scopes supported by the server")
-
-	Attribute("created_at", String, func() {
-		Description("When the tool definition was created.")
-		Format(FormatDateTime)
-	})
-	Attribute("updated_at", String, func() {
-		Description("When the tool definition was last updated.")
-		Format(FormatDateTime)
-	})
-
-	Required("deployment_external_mcp_id", "deployment_id", "registry_specifier", "registry_server_name", "registry_id", "slug", "remote_url", "transport_type", "requires_oauth", "oauth_version", "created_at", "updated_at")
-})
-
 var PlatformToolDefinition = Type("PlatformToolDefinition", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -174,13 +131,12 @@ var PlatformToolDefinition = Type("PlatformToolDefinition", func() {
 // Custom JSON marshaling provided in goaext.
 var Tool = Type("Tool", func() {
 	Meta("struct:pkg:path", "types")
-	Description("A polymorphic tool - can be an HTTP tool, function tool, prompt template, or external MCP proxy")
+	Description("A polymorphic tool - can be an HTTP tool, function tool, prompt template, or platform tool")
 
 	Attribute("http_tool_definition", HTTPToolDefinition, "The HTTP tool definition")
 	Attribute("function_tool_definition", FunctionToolDefinition, "The function tool definition")
 	Attribute("prompt_template", PromptTemplate, "The prompt template")
 	Attribute("platform_tool_definition", PlatformToolDefinition, "The Platform tool definition")
-	Attribute("external_mcp_tool_definition", ExternalMCPToolDefinition, "The external MCP tool definition")
 })
 
 var ToolType = Type("ToolType", String, func() {
@@ -191,7 +147,6 @@ var ToolType = Type("ToolType", String, func() {
 		string(urn.ToolKindPrompt),
 		string(urn.ToolKindFunction),
 		string(urn.ToolKindPlatform),
-		string(urn.ToolKindExternalMCP),
 	)
 
 	Meta("struct:pkg:path", "types")

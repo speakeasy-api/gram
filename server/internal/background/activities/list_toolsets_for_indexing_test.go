@@ -124,14 +124,6 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 	})
 	createMCPToolset(t, db, organizationID, project.ID, "empty", []urn.Tool{})
 
-	externalToolURN, err := urn.ParseTool("tools:externalmcp:retired:proxy")
-	require.NoError(t, err)
-	createMCPToolset(t, db, organizationID, project.ID, "external-only", []urn.Tool{externalToolURN})
-	mixedToolset := createMCPToolset(t, db, organizationID, project.ID, "mixed-external", []urn.Tool{validToolURN, externalToolURN})
-	mixedVersion, err := toolsetsrepo.New(db).GetLatestToolsetVersion(ctx, mixedToolset.ID)
-	require.NoError(t, err)
-	require.Equal(t, []urn.Tool{validToolURN, externalToolURN}, mixedVersion.ToolUrns)
-
 	activity := activities.NewListToolsetsForIndexing(db)
 	projectIDs, err := activity.ListProjects(ctx, activities.ListProjectsForToolsetIndexingInput{RotationSeed: 1, ProjectLimit: 100})
 	require.NoError(t, err)

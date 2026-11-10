@@ -3451,19 +3451,12 @@ type McpServerToolsetSummaryResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The toolset's description, if any
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Number of tools the toolset serves: deployment-backed tools (HTTP, function,
-	// external MCP) that resolve in the project's latest completed deployment,
-	// plus its prompt templates and registered platform tools. External MCP proxy
-	// tools are excluded.
+	// Number of tools the toolset serves: deployment-backed tools (HTTP and
+	// function) that resolve in the project's latest completed deployment, plus
+	// its prompt templates and registered platform tools.
 	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
 	// The toolset's tool selection mode
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The distinct slugs of the external MCP sources the toolset's configured
-	// tools come from, sorted
-	ExternalMcpSlugs []string `form:"external_mcp_slugs" json:"external_mcp_slugs" xml:"external_mcp_slugs"`
-	// Whether every configured tool is an external MCP proxy tool, so the real
-	// tool count is unknown until a user signs in
-	ExternalMcpProxyOnly bool `form:"external_mcp_proxy_only" json:"external_mcp_proxy_only" xml:"external_mcp_proxy_only"`
 	// The ID of the external OAuth server attached to the toolset, if any
 	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
 	// The registry specifier the toolset originated from, if any

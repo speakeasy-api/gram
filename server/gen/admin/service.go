@@ -1430,8 +1430,6 @@ type AdminProjectRedeployPreview struct {
 	FunctionAssets int
 	// Packages carried into the new deployment.
 	Packages int
-	// External MCP sources the new deployment would drop.
-	ExternalMcps int
 }
 
 // AdminProjectRedeployResult is the result type of the admin service

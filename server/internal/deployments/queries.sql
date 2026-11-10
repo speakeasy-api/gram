@@ -39,20 +39,6 @@ fn_counts AS (
   FROM function_tool_definitions
   WHERE deployment_id IN (SELECT id FROM paged) AND deleted IS FALSE
   GROUP BY deployment_id
-),
-ema_counts AS (
-  SELECT deployment_id, COUNT(*) AS c
-  FROM external_mcp_attachments
-  WHERE deployment_id IN (SELECT id FROM paged) AND deleted IS FALSE
-  GROUP BY deployment_id
-),
-emtd_counts AS (
-  SELECT ema.deployment_id, COUNT(*) AS c
-  FROM external_mcp_tool_definitions emtd
-  JOIN external_mcp_attachments ema ON emtd.external_mcp_attachment_id = ema.id
-  WHERE ema.deployment_id IN (SELECT id FROM paged)
-    AND ema.deleted IS FALSE AND emtd.deleted IS FALSE
-  GROUP BY ema.deployment_id
 )
 SELECT
   p.id,
@@ -62,9 +48,7 @@ SELECT
   COALESCE(oa.c, 0) AS openapiv3_asset_count,
   COALESCE(ht.c, 0) AS openapiv3_tool_count,
   COALESCE(fn.asset_c, 0) AS functions_asset_count,
-  COALESCE(fn.tool_c, 0) AS functions_tool_count,
-  COALESCE(ema.c, 0) AS external_mcp_asset_count,
-  COALESCE(emtd.c, 0) AS external_mcp_tool_count
+  COALESCE(fn.tool_c, 0) AS functions_tool_count
 FROM paged p
 LEFT JOIN LATERAL (
   SELECT status FROM deployment_statuses
@@ -75,8 +59,6 @@ LEFT JOIN LATERAL (
 LEFT JOIN oa_counts   oa   ON oa.deployment_id   = p.id
 LEFT JOIN http_counts ht   ON ht.deployment_id   = p.id
 LEFT JOIN fn_counts   fn   ON fn.deployment_id   = p.id
-LEFT JOIN ema_counts  ema  ON ema.deployment_id  = p.id
-LEFT JOIN emtd_counts emtd ON emtd.deployment_id = p.id
 ORDER BY p.id DESC;
 
 -- name: GetDeploymentLogs :many
@@ -134,15 +116,6 @@ functions_tool_counts as (
     FROM function_tool_definitions
     WHERE deployment_id = @id AND deleted IS FALSE
     GROUP BY deployment_id
-),
-external_mcp_tool_counts as (
-    SELECT
-        ema.deployment_id,
-        COUNT(DISTINCT emtd.id) as tool_count
-    FROM external_mcp_tool_definitions emtd
-    JOIN external_mcp_attachments ema ON emtd.external_mcp_attachment_id = ema.id
-    WHERE ema.deployment_id = @id AND emtd.deleted IS FALSE AND ema.deleted IS FALSE
-    GROUP BY ema.deployment_id
 )
 SELECT
   sqlc.embed(deployments),
@@ -166,13 +139,7 @@ SELECT
   package_versions.prerelease as package_version_prerelease,
   package_versions.build as package_version_build,
   COALESCE(openapiv3_tool_counts.tool_count, 0) as openapiv3_tool_count,
-  COALESCE(functions_tool_counts.tool_count, 0) as functions_tool_count,
-  COALESCE(external_mcp_tool_counts.tool_count, 0) as external_mcp_tool_count,
-  external_mcp_attachments.id as external_mcp_id,
-  external_mcp_attachments.registry_id as external_mcp_registry_id,
-  external_mcp_attachments.name as external_mcp_name,
-  external_mcp_attachments.slug as external_mcp_slug,
-  external_mcp_attachments.registry_server_specifier as external_mcp_registry_server_specifier
+  COALESCE(functions_tool_counts.tool_count, 0) as functions_tool_count
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 LEFT JOIN deployments_functions ON deployments.id = deployments_functions.deployment_id
@@ -182,8 +149,6 @@ LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
 LEFT JOIN openapiv3_tool_counts ON deployments.id = openapiv3_tool_counts.deployment_id
 LEFT JOIN functions_tool_counts ON deployments.id = functions_tool_counts.deployment_id
-LEFT JOIN external_mcp_tool_counts ON deployments.id = external_mcp_tool_counts.deployment_id
-LEFT JOIN external_mcp_attachments ON deployments.id = external_mcp_attachments.deployment_id AND external_mcp_attachments.deleted IS FALSE
 WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
 -- name: GetLatestDeploymentID :one
