@@ -141,12 +141,6 @@ func Grant(grantType string) Option {
 	}}
 }
 
-// Unstored marks a row whose caller found, through Stores, that it won't be stored. The
-// steps metric counts it only if the writer's logs check stores it after all.
-func Unstored() Option {
-	return Option{apply: func(row *Row) { row.unstored = true }}
-}
-
 // Detail is a finer label within the reason, such as org_lookup_failed. A value
 // that is not a short identifier is left out and the row is kept.
 func Detail(subReason string) Option {
@@ -244,10 +238,6 @@ type Row struct {
 
 	// client waits here for the writer to read it. It is never stored or logged.
 	client requestClient
-
-	// unstored marks a row its caller expects won't be stored, so the steps metric counts it
-	// only if the writer's own logs check stores it after all.
-	unstored bool
 }
 
 var errInvalidEvent = errors.New("invalid connection event")
@@ -324,7 +314,6 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		Repeats:               0,
 		DeviceKey:             "",
 		client:                requestClient{present: false, userAgent: "", forwardedFor: "", appFamily: attempt.scope.appFamily, reported: nil},
-		unstored:              false,
 	}
 	for _, opt := range opts {
 		if opt.apply != nil {
@@ -680,14 +669,9 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 			row.AttemptID = decision.foldID
 		}
 	}
-	if !row.unstored {
-		r.countStep(ctx, row)
-	}
+	r.countStep(ctx, row)
 	if r.capture != nil {
 		if reason, _ := r.organizationAllowed(row.OrganizationID, r.cfg.logsCheckTimeout); reason == "" {
-			if row.unstored {
-				r.countStep(ctx, row)
-			}
 			r.stampClient(&row)
 			r.capture(row)
 			r.leaveReference(ctx, step, row.OrganizationID, row.AttemptID, what)
@@ -1033,10 +1017,6 @@ func (r *Recorder) run() {
 				r.drop(context.Background(), reason, events(row), nil)
 				return
 			}
-			// The caller's Stores answer was a snapshot; this check decides.
-			if row.unstored {
-				r.countStep(context.Background(), row)
-			}
 			r.stampClient(&row)
 			batch = append(batch, row)
 		})
@@ -1050,9 +1030,7 @@ func (r *Recorder) run() {
 	addPending := func(rows []Row) {
 		for _, row := range rows {
 			r.unfinished.Add(1)
-			if !row.unstored {
-				r.countStep(context.Background(), row)
-			}
+			r.countStep(context.Background(), row)
 			add(row)
 		}
 	}
@@ -1087,25 +1065,6 @@ func (r *Recorder) surviving(n int, fn func()) {
 		}
 	}()
 	fn()
-}
-
-// Stores reports whether rows on scope may be stored, so a caller can skip costly detail
-// for a row that would be dropped. It never waits on a logs check: false is a remembered
-// logs-off answer, and a miss or a failed check reports true, so the writer decides then.
-func (r *Recorder) Stores(scope Scope) bool {
-	if r == nil {
-		return false
-	}
-	if r.referableOrgs == nil {
-		reason, _ := r.organizationAllowed(scope.organizationID, r.cfg.logsCheckTimeout)
-		return reason != dropLogsOff
-	}
-	cached, ok := r.rememberedLogsAnswer(scope.organizationID)
-	if !ok {
-		r.checkLogs(scope.organizationID)
-		return true
-	}
-	return !cached.off
 }
 
 // organizationAllowed is the one place that decides whether an organization's attempts
