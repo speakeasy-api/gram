@@ -77,12 +77,44 @@ function OktaPermissions(): JSX.Element {
           ]}
         />
       </Section>
+      <Section title="Configure app authentication">
+        <InProvider
+          actions={[
+            <>
+              Open the app’s <strong>General</strong> tab.
+            </>,
+            <>
+              Click <strong>Edit</strong> in <strong>Client Credentials</strong>
+              .
+            </>,
+            <>
+              Set <strong>Client authentication</strong> to{" "}
+              <strong>
+                {s.values.oktaAppType === "web" ? "Client secret" : "None"}
+              </strong>
+              .
+            </>,
+            ...(s.values.oktaAppType === "web"
+              ? [
+                  <>
+                    Select <strong>Proof Key for Code Exchange (PKCE)</strong>.
+                  </>,
+                ]
+              : []),
+            <>Save the changes.</>,
+          ]}
+        />
+      </Section>
       {refreshTokens && (
         <Section title="Enable refresh tokens">
           <InProvider
             actions={[
               <>
                 Open the app’s <strong>General</strong> tab.
+              </>,
+              <>
+                Click <strong>Edit</strong> in <strong>General Settings</strong>
+                .
               </>,
               <>
                 Enable <strong>Refresh Token</strong> under{" "}
@@ -212,6 +244,10 @@ export function OktaTask(): JSX.Element {
                 <>
                   Open the app’s <strong>General</strong> tab.
                 </>,
+                <>
+                  Click <strong>Edit</strong> in{" "}
+                  <strong>General Settings</strong>.
+                </>,
               ]
             : [
                 <>
@@ -237,17 +273,8 @@ export function OktaTask(): JSX.Element {
                 </>,
               ]),
           <>
-            Enable <strong>Authorization Code</strong>.
-          </>,
-          <>
-            Require <strong>Proof Key for Code Exchange (PKCE)</strong>.
-          </>,
-          <>
-            Set <strong>Client authentication</strong> to{" "}
-            <strong>
-              {s.values.oktaAppType === "web" ? "Client Secret" : "None"}
-            </strong>
-            .
+            In <strong>Grant type</strong>, select{" "}
+            <strong>Authorization code</strong>.
           </>,
           <>
             Add the URL below to <strong>Sign-in redirect URIs</strong>.

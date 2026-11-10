@@ -762,13 +762,10 @@ it.each(["web", "native"])(
     expect(
       screen.getByLabelText("Sign-in redirect URI").getAttribute("value"),
     ).toBe("https://current.example/callback");
-    expect(
-      screen.getByText("Proof Key for Code Exchange (PKCE)"),
-    ).toBeDefined();
+    expect(screen.queryByText("Proof Key for Code Exchange (PKCE)")).toBeNull();
     const instructions = screen.getByText("In Okta").parentElement!.textContent;
-    expect(instructions).toContain(
-      `Set Client authentication to ${appType === "web" ? "Client Secret" : "None"}.`,
-    );
+    expect(instructions).toContain("In Grant type, select Authorization code.");
+    expect(instructions).not.toContain("Client authentication");
     expect(instructions).not.toContain(
       appType === "web" ? "Native app" : "Web app",
     );
@@ -776,6 +773,22 @@ it.each(["web", "native"])(
     expect(screen.getByLabelText("Client ID")).toBeDefined();
     expect(!!screen.queryByLabelText("Client Secret")).toBe(appType === "web");
     view.rerender(content("permissions"));
+    expect(!!screen.queryByText("Proof Key for Code Exchange (PKCE)")).toBe(
+      appType === "web",
+    );
+    const authentication = screen.getByRole("heading", {
+      name: "Configure app authentication",
+    }).parentElement!.textContent!;
+    expect(authentication).toContain(
+      `Set Client authentication to ${appType === "web" ? "Client secret" : "None"}.`,
+    );
+    expect(authentication.indexOf("Open the app’s General tab.")).toBeLessThan(
+      authentication.indexOf("Click Edit in Client Credentials."),
+    );
+    if (appType === "web")
+      expect(authentication.indexOf("Client authentication")).toBeLessThan(
+        authentication.indexOf("Proof Key for Code Exchange"),
+      );
     expect(screen.getByLabelText("Okta API scopes")).toBeDefined();
     expect(
       screen
