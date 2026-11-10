@@ -141,7 +141,7 @@ func TestStoreRefreshTokenReplayFailureDoesNotOverwriteSuccess(t *testing.T) {
 	require.NoError(t, service.userSessionRefreshReplayCache.Store(t.Context(), replay))
 
 	stored := service.storeRefreshTokenReplayFailure(
-		t.Context(), replay.Key, clientRow.ID,
+		t.Context(), replay.Key, clientRow.ID, nil,
 		"refresh_token_unknown_or_already_used",
 		"refresh_token is unknown or already used", testenv.NewLogger(t),
 	)
@@ -290,7 +290,7 @@ func TestStoredRefreshTokenReplayOutlivesGracePeriod(t *testing.T) {
 	}))
 	failureKey := "userSessionRefreshReplay:failure"
 	require.True(t, service.storeRefreshTokenReplayFailure(
-		t.Context(), failureKey, clientRow.ID,
+		t.Context(), failureKey, clientRow.ID, nil,
 		"refresh_token_unknown_or_already_used",
 		"refresh_token is unknown or already used", testenv.NewLogger(t),
 	))

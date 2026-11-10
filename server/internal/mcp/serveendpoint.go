@@ -176,11 +176,11 @@ func (s *Service) serveResolvedMCPEndpoint(
 	s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, mcpServer.ID, uuid.Nil, "")
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
 
-	// A first-party backend authorizes each call itself and is never
-	// risk-scanned, so it is dispatched before the issuer gate and the scan,
-	// and authenticates its callers on its own path.
+	// Speakeasy no longer serves the approvals server, the only server with a
+	// first-party backend. Its rows stay until a cleanup migration deletes
+	// them, and answer as not found until then.
 	if mcpServer.BuiltinBackend.Valid {
-		return s.serveBuiltinBackend(w, r, logger, mcpEndpoint, mcpServer, mcpRouteBase)
+		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
 	}
 
 	var prepared *preparedMCPRequest

@@ -42,6 +42,28 @@ describe("sidebarNavLayout", () => {
     ]);
   });
 
+  it("keeps a lone group with staged items as a group", () => {
+    const staged = [
+      {
+        label: "Observability",
+        items: [
+          entry("Costs", "project:read"),
+          {
+            item: {
+              title: "Explore",
+              url: "/explore",
+              stage: "preview",
+            } as AppRoute,
+            scope: "project:read" as Scope,
+          },
+        ],
+      },
+    ];
+    const layout = sidebarNavLayout(staged, false, holding("project:read"));
+    expect(layout.groups.map((g) => g.label)).toEqual(["Observability"]);
+    expect(layout.flatEntries).toBeUndefined();
+  });
+
   it("drops the divider when nothing sits above the groups", () => {
     expect(
       sidebarNavLayout(groups, false, holding("mcp:read")).showDivider,

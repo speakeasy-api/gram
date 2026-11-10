@@ -151,19 +151,29 @@ func notConnectedRow(gate *metaGateContext, oauthSignIn bool) metamcp.Connection
 // a grant routed by its upstream resource without a derived issuer, so
 // routing runs before that shortcut.
 func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, requiresAuth func(context.Context, metaMember) (bool, error)) metamcp.ConnectionStatusServer {
-	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
-		if err := s.validateCatalogMember(ctx, gate, member); err != nil {
-			if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
-				return s.staleMemberStatus(ctx, logger, gate, member)
+	if gate.catalog != nil {
+		// Live discovery checks the approval too, so a refused call never reads as ready.
+		approval := s.checkCatalogApproval(ctx, logger, gate, member)
+		if approval.changed {
+			if approval.remedy == staleChoiceAskAdmin {
+				return signInRow(metamcp.SignInActionRequired, approval.message, nil)
 			}
-			return signInRow(metamcp.SignInNeedsConsent, memberErrorMessage(err), nil)
+			return signInRow(metamcp.SignInNeedsConsent, approval.message, nil)
 		}
-		for _, outcome := range gate.catalog.MemberOutcomes {
-			if outcome.Slug == member.slug {
-				return signInRow(metamcp.SignInVerifiedAtConsent, outcome.Label+". Tool calls check current authorization.", nil)
+		if gate.catalogRef.Mode == toolfilter.CatalogModeCached {
+			if approval.err != nil {
+				if _, stale := errors.AsType[memberStaleChoiceError](approval.err); stale {
+					return s.staleMemberStatus(ctx, logger, gate, member)
+				}
+				return signInRow(metamcp.SignInNeedsConsent, memberErrorMessage(approval.err), nil)
 			}
+			for _, outcome := range gate.catalog.MemberOutcomes {
+				if outcome.Slug == member.slug {
+					return signInRow(metamcp.SignInVerifiedAtConsent, outcome.Label+". Tool calls check current authorization.", nil)
+				}
+			}
+			return signInRow(metamcp.SignInNeedsConsent, "No recorded consent outcome.", nil)
 		}
-		return signInRow(metamcp.SignInNeedsConsent, "No recorded consent outcome.", nil)
 	}
 	if member.backend == metaMemberBackendHosted {
 		if !member.remoteSessionIssuerID.Valid {

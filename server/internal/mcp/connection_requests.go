@@ -153,11 +153,17 @@ func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext
 	s.recordRequestOutcome(ctx, gate.connectionScope(ctx), what, gate.request, append([]mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate)}, opts...)...)
 }
 
-// recordConsentRefusal records a member call refused because its approval no longer matches.
-func (s *Service) recordConsentRefusal(ctx context.Context, gate *metaGateContext, member metaMember, err error) {
-	if consent, ok := errors.AsType[catalogConsentError](err); ok {
-		s.recordMemberFailure(ctx, gate, member, mcpconnectionattempts.CodeConsentNotApproved, mcpconnectionattempts.Detail(string(consent.reason)))
+// consentRefusalHappened is the code for whoever a consent refusal's message tells to act first.
+// An unchecked remedy is our failed lookup.
+func consentRefusalHappened(remedy staleChoiceRemedy) mcpconnectionattempts.Code {
+	switch remedy {
+	case staleChoiceAskAdmin:
+		return mcpconnectionattempts.CodeApprovalNeedsAdmin
+	case staleChoiceUnchecked:
+		return mcpconnectionattempts.CodeInternalError
+	case staleChoiceReconnect, staleChoiceReconnectThenAdmin:
 	}
+	return mcpconnectionattempts.CodeConsentNotApproved
 }
 
 // resolveFailureHappened says who fixes a member credential that could not be resolved.

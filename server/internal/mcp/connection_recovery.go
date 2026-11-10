@@ -55,10 +55,13 @@ type connectionRecovery struct {
 	UserSessionIssuerID uuid.UUID `json:"user_session_issuer_id"`
 	McpServerID         uuid.UUID `json:"mcp_server_id"`
 	McpSlug             string    `json:"mcp_slug"`
-	ServerName          string    `json:"server_name"`
-	AuthClientID        uuid.UUID `json:"auth_client_id"`
-	RegistrationID      uuid.UUID `json:"registration_id"`
-	CreatedAt           time.Time `json:"created_at"`
+	// UpstreamResource is the server's upstream, which the link's registration
+	// uses as its resource for this exact offer.
+	UpstreamResource string    `json:"upstream_resource,omitempty"`
+	ServerName       string    `json:"server_name"`
+	AuthClientID     uuid.UUID `json:"auth_client_id"`
+	RegistrationID   uuid.UUID `json:"registration_id"`
+	CreatedAt        time.Time `json:"created_at"`
 	// BrowserCookieID and BrowserHash bind a login entry to the browser that
 	// started it: its callback must carry the host-only cookie they name.
 	// BrowserHop records that the cookie was set on another callback host
@@ -123,7 +126,7 @@ func (s *Service) connectionRecoveryError(ctx context.Context, authentication *i
 	recovery := connectionRecovery{
 		ID: token, OrganizationID: endpoint.OrganizationID, UserID: userID, ProjectID: endpoint.ProjectID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID, McpServerID: endpoint.McpServerID.UUID, McpSlug: endpoint.Slug,
-		ServerName: res.serverName, AuthClientID: res.clientID, RegistrationID: authentication.chosenClient.UUID, CreatedAt: time.Now(),
+		UpstreamResource: endpoint.UpstreamResource, ServerName: res.serverName, AuthClientID: res.clientID, RegistrationID: authentication.chosenClient.UUID, CreatedAt: time.Now(),
 		BrowserCookieID: "", BrowserHash: "", BrowserHop: false,
 	}
 	if err := s.connectionRecoveryCache.Store(ctx, recovery); err != nil {
@@ -225,12 +228,22 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeUnexpected, err, "store connection login").LogError(ctx, s.logger)
 	}
 	subject := urn.NewUserSubject(recovery.UserID)
+	typedAuthorization, resource, err := s.connectionRecoveryTypedLogin(ctx, recovery, login.ID, subject)
+	if errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
+		t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(err))
+		s.logger.InfoContext(ctx, "connection link refused: typed login not authorized", attr.SlogAuthClientID(recovery.AuthClientID.String()), attr.SlogError(err))
+		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryNoAccessPage)
+	}
+	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return oops.E(oops.CodeUnexpected, err, "authorize connection login").LogError(ctx, s.logger)
+	}
 	attempt := mcpconnectionattempts.Begin(recoveryScope(recovery))
 	t.Attach(attempt)
 	t.Consumed()
 	t.With(mcpconnectionattempts.Subject(&subject))
 	authorizationURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
-		TypedAuthorization:  nil,
+		TypedAuthorization:  typedAuthorization,
 		ConnectionPopup:     false,
 		ID:                  login.ID,
 		ProjectID:           recovery.ProjectID,
@@ -245,7 +258,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		FinalRedirectURI:    s.platformBaseURL(ctx).JoinPath(connectionRecoveryDonePath).String(),
 		ConsentURL:          "",
 		ConsentServer:       "",
-		Resource:            "",
+		Resource:            resource,
 		AutoRefresh:         nil,
 		Authority:           networkingress.Authority{Surface: "", BaseURL: "", OrganizationID: "", NetworkIngressID: uuid.Nil, NamespaceKind: "", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		BrowserCookieID:     "",
@@ -271,6 +284,53 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	t.Continue()
 	http.Redirect(w, r, target, http.StatusFound)
 	return nil
+}
+
+// connectionRecoveryTypedLogin is what a link's login carries where typed auth
+// clients are enforced: the exact offer the link names, which authorizes the
+// login in place of a user session issuer link, and the server's upstream
+// resource, falling back to its offers when absent. Elsewhere it returns nil and no resource,
+// and the login relies on the link. A refused login returns remotesessions.ErrTypedAuthorizationDenied
+// here, before the person signs in to the provider, as it would at the callback.
+func (s *Service) connectionRecoveryTypedLogin(ctx context.Context, recovery connectionRecovery, loginID string, subject urn.SessionSubject) (*remotesessions.TypedAuthorization, string, error) {
+	enforced, err := s.consentAuthChoicesEnforced(ctx, recovery.OrganizationID)
+	if err != nil || !enforced {
+		return nil, "", err
+	}
+	authorization := &remotesessions.TypedAuthorization{
+		OrganizationID:        recovery.OrganizationID,
+		ProjectID:             recovery.ProjectID,
+		ServerID:              recovery.McpServerID,
+		AuthClientID:          recovery.AuthClientID,
+		RemoteSessionClientID: recovery.RegistrationID,
+		Subject:               subject,
+	}
+	//nolint:exhaustruct // Validate only authorization before minting the full OAuth state.
+	state := remotesessions.RemoteLoginState{
+		TypedAuthorization:    authorization,
+		ParentChallengeID:     loginID,
+		OrganizationID:        recovery.OrganizationID,
+		ProjectID:             recovery.ProjectID,
+		RemoteSessionClientID: recovery.RegistrationID,
+		Subject:               &subject,
+		McpServerID:           uuid.NullUUID{UUID: recovery.McpServerID, Valid: true},
+		UserSessionIssuerID:   recovery.UserSessionIssuerID,
+	}
+	if err := s.ValidateRemoteLoginTypedAuthorization(ctx, state); err != nil {
+		return nil, "", err
+	}
+	if recovery.UpstreamResource != "" {
+		return authorization, recovery.UpstreamResource, nil
+	}
+	offered, err := s.typedOfferedRegistrations(ctx, recovery.OrganizationID, []uuid.UUID{recovery.McpServerID})
+	if err != nil {
+		return nil, "", err
+	}
+	resource, err := s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, recovery.OrganizationID, recovery.RegistrationID, offered[recovery.McpServerID], recovery.UpstreamResource)
+	if err != nil {
+		return nil, "", fmt.Errorf("derive connection resource: %w", err)
+	}
+	return authorization, resource, nil
 }
 
 // startConnectionRecoveryHop carries a connection login's browser to its

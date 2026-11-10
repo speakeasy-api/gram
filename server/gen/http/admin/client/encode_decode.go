@@ -15512,6 +15512,241 @@ func DecodeGetHookClientsResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildGetOrganizationHookFleetRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "getOrganizationHookFleet"
+// endpoint
+func (c *Client) BuildGetOrganizationHookFleetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOrganizationHookFleetAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getOrganizationHookFleet", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetOrganizationHookFleetRequest returns an encoder for requests sent
+// to the admin getOrganizationHookFleet server.
+func EncodeGetOrganizationHookFleetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetOrganizationHookFleetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getOrganizationHookFleet", "*admin.GetOrganizationHookFleetPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		values.Add("window_days", fmt.Sprintf("%v", p.WindowDays))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetOrganizationHookFleetResponse returns a decoder for responses
+// returned by the admin getOrganizationHookFleet endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetOrganizationHookFleetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetOrganizationHookFleetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetOrganizationHookFleetResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			res := NewGetOrganizationHookFleetAdminHookFleetResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetOrganizationHookFleetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetOrganizationHookFleetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetOrganizationHookFleetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetOrganizationHookFleetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetOrganizationHookFleetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetOrganizationHookFleetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetOrganizationHookFleetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetOrganizationHookFleetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				}
+				err = ValidateGetOrganizationHookFleetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				}
+				return nil, NewGetOrganizationHookFleetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetOrganizationHookFleetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				}
+				err = ValidateGetOrganizationHookFleetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				}
+				return nil, NewGetOrganizationHookFleetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationHookFleet", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetOrganizationHookFleetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationHookFleet", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRegistryPromotionCandidatesRequest instantiates a HTTP request
 // object with method and path set to call the "admin" service
 // "listRegistryPromotionCandidates" endpoint
@@ -26859,6 +27094,55 @@ func unmarshalAdminDeviceAgentCellResponseBodyToAdminAdminDeviceAgentCell(v *Adm
 		Day:            *v.Day,
 		Version:        *v.Version,
 		Machines:       *v.Machines,
+	}
+
+	return res
+}
+
+// unmarshalAdminHookFleetVersionResponseBodyToAdminAdminHookFleetVersion
+// builds a value of type *admin.AdminHookFleetVersion from a value of type
+// *AdminHookFleetVersionResponseBody.
+func unmarshalAdminHookFleetVersionResponseBodyToAdminAdminHookFleetVersion(v *AdminHookFleetVersionResponseBody) *admin.AdminHookFleetVersion {
+	res := &admin.AdminHookFleetVersion{
+		Version:  *v.Version,
+		Status:   *v.Status,
+		Installs: *v.Installs,
+	}
+
+	return res
+}
+
+// unmarshalAdminHookFleetBucketResponseBodyToAdminAdminHookFleetBucket builds
+// a value of type *admin.AdminHookFleetBucket from a value of type
+// *AdminHookFleetBucketResponseBody.
+func unmarshalAdminHookFleetBucketResponseBodyToAdminAdminHookFleetBucket(v *AdminHookFleetBucketResponseBody) *admin.AdminHookFleetBucket {
+	res := &admin.AdminHookFleetBucket{
+		Value:    *v.Value,
+		Installs: *v.Installs,
+		Events:   *v.Events,
+	}
+
+	return res
+}
+
+// unmarshalAdminHookFleetInstallResponseBodyToAdminAdminHookFleetInstall
+// builds a value of type *admin.AdminHookFleetInstall from a value of type
+// *AdminHookFleetInstallResponseBody.
+func unmarshalAdminHookFleetInstallResponseBodyToAdminAdminHookFleetInstall(v *AdminHookFleetInstallResponseBody) *admin.AdminHookFleetInstall {
+	res := &admin.AdminHookFleetInstall{
+		ProjectID:          *v.ProjectID,
+		UserEmail:          *v.UserEmail,
+		Hostname:           *v.Hostname,
+		Harness:            *v.Harness,
+		Version:            *v.Version,
+		VersionStatus:      *v.VersionStatus,
+		EndpointGeneration: *v.EndpointGeneration,
+		InstallRoute:       *v.InstallRoute,
+		FirstSeen:          *v.FirstSeen,
+		LastSeen:           *v.LastSeen,
+		Events:             *v.Events,
+		Errors:             *v.Errors,
+		Quiet:              *v.Quiet,
 	}
 
 	return res

@@ -125,6 +125,7 @@ var frozenCodes = []string{
 	"stored_session_invalid",
 	"sign_in_revoked_by_admin",
 	"stored_sign_in_unreadable",
+	"approval_needs_admin",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.

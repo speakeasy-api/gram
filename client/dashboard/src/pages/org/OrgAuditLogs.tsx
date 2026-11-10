@@ -25,12 +25,22 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useSessionDateRange } from "@/hooks/useSessionDateRange";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { subjectHref } from "@/components/auditlogs/subject-href";
 import {
   formatActingSurfaceLabel,
   isNotableActingSurface,
 } from "@/lib/audit-surfaces";
+import {
+  auditViewQuery,
+  parseAuditView,
+  parseResourceFilter,
+  resourceFilterValue,
+  VIEW_EMPTY,
+  VIEW_INSIGHTS,
+  VIEW_OPTIONS,
+} from "@/lib/audit-views";
 import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import { scopeLabel, type ScopeCatalogue } from "@/pages/access/scopeCatalogue";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
@@ -105,6 +115,14 @@ const AUDIT_LOG_FILTERS = defineFilters([
   { id: "action", label: "Action", kind: "select" },
   { id: "actor", label: "Actor", kind: "select" },
   { id: "surface", label: "Surface", kind: "select" },
+  {
+    id: "resource",
+    label: "Resource",
+    kind: "select",
+    description:
+      "Pick a resource from the list, or use the filter button beside one.",
+  },
+  { id: "date", label: "Date", kind: "daterange" },
 ]);
 
 function auditLogCountDescription(count?: number) {
@@ -243,6 +261,7 @@ function AuditLogRow({
   isHighlighted,
   rowRef,
   highlightMatch,
+  onFilterResource,
   catalogue,
 }: {
   log: AuditLog;
@@ -253,6 +272,7 @@ function AuditLogRow({
   isHighlighted?: boolean;
   rowRef?: (el: HTMLDivElement | null) => void;
   highlightMatch?: (text: string) => React.ReactNode;
+  onFilterResource?: (log: AuditLog) => void;
   /** Read once by the list, so every row shares the one subscription. */
   catalogue: ScopeCatalogue;
 }) {
@@ -283,6 +303,18 @@ function AuditLogRow({
             {highlightMatch ? highlightMatch(verbText) : verbText}
           </span>{" "}
           {renderSubject(log, orgSlug, identities, projectSlug)}
+          {onFilterResource && (
+            <SimpleTooltip tooltip="Show only this resource">
+              <button
+                type="button"
+                onClick={() => onFilterResource(log)}
+                aria-label="Show only this resource"
+                className="text-muted-foreground hover:text-foreground ml-1 inline-flex align-middle opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+              >
+                <Icon name="filter" className="size-3.5" />
+              </button>
+            </SimpleTooltip>
+          )}
           {isNotableActingSurface(log.actingSurface) && (
             <span
               className="border-border text-muted-foreground ml-2 border px-1.5 py-0.5 align-middle text-xs whitespace-nowrap"
@@ -349,29 +381,10 @@ function AuditLogRow({
   );
 }
 
-type AuditCategory = "configuration" | "security";
-
-const CATEGORY_OPTIONS: {
-  value: AuditCategory;
-  label: string;
-  tooltip: string;
-}[] = [
-  {
-    value: "configuration",
-    label: "Configuration",
-    tooltip: "Changes people and the Speakeasy team made to settings",
-  },
-  {
-    value: "security",
-    label: "Security activity",
-    tooltip:
-      "Machine access and other security activity that isn't a settings change",
-  },
-];
-
 /**
- * A collapsed run of consecutive security entries by one actor. Expanding it
- * shows each entry.
+ * A collapsed run of consecutive entries by one actor, typically an agent's
+ * runtime admitting its workload identity on every start, or a background job
+ * publishing plugins. Expanding it shows each entry.
  */
 function ActorRunRow({
   run,
@@ -381,6 +394,7 @@ function ActorRunRow({
   projectSlug,
   timestampMode,
   highlightMatch,
+  eventNoun,
   children,
 }: {
   run: ActorRun;
@@ -390,6 +404,7 @@ function ActorRunRow({
   projectSlug?: string;
   timestampMode: "utc" | "local";
   highlightMatch?: (text: string) => React.ReactNode;
+  eventNoun: string;
   children: ReactNode;
 }) {
   const latest = run.logs[0]!;
@@ -409,7 +424,7 @@ function ActorRunRow({
             />
           </StrongName>{" "}
           <span className="text-muted-foreground">
-            {run.logs.length} security events
+            {run.logs.length} {eventNoun}
           </span>
           <button
             type="button"
@@ -564,6 +579,9 @@ function OrgAuditLogsInner() {
       actor: rawFilterValues.actor === "all" ? null : rawFilterValues.actor,
       surface:
         rawFilterValues.surface === "all" ? null : rawFilterValues.surface,
+      resource:
+        rawFilterValues.resource === "all" ? null : rawFilterValues.resource,
+      date: rawFilterValues.date,
     }),
     [rawFilterValues],
   );
@@ -571,19 +589,28 @@ function OrgAuditLogsInner() {
   const selectedAction = filterValues.action ?? "all";
   const selectedActor = filterValues.actor ?? "all";
   const selectedSurface = filterValues.surface ?? "all";
+  const selectedResource = parseResourceFilter(filterValues.resource);
+  const { dates } = useSessionDateRange(filterValues.date);
+  // Presets keep an open upper bound so new entries still appear.
+  const dateTo = filterValues.date.customRange ? dates.to : undefined;
   const hasActiveFilters =
     selectedProjectSlug !== "all" ||
     selectedAction !== "all" ||
     selectedActor !== "all" ||
-    selectedSurface !== "all";
+    selectedSurface !== "all" ||
+    selectedResource !== null ||
+    dates.from !== undefined;
   const [timestampMode, setTimestampMode] = useQueryState("time", {
     defaultValue: "utc",
   });
-  const [selectedCategory, setSelectedCategory] = useQueryState("category", {
-    defaultValue: "configuration",
+  const [selectedView, setSelectedView] = useQueryState("category", {
+    defaultValue: "changes",
   });
-  const category: AuditCategory =
-    selectedCategory === "security" ? "security" : "configuration";
+  const view = parseAuditView(selectedView);
+  const { category, origin } = auditViewQuery(view);
+  // Security and system entries arrive in bursts from one actor, so those
+  // views collapse consecutive entries by actor.
+  const groupsRuns = view === "security" || view === "system";
 
   const tsMode = (timestampMode === "local" ? "local" : "utc") as
     | "utc"
@@ -599,6 +626,7 @@ function OrgAuditLogsInner() {
     projectSlug:
       selectedProjectSlug === "all" ? undefined : selectedProjectSlug,
     category,
+    origin,
   });
 
   const actionOptions = useMemo(
@@ -633,7 +661,12 @@ function OrgAuditLogsInner() {
     action: selectedAction === "all" ? undefined : selectedAction,
     actorId: selectedActor === "all" ? undefined : selectedActor,
     actingSurface: selectedSurface === "all" ? undefined : selectedSurface,
+    subjectType: selectedResource?.subjectType,
+    subjectId: selectedResource?.subjectId,
+    from: dates.from,
+    to: dateTo,
     category,
+    origin,
   });
 
   const logs = useMemo(
@@ -642,29 +675,49 @@ function OrgAuditLogsInner() {
   );
 
   const identities = useAuditPrincipals(logs);
+
+  const resourceOptions = useMemo(() => {
+    const seen = new Map<string, { value: string; label: string }>();
+    for (const log of logs) {
+      const value = resourceFilterValue(log);
+      if (seen.has(value)) continue;
+      seen.set(value, {
+        value,
+        label: formatSubjectLabel(getSubjectLabel(log), log.subjectType),
+      });
+    }
+    if (filterValues.resource && !seen.has(filterValues.resource)) {
+      seen.set(filterValues.resource, {
+        value: filterValues.resource,
+        label: selectedResource?.subjectId ?? filterValues.resource,
+      });
+    }
+    return [...seen.values()];
+  }, [logs, filterValues.resource, selectedResource?.subjectId]);
+
+  const filterToResource = useCallback(
+    (log: AuditLog) => setFilterValue("resource", resourceFilterValue(log)),
+    [setFilterValue],
+  );
   const dateGroups = useMemo(
     () => groupLogsByDate(logs, tsMode),
     [logs, tsMode],
   );
 
-  // Security entries from one actor arrive in bursts, so each day groups
-  // consecutive entries by actor.
-  // Configuration changes stay one row each.
   const dateRuns = useMemo(
     () =>
       dateGroups.map((group) => ({
         ...group,
-        runs:
-          category === "security"
-            ? groupConsecutiveByActor(group.logs)
-            : group.logs.map((log) => ({
-                key: log.id,
-                actorId: log.actorId,
-                actorType: log.actorType,
-                logs: [log],
-              })),
+        runs: groupsRuns
+          ? groupConsecutiveByActor(group.logs)
+          : group.logs.map((log) => ({
+              key: log.id,
+              actorId: log.actorId,
+              actorType: log.actorType,
+              logs: [log],
+            })),
       })),
-    [dateGroups, category],
+    [dateGroups, groupsRuns],
   );
   const [expandedRuns, setExpandedRuns] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -698,11 +751,17 @@ function OrgAuditLogsInner() {
         `Filtered to acting surface: ${formatActingSurfaceLabel(selectedSurface)}`,
       );
     }
-    parts.push(
-      category === "security"
-        ? "Showing security activity: machine access and other activity that isn't a settings change."
-        : "Showing configuration changes.",
-    );
+    if (selectedResource) {
+      parts.push(
+        `Filtered to resource: ${selectedResource.subjectType} ${selectedResource.subjectId}`,
+      );
+    }
+    if (dates.from) {
+      parts.push(
+        `Filtered to entries from ${dates.from.toISOString()}${dateTo ? ` to ${dateTo.toISOString()}` : ""}`,
+      );
+    }
+    parts.push(VIEW_INSIGHTS[view]);
     parts.push(`Currently showing ${logs.length} audit log entries.`);
     if (dateGroups.length > 0) {
       const firstDate = dateGroups[0]!.date!;
@@ -719,7 +778,10 @@ function OrgAuditLogsInner() {
     selectedAction,
     selectedActor,
     selectedSurface,
-    category,
+    selectedResource,
+    dates.from,
+    dateTo,
+    view,
     logs.length,
     dateGroups,
     tsMode,
@@ -1001,21 +1063,6 @@ function OrgAuditLogsInner() {
           }}
         >
           <Page.Toolbar>
-            <Page.Toolbar.Leading>
-              <SegmentedControl
-                ariaLabel="Audit log category"
-                value={category}
-                onChange={(value) => {
-                  // Actions, actors and surfaces differ between categories, so
-                  // a filter chosen in one would leave the other empty.
-                  void setSelectedCategory(value);
-                  clearFilterValue("action");
-                  clearFilterValue("actor");
-                  clearFilterValue("surface");
-                }}
-                options={CATEGORY_OPTIONS}
-              />
-            </Page.Toolbar.Leading>
             <Page.Toolbar.Search
               value={searchQuery}
               onChange={handleSearchChange}
@@ -1044,6 +1091,7 @@ function OrgAuditLogsInner() {
                   label: option.displayName,
                   description: auditLogCountDescription(option.count),
                 })),
+                resource: resourceOptions,
               }}
               onChange={
                 setFilterValue as (id: string, value: FilterValue) => void
@@ -1052,72 +1100,87 @@ function OrgAuditLogsInner() {
               onClearAll={clearAllFilters}
             />
             <Page.Toolbar.Actions>
-              <div className="flex items-center gap-3">
-                {searchQuery ? (
-                  <div className="text-muted-foreground flex items-center gap-1 text-[11px]">
-                    <span aria-live="polite" className="min-w-8 text-center">
-                      {searchMatchIndices.length > 0
-                        ? `${effectiveSearchIndex + 1}/${searchMatchIndices.length}`
-                        : "0/0"}
-                    </span>
-                    <button
-                      onClick={() => navigateToResult("prev")}
-                      disabled={searchMatchIndices.length === 0}
-                      className="hover:bg-muted p-1 opacity-60 transition-opacity hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
-                      title="Previous (Shift+N)"
-                      aria-label="Previous search result"
-                    >
-                      <Icon name="chevron-up" className="size-3" />
-                    </button>
-                    <button
-                      onClick={() => navigateToResult("next")}
-                      disabled={searchMatchIndices.length === 0}
-                      className="hover:bg-muted p-1 opacity-60 transition-opacity hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
-                      title="Next (N)"
-                      aria-label="Next search result"
-                    >
-                      <Icon name="chevron-down" className="size-3" />
-                    </button>
-                  </div>
-                ) : null}
-                <Text small muted>
-                  Timestamp
-                </Text>
-                <div className="bg-background flex h-8 items-center gap-2 border px-3">
-                  <Text
-                    small
-                    className={
-                      tsMode === "utc"
-                        ? "text-foreground"
-                        : "text-muted-foreground"
-                    }
+              {searchQuery ? (
+                <div className="text-muted-foreground flex items-center gap-1 text-[11px]">
+                  <span aria-live="polite" className="min-w-8 text-center">
+                    {searchMatchIndices.length > 0
+                      ? `${effectiveSearchIndex + 1}/${searchMatchIndices.length}`
+                      : "0/0"}
+                  </span>
+                  <button
+                    onClick={() => navigateToResult("prev")}
+                    disabled={searchMatchIndices.length === 0}
+                    className="hover:bg-muted p-1 opacity-60 transition-opacity hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
+                    title="Previous (Shift+N)"
+                    aria-label="Previous search result"
                   >
-                    UTC
-                  </Text>
-                  <Switch
-                    checked={tsMode === "local"}
-                    onCheckedChange={(checked) => {
-                      void setTimestampMode(checked ? "local" : "utc");
-                    }}
-                    aria-label="Toggle timestamp timezone"
-                  />
-                  <Text
-                    small
-                    className={
-                      tsMode === "local"
-                        ? "text-foreground"
-                        : "text-muted-foreground"
-                    }
+                    <Icon name="chevron-up" className="size-3" />
+                  </button>
+                  <button
+                    onClick={() => navigateToResult("next")}
+                    disabled={searchMatchIndices.length === 0}
+                    className="hover:bg-muted p-1 opacity-60 transition-opacity hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
+                    title="Next (N)"
+                    aria-label="Next search result"
                   >
-                    Local
-                  </Text>
+                    <Icon name="chevron-down" className="size-3" />
+                  </button>
                 </div>
-              </div>
+              ) : null}
             </Page.Toolbar.Actions>
           </Page.Toolbar>
         </div>
 
         <div className="bg-card overflow-hidden border">
+          <div className="border-border flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2">
+            <SegmentedControl
+              ariaLabel="Audit log view"
+              value={view}
+              onChange={(value) => {
+                // Actions, actors and surfaces differ between views, so a
+                // filter chosen in one could leave another empty.
+                void setSelectedView(value);
+                clearFilterValue("action");
+                clearFilterValue("actor");
+                clearFilterValue("surface");
+              }}
+              options={VIEW_OPTIONS}
+            />
+            <div className="flex items-center gap-3">
+              <Text small muted>
+                Timestamp
+              </Text>
+              <div className="bg-background flex h-8 items-center gap-2 border px-3">
+                <Text
+                  small
+                  className={
+                    tsMode === "utc"
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }
+                >
+                  UTC
+                </Text>
+                <Switch
+                  checked={tsMode === "local"}
+                  onCheckedChange={(checked) => {
+                    void setTimestampMode(checked ? "local" : "utc");
+                  }}
+                  aria-label="Toggle timestamp timezone"
+                />
+                <Text
+                  small
+                  className={
+                    tsMode === "local"
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }
+                >
+                  Local
+                </Text>
+              </div>
+            </div>
+          </div>
           <div
             ref={logsContainerRef}
             tabIndex={0}
@@ -1140,17 +1203,11 @@ function OrgAuditLogsInner() {
               </div>
             ) : logs.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-12 text-center">
-                <Text className="font-medium">
-                  {category === "security"
-                    ? "No security activity found"
-                    : "No audit logs found"}
-                </Text>
+                <Text className="font-medium">{VIEW_EMPTY[view].title}</Text>
                 <Text muted small>
                   {hasActiveFilters
                     ? "No audit logs match the selected filters."
-                    : category === "security"
-                      ? "Machine access and other security activity appear here."
-                      : "Activity will appear here as changes are made across your organization."}
+                    : VIEW_EMPTY[view].description}
                 </Text>
               </div>
             ) : (
@@ -1183,6 +1240,11 @@ function OrgAuditLogsInner() {
                             highlightMatch={
                               searchQuery ? highlightMatch : undefined
                             }
+                            onFilterResource={
+                              filterValues.resource
+                                ? undefined
+                                : filterToResource
+                            }
                           />
                         );
                       });
@@ -1193,6 +1255,11 @@ function OrgAuditLogsInner() {
                         <ActorRunRow
                           key={run.key}
                           run={run}
+                          eventNoun={
+                            view === "security"
+                              ? "security events"
+                              : "system events"
+                          }
                           expanded={expandedRuns.has(run.key)}
                           onToggle={() => {
                             // Collapsing the run that holds the selected entry

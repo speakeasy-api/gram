@@ -1,6 +1,7 @@
 import * as React from "react";
 
-import { AppRoute, useOrgRoutes } from "@/routes";
+import type { AppRoute } from "@/routes";
+import { useOrgRoutes } from "@/routes";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import {
   Sidebar,
@@ -14,7 +15,7 @@ import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { Icon } from "@/components/ui/Icon";
 import { RequireScope } from "@/components/require-scope";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import { SidebarBrandHeader } from "./sidebar-brand-header";
 import { SidebarFooterAction } from "./sidebar-footer-action";

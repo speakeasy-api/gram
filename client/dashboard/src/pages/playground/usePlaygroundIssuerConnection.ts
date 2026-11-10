@@ -1,7 +1,7 @@
 import { useProxiedMcpTools } from "@/hooks/useProxiedMcpTools";
 import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
-import { Toolset } from "@/lib/toolTypes";
+import type { Toolset } from "@/lib/toolTypes";
 import { firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
 import { useCallback, useMemo } from "react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";

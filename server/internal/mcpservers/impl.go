@@ -41,6 +41,7 @@ import (
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -61,7 +62,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
@@ -1019,6 +1019,14 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 	}
 
+	// Moving the server onto an issuer configures its sign-in, so a server
+	// that is the issuer's only consumer offers the clients bound there.
+	if ids.UserSessionIssuerID.Valid && ids.UserSessionIssuerID != existing.UserSessionIssuerID {
+		if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID}, nil); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "capture mcp server upstream clients").LogError(ctx, logger)
+		}
+	}
+
 	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue MCP server publication").LogError(ctx, logger)
 	}
@@ -1240,6 +1248,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		ActorEmail:     authCtx.Email,
 		ActorSystem:    "",
 		TracerProvider: s.tracerProvider,
+		Logger:         logger,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete mcp server").LogError(ctx, logger)
@@ -1251,70 +1260,12 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	// cascade once this deletion leaves it without an active owner.
 	var orphanCreds []remotesessions.RevokedCredentials
 	if deleted.UserSessionIssuerID.Valid {
-		userSessionsRepo := usersessionsrepo.New(dbtx)
-		if err := userSessionsRepo.LockUserSessionIssuerForOwnerBinding(ctx, deleted.UserSessionIssuerID.UUID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "lock mcp server issuer for owner binding").LogError(ctx, logger)
-		}
-		// Lock the issuer row before the ownership check. A concurrent meta
-		// MCP attach holds this same row lock while writing its reference, so
-		// the statements below see any newly committed owner. A missing
-		// issuer must not block server deletion, so ErrNoRows skips the
-		// cascade entirely.
-		_, lockErr := userSessionsRepo.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
-			ID:        deleted.UserSessionIssuerID.UUID,
-			ProjectID: *authCtx.ProjectID,
-		})
-		if lockErr != nil && !errors.Is(lockErr, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnexpected, lockErr, "lock mcp server issuer").LogError(ctx, logger)
-		}
-
-		hasActiveOwner, err := userSessionsRepo.UserSessionIssuerHasActiveOwner(ctx, usersessionsrepo.UserSessionIssuerHasActiveOwnerParams{
-			ProjectID:           *authCtx.ProjectID,
-			UserSessionIssuerID: deleted.UserSessionIssuerID.UUID,
-		})
+		orphanCreds, err = lifecycle.ReleaseUnownedIssuer(ctx, dbtx, s.revoker, s.audit, lifecycle.ReleaseActor{
+			Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			DisplayName: authCtx.Email,
+		}, authCtx.ActiveOrganizationID, *authCtx.ProjectID, deleted.UserSessionIssuerID.UUID)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "check user session issuer ownership").LogError(ctx, logger)
-		}
-
-		if lockErr == nil && !hasActiveOwner {
-			if err := lifecycle.GuardEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, deleted.UserSessionIssuerID.UUID); err != nil {
-				return fmt.Errorf("guard orphan issuer identity-chaining bindings: %w", err)
-			}
-			deletedIssuer, err := userSessionsRepo.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
-				ID:        deleted.UserSessionIssuerID.UUID,
-				ProjectID: *authCtx.ProjectID,
-			})
-			switch {
-			case errors.Is(err, pgx.ErrNoRows):
-				// A missing issuer must not block server deletion.
-			case err != nil:
-				return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer").LogError(ctx, logger)
-			default:
-				orphanCreds, err = s.revoker.DetachUserSessionIssuerFromClients(ctx, dbtx, deletedIssuer.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-				if err != nil {
-					return oops.E(oops.CodeUnexpected, err, "detach remote session clients from mcp server issuer").LogError(ctx, logger)
-				}
-
-				if _, err := userSessionsRepo.SoftDeleteUserSessionsByIssuerID(ctx, deletedIssuer.ID); err != nil {
-					return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer sessions").LogError(ctx, logger)
-				}
-
-				if _, err := userSessionsRepo.SoftDeleteUserSessionConsentsByIssuerID(ctx, deletedIssuer.ID); err != nil {
-					return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer consents").LogError(ctx, logger)
-				}
-
-				if err := s.audit.LogUserSessionIssuerDelete(ctx, dbtx, audit.LogUserSessionIssuerDeleteEvent{
-					OrganizationID:       authCtx.ActiveOrganizationID,
-					ProjectID:            *authCtx.ProjectID,
-					Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-					ActorDisplayName:     authCtx.Email,
-					ActorSlug:            nil,
-					UserSessionIssuerURN: urn.NewUserSessionIssuer(deletedIssuer.ID),
-					Slug:                 deletedIssuer.Slug,
-				}); err != nil {
-					return oops.E(oops.CodeUnexpected, err, "log mcp server issuer deletion").LogError(ctx, logger)
-				}
-			}
+			return err //nolint:wrapcheck // oops errors pass through.
 		}
 	}
 
@@ -1331,6 +1282,11 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	}
 	if err := authclientbackfill.SyncServerDerivedCopies(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.ID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "sync mcp server auth client headers").LogError(ctx, logger)
+	}
+	// The deleted server's associations, and any the cascaded issuer served,
+	// go with it, and so do the typed links derived from them.
+	if err := upstreamclients.ReconcileInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, nil); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "prune deleted server upstream clients").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogMcpServerDelete(ctx, dbtx, audit.LogMcpServerDeleteEvent{
@@ -1352,8 +1308,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	// Prunes the deleted server's upstream client associations, and lets a
-	// server left alone on the shared issuer pick up its bindings.
+	// Restamps the denormalized issuer column of servers left on the shared
+	// issuer after commit, like every client binding writer, and lets one left
+	// alone there pick up its bindings.
 	var releasedIssuers []uuid.UUID
 	if deleted.UserSessionIssuerID.Valid {
 		releasedIssuers = []uuid.UUID{deleted.UserSessionIssuerID.UUID}

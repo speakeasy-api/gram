@@ -36,7 +36,7 @@ import (
 // exchange and credential persistence without a legacy issuer binding.
 func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"typed", "ema", "gateway", "gateway_ambiguous", "gateway_denied_member", "revoked_link", "deleted_auth_client", "disabled_auth_client", "revoked_permission", "revoked_connect", "deleted_server", "deleted_sign_in", "deleted_remote_issuer", "tenant_mismatch", "legacy_unlinked", "legacy"} {
+	for _, scenario := range []string{"typed", "typed_alternatives", "typed_alternatives_no_identity", "ema", "gateway", "gateway_ambiguous", "gateway_denied_member", "revoked_link", "deleted_auth_client", "disabled_auth_client", "revoked_permission", "revoked_connect", "deleted_server", "deleted_sign_in", "deleted_remote_issuer", "tenant_mismatch", "legacy_unlinked", "legacy"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestMCPService(t)
@@ -142,12 +142,41 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 					return
 				}
 			}
+			targetScopes := []string{"target:read", "openid"}
+			if scenario == "typed_alternatives_no_identity" {
+				targetScopes = []string{"target:read"}
+			}
+			if strings.HasPrefix(scenario, "typed_alternatives") {
+				// Reuse the selected registration on another distinct resource,
+				// while a different provider also offers the requested target.
+				otherServer, otherRemote := uuid.New(), uuid.New()
+				require.NoError(t, q.SeedRemoteMCPServerFixture(ctx, authclientbackfill.SeedRemoteMCPServerFixtureParams{ID: otherRemote, ProjectID: projectID, Url: consentUpstreamB}))
+				require.NoError(t, q.SeedMCPServerFixture(ctx, authclientbackfill.SeedMCPServerFixtureParams{ID: otherServer, ProjectID: projectID, Slug: conv.ToPGText("alternative-resource"), RemoteMcpServerID: conv.ToNullUUID(otherRemote)}))
+				require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: otherServer, AuthClientID: authClientID, Source: "admin"}))
+				alternativeAS := newConsentExchangeAS(t, new(atomic.Value), "alternative-token")
+				alternative := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "alternative-provider", alternativeAS.URL, nil)
+				alternativeID, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: authz.AuthClientTypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(alternative)})
+				require.NoError(t, err)
+				require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, AuthClientID: alternativeID, Source: "admin"}))
+				seedPrincipalGrant(t, ctx, ti, orgID, principal, authz.ScopeMCPAuth, alternativeID.String())
+				advertise(t, ctx, fx, clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, registration), []string{"issuer:default", "openid"})
+				cacheResourceScopes(t, ctx, fx, consentUpstreamA, targetScopes)
+			}
 			loc := postConnectAction(t, fx, registration)
+			if strings.HasPrefix(scenario, "typed_alternatives") {
+				require.Equal(t, as.URL, loc.Scheme+"://"+loc.Host, "keep the selected provider")
+				require.Equal(t, consentUpstreamA, loc.Query().Get("resource"))
+				require.ElementsMatch(t, targetScopes, strings.Fields(loc.Query().Get("scope")))
+			}
 			state := mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state"))
 			if scenario == "legacy" {
 				require.Nil(t, state.TypedAuthorization)
 			} else {
 				require.Equal(t, &remotesessions.TypedAuthorization{OrganizationID: orgID, ProjectID: projectID, ServerID: serverID, AuthClientID: authClientID, RemoteSessionClientID: registration, Subject: subject}, state.TypedAuthorization)
+			}
+			if scenario == "typed" || scenario == "ema" {
+				require.Equal(t, consentUpstreamA, state.Resource, "a registration the server offers connects qualified to that server's upstream, with no sign-in link")
+				require.Equal(t, consentUpstreamA, loc.Query().Get("resource"), "the authorization request names the resource")
 			}
 			switch scenario {
 			case "revoked_link":
@@ -184,7 +213,7 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			w := httptest.NewRecorder()
 			callbackErr := mgr.HandleRemoteLoginCallback(w, req)
 			session, sessionErr := remotesessionsrepo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: registration})
-			if scenario != "typed" && scenario != "ema" && scenario != "gateway" && scenario != "gateway_denied_member" && scenario != "legacy" {
+			if scenario != "typed" && !strings.HasPrefix(scenario, "typed_alternatives") && scenario != "ema" && scenario != "gateway" && scenario != "gateway_denied_member" && scenario != "legacy" {
 				require.Error(t, callbackErr)
 				if scenario != "legacy_unlinked" && scenario != "deleted_sign_in" {
 					require.Nil(t, posted.Load(), "revocation must fail before exchanging the code")
@@ -195,9 +224,19 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			require.NoError(t, callbackErr)
 			require.Equal(t, http.StatusSeeOther, w.Code)
 			require.NotNil(t, posted.Load())
+			if strings.HasPrefix(scenario, "typed_alternatives") {
+				require.Equal(t, consentExchangeCapture{HasResource: true, Resource: consentUpstreamA}, posted.Load())
+				require.Equal(t, consentUpstreamA, state.Resource)
+				require.ElementsMatch(t, targetScopes, session.Scopes)
+				registerPageClient(t, ctx, fx)
+				code, html, _ := render(t, fx)
+				require.Equal(t, http.StatusOK, code)
+				require.Contains(t, html, "1 of 2 connected", "selected registration should remain connected")
+				require.NotContains(t, html, consentIdentityCopy, "card must use the same resource scopes as login")
+			}
 			require.NoError(t, sessionErr)
 			require.Equal(t, state.Resource, session.Resource.String)
-			if scenario == "typed" || scenario == "ema" || strings.HasPrefix(scenario, "gateway") {
+			if scenario == "typed" || strings.HasPrefix(scenario, "typed_alternatives") || scenario == "ema" || strings.HasPrefix(scenario, "gateway") {
 				bound, err := mgr.ListClients(ctx, projectID, orgID, issuerID)
 				require.NoError(t, err)
 				require.Empty(t, bound, "typed login must not create a legacy issuer binding")

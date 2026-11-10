@@ -1,11 +1,9 @@
 import type { ToolsFilter } from "@/elements/types";
-import {
-  AssistantToolProps,
-  Tool,
-  makeAssistantTool,
-} from "@assistant-ui/react";
-import { JSONSchema7, ToolSet, type ToolExecutionOptions } from "ai";
-import { FC } from "react";
+import type { AssistantToolProps, Tool } from "@assistant-ui/react";
+import { makeAssistantTool } from "@assistant-ui/react";
+import type { JSONSchema7, ToolSet } from "ai";
+import { type ToolExecutionOptions } from "ai";
+import type { FC } from "react";
 import z from "zod";
 
 /**

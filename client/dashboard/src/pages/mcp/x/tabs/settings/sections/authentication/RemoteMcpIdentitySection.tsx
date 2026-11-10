@@ -380,10 +380,6 @@ export function RemoteMcpIdentitySectionBody({
       mcpServerId: target.mcpServerId,
       change: "replace",
       providerId: userDraft.selected.isNew ? undefined : userDraft.selected.id,
-      clientId:
-        userDraft.choice === "existing"
-          ? (userDraft.existingClientId ?? undefined)
-          : undefined,
       replaceClient: userDraft.cleared ? true : undefined,
     };
   }

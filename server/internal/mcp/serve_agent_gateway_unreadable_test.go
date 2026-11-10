@@ -48,7 +48,7 @@ func TestServeAgentGateway_UnreadableConnectionAsksEditorsToReconnect(t *testing
 		require.NoError(t, err)
 		projectSlug = project.Slug
 	}
-	link := fmt.Sprintf("/%s/projects/%s/identities/agents/%s/edit?step=2", authCtx.OrganizationSlug, projectSlug, fx.agent.ID)
+	link := fmt.Sprintf("/%s/projects/%s/identities/agent:%s/mcp-sign-in", authCtx.OrganizationSlug, projectSlug, fx.agent.ID)
 
 	call := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
 	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, call)

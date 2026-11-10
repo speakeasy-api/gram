@@ -1,8 +1,9 @@
-import React, { forwardRef, ReactNode } from "react";
+import type { ReactNode } from "react";
+import React, { forwardRef } from "react";
 import { cn } from "@/lib/utils";
 import { cva } from "class-variance-authority";
 import { Slot, Slottable } from "@radix-ui/react-slot";
-import { IconName } from "../Icon/names";
+import type { IconName } from "../Icon/names";
 import { Icon as IconComponent } from "../Icon";
 /** Link text sizes, matching the design system body scale. */
 type LinkSize = "xs" | "sm" | "md" | "lg";

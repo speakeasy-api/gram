@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
@@ -127,7 +128,8 @@ func newTestToolsetsService(t *testing.T, policies ...*guardian.Policy) (context
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, false)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardianPolicy, nil)
+	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, false, revoker)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), authzEngine, auditLogger)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
@@ -227,7 +229,8 @@ func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, 
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, true)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardianPolicy, nil)
+	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, true, revoker)
 
 	return ctx, &testInstance{
 		service:        svc,

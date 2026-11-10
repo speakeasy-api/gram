@@ -1,6 +1,7 @@
 import * as React from "react";
 
-import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
+import type { AppRoute } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { ArrowLeft, MinusIcon, TestTube2Icon } from "lucide-react";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import {
@@ -26,7 +27,7 @@ import { ProjectGuideSidebarCta } from "./project-guide-sidebar-cta";
 import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
 import { RequireScope } from "./require-scope";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import {
   ScopeGatedNavGroup,
   type ScopeGatedNavEntry,

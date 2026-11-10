@@ -1371,12 +1371,6 @@ type ServersInsertLinearRemoteSessionIssuerParams struct {
 	OrgID     string
 }
 
-// Leave instructions NULL so Settings starts with the editable built-in
-// instructions, matching the gateway's initialize and server/discover text.
-// Remote MCP identity modes: Linear uses per-user OAuth through a
-// project-scoped CIMD client, Slack carries one inert shared Service Account
-// credential, and GitHub intentionally has no upstream identity. The demo
-// values are display fixtures only and cannot authenticate to any service.
 func (q *Queries) ServersInsertLinearRemoteSessionIssuer(ctx context.Context, arg ServersInsertLinearRemoteSessionIssuerParams) error {
 	_, err := q.db.Exec(ctx, serversInsertLinearRemoteSessionIssuer, arg.ID, arg.ProjectID, arg.OrgID)
 	return err
@@ -1502,6 +1496,25 @@ func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg Ser
 		arg.SlackMemberID,
 		arg.SlackServerID,
 	)
+	return err
+}
+
+const serversInsertNotionUserSessionIssuer = `-- name: ServersInsertNotionUserSessionIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode) VALUES
+  ($1::uuid, $2::uuid, $3::text, 'notion',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
+`
+
+type ServersInsertNotionUserSessionIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+func (q *Queries) ServersInsertNotionUserSessionIssuer(ctx context.Context, arg ServersInsertNotionUserSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertNotionUserSessionIssuer, arg.ID, arg.ProjectID, arg.OrgID)
 	return err
 }
 
@@ -1843,6 +1856,104 @@ func (q *Queries) ServersInsertServerClientAssociation(ctx context.Context, arg 
 		arg.McpServerID,
 		arg.RemoteSessionClientID,
 	)
+	return err
+}
+
+const serversInsertSignInExampleEndpoints = `-- name: ServersInsertSignInExampleEndpoints :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  ($1::uuid, $2::uuid, NULL,
+   $3::uuid, $4::text),
+  ($5::uuid, $2::uuid, NULL,
+   $6::uuid, $7::text)
+`
+
+type ServersInsertSignInExampleEndpointsParams struct {
+	NotionEndpointID   uuid.UUID
+	ProjectID          uuid.UUID
+	NotionServerID     uuid.UUID
+	NotionSlug         string
+	DeepwikiEndpointID uuid.UUID
+	DeepwikiServerID   uuid.UUID
+	DeepwikiSlug       string
+}
+
+// Each gets an endpoint of its own, as a server added in the dashboard does:
+// the endpoint is where its sign-in page lives.
+func (q *Queries) ServersInsertSignInExampleEndpoints(ctx context.Context, arg ServersInsertSignInExampleEndpointsParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSignInExampleEndpoints,
+		arg.NotionEndpointID,
+		arg.ProjectID,
+		arg.NotionServerID,
+		arg.NotionSlug,
+		arg.DeepwikiEndpointID,
+		arg.DeepwikiServerID,
+		arg.DeepwikiSlug,
+	)
+	return err
+}
+
+const serversInsertSignInExampleMCPServers = `-- name: ServersInsertSignInExampleMCPServers :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                         remote_mcp_server_id, user_session_issuer_id,
+                         visibility) VALUES
+  ($1::uuid, $2::uuid, 'Notion', 'notion',
+   NULL, $3::uuid, $4::uuid, 'private'),
+  ($5::uuid, $2::uuid, 'DeepWiki', 'deepwiki',
+   NULL, $6::uuid, $7::uuid, 'private')
+`
+
+type ServersInsertSignInExampleMCPServersParams struct {
+	NotionID          uuid.UUID
+	ProjectID         uuid.UUID
+	RemoteNotionID    uuid.UUID
+	IssuerNotionID    uuid.UUID
+	DeepwikiID        uuid.UUID
+	RemoteDeepwikiID  uuid.UUID
+	IssuerWorkforceID uuid.UUID
+}
+
+// DeepWiki takes no credential, so it sits under the shared workforce issuer
+// like GitHub, with no upstream client to sign in through.
+func (q *Queries) ServersInsertSignInExampleMCPServers(ctx context.Context, arg ServersInsertSignInExampleMCPServersParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSignInExampleMCPServers,
+		arg.NotionID,
+		arg.ProjectID,
+		arg.RemoteNotionID,
+		arg.IssuerNotionID,
+		arg.DeepwikiID,
+		arg.RemoteDeepwikiID,
+		arg.IssuerWorkforceID,
+	)
+	return err
+}
+
+const serversInsertSignInExampleRemoteMCPServers = `-- name: ServersInsertSignInExampleRemoteMCPServers :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  ($1::uuid, $2::uuid, 'Notion', 'notion',
+   'streamable-http', 'https://mcp.notion.com/mcp'),
+  ($3::uuid, $2::uuid, 'DeepWiki', 'deepwiki',
+   'streamable-http', 'https://mcp.deepwiki.com/mcp')
+`
+
+type ServersInsertSignInExampleRemoteMCPServersParams struct {
+	NotionID   uuid.UUID
+	ProjectID  uuid.UUID
+	DeepwikiID uuid.UUID
+}
+
+// Leave instructions NULL so Settings starts with the editable built-in
+// instructions, matching the gateway's initialize and server/discover text.
+// Remote MCP identity modes: Linear uses per-user OAuth through a
+// project-scoped CIMD client, Slack carries one inert shared Service Account
+// credential, and GitHub intentionally has no upstream identity. The demo
+// values are display fixtures only and cannot authenticate to any service.
+// Two more vendor remotes for the agent MCP sign-in tab, both real and
+// connectable: Notion signs each caller in to their own account once an
+// admin sets up its sign-in from the server's page (Speakeasy registers a
+// client with Notion then; the seed holds no credential), and DeepWiki is a
+// public server that needs no sign-in at all.
+func (q *Queries) ServersInsertSignInExampleRemoteMCPServers(ctx context.Context, arg ServersInsertSignInExampleRemoteMCPServersParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSignInExampleRemoteMCPServers, arg.NotionID, arg.ProjectID, arg.DeepwikiID)
 	return err
 }
 

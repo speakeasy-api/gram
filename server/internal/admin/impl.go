@@ -122,6 +122,9 @@ type Service struct {
 	scopes *remotemcp.StaffScopes
 	// HookClientsCache shares snapshot storage with the nightly worker.
 	*HookClientsCache
+
+	hookFleet         HookFleetReader
+	hookFleetVersions HookFleetVersions
 }
 
 type BillingOperations interface {
@@ -278,11 +281,13 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:            trialNotifier,
-		billing:          billing,
-		supportCoverage:  supportCoverage,
-		mcpServerHealth:  mcpServerHealth,
-		HookClientsCache: NewHookClientsCache(logger, adminCache, nil, nil),
+		trial:             trialNotifier,
+		billing:           billing,
+		supportCoverage:   supportCoverage,
+		mcpServerHealth:   mcpServerHealth,
+		HookClientsCache:  NewHookClientsCache(logger, adminCache, nil, nil),
+		hookFleet:         nil,
+		hookFleetVersions: HookFleetVersions{Latest: nil, Minimum: nil},
 	}
 }
 
@@ -1146,6 +1151,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		SubjectID:              conv.PtrToPGTextEmpty(filter.SubjectID),
 		SubjectIds:             nil,
 		ActingSurface:          conv.PtrToPGTextEmpty(filter.ActingSurface),
+		Origin:                 pgtype.Text{String: "", Valid: false},
 		CreatedFrom:            conv.PtrToPGTimestamptz(filter.From),
 		CreatedTo:              conv.PtrToPGTimestamptz(filter.To),
 	}

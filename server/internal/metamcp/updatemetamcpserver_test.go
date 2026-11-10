@@ -427,6 +427,8 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, 1, boundCount(newIssuerID),
 		"issuer change must re-bind member provider clients to the new issuer")
+	require.Equal(t, 0, boundCount(uuid.MustParse(*meta.UserSessionIssuerID)),
+		"the previous issuer no longer holds the binding the gateway put there")
 
 	// A second swap wires the members again: rewiring is not a one-shot.
 	thirdIssuerID := seedUserSessionIssuer(t, ctx, ti.conn, projectID)
@@ -441,6 +443,8 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, 1, boundCount(thirdIssuerID),
 		"each issuer change must re-wire member provider clients")
+	require.Equal(t, 0, boundCount(newIssuerID),
+		"each issuer change removes the binding from the issuer it leaves")
 }
 
 // Instructions follow omit-preserves / blank-clears: an update that does not

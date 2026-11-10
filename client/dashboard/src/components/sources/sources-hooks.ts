@@ -1,7 +1,5 @@
-import {
-  CatalogAuthType,
-  extractAuthType,
-} from "@/pages/catalog/hooks/serverMetadata";
+import type { CatalogAuthType } from "@/pages/catalog/hooks/serverMetadata";
+import { extractAuthType } from "@/pages/catalog/hooks/serverMetadata";
 
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListMCPCatalog } from "@/pages/catalog/hooks";

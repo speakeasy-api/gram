@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -207,6 +208,10 @@ type RefreshService struct {
 	connections *mcpconnectionattempts.Recorder
 	// refreshes tracks request-path refreshes, which can outlive their caller.
 	refreshes sync.WaitGroup
+
+	// features decides per organization whether a client's MCP servers are
+	// the ones it is associated with; nil keeps its issuer bindings.
+	features feature.Provider
 }
 
 // identityRestatement carries a refresh response out of the lease so identity is written after release.
@@ -246,6 +251,12 @@ func WithRefreshTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner
 	return func(s *RefreshService) { s.assertions = signer }
 }
 
+// WithRefreshFeatureFlags evaluates the per-organization rollout flags that
+// decide which MCP servers a client is attached to.
+func WithRefreshFeatureFlags(flags feature.Provider) RefreshOption {
+	return func(s *RefreshService) { s.features = flags }
+}
+
 // WithRefreshConnectionRecorder records each refresh's outcome.
 func WithRefreshConnectionRecorder(recorder *mcpconnectionattempts.Recorder) RefreshOption {
 	return func(s *RefreshService) { s.connections = recorder }
@@ -269,6 +280,7 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		restatements:   sync.WaitGroup{},
 		connections:    nil,
 		refreshes:      sync.WaitGroup{},
+		features:       nil,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -281,14 +293,53 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 
 // FallbackResourceForClient derives the RFC 8707 resource for a client from
 // its attached MCP servers. RefreshNow applies it to rows that carry no
-// persisted resource; the consent connect arm applies it to the grant it is
-// about to mint.
-func (s *RefreshService) FallbackResourceForClient(ctx context.Context, clientID uuid.UUID) (string, error) {
+// persisted resource. organizationID is the client's organization; it selects
+// where the attachments come from and, for associations, scopes them.
+func (s *RefreshService) FallbackResourceForClient(ctx context.Context, organizationID string, clientID uuid.UUID) (string, error) {
+	if s.attachmentsFromAssociations(ctx, organizationID) {
+		attachments, err := attachmentsForClients(ctx, s.db, organizationID, []uuid.UUID{clientID}, true)
+		if err != nil {
+			return "", err
+		}
+		return clientUpstreamResource(attachments[clientID]), nil
+	}
+
 	rows, err := remotesessions_repo.New(s.db).ListOrganizationMcpServersForClient(ctx, clientID)
 	if err != nil {
 		return "", fmt.Errorf("list mcp servers for client: %w", err)
 	}
-	return clientUpstreamResource(rows), nil
+	resources := make([]string, 0, len(rows))
+	for _, row := range rows {
+		resources = append(resources, row.Url)
+	}
+	return clientUpstreamResource(resources), nil
+}
+
+// fallbackResourceForGrant derives the resource for a grant stored with none.
+// Where the organization it was consented in enforces typed auth clients, the
+// servers that offer its client decide; a client with no offer, and any client
+// elsewhere, falls back to its attached servers.
+func (s *RefreshService) fallbackResourceForGrant(ctx context.Context, sess remotesessions_repo.RemoteSession) (string, error) {
+	q := remotesessions_repo.New(s.db)
+	organizationID, err := q.GetUserSessionIssuerOrganizationID(ctx, sess.UserSessionIssuerID)
+	if err != nil {
+		return "", fmt.Errorf("get grant organization: %w", err)
+	}
+	attachments, offered, err := loadClientAttachments(ctx, s.db, organizationID, []uuid.UUID{sess.RemoteSessionClientID})
+	if err != nil {
+		return "", fmt.Errorf("list mcp servers for grant client: %w", err)
+	}
+	if offered[sess.RemoteSessionClientID] {
+		return clientUpstreamResource(attachments[sess.RemoteSessionClientID]), nil
+	}
+	// A global sign-in has no organization, but its client still has a tenant.
+	// Use that tenant for the association flag and retain the legacy client-wide
+	// fallback when association-derived resources are not enabled.
+	organizationID, err = q.GetRemoteSessionClientTenantOrganizationID(ctx, sess.RemoteSessionClientID)
+	if err != nil {
+		return "", fmt.Errorf("read client organization for fallback resource: %w", err)
+	}
+	return s.FallbackResourceForClient(ctx, organizationID, sess.RemoteSessionClientID)
 }
 
 // ResourceForClientAtUpstream derives the RFC 8707 resource for a client
@@ -296,7 +347,7 @@ func (s *RefreshService) FallbackResourceForClient(ctx context.Context, clientID
 // same endpoint; see claimableUpstream. Siblings are only consulted when the
 // client's own attachments leave the claim open.
 func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
-	attachments, err := attachmentsForClients(ctx, s.db, organizationID, append([]uuid.UUID{clientID}, siblingIDs...))
+	attachments, err := attachmentsForClients(ctx, s.db, organizationID, append([]uuid.UUID{clientID}, siblingIDs...), s.attachmentsFromAssociations(ctx, organizationID))
 	if err != nil {
 		return "", err
 	}
@@ -307,7 +358,7 @@ func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, organi
 // client bound to one endpoint, each weighed against the others, from a
 // single load of their attachments.
 func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, organizationID string, clientIDs []uuid.UUID, upstream string) (map[uuid.UUID]string, error) {
-	attachments, err := attachmentsForClients(ctx, s.db, organizationID, clientIDs)
+	attachments, err := attachmentsForClients(ctx, s.db, organizationID, clientIDs, s.attachmentsFromAssociations(ctx, organizationID))
 	if err != nil {
 		return nil, err
 	}
@@ -318,41 +369,82 @@ func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, orga
 	return resources, nil
 }
 
-// attachmentsForClients loads the MCP servers attached to each client in one
-// round trip, within organizationID. A client with no attachments has no entry.
-func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, error) {
+// attachmentsFromAssociations reports whether the organization's clients are
+// attached to the servers they are associated with rather than to every server
+// on the user session issuers they are bound to.
+func (s *RefreshService) attachmentsFromAssociations(ctx context.Context, organizationID string) bool {
+	return feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID)
+}
+
+// attachmentsForClients loads the resources of the MCP servers attached to
+// each client within organizationID. A client with no attachments has no entry.
+//
+// Where the organization enforces typed auth clients, the servers that offer a
+// client through one replace the servers behind its user session issuer links:
+// a client with an offer has its resource decided by the servers configured to
+// use it, linked to their sign-in or not. A client with no offer keeps the
+// servers behind its links, or its associated servers when fromAssociations
+// is enabled.
+func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID, fromAssociations bool) (map[uuid.UUID][]string, error) {
+	attachments, offered, err := loadClientAttachments(ctx, db, organizationID, clientIDs)
+	if err != nil || !fromAssociations {
+		return attachments, err
+	}
+	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersAssociatedWithClients(ctx, remotesessions_repo.ListOrganizationMcpServersAssociatedWithClientsParams{
+		RemoteSessionClientIds: clientIDs,
+		OrganizationID:         organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list mcp servers associated with clients: %w", err)
+	}
+	for _, clientID := range clientIDs {
+		if !offered[clientID] {
+			delete(attachments, clientID)
+		}
+	}
+	for _, row := range rows {
+		if !offered[row.ClientID] {
+			attachments[row.ClientID] = append(attachments[row.ClientID], row.Url)
+		}
+	}
+	return attachments, nil
+}
+
+// loadClientAttachments also reports which clients have offers, so grant
+// refresh can preserve its client-wide fallback when no offer decides.
+func loadClientAttachments(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]string, map[uuid.UUID]bool, error) {
 	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
 		RemoteSessionClientIds: clientIDs,
 		OrganizationID:         organizationID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list mcp servers for bound clients: %w", err)
+		return nil, nil, fmt.Errorf("list mcp servers for bound clients: %w", err)
 	}
-	attachments := make(map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, len(clientIDs))
+	attachments := make(map[uuid.UUID][]string, len(clientIDs))
+	// Offered rows sort first for each client.
+	offered := make(map[uuid.UUID]bool, len(clientIDs))
 	for _, row := range rows {
-		attachments[row.ClientID] = append(attachments[row.ClientID], remotesessions_repo.ListOrganizationMcpServersForClientRow{
-			ID:          row.ID,
-			ProjectID:   row.ProjectID,
-			ProjectSlug: row.ProjectSlug,
-			Name:        row.Name,
-			Slug:        row.Slug,
-			Url:         row.Url,
-		})
+		if row.Offered {
+			offered[row.ClientID] = true
+		} else if offered[row.ClientID] {
+			continue
+		}
+		attachments[row.ClientID] = append(attachments[row.ClientID], row.Resource)
 	}
-	return attachments, nil
+	return attachments, offered, nil
 }
 
 // resourceAmongSiblings decides clientID's resource at upstream from the
 // loaded attachments of every client bound to the endpoint: its own
 // derivation when it has one, otherwise a claim on upstream that stands only
 // while no sibling serves it.
-func resourceAmongSiblings(attachments map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, clientID uuid.UUID, upstream string) string {
+func resourceAmongSiblings(attachments map[uuid.UUID][]string, clientID uuid.UUID, upstream string) string {
 	resource, claimable := claimableUpstream(attachments[clientID], upstream)
 	if !claimable {
 		return resource
 	}
-	for id, rows := range attachments {
-		if id != clientID && rowsServeUpstream(rows, resource) {
+	for id, resources := range attachments {
+		if id != clientID && resourcesServeUpstream(resources, resource) {
 			return ""
 		}
 	}
@@ -967,7 +1059,7 @@ func (s *RefreshService) refresh(
 		// derive the client's own so it is never replayed against another
 		// upstream's audience.
 		var err error
-		resource, err = s.FallbackResourceForClient(ctx, sess.RemoteSessionClientID)
+		resource, err = s.fallbackResourceForGrant(ctx, sess)
 		if err != nil {
 			return zero, nil, nil, fmt.Errorf("derive fallback resource: %w", err)
 		}

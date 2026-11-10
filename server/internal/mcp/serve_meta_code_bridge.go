@@ -227,17 +227,37 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 	return ctx, gate, permitted, nil
 }
 
+// catalogConsentCodeRefusal is a Code Mode refusal for a member whose approval no longer matches.
+func catalogConsentCodeRefusal(message string, remedy staleChoiceRemedy) error {
+	if remedy == staleChoiceReconnect {
+		return codemode.ErrConsentRequired
+	}
+	return &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy != staleChoiceAskAdmin}
+}
+
 // helperFailure keeps a member that needs a new consent, or someone else's fix,
 // distinguishable from one that is merely unavailable.
 func (b *metaCodeBackend) helperFailure(ctx context.Context, gate *metaGateContext, member metaMember, err error) error {
 	if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
 		message, remedy := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
-		return &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect}
+		return &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect || remedy == staleChoiceReconnectThenAdmin}
 	}
-	if needsNewConsent(err) {
-		return codemode.ErrConsentRequired
+	if consent, ok := errors.AsType[catalogConsentError](err); ok {
+		return catalogConsentCodeRefusal(b.service.catalogConsentRefusal(ctx, b.service.logger, gate, member, consent, false))
 	}
 	return codemode.ErrToolUnavailable
+}
+
+// memberCallRefusal records and refuses a call to a member with a stale choice or a changed approval, before dispatch.
+func (b *metaCodeBackend) memberCallRefusal(ctx context.Context, gate *metaGateContext, member metaMember) error {
+	if stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); ok {
+		message, remedy := b.service.refuseStaleChoiceCall(ctx, b.service.logger, gate, member, stale)
+		return &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect || remedy == staleChoiceReconnectThenAdmin}
+	}
+	if consent, ok := errors.AsType[catalogConsentError](b.service.validateCatalogMember(ctx, gate, member, catalogCheckRecorded)); ok {
+		return catalogConsentCodeRefusal(b.service.refuseCatalogConsentCall(ctx, b.service.logger, gate, member, consent, false))
+	}
+	return nil
 }
 
 func (b *metaCodeBackend) revoke() error {
@@ -386,13 +406,8 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 	callGate := *gate
 	if slug, _, splitErr := metamcp.SplitQualifiedName(path); splitErr == nil {
 		if member, ok := findMetaMember(members, slug); ok {
-			if stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); ok {
-				message, remedy := b.service.refuseStaleChoiceCall(ctx, b.service.logger, &callGate, member, stale)
-				return nil, &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect}
-			}
-			if err := b.service.validateCatalogMember(ctx, &callGate, member); needsNewConsent(err) {
-				b.service.recordConsentRefusal(ctx, &callGate, member, err)
-				return nil, codemode.ErrConsentRequired
+			if err := b.memberCallRefusal(ctx, &callGate, member); err != nil {
+				return nil, err
 			}
 		}
 	}

@@ -30,10 +30,6 @@ const (
 	// WatchPath is the endpoint the watcher polls with a request token.
 	WatchPath = "/approvals/watch"
 
-	// BuiltinBackend is the mcp_servers.builtin_backend value of a project's
-	// approvals server, which the gateway serves with this runtime.
-	BuiltinBackend = "approvals"
-
 	// MCPServerName is the server name agents see.
 	MCPServerName = "speakeasy-approvals"
 
@@ -67,7 +63,6 @@ type Runtime struct {
 	authenticate Authenticator
 	watchLimiter *ratelimit.Limiter
 	server       *mcp.Server
-	tools        []*mcp.Tool
 }
 
 // watchRate bounds polling per token. The watcher polls every 3 seconds (20 a
@@ -110,14 +105,9 @@ func NewRuntime(service *Service, authenticate Authenticator, store ratelimit.St
 		OutputSchema: nil,
 		Icons:        nil,
 	}
-	r := &Runtime{service: service, authenticate: authenticate, watchLimiter: limiter, server: server, tools: []*mcp.Tool{tool}}
+	r := &Runtime{service: service, authenticate: authenticate, watchLimiter: limiter, server: server}
 	mcp.AddTool(server, tool, r.requestApproval)
 	return r
-}
-
-// Tools lists the Approvals MCP server's tools.
-func (r *Runtime) Tools() []*mcp.Tool {
-	return r.tools
 }
 
 // requestApprovalInput is the request_approval tool input.
@@ -240,19 +230,6 @@ func (r *Runtime) watchChecks(row repo.RiskPolicyApproval) int {
 // Handler serves the Approvals MCP server at MCPPath, where it authenticates
 // each caller itself.
 func (r *Runtime) Handler() http.Handler {
-	return r.serve(r.authenticate)
-}
-
-// GatewayHandler serves the Approvals MCP server at each project's approvals
-// server endpoint. The gateway authenticates callers before it hands requests
-// over.
-func (r *Runtime) GatewayHandler() http.Handler {
-	return r.serve(func(_ http.ResponseWriter, req *http.Request) (context.Context, error) {
-		return req.Context(), nil
-	})
-}
-
-func (r *Runtime) serve(authenticate Authenticator) http.Handler {
 	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return r.server
 	}, &mcp.StreamableHTTPOptions{
@@ -273,7 +250,7 @@ func (r *Runtime) serve(authenticate Authenticator) http.Handler {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		ctx, err := authenticate(w, req)
+		ctx, err := r.authenticate(w, req)
 		if err != nil {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return

@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
@@ -8,6 +15,28 @@ import type { InventoryServer } from "./useServerInventory";
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
+
+const popup = vi.hoisted(() => ({
+  onComplete: undefined as
+    | undefined
+    | ((reason: "popup-closed" | "focus") => void | Promise<void>),
+}));
+// The real popup hook, with its completion callback kept so a test can say
+// the popup closed.
+vi.mock("@/components/sessions/useOAuthPopup", async (importOriginal) => {
+  const real =
+    await importOriginal<
+      typeof import("@/components/sessions/useOAuthPopup")
+    >();
+  return {
+    useOAuthPopup: (
+      onComplete: (reason: "popup-closed" | "focus") => void | Promise<void>,
+    ) => {
+      popup.onComplete = onComplete;
+      return real.useOAuthPopup(onComplete);
+    },
+  };
+});
 
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: "editor", displayName: "Example Editor" } }),
@@ -166,4 +195,63 @@ describe("create connection reauthentication", () => {
       expect(url.searchParams.get("existing")).toBe("keep");
     },
   );
+});
+
+describe("saving after a connection", () => {
+  const fakePopup = () =>
+    ({
+      closed: false,
+      opener: null,
+      location: { href: "" },
+      focus: () => {},
+      close: () => {},
+    }) as unknown as Window;
+  const connectable = { ...server, connectUrl: "https://example.test/connect" };
+  function row(status: "missing" | "ready", onConnected: () => void) {
+    return (
+      <StepAuthentication
+        servers={[connectable]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        onConnected={onConnected}
+        connections={{
+          byServer: new Map([
+            [
+              connectable.id,
+              status === "ready"
+                ? { status: "ready", sessions: [mine] }
+                : { status: "missing" },
+            ],
+          ]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />
+    );
+  }
+
+  it("saves once the reader's connection is ready after the sign-in popup closes", async () => {
+    vi.spyOn(window, "open").mockReturnValue(fakePopup());
+    const onConnected = vi.fn<() => void>();
+    const view = render(row("missing", onConnected), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
+    // The refetch the popup's close starts reads the new connection.
+    view.rerender(row("ready", onConnected));
+    await act(async () => {
+      await popup.onComplete?.("popup-closed");
+    });
+    await waitFor(() => expect(onConnected).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not save when the popup closes without a connection", async () => {
+    vi.spyOn(window, "open").mockReturnValue(fakePopup());
+    const onConnected = vi.fn<() => void>();
+    render(row("missing", onConnected), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
+    await act(async () => {
+      await popup.onComplete?.("popup-closed");
+    });
+    expect(onConnected).not.toHaveBeenCalled();
+  });
 });

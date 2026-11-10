@@ -106,6 +106,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		SubjectID:              conv.PtrToPGTextEmpty(payload.SubjectID),
 		SubjectIds:             normalizeSubjectIDs(payload.SubjectIds),
 		ActingSurface:          conv.PtrToPGTextEmpty(payload.ActingSurface),
+		Origin:                 conv.PtrToPGTextEmpty(payload.Origin),
 		IncludeAssistantEvents: false,
 		IncludeInternalEvents:  false,
 		CreatedFrom:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
@@ -232,7 +233,7 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 		return nil, err
 	}
 
-	actorRows, actionRows, surfaceRows, err := s.listFacetRows(ctx, categoryOrDefault(payload.Category), authCtx.ActiveOrganizationID, projectID)
+	actorRows, actionRows, surfaceRows, err := s.listFacetRows(ctx, categoryOrDefault(payload.Category), authCtx.ActiveOrganizationID, projectID, conv.PtrToPGTextEmpty(payload.Origin))
 	if err != nil {
 		return nil, err
 	}
@@ -337,10 +338,10 @@ func categoryOrDefault(category string) audit.Category {
 }
 
 // listFacetRows reads the facet values of one category's log.
-func (s *Service) listFacetRows(ctx context.Context, category audit.Category, organizationID string, projectID uuid.NullUUID) ([]repo.ListAuditActorFacetsRow, []repo.ListAuditActionFacetsRow, []repo.ListAuditSurfaceFacetsRow, error) {
-	actorParams := repo.ListAuditActorFacetsParams{OrganizationID: organizationID, ProjectID: projectID}
-	actionParams := repo.ListAuditActionFacetsParams{OrganizationID: organizationID, ProjectID: projectID}
-	surfaceParams := repo.ListAuditSurfaceFacetsParams{OrganizationID: organizationID, ProjectID: projectID}
+func (s *Service) listFacetRows(ctx context.Context, category audit.Category, organizationID string, projectID uuid.NullUUID, origin pgtype.Text) ([]repo.ListAuditActorFacetsRow, []repo.ListAuditActionFacetsRow, []repo.ListAuditSurfaceFacetsRow, error) {
+	actorParams := repo.ListAuditActorFacetsParams{OrganizationID: organizationID, ProjectID: projectID, Origin: origin}
+	actionParams := repo.ListAuditActionFacetsParams{OrganizationID: organizationID, ProjectID: projectID, Origin: origin}
+	surfaceParams := repo.ListAuditSurfaceFacetsParams{OrganizationID: organizationID, ProjectID: projectID, Origin: origin}
 
 	var (
 		actors   []repo.ListAuditActorFacetsRow

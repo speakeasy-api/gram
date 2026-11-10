@@ -28,6 +28,8 @@ function routes(): ReturnType<typeof useRoutes> {
         connections: page("connections"),
         devices: page("devices"),
         activity: page("activity"),
+        mcpSignIn: page("mcp-sign-in"),
+        auditTrail: page("audit-trail"),
       },
     },
   } as unknown as ReturnType<typeof useRoutes>;
@@ -57,10 +59,11 @@ describe("identityRailItems", () => {
     // render a panel whose only content was a sentence saying it had none.
     expect(keys("agent")).toEqual([
       "overview",
+      "mcp-sign-in",
       "permissions",
       "sessions",
-      "activity",
-      "credentials",
+      "audit-trail",
+      "sign-in",
       "controls",
     ]);
   });
@@ -78,7 +81,11 @@ describe("identityRailItems", () => {
     // The keys and the federated platforms are the only way an agent gets
     // in, so the rail has to reach them: without this entry the panels still
     // render at their address and nothing links to it.
-    expect(titles["credentials"]).toBe("Credentials");
+    expect(titles["sign-in"]).toBe("Agent sign-in");
+    // Its servers and their sign-in are changed here, not by walking the
+    // setup wizard again; its activity is the record of changes to it.
+    expect(titles["mcp-sign-in"]).toBe("MCP sign-in");
+    expect(titles["audit-trail"]).toBe("Audit trail");
   });
 
   it("carries the current query string onto every link", () => {
@@ -99,7 +106,7 @@ describe("identityRailItems", () => {
       identityRailItems(routes(), "agent%3A1", "", "agent"),
     );
     expect(agent["controls"]).toBe("Controls & Safety");
-    expect(agent["credentials"]).toBe("Credentials");
+    expect(agent["sign-in"]).toBe("Agent sign-in");
     const person = identitySectionCrumbs(
       identityRailItems(routes(), "user%3A1", "", "user"),
     );

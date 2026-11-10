@@ -81,6 +81,9 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 			values.Add("to", *p.To)
 		}
 		values.Add("category", p.Category)
+		if p.Origin != nil {
+			values.Add("origin", *p.Origin)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -321,6 +324,9 @@ func EncodeListFacetsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			values.Add("project_slug", *p.ProjectSlug)
 		}
 		values.Add("category", p.Category)
+		if p.Origin != nil {
+			values.Add("origin", *p.Origin)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

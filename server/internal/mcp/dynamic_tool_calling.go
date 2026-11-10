@@ -99,10 +99,6 @@ func buildDynamicSessionTools(
 func buildDescribeToolsTool(tools []*types.Tool) (*toolListEntry, error) {
 	toolNames := []string{}
 	for _, tool := range tools {
-		if conv.IsProxyTool(tool) {
-			return nil, fmt.Errorf("build describe tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
-		}
-
 		baseTool, err := conv.ToBaseTool(tool)
 		if err != nil {
 			continue
@@ -227,10 +223,6 @@ func handleSearchToolsCall(
 func buildToolSearchResultEntries(tools []*types.Tool, searchResults []*rag.ToolSearchResult) ([]*toolListEntry, error) {
 	toolsByURN := make(map[string]*types.Tool, len(tools))
 	for _, tool := range tools {
-		if conv.IsProxyTool(tool) {
-			return nil, fmt.Errorf("search tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
-		}
-
 		baseTool, err := conv.ToBaseTool(tool)
 		if err != nil {
 			continue
@@ -315,10 +307,6 @@ func handleDescribeToolsCall(
 	// Build a map of tools by name for quick lookup
 	toolsByName := make(map[string]*types.Tool)
 	for _, tool := range toolset.Tools {
-		if conv.IsProxyTool(tool) {
-			return nil, fmt.Errorf("describe tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
-		}
-
 		baseTool, err := conv.ToBaseTool(tool)
 		if err != nil {
 			continue

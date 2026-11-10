@@ -59,7 +59,7 @@ func TestCodeConnectionAuthenticationMetadata(t *testing.T) {
 	t.Parallel()
 	b := &metaCodeBackend{}
 	for _, backend := range []metaMemberBackend{metaMemberBackendHosted, metaMemberBackendProxied} {
-		state := b.knownConnectionState(t.Context(), &metaGateContext{}, metaMember{backend: backend})
+		state := b.knownConnectionState(t.Context(), &metaGateContext{}, metaMember{backend: backend}, nil)
 		if backend == metaMemberBackendHosted {
 			require.Equal(t, "not_required", state.Authentication)
 		} else {
