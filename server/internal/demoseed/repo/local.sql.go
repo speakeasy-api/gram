@@ -321,34 +321,6 @@ func (q *Queries) LocalFixturePointProtectedResource(ctx context.Context, arg Lo
 	return result.RowsAffected(), nil
 }
 
-const localFixturePointRegisteredClient = `-- name: LocalFixturePointRegisteredClient :execrows
-UPDATE remote_session_clients
-SET client_id = $1::text, callback_base_url = $2::text, updated_at = clock_timestamp()
-WHERE id = $3::uuid AND project_id = $4::uuid AND deleted IS FALSE
-`
-
-type LocalFixturePointRegisteredClientParams struct {
-	ClientID        string
-	CallbackBaseUrl string
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-}
-
-// A client registered with the fixture ahead of time (the seed mints the
-// registration the fixture would have returned).
-func (q *Queries) LocalFixturePointRegisteredClient(ctx context.Context, arg LocalFixturePointRegisteredClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, localFixturePointRegisteredClient,
-		arg.ClientID,
-		arg.CallbackBaseUrl,
-		arg.ID,
-		arg.ProjectID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const localFixturePointRemoteServer = `-- name: LocalFixturePointRemoteServer :execrows
 UPDATE remote_mcp_servers SET url = $1::text, name = $2::text, updated_at = clock_timestamp()
 WHERE id = $3::uuid AND project_id = $4::uuid AND deleted IS FALSE

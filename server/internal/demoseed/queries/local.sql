@@ -291,13 +291,6 @@ SET client_id = @client_id::text, client_id_metadata_uri = @client_id::text,
     callback_base_url = @callback_base_url::text, updated_at = clock_timestamp()
 WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
 
--- A client registered with the fixture ahead of time (the seed mints the
--- registration the fixture would have returned).
--- name: LocalFixturePointRegisteredClient :execrows
-UPDATE remote_session_clients
-SET client_id = @client_id::text, callback_base_url = @callback_base_url::text, updated_at = clock_timestamp()
-WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
-
 -- name: LocalFixtureRenameAuthClient :execrows
 UPDATE mcp_auth_clients SET name = @name::text, updated_at = clock_timestamp()
 WHERE id = @id::uuid AND organization_id = @organization_id::text AND deleted IS FALSE;
