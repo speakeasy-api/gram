@@ -159,60 +159,87 @@ func TestToolsets_RBAC_CloneToolset_DeniedWithProjectWriteButNoSourceRead(t *tes
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func projectBoundMCPGrant(scope authz.Scope, projectID string) authz.Grant {
-	return authz.Grant{Scope: scope, Selector: authz.Selector{
+func projectBoundMCPGrant(projectID string, scope authz.Scope) authz.Grant {
+	return authz.NewGrantWithSelector(scope, authz.Selector{
 		authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
 		authz.SelectorKeyResourceID:   authz.WildcardResource,
 		authz.SelectorKeyProjectID:    projectID,
-	}}
+	})
 }
 
-func TestToolsets_RBAC_CloneToolset_DeniedWithGrantsBoundToAnotherProject(t *testing.T) {
+func TestToolsets_RBAC_CloneToolset_HonorsProjectScopedAuthorization(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestToolsetsService(t)
-	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-clone-other-project-test")
+	cases := []struct {
+		name    string
+		grants  func(projectID string) []authz.Grant
+		allowed bool
+	}{
+		{
+			name: "write and read bound to another project",
+			grants: func(string) []authz.Grant {
+				otherProjectID := uuid.NewString()
+				return []authz.Grant{
+					projectBoundMCPGrant(otherProjectID, authz.ScopeMCPWrite),
+					projectBoundMCPGrant(otherProjectID, authz.ScopeMCPRead),
+				}
+			},
+			allowed: false,
+		},
+		{
+			name: "project write without project dimension and read bound to another project",
+			grants: func(projectID string) []authz.Grant {
+				return []authz.Grant{
+					authz.NewGrantWithSelector(authz.ScopeMCPWrite, authz.Selector{
+						authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+						authz.SelectorKeyResourceID:   projectID,
+					}),
+					projectBoundMCPGrant(uuid.NewString(), authz.ScopeMCPRead),
+				}
+			},
+			allowed: false,
+		},
+		{
+			name: "write and read bound to its project",
+			grants: func(projectID string) []authz.Grant {
+				return []authz.Grant{
+					projectBoundMCPGrant(projectID, authz.ScopeMCPWrite),
+					projectBoundMCPGrant(projectID, authz.ScopeMCPRead),
+				}
+			},
+			allowed: true,
+		},
+	}
 
-	otherProjectID := uuid.NewString()
-	ctx = authztest.WithExactGrants(t, ctx,
-		projectBoundMCPGrant(authz.ScopeMCPWrite, otherProjectID),
-		projectBoundMCPGrant(authz.ScopeMCPRead, otherProjectID),
-	)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	_, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		Slug:             toolset.Slug,
-	})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
+			ctx, ti := newTestToolsetsService(t)
+			toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-clone-project-scope-test")
 
-func TestToolsets_RBAC_CloneToolset_AllowedWithGrantsBoundToItsProject(t *testing.T) {
-	t.Parallel()
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx)
 
-	ctx, ti := newTestToolsetsService(t)
-	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-clone-own-project-test")
+			ctx = authztest.WithExactGrants(t, ctx, tc.grants(authCtx.ProjectID.String())...)
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-
-	ctx = authztest.WithExactGrants(t, ctx,
-		projectBoundMCPGrant(authz.ScopeMCPWrite, authCtx.ProjectID.String()),
-		projectBoundMCPGrant(authz.ScopeMCPRead, authCtx.ProjectID.String()),
-	)
-
-	cloned, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		Slug:             toolset.Slug,
-	})
-	require.NoError(t, err)
-	require.NotEqual(t, toolset.ID, cloned.ID)
+			cloned, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
+				SessionToken:     nil,
+				ApikeyToken:      nil,
+				ProjectSlugInput: nil,
+				Slug:             toolset.Slug,
+			})
+			if !tc.allowed {
+				var oopsErr *oops.ShareableError
+				require.ErrorAs(t, err, &oopsErr)
+				require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+				return
+			}
+			require.NoError(t, err)
+			require.NotEqual(t, toolset.ID, cloned.ID)
+		})
+	}
 }
 
 func TestToolsets_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
