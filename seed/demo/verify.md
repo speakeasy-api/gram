@@ -166,7 +166,7 @@ open their effective assignments; the dropdown always offers compact member sear
     selected servers and all current/future MCP servers. Amara's panel holds two
     simultaneously effective rows whose record overlap panels identify each
     other. Open Jonas's changed row and confirm history narrows **Acme Support
-    Tools / Acme Ops / Linear** to **Acme Support Tools** without losing the
+    Tools / Acme Ops / Per-User OAuth Server** to **Acme Support Tools** without losing the
     removed-server diff. Open the lifted and expired rows and confirm their
     complete history and terminal status. On the active selected row, the
     external message renders the newline, `<script>alert("demo")</script>`, and
@@ -199,8 +199,8 @@ open their effective assignments; the dropdown always offers compact member sear
     Gateway tool usage chart with all four tools populated, the three discovery tools
     decreasing (list_servers > describe_server > describe_tools) and
     execute_tool counting the member calls, and a Calls-by-member
-    table listing Acme Support Tools, Acme Ops, Linear, and Slack with Acme Ops
-    carrying most of the errors — and no GitHub row, even though GitHub's
+    table listing Acme Support Tools, Acme Ops, the Per-User OAuth Server, and Slack with Acme Ops
+    carrying most of the errors — and no Shared or Own Token Server row, even though that server's
     dispatches from before it left the gateway still count in the totals.
     The "Dispatched calls over time" title opens Tool Logs and the "Gateway
     tool usage" title opens MCP & Tools, both with the Acme Agent Gateway
@@ -251,7 +251,7 @@ open their effective assignments; the dropdown always offers compact member sear
       credentials.
       Never add usable keys to shared SQL.
     - Both active release agents have one direct `mcp:connect` grant scoped to
-      the demo project and Linear MCP server. Release assistant also inherits
+      the demo project and Per-User OAuth Server. Release assistant also inherits
       a wildcard read-only `mcp:connect` grant from the Read-only Tools role.
       Confirm the wizard offers only the intersection with owner/caller access. If that intersection is empty,
       explain that no permissions can be delegated; never widen policy silently.
@@ -273,7 +273,7 @@ open their effective assignments; the dropdown always offers compact member sear
       exchange; the inert shared seed cannot prove third-party authentication.
     - Seed rationale: four identities cover active, suspended and revoked
       states; the two active release agents have exact project/server-scoped
-      Linear grants and share one human-owned upstream session (inert in the
+      Per-User OAuth Server grants and share one human-owned upstream session (inert in the
       demo org; a live MCP fixture token locally). API keys
       remain empty and the agent credential session is expired. Confirm the
       release agents' policy views show their scoped grant; the other two
@@ -352,26 +352,24 @@ open their effective assignments; the dropdown always offers compact member sear
       shared SQL. Local-only developer keys may be restored by
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
 19. **Remote MCP identity settings** — open the settings page for each seeded
-    Remote MCP server. Linear shows the **User** identity pill, the Example
-    Workspace Identity provider, and the Session length / Client access controls
+    Remote MCP server. The Per-User OAuth Server shows the **User** identity pill, the MCP
+    Fixture OAuth provider, and the Session length / Client access controls
     in Sessions. Slack shows **Service Account** with the inert demo
-    Authorization credential managed under Identity. GitHub shows **None** with
+    Authorization credential managed under Identity. The Shared or Own Token Server shows **None** with
     no provider or static Authorization header. All three use the Display,
     Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with
     Custom Headers directly after the Identity controls. In Postgres, only the
-    Linear row in `mcp_servers` has `remote_session_issuer_id` set, to the
-    Example Workspace Identity provider, and the one client bound to Linear's
+    Per-User OAuth Server row in `mcp_servers` has `remote_session_issuer_id` set, to the
+    MCP Fixture OAuth provider, and the one client bound to the Per-User OAuth Server's
     user session issuer (`remote-identity-client-linear`, the main CIMD
     client) sits under that same provider, so the stamp matches what
-    `ResyncMCPServerRemoteSessionIssuers` would derive. Linear offers one
-    OAuth client, "Example Workspace sign-in". The legacy callback client
+    `ResyncMCPServerRemoteSessionIssuers` would derive. The Per-User OAuth Server offers one
+    OAuth client, "Fixture OAuth sign-in". The legacy callback client
     (`attachment-client`) has no row in
     `remote_session_client_user_session_issuers` and no server association;
-    it shows only on the provider's pages. After
-    `mise run seed`, the local org renames Linear to **Per-User OAuth Server**
-    (provider **MCP Fixture OAuth**, server URL on `GRAM_MCP_FIXTURE_URL`)
-    and GitHub to **Shared or Own Token Server**; the demo org keeps Linear
-    and GitHub.
+    it shows only on the provider's pages. The demo org points both fixture
+    servers at the placeholder `mcp-fixture.example.com`; after `mise run seed`
+    the local org points them at `GRAM_MCP_FIXTURE_URL`.
 
 20. **Billing meter usage** — select a custom trailing 14-day window. Storage
     shows s-tokens of stored content, bandwidth shows ingress and egress bytes,
@@ -481,8 +479,8 @@ open their effective assignments; the dropdown always offers compact member sear
       per agent/issuer/client slot. Reauthorization changes the generation and
       must not silently authorize an old attachment.
     - Rerun `mise run seed` twice. Expect six managed agents, two attachment
-      sessions on Linear's one OAuth client, two bindings and two exact
-      project/server-scoped grants. The four Linear validation sessions
+      sessions on the Per-User OAuth Server's one OAuth client, two bindings and two exact
+      project/server-scoped grants. The four Per-User OAuth Server validation sessions
       (members 3 to 6) remain intact. In the demo org every upstream
       credential is inert; locally, the unexpired sessions hold real MCP
       fixture tokens and the expired one stays expired.
@@ -549,19 +547,19 @@ open their effective assignments; the dropdown always offers compact member sear
     `skill`: the values picker offers those three names with counts and
     never an empty value. Then flip the Explore row in `PAGES.md` from
     `[~]` to `[x]`.
-27. **Check access** — open MCP → **GitHub** → Team Access and pick Mateo
+27. **Check access** — open MCP → **Shared or Own Token Server** → Team Access and pick Mateo
     Alvarez in Check access. Connect is **Blocked**: the Contractors block
     wins, Engineer's grants show as blocked, and his own grant covering
-    every server is blocked because it does not name GitHub. Contractors
+    every server is blocked because it does not name the Shared or Own Token Server. Contractors
     reads "Mapped from employee_type = contractor" for an organization
     admin. View and Manage stay allowed, since the block covers Connect
     only. Pick Priya Raman: Connect is **Allowed** because her grant naming
-    GitHub overrides the Contractors block, which shows as overridden.
+    The Shared or Own Token Server overrides the Contractors block, which shows as overridden.
 28. **Role editor: MCP access** — open Team → Roles & Permissions and edit
     **Support Desk**. MCP access opens on Specific servers with the Default
     project expanded: Acme Support Tools is ticked with no badge, and Slack
     is ticked with a **Read-Only Tools** badge that opens its tool access
-    sheet on By annotation. Edit **Contractors**: GitHub sits in the
+    sheet on By annotation. Edit **Contractors**: The Shared or Own Token Server sits in the
     Forbidden section with Remove. Edit **Engineer**: every server row is
     ticked and locked, and the lock's card links to Platform access, where
     `mcp:read` and `mcp:write` carry the note that they also connect. Edit
@@ -598,7 +596,7 @@ open their effective assignments; the dropdown always offers compact member sear
       **Use default**.
     - `acme-workforce` trusts Acme Identity for inbound EMA (ID-JAGs) only.
       Its sign-in client is unset on purpose, so interactive sign-in through
-      it (GitHub, the organization gateway) keeps working, and the trust
+      it (Shared or Own Token Server, the organization gateway) keeps working, and the trust
       changes nothing outbound: **MCP → Acme Tracker → Settings** still has no
       Enterprise Managed Authorization section, and Acme Identity is not
       offered as a provider a service can accept on the strength of this
@@ -682,19 +680,18 @@ open their effective assignments; the dropdown always offers compact member sear
     - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
       server appears once: one each of Acme Support Tools, Acme Ops, Acme
       Partner Gateway and Acme OAuth Discovery (each toolset's canonical
-      wrapper), and one row for Linear (Per-User OAuth
-      Server locally). Expanding Linear shows one OAuth client, not two.
+      wrapper), and one row for the Per-User OAuth Server. Expanding the Per-User OAuth Server shows one OAuth client, not two.
     - Locally, with the `mcp-fixture` daemon up (`pitchfork status
       mcp-fixture`), connect any MCP client to
-      `GRAM_SERVER_URL/mcp/<org>-linear`. The consent page lists one service,
+      `GRAM_SERVER_URL/mcp/<org>-per-user-oauth`. The consent page lists one service,
       **MCP Fixture OAuth**. **Connect** opens the fixture's sign-in page; pick
       an email, then **Give access**. `whoami` returns that email with
       `auth: oauth`.
     - Connect a client to `GRAM_SERVER_URL/mcp/<org>-partner` and call
       `get_customer`: it returns the fixture's demo customer, not an error
       about `api.internal.acme.example`.
-    - The demo org keeps display-only upstreams: Linear's **Connect account**
-      goes to `identity.example.com` and fails, by design.
+    - The demo org keeps display-only upstreams: The Per-User OAuth Server's **Connect account**
+      goes to `mcp-fixture.example.com` and fails, by design.
 
 ## On failure
 

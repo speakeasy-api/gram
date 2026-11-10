@@ -31,7 +31,7 @@ This directory holds the authoring docs:
 
 The shared seed writes two active release agents with one fictional human owner.
 Both reference the same exact upstream session through
-`principal_remote_session_bindings`; the requesting Linear session's issuer is
+`principal_remote_session_bindings`; the requesting Per-User OAuth Server session's issuer is
 linked to its upstream client. This is intentionally inert: `.invalid` issuer,
 invalid ciphertext, no refresh token, and auto-refresh off. No real credentials
 or external account IDs are included. Deterministic `gram-demo-attachment-*`
@@ -141,10 +141,10 @@ needs and the shared demo org must never have:
   It is its own OAuth 2.1 server (sign in by picking an email; dynamic
   registration, client ID metadata documents, PKCE, refresh rotation), takes
   the checked-in shared token `fixtureauth.SharedToken`, and stubs the demo
-  API document. `local_mcp_fixture.go` points the local org at it: Linear
-  becomes the **Per-User OAuth Server** with real fixture tokens on its seeded
-  sign-ins, GitHub becomes the **Shared or Own Token Server**, and the
-  generated toolsets get an `ACME_SERVER_URL` system environment. All three
+  API document. `local_mcp_fixture.go` points the local org at it: the **Per-User OAuth
+  Server** (real fixture tokens on its seeded sign-ins), the **Shared or Own
+  Token Server**, and the generated toolsets (an `ACME_SERVER_URL` system
+  environment). The shared seed uses the placeholder `mcp-fixture.example.com`. All three
   work right after `mise run seed`. The public demo org keeps its
   display-only values: prod cannot reach localhost.
 

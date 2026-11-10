@@ -45,7 +45,7 @@ const (
 	fixtureSignInClientName   = "Fixture OAuth sign-in"
 	fixtureEnvironmentFixedID = "0000-4000-a000-000000007008"
 	fixtureAPIEnvVar          = "ACME_SERVER_URL"
-	linearOldResource         = "https://mcp.linear.app/mcp"
+	demoOAuthResource         = "https://mcp-fixture.example.com/mcp/oauth"
 )
 
 // wireLocalMCPFixture rewires, in the local org only:
@@ -53,15 +53,16 @@ const (
 //   - the generated toolset servers (Acme Support Tools, Acme Ops, Acme
 //     Partner Gateway, Acme OAuth Discovery) to call the fixture's stub of
 //     the demo API, through a system environment;
-//   - Linear into the Per-User OAuth Server: its URL, OAuth provider,
-//     protected resource and OAuth client point at the fixture, and
+//   - the Per-User OAuth Server: its URL, MCP Fixture OAuth provider,
+//     protected resource and OAuth client move from the shared seed's
+//     placeholder host (mcp-fixture.example.com) to the running fixture, and
 //     every live seeded sign-in holds real fixture tokens;
-//   - GitHub into the Shared or Own Token Server: its URL points at the
-//     fixture's shared-token endpoint and its shared credential carries the
-//     checked-in shared token.
+//   - the Shared or Own Token Server: its URL points at the fixture's
+//     shared-token endpoint and its shared credential carries the checked-in
+//     shared token.
 //
-// The public demo org keeps its display-only values: prod cannot reach a
-// developer's localhost.
+// The shared seed already gives these servers their names. The public demo
+// org keeps the placeholder host: prod cannot reach a developer's localhost.
 func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts LocalMCPFixtureOptions) error {
 	if opts.BaseURL == "" || opts.BaseURL == "unset" {
 		logger.InfoContext(ctx, "GRAM_MCP_FIXTURE_URL is not set; seeded servers stay display-only")
@@ -119,7 +120,7 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 		return err
 	}
 
-	// 2. Linear becomes the Per-User OAuth Server.
+	// 2. The Per-User OAuth Server.
 	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: resource, Name: fixtureOAuthServerName, ID: s.det("remotemcp-linear"), ProjectID: proj})
 	if err := expect("point the OAuth remote server", n, err); err != nil {
 		return err
@@ -134,7 +135,7 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 	}
 	n, err = q.LocalFixturePointProtectedResource(ctx, repo.LocalFixturePointProtectedResourceParams{
 		Resource: resource, MetadataUrl: base + "/.well-known/oauth-protected-resource" + fixtureauth.PathOAuthMCP,
-		Issuer: base, Scopes: fixtureauth.DefaultScopes, ProjectID: proj, OrganizationID: org, OldResource: linearOldResource,
+		Issuer: base, Scopes: fixtureauth.DefaultScopes, ProjectID: proj, OrganizationID: org, OldResource: demoOAuthResource,
 	})
 	if err := expect("point the protected resource", n, err); err != nil {
 		return err
@@ -198,7 +199,7 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 		}
 	}
 
-	// 3. GitHub becomes the Shared or Own Token Server.
+	// 3. The Shared or Own Token Server.
 	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: base + fixtureauth.PathSharedMCP, Name: fixtureSharedServerName, ID: s.det("remotemcp-github"), ProjectID: proj})
 	if err := expect("point the shared-token remote server", n, err); err != nil {
 		return err

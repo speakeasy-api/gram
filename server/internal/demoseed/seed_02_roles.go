@@ -98,7 +98,7 @@ var rolesCustomRoles = []rolesCustomRole{
 	},
 	{
 		slug: "contractors", name: "Contractors",
-		description: "Outside contractors. Holds no access of its own; it blocks GitHub.",
+		description: "Outside contractors. Holds no access of its own; it blocks the Shared or Own Token Server.",
 		scopes:      []string{},
 		members:     []string{"priya"},
 		agents:      []string{},
@@ -505,7 +505,7 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo deleted group role mapping: %w", err)
 	}
-	// Contractors arrive through the directory, so Check Access on GitHub can
+	// Contractors arrive through the directory, so Check Access on the Shared or Own Token Server can
 	// name the mapping that put a person in the role that blocks them.
 	if err := s.q.RolesInsertAttributeRoleMapping(ctx, repo.RolesInsertAttributeRoleMappingParams{
 		OrganizationID: org,

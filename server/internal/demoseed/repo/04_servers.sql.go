@@ -125,10 +125,10 @@ type ServersInsertAttachmentClientParams struct {
 	RemoteSessionIssuerID uuid.UUID
 }
 
-// Inert upstream account, owned by the human on Linear session 6. Both
+// Inert upstream account, owned by the human on the Per-User OAuth Server session 6. Both
 // active release agents share that human owner. The explicit client link
 // makes this exact session reachable from the requesting session's issuer.
-// The client sits under Linear's own remote identity provider: every client
+// The client sits under the Per-User OAuth Server's own remote identity provider: every client
 // bound to one user session issuer must share a remote issuer, or the
 // mcp_servers.remote_session_issuer_id derivation above would come out NULL.
 // Reserved example endpoints, an invalid ciphertext and no refresh token
@@ -196,9 +196,9 @@ type ServersInsertAuthClientParams struct {
 	RemoteSessionClientID uuid.NullUUID
 }
 
-// Typed auth clients, as the upstream OAuth migration records them: Linear's
+// Typed auth clients, as the upstream OAuth migration records them: the Per-User OAuth Server's
 // personal client over its OAuth registration, and one static credential
-// shared by GitHub and Linear, so the server settings show a shared client
+// shared by the Shared or Own Token Server and the Per-User OAuth Server, so the server settings show a shared client
 // and a server offering two. Slack offers none.
 // The projects delete cascades the clients, their headers and associations.
 func (q *Queries) ServersInsertAuthClient(ctx context.Context, arg ServersInsertAuthClientParams) error {
@@ -289,7 +289,7 @@ type ServersInsertAuthClientRoleGrantsParams struct {
 	BlockID      uuid.UUID
 }
 
-// Engineers may use the shared GitHub token; Contractors are blocked from
+// Engineers may use the shared the Shared or Own Token Server token; Contractors are blocked from
 // it on every server that offers it. Cleared by id at the top of the seed.
 func (q *Queries) ServersInsertAuthClientRoleGrants(ctx context.Context, arg ServersInsertAuthClientRoleGrantsParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAuthClientRoleGrants,
@@ -696,7 +696,7 @@ type ServersInsertEngineeringEssentialsPluginParams struct {
 }
 
 // A hand-curated supplement gives Team Access a multiple-plugin example:
-// Engineer reaches GitHub through both its role plugin and this one. Other
+// Engineer reaches the Shared or Own Token Server through both its role plugin and this one. Other
 // servers/roles keep their single-match and no-match examples.
 func (q *Queries) ServersInsertEngineeringEssentialsPlugin(ctx context.Context, arg ServersInsertEngineeringEssentialsPluginParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, serversInsertEngineeringEssentialsPlugin, arg.OrgID, arg.ProjectID)
@@ -708,7 +708,7 @@ func (q *Queries) ServersInsertEngineeringEssentialsPlugin(ctx context.Context, 
 const serversInsertEngineeringEssentialsServers = `-- name: ServersInsertEngineeringEssentialsServers :execrows
 INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
 SELECT $1::uuid, id, name FROM mcp_servers
-WHERE project_id = $2::uuid AND slug = 'github'
+WHERE project_id = $2::uuid AND slug = 'shared-token'
 `
 
 type ServersInsertEngineeringEssentialsServersParams struct {
@@ -868,11 +868,11 @@ type ServersInsertGitHubContractorsBlockParams struct {
 	GithubServerID uuid.UUID
 }
 
-// Check Access scenarios on GitHub. Contractors blocks connecting, which
+// Check Access scenarios on the Shared or Own Token Server. Contractors blocks connecting, which
 // wins over every other role's grant: Mateo (a contractor through the
 // directory) is blocked even though Engineer reaches every server, and his
 // own grant covering every server cannot outrank the block. Priya holds the
-// role too, but a grant made to her by name for GitHub outranks it. The
+// role too, but a grant made to her by name for the Shared or Own Token Server outranks it. The
 // user grants are cleared by id at the top of the seed.
 func (q *Queries) ServersInsertGitHubContractorsBlock(ctx context.Context, arg ServersInsertGitHubContractorsBlockParams) error {
 	_, err := q.db.Exec(ctx, serversInsertGitHubContractorsBlock, arg.ID, arg.OrgID, arg.GithubServerID)
@@ -930,7 +930,7 @@ type ServersInsertHeadlessClientParams struct {
 	IssuerID  uuid.UUID
 }
 
-// An app that signs in to Linear without a browser, so it cannot pick a
+// An app that signs in to the Per-User OAuth Server without a browser, so it cannot pick a
 // credential on the consent screen.
 func (q *Queries) ServersInsertHeadlessClient(ctx context.Context, arg ServersInsertHeadlessClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertHeadlessClient,
@@ -1356,14 +1356,14 @@ INSERT INTO remote_session_issuers
    name, scope_override)
 VALUES
   ($1::uuid, $2::uuid, $3::text,
-   'example-workspace-identity', 'https://identity.example.com',
-   'https://identity.example.com/oauth/authorize',
-   'https://identity.example.com/oauth/token',
-   'https://identity.example.com/.well-known/jwks.json',
-   ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
+   'mcp-fixture-oauth', 'https://mcp-fixture.example.com',
+   'https://mcp-fixture.example.com/oauth/authorize',
+   'https://mcp-fixture.example.com/oauth/token',
+   NULL,
+   ARRAY['notes:read', 'notes:write'], ARRAY['authorization_code', 'refresh_token'],
    ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
    -- An issuer-wide scope override, shown on the provider's page.
-   'Example Workspace Identity', ARRAY['read'])
+   'MCP Fixture OAuth', ARRAY['notes:read'])
 `
 
 type ServersInsertLinearRemoteSessionIssuerParams struct {
@@ -1381,13 +1381,13 @@ const serversInsertMCPServers = `-- name: ServersInsertMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
-  ($1::uuid, $2::uuid, 'Linear', 'linear',
+  ($1::uuid, $2::uuid, 'Per-User OAuth Server', 'per-user-oauth',
    $3::uuid,
    $4::uuid, 'private'),
   ($5::uuid, $2::uuid, 'Slack', 'slack',
    $6::uuid,
    $7::uuid, 'private'),
-  ($8::uuid, $2::uuid, 'GitHub', 'github',
+  ($8::uuid, $2::uuid, 'Shared or Own Token Server', 'shared-token',
    $9::uuid,
    $10::uuid, 'private')
 `
@@ -1669,12 +1669,12 @@ func (q *Queries) ServersInsertRegistryPromotionCandidate(ctx context.Context, a
 const serversInsertRemoteMCPServers = `-- name: ServersInsertRemoteMCPServers :exec
 
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
-  ($1::uuid, $2::uuid, 'Linear', 'linear',
-   'streamable-http', 'https://mcp.linear.app/mcp'),
+  ($1::uuid, $2::uuid, 'Per-User OAuth Server', 'per-user-oauth',
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/oauth'),
   ($3::uuid, $2::uuid, 'Slack', 'slack',
    'streamable-http', 'https://mcp.slack.com/mcp'),
-  ($4::uuid, $2::uuid, 'GitHub', 'github',
-   'streamable-http', 'https://api.githubcopilot.com/mcp/')
+  ($4::uuid, $2::uuid, 'Shared or Own Token Server', 'shared-token',
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/shared')
 `
 
 type ServersInsertRemoteMCPServersParams struct {
@@ -1690,8 +1690,12 @@ type ServersInsertRemoteMCPServersParams struct {
 // MCP servers and the Gateway Endpoint fronting them (AGE-3299).
 // Two backends so the gateway's member table shows both classes: the
 // toolset-backed pair (the hosted toolsets' canonical wrappers below)
-// executes in-process, the third-party remotes are proxied. URLs are the vendors' public MCP endpoints: no credentials,
-// and nothing here connects on its own.
+// executes in-process, the remotes are proxied. The Per-User OAuth Server and
+// the Shared or Own Token Server name what they demonstrate; their upstream is
+// the MCP fixture (mcp-fixture/), at a reserved example.com host here and at
+// the real local fixture after `mise run seed` (local_mcp_fixture.go). Slack
+// uses its vendor's public endpoint. No credentials, and nothing here
+// connects on its own.
 func (q *Queries) ServersInsertRemoteMCPServers(ctx context.Context, arg ServersInsertRemoteMCPServersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertRemoteMCPServers,
 		arg.LinearID,
@@ -1735,7 +1739,7 @@ type ServersInsertRemovedGitHubMemberParams struct {
 	GithubServerID uuid.UUID
 }
 
-// GitHub was a member until three days ago. Its dispatches are still in
+// the Shared or Own Token Server was a member until three days ago. Its dispatches are still in
 // ClickHouse (gwgone rows), so the Activity section can show that a removed
 // member drops out of Calls by member while the gateway totals keep them.
 func (q *Queries) ServersInsertRemovedGitHubMember(ctx context.Context, arg ServersInsertRemovedGitHubMemberParams) error {
@@ -1910,7 +1914,7 @@ type ServersInsertSignInExampleMCPServersParams struct {
 }
 
 // DeepWiki takes no credential, so it sits under the shared workforce issuer
-// like GitHub, with no upstream client to sign in through.
+// like the Shared or Own Token Server, with no upstream client to sign in through.
 func (q *Queries) ServersInsertSignInExampleMCPServers(ctx context.Context, arg ServersInsertSignInExampleMCPServersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertSignInExampleMCPServers,
 		arg.NotionID,
@@ -1940,9 +1944,9 @@ type ServersInsertSignInExampleRemoteMCPServersParams struct {
 
 // Leave instructions NULL so Settings starts with the editable built-in
 // instructions, matching the gateway's initialize and server/discover text.
-// Remote MCP identity modes: Linear uses per-user OAuth through a
+// Remote MCP identity modes: the Per-User OAuth Server uses per-user OAuth through a
 // project-scoped CIMD client, Slack carries one inert shared Service Account
-// credential, and GitHub intentionally has no upstream identity. The demo
+// credential, and the Shared or Own Token Server intentionally has no upstream identity. The demo
 // values are display fixtures only and cannot authenticate to any service.
 // Two more vendor remotes for the agent MCP sign-in tab, both real and
 // connectable: Notion signs each caller in to their own account once an
@@ -2151,7 +2155,7 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
                                   authorization_server_mode) VALUES
   ($1::uuid, NULL, $2::text, 'acme-workforce',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'shared'),
-  ($3::uuid, $4::uuid, $2::text, 'linear',
+  ($3::uuid, $4::uuid, $2::text, 'per-user-oauth',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   ($5::uuid, $4::uuid, $2::text, 'slack',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
@@ -2202,7 +2206,7 @@ VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
         'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
-        ARRAY['read'], $5::bigint,
+        ARRAY['notes:read'], $5::bigint,
         CASE WHEN $6::text <> '' THEN now() - make_interval(hours => $7::int) END,
         NULLIF($6::text, ''), now() - make_interval(days => $8::int),
         now() - make_interval(hours => $7::int))
@@ -2219,7 +2223,7 @@ type ServersInsertValidatedSessionParams struct {
 	DaysAgo               int32
 }
 
-// Upstream sessions on Linear's CIMD client, one per last-validation outcome
+// Upstream sessions on the Per-User OAuth Server's CIMD client, one per last-validation outcome
 // plus one never validated, so the admin server health page shows every
 // validation state. Inert like the session above: an invalid ciphertext and
 // no refresh token. grant_generation above 1 records re-authorizations.
@@ -2263,8 +2267,8 @@ type ServersPickGatewayGitHubCredentialParams struct {
 	McpServerID   uuid.UUID
 }
 
-// Sets the organization gateway's seeded GitHub choices to the caller's own
-// GitHub token. The server offers two credentials, so a choice that names
+// Sets the organization gateway's seeded the Shared or Own Token Server choices to the caller's own
+// the Shared or Own Token Server token. The server offers two credentials, so a choice that names
 // neither resolves to no credential under enforcement.
 func (q *Queries) ServersPickGatewayGitHubCredential(ctx context.Context, arg ServersPickGatewayGitHubCredentialParams) (int64, error) {
 	result, err := q.db.Exec(ctx, serversPickGatewayGitHubCredential,
@@ -2335,10 +2339,10 @@ INSERT INTO remote_protected_resources
    authorization_servers, scopes_supported, scope_override, metadata_fetched_at)
 VALUES
   ($1::uuid, $2::uuid, $3::text,
-   'https://mcp.linear.app/mcp',
-   'https://mcp.linear.app/.well-known/oauth-protected-resource/mcp',
-   ARRAY['https://identity.example.com'], ARRAY['read', 'write'],
-   ARRAY['read'], now() - interval '2 hours')
+   'https://mcp-fixture.example.com/mcp/oauth',
+   'https://mcp-fixture.example.com/.well-known/oauth-protected-resource/mcp/oauth',
+   ARRAY['https://mcp-fixture.example.com'], ARRAY['notes:read', 'notes:write'],
+   ARRAY['notes:read'], now() - interval '2 hours')
 ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
 SET metadata_url = EXCLUDED.metadata_url,
     authorization_servers = EXCLUDED.authorization_servers,
@@ -2354,7 +2358,8 @@ type ServersUpsertLinearProtectedResourceParams struct {
 	OrgID     string
 }
 
-// Linear's protected resource, read recently, with a scope pin for the server's scope panel.
+// The Per-User OAuth Server's protected resource, read recently, with a scope
+// pin for the server's scope panel.
 func (q *Queries) ServersUpsertLinearProtectedResource(ctx context.Context, arg ServersUpsertLinearProtectedResourceParams) error {
 	_, err := q.db.Exec(ctx, serversUpsertLinearProtectedResource, arg.ID, arg.ProjectID, arg.OrgID)
 	return err

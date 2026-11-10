@@ -25,7 +25,7 @@ type serversUserSession struct {
 	createdAgo       string
 }
 
-// serversValidatedSession is one upstream session on Linear's CIMD client.
+// serversValidatedSession is one upstream session on the Per-User OAuth Server's CIMD client.
 // status "" is the never-validated session (NULL validation_status).
 type serversValidatedSession struct {
 	n               int32
@@ -209,8 +209,8 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("bind demo linear remote session client: %w", err)
 	}
-	// The gateway serves Linear as a member, so its issuer binds Linear's
-	// client too, or no gateway sign-in could choose a client for Linear.
+	// The gateway serves the Per-User OAuth Server as a member, so its issuer binds the Per-User OAuth Server's
+	// client too, or no gateway sign-in could choose a client for the Per-User OAuth Server.
 	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
 		RemoteSessionClientID: s.det("remote-identity-client-linear"),
 		UserSessionIssuerID:   s.det("issuer-gateway"),
@@ -313,7 +313,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		GatewaySlug:       s.spec.OrgSlug + "-gateway",
 		LinearEndpointID:  s.det("endpoint-linear"),
 		LinearServerID:    s.det("mcpserver-linear"),
-		LinearSlug:        s.spec.OrgSlug + "-linear",
+		LinearSlug:        s.spec.OrgSlug + "-per-user-oauth",
 		SlackEndpointID:   s.det("endpoint-slack"),
 		SlackServerID:     s.det("mcpserver-slack"),
 		SlackSlug:         s.spec.OrgSlug + "-slack",
@@ -407,11 +407,11 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo attachment client: %w", err)
 	}
 	// The legacy callback client above stays unbound: Speakeasy allows one
-	// client per (user session issuer, remote issuer) pair, and Linear's main
+	// client per (user session issuer, remote issuer) pair, and the Per-User OAuth Server's main
 	// client already holds that pair. Exact-session attachments use the main
-	// client, so Linear offers one OAuth client.
+	// client, so the Per-User OAuth Server offers one OAuth client.
 	// Each seeded sign-in carries the choice its consent page would have
-	// recorded for every server it reaches: Linear through its main client,
+	// recorded for every server it reaches: the Per-User OAuth Server through its main client,
 	// Slack with no upstream authentication.
 	choices := []struct {
 		session int
@@ -446,7 +446,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			return fmt.Errorf("insert demo upstream client choice for session %d on %s: %w", c.session, c.server, err)
 		}
 	}
-	// Organization authorizations include Linear and Slack plus GitHub, private
+	// Organization authorizations include the Per-User OAuth Server and Slack plus the Shared or Own Token Server, private
 	// inventory, both EMA servers, Notion and DeepWiki, including on the
 	// expired history row.
 	for i := 1; i <= 3; i++ {
@@ -620,21 +620,20 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	return s.seedAuthClients(ctx)
 }
 
-// seedAuthClients records Linear's OAuth client as the upstream OAuth
-// migration derives it. It sits under the fictional Example Workspace
-// Identity provider, not Linear's own sign-in, so it carries that name.
-// It also records two clients an administrator created: a token
-// shared by two servers and a pass-through of the caller's own GitHub token,
-// with who may use the shared token, and the token chosen for an app that
-// signs in to Linear without a browser.
+// seedAuthClients records the Per-User OAuth Server's OAuth client as the
+// upstream OAuth migration derives it, under the MCP Fixture OAuth provider.
+// It also records two clients an administrator created: a token shared by two
+// servers and a pass-through of the caller's own token, with who may use the
+// shared token, and the token chosen for an app that signs in to the
+// Per-User OAuth Server without a browser.
 func (s *seeder) seedAuthClients(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
 
 	clients := []repo.ServersInsertAuthClientParams{
-		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Example Workspace sign-in", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
-		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Engineering automation token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
-		{ID: s.det("auth-client-github-forwarded"), OrgID: org, ProjectID: proj, ClientType: "pass_through", Source: "admin", Name: "Your own GitHub token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
+		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Fixture OAuth sign-in", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
+		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Shared service token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
+		{ID: s.det("auth-client-github-forwarded"), OrgID: org, ProjectID: proj, ClientType: "pass_through", Source: "admin", Name: "Your own token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 	}
 	for _, client := range clients {
 		if err := s.q.ServersInsertAuthClient(ctx, client); err != nil {
@@ -649,7 +648,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 	}
 	if err := s.q.ServersInsertAuthClientForwardedHeader(ctx, repo.ServersInsertAuthClientForwardedHeaderParams{
 		ID: s.det("auth-client-github-forwarded-header"), AuthClientID: s.det("auth-client-github-forwarded"), OrgID: org,
-		Name: "Authorization", ValueFromRequestHeader: "X-GitHub-Token",
+		Name: "Authorization", ValueFromRequestHeader: "X-Upstream-Token",
 	}); err != nil {
 		return fmt.Errorf("insert demo forwarded auth client header: %w", err)
 	}
@@ -673,10 +672,10 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		McpServerID:   s.det("mcpserver-github"),
 	})
 	if err != nil {
-		return fmt.Errorf("pick demo gateway GitHub credential: %w", err)
+		return fmt.Errorf("pick demo gateway the Shared or Own Token Server credential: %w", err)
 	}
 	if picked != 3 {
-		return fmt.Errorf("pick demo gateway GitHub credential: expected 3 choices, updated %d", picked)
+		return fmt.Errorf("pick demo gateway the Shared or Own Token Server credential: expected 3 choices, updated %d", picked)
 	}
 	if err := s.q.ServersInsertAuthClientRoleGrants(ctx, repo.ServersInsertAuthClientRoleGrantsParams{
 		OrgID: org, AuthClientID: s.det("auth-client-github-token"),
@@ -685,7 +684,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		return fmt.Errorf("insert demo auth client role grants: %w", err)
 	}
 
-	// Linear offers two credentials, so the app that signs in without a
+	// The Per-User OAuth Server offers two credentials, so the app that signs in without a
 	// browser has its choice made by an administrator.
 	if err := s.q.ServersInsertHeadlessClient(ctx, repo.ServersInsertHeadlessClientParams{
 		ID: s.det("usc-nightly-report"), ProjectID: proj, OrgID: org, IssuerID: s.det("issuer-linear"),
@@ -705,7 +704,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		return fmt.Errorf("insert demo issuance profile choice: %w", err)
 	}
 
-	// The identity-bound assistant reaches Linear, which offers a person's own
+	// The identity-bound assistant reaches the Per-User OAuth Server, which offers a person's own
 	// account and the shared token, so its turns need a choice in each context
 	// they run in: person-backed dashboard turns, and userless ones, which can
 	// only use a shared credential.
@@ -855,7 +854,7 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 	}
 	// The workforce issuer is shared, so each service's server is associated
 	// with the one client of the authorization server its protected resource
-	// names. GitHub, on the same issuer, uses neither client.
+	// names. The Shared or Own Token Server, on the same issuer, uses neither client.
 	for _, service := range []string{"tracker", "wiki"} {
 		if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
 			ID:                    s.det("server-client-association-ema-" + service),

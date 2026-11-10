@@ -148,7 +148,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// duplicated any of them would leave the badges telling a different
 		// story than the one they were seeded to tell.
 		// Two upstream MCP issuers, two independent gateway issuers, one
-		// Connections issuer, and Notion's issuer; GitHub and DeepWiki use the
+		// Connections issuer, and Notion's issuer; the Shared or Own Token Server and DeepWiki use the
 		// organization workforce issuer.
 		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 6, "demo seed postflight: expected 6 project user session issuers, found %d"},
 		{byProj(s.q.PostflightIDGatewayIssuers), 2, "demo seed postflight: expected 2 distinct gateway issuers, found %d"},
@@ -177,7 +177,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byOrg(s.q.PostflightIDEMACredentials), 0, "demo seed postflight: expected no EMA credentials, found %d"},
 		{byOrg(s.q.PostflightIDTrustedIssuerSessions), 0, "demo seed postflight: expected no trusted issuer sessions, found %d"},
 		{byOrg(s.q.PostflightIDSavedEMAProviders), 1, "demo seed postflight: expected 1 saved EMA provider, found %d"},
-		// Linear's remote identity provider, the identity chaining example, Jamf
+		// The Per-User OAuth Server's remote identity provider, the identity chaining example, Jamf
 		// Pro, and the two EMA services' authorization servers.
 		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 5, "demo seed postflight: expected 5 project remote session issuers, found %d"},
 		{func(ctx context.Context) (int64, error) {
@@ -185,7 +185,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected 1 Remote MCP identity client, found %d"},
 		{byProj(s.q.PostflightIDRemoteIdentityBindings), 2, "demo seed postflight: expected 2 Remote MCP User Identity bindings, found %d"},
 		// The stamp has to be what ResyncMCPServerRemoteSessionIssuers would
-		// derive: every live client bound to Linear's user session issuer names
+		// derive: every live client bound to the Per-User OAuth Server's user session issuer names
 		// one remote issuer, and it is the stamped one. The query returns no
 		// row when its HAVING fails (the SQL's IF NOT FOUND), so a row counts
 		// as 1 and no row as 0.
@@ -201,17 +201,17 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				return 0, fmt.Errorf("linear issuer stamp: %w", err)
 			}
 			return 1, nil
-		}, 1, "demo seed postflight: Linear user session issuer must bind clients of exactly one remote issuer, its stamped provider"},
+		}, 1, "demo seed postflight: the Per-User OAuth Server user session issuer must bind clients of exactly one remote issuer, its stamped provider"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDLinearStampedServers(ctx, repo.PostflightIDLinearStampedServersParams{
 				ProjectID:          proj,
 				LinearRemoteIssuer: linearRemoteIssuer,
 			})
 		}, 1, "demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %d"},
-		{byProj(s.q.PostflightIDLinearProtectedResource), 1, "demo seed postflight: expected Linear's protected resource pinned to read, found %d matching rows"},
-		// Linear's one OAuth client, and each EMA service's own client.
+		{byProj(s.q.PostflightIDLinearProtectedResource), 1, "demo seed postflight: expected the Per-User OAuth Server's protected resource pinned to read, found %d matching rows"},
+		// The Per-User OAuth Server's one OAuth client, and each EMA service's own client.
 		{byProj(s.q.PostflightIDServerClientAssociations), 3, "demo seed postflight: expected 3 MCP server upstream client associations, found %d"},
-		// One per server each seeded sign-in reaches: the Linear and Slack
+		// One per server each seeded sign-in reaches: the Per-User OAuth Server and Slack
 		// sign-ins on their own server, the gateway sign-ins on both members.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
@@ -238,7 +238,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				LinearClientID:     s.det("remote-identity-client-linear"),
 				SlackServerID:      s.det("mcpserver-slack"),
 			})
-		}, 0, "demo seed postflight: %d upstream client choices are not the intended Linear client or Slack no-auth choice"},
+		}, 0, "demo seed postflight: %d upstream client choices are not the intended the Per-User OAuth Server client or Slack no-auth choice"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDIssuanceProfileChoices(ctx, repo.PostflightIDIssuanceProfileChoicesParams{
 				ProjectID:      proj,
@@ -246,7 +246,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				LinearServerID: s.det("mcpserver-linear"),
 				AuthClientID:   s.det("auth-client-github-token"),
 			})
-		}, 1, "demo seed postflight: expected the headless app's profile to choose the shared token on Linear, found %d"},
+		}, 1, "demo seed postflight: expected the headless app's profile to choose the shared token on the Per-User OAuth Server, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDExecutionProfileChoices(ctx, repo.PostflightIDExecutionProfileChoicesParams{
 				ProjectID:      proj,
@@ -254,7 +254,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				LinearServerID: s.det("mcpserver-linear"),
 				AuthClientID:   s.det("auth-client-github-token"),
 			})
-		}, 2, "demo seed postflight: expected the bound assistant's two profiles to choose the shared token on Linear, found %d"},
+		}, 2, "demo seed postflight: expected the bound assistant's two profiles to choose the shared token on the Per-User OAuth Server, found %d"},
 		{byProj(s.q.PostflightIDServiceAccountHeaders), 1, "demo seed postflight: expected 1 Remote MCP Service Account header, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.
@@ -363,7 +363,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				DirectGrant:      s.det("github-direct-grant"),
 				WildcardGrant:    s.det("github-wildcard-grant"),
 			})
-		}, 3, "demo seed postflight: expected 3 GitHub Check Access grants, found %d"},
+		}, 3, "demo seed postflight: expected 3 the Shared or Own Token Server Check Access grants, found %d"},
 		{byOrg(s.q.PostflightIDSlackIdentityMappings), 6, "demo seed postflight: expected 6 Slack mapping examples, found %d"},
 		{byProj(s.q.PostflightIDMessageParticipants), 3, "demo seed postflight: expected 3 message participants, found %d"},
 		{byOrg(s.q.PostflightIDSlackDirectoryMemberships), 10, "demo seed postflight: expected 10 Slack workspace memberships, found %d"},

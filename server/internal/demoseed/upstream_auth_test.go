@@ -60,7 +60,7 @@ func TestSeedUpstreamAuthReadyAfterReseed(t *testing.T) {
 // shared token. Each agent attachment grant is bound to the agent's owner and
 // the attachment's upstream client.
 func expectedSeedAuthGrants() []string {
-	sharedClients := []string{"Static credential", "Your own GitHub token", "Engineering automation token", "Acme Wiki", "Acme Tracker"}
+	sharedClients := []string{"Static credential", "Your own token", "Shared service token", "Acme Wiki", "Acme Tracker"}
 	var out []string
 	shared := func(principal, kind string, clients ...string) {
 		for _, client := range clients {
@@ -77,16 +77,16 @@ func expectedSeedAuthGrants() []string {
 	for _, role := range []string{"analyst", "collaborator", "environment-manager", "read-only-tools", "temporary-escalation"} {
 		shared("role "+role, "shared_client", sharedClients...)
 	}
-	shared("role engineer", "shared_client", "Static credential", "Your own GitHub token", "Acme Wiki", "Acme Tracker")
-	shared("role engineer", "", "Engineering automation token")
+	shared("role engineer", "shared_client", "Static credential", "Your own token", "Acme Wiki", "Acme Tracker")
+	shared("role engineer", "", "Shared service token")
 	shared("role support-desk", "shared_client", "Static credential")
-	out = append(out, "role contractors | mcp:blocked_auth | Engineering automation token | type= | owner= | upstream= | ")
+	out = append(out, "role contractors | mcp:blocked_auth | Shared service token | type= | owner= | upstream= | ")
 	personal("role automation-agent")
 	personal("role read-only-tools")
 
 	personal("user:all")
 	shared("user mateo", "shared_client", sharedClients...)
-	shared("user priya", "shared_client", "Your own GitHub token", "Engineering automation token")
+	shared("user priya", "shared_client", "Your own token", "Shared service token")
 
 	personal("agent Identity-bound assistant agent")
 	shared("agent Identity-bound assistant agent", "shared_client", sharedClients...)
@@ -96,7 +96,7 @@ func expectedSeedAuthGrants() []string {
 	} {
 		personal("agent " + agent.name)
 		attachment("agent "+agent.name, agent.owner)
-		shared("agent "+agent.name, "shared_client", "Engineering automation token")
+		shared("agent "+agent.name, "shared_client", "Shared service token")
 	}
 	return out
 }

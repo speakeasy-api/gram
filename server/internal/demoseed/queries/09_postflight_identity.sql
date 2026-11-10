@@ -128,7 +128,7 @@ WHERE project_id = @project_id::uuid
 -- duplicated any of them would leave the badges telling a different story
 -- than the one they were seeded to tell.
 -- Two upstream MCP issuers, two independent gateway issuers, and one
--- Connections issuer; GitHub uses the organization workforce issuer.
+-- Connections issuer; the Shared or Own Token Server uses the organization workforce issuer.
 -- name: PostflightIDProjectUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
@@ -176,7 +176,7 @@ WHERE organization_id = @org_id::text;
 SELECT count(*) FROM remote_session_ema_providers
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
 
--- Linear's remote identity provider, the identity chaining example, Jamf
+-- The Per-User OAuth Server's remote identity provider, the identity chaining example, Jamf
 -- Pro, and the two EMA services' authorization servers.
 -- name: PostflightIDProjectRemoteSessionIssuers :one
 SELECT count(*) FROM remote_session_issuers
@@ -194,7 +194,7 @@ JOIN user_session_issuers usi ON usi.id = link.user_session_issuer_id
 WHERE usi.project_id = @project_id::uuid;
 
 -- The stamp has to be what ResyncMCPServerRemoteSessionIssuers would derive:
--- every live client bound to Linear's user session issuer names one remote
+-- every live client bound to the Per-User OAuth Server's user session issuer names one remote
 -- issuer, and it is the stamped one. Returns no row (pgx.ErrNoRows) when the
 -- HAVING fails, including when no live client is bound at all.
 -- name: PostflightIDLinearIssuerStamp :one
@@ -213,8 +213,8 @@ WHERE project_id = @project_id::uuid
 -- name: PostflightIDLinearProtectedResource :one
 SELECT count(*) FROM remote_protected_resources
 WHERE project_id = @project_id::uuid AND deleted IS FALSE
-  AND resource_identifier = 'https://mcp.linear.app/mcp'
-  AND scope_override = ARRAY['read'];
+  AND resource_identifier = 'https://mcp-fixture.example.com/mcp/oauth'
+  AND scope_override = ARRAY['notes:read'];
 
 -- name: PostflightIDServerClientAssociations :one
 SELECT count(*) FROM mcp_server_remote_session_clients
@@ -274,8 +274,8 @@ WHERE (SELECT count(*) FROM live) = 32
                    AND a.deleted IS FALSE))
   );
 
--- Count live choices outside the intended set: Linear through its main client,
--- Slack with no upstream authentication, the organization gateway's GitHub
+-- Count live choices outside the intended set: the Per-User OAuth Server through its main client,
+-- Slack with no upstream authentication, the organization gateway's the Shared or Own Token Server
 -- choice of the caller's own token and its tunneled inventory choice, each on a
 -- seeded session.
 -- name: PostflightIDMisassignedUpstreamClientChoices :one
@@ -307,7 +307,7 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
     )
   );
 
--- The headless app's one profile, choosing the shared token on Linear,
+-- The headless app's one profile, choosing the shared token on the Per-User OAuth Server,
 -- which is still enabled and offered there.
 -- name: PostflightIDIssuanceProfileChoices :one
 SELECT count(*)
@@ -328,7 +328,7 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
   AND u.auth_client_id = @auth_client_id::uuid;
 
 -- The identity-bound assistant's person-backed and userless turns use the
--- shared token on Linear, by an administrator's choice in each profile's
+-- shared token on the Per-User OAuth Server, by an administrator's choice in each profile's
 -- latest version, and the token is still enabled and offered there.
 -- name: PostflightIDExecutionProfileChoices :one
 SELECT count(*)

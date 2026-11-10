@@ -359,7 +359,7 @@ type PostflightIDExecutionProfileChoicesParams struct {
 }
 
 // The identity-bound assistant's person-backed and userless turns use the
-// shared token on Linear, by an administrator's choice in each profile's
+// shared token on the Per-User OAuth Server, by an administrator's choice in each profile's
 // latest version, and the token is still enabled and offered there.
 func (q *Queries) PostflightIDExecutionProfileChoices(ctx context.Context, arg PostflightIDExecutionProfileChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDExecutionProfileChoices,
@@ -599,7 +599,7 @@ type PostflightIDIssuanceProfileChoicesParams struct {
 	AuthClientID   uuid.UUID
 }
 
-// The headless app's one profile, choosing the shared token on Linear,
+// The headless app's one profile, choosing the shared token on the Per-User OAuth Server,
 // which is still enabled and offered there.
 func (q *Queries) PostflightIDIssuanceProfileChoices(ctx context.Context, arg PostflightIDIssuanceProfileChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDIssuanceProfileChoices,
@@ -719,7 +719,7 @@ type PostflightIDLinearIssuerStampParams struct {
 }
 
 // The stamp has to be what ResyncMCPServerRemoteSessionIssuers would derive:
-// every live client bound to Linear's user session issuer names one remote
+// every live client bound to the Per-User OAuth Server's user session issuer names one remote
 // issuer, and it is the stamped one. Returns no row (pgx.ErrNoRows) when the
 // HAVING fails, including when no live client is bound at all.
 func (q *Queries) PostflightIDLinearIssuerStamp(ctx context.Context, arg PostflightIDLinearIssuerStampParams) (int64, error) {
@@ -732,8 +732,8 @@ func (q *Queries) PostflightIDLinearIssuerStamp(ctx context.Context, arg Postfli
 const postflightIDLinearProtectedResource = `-- name: PostflightIDLinearProtectedResource :one
 SELECT count(*) FROM remote_protected_resources
 WHERE project_id = $1::uuid AND deleted IS FALSE
-  AND resource_identifier = 'https://mcp.linear.app/mcp'
-  AND scope_override = ARRAY['read']
+  AND resource_identifier = 'https://mcp-fixture.example.com/mcp/oauth'
+  AND scope_override = ARRAY['notes:read']
 `
 
 func (q *Queries) PostflightIDLinearProtectedResource(ctx context.Context, projectID uuid.UUID) (int64, error) {
@@ -813,8 +813,8 @@ type PostflightIDMisassignedUpstreamClientChoicesParams struct {
 	GithubAuthClientID uuid.UUID
 }
 
-// Count live choices outside the intended set: Linear through its main client,
-// Slack with no upstream authentication, the organization gateway's GitHub
+// Count live choices outside the intended set: the Per-User OAuth Server through its main client,
+// Slack with no upstream authentication, the organization gateway's the Shared or Own Token Server
 // choice of the caller's own token and its tunneled inventory choice, each on a
 // seeded session.
 func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Context, arg PostflightIDMisassignedUpstreamClientChoicesParams) (int64, error) {
@@ -877,7 +877,7 @@ SELECT count(*) FROM remote_session_issuers
 WHERE project_id = $1::uuid AND deleted IS FALSE
 `
 
-// Linear's remote identity provider, the identity chaining example, Jamf
+// the Per-User OAuth Server's remote identity provider, the identity chaining example, Jamf
 // Pro, and the two EMA services' authorization servers.
 func (q *Queries) PostflightIDProjectRemoteSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectRemoteSessionIssuers, projectID)
@@ -896,7 +896,7 @@ WHERE project_id = $1::uuid AND deleted IS FALSE
 // duplicated any of them would leave the badges telling a different story
 // than the one they were seeded to tell.
 // Two upstream MCP issuers, two independent gateway issuers, and one
-// Connections issuer; GitHub uses the organization workforce issuer.
+// Connections issuer; the Shared or Own Token Server uses the organization workforce issuer.
 func (q *Queries) PostflightIDProjectUserSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectUserSessionIssuers, projectID)
 	var count int64

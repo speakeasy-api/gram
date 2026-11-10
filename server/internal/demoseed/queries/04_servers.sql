@@ -5,16 +5,20 @@
 -- MCP servers and the Gateway Endpoint fronting them (AGE-3299).
 -- Two backends so the gateway's member table shows both classes: the
 -- toolset-backed pair (the hosted toolsets' canonical wrappers below)
--- executes in-process, the third-party remotes are proxied. URLs are the vendors' public MCP endpoints: no credentials,
--- and nothing here connects on its own.
+-- executes in-process, the remotes are proxied. The Per-User OAuth Server and
+-- the Shared or Own Token Server name what they demonstrate; their upstream is
+-- the MCP fixture (mcp-fixture/), at a reserved example.com host here and at
+-- the real local fixture after `mise run seed` (local_mcp_fixture.go). Slack
+-- uses its vendor's public endpoint. No credentials, and nothing here
+-- connects on its own.
 -- name: ServersInsertRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
-  (@linear_id::uuid, @project_id::uuid, 'Linear', 'linear',
-   'streamable-http', 'https://mcp.linear.app/mcp'),
+  (@linear_id::uuid, @project_id::uuid, 'Per-User OAuth Server', 'per-user-oauth',
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/oauth'),
   (@slack_id::uuid, @project_id::uuid, 'Slack', 'slack',
    'streamable-http', 'https://mcp.slack.com/mcp'),
-  (@github_id::uuid, @project_id::uuid, 'GitHub', 'github',
-   'streamable-http', 'https://api.githubcopilot.com/mcp/');
+  (@github_id::uuid, @project_id::uuid, 'Shared or Own Token Server', 'shared-token',
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/shared');
 
 -- Remote-backed servers must carry a Speakeasy-as-AS issuer for their lifetime
 -- (mcp_servers_issuer_required_check); the gateway gets its own so clients
@@ -31,7 +35,7 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
                                   authorization_server_mode) VALUES
   (@workforce_id::uuid, NULL, @org_id::text, 'acme-workforce',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'shared'),
-  (@linear_id::uuid, @project_id::uuid, @org_id::text, 'linear',
+  (@linear_id::uuid, @project_id::uuid, @org_id::text, 'per-user-oauth',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   (@slack_id::uuid, @project_id::uuid, @org_id::text, 'slack',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
@@ -44,13 +48,13 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
 INSERT INTO mcp_servers (id, project_id, name, slug,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
-  (@linear_id::uuid, @project_id::uuid, 'Linear', 'linear',
+  (@linear_id::uuid, @project_id::uuid, 'Per-User OAuth Server', 'per-user-oauth',
    @remote_linear_id::uuid,
    @issuer_linear_id::uuid, 'private'),
   (@slack_id::uuid, @project_id::uuid, 'Slack', 'slack',
    @remote_slack_id::uuid,
    @issuer_slack_id::uuid, 'private'),
-  (@github_id::uuid, @project_id::uuid, 'GitHub', 'github',
+  (@github_id::uuid, @project_id::uuid, 'Shared or Own Token Server', 'shared-token',
    @remote_github_id::uuid,
    @issuer_workforce_id::uuid, 'private');
 
@@ -86,11 +90,11 @@ FROM mcp_servers s
 JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
 WHERE s.project_id = @project_id::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE;
 
--- Check Access scenarios on GitHub. Contractors blocks connecting, which
+-- Check Access scenarios on the Shared or Own Token Server. Contractors blocks connecting, which
 -- wins over every other role's grant: Mateo (a contractor through the
 -- directory) is blocked even though Engineer reaches every server, and his
 -- own grant covering every server cannot outrank the block. Priya holds the
--- role too, but a grant made to her by name for GitHub outranks it. The
+-- role too, but a grant made to her by name for the Shared or Own Token Server outranks it. The
 -- user grants are cleared by id at the top of the seed.
 -- name: ServersInsertGitHubContractorsBlock :exec
 INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
@@ -155,7 +159,7 @@ WHERE p.organization_id = @org_id::text AND p.project_id = @project_id::uuid
       AND g.selectors->>'resource_id' = '*');
 
 -- A hand-curated supplement gives Team Access a multiple-plugin example:
--- Engineer reaches GitHub through both its role plugin and this one. Other
+-- Engineer reaches the Shared or Own Token Server through both its role plugin and this one. Other
 -- servers/roles keep their single-match and no-match examples.
 -- name: ServersInsertEngineeringEssentialsPlugin :one
 INSERT INTO plugins (organization_id, project_id, name, slug, auto_sync_enabled)
@@ -171,13 +175,13 @@ WHERE organization_id = @org_id::text AND workos_slug = 'engineer';
 -- name: ServersInsertEngineeringEssentialsServers :execrows
 INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
 SELECT @plugin_id::uuid, id, name FROM mcp_servers
-WHERE project_id = @project_id::uuid AND slug = 'github';
+WHERE project_id = @project_id::uuid AND slug = 'shared-token';
 
 -- Leave instructions NULL so Settings starts with the editable built-in
 -- instructions, matching the gateway's initialize and server/discover text.
--- Remote MCP identity modes: Linear uses per-user OAuth through a
+-- Remote MCP identity modes: the Per-User OAuth Server uses per-user OAuth through a
 -- project-scoped CIMD client, Slack carries one inert shared Service Account
--- credential, and GitHub intentionally has no upstream identity. The demo
+-- credential, and the Shared or Own Token Server intentionally has no upstream identity. The demo
 -- values are display fixtures only and cannot authenticate to any service.
 -- Two more vendor remotes for the agent MCP sign-in tab, both real and
 -- connectable: Notion signs each caller in to their own account once an
@@ -199,7 +203,7 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
 
 -- DeepWiki takes no credential, so it sits under the shared workforce issuer
--- like GitHub, with no upstream client to sign in through.
+-- like the Shared or Own Token Server, with no upstream client to sign in through.
 -- name: ServersInsertSignInExampleMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
@@ -227,14 +231,14 @@ INSERT INTO remote_session_issuers
    name, scope_override)
 VALUES
   (@id::uuid, @project_id::uuid, @org_id::text,
-   'example-workspace-identity', 'https://identity.example.com',
-   'https://identity.example.com/oauth/authorize',
-   'https://identity.example.com/oauth/token',
-   'https://identity.example.com/.well-known/jwks.json',
-   ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
+   'mcp-fixture-oauth', 'https://mcp-fixture.example.com',
+   'https://mcp-fixture.example.com/oauth/authorize',
+   'https://mcp-fixture.example.com/oauth/token',
+   NULL,
+   ARRAY['notes:read', 'notes:write'], ARRAY['authorization_code', 'refresh_token'],
    ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
    -- An issuer-wide scope override, shown on the provider's page.
-   'Example Workspace Identity', ARRAY['read']);
+   'MCP Fixture OAuth', ARRAY['notes:read']);
 
 -- name: ServersInsertLinearRemoteSessionClient :exec
 INSERT INTO remote_session_clients
@@ -296,17 +300,18 @@ FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
   ON c.id = sqlc.narg(remote_session_client_id)::uuid;
 
--- Linear's protected resource, read recently, with a scope pin for the server's scope panel.
+-- The Per-User OAuth Server's protected resource, read recently, with a scope
+-- pin for the server's scope panel.
 -- name: ServersUpsertLinearProtectedResource :exec
 INSERT INTO remote_protected_resources
   (id, project_id, organization_id, resource_identifier, metadata_url,
    authorization_servers, scopes_supported, scope_override, metadata_fetched_at)
 VALUES
   (@id::uuid, @project_id::uuid, @org_id::text,
-   'https://mcp.linear.app/mcp',
-   'https://mcp.linear.app/.well-known/oauth-protected-resource/mcp',
-   ARRAY['https://identity.example.com'], ARRAY['read', 'write'],
-   ARRAY['read'], now() - interval '2 hours')
+   'https://mcp-fixture.example.com/mcp/oauth',
+   'https://mcp-fixture.example.com/.well-known/oauth-protected-resource/mcp/oauth',
+   ARRAY['https://mcp-fixture.example.com'], ARRAY['notes:read', 'notes:write'],
+   ARRAY['notes:read'], now() - interval '2 hours')
 ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
 SET metadata_url = EXCLUDED.metadata_url,
     authorization_servers = EXCLUDED.authorization_servers,
@@ -363,7 +368,7 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
 INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
   (@id::uuid, @project_id::uuid, @meta_id::uuid, NULL, @slug::text);
 
--- GitHub was a member until three days ago. Its dispatches are still in
+-- The Shared or Own Token Server was a member until three days ago. Its dispatches are still in
 -- ClickHouse (gwgone rows), so the Activity section can show that a removed
 -- member drops out of Calls by member while the gateway totals keep them.
 -- name: ServersInsertRemovedGitHubMember :exec
@@ -589,10 +594,10 @@ VALUES
    now() + (@refresh_expires_in::text)::interval, now() + (@expires_in::text)::interval,
    now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);
 
--- Inert upstream account, owned by the human on Linear session 6. Both
+-- Inert upstream account, owned by the human on the Per-User OAuth Server session 6. Both
 -- active release agents share that human owner. The explicit client link
 -- makes this exact session reachable from the requesting session's issuer.
--- The client sits under Linear's own remote identity provider: every client
+-- The client sits under the Per-User OAuth Server's own remote identity provider: every client
 -- bound to one user session issuer must share a remote issuer, or the
 -- mcp_servers.remote_session_issuer_id derivation above would come out NULL.
 -- Reserved example endpoints, an invalid ciphertext and no refresh token
@@ -619,7 +624,7 @@ VALUES (@id::uuid,
         ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes');
 
--- Upstream sessions on Linear's CIMD client, one per last-validation outcome
+-- Upstream sessions on the Per-User OAuth Server's CIMD client, one per last-validation outcome
 -- plus one never validated, so the admin server health page shows every
 -- validation state. Inert like the session above: an invalid ciphertext and
 -- no refresh token. grant_generation above 1 records re-authorizations.
@@ -634,7 +639,7 @@ VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
         'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
-        ARRAY['read'], @grant_generation::bigint,
+        ARRAY['notes:read'], @grant_generation::bigint,
         CASE WHEN @status::text <> '' THEN now() - make_interval(hours => @hours_ago::int) END,
         NULLIF(@status::text, ''), now() - make_interval(days => @days_ago::int),
         now() - make_interval(hours => @hours_ago::int));
@@ -780,9 +785,9 @@ VALUES
    now() + (@expires_in::text)::interval, now() - (@created_ago::text)::interval,
    now() - (@created_ago::text)::interval);
 
--- Typed auth clients, as the upstream OAuth migration records them: Linear's
+-- Typed auth clients, as the upstream OAuth migration records them: the Per-User OAuth Server's
 -- personal client over its OAuth registration, and one static credential
--- shared by GitHub and Linear, so the server settings show a shared client
+-- shared by the Shared or Own Token Server and the Per-User OAuth Server, so the server settings show a shared client
 -- and a server offering two. Slack offers none.
 -- The projects delete cascades the clients, their headers and associations.
 -- name: ServersInsertAuthClient :exec
@@ -819,7 +824,7 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid;
 
--- Engineers may use the shared GitHub token; Contractors are blocked from
+-- Engineers may use the shared the Shared or Own Token Server token; Contractors are blocked from
 -- it on every server that offers it. Cleared by id at the top of the seed.
 -- name: ServersInsertAuthClientRoleGrants :exec
 INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
@@ -833,7 +838,7 @@ FROM (VALUES
 JOIN organization_roles r
   ON r.organization_id = @org_id::text AND r.workos_slug = v.slug;
 
--- An app that signs in to Linear without a browser, so it cannot pick a
+-- An app that signs in to the Per-User OAuth Server without a browser, so it cannot pick a
 -- credential on the consent screen.
 -- name: ServersInsertHeadlessClient :exec
 INSERT INTO user_session_clients
@@ -865,8 +870,8 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, 'issuance_profile',
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
 
--- Sets the organization gateway's seeded GitHub choices to the caller's own
--- GitHub token. The server offers two credentials, so a choice that names
+-- Sets the organization gateway's seeded Shared or Own Token Server choices
+-- to the caller's own token. The server offers two credentials, so a choice that names
 -- neither resolves to no credential under enforcement.
 -- name: ServersPickGatewayGitHubCredential :execrows
 UPDATE upstream_client_selections AS sel

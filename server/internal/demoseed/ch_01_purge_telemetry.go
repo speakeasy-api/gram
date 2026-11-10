@@ -470,7 +470,7 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
 				}
 				// How the gateway signed the call in upstream: the person's
-				// own Linear connection, the shared engineering token, or
+				// own Per-User OAuth connection, the shared service token, or
 				// nothing for calls recorded before the gateway named it, so
 				// the Tool Logs row shows all three renderings. The ids are
 				// seeded auth clients, so the id a row names resolves to one.
