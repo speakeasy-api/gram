@@ -110,6 +110,15 @@ func TestSummarizeHookFleetWithoutMinimumNeverUnsupported(t *testing.T) {
 	require.Equal(t, "unknown", result.Installs[1].VersionStatus)
 }
 
+func TestClassifyHookVersionBoundaries(t *testing.T) {
+	t.Parallel()
+	versions := hookFleetTestVersions("0.3.0")
+	require.Equal(t, "behind", classifyHookVersion("0.3.0", versions))
+	require.Equal(t, "unsupported", classifyHookVersion("0.2.99", versions))
+	require.Equal(t, "current", classifyHookVersion("0.3.46", versions))
+	require.Equal(t, "current", classifyHookVersion("0.4.0", versions))
+}
+
 func TestGetOrganizationHookFleet(t *testing.T) {
 	t.Parallel()
 	logger := testenv.NewLogger(t)

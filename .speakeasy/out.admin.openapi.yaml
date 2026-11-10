@@ -4173,7 +4173,7 @@ paths:
             default: 30
             description: Window in days.
             format: int64
-            maximum: 90
+            maximum: 89
             minimum: 1
             type: integer
       responses:
@@ -9319,7 +9319,7 @@ components:
           format: int64
         quiet_installs:
           type: integer
-          description: Returned installs that have gone quiet.
+          description: Returned installs that have gone quiet. Only a window longer than quiet_after_days can return quiet installs.
           format: int64
         routes:
           type: array
@@ -9332,7 +9332,7 @@ components:
           format: date-time
         total_installs:
           type: integer
-          description: Installs returned.
+          description: Installs returned. Not the organization's full install count when truncated is true.
           format: int64
         truncated:
           type: boolean

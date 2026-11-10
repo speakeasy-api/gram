@@ -2412,8 +2412,8 @@ func BuildGetOrganizationHookFleetPayload(adminGetOrganizationHookFleetOrganizat
 			if windowDays < 1 {
 				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
 			}
-			if windowDays > 90 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 90, false))
+			if windowDays > 89 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 89, false))
 			}
 			if err != nil {
 				return nil, err

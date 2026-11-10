@@ -151,7 +151,7 @@ func summarizeHookFleet(page telemetry.HookInstallPage, versions HookFleetVersio
 		bv, bErr := semver.NewVersion(b.Version)
 		switch {
 		case aErr == nil && bErr == nil:
-			return bv.Compare(av)
+			return cmp.Or(bv.Compare(av), cmp.Compare(a.Version, b.Version))
 		case aErr == nil:
 			return -1
 		case bErr == nil:

@@ -60,9 +60,11 @@ const FLEET = {
 };
 
 let requested: string[] = [];
+let fleetResponse: () => Response = () => Response.json(FLEET);
 
 beforeEach(() => {
   requested = [];
+  fleetResponse = () => Response.json(FLEET);
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
@@ -72,7 +74,7 @@ beforeEach(() => {
       );
       requested.push(url.pathname + url.search);
       if (url.pathname === "/admin/organizationHookFleet.get") {
-        return Response.json(FLEET);
+        return fleetResponse();
       }
       return new Response("unexpected", { status: 500 });
     }),
@@ -97,5 +99,32 @@ describe("HookFleetView", () => {
     expect(screen.getAllByText("Legacy (keyed)").length).toBeGreaterThan(0);
     expect(screen.getByText("quiet")).toBeTruthy();
     expect(screen.getByText("Legacy endpoint events")).toBeTruthy();
+  });
+
+  it("counts behind installs and states the minimum and truncation", async () => {
+    fleetResponse = () =>
+      Response.json({
+        ...FLEET,
+        minimum_version: "0.3.0",
+        truncated: true,
+        installs: FLEET.installs.map((i) => ({
+          ...i,
+          version_status: "behind",
+        })),
+      });
+    await renderWithApp(<HookFleetView org={anOrganization()} />);
+
+    expect(await screen.findByText(/supports 0\.3\.0 and newer/)).toBeTruthy();
+    expect(screen.getByText(/more installs than shown/)).toBeTruthy();
+    const tile = screen.getByText("Behind or unsupported").parentElement;
+    expect(tile?.textContent).toContain("2");
+  });
+
+  it("says so when the fleet cannot be read", async () => {
+    fleetResponse = () => new Response("boom", { status: 500 });
+    await renderWithApp(<HookFleetView org={anOrganization()} />);
+
+    expect(await screen.findByText("Fleet unavailable")).toBeTruthy();
+    expect(screen.getByText("Unable to load hooks")).toBeTruthy();
   });
 });

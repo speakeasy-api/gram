@@ -15,7 +15,7 @@ var errHookFleetUnavailable = errors.New("organization hooks fleet is unavailabl
 
 const (
 	hookFleetDefaultWindowDays = 30
-	hookFleetMaxWindowDays     = 90
+	hookFleetMaxWindowDays     = 89
 	hookFleetMaxInstalls       = 200
 )
 
@@ -26,7 +26,7 @@ type HookFleetReader interface {
 
 type HookFleetInput struct {
 	OrganizationID string `json:"organization_id" jsonschema:"Exact organization ID returned by find_organizations, not a slug"`
-	WindowDays     int    `json:"window_days,omitempty" jsonschema:"Window in days, 1 to 90 (default 30)"`
+	WindowDays     int    `json:"window_days,omitempty" jsonschema:"Window in days, 1 to 89 (default 30). Quiet installs only appear in windows longer than quiet_after_days"`
 }
 
 type HookFleetVersion struct {

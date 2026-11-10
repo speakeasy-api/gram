@@ -13958,8 +13958,8 @@ func DecodeGetOrganizationHookFleetRequest(mux goahttp.Muxer, decoder func(*http
 		if windowDays < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
 		}
-		if windowDays > 90 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 90, false))
+		if windowDays > 89 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 89, false))
 		}
 		adminSessionTokenRaw := r.Header.Get("Authorization")
 		if adminSessionTokenRaw != "" {

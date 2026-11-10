@@ -2328,9 +2328,11 @@ type GetOrganizationHookFleetResponseBody struct {
 	// True when the organization has more installs than the response holds.
 	// Breakdowns then cover only the installs returned.
 	Truncated *bool `form:"truncated,omitempty" json:"truncated,omitempty" xml:"truncated,omitempty"`
-	// Installs returned.
+	// Installs returned. Not the organization's full install count when truncated
+	// is true.
 	TotalInstalls *int64 `form:"total_installs,omitempty" json:"total_installs,omitempty" xml:"total_installs,omitempty"`
-	// Returned installs that have gone quiet.
+	// Returned installs that have gone quiet. Only a window longer than
+	// quiet_after_days can return quiet installs.
 	QuietInstalls *int64 `form:"quiet_installs,omitempty" json:"quiet_installs,omitempty" xml:"quiet_installs,omitempty"`
 	// Hook events sent to the legacy endpoints in the window.
 	LegacyEvents *int64 `form:"legacy_events,omitempty" json:"legacy_events,omitempty" xml:"legacy_events,omitempty"`

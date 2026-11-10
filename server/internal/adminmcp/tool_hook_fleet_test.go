@@ -85,7 +85,7 @@ func TestOrganizationHookFleetBoundsInstalls(t *testing.T) {
 func TestOrganizationHookFleetErrors(t *testing.T) {
 	t.Parallel()
 
-	for _, args := range []string{`{"organization_id":"org-a","window_days":91}`, `{"organization_id":"org-a","window_days":-1}`} {
+	for _, args := range []string{`{"organization_id":"org-a","window_days":90}`, `{"organization_id":"org-a","window_days":-1}`} {
 		reads := testHookFleetReads(0)
 		_, body, _ := callStaffReadTool(t, reads, "get_organization_hook_fleet", args)
 		require.Contains(t, body, `"isError":true`)
