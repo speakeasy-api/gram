@@ -61,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/dailyoutcomes"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -135,6 +136,7 @@ type Activities struct {
 	syncTenantDimensions             *activities.SyncTenantDimensions
 	promoteStagedTelemetry           *activities.PromoteStagedTelemetry
 	listStagedTelemetryProjects      *activities.ListStagedTelemetryProjects
+	mcpConnectionOutcomesDaily       *activities.MCPConnectionOutcomesDaily
 	generateChatTitle                *activities.GenerateChatTitle
 	processDeployment                *activities.ProcessDeployment
 	provisionFunctionsAccess         *activities.ProvisionFunctionsAccess
@@ -419,6 +421,7 @@ func NewActivities(
 		syncTenantDimensions:             activities.NewSyncTenantDimensions(logger, db, chConn, cacheAdapter),
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
+		mcpConnectionOutcomesDaily:       activities.NewMCPConnectionOutcomesDaily(logger, meterProvider, db, chConn),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
 		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
@@ -831,6 +834,14 @@ func (a *Activities) PromoteStagedTelemetry(ctx context.Context, input activitie
 
 func (a *Activities) ListStagedTelemetryProjects(ctx context.Context) ([]activities.PromoteStagedTelemetryArgs, error) {
 	return a.listStagedTelemetryProjects.Do(ctx)
+}
+
+func (a *Activities) PlanMCPConnectionOutcomeDays(ctx context.Context, args activities.PlanMCPConnectionOutcomeDaysArgs) ([]time.Time, error) {
+	return a.mcpConnectionOutcomesDaily.Plan(ctx, args) //nolint:wrapcheck // wrapped by the activity
+}
+
+func (a *Activities) BuildMCPConnectionOutcomesDay(ctx context.Context, args activities.BuildMCPConnectionOutcomesDayArgs) (*dailyoutcomes.Result, error) {
+	return a.mcpConnectionOutcomesDaily.Build(ctx, args) //nolint:wrapcheck // wrapped by the activity, and a non-retryable error must keep its type
 }
 
 func (a *Activities) SegmentChat(ctx context.Context, input resolution_activities.SegmentChatArgs) (*resolution_activities.SegmentChatOutput, error) {
