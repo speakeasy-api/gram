@@ -16,7 +16,7 @@ import (
 var updateScopeTables = flag.Bool("update-scope-tables", false, "rewrite testdata/engine_compatibility/scope_tables.golden from the current scope tables")
 
 // TestScopeTablesGolden pins the observable behaviour of every registered
-// scope: visibility, one-step expansions, exclusion scope, implication closure,
+// scope: visibility, which other scopes' grants satisfy it, exclusion scope, implication closure,
 // sub-scopes, grant surface, resource kind, accepted selector keys, and system
 // role defaults. It records behaviour rather than table layout, so moving scope
 // definitions between tables must reproduce it exactly. A deliberate behaviour
@@ -42,8 +42,7 @@ func dumpScopeTables() string {
 		visibility, _ := ScopeVisibilityFor(scope)
 		exclusion, _ := ExclusionScopeFor(scope)
 		surface, _ := GrantSurfaceForScope(scope)
-		expansions := slices.Clone(scopeExpansions[scope])
-		slices.Sort(expansions)
+		expansions := satisfyingScopes(scope)
 
 		fmt.Fprintf(&b, "%s\n", scope)
 		fmt.Fprintf(&b, "  visibility: %s\n", visibility)
@@ -96,4 +95,25 @@ func systemRolesHolding(scope Scope) []string {
 	}
 	slices.Sort(roles)
 	return roles
+}
+
+// satisfyingScopes probes the evaluator for every other registered scope whose
+// wildcard grant satisfies a check on scope, so the dump records which grants
+// satisfy a check rather than how the expansion table stores it. Root is left
+// out: it satisfies everything except auth-client checks, and the corpus
+// covers it separately.
+func satisfyingScopes(scope Scope) []Scope {
+	check := Check{Scope: scope, ResourceKind: ResourceKindForScope(scope), ResourceID: "probe", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	var satisfying []Scope
+	for _, candidate := range RegisteredScopes() {
+		if candidate == scope || candidate == ScopeRoot {
+			continue
+		}
+		grant := NewGrantWithSelector(candidate, Selector{SelectorKeyResourceID: WildcardResource})
+		if GrantsSatisfy([]Grant{grant}, check) {
+			satisfying = append(satisfying, candidate)
+		}
+	}
+	slices.Sort(satisfying)
+	return satisfying
 }

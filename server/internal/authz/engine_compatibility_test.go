@@ -41,7 +41,7 @@ const engineCompatibilityDir = "testdata/engine_compatibility"
 //	policies   independent admitted policies for credential and workload callers
 //	operation  which entry point decides; see runCompatCase
 //	checks     the checks passed to it, in order
-//	want       allow, deny, or error:<oops code>
+//	want       allow, deny, error (a plain error) or error:<oops code>, compared exactly
 const (
 	fixtureUserID      = "user_fixture"
 	fixtureOrgID       = "org_fixture"
@@ -317,9 +317,6 @@ func requireCompatOutcome(t *testing.T, want string, allowed bool, err error) {
 		}
 	case allowed:
 		got = "allow"
-	}
-	if want == "error" && strings.HasPrefix(got, "error") {
-		return
 	}
 	require.Equal(t, want, got, "error: %v", err)
 }
