@@ -319,3 +319,17 @@ func TestSummarizeTakesTheProviderThatEndedTheAttempt(t *testing.T) {
 		row(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, true, 2*time.Minute)})
 	require.Equal(t, "accounts.google.com", noHost.ProviderHost, "an ending row with no provider falls back to the earliest")
 }
+
+func TestSummarizeBreaksAProviderTieTheSameWayAsSQL(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, time.November, 5, 10, 0, 0, 0, time.UTC)
+	a := mcpconnectionattempts.AttemptAt(uuid.New(), start, mcpconnectionattempts.GatewayScope("org-a", uuid.New(), uuid.New(), mcpconnectionattempts.AppDCR))
+	at := start.Add(time.Minute)
+	first, err := mcpconnectionattempts.RowAt(a, mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeProviderUnavailable, true, at, mcpconnectionattempts.Provider("https://linear.app"))
+	require.NoError(t, err)
+	second, err := mcpconnectionattempts.RowAt(a, mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeProviderUnavailable, true, at, mcpconnectionattempts.Provider("https://accounts.google.com"))
+	require.NoError(t, err)
+
+	require.Equal(t, "accounts.google.com", mcpconnectionattempts.Summarize([]mcpconnectionattempts.Row{first, second}).ProviderHost, "the smaller host wins a final-row tie")
+	require.Equal(t, "accounts.google.com", mcpconnectionattempts.Summarize([]mcpconnectionattempts.Row{second, first}).ProviderHost, "in any order")
+}

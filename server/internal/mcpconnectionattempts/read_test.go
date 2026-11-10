@@ -173,3 +173,42 @@ func TestReadAttemptsConnectedOnly(t *testing.T) {
 	}))
 	require.Equal(t, []uuid.UUID{connected.ID()}, ids)
 }
+
+func TestReadAttemptsBreaksAProviderTieLikeSummarize(t *testing.T) {
+	t.Parallel()
+	ch, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	org := "org-" + uuid.NewString()
+	day := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)
+	scope := GatewayScope(org, uuid.New(), uuid.New(), AppDCR)
+	at := day.Add(time.Hour + time.Minute)
+
+	var rows []Row
+	for _, tied := range []struct {
+		attempt Attempt
+		what    Happened
+		final   bool
+	}{
+		{AttemptAt(uuid.New(), day.Add(time.Hour), scope), CodeProviderUnavailable, true},
+		{AttemptAt(uuid.New(), day.Add(time.Hour), scope), CodeProviderUnavailable, false},
+	} {
+		for _, host := range []string{"https://linear.app", "https://accounts.google.com"} {
+			row, err := RowAt(tied.attempt, StepProviderToken, tied.what, tied.final, at, Provider(host))
+			require.NoError(t, err)
+			rows = append(rows, row)
+		}
+	}
+	require.NoError(t, AppendRows(t.Context(), ch, rows))
+
+	byAttempt := map[uuid.UUID][]Row{}
+	for _, r := range rows {
+		byAttempt[r.AttemptID] = append(byAttempt[r.AttemptID], r)
+	}
+	filter := AttemptFilter{StartedFrom: day, StartedBefore: day.AddDate(0, 0, 1), OrganizationID: org}
+	seen := 0
+	require.NoError(t, ReadAttempts(t.Context(), ch, filter, func(s AttemptSummary) {
+		seen++
+		require.Equal(t, Summarize(byAttempt[s.AttemptID]).ProviderHost, s.ProviderHost, "attempt %s", s.AttemptID)
+	}))
+	require.Equal(t, 2, seen)
+}
