@@ -234,8 +234,8 @@ func TestMemberClientFailure_SDKRejection(t *testing.T) {
 func TestMemberClientFailure_CarriesWhatHappened(t *testing.T) {
 	t.Parallel()
 
-	bearerSent := memberRejection{sent: http.Header{"Authorization": {"Bearer token"}}}
-	keySent := memberRejection{sent: http.Header{"X-Api-Key": {"key"}}, headers: []proxy.ConfiguredHeader{{Name: "X-Api-Key", StaticValue: "key", IsSecret: true}}}
+	bearerSent := memberRejection{authorizationSent: true}
+	keySent := memberRejection{configuredSent: true}
 	withChallenge := func(answer memberRejection, challenge string) memberRejection {
 		answer.challenges = []string{challenge}
 		return answer
@@ -251,7 +251,7 @@ func TestMemberClientFailure_CarriesWhatHappened(t *testing.T) {
 		{name: "person's token invalid on a 403", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: withChallenge(bearerSent, `Bearer error="invalid_token"`)}, want: mcpconnectionattempts.CodeProviderRejected},
 		{name: "person's token lacks scope", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: withChallenge(bearerSent, `Bearer error="insufficient_scope", scope="repo"`)}, want: mcpconnectionattempts.Code{}},
 		{name: "403 with no challenge", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: bearerSent}, want: mcpconnectionattempts.Code{}},
-		{name: "credential stripped before the server", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: memberRejection{sent: http.Header{}}}, want: mcpconnectionattempts.Code{}},
+		{name: "credential stripped before the server", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: memberRejection{}}, want: mcpconnectionattempts.Code{}},
 		{name: "proxy answered itself", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, want: mcpconnectionattempts.Code{}},
 		{name: "no credential to send", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, dial: memberDial{anonymous: true}, want: mcpconnectionattempts.CodeInvalidRemoteSession},
 		{name: "configured key rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: keySent}, dial: memberDial{anonymous: true, configuredHeaders: true}, want: mcpconnectionattempts.CodeStaticKeyRejected},

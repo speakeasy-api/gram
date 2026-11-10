@@ -66,7 +66,7 @@ type memberAttempt struct {
 type memberAttemptKey struct{}
 
 func newMemberAttempt(build memberProxyBuilder) *memberAttempt {
-	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, rejectedAnswer: memberRejection{challenges: nil, sent: nil, headers: nil}, lastStatus: 0, lastTunnelError: "", lastRetryAfter: "", lastErr: nil, refused: false, sentCall: false}
+	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, rejectedAnswer: memberRejection{challenges: nil, authorizationSent: false, configuredSent: false}, lastStatus: 0, lastTunnelError: "", lastRetryAfter: "", lastErr: nil, refused: false, sentCall: false}
 }
 
 func (a *memberAttempt) memberRefused() bool {
@@ -75,12 +75,12 @@ func (a *memberAttempt) memberRefused() bool {
 	return a.refused
 }
 
-// memberRejection is the member's 401 or 403: its challenges, and what the final request
-// carried. A response the proxy wrote itself leaves both empty.
+// memberRejection is the member's 401 or 403: its challenges, and which credential headers the
+// final request carried. A response the proxy wrote itself leaves it empty.
 type memberRejection struct {
-	challenges []string
-	sent       http.Header
-	headers    []proxy.ConfiguredHeader
+	challenges        []string
+	authorizationSent bool
+	configuredSent    bool
 }
 
 // memberOutcome is what failure classification reads from an operation.
@@ -184,16 +184,19 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	// and then fail or hang the body, and the SDK never sees such an answer.
 	mintedSession := ""
 	tunnelError := ""
-	answered := memberRejection{challenges: nil, sent: nil, headers: p.Headers}
+	answered := memberRejection{challenges: nil, authorizationSent: false, configuredSent: false}
 	answeredStatus := 0
 	interceptResponse := p.UpstreamResponseInterceptor
 	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
 		answeredStatus = resp.StatusCode
 		mintedSession = resp.Header.Get(proxy.McpSessionIDHeader)
 		tunnelError = resp.Header.Get(tunnelrouting.ErrorHeader)
-		answered.challenges = resp.Header.Values("WWW-Authenticate")
-		if resp.Request != nil {
-			answered.sent = resp.Request.Header.Clone()
+		answered = memberRejection{challenges: nil, authorizationSent: false, configuredSent: false}
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			answered.challenges = resp.Header.Values("WWW-Authenticate")
+			if resp.Request != nil {
+				answered.authorizationSent, answered.configuredSent = remotemcp.CredentialHeadersSent(resp.Request.Header, p.Headers)
+			}
 		}
 		if interceptResponse != nil {
 			return interceptResponse(ctx, resp)

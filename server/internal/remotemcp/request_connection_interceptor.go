@@ -142,23 +142,27 @@ func (c *requestConnections) upstreamFailureHappened(status int, sent, response 
 		code := remotesessions.ConnectionOutageHappened(cause)
 		return code, code != (mcpconnectionattempts.Code{})
 	}
-	credential := sentCredential(sent, c.upstreamAuth, c.SelfCredential, c.credentialHeaders)
+	authorization, configured := credentialHeadersSent(sent, c.credentialHeaders)
+	credential := SentCredential(authorization, configured, c.upstreamAuth, c.SelfCredential)
 	return UpstreamFailureHappened(status, CredentialRejected(status, response.Values("WWW-Authenticate")), credential, c.tunneled, response.Get(tunnelrouting.ErrorHeader), cause)
 }
 
-// SentCredential is what a request that reached the server still carried: the bearer Speakeasy
-// attached, which self marks as the server's own, and any admin-set credential in headers.
-func SentCredential(sent http.Header, bearerAttached, self bool, headers []proxy.ConfiguredHeader) UpstreamCredentialSent {
-	return sentCredential(sent, bearerAttached, self, configuredCredentialNames(headers))
+// CredentialHeadersSent reports whether a request that reached the server still carried an
+// Authorization header, and any admin-set credential in headers.
+func CredentialHeadersSent(sent http.Header, headers []proxy.ConfiguredHeader) (authorization, configured bool) {
+	return credentialHeadersSent(sent, configuredCredentialNames(headers))
 }
 
-func sentCredential(sent http.Header, bearerAttached, self bool, credentialHeaders []string) UpstreamCredentialSent {
-	attached := bearerAttached && sent.Get("Authorization") != ""
-	return UpstreamCredentialSent{
-		Attached:   attached,
-		Self:       attached && self,
-		Configured: slices.ContainsFunc(credentialHeaders, func(name string) bool { return sent.Get(name) != "" }),
-	}
+func credentialHeadersSent(sent http.Header, credentialHeaders []string) (authorization, configured bool) {
+	return sent.Get("Authorization") != "", slices.ContainsFunc(credentialHeaders, func(name string) bool { return sent.Get(name) != "" })
+}
+
+// SentCredential is what a request that reached the server still carried, from
+// [CredentialHeadersSent]: the bearer Speakeasy attached, which self marks as the server's own,
+// and any admin-set credential.
+func SentCredential(authorization, configured, bearerAttached, self bool) UpstreamCredentialSent {
+	attached := bearerAttached && authorization
+	return UpstreamCredentialSent{Attached: attached, Self: attached && self, Configured: configured}
 }
 
 // CredentialRejected reports whether a provider's answer rejected the credential: a 401, or a 403

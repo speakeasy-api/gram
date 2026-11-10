@@ -185,7 +185,7 @@ func (d memberDial) upstreamCredential() remotemcp.UpstreamCredentialSent {
 
 // sentCredential is what of the dialed credentials the final request to the member still carried.
 func (d memberDial) sentCredential(answer memberRejection) remotemcp.UpstreamCredentialSent {
-	return remotemcp.SentCredential(answer.sent, !d.anonymous, d.clientCredential, answer.headers)
+	return remotemcp.SentCredential(answer.authorizationSent, answer.configuredSent, !d.anonymous, d.clientCredential)
 }
 
 // memberSendsConfiguredCredential reports an admin-set credential among the headers a member's
