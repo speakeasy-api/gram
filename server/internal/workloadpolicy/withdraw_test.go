@@ -314,8 +314,8 @@ func TestWithdrawSubject_NamesTheProjectTier(t *testing.T) {
 
 // A sibling project's issuer is invisible in the caller's list, so it must not be
 // withdrawable by supplying its UUID. GetWorkloadIssuer and SoftDeleteWorkloadIssuer
-// once scoped on organization alone, which made a row the caller could not observe
-// a row it could destroy.
+// once scoped on organization alone, which let a caller destroy a row it could
+// not see.
 func TestWithdrawIssuer_RefusesASiblingProjectsIssuer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
