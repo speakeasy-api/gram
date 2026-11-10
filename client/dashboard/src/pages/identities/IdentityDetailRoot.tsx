@@ -306,7 +306,9 @@ function IdentityDetailContent(): JSX.Element {
                 } as CSSProperties)
           }
         >
-          {identity.agent ? (
+          {/* Only someone who can change the agent reads its servers, so
+              only they get the count. */}
+          {identity.agent?.permissions.write ? (
             <AgentIdentityRail
               agent={identity.agent}
               items={railItems}

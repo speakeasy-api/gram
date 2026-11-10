@@ -20,8 +20,9 @@ import { ACCOUNT_CHOICE } from "./keyCredentialChoices";
  *
  * With `accounts`, the server also signs in a connected account, and that
  * account is listed as a choice of its own (`ACCOUNT_CHOICE`) beside the
- * shared credentials. Without it, a server offering one shared credential has
- * nothing to choose: it is picked, and named rather than asked.
+ * shared credentials. With `pickSole`, a caller that knows the server signs
+ * in no accounts has a single shared credential picked and named rather than
+ * asked; without it the reader picks it, as before.
  *
  * It renders its own wrapper, so a caller's spacing appears only when there
  * is something to show: an empty padded box would grow the row it sits in.
@@ -33,6 +34,7 @@ export function KeyCredentialChoice({
   onChange,
   className,
   accounts = false,
+  pickSole = false,
   label = "Choose which credential this key uses",
 }: {
   serverId: string;
@@ -42,6 +44,11 @@ export function KeyCredentialChoice({
   className?: string;
   /** The server also signs in an account connected for the agent. */
   accounts?: boolean;
+  /**
+   * Pick a single shared credential without asking. Only for a caller that
+   * knows `accounts`: a server that also signs in accounts keeps them.
+   */
+  pickSole?: boolean;
   /** The placeholder, before anything is chosen. */
   label?: string;
 }): JSX.Element | null {
@@ -55,7 +62,8 @@ export function KeyCredentialChoice({
     !value ||
     (accounts && value === ACCOUNT_CHOICE) ||
     options.some((option) => option.id === value);
-  const sole = !accounts && options.length === 1 ? options[0] : undefined;
+  const sole =
+    pickSole && !accounts && options.length === 1 ? options[0] : undefined;
   useEffect(() => {
     // A pick the server stopped offering is cleared so the picker asks again.
     if (choices.isSuccess && !offered) {

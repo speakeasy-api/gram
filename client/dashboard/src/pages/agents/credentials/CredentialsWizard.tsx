@@ -1252,7 +1252,9 @@ export function CredentialsWizard({
     setSaving(true);
     setError(null);
     try {
-      if (name.trim() !== agent.name) {
+      // The tab never edits the name, and the page renames the agent in
+      // place while the tab is open: a mounted name would undo that.
+      if (!section && name.trim() !== agent.name) {
         await renameAgent.mutateAsync({
           request: { renameAgentForm: { id: agent.id, name: name.trim() } },
         });
@@ -1393,6 +1395,9 @@ export function CredentialsWizard({
             (form) => !waiting.has(form.selector.resourceId),
           );
           const choices = plan.choices;
+          // Known from the plan, so a failed extension below still leaves
+          // these rows asking.
+          setChoicePending(new Set(plan.undecided.map((pick) => pick.id)));
           for (
             let start = 0;
             start < ready.length;
@@ -1414,7 +1419,6 @@ export function CredentialsWizard({
           keysMissing.current = keysMissing.current.filter((form) =>
             waiting.has(form.selector.resourceId),
           );
-          setChoicePending(new Set(plan.undecided.map((pick) => pick.id)));
           void invalidateAllListAPIKeys(queryClient);
         } catch (failure) {
           toast.warning(

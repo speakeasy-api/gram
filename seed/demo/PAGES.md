@@ -450,5 +450,6 @@ Two real, connectable servers, each with its own `<org>-notion` /
   sits under the workforce issuer with no upstream client, so it reads as
   "Shared credential".
 
-Neither is granted to an agent by the seed; add them from an agent's MCP
-sign-in tab. The organization gateway sign-ins record no-auth choices on both.
+No agent is granted either one by name; an agent with a project-wide
+`mcp:connect` wildcard (such as the identity-bound assistant's) reaches both.
+Add them to any other agent from its MCP sign-in tab. The organization gateway sign-ins record no-auth choices on both.

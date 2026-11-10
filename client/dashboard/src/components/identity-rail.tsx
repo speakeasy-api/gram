@@ -95,13 +95,18 @@ export function IdentityRail({
           )}
           {item.title}
           {item.badge ? (
-            <span
-              // Read with the title: "MCP sign-in, 2 need attention".
-              aria-label={`, ${item.badge} need${item.badge === 1 ? "s" : ""} attention`}
-              className="ml-2 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#FF3B30] px-[5px] align-[1px] text-[11px] leading-none font-semibold text-white tabular-nums"
-            >
-              {item.badge}
-            </span>
+            <>
+              <span
+                aria-hidden
+                className="bg-destructive ml-2 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-[5px] align-[1px] text-[11px] leading-none font-semibold text-white tabular-nums"
+              >
+                {item.badge}
+              </span>
+              {/* Read with the title: "MCP sign-in, 2 need attention". */}
+              <span className="sr-only">
+                {`, ${item.badge} need${item.badge === 1 ? "s" : ""} attention`}
+              </span>
+            </>
           ) : null}
         </Link>
       ))}

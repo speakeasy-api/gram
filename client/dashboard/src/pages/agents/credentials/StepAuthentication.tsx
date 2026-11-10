@@ -67,10 +67,12 @@ export function StepAuthentication({
   const connecting = useRef<string | null>(null);
   const [reading, setReading] = useState<string | null>(null);
   const oauth = useOAuthPopup(async (reason) => {
+    // Taken before the refetch: another sign-in opened while it runs must
+    // not replace the server this one was for.
+    const server = reason === "popup-closed" ? connecting.current : null;
+    if (server !== null) connecting.current = null;
     await connections.refetch();
-    if (reason !== "popup-closed" || connecting.current === null) return;
-    setReading(connecting.current);
-    connecting.current = null;
+    if (server !== null) setReading(server);
   });
   // Only a connection that is now usable is worth saving: closing the popup
   // without signing in changes nothing.
@@ -218,7 +220,12 @@ export function StepAuthentication({
                 </Button>
               </div>
               {credentialChoice?.show(server.id) &&
-                (server.kind === "Remote" || server.kind === "Tunneled") && (
+                (server.kind === "Remote" || server.kind === "Tunneled") &&
+                // Whether it signs in accounts is only known once its
+                // connection has been read.
+                (!server.issuerId ||
+                  (connection !== undefined &&
+                    connection.status !== "checking")) && (
                   <KeyCredentialChoice
                     className="pb-3"
                     serverId={server.id}
@@ -227,6 +234,7 @@ export function StepAuthentication({
                     // account connected for the agent, beside its shared
                     // credentials.
                     accounts={!!server.issuerId && !shared}
+                    pickSole
                     label={`Choose how the agent's keys sign in to ${server.name}`}
                     value={credentialChoice.value(server.id)}
                     onChange={(authClientId) =>

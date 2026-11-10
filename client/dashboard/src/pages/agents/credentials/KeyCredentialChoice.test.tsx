@@ -29,7 +29,7 @@ describe("KeyCredentialChoice", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("picks and names a server's only shared credential instead of asking", () => {
+  it("asks for a server's only shared credential unless told to pick it", () => {
     mocks.choices = [
       { id: "a", name: "Token", clientType: "static_credential" },
     ];
@@ -38,6 +38,34 @@ describe("KeyCredentialChoice", () => {
       <KeyCredentialChoice
         serverId="s"
         serverName="Example"
+        value={undefined}
+        onChange={(id) => {
+          onChange(id);
+        }}
+      />,
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("combobox", {
+        name: "Credential the key uses on Example",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: /Token · Static credential/ }),
+    );
+    expect(onChange).toHaveBeenCalledWith("a");
+  });
+
+  it("picks and names a server's only shared credential when told to", () => {
+    mocks.choices = [
+      { id: "a", name: "Token", clientType: "static_credential" },
+    ];
+    const onChange = vi.fn();
+    render(
+      <KeyCredentialChoice
+        serverId="s"
+        serverName="Example"
+        pickSole
         value={undefined}
         onChange={(id) => {
           onChange(id);

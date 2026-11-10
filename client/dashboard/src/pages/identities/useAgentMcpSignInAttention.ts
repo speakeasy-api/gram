@@ -25,8 +25,8 @@ export function useAgentMcpSignInAttention(agent: ManagedAgent): number {
     throwOnError: false,
     enabled: canWrite,
   });
-  // The same read the tab makes, so the two share one cached answer.
-  const inventory = useServerInventory();
+  // Only what finding a server needs: no activity counts or upstream URLs.
+  const inventory = useServerInventory({ lookupOnly: true });
   const wildcard =
     grants.data === undefined ? undefined : wildcardConnectGrant(grants.data);
   const granted =
