@@ -1474,6 +1474,7 @@ function InspectRow({
             <ScopeRationaleHint
               rationale={category.recommendedScopeRationale}
             />
+            {custom ? <Badge variant="information">Custom</Badge> : null}
           </div>
           {invalid ? (
             <Text small className="text-destructive">
@@ -1487,43 +1488,46 @@ function InspectRow({
             </Text>
           )}
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-3">
-          <Badge variant={custom ? "information" : "neutral"}>
-            {custom ? "Custom" : "Recommended"}
-          </Badge>
-          {custom ? (
-            <Button
-              type="button"
-              variant="tertiary"
-              size="xs"
-              onClick={() => {
-                setCelOpen(false);
-                setEditing(false);
-                onOverrideChange(null);
-              }}
-            >
-              Reset
-            </Button>
-          ) : null}
-          {invalid ? null : (
-            <Button
-              type="button"
-              variant="secondary"
-              size="xs"
-              aria-expanded={expanded}
-              onClick={() => setOpen((value) => !value)}
-            >
-              {expanded ? "Done" : "Change"}
-            </Button>
-          )}
-        </div>
+        {invalid ? null : (
+          <Button
+            type="button"
+            variant="secondary"
+            size="xs"
+            className="ml-auto w-16 shrink-0 text-center"
+            aria-expanded={expanded}
+            onClick={() => setOpen((value) => !value)}
+          >
+            {expanded ? "Done" : "Change"}
+          </Button>
+        )}
       </div>
       {expanded ? (
         <div className="bg-muted/20 space-y-4 border-t px-4 py-4">
-          <fieldset className="space-y-3">
-            <legend className="text-eyebrow mb-3">
-              Check this detector against
-            </legend>
+          <fieldset
+            className="space-y-3"
+            aria-labelledby={`inspect-${category.key}-legend`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span
+                id={`inspect-${category.key}-legend`}
+                className="text-eyebrow"
+              >
+                Check this detector against
+              </span>
+              {custom ? (
+                <button
+                  type="button"
+                  className="text-foreground text-xs underline"
+                  onClick={() => {
+                    setCelOpen(false);
+                    setEditing(false);
+                    onOverrideChange(null);
+                  }}
+                >
+                  Reset to recommended
+                </button>
+              ) : null}
+            </div>
             <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
               {SCOPE_SURFACES.map(({ kind, label, help }) => {
                 const unavailable = !editableKinds.includes(kind);

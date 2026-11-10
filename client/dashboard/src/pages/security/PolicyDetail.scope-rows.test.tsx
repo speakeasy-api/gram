@@ -556,7 +556,7 @@ describe("StandardPolicyEditor scope rows", () => {
         "Checks everything: what people type, tool calls, tool results and agent replies.",
       ),
     ).toHaveLength(2);
-    expect(screen.getAllByText("Recommended")).toHaveLength(3);
+    expect(screen.queryByText("Custom")).toBeNull();
     expect(screen.queryByRole("checkbox", { name: /^Secrets:/ })).toBeNull();
   });
 
@@ -570,12 +570,13 @@ describe("StandardPolicyEditor scope rows", () => {
 
     expect(screen.getByText("Custom")).toBeTruthy();
     expect(screen.getByText("1 changed from recommended")).toBeTruthy();
-    fireEvent.click(screen.getAllByRole("button", { name: "Done" })[0]!);
     expect(
       screen.getByText("Checks what people type and tool results."),
     ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reset to recommended" }),
+    );
     expect(screen.queryByText("Custom")).toBeNull();
     expect(screen.getByText("Checks tool results.")).toBeTruthy();
   });
