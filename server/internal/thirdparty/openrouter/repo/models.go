@@ -18,6 +18,8 @@ type OpenrouterApiKey struct {
 	// @access: secret-restricted
 	KeyEncrypted pgtype.Text
 	// @access: secret-restricted
+	KeyOrgEncrypted pgtype.Text
+	// @access: secret-restricted
 	KeyHash string
 	// @access: restricted
 	MonthlyCredits int64

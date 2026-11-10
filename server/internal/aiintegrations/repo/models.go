@@ -26,6 +26,8 @@ type AiIntegrationConfig struct {
 	ExternalOrganizationID pgtype.Text
 	// @access: secret-restricted
 	ApiKeyEncrypted string
+	// @access: secret-restricted
+	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
 	Enabled bool
 	// @access: confidential
