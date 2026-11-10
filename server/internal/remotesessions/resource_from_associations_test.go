@@ -183,3 +183,42 @@ func TestGetRemoteSessionClientTenantOrganizationID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, fx.organizationID, deletedProjectClient, "a deleted project still names its organization")
 }
+
+// Typed offers remain authoritative during the association-derived rollout.
+func TestResourceForClientAtUpstream_AssociationsPreserveOfferPrecedence(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		enforced bool
+	}{
+		{name: "enforced", enforced: true},
+		{name: "not-enforced", enforced: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, fx := seedSharedIssuerFixture(t, "association-offer-"+tc.name)
+			const offeredURL = "https://offered.example.com/mcp"
+			serverID := seedRemoteMCPServerForIssuer(t, ctx, fx.ti, fx.userIssuerID, "association-offered", offeredURL)
+			offerRegistration(t, ctx, fx.ti.conn, fx.organizationID, fx.projectID, serverID, fx.clientID)
+			if tc.enforced {
+				enforceUpstreamAuth(t, ctx, fx.ti.conn, fx.organizationID)
+			}
+			mgr := newFlaggedResolveManager(t, fx, true)
+			want := fx.ownURL
+			if tc.enforced {
+				want = offeredURL
+			}
+			resource, err := mgr.ResourceForClientAtUpstream(ctx, fx.organizationID, fx.clientID, []uuid.UUID{fx.siblingID}, want)
+			require.NoError(t, err)
+			require.Equal(t, want, resource)
+
+			resource, err = mgr.FallbackResourceForClient(ctx, fx.organizationID, fx.clientID)
+			require.NoError(t, err)
+			require.Equal(t, want, resource)
+
+			owners, err := remotesessions.ResourceOwnersAmong(ctx, fx.ti.conn, fx.organizationID, []uuid.UUID{fx.clientID, fx.siblingID}, want, true)
+			require.NoError(t, err)
+			require.Equal(t, map[uuid.UUID]bool{fx.clientID: true, fx.siblingID: false}, owners)
+		})
+	}
+}

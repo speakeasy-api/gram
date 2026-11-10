@@ -308,7 +308,38 @@ func (s *RefreshService) FallbackResourceForClient(ctx context.Context, organiza
 	if err != nil {
 		return "", fmt.Errorf("list mcp servers for client: %w", err)
 	}
-	return clientUpstreamResource(rows), nil
+	resources := make([]string, 0, len(rows))
+	for _, row := range rows {
+		resources = append(resources, row.Url)
+	}
+	return clientUpstreamResource(resources), nil
+}
+
+// fallbackResourceForGrant derives the resource for a grant stored with none.
+// Where the organization it was consented in enforces typed auth clients, the
+// servers that offer its client decide; a client with no offer, and any client
+// elsewhere, falls back to its attached servers.
+func (s *RefreshService) fallbackResourceForGrant(ctx context.Context, sess remotesessions_repo.RemoteSession) (string, error) {
+	q := remotesessions_repo.New(s.db)
+	organizationID, err := q.GetUserSessionIssuerOrganizationID(ctx, sess.UserSessionIssuerID)
+	if err != nil {
+		return "", fmt.Errorf("get grant organization: %w", err)
+	}
+	attachments, offered, err := loadClientAttachments(ctx, s.db, organizationID, []uuid.UUID{sess.RemoteSessionClientID})
+	if err != nil {
+		return "", fmt.Errorf("list mcp servers for grant client: %w", err)
+	}
+	if offered[sess.RemoteSessionClientID] {
+		return clientUpstreamResource(attachments[sess.RemoteSessionClientID]), nil
+	}
+	// A global sign-in has no organization, but its client still has a tenant.
+	// Use that tenant for the association flag and retain the legacy client-wide
+	// fallback when association-derived resources are not enabled.
+	organizationID, err = q.GetRemoteSessionClientTenantOrganizationID(ctx, sess.RemoteSessionClientID)
+	if err != nil {
+		return "", fmt.Errorf("read client organization for fallback resource: %w", err)
+	}
+	return s.FallbackResourceForClient(ctx, organizationID, sess.RemoteSessionClientID)
 }
 
 // ResourceForClientAtUpstream derives the RFC 8707 resource for a client
@@ -345,66 +376,75 @@ func (s *RefreshService) attachmentsFromAssociations(ctx context.Context, organi
 	return feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID)
 }
 
-// attachmentsForClients loads the MCP servers attached to each client in one
-// round trip, within organizationID. A client with no attachments has no entry.
-// fromAssociations attaches a client to the servers it is associated with;
-// otherwise it is attached to every server on the user session issuers it is
-// bound to.
-func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID, fromAssociations bool) (map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, error) {
-	if fromAssociations {
-		rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersAssociatedWithClients(ctx, remotesessions_repo.ListOrganizationMcpServersAssociatedWithClientsParams{
-			RemoteSessionClientIds: clientIDs,
-			OrganizationID:         organizationID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("list mcp servers associated with clients: %w", err)
-		}
-		attachments := make(map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, len(clientIDs))
-		for _, row := range rows {
-			attachments[row.ClientID] = append(attachments[row.ClientID], remotesessions_repo.ListOrganizationMcpServersForClientRow{
-				ID:          row.ID,
-				ProjectID:   row.ProjectID,
-				ProjectSlug: row.ProjectSlug,
-				Name:        row.Name,
-				Slug:        row.Slug,
-				Url:         row.Url,
-			})
-		}
-		return attachments, nil
+// attachmentsForClients loads the resources of the MCP servers attached to
+// each client within organizationID. A client with no attachments has no entry.
+//
+// Where the organization enforces typed auth clients, the servers that offer a
+// client through one replace the servers behind its user session issuer links:
+// a client with an offer has its resource decided by the servers configured to
+// use it, linked to their sign-in or not. A client with no offer keeps the
+// servers behind its links, or its associated servers when fromAssociations
+// is enabled.
+func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID, fromAssociations bool) (map[uuid.UUID][]string, error) {
+	attachments, offered, err := loadClientAttachments(ctx, db, organizationID, clientIDs)
+	if err != nil || !fromAssociations {
+		return attachments, err
 	}
+	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersAssociatedWithClients(ctx, remotesessions_repo.ListOrganizationMcpServersAssociatedWithClientsParams{
+		RemoteSessionClientIds: clientIDs,
+		OrganizationID:         organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list mcp servers associated with clients: %w", err)
+	}
+	for _, clientID := range clientIDs {
+		if !offered[clientID] {
+			delete(attachments, clientID)
+		}
+	}
+	for _, row := range rows {
+		if !offered[row.ClientID] {
+			attachments[row.ClientID] = append(attachments[row.ClientID], row.Url)
+		}
+	}
+	return attachments, nil
+}
 
+// loadClientAttachments also reports which clients have offers, so grant
+// refresh can preserve its client-wide fallback when no offer decides.
+func loadClientAttachments(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]string, map[uuid.UUID]bool, error) {
 	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
 		RemoteSessionClientIds: clientIDs,
 		OrganizationID:         organizationID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list mcp servers for bound clients: %w", err)
+		return nil, nil, fmt.Errorf("list mcp servers for bound clients: %w", err)
 	}
-	attachments := make(map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, len(clientIDs))
+	attachments := make(map[uuid.UUID][]string, len(clientIDs))
+	// Offered rows sort first for each client.
+	offered := make(map[uuid.UUID]bool, len(clientIDs))
 	for _, row := range rows {
-		attachments[row.ClientID] = append(attachments[row.ClientID], remotesessions_repo.ListOrganizationMcpServersForClientRow{
-			ID:          row.ID,
-			ProjectID:   row.ProjectID,
-			ProjectSlug: row.ProjectSlug,
-			Name:        row.Name,
-			Slug:        row.Slug,
-			Url:         row.Url,
-		})
+		if row.Offered {
+			offered[row.ClientID] = true
+		} else if offered[row.ClientID] {
+			continue
+		}
+		attachments[row.ClientID] = append(attachments[row.ClientID], row.Resource)
 	}
-	return attachments, nil
+	return attachments, offered, nil
 }
 
 // resourceAmongSiblings decides clientID's resource at upstream from the
 // loaded attachments of every client bound to the endpoint: its own
 // derivation when it has one, otherwise a claim on upstream that stands only
 // while no sibling serves it.
-func resourceAmongSiblings(attachments map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, clientID uuid.UUID, upstream string) string {
+func resourceAmongSiblings(attachments map[uuid.UUID][]string, clientID uuid.UUID, upstream string) string {
 	resource, claimable := claimableUpstream(attachments[clientID], upstream)
 	if !claimable {
 		return resource
 	}
-	for id, rows := range attachments {
-		if id != clientID && rowsServeUpstream(rows, resource) {
+	for id, resources := range attachments {
+		if id != clientID && resourcesServeUpstream(resources, resource) {
 			return ""
 		}
 	}
@@ -983,27 +1023,22 @@ func (s *RefreshService) refresh(
 	if resource == "" {
 		resource = callerResource
 	}
+	if resource == "" {
+		// Legacy row minted before the resource column, with no caller value:
+		// derive the client's own so it is never replayed against another
+		// upstream's audience.
+		var err error
+		resource, err = s.fallbackResourceForGrant(ctx, sess)
+		if err != nil {
+			return zero, nil, nil, fmt.Errorf("derive fallback resource: %w", err)
+		}
+	}
 
 	// Read after the lock: this caller may have waited on it for seconds, and
 	// a client secret or token endpoint rotated meanwhile must reach the POST.
 	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
 	if err != nil {
 		return zero, nil, nil, refreshClientLoadError(err)
-	}
-
-	if resource == "" {
-		// Legacy row minted before the resource column, with no caller value:
-		// derive the client's own so it is never replayed against another
-		// upstream's audience.
-		var organizationID string
-		organizationID, err = q.GetRemoteSessionClientTenantOrganizationID(ctx, sess.RemoteSessionClientID)
-		if err != nil {
-			return zero, nil, nil, fmt.Errorf("read client organization for fallback resource: %w", err)
-		}
-		resource, err = s.FallbackResourceForClient(ctx, organizationID, sess.RemoteSessionClientID)
-		if err != nil {
-			return zero, nil, nil, fmt.Errorf("derive fallback resource: %w", err)
-		}
 	}
 
 	now := time.Now()
