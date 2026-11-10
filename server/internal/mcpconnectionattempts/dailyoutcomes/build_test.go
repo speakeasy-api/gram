@@ -1,6 +1,8 @@
 package dailyoutcomes
 
 import (
+	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -34,6 +36,7 @@ const (
 	daysAgoPlanDemo    = 6
 	daysAgoPlanMissing = 4
 	daysAgoPlanRecent  = 3
+	daysAgoRepublish   = 7
 )
 
 const catalogApp = "https://claude.ai/oauth/claude-code-client-metadata"
@@ -404,5 +407,41 @@ func TestBuildDayRefusesADayWhoseRawEventsMayBeExpiring(t *testing.T) {
 
 	_, err := f.b.BuildDay(t.Context(), day, f.now)
 	require.ErrorIs(t, err, ErrDayExpiring)
+	require.Equal(t, map[string]uint64{"|dcr||inbound_token|connected||": 3}, f.stored(mainTable, day))
+}
+
+// doublingConn adds a second copy of staging before the first swap, as an overlapping build would.
+type doublingConn struct {
+	driver.Conn
+	t       *testing.T
+	day     time.Time
+	doubled bool
+}
+
+func (c *doublingConn) Exec(ctx context.Context, query string, args ...any) error {
+	if !c.doubled && strings.Contains(query, "REPLACE PARTITION") {
+		c.doubled = true
+		require.NoError(c.t, c.Conn.Exec(ctx, `INSERT INTO `+stagingTable+` SELECT * FROM `+stagingTable+` WHERE day = toDate(?)`, c.day.Format(time.DateOnly)))
+	}
+	if err := c.Conn.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("exec: %w", err)
+	}
+	return nil
+}
+
+func TestBuildDayPublishesAgainWhenTheStoredDayIsWrong(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	day := f.day(daysAgoRepublish)
+	for range 3 {
+		a := f.attempt(uuid.New(), mcpconnectionattempts.AppDCR, day.Add(time.Hour))
+		f.write(f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute))
+	}
+	conn := &doublingConn{Conn: f.ch, t: t, day: day, doubled: false}
+	f.b.ch = conn
+
+	result := f.build(day)
+	require.True(t, conn.doubled, "the first swap stored a doubled day")
+	require.True(t, result.Swapped)
 	require.Equal(t, map[string]uint64{"|dcr||inbound_token|connected||": 3}, f.stored(mainTable, day))
 }

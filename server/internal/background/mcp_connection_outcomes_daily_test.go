@@ -65,3 +65,10 @@ func TestMCPConnectionOutcomesDayWorkflowIDIsOnePerDay(t *testing.T) {
 	require.Equal(t, "v1:mcp-connection-outcomes-daily:2026-11-04", mcpConnectionOutcomesDayWorkflowID(morning))
 	require.Equal(t, mcpConnectionOutcomesDayWorkflowID(morning), mcpConnectionOutcomesDayWorkflowID(evening))
 }
+
+func TestMCPConnectionOutcomesTimeoutsCoverEveryRead(t *testing.T) {
+	t.Parallel()
+	reads := dailyoutcomes.ReadsPerBuild * dailyoutcomes.ReadTimeout
+	require.Greater(t, mcpConnectionOutcomesBuildTimeout, reads)
+	require.Greater(t, mcpConnectionOutcomesPlanTimeout, reads)
+}

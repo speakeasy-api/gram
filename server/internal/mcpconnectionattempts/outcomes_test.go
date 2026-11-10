@@ -192,6 +192,7 @@ func TestFixedByCountsOnlyChangesAfterTheFailingRow(t *testing.T) {
 func TestLabelsSendUnknownValuesToOther(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "accounts.google.com", mcpconnectionattempts.ProviderLabel("accounts.google.com"))
+	require.Equal(t, "id.speakeasy.com", mcpconnectionattempts.ProviderLabel("id.speakeasy.com"), "Speakeasy's own sign-in host")
 	require.Empty(t, mcpconnectionattempts.ProviderLabel(""))
 	for _, tenant := range []string{"acme.okta.com", "acme.my.salesforce.com", "login.acme.example", "mcp.acme.com:8443", "accounts.google.com.acme.example"} {
 		require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.ProviderLabel(tenant), tenant)
