@@ -1,16 +1,16 @@
 import type { CatalogServer } from "@/pages/catalog/hooks";
 import { filterToHttpRemotes } from "@/pages/catalog/remotes";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
-import { ExternalMCPRemoteTransportType } from "@gram/client/models/components/externalmcpremote.js";
+import { TransportType } from "@gram/client/models/components/externalmcpremote.js";
 import type { OktaServerSuggestion } from "@gram/client/models/components/oktaserversuggestion.js";
 
 const TRANSPORT_TYPES: ReadonlySet<string> = new Set(
-  Object.values(ExternalMCPRemoteTransportType),
+  Object.values(TransportType),
 );
 
-function transportType(type: string): ExternalMCPRemoteTransportType | null {
+function transportType(type: string): TransportType | null {
   return TRANSPORT_TYPES.has(type)
-    ? (type as ExternalMCPRemoteTransportType)
+    ? (type as TransportType)
     : null;
 }
 

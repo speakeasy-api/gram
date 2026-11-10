@@ -77,30 +77,15 @@ export function useOrgMcpServers(enabled: boolean): OrgMcpServers {
         ? `${baseUrl}/mcp/${t.mcpSlug}`
         : `${baseUrl}/mcp/${project?.slug ?? ""}/${t.slug}/${t.defaultEnvironmentSlug ?? ""}`;
       const mcpUrl = fullUrl.replace(/^https?:\/\//, "");
-      // External MCP "proxy" entries (name suffix ":proxy") represent servers
-      // whose tools/list requires user auth, so we can't enumerate them at
-      // deploy time. They still resolve at call-time via mcp:connect, so the
-      // grant model supports them; we just don't surface the proxy entry as a
-      // selectable tool in the picker.
-      const tools = t.tools
-        .filter(
-          (tool) =>
-            !(tool.type === "externalmcp" && tool.name.endsWith(":proxy")),
-        )
-        .map((tool) => ({
+      const tools = t.tools.map((tool) => ({
           id: tool.id,
           name: tool.name,
           type: tool.type,
           httpMethod: tool.httpMethod,
           annotations: tool.annotations,
         }));
-      const isExternalMcpProxy = t.tools.some(
-        (tool) => tool.type === "externalmcp" && tool.name.endsWith(":proxy"),
-      );
-      // Skip servers with nothing grantable: zero visible tools and not a
-      // proxy server (proxy servers stay listed so users can grant at the
-      // server level).
-      if (tools.length === 0 && !isExternalMcpProxy) continue;
+      // Skip servers with nothing grantable.
+      if (tools.length === 0) continue;
       group.servers.push({
         id: t.id,
         name: t.name,

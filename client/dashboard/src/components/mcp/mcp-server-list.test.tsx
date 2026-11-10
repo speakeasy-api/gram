@@ -2,20 +2,10 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  oauthStatus: "not-external-mcp" as string,
-}));
-
-vi.mock("@/components/sources/sources-hooks", () => ({
-  useHostedMcpOAuthConfigStatus: () => mocks.oauthStatus,
-}));
 vi.mock("@/components/sources/SourceCard", () => ({
   SourceMcpIcon: () => null,
-}));
-vi.mock("./MCPToolsetIcon", () => ({
-  ExternalMcpIcon: () => null,
 }));
 vi.mock("@/components/icon-dither", () => ({
   useIconDither: () => ({
@@ -33,9 +23,6 @@ import { MCPServerTableRow } from "./mcp-table-rows";
 import { listedMcpServers } from "./mcp-server-kind";
 
 afterEach(cleanup);
-beforeEach(() => {
-  mocks.oauthStatus = "not-external-mcp";
-});
 
 function server(fields: Partial<McpServer>): McpServer {
   return {
@@ -208,15 +195,6 @@ describe("hosted wrappers", () => {
       screen.getAllByRole("link").map((link) => link.getAttribute("href")),
     ).toEqual(["/org/projects/project/mcp/hosted-wrapper/overview"]);
   });
-
-  it("sends a wrapper with an endpoint waiting on OAuth to its own settings", () => {
-    mocks.oauthStatus = "required-unconfigured";
-    renderCards([extra("wrapper-2", "Support (staging)", true)]);
-    expect(screen.getByText("Set up")).toBeTruthy();
-    expect(screen.getByRole("link").getAttribute("href")).toBe(
-      "/org/projects/project/mcp/wrapper-2/settings",
-    );
-  });
 });
 
 describe("MCPServerTableRow", () => {
@@ -247,16 +225,6 @@ describe("MCPServerTableRow", () => {
     ).toHaveLength(2);
   });
 
-  it("says a proxy-only hosted server lists its tools after sign-in", () => {
-    renderRows([
-      server({
-        ...HOSTED,
-        toolset: { ...toolset, toolCount: 0, externalMcpProxyOnly: true },
-      }),
-    ]);
-    expect(screen.getByText("Tools listed once you sign in")).toBeTruthy();
-  });
-
   it("falls back to the server page and claims no count without a toolset summary", () => {
     renderRows([server({ ...HOSTED, toolset: undefined })]);
     const link = screen.getByRole("link", {
@@ -266,17 +234,6 @@ describe("MCPServerTableRow", () => {
       "/org/projects/project/mcp/hosted-wrapper/overview",
     );
     expect(screen.queryByText(/tools?$/)).toBeNull();
-  });
-
-  it("sends a hosted server still waiting on OAuth to its setup step", () => {
-    mocks.oauthStatus = "required-unconfigured";
-    renderRows([HOSTED]);
-    expect(screen.getByText("OAuth Required")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("link", { name: "Open MCP server Hosted tools" })
-        .getAttribute("href"),
-    ).toBe("/org/projects/project/mcp/hosted-wrapper/settings#authentication");
   });
 });
 

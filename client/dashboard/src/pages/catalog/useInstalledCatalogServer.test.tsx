@@ -7,12 +7,10 @@ const mocks = vi.hoisted(() => ({
     string,
     unknown
   >,
-  deploymentData: undefined as unknown,
   catalog: [] as unknown[],
   servers: vi.fn(),
   remotes: vi.fn(),
   unproxied: vi.fn(),
-  deployment: vi.fn(),
   query: vi.fn(),
   listCatalog: vi.fn(),
 }));
@@ -40,12 +38,6 @@ vi.mock("@gram/client/react-query/unproxiedMcpServers.js", () => ({
     return {};
   },
 }));
-vi.mock("@gram/client/react-query/latestDeployment.js", () => ({
-  useLatestDeployment: (...args: unknown[]) => {
-    mocks.deployment(...args);
-    return { data: mocks.deploymentData };
-  },
-}));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ mcpRegistries: { listCatalog: mocks.listCatalog } }),
   useProjectSlugForRequests: () => "selected-project",
@@ -60,7 +52,6 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.server = { id: "server", remoteMcpServerId: "remote" };
-  mocks.deploymentData = undefined;
   mocks.catalog = [];
 });
 it("scopes every lookup and the catalog cache/request to the server project", async () => {
@@ -69,7 +60,6 @@ it("scopes every lookup and the catalog cache/request to the server project", as
     mocks.servers,
     mocks.remotes,
     mocks.unproxied,
-    mocks.deployment,
   ]) {
     expect(query).toHaveBeenCalledWith(
       { gramProject: "server-project" },
@@ -99,22 +89,6 @@ it("normalizes all trailing slashes for installed remotes", () => {
     remotes: [{ url: "https://example.com/mcp" }],
   };
   mocks.catalog = [entry];
-  expect(
-    renderHook(() => useInstalledCatalogServer("server")).result.current,
-  ).toEqual(entry);
-});
-it("selects the primary sorted external MCP rather than deployment order", () => {
-  mocks.server = { id: "server", toolset: { externalMcpSlugs: ["z", "a"] } };
-  mocks.deploymentData = {
-    deployment: {
-      externalMcps: [
-        { slug: "z", registryServerSpecifier: "last" },
-        { slug: "a", registryServerSpecifier: "first" },
-      ],
-    },
-  };
-  const entry = { registrySpecifier: "first" };
-  mocks.catalog = [{ registrySpecifier: "last" }, entry];
   expect(
     renderHook(() => useInstalledCatalogServer("server")).result.current,
   ).toEqual(entry);

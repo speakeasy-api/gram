@@ -17,7 +17,6 @@ import {
   Code,
   FileCode,
   Network,
-  Server,
   Wrench,
 } from "lucide-react";
 import { useRoutes } from "@/routes";
@@ -49,7 +48,6 @@ function unusedSourceIds(
 const SOURCE_ICONS = {
   openapi: FileCode,
   function: Code,
-  externalmcp: Server,
   // Remote/tunneled/unproxied MCP servers are project-scoped, not
   // deployment-bound, so they cannot appear in failed deployment sources —
   // but the icon map must cover the full SourceType union for the indexed
@@ -137,7 +135,6 @@ export function FailedSourcesSection({
     try {
       const excludeOpenapiv3Assets: string[] = [];
       const excludeFunctions: string[] = [];
-      const excludeExternalMcps: string[] = [];
 
       for (const source of selectedSources) {
         switch (source.type) {
@@ -146,9 +143,6 @@ export function FailedSourcesSection({
             break;
           case "function":
             excludeFunctions.push(source.id);
-            break;
-          case "externalmcp":
-            excludeExternalMcps.push(source.slug);
             break;
           case "remotemcp":
             break;
@@ -167,7 +161,6 @@ export function FailedSourcesSection({
             excludeOpenapiv3Assets,
           }),
           ...(excludeFunctions.length > 0 && { excludeFunctions }),
-          ...(excludeExternalMcps.length > 0 && { excludeExternalMcps }),
         },
       });
 
