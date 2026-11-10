@@ -43,7 +43,6 @@ const (
 	fixtureSharedServerName   = "Shared or Own Token Server"
 	fixtureProviderName       = "MCP Fixture OAuth"
 	fixtureSignInClientName   = "Fixture OAuth sign-in"
-	fixtureAttachedClientName = "Fixture OAuth agent connections"
 	fixtureEnvironmentFixedID = "0000-4000-a000-000000007008"
 	fixtureAPIEnvVar          = "ACME_SERVER_URL"
 	linearOldResource         = "https://mcp.linear.app/mcp"
@@ -55,7 +54,7 @@ const (
 //     Partner Gateway, Acme OAuth Discovery) to call the fixture's stub of
 //     the demo API, through a system environment;
 //   - Linear into the Per-User OAuth Server: its URL, OAuth provider,
-//     protected resource and both OAuth clients point at the fixture, and
+//     protected resource and OAuth client point at the fixture, and
 //     every live seeded sign-in holds real fixture tokens;
 //   - GitHub into the Shared or Own Token Server: its URL points at the
 //     fixture's shared-token endpoint and its shared credential carries the
@@ -143,31 +142,16 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 	if err := expect("point the sign-in client", n, err); err != nil {
 		return err
 	}
-	// The attachment client is a legacy-callback client, so it cannot use a
-	// metadata document; the seed registers it with the fixture up front.
-	attachedClient := s.det("attachment-client")
-	registered, err := fixtureauth.RegisterClient(base, fixtureAttachedClientName, []string{
-		serverURL + "/mcp/remote_login_callback",
-		serverURL + "/oauth/callback",
-	}, s.now)
-	if err != nil {
-		return fmt.Errorf("wire local mcp fixture: register the attachment client: %w", err)
-	}
-	n, err = q.LocalFixturePointRegisteredClient(ctx, repo.LocalFixturePointRegisteredClientParams{ClientID: registered, CallbackBaseUrl: serverURL, ID: attachedClient, ProjectID: proj})
-	if err := expect("point the attachment client", n, err); err != nil {
+	n, err = q.LocalFixtureRenameAuthClient(ctx, repo.LocalFixtureRenameAuthClientParams{Name: fixtureSignInClientName, ID: s.det("auth-client-linear"), OrganizationID: org})
+	if err := expect("rename the sign-in auth client", n, err); err != nil {
 		return err
 	}
-	for id, name := range map[string]string{"auth-client-linear": fixtureSignInClientName, "auth-client-linear-attachment": fixtureAttachedClientName} {
-		n, err = q.LocalFixtureRenameAuthClient(ctx, repo.LocalFixtureRenameAuthClientParams{Name: name, ID: s.det(id), OrganizationID: org})
-		if err := expect("rename auth client "+id, n, err); err != nil {
-			return err
-		}
-	}
 
-	// Every live seeded sign-in on those clients gets real fixture tokens.
-	// Expired ones stay expired, so Needs refresh still shows; reconnecting
-	// them signs in against the fixture.
-	clients := []uuid.UUID{mainClient, attachedClient}
+	// Every live seeded sign-in on that client, including the agents'
+	// attached connection, gets real fixture tokens. Expired ones stay
+	// expired, so Needs refresh still shows; reconnecting them signs in
+	// against the fixture.
+	clients := []uuid.UUID{mainClient}
 	sessions, err := q.LocalFixtureListLiveSessions(ctx, clients)
 	if err != nil {
 		return fmt.Errorf("wire local mcp fixture: list sessions: %w", err)
