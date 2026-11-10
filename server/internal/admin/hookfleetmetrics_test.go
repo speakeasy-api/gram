@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/hookversions"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type stubVersionMix struct {
@@ -48,7 +48,7 @@ func TestHookFleetMetricsEmit(t *testing.T) {
 	}}
 	metricReader := sdkmetric.NewManualReader()
 	policy := hookversions.Policy{Latest: semver.MustParse("0.7.0"), Minimum: semver.MustParse("0.3.0")}
-	m, err := NewHookFleetMetrics(slog.New(slog.DiscardHandler), sdkmetric.NewMeterProvider(sdkmetric.WithReader(metricReader)), conn, reader, policy)
+	m, err := NewHookFleetMetrics(testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(metricReader)), conn, reader, policy)
 	require.NoError(t, err)
 	m.now = func() time.Time { return time.Date(2026, 11, 9, 6, 0, 0, 0, time.UTC) }
 
