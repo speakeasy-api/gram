@@ -592,20 +592,16 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 // choose; block_all must be asked for. Any other policy shape takes no
 // disposition. The disposition cannot change after create.
 func createShadowMCPDisposition(requested string, sources []string, action string) (string, error) {
-	if requested != "" && requested != shadowmcp.DispositionAllowAll && requested != shadowmcp.DispositionBlockAll {
+	if err := risk.ValidateShadowMCPDisposition(requested, sources, action); err != nil {
 		return "", invalidRiskPolicyRequest()
 	}
-	blocksShadowMCP := action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP)
-	if !blocksShadowMCP {
-		if requested != "" {
-			return "", invalidRiskPolicyRequest()
-		}
+	if requested != "" {
+		return requested, nil
+	}
+	if shadowmcp.EffectiveDisposition(pgtype.Text{String: "", Valid: false}, sources, action) == "" {
 		return "", nil
 	}
-	if requested == "" {
-		return shadowmcp.DispositionAllowAll, nil
-	}
-	return requested, nil
+	return shadowmcp.DispositionAllowAll, nil
 }
 
 // prepareMCPScope canonicalizes a requested scope and applies the same rules

@@ -438,7 +438,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	}
 
 	shadowMCPDisposition := conv.PtrValOr(payload.ShadowMcpDisposition, "")
-	if err := validateShadowMCPDisposition(shadowMCPDisposition, sources, action); err != nil {
+	if err := ValidateShadowMCPDisposition(shadowMCPDisposition, sources, action); err != nil {
 		return nil, err
 	}
 

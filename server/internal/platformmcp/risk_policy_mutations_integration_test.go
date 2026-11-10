@@ -238,40 +238,40 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	require.NoError(t, json.Unmarshal(receipt.ResultPayload, &safeResult))
 	require.Equal(t, promptCreated.Policy.ID, safeResult.Policy.ID)
 
-	legacyBlockingInput := map[string]any{
+	blockAllInput := map[string]any{
 		"project_slug":           project.Slug,
 		"policy_type":            "standard",
-		"name":                   "Legacy blocking policy",
+		"name":                   "Block all policy",
 		"enabled":                true,
 		"action":                 "block",
 		"sources":                []string{"shadow_mcp"},
 		"shadow_mcp_disposition": "block_all",
-		"idempotency_key":        "legacy-blocking-policy-key",
+		"idempotency_key":        "block-all-policy-key",
 	}
-	_, legacyBlocking, err := handlers.CreatePolicy(ctx, nil, legacyBlockingInput)
+	_, blockAll, err := handlers.CreatePolicy(ctx, nil, blockAllInput)
 	require.NoError(t, err)
-	legacyBlockingID, err := uuid.Parse(legacyBlocking.Policy.ID)
+	blockAllID, err := uuid.Parse(blockAll.Policy.ID)
 	require.NoError(t, err)
-	legacyStored, err := riskrepo.New(conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: legacyBlockingID, ProjectID: project.ID})
+	blockAllStored, err := riskrepo.New(conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: blockAllID, ProjectID: project.ID})
 	require.NoError(t, err)
-	require.Equal(t, shadowmcp.DispositionBlockAll, legacyStored.ShadowMcpDisposition.String, "an explicit block_all request is stored")
+	require.Equal(t, shadowmcp.DispositionBlockAll, blockAllStored.ShadowMcpDisposition.String, "an explicit block_all request is stored")
 
-	legacyAllowedURL := "https://legacy-allowed.example.test/mcp"
-	require.NoError(t, policybypass.ReplacePolicyURLAudience(ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, legacyBlockingID.String(), legacyAllowedURL, []urn.Principal{authz.AllUsersPrincipal()}))
-	legacyRead, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: legacyBlocking.Policy.ID})
+	blockAllAllowedURL := "https://block-all-allowed.example.test/mcp"
+	require.NoError(t, policybypass.ReplacePolicyURLAudience(ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, blockAllID.String(), blockAllAllowedURL, []urn.Principal{authz.AllUsersPrincipal()}))
+	blockAllRead, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: blockAll.Policy.ID})
 	require.NoError(t, err)
 	_, _, err = handlers.UpdatePolicy(ctx, nil, map[string]any{
 		"project_slug":     project.Slug,
-		"policy_id":        legacyBlocking.Policy.ID,
-		"expected_version": legacyRead.Policy.Version,
-		"idempotency_key":  "drop-legacy-blocking-posture-key",
+		"policy_id":        blockAll.Policy.ID,
+		"expected_version": blockAllRead.Policy.Version,
+		"idempotency_key":  "drop-block-all-posture-key",
 		"patch":            map[string]any{"sources": []string{"gitleaks"}},
 	})
 	require.NoError(t, err)
-	legacyStored, err = riskrepo.New(conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: legacyBlockingID, ProjectID: project.ID})
+	blockAllStored, err = riskrepo.New(conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: blockAllID, ProjectID: project.ID})
 	require.NoError(t, err)
-	require.Equal(t, []string{"gitleaks"}, legacyStored.Sources)
-	require.Empty(t, riskPolicyURLGrants(t, ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, legacyBlockingID), "a legacy block_all posture retires its allowed-server grants with it")
+	require.Equal(t, []string{"gitleaks"}, blockAllStored.Sources)
+	require.Empty(t, riskPolicyURLGrants(t, ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, blockAllID), "a block_all posture retires its allowed-server grants with it")
 
 	_, _, err = unavailableRiskMutationTool[CreateRiskExclusionToolOutput]()(ctx, nil, map[string]any{})
 	requireRiskMutationRefusal(t, err, unavailableCode)
