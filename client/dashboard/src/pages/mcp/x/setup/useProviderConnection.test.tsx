@@ -130,7 +130,9 @@ function mount(
         state,
         dispatch,
         mcpServer,
-        provider === "salesforce" || provider === "snowflake"
+        provider === "salesforce" ||
+          provider === "snowflake" ||
+          provider === "okta"
           ? currentSource
           : undefined,
         onConfigured,
@@ -175,6 +177,31 @@ beforeEach(() => {
     url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
   });
   mocks.headers.mockResolvedValue({ headers: [] });
+  mocks.createHeader.mockImplementation(async ({ createServerHeaderForm }) => {
+    const { remoteMcpServerId: _remoteMcpServerId, ...fields } =
+      createServerHeaderForm;
+    const header = { id: "instance", ...fields };
+    const { headers } = await mocks.headers();
+    mocks.headers.mockResolvedValue({ headers: [...headers, header] });
+    return header;
+  });
+  mocks.updateHeader.mockImplementation(async ({ updateServerHeaderForm }) => {
+    const { headers } = await mocks.headers();
+    mocks.headers.mockResolvedValue({
+      headers: headers.map((h: { id: string }) =>
+        h.id === updateServerHeaderForm.id
+          ? { ...h, ...updateServerHeaderForm }
+          : h,
+      ),
+    });
+    return updateServerHeaderForm;
+  });
+  mocks.deleteHeader.mockImplementation(async ({ id }) => {
+    const { headers } = await mocks.headers();
+    mocks.headers.mockResolvedValue({
+      headers: headers.filter((h: { id: string }) => h.id !== id),
+    });
+  });
   mocks.linkedServers.mockResolvedValue({ mcpServers: [server] });
   mocks.updateRemote.mockImplementation(async ({ updateServerForm }) => {
     const value = { id: "upstream", ...updateServerForm };
@@ -1522,14 +1549,6 @@ describe("Salesforce shared actions", () => {
       });
       expect(mocks.commit).toHaveBeenCalledWith({
         commitServerIdentityConfigurationForm: expect.objectContaining({
-          mcpServerId: server.id,
-          targetServerOnly: true,
-          clientMode: "manual",
-          createProvider: expect.objectContaining({
-            issuer,
-            authorizationEndpoint: `${issuer}/services/oauth2/authorize`,
-            tokenEndpoint: `${issuer}/services/oauth2/token`,
-          }),
           clientConfiguration: {
             clientId: "key",
             clientSecret: undefined,
@@ -1538,8 +1557,9 @@ describe("Salesforce shared actions", () => {
           },
         }),
       });
-      expect(result.current.state.authorized).toBe(false);
-      expect(result.current.state.tested).toBe(false);
+      expect(
+        result.current.state.authorized || result.current.state.tested,
+      ).toBe(false);
     },
   );
   it.each([
@@ -1804,6 +1824,199 @@ describe("Salesforce source safeguards", () => {
     await waitFor(() => expect(mounted.result.current.state.saved).toBe(true));
     expect(mocks.updateRemote).not.toHaveBeenCalled();
   });
+});
+
+describe("Snowflake shared actions", () => {
+  const oldUrl =
+    "https://example.snowflakecomputing.com/api/v2/databases/OLD/schemas/PUBLIC/mcp-servers/MCP";
+  const values = {
+    ...initialState("snowflake").values,
+    host: "example.snowflakecomputing.com",
+    database: "APP",
+    schema: "PUBLIC",
+    serverName: "MCP",
+    clientId: "app-id",
+    clientSecret: "app-secret",
+  };
+
+  it.each([{ scope: [] }, { scope: ["session:role:OTHER"] }])(
+    "requires corrected credentials for saved Snowflake scopes $scope",
+    async ({ scope }) => {
+      const url = oldUrl.replace("/OLD/", "/APP/");
+      mocks.remote.mockResolvedValue({ id: "upstream", url });
+      mocks.associations.mockResolvedValue({
+        associations: [
+          {
+            issuerUrl: "https://example.snowflakecomputing.com",
+            remoteSessionClientId: "client",
+            serverCount: 1,
+          },
+        ],
+      });
+      mocks.client.mockResolvedValue({
+        id: "client",
+        clientId: "saved-app",
+        scope,
+        callbackUrl: "https://platform.example/callback",
+      });
+      const { result } = mount(
+        "snowflake",
+        { step: "test", values: { ...values, clientId: "", clientSecret: "" } },
+        { url, instanceUrl: "" },
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.state.saved).toBe(false);
+      expect(result.current.state.configChanged).toBe(true);
+      act(() => {
+        result.current.signIn();
+        result.current.testConnection();
+      });
+      expect(window.open).not.toHaveBeenCalled();
+      expect(mocks.probe).not.toHaveBeenCalled();
+    },
+  );
+  it("invalidates a restored Snowflake client when its saved scopes change", async () => {
+    const url = oldUrl.replace("/OLD/", "/APP/");
+    mocks.remote.mockResolvedValue({ id: "upstream", url });
+    mocks.associations.mockResolvedValue({
+      associations: [
+        {
+          issuerUrl: "https://example.snowflakecomputing.com",
+          remoteSessionClientId: "client",
+          serverCount: 1,
+        },
+      ],
+    });
+    const client = {
+      id: "client",
+      clientId: "saved-app",
+      scope: ["session:role:all"],
+      callbackUrl: "https://platform.example/callback",
+    };
+    mocks.client.mockResolvedValue(client);
+    const { result } = mount(
+      "snowflake",
+      { step: "test", values: { ...values, clientId: "", clientSecret: "" } },
+      { url, instanceUrl: "" },
+    );
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    expect(result.current.state.configChanged).toBe(false);
+    act(() => {
+      clients
+        .at(-1)
+        ?.setQueryData(queryKeyRemoteSessionClient({ id: "client" }), {
+          ...client,
+          scope: ["session:role:OTHER"],
+        });
+    });
+    await waitFor(() => expect(result.current.state.saved).toBe(false));
+    expect(result.current.state.configChanged).toBe(true);
+    act(() => result.current.signIn());
+    expect(window.open).not.toHaveBeenCalled();
+  });
+  it("saves the native endpoint and confidential account OAuth configuration", async () => {
+    mocks.remote.mockResolvedValue({ id: "upstream", url: oldUrl });
+    mocks.provider.mockRejectedValue({ statusCode: 404 });
+    const { result } = mount(
+      "snowflake",
+      { step: "credentials", values },
+      { url: oldUrl, instanceUrl: "" },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.next());
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    expect(mocks.updateRemote).toHaveBeenCalledWith({
+      updateServerForm: {
+        id: "upstream",
+        url: oldUrl.replace("/OLD/", "/APP/"),
+      },
+    });
+    expect(mocks.commit).toHaveBeenCalledWith({
+      commitServerIdentityConfigurationForm: expect.objectContaining({
+        targetServerOnly: true,
+        createProvider: expect.objectContaining({
+          issuer: "https://example.snowflakecomputing.com",
+          authorizationEndpoint:
+            "https://example.snowflakecomputing.com/oauth/authorize",
+          tokenEndpoint:
+            "https://example.snowflakecomputing.com/oauth/token-request",
+          tokenEndpointAuthMethodsSupported: ["client_secret_post"],
+        }),
+        clientConfiguration: {
+          clientId: "app-id",
+          clientSecret: "app-secret",
+          tokenEndpointAuthMethod: "client_secret_post",
+          scope: ["session:role:all"],
+        },
+      }),
+    });
+    expect(mocks.createHeader).not.toHaveBeenCalled();
+    expect(result.current.state.values.clientSecret).toBe("");
+    expect(result.current.state.authorized).toBe(false);
+  });
+  it.each([false, true])(
+    "finishes the catalog handoff after committing credentials (failure=%s)",
+    async (fails) => {
+      mocks.remote.mockResolvedValue({ id: "upstream", url: oldUrl });
+      mocks.provider.mockRejectedValue({ statusCode: 404 });
+      const onConfigured = vi.fn<() => Promise<void>>();
+      if (fails)
+        onConfigured.mockRejectedValue(new Error("Gateway unavailable"));
+      else onConfigured.mockResolvedValue();
+      const { result } = mount(
+        "snowflake",
+        { step: "credentials", values },
+        { url: oldUrl, instanceUrl: "" },
+        onConfigured,
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.next());
+      await waitFor(() => expect(onConfigured).toHaveBeenCalledOnce());
+      expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(
+        onConfigured.mock.invocationCallOrder[0]!,
+      );
+      if (fails) {
+        await waitFor(() =>
+          expect(result.current.error).toContain(
+            "credentials were saved, but the connection handoff",
+          ),
+        );
+        expect(result.current.error).not.toContain("Check the app details");
+        expect(result.current.state.saved).toBe(false);
+      } else await waitFor(() => expect(result.current.state.saved).toBe(true));
+    },
+  );
+  it.each(["shared source", "external edit", "authorization header"])(
+    "refuses a save after %s",
+    async (reason) => {
+      mocks.remote.mockResolvedValue({
+        id: "upstream",
+        url:
+          reason === "external edit"
+            ? oldUrl.replace("/OLD/", "/OTHER/")
+            : oldUrl,
+      });
+      if (reason === "shared source")
+        mocks.linkedServers.mockResolvedValue({
+          mcpServers: [server, { ...server, id: "other-server" }],
+        });
+      if (reason === "authorization header")
+        mocks.headers.mockResolvedValue({
+          headers: [{ name: "Authorization", value: "redacted" }],
+        });
+      const { result } = mount(
+        "snowflake",
+        { step: "credentials", values },
+        { url: oldUrl, instanceUrl: "" },
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.next());
+      await waitFor(() => expect(result.current.error).toBeTruthy());
+      expect(mocks.commit).not.toHaveBeenCalled();
+      expect(mocks.updateRemote).not.toHaveBeenCalled();
+      expect(result.current.recovery).toBe("settings");
+    },
+  );
 });
 
 describe("Salesforce review recovery", () => {
@@ -2255,3 +2468,190 @@ describe("Snowflake shared actions", () => {
     },
   );
 });
+
+describe("Okta native OAuth contract", () => {
+  it.each(["web", "native"])(
+    "saves %s credentials with exact scopes, PKCE and resolved upstream",
+    async (appType) => {
+      mocks.provider.mockRejectedValue({ statusCode: 404 });
+      mocks.remote.mockResolvedValue({
+        id: "upstream",
+        url: "https://example.okta.com/mcp",
+      });
+      const values = {
+        ...initialState("okta").values,
+        oktaOrg: "example.okta.com",
+        oktaAppType: appType,
+        oktaScopes: "okta.users.read okta.apps.read",
+        clientId: "example-client",
+        clientSecret: appType === "web" ? "example-secret" : "",
+      };
+      const { result } = mount(
+        "okta",
+        { values, step: "credentials" },
+        { url: "https://example.okta.com/mcp", instanceUrl: "" },
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.next());
+      await waitFor(() => expect(mocks.commit).toHaveBeenCalled());
+      expect(
+        mocks.commit.mock.calls[0]![0].commitServerIdentityConfigurationForm,
+      ).toMatchObject({
+        targetServerOnly: true,
+        clientMode: "manual",
+        createProvider: {
+          issuer: "https://example.okta.com",
+          authorizationEndpoint: "https://example.okta.com/oauth2/v1/authorize",
+          tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+          codeChallengeMethodsSupported: ["S256"],
+        },
+        clientConfiguration: {
+          clientId: "example-client",
+          tokenEndpointAuthMethod:
+            appType === "web" ? "client_secret_basic" : "none",
+          scope: ["okta.users.read", "okta.apps.read"],
+        },
+      });
+      expect(
+        mocks.commit.mock.calls[0]![0].commitServerIdentityConfigurationForm
+          .clientConfiguration.clientSecret,
+      ).toBe(appType === "web" ? "example-secret" : undefined);
+      await waitFor(() => expect(result.current.state.step).toBe("test"));
+      expect(result.current.state.values.clientSecret).toBe("");
+      expect(mocks.probe).not.toHaveBeenCalled();
+    },
+  );
+});
+
+it("restores a saved Native Okta client without reading a secret", async () => {
+  mocks.remote.mockResolvedValue({
+    id: "upstream",
+    url: "https://example.okta.com/mcp",
+  });
+  mocks.associations.mockResolvedValue({
+    associations: [
+      {
+        issuerUrl: "https://example.okta.com",
+        remoteSessionClientId: "client",
+        serverCount: 1,
+      },
+    ],
+  });
+  mocks.client.mockResolvedValue({
+    id: "client",
+    clientId: "example-client",
+    tokenEndpointAuthMethod: "none",
+    scope: ["okta.users.read"],
+    callbackUrl: "https://platform.example/callback",
+  });
+  const { result } = mount(
+    "okta",
+    { values: { ...initialState("okta").values, oktaOrg: "example.okta.com" } },
+    { url: "https://example.okta.com/mcp", instanceUrl: "" },
+  );
+  await waitFor(() => expect(result.current.state.saved).toBe(true));
+  expect(result.current.state.values).toMatchObject({
+    oktaAppType: "native",
+    oktaScopes: "okta.users.read",
+    clientSecret: "",
+  });
+  expect(result.current.state.authorized).toBe(false);
+  expect(mocks.commit).not.toHaveBeenCalled();
+});
+
+it("retries failed Okta credential saving against the resolved changed org without duplicate source writes", async () => {
+  mocks.remote.mockResolvedValue({
+    id: "upstream",
+    url: "https://example.okta.com/mcp",
+  });
+  mocks.provider.mockRejectedValue({ statusCode: 404 });
+  mocks.commit
+    .mockRejectedValueOnce(new Error("temporary"))
+    .mockResolvedValue({ status: "registered" });
+  const { result } = mount(
+    "okta",
+    {
+      step: "credentials",
+      values: {
+        ...initialState("okta").values,
+        oktaOrg: "other.okta.com",
+        oktaScopes: "okta.apps.read",
+        clientId: "example-client",
+        clientSecret: "example-secret",
+      },
+    },
+    { url: "https://example.okta.com/mcp", instanceUrl: "" },
+  );
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  act(() => result.current.next());
+  await waitFor(() => expect(result.current.error).toBeTruthy());
+  expect(result.current.state.saved).toBe(false);
+  act(() => result.current.next());
+  await waitFor(() => expect(result.current.state.saved).toBe(true));
+  expect(mocks.updateRemote).toHaveBeenCalledTimes(1);
+  expect(mocks.updateRemote).toHaveBeenCalledWith({
+    updateServerForm: { id: "upstream", url: "https://other.okta.com/mcp" },
+  });
+  expect(mocks.commit).toHaveBeenCalledTimes(2);
+  expect(mocks.probe).not.toHaveBeenCalled();
+});
+
+it.each(["web", "native"])(
+  "verifies Okta %s sign-in separately from the authenticated connection test (mocked API)",
+  async (appType) => {
+    mocks.remote.mockResolvedValue({
+      id: "upstream",
+      url: "https://example.okta.com/mcp",
+    });
+    mocks.associations.mockResolvedValue({
+      associations: [
+        {
+          issuerUrl: "https://example.okta.com",
+          remoteSessionClientId: "client",
+          serverCount: 1,
+        },
+      ],
+    });
+    mocks.client.mockResolvedValue({
+      id: "client",
+      clientId: "example-client",
+      tokenEndpointAuthMethod:
+        appType === "web" ? "client_secret_basic" : "none",
+      scope: ["okta.users.read"],
+      callbackUrl: "https://platform.example/callback",
+    });
+    vi.mocked(window.open).mockReturnValue({
+      closed: true,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    } as unknown as Window);
+    const { result } = mount(
+      "okta",
+      {
+        step: "test",
+        values: {
+          ...initialState("okta").values,
+          oktaOrg: "example.okta.com",
+          oktaAppType: appType,
+          oktaScopes: "okta.users.read",
+        },
+      },
+      { url: "https://example.okta.com/mcp", instanceUrl: "" },
+    );
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    act(() => result.current.signIn());
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await waitFor(() => expect(result.current.state.authorized).toBe(true));
+    expect(result.current.state.tested).toBe(false);
+    act(() => result.current.testConnection());
+    await waitFor(() => expect(result.current.state.tested).toBe(true));
+    expect(result.current.toolCount).toBe(2);
+    expect(mocks.probe).toHaveBeenCalledTimes(2);
+    expect(mocks.probe.mock.calls[1]![1]).toMatchObject({
+      testServerConnectionRequestBody: { mcpServerId: server.id },
+    });
+  },
+);

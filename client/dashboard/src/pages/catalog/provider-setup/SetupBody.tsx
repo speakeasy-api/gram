@@ -1,3 +1,4 @@
+import { oktaGuide } from "./okta";
 import { useEffect, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
 import { BookOpen, Check, ExternalLink } from "lucide-react";
@@ -132,7 +133,7 @@ export function SetupBody({
                   {taskTitle(s)}
                 </Heading>
               </div>
-              {s.provider === "snowflake" ? (
+              {["snowflake", "okta"].includes(s.provider) ? (
                 <Button
                   variant="secondary"
                   size="xs"
@@ -140,7 +141,7 @@ export function SetupBody({
                   asChild
                 >
                   <a
-                    href="https://www.speakeasy.com/docs/ai-control-plane/guides/snowflake"
+                    href={s.provider === "okta" ? oktaGuide : "https://www.speakeasy.com/docs/ai-control-plane/guides/snowflake"}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

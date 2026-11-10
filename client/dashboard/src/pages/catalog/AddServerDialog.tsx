@@ -1,3 +1,8 @@
+import { accountCatalogProvider, accountSpecifiers } from "./account-provider";
+import { names } from "./provider-setup/state";
+import { writeCatalogSetupHandoff } from "./catalog-setup-handoff";
+import { providerProgressKey } from "@/pages/mcp/x/setup/provider-setup";
+import { useSession } from "@/contexts/Auth";
 import { effectiveAction } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { policyNewPrefillQuery } from "@/pages/security/policy-new-prefill";
 import { useProject } from "@/contexts/Auth";
@@ -248,7 +253,7 @@ export function AddServerDialog({
       !headless &&
       !autoStartInstall &&
       enrichedServers.length === 1 &&
-      isSnowflakeCatalogServer(enrichedServers[0]!)
+      !!accountCatalogProvider(enrichedServers[0]!)
     )
       return { identityMode: "user" as const };
     return undefined;
@@ -270,6 +275,8 @@ export function AddServerDialog({
   // Guardrails are an interactive step (there is nobody to draft a policy in a
   // headless or auto-started install) and follow the policy admin permission.
   const organization = useOrganization();
+  const project = useProject();
+  const session = useSession();
   const { hasScope } = useRBAC();
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
@@ -285,6 +292,57 @@ export function AddServerDialog({
         return false;
       }
       return beforeInstall();
+    },
+    deferSetup: (configs, options) => {
+      const config = configs[0];
+      if (
+        providerSetupRollout === "disabled" ||
+        (!openProviderSetup && !attachToGatewayId) ||
+        !open ||
+        headless ||
+        autoStartInstall ||
+        configs.length !== 1 ||
+        !config ||
+        config.identityMode !== "user" ||
+        accountCatalogProvider(config.server) !== "okta"
+      )
+        return false;
+      const provider = accountCatalogProvider(config.server)!;
+      const name = names[provider];
+      if (providerSetupRollout === "loading") {
+        toast.info(`${name} setup is loading. Try again in a moment.`);
+        return true;
+      }
+      const key = providerProgressKey(
+        provider,
+        session.user.id,
+        organization.id,
+        project.id,
+        `catalog:${accountSpecifiers[provider]}`,
+      );
+      if (
+        !writeCatalogSetupHandoff(key, {
+          name: config.name,
+          guardrail: options.guardrail ?? options.customize,
+          customize: !!options.customize,
+        })
+      ) {
+        toast.error(
+          `Couldn’t open ${name} setup. Allow browser storage and try again.`,
+        );
+        return true;
+      }
+      setupHandoffRef.current = true;
+      onOpenChange(false);
+      void navigate(
+        routes.mcp.catalog.detail.setup.href(
+          encodeURIComponent(config.server.registrySpecifier),
+        ) +
+          (attachToGatewayId
+            ? `?attachToGateway=${encodeURIComponent(attachToGatewayId)}`
+            : ""),
+      );
+      return true;
     },
     snowflakeSetupEnabled:
       providerSetupRollout === "enabled" &&

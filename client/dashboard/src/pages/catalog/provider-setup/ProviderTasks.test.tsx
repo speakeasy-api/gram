@@ -407,7 +407,9 @@ it.each([
       </SetupContext>
     );
     const view = render(task);
-    expect(screen.getByText(`Loading ${label}…`)).toBeDefined();
+    expect(screen.getByText(`Loading ${label}…`).className).toContain(
+      "text-muted-foreground",
+    );
     callback.isError = true;
     view.rerender(
       <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
@@ -667,4 +669,229 @@ describe("Snowflake instructions", () => {
     );
     expect(text).toContain("OAUTH_CLIENT_TYPE = 'CONFIDENTIAL'");
   });
+});
+
+it.each([
+  ["github", "GitHub", "permission to manage OAuth apps"],
+  ["slack", "Slack", "permission to manage an app"],
+  ["salesforce", "Salesforce", "Salesforce System Administrator access"],
+] as const)(
+  "uses the shared setup-plan card with %s content",
+  (provider, name, requirement) => {
+    const s = { ...initialState(provider), step: "begin" };
+    const dispatch = vi.fn<(action: Action) => void>();
+    render(
+      <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
+        <ProviderTask serverName={name} />
+      </SetupContext>,
+    );
+    const heading = screen.getByRole("heading", {
+      name: `Let’s connect ${name} to Speakeasy.`,
+    });
+    expect(heading).toBeDefined();
+    expect(screen.getByText(requirement, { exact: false })).toBeDefined();
+    if (provider === "salesforce") {
+      expect(
+        screen.getByText("create your own External Client App", {
+          exact: false,
+        }),
+      ).toBeDefined();
+      expect(
+        screen.queryByText("Using an existing app or an IP allowlist?"),
+      ).toBeNull();
+      expect(screen.queryByText("Organization approval and SSO")).toBeNull();
+    }
+  },
+);
+
+it("uses the published app installation URL and stops at the documented support handoff", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="choices" />);
+  await user.click(screen.getByText("Use Speakeasy’s app", { exact: true }));
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen
+      .getByRole("link", { name: "Open Salesforce installation" })
+      .getAttribute("href"),
+  ).toBe(
+    "https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2",
+  );
+  expect(
+    screen.getByText(/Installation alone does not complete OAuth/),
+  ).toBeDefined();
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen
+      .getByRole("link", { name: "Read support instructions" })
+      .getAttribute("href"),
+  ).toBe(
+    "https://www.speakeasy.com/docs/ai-control-plane/guides/salesforce#contact-speakeasy-support",
+  );
+  expect(screen.getByLabelText("Selected MCP endpoint")).toHaveProperty(
+    "value",
+    "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+  );
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen.getByText(/Your next step is with Speakeasy support/),
+  ).toBeDefined();
+  expect(screen.queryByLabelText("Consumer Key")).toBeNull();
+});
+
+it.each(["web", "native"])(
+  "renders Okta %s app instructions with the actual callback and matching credentials",
+  (appType) => {
+    const dispatch = vi.fn<() => void>();
+    const s = initialState("okta");
+    Object.assign(s.values, {
+      oktaOrg: "https://example.okta.com",
+      oktaAppType: appType,
+    });
+    const content = (step: string) => (
+      <SetupContext
+        value={{
+          s: { ...s, step },
+          dispatch,
+          live: connectionFixture(dispatch),
+        }}
+      >
+        <ProviderTask serverName="Okta" />
+      </SetupContext>
+    );
+    const view = render(content("app"));
+    expect(
+      screen.getByLabelText("Sign-in redirect URI").getAttribute("value"),
+    ).toBe("https://current.example/callback");
+    expect(
+      screen.getByText("Proof Key for Code Exchange (PKCE)"),
+    ).toBeDefined();
+    const instructions = screen.getByText("In Okta").parentElement!.textContent;
+    expect(instructions).toContain(
+      `Set Client authentication to ${appType === "web" ? "Client Secret" : "None"}.`,
+    );
+    expect(instructions).not.toContain(
+      appType === "web" ? "Native app" : "Web app",
+    );
+    view.rerender(content("credentials"));
+    expect(screen.getByLabelText("Client ID")).toBeDefined();
+    expect(!!screen.queryByLabelText("Client Secret")).toBe(appType === "web");
+    view.rerender(content("permissions"));
+    expect(screen.getByLabelText("Okta API scopes")).toBeDefined();
+    expect(
+      screen
+        .getByRole("link", { name: "Scope-to-tool guide" })
+        .getAttribute("href"),
+    ).toContain("scope-based-tool-loading");
+    expect(screen.getByText(/Assign the people or groups/)).toBeDefined();
+  },
+);
+
+it("explains why Open Okta is disabled on hover and keyboard focus", async () => {
+  const { TooltipProvider } = await import("@/components/ui/Tooltip");
+  const dispatch = vi.fn<() => void>();
+  const s = { ...initialState("okta"), step: "app" };
+  render(
+    <TooltipProvider delayDuration={0}>
+      <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
+        <ProviderTask serverName="Okta" />
+      </SetupContext>
+    </TooltipProvider>,
+  );
+  expect(
+    screen.getByRole<HTMLButtonElement>("button", { name: "Open Okta" })
+      .disabled,
+  ).toBe(true);
+  const user = userEvent.setup();
+  const trigger = screen.getByRole("group", { name: "Open Okta unavailable" });
+  await user.hover(trigger);
+  expect((await screen.findByRole("tooltip")).textContent).toContain(
+    "Enter a valid Okta organization URL",
+  );
+  await user.unhover(trigger);
+  trigger.focus();
+  expect((await screen.findByRole("tooltip")).textContent).toContain(
+    "Okta organization step",
+  );
+});
+
+function OktaTaskFixture({
+  step,
+  appType = "web",
+  appChoice = "new",
+  scopes = "okta.users.read",
+  saved = false,
+}: {
+  step: string;
+  appType?: string;
+  appChoice?: string;
+  scopes?: string;
+  saved?: boolean;
+}) {
+  const dispatch = vi.fn<() => void>();
+  const s = initialState("okta");
+  Object.assign(s.values, {
+    oktaOrg: "https://example.okta.com",
+    oktaAppType: appType,
+    appChoice,
+    oktaScopes: scopes,
+  });
+  return (
+    <SetupContext
+      value={{
+        s: { ...s, step, saved },
+        dispatch,
+        live: connectionFixture(dispatch),
+      }}
+    >
+      <ProviderTask serverName="Okta" />
+    </SetupContext>
+  );
+}
+
+it.each(["web", "native"])(
+  "shows only the chosen %s app creation or editing instructions",
+  (appType) => {
+    const view = render(<OktaTaskFixture step="app" appType={appType} />);
+    expect(screen.getByText("Create App Integration")).toBeDefined();
+    expect(screen.getByText("App integration name")).toBeDefined();
+    view.rerender(
+      <OktaTaskFixture step="app" appType={appType} appChoice="existing" />,
+    );
+    expect(screen.queryByText("Create App Integration")).toBeNull();
+    expect(screen.queryByText("App integration name")).toBeNull();
+    expect(screen.getByText(/Keep any redirect URIs/)).toBeDefined();
+  },
+);
+
+it("shows refresh-token actions only when offline_access is selected", () => {
+  const view = render(<OktaTaskFixture step="permissions" />);
+  expect(screen.queryByText("Refresh Token")).toBeNull();
+  expect(screen.queryByText(/refresh tokens/i)).toBeNull();
+  expect(
+    screen.getByRole("heading", { name: "Grant API scopes" }),
+  ).toBeDefined();
+  expect(screen.getByRole("heading", { name: "Assign people" })).toBeDefined();
+  view.rerender(
+    <OktaTaskFixture
+      step="permissions"
+      scopes="okta.users.read offline_access"
+    />,
+  );
+  expect(screen.getByText("Refresh Token")).toBeDefined();
+  expect(screen.getByLabelText("Scopes to grant").getAttribute("value")).toBe(
+    "okta.users.read",
+  );
+});
+
+it("keeps credential instructions specific to the selected app and hides them after saving", () => {
+  const view = render(<OktaTaskFixture step="credentials" appType="native" />);
+  expect(screen.queryByText(/client secret/i)).toBeNull();
+  expect(screen.queryByText(/confirm/i)).toBeNull();
+  view.rerender(<OktaTaskFixture step="credentials" appType="web" />);
+  expect(screen.getByText("Client Credentials")).toBeDefined();
+  view.rerender(<OktaTaskFixture step="credentials" appType="web" saved />);
+  expect(screen.queryByText("In Okta")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Update credentials" }),
+  ).toBeDefined();
 });

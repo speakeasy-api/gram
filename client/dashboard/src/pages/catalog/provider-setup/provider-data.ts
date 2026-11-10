@@ -1,5 +1,11 @@
 import { steps, type State } from "./state";
 export const setupPlanCopy = {
+  okta: {
+    introduction:
+      "We’ll walk you through enabling Okta MCP, setting up an app, granting access, and testing the connection.",
+    requirements:
+      "You’ll need permission to configure an Okta app and grant its API scopes—or a teammate who can help.",
+  },
   snowflake: {
     introduction:
       "We’ll walk you through creating or choosing an MCP server, granting access, setting up OAuth, and testing the connection.",
@@ -67,7 +73,7 @@ export const scopesFor = (s: { values: { access: string } }): string[] =>
     : slackScopes;
 
 export function taskTitle(s: State): string {
-  if (s.provider === "salesforce" || s.provider === "snowflake")
+  if (["salesforce", "snowflake", "okta"].includes(s.provider))
     return (
       steps(s).find((step) => step.id === s.step)?.title ?? "Salesforce setup"
     );
