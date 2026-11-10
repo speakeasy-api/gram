@@ -585,7 +585,7 @@ var Vendors = []Vendor{
 		Title:            "Sentry",
 		Description:      "Sentry's hosted MCP server for errors and issues.",
 		WebsiteURL:       "https://sentry.io",
-		DocumentationURL: "",
+		DocumentationURL: "https://mcp.sentry.dev",
 		IconURL:          "https://sentry-brand.storage.googleapis.com/sentry-glyph-black.png",
 		SupportsDCR:      true,
 		Remotes: []Remote{
