@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -3257,7 +3258,10 @@ func TestToolProxy_Do_HTTPTool_RedirectStrippedCredentialNotReported(t *testing.
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer final.Close()
-	finalURL := strings.Replace(final.URL, "127.0.0.1", "localhost", 1)
+	// localhost is another host than the listener's IP literal, whether IPv4 or [::1].
+	parsed, err := url.Parse(final.URL)
+	require.NoError(t, err)
+	finalURL := "http://" + net.JoinHostPort("localhost", parsed.Port())
 	start := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, finalURL+r.URL.Path, http.StatusTemporaryRedirect)
 	}))
