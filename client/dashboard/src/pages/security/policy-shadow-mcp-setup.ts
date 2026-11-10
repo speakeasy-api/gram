@@ -9,6 +9,21 @@ type OriginalPolicy = Pick<RiskPolicy, "action" | "enabled" | "sources">;
  * create. */
 export type ShadowMCPDisposition = "block_all" | "allow_all";
 
+/** The enabled blocking Shadow MCP policy that would stop this editor's
+ *  policy from blocking Shadow MCP servers, if any. The server allows one per
+ *  project. The policy being edited never conflicts with itself, and a
+ *  disabled policy is not checked until it is enabled. */
+export function conflictingShadowMCPBlockingPolicy<T extends { id: string }>(
+  existing: T | undefined,
+  editing: { id: string; enabled: boolean } | null,
+): T | undefined {
+  if (!existing) return undefined;
+  if (editing && (editing.id === existing.id || !editing.enabled)) {
+    return undefined;
+  }
+  return existing;
+}
+
 export function isShadowMCPBlockConfiguration(
   sources: readonly string[],
   action: string,

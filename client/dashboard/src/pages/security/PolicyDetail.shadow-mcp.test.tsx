@@ -8,6 +8,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { Children, isValidElement, type ReactNode } from "react";
 import { MemoryRouter } from "react-router";
@@ -33,6 +34,20 @@ const mocks = vi.hoisted(() => ({
     disabledReason?: string;
   }>,
   pinnedActions: [] as Array<{ value: string; reason: string } | undefined>,
+  slot: {
+    pending: false,
+    failed: false,
+    existing: undefined as { id: string; name: string } | undefined,
+    href: undefined as string | undefined,
+  },
+  slotEnabled: [] as boolean[],
+}));
+
+vi.mock("./use-shadow-ai-policy-slot", () => ({
+  useShadowAIPolicySlot: ({ enabled = true }: { enabled?: boolean } = {}) => {
+    mocks.slotEnabled.push(enabled);
+    return mocks.slot;
+  },
 }));
 
 vi.mock("sonner", () => ({
@@ -366,6 +381,85 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
       ]);
       expect(mocks.modeRenders.at(-1)).toBe("block");
     });
+  });
+});
+
+describe("StandardPolicyEditor existing Shadow MCP blocking policy", () => {
+  afterEach(() => {
+    cleanup();
+    mocks.slot.existing = undefined;
+    mocks.slot.href = undefined;
+  });
+
+  beforeEach(() => {
+    mocks.kind = null;
+    mocks.category = null;
+    mocks.slotEnabled.length = 0;
+    mocks.slot.existing = { id: "existing", name: "Existing blocker" };
+    mocks.slot.href = "/org/projects/test-project/risk-policies/existing";
+    vi.clearAllMocks();
+    vi.mocked(useSdkClient).mockReturnValue({
+      access: { listShadowMCPInventory: vi.fn() },
+    } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  function renderNew(step: string, action: "block" | "flag") {
+    mocks.step = step;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(shadowMCPPolicyInventoryQueryKey("project-1"), []);
+    const view = render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <StandardPolicyEditor
+              policy={null}
+              prefill={{
+                categories: new Set(["shadow_mcp"]),
+                action,
+                mcpServerIds: [],
+              }}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    return within(view.container);
+  }
+
+  it("warns on the Detect step as soon as Shadow AI is on", () => {
+    const page = renderNew("detect", "flag");
+
+    expect(mocks.slotEnabled.at(-1)).toBe(true);
+    expect(
+      page.getByText("One Shadow MCP blocking policy per project"),
+    ).toBeTruthy();
+    const link = page.getByRole("link", { name: "Existing blocker" });
+    expect(link.getAttribute("href")).toBe(
+      "/org/projects/test-project/risk-policies/existing",
+    );
+    expect(page.getByText(/It can still flag Shadow MCP servers/)).toBeTruthy();
+  });
+
+  it("tells a Block policy on the Action step how to proceed", () => {
+    const page = renderNew("action", "block");
+
+    expect(
+      page.getByText(
+        /Choose another action, or disable or delete Existing blocker first/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("stays quiet when the project has no blocking policy", () => {
+    mocks.slot.existing = undefined;
+    mocks.slot.href = undefined;
+    const page = renderNew("action", "block");
+
+    expect(
+      page.queryByText("One Shadow MCP blocking policy per project"),
+    ).toBeNull();
   });
 });
 

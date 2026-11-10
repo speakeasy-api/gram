@@ -3,6 +3,7 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { describe, expect, it } from "vitest";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import {
+  conflictingShadowMCPBlockingPolicy,
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   shadowMCPAllowAllPostureLocked,
@@ -19,6 +20,45 @@ const blockingShadowMCPPolicy = {
   enabled: true,
   sources: ["shadow_mcp"],
 } satisfies Pick<RiskPolicy, "action" | "enabled" | "sources">;
+
+describe("conflictingShadowMCPBlockingPolicy", () => {
+  const existing = { id: "existing", name: "Existing blocker" };
+
+  it("reports the existing blocker to a new policy", () => {
+    expect(conflictingShadowMCPBlockingPolicy(existing, null)).toBe(existing);
+  });
+
+  it("reports it to another enabled policy", () => {
+    expect(
+      conflictingShadowMCPBlockingPolicy(existing, {
+        id: "other",
+        enabled: true,
+      }),
+    ).toBe(existing);
+  });
+
+  it("never reports the policy being edited against itself", () => {
+    expect(
+      conflictingShadowMCPBlockingPolicy(existing, {
+        id: "existing",
+        enabled: true,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("skips a disabled policy, which the server checks only on enable", () => {
+    expect(
+      conflictingShadowMCPBlockingPolicy(existing, {
+        id: "other",
+        enabled: false,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("reports nothing when the project has no blocker", () => {
+    expect(conflictingShadowMCPBlockingPolicy(undefined, null)).toBeUndefined();
+  });
+});
 
 describe("isBlockingShadowMCPPolicy", () => {
   it("recognizes an enabled blocking Shadow MCP policy", () => {
