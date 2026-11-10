@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -125,6 +126,9 @@ func checkFailureCode(ctx context.Context, err error) mcpconnectionattempts.Code
 
 // checkFailureBrowserError explains a failed check on the error page the way its row records it.
 func checkFailureBrowserError(ctx context.Context, err error) error {
+	if refreshProvenance(err) {
+		contextvalues.ClaimRefreshConnectionReference(ctx)
+	}
 	if failure, ok := classifyCheckFailure(ctx, err); ok && failure.page != oauthui.ReasonDefault {
 		return fmt.Errorf("check connection: %w", oops.WithBrowserReason(err, failure.page))
 	}

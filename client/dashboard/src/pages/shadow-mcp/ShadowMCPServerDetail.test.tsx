@@ -57,7 +57,12 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 
-vi.mock("@/components/page-layout", () => {
+vi.mock("@/components/page-layout", async () => {
+  // The real trail, so the breadcrumb test reads the links a user would see.
+  const { PageHeader } = await vi.importActual<
+    typeof import("@/components/page-header")
+  >("@/components/page-header");
+
   function Page({ children }: { children: ReactNode }) {
     return <div>{children}</div>;
   }
@@ -65,7 +70,7 @@ vi.mock("@/components/page-layout", () => {
   function Header({ children }: { children?: ReactNode }) {
     return <div>{children}</div>;
   }
-  Header.Breadcrumbs = () => null;
+  Header.Breadcrumbs = PageHeader.Breadcrumbs;
 
   function Body({ children }: { children: ReactNode }) {
     return <main>{children}</main>;
@@ -93,6 +98,7 @@ vi.mock("@/components/page-layout", () => {
 });
 
 vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({}),
   useProject: mocks.useProject,
 }));
 
@@ -389,7 +395,11 @@ function inventoryServer(
 const render = (ui: ReactElement) =>
   renderView(ui, {
     wrapper: ({ children }) => (
-      <MemoryRouter initialEntries={["/acme/projects/default/shadow-mcp"]}>
+      <MemoryRouter
+        initialEntries={[
+          "/acme/projects/default/shadow-ai/mcps/github-example-com-mcp-d8860eea",
+        ]}
+      >
         {children}
       </MemoryRouter>
     ),
@@ -513,6 +523,28 @@ describe("ShadowMCPServerDetail", () => {
       undefined,
       expect.objectContaining({ enabled: true }),
     );
+  });
+
+  // The page is opened from the MCP approvals tab of Guardrails, and the
+  // sidebar highlights Guardrails, so the trail leads back there rather than
+  // through the retired Shadow AI section its URL still carries.
+  it("leads the breadcrumb back to the MCP approvals tab of Guardrails", () => {
+    renderDetailPage();
+
+    const trail = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(
+      within(trail)
+        .getByRole("link", { name: "Guardrails" })
+        .getAttribute("href"),
+    ).toBe("/acme/projects/default/risk-policies");
+    expect(
+      within(trail)
+        .getByRole("link", { name: "MCP approvals" })
+        .getAttribute("href"),
+    ).toBe("/acme/projects/default/risk-policies?tab=mcp-approvals");
+    expect(within(trail).getByText("GitHub MCP")).toBeTruthy();
+    expect(within(trail).queryByText("Shadow AI")).toBeNull();
+    expect(within(trail).queryByText("MCPs")).toBeNull();
   });
 
   it("renders user sources and only links email-backed users to their employee page", () => {

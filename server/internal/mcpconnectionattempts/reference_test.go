@@ -1,0 +1,458 @@
+package mcpconnectionattempts
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"testing/synctest"
+	"time"
+
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+func withSlot(t *testing.T) context.Context {
+	t.Helper()
+	return contextvalues.WithConnectionReferenceSlot(t.Context())
+}
+
+func TestReference_IsTheStoredRowsID(t *testing.T) {
+	t.Parallel()
+
+	var rows []Row
+	recorder := NewCapturing(func(row Row) { rows = append(rows, row) }, logsOn)
+	ctx := withSlot(t)
+
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+
+	require.Len(t, rows, 1)
+	require.Equal(t, rows[0].AttemptID.String(), contextvalues.ConnectionReference(ctx))
+}
+
+func TestReference_NotShownWhenLogsAreOff(t *testing.T) {
+	t.Parallel()
+
+	offCtx := withSlot(t)
+	NewCapturing(func(Row) {}, func(context.Context, string) (bool, error) { return false, nil }).Once(offCtx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	require.Empty(t, contextvalues.ConnectionReference(offCtx))
+
+	noCheckCtx := withSlot(t)
+	NewCapturing(func(Row) {}, nil).Once(noCheckCtx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	require.Empty(t, contextvalues.ConnectionReference(noCheckCtx))
+}
+
+func TestReference_NotShownWhenTheLogsCheckFails(t *testing.T) {
+	t.Parallel()
+
+	ctx := withSlot(t)
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, func(context.Context, string) (bool, error) {
+		return false, errors.New("logs check failed")
+	}, testConfig())
+	t.Cleanup(func() { _ = recorder.Shutdown(context.WithoutCancel(ctx)) })
+
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
+}
+
+func TestReference_ALogsAnswerIsCachedForTheFailureLoop(t *testing.T) {
+	t.Parallel()
+
+	check := &logsCheck{enabled: true, err: nil, block: nil, panics: false, checks: atomic.Int64{}}
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, check.check, testConfig())
+	t.Cleanup(func() { _ = recorder.Shutdown(context.WithoutCancel(t.Context())) })
+
+	for range 5 {
+		require.True(t, recorder.logsAllowForReference(t.Context(), "org"))
+	}
+	require.Equal(t, int64(1), check.checks.Load(), "only reference checks run here: no row was queued")
+}
+
+// A stalled logs lookup must not hold the failure response; the answer serves the next one.
+func TestReference_ASlowLogsCheckShowsNoReferenceAndDoesNotBlock(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		block := make(chan struct{})
+		check := &logsCheck{enabled: true, err: nil, block: block, panics: false, checks: atomic.Int64{}}
+		conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+		recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, check.check, testConfig())
+
+		start := time.Now()
+		var wg sync.WaitGroup
+		results := make([]bool, 3)
+		for i := range results {
+			wg.Go(func() { results[i] = recorder.logsAllowForReference(t.Context(), "org") })
+		}
+		wg.Wait()
+		require.Equal(t, referenceLogsTimeout, time.Since(start), "the slow path waits only the bound")
+		require.Equal(t, []bool{false, false, false}, results)
+		require.Equal(t, int64(1), check.checks.Load(), "one background check for the organization")
+
+		close(block)
+		synctest.Wait()
+		require.True(t, recorder.logsAllowForReference(t.Context(), "org"), "the finished check answers the next failure")
+		require.NoError(t, recorder.Shutdown(t.Context()))
+	})
+}
+
+func TestReference_APanickingLogsCheckShowsNoneAndIsCounted(t *testing.T) {
+	t.Parallel()
+
+	check := &logsCheck{enabled: true, err: nil, block: nil, panics: true, checks: atomic.Int64{}}
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, check.check, testConfig())
+	t.Cleanup(func() { _ = recorder.Shutdown(context.WithoutCancel(t.Context())) })
+
+	require.False(t, recorder.logsAllowForReference(t.Context(), "org"))
+	require.Equal(t, int64(1), recorder.dropTotals[dropPanic].Load())
+}
+
+func TestReference_DifferentFailuresInOneSlotShowNone(t *testing.T) {
+	t.Parallel()
+
+	recorder := NewCapturing(func(Row) {}, logsOn)
+	ctx := withSlot(t)
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeProviderUnreachable)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
+
+	attempt := Begin(testScope())
+	sameCtx := withSlot(t)
+	recorder.Step(sameCtx, attempt, StepProviderSignIn, CodeProviderUnreachable)
+	recorder.End(sameCtx, attempt, StepProviderSignIn, CodeProviderUnreachable)
+	require.Equal(t, attempt.ID().String(), contextvalues.ConnectionReference(sameCtx), "one attempt is one reference")
+}
+
+func TestReference_ARefreshThatLeftNoIDBlocksClaiming(t *testing.T) {
+	t.Parallel()
+
+	ctx := withSlot(t)
+	contextvalues.SetRefreshConnectionReference(ctx, "ref-a")
+	contextvalues.SetRefreshConnectionReference(ctx, "")
+	contextvalues.ClaimRefreshConnectionReference(ctx)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
+}
+
+func TestReference_AFailureThatLeftNoIDHidesAnEarlierOne(t *testing.T) {
+	t.Parallel()
+
+	recorder := NewCapturing(func(Row) {}, logsOn)
+	ctx := withSlot(t)
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	require.NotEmpty(t, contextvalues.ConnectionReference(ctx))
+
+	recorder.insertFailing.Store(true)
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeProviderUnreachable)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
+}
+
+func TestReference_ASuccessKeepsAnEarlierFailure(t *testing.T) {
+	t.Parallel()
+
+	recorder := NewCapturing(func(Row) {}, logsOn)
+	ctx := withSlot(t)
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	reference := contextvalues.ConnectionReference(ctx)
+	recorder.Once(ctx, testScope(), StepMCPRequest, ResultAccepted)
+	require.Equal(t, reference, contextvalues.ConnectionReference(ctx))
+}
+
+func TestReference_ALogsOnAnswerExpiresWithTheFlush(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		var enabled atomic.Bool
+		enabled.Store(true)
+		conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+		recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, func(context.Context, string) (bool, error) {
+			return enabled.Load(), nil
+		}, testConfig())
+
+		require.True(t, recorder.logsAllowForReference(t.Context(), "org"))
+		enabled.Store(false)
+		time.Sleep(referenceLogsOnTTL) //nolint:forbidigo // GG013: advances the synctest fake clock inside a synctest.Test bubble
+		require.False(t, recorder.logsAllowForReference(t.Context(), "org"), "logs turned off is seen within one flush")
+		require.NoError(t, recorder.Shutdown(t.Context()))
+	})
+}
+
+func TestReference_FailuresThatLeaveNoIDHideAnEarlierOne(t *testing.T) {
+	t.Parallel()
+
+	earlier := func(t *testing.T) context.Context {
+		t.Helper()
+		ctx := withSlot(t)
+		contextvalues.SetConnectionReference(ctx, uuid.NewString())
+		return ctx
+	}
+
+	t.Run("invalid row", func(t *testing.T) {
+		t.Parallel()
+		recorder := NewCapturing(func(Row) {}, logsOn)
+		ctx := earlier(t)
+		recorder.Step(ctx, Begin(testScope()), Step{}, CodeProviderUnreachable)
+		require.Empty(t, contextvalues.ConnectionReference(ctx))
+	})
+	t.Run("logs off", func(t *testing.T) {
+		t.Parallel()
+		recorder := NewCapturing(func(Row) {}, func(context.Context, string) (bool, error) { return false, nil })
+		ctx := earlier(t)
+		recorder.Once(ctx, testScope(), StepMCPRequest, CodeProviderUnreachable)
+		require.Empty(t, contextvalues.ConnectionReference(ctx))
+	})
+	t.Run("panic", func(t *testing.T) {
+		t.Parallel()
+		recorder := NewCapturing(func(Row) { panic("capture panicked") }, logsOn)
+		ctx := earlier(t)
+		recorder.Once(ctx, testScope(), StepMCPRequest, CodeProviderUnreachable)
+		require.Empty(t, contextvalues.ConnectionReference(ctx))
+	})
+}
+
+func TestReference_AnAnonymousFoldShowsNone(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.queueSize = 4096
+	recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
+	t.Cleanup(func() { _ = recorder.Shutdown(context.WithoutCancel(t.Context())) })
+
+	scope := testScope()
+	var shown []string
+	for range onceKeyBurst + 2 {
+		ctx := withSlot(t)
+		recorder.Once(ctx, scope, StepMCPRequest, CodeInvalidBearerToken)
+		shown = append(shown, contextvalues.ConnectionReference(ctx))
+	}
+	require.NotEmpty(t, shown[0], "an unfolded row is its own")
+	require.Empty(t, shown[onceKeyBurst], "folded callers with no known subject can't be told apart")
+	require.Empty(t, shown[onceKeyBurst+1])
+}
+
+func TestReference_ASlowLogsCheckIsCounted(t *testing.T) {
+	t.Parallel()
+
+	block := make(chan struct{})
+	check := &logsCheck{enabled: true, err: nil, block: block, panics: false, checks: atomic.Int64{}}
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	recorder := newTestRecorderWithLogs(t, conn, check.check, testConfig())
+	t.Cleanup(func() { close(block) })
+
+	require.False(t, recorder.logsAllowForReference(t.Context(), "org"))
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, recorder.reader.Collect(t.Context(), &collected))
+	var total int64
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if sum, ok := m.Data.(metricdata.Sum[int64]); ok && m.Name == meterReferenceTimeouts {
+				for _, point := range sum.DataPoints {
+					total += point.Value
+				}
+			}
+		}
+	}
+	require.Equal(t, int64(1), total)
+}
+
+func TestReference_NonFailuresLeaveNone(t *testing.T) {
+	t.Parallel()
+
+	for _, what := range []Happened{CodeRefreshedUnverified, CodeCanceled, CodeReviewCanceled} {
+		ctx := withSlot(t)
+		NewCapturing(func(Row) {}, logsOn).Once(ctx, testScope(), StepMCPRequest, what)
+		require.Empty(t, contextvalues.ConnectionReference(ctx))
+	}
+}
+
+func TestReference_AFailedRefreshIsNotShownUntilClaimed(t *testing.T) {
+	t.Parallel()
+
+	var rows []Row
+	recorder := NewCapturing(func(row Row) { rows = append(rows, row) }, logsOn)
+	ctx := withSlot(t)
+
+	recorder.Once(ctx, testScope(), StepProviderRefresh, CodeRefreshRejected)
+	require.Empty(t, contextvalues.ConnectionReference(ctx), "an error unrelated to the refresh must not show it")
+
+	contextvalues.ClaimRefreshConnectionReference(ctx)
+	require.Equal(t, rows[0].AttemptID.String(), contextvalues.ConnectionReference(ctx))
+}
+
+func TestReference_SeveralFailedRefreshesCannotBeClaimed(t *testing.T) {
+	t.Parallel()
+
+	recorder := NewCapturing(func(Row) {}, logsOn)
+	ctx := withSlot(t)
+	recorder.Once(ctx, testScope(), StepProviderRefresh, CodeRefreshRejected)
+	recorder.Once(ctx, testScope(), StepProviderRefresh, CodeRefreshRejected)
+
+	contextvalues.ClaimRefreshConnectionReference(ctx)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
+}
+
+func TestReference_DroppedRowsLeaveNone(t *testing.T) {
+	t.Parallel()
+
+	ctx := withSlot(t)
+	var nilRecorder *Recorder
+	nilRecorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.flushInterval = time.Hour
+	recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
+	require.NoError(t, recorder.Shutdown(ctx))
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	require.Empty(t, contextvalues.ConnectionReference(ctx), "shutdown dropped the row")
+}
+
+func TestReference_NoneForASuccess(t *testing.T) {
+	t.Parallel()
+
+	ctx := withSlot(t)
+	NewCapturing(func(Row) {}, logsOn).Once(ctx, testScope(), StepMCPRequest, ResultAccepted)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
+}
+
+func TestReference_NoneWhileInsertsAreFailing(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, testConfig())
+	t.Cleanup(func() { _ = recorder.Shutdown(context.WithoutCancel(t.Context())) })
+	recorder.insertFailing.Store(true)
+
+	ctx := withSlot(t)
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
+}
+
+// A folded request's reference must be the id its row is written under.
+func TestReference_AFoldedRequestShowsTheRowItFoldsInto(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		conn := &idConn{}
+		cfg := testConfig()
+		cfg.queueSize = 4096
+		cfg.repeatsInterval = time.Minute
+		recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
+		scope := testScope()
+
+		subject := urn.NewUserSubject("user-1")
+		var folded []string
+		for range onceKeyBurst + 3 {
+			ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
+			recorder.Once(ctx, scope, StepMCPRequest, CodeInvalidRemoteSession, Subject(&subject))
+			folded = append(folded, contextvalues.ConnectionReference(ctx))
+		}
+		require.NotEqual(t, folded[onceKeyBurst-1], folded[onceKeyBurst], "the burst's rows keep their own ids")
+		require.Equal(t, folded[onceKeyBurst], folded[onceKeyBurst+1], "folded requests share one id")
+		require.Equal(t, folded[onceKeyBurst], folded[onceKeyBurst+2])
+
+		time.Sleep(2 * time.Minute) //nolint:forbidigo // GG013: advances the synctest fake clock inside a synctest.Test bubble
+		synctest.Wait()
+
+		ids := conn.ids()
+		require.Contains(t, ids, folded[onceKeyBurst], "the periodic pass wrote the folded row under the id they were shown")
+		require.Len(t, ids, onceKeyBurst+1, "folded requests store one row")
+		require.NoError(t, recorder.Shutdown(t.Context()))
+	})
+}
+
+func TestOnceLimiter_TheNextAllowedRowTakesTheFoldID(t *testing.T) {
+	t.Parallel()
+
+	limiter := newOnceLimiter()
+	now := time.Now()
+	first := limiterRow("org", "server", "invalid_request", "")
+	var heldID uuid.UUID
+	for range onceKeyBurst + 2 {
+		row := first
+		row.AttemptID = uuid.New()
+		if decision := limiter.take(row, now); !decision.allowed {
+			if heldID == uuid.Nil {
+				heldID = decision.foldID
+			}
+			require.Equal(t, heldID, decision.foldID, "every held row folds into the first held id")
+		}
+	}
+	require.NotEqual(t, uuid.Nil, heldID)
+
+	next := first
+	next.AttemptID = uuid.New()
+	decision := limiter.take(next, now.Add(2*onceKeyInterval))
+	require.True(t, decision.allowed)
+	require.Equal(t, heldID, decision.foldID)
+
+	rows := limiter.pendingRows(now.Add(3*onceKeyInterval), true)
+	require.Empty(t, rows, "the fold was written, not held for later")
+}
+
+func TestReference_APassOfHeldRowsKeepsTheFoldID(t *testing.T) {
+	t.Parallel()
+
+	limiter := newOnceLimiter()
+	row := limiterRow("org", "server", "invalid_request", "")
+	row.AttemptID = uuid.New()
+	first := limiter.holdBack(row).foldID
+	later := row
+	later.AttemptID = uuid.New()
+	require.Equal(t, first, limiter.holdBack(later).foldID)
+
+	rows := limiter.pendingRows(time.Now(), true)
+	require.Len(t, rows, 1)
+	require.Equal(t, first, rows[0].AttemptID)
+	require.Equal(t, row.AttemptID, first)
+}
+
+// idConn records the attempt_id of every stored row.
+type idConn struct {
+	driver.Conn
+
+	stored atomic.Pointer[[]string]
+}
+
+func (c *idConn) ids() []string {
+	if v := c.stored.Load(); v != nil {
+		return append([]string(nil), *v...)
+	}
+	return nil
+}
+
+func (c *idConn) PrepareBatch(context.Context, string, ...driver.PrepareBatchOption) (driver.Batch, error) {
+	return &idBatch{Batch: nil, conn: c}, nil
+}
+
+type idBatch struct {
+	driver.Batch
+
+	conn *idConn
+}
+
+func (b *idBatch) Append(values ...any) error {
+	id, ok := values[2].(uuid.UUID)
+	if !ok {
+		return errors.New("attempt_id is the third column")
+	}
+	ids := append(b.conn.ids(), id.String())
+	b.conn.stored.Store(&ids)
+	return nil
+}
+
+func (b *idBatch) Send() error  { return nil }
+func (b *idBatch) Abort() error { return nil }
