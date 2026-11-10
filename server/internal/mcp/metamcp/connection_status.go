@@ -80,7 +80,7 @@ type ConnectionStatusServer struct {
 
 	// Reconnect marks a row that opening ConnectURL fixes when the result's
 	// Audience is not the caller: on an agent gateway, a server the agent's
-	// sign-in step connects. The caller's own connect page fixes every row
+	// sign-in tab connects. The caller's own connect page fixes every row
 	// that needs sign-in, so it marks none.
 	Reconnect bool `json:"reconnect,omitempty"`
 
@@ -105,7 +105,7 @@ const (
 	ConnectionStatusAudienceCaller ConnectionStatusAudience = ""
 	// ConnectionStatusAudienceAgentEditors: the caller is an agent, which
 	// cannot sign in itself. Someone who can edit it opens ConnectURL, the
-	// agent's MCP sign-in step, for the rows marked Reconnect.
+	// agent's MCP sign-in tab, for the rows marked Reconnect.
 	ConnectionStatusAudienceAgentEditors ConnectionStatusAudience = "agent_editors"
 )
 
@@ -116,7 +116,7 @@ const AgentEditors = "someone who can edit this agent"
 
 // ConnectionStatusResult is the structuredContent payload of a
 // connection_status call. ConnectURL is the gateway's connect page, or on an
-// agent gateway the agent's MCP sign-in step; it is empty when there is no
+// agent gateway the agent's MCP sign-in tab; it is empty when there is no
 // page to open.
 type ConnectionStatusResult struct {
 	ConnectURL string `json:"connectUrl,omitempty"`

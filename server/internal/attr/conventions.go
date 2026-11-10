@@ -475,6 +475,7 @@ const (
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
+	CustomDomainDNSRoutingMethodKey     = attribute.Key("gram.custom_domain.dns.routing_method")
 	CustomDomainNotifyRecipientCountKey = attribute.Key("gram.custom_domain.notify.recipient_count")
 	AccessRequestScopeKey               = attribute.Key("gram.access_request.scope")
 	AccessRequestAdminCountKey          = attribute.Key("gram.access_request.admin_count")
@@ -970,6 +971,13 @@ const (
 	// marketplace, download, agent_install, hooks_install and dogfood; the
 	// value is free-form. Installs that predate it don't report one.
 	HookDeviceInstallRouteKey = attribute.Key("gram.hook.device.install_route")
+	// The client state snapshot rides the binary's first hook event of each
+	// day. FailOpen is the effective fail-open posture ("true" or "false"),
+	// DebugLog whether a debug log is enabled, and SpoolDepth how many events
+	// wait in the spool to be resent.
+	HookDeviceFailOpenKey   = attribute.Key("gram.hook.device.fail_open")
+	HookDeviceDebugLogKey   = attribute.Key("gram.hook.device.debug_log")
+	HookDeviceSpoolDepthKey = attribute.Key("gram.hook.device.spool_depth")
 	// HookEndpointGenerationKey records which generation of hook endpoint
 	// and sender produced a row (see the HookEndpointGeneration* values), so
 	// traffic on retired endpoints can be found and moved to a supported one.
@@ -2493,6 +2501,14 @@ func CustomDomainHealthIssue(v string) attribute.KeyValue {
 
 func SlogCustomDomainHealthIssue(v string) slog.Attr {
 	return slog.String(string(CustomDomainHealthIssueKey), v)
+}
+
+func CustomDomainDNSRoutingMethod(v string) attribute.KeyValue {
+	return CustomDomainDNSRoutingMethodKey.String(v)
+}
+
+func SlogCustomDomainDNSRoutingMethod(v string) slog.Attr {
+	return slog.String(string(CustomDomainDNSRoutingMethodKey), v)
 }
 
 func CustomDomainNotifyRecipientCount(v int) attribute.KeyValue {

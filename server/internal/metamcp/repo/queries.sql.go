@@ -352,7 +352,9 @@ WHERE meta_mcp_servers.id = meta_mcp_server_members.meta_mcp_server_id
   AND meta_mcp_server_members.mcp_server_id = $1
   AND meta_mcp_server_members.project_id = $2
   AND meta_mcp_server_members.deleted IS FALSE
-RETURNING meta_mcp_server_members.id, meta_mcp_server_members.project_id, meta_mcp_server_members.meta_mcp_server_id, meta_mcp_server_members.mcp_server_id, meta_mcp_server_members.sort_order, meta_mcp_server_members.created_at, meta_mcp_server_members.updated_at, meta_mcp_server_members.deleted_at, meta_mcp_server_members.deleted, meta_mcp_servers.name AS meta_mcp_server_name
+RETURNING meta_mcp_server_members.id, meta_mcp_server_members.project_id, meta_mcp_server_members.meta_mcp_server_id, meta_mcp_server_members.mcp_server_id, meta_mcp_server_members.sort_order, meta_mcp_server_members.created_at, meta_mcp_server_members.updated_at, meta_mcp_server_members.deleted_at, meta_mcp_server_members.deleted,
+          meta_mcp_servers.name AS meta_mcp_server_name,
+          meta_mcp_servers.user_session_issuer_id AS meta_mcp_server_user_session_issuer_id
 `
 
 type DeleteMetaMCPMembersByMCPServerIDParams struct {
@@ -361,16 +363,17 @@ type DeleteMetaMCPMembersByMCPServerIDParams struct {
 }
 
 type DeleteMetaMCPMembersByMCPServerIDRow struct {
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
-	MetaMcpServerID   uuid.UUID
-	McpServerID       uuid.UUID
-	SortOrder         int32
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	DeletedAt         pgtype.Timestamptz
-	Deleted           bool
-	MetaMcpServerName string
+	ID                               uuid.UUID
+	ProjectID                        uuid.UUID
+	MetaMcpServerID                  uuid.UUID
+	McpServerID                      uuid.UUID
+	SortOrder                        int32
+	CreatedAt                        pgtype.Timestamptz
+	UpdatedAt                        pgtype.Timestamptz
+	DeletedAt                        pgtype.Timestamptz
+	Deleted                          bool
+	MetaMcpServerName                string
+	MetaMcpServerUserSessionIssuerID uuid.NullUUID
 }
 
 // Soft-delete all live memberships that reference a generic MCP server. Used
@@ -398,6 +401,7 @@ func (q *Queries) DeleteMetaMCPMembersByMCPServerID(ctx context.Context, arg Del
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.MetaMcpServerName,
+			&i.MetaMcpServerUserSessionIssuerID,
 		); err != nil {
 			return nil, err
 		}

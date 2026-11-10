@@ -122,6 +122,13 @@ type Service struct {
 	scopes *remotemcp.StaffScopes
 	// HookClientsCache shares snapshot storage with the nightly worker.
 	*HookClientsCache
+
+	hookFleet         HookFleetReader
+	hookFleetVersions HookFleetVersions
+
+	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets. Empty leaves targets out of listCustomDomains.
+	customDomainTargetSuffix string
 }
 
 type BillingOperations interface {
@@ -278,11 +285,14 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:            trialNotifier,
-		billing:          billing,
-		supportCoverage:  supportCoverage,
-		mcpServerHealth:  mcpServerHealth,
-		HookClientsCache: NewHookClientsCache(logger, adminCache, nil, nil),
+		trial:                    trialNotifier,
+		billing:                  billing,
+		supportCoverage:          supportCoverage,
+		mcpServerHealth:          mcpServerHealth,
+		HookClientsCache:         NewHookClientsCache(logger, adminCache, nil, nil),
+		hookFleet:                nil,
+		hookFleetVersions:        HookFleetVersions{Latest: nil, Minimum: nil},
+		customDomainTargetSuffix: "",
 	}
 }
 
@@ -1146,6 +1156,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		SubjectID:              conv.PtrToPGTextEmpty(filter.SubjectID),
 		SubjectIds:             nil,
 		ActingSurface:          conv.PtrToPGTextEmpty(filter.ActingSurface),
+		Origin:                 pgtype.Text{String: "", Valid: false},
 		CreatedFrom:            conv.PtrToPGTimestamptz(filter.From),
 		CreatedTo:              conv.PtrToPGTimestamptz(filter.To),
 	}

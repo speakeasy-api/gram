@@ -721,6 +721,21 @@ func (q *Queries) CountPublishOutboxRowsByTopic(ctx context.Context, arg CountPu
 	return count, err
 }
 
+const countRemoteSessionClientBindingsFixture = `-- name: CountRemoteSessionClientBindingsFixture :one
+SELECT count(*)
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1
+`
+
+// Counts a client's user session issuer bindings, whether or not the client is
+// deleted.
+func (q *Queries) CountRemoteSessionClientBindingsFixture(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countRemoteSessionClientBindingsFixture, remoteSessionClientID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSkillScanRecords = `-- name: CountSkillScanRecords :one
 SELECT count(*)
 FROM risk_results rr
@@ -3719,6 +3734,25 @@ func (q *Queries) InsertRetainedLegacyCatalogSourceFixture(ctx context.Context, 
 	return err
 }
 
+const insertRetiredApprovalsServerFixture = `-- name: InsertRetiredApprovalsServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
+VALUES ($1, $2, 'Speakeasy Approvals', $3, 'approvals', 'private')
+`
+
+type InsertRetiredApprovalsServerFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Slug      pgtype.Text
+}
+
+// A project's approvals server as Speakeasy created it before the server was
+// retired. Such rows stay until a cleanup migration deletes them, and every
+// read path must treat them as gone.
+func (q *Queries) InsertRetiredApprovalsServerFixture(ctx context.Context, arg InsertRetiredApprovalsServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertRetiredApprovalsServerFixture, arg.ID, arg.ProjectID, arg.Slug)
+	return err
+}
+
 const insertToolsetVersionFixture = `-- name: InsertToolsetVersionFixture :exec
 INSERT INTO toolset_versions (toolset_id, version, tool_urns)
 SELECT t.id, $1, $2::TEXT[]
@@ -6636,6 +6670,24 @@ type SetCapturedAgentChatSummaryFixtureParams struct {
 // Test-only fixture: stores a summary so callers can prove metadata reads do not disclose it.
 func (q *Queries) SetCapturedAgentChatSummaryFixture(ctx context.Context, arg SetCapturedAgentChatSummaryFixtureParams) error {
 	_, err := q.db.Exec(ctx, setCapturedAgentChatSummaryFixture, arg.Summary, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setCustomDomainHealthWithoutDNSObservation = `-- name: SetCustomDomainHealthWithoutDNSObservation :exec
+UPDATE custom_domains
+SET health_status = 'unhealthy', health_issue = 'check_failed', health_checked_at = $1
+WHERE id = $2 AND organization_id = $3 AND deleted IS FALSE
+`
+
+type SetCustomDomainHealthWithoutDNSObservationParams struct {
+	CheckedAt      pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Models a worker that does not write the independent DNS observation columns.
+func (q *Queries) SetCustomDomainHealthWithoutDNSObservation(ctx context.Context, arg SetCustomDomainHealthWithoutDNSObservationParams) error {
+	_, err := q.db.Exec(ctx, setCustomDomainHealthWithoutDNSObservation, arg.CheckedAt, arg.ID, arg.OrganizationID)
 	return err
 }
 

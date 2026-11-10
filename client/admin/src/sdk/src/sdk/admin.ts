@@ -38,6 +38,7 @@ import { adminGetOnboardingStackOptions } from "../funcs/adminGetOnboardingStack
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
+import { adminGetOrganizationHookFleet } from "../funcs/adminGetOrganizationHookFleet.js";
 import { adminGetOrganizationOnboardingPlaybook } from "../funcs/adminGetOrganizationOnboardingPlaybook.js";
 import { adminGetOrganizationOnboardingStack } from "../funcs/adminGetOrganizationOnboardingStack.js";
 import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js";
@@ -55,6 +56,7 @@ import { adminGetStripeSubscriptionCandidate } from "../funcs/adminGetStripeSubs
 import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminGetUpstreamOAuthMigrationStatus } from "../funcs/adminGetUpstreamOAuthMigrationStatus.js";
+import { adminListCustomDomains } from "../funcs/adminListCustomDomains.js";
 import { adminListCustomerUsage } from "../funcs/adminListCustomerUsage.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
@@ -114,10 +116,12 @@ import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysi
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
 import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
 import { AdminHookClientsResult } from "../models/components/adminhookclientsresult.js";
+import { AdminHookFleetResult } from "../models/components/adminhookfleetresult.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
 import { AdminInferenceKeyRepairResult } from "../models/components/admininferencekeyrepairresult.js";
 import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
+import { AdminListCustomDomainsResult } from "../models/components/adminlistcustomdomainsresult.js";
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
 import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
@@ -234,6 +238,7 @@ import { AdminGetMeterUsageRequest } from "../models/operations/admingetmeterusa
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminGetOrganizationHookFleetRequest } from "../models/operations/admingetorganizationhookfleet.js";
 import { AdminGetOrganizationOnboardingPlaybookRequest } from "../models/operations/admingetorganizationonboardingplaybook.js";
 import { AdminGetOrganizationOnboardingStackRequest } from "../models/operations/admingetorganizationonboardingstack.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
@@ -247,6 +252,7 @@ import { AdminGetStripeSubscriptionRequest } from "../models/operations/adminget
 import { AdminGetStripeSubscriptionCandidateRequest } from "../models/operations/admingetstripesubscriptioncandidate.js";
 import { AdminGetSupportCoverageRequest } from "../models/operations/admingetsupportcoverage.js";
 import { AdminGetUpstreamOAuthMigrationStatusRequest } from "../models/operations/admingetupstreamoauthmigrationstatus.js";
+import { AdminListCustomDomainsRequest } from "../models/operations/adminlistcustomdomains.js";
 import { AdminListCustomerUsageRequest } from "../models/operations/adminlistcustomerusage.js";
 import {
   AdminListGlobalIssuerConvergenceCandidatesRequest,
@@ -323,6 +329,23 @@ export class Admin extends ClientSDK {
   ): Promise<void> {
     return unwrapAsync(adminLogout(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * listCustomDomains admin
+   *
+   * @remarks
+   * Lists live custom domains across organizations with their designated CNAME targets and observed DNS routing methods.
+   */
+  async listCustomDomains(
+    request?: AdminListCustomDomainsRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminListCustomDomainsResult> {
+    return unwrapAsync(adminListCustomDomains(
+      this,
+      request,
       options,
     ));
   }
@@ -1082,6 +1105,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminUpdateOrganization(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getOrganizationHookFleet admin
+   *
+   * @remarks
+   * The hooks installs of one organization: which versions, install routes and endpoints its users' machines use, which machines have gone quiet, and how much traffic still reaches the legacy endpoints.
+   */
+  async getOrganizationHookFleet(
+    request: AdminGetOrganizationHookFleetRequest,
+    options?: RequestOptions,
+  ): Promise<AdminHookFleetResult> {
+    return unwrapAsync(adminGetOrganizationHookFleet(
       this,
       request,
       options,

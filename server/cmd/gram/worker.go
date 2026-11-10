@@ -358,6 +358,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, functionsFlags()...)
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
+	flags = append(flags, orgEncryptionFlags()...)
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
@@ -378,6 +379,10 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("worker site-url: %w", err)
 			}
 			customDomainARecords, err := customDomainARecordsFromCLI(c)
+			if err != nil {
+				return err
+			}
+			customDomainTargetSuffix, err := customDomainTargetSuffixFromCLI(c)
 			if err != nil {
 				return err
 			}
@@ -504,7 +509,7 @@ func newWorkerCommand() *cli.Command {
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
 
-			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"), c.String("custom-domain-k8s-namespace"), c.String("custom-domain-backend-service"))
+			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"), c.String("custom-domain-k8s-namespace"), c.String("custom-domain-backend-service"), c.String("custom-domain-server-backend-service"))
 			if err != nil {
 				return fmt.Errorf("failed to create k8s client: %w", err)
 			}
@@ -840,6 +845,13 @@ func newWorkerCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+			// Unconfigured, this is nil without an error. A configuration error
+			// stops the worker: a silently disabled sweep would leave
+			// organizations whose key was revoked unsuspended.
+			_, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+			if err != nil {
+				return err
+			}
 			// Issuer URLs are pinned to the outbound origin, as on the server.
 			// The worker only sweeps issuer keys, so a bad issuer setting turns
 			// the sweep off with an error log instead of stopping every
@@ -883,8 +895,9 @@ func newWorkerCommand() *cli.Command {
 				OpenRouter:                     openRouter,
 				OpenRouterSpend:                openRouter,
 				K8sClient:                      k8sClient,
-				ExpectedTargetCNAME:            c.String("custom-domain-cname"),
+				ExpectedTargetCNAME:            customDomainCNAMEFromCLI(c),
 				ExpectedARecords:               customDomainARecords,
+				CustomDomainTargetSuffix:       customDomainTargetSuffix,
 				GitHubEvidenceToken:            c.String("github-evidence-token"),
 				SiteURL:                        siteURL,
 				ServerURL:                      serverURL,
@@ -909,6 +922,7 @@ func newWorkerCommand() *cli.Command {
 				RemoteSessionAssertionSigner:   clientAssertionSigner,
 				Connections:                    connectionRecorder,
 				IssuerKeySweeper:               issuerKeySweeper(issuerProvisioner),
+				OrganizationEncryptionSweeper:  orgEncryptionSweeper(orgEncryptionProvisioner),
 				StartupSeeds:                   startupSeeds(logger, db, siteURL),
 				AssistantsCore:                 assistantsCore,
 				TemporalEnv:                    temporalEnv,

@@ -21,10 +21,7 @@ const (
 	MCPBackendRemote    MCPBackendKind = "remote"
 	MCPBackendTunneled  MCPBackendKind = "tunneled"
 	MCPBackendUnproxied MCPBackendKind = "unproxied"
-	// MCPBackendBuiltin is a server Speakeasy serves itself, such as the
-	// approvals server agents call request_approval on.
-	MCPBackendBuiltin MCPBackendKind = "built_in"
-	MCPBackendLegacy  MCPBackendKind = "legacy"
+	MCPBackendLegacy    MCPBackendKind = "legacy"
 )
 
 // bothAudiences admits a tool to the external endpoint and to a project's
@@ -228,6 +225,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		sessionHandoffSelectionInstructions,
 		"Use list_recent_tool_calls to inspect a project’s newest Tool Logs summaries. For a particular agent, provide its exact agent_id; this includes authenticated gateway and hook calls. Returned agent_id values identify agents, while human identities remain omitted. Resolve names through the agent directory only when that separate access is available; do not infer a human owner or authorizer from a log row.",
 		"On the external Platform MCP, to explain what an agent identity may reach, call get_agent_mcp_access with its exact agent_id: it lists the MCP servers the agent may connect to through its own grants, its roles, and grants to everyone, with blocks applied, not the ones it called, and whether it signs in with a shared credential, on behalf of named people, or with what its own client sends. A grant on every server means it may connect to any of them; which servers it actually called needs list_recent_tool_calls and log:read. To explain why an agent was refused, call list_agent_authorization_checks: denied checks come first. Both are read-only; grants and connection assignments change in the dashboard. The managed assistant does not have these reads, so it sends people to the agent's page in the dashboard.",
+		"For custom domain diagnostics, use get_custom_domain_status on the external Platform MCP. Keep ownership, activation, advisory DNS configuration and infrastructure health distinct. An unconfirmed target can be hidden by a proxy; no result proves public reachability. Use checked_at for freshness and Network Access settings for rechecks. Health does not revoke ownership or activation.",
 		"On the external Platform MCP, when an administrator asks about their own access across servers, inspect the authenticated caller directly; do not search the member directory first. For anyone else, find that exact member before inspecting their access. The managed assistant does not have the organization-wide self-access inspection: do not work around that with member search or inference; direct the user to the dashboard or external Platform MCP. Present available results as a compact table grouped by project, with server, connection access, view, and manage columns. Treat public and disabled as endpoint behavior rather than role grants, preserve partial tool access, and say when the inventory was truncated. Never infer a person's role or MCP access from their ability to use Platform MCP, organization administration, or any other permission, and never reveal or reconstruct another member's unmasked identity.",
 		"Use describe_access_permissions to explain what a permission or role gives: it names each permission as the dashboard does, what it includes, which are sensitive and why, and which tasks need several permissions together. Before confirming a role to create or assign, name every sensitive permission it carries with the reason the tool gives; a role mutation result lists them as sensitive_scopes_added when the write added any.",
 		"For signals intelligence, discover the exact project and reusable signals before authoring a sensor. Sensors are classifiers, not enforcement policies. Choose multi_label for independent labels, exclusive for one choice, or ordered_score for two to ten ordered levels with criteria. Only message.role is available to matching predicates. Use create_sensor or create_signal with confirmed:false, show the normalized configuration, and obtain explicit confirmation before resending the identical proposal with its preview token, expected version and a stable idempotency key. Preview creation IDs are provisional. Update shared signals only after showing every affected sensor. A configuration version covers the whole project, so any concurrent configuration change requires a new preview. Re-read the committed target; configuration readiness does not prove inference is active. Receipt replay reports a historical write and a separate live target. If snapshot_scope is verification_unavailable, the write committed but the fresh read failed; preserve all retry inputs and the key, and do not interpret target_available:false as deletion. Only a current_configuration snapshot can establish target absence. Matching examples use caller-supplied metadata, never stored transcripts or inference. These tools currently admit external users only; never infer a human from assistant attribution.",
@@ -320,6 +318,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerGatewaySessionTool(reg, postgresReader.gatewaySessions)
 		registerAgentIdentityReadTools(reg, postgresReader.agentIdentityReads)
 		registerMCPConnectionMutationTools(reg, connectionMutationService)
+		registerCustomDomainStatusTool(reg, postgresReader.db, postgresReader.logger, postgresReader.customDomainTargetSuffix)
 		if postgresReader.networkIngress == nil {
 			registerUnavailableNetworkIngressTool(reg)
 		} else {
@@ -374,6 +373,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerDashboardTools(reg, postgresReader.dashboards)
 	} else {
 		registerWhoamiTool(reg, nil)
+		registerCustomDomainStatusTool(reg, nil, nil, "")
 		registerUnavailableMCPConnectionSettingsTool(reg)
 		registerGatewaySessionTool(reg, nil)
 		registerAgentIdentityReadTools(reg, nil)

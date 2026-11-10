@@ -181,6 +181,16 @@ func createMCPServerInLockedTransaction(ctx context.Context, tx pgx.Tx, auditLog
 		if err := upstreamclients.ReconcileInLockedTransaction(ctx, tx, input.OrganizationID, input.ProjectID, []uuid.UUID{issuerID.UUID}); err != nil {
 			return repo.McpServer{}, fmt.Errorf("capture server upstream clients: %w", err)
 		}
+		// Choosing the issuer configures the server's sign-in, so a server that
+		// is the issuer's only consumer offers the clients bound there.
+		if err := upstreamclients.CaptureSoleConsumers(ctx, tx, input.OrganizationID, input.ProjectID, []uuid.UUID{issuerID.UUID}, nil); err != nil {
+			return repo.McpServer{}, fmt.Errorf("capture server upstream clients: %w", err)
+		}
+		// Choosing the issuer configures the server's sign-in, so a server that
+		// is the issuer's only consumer offers the clients bound there.
+		if err := upstreamclients.CaptureSoleConsumers(ctx, tx, input.OrganizationID, input.ProjectID, []uuid.UUID{issuerID.UUID}, nil); err != nil {
+			return repo.McpServer{}, fmt.Errorf("capture server upstream clients: %w", err)
+		}
 		if _, err := repo.New(tx).ResyncMCPServerRemoteSessionIssuers(ctx, derive); err != nil {
 			return repo.McpServer{}, fmt.Errorf("derive server upstream issuer: %w", err)
 		}

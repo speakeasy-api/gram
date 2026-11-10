@@ -51,6 +51,10 @@ type xaaReadinessService struct {
 	// describe: orgs without one, and servers Speakeasy may vouch for.
 	emaEnabled FeatureChecker
 	servers    xaaServerReader
+
+	// flags decides per organization whether identity chaining resource
+	// ownership comes from client associations; nil keeps issuer bindings.
+	flags feature.Provider
 }
 
 // xaaServer is one eligible server and whether Speakeasy vouches for it.
@@ -97,7 +101,7 @@ func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, sign
 			return flags.IsFlagEnabled(ctx, flag, orgID, feature.OrgProjectGroups(slug, ""))
 		}
 	}
-	r.xaaReadiness = &xaaReadinessService{logger: r.logger, connections: connections, signIn: signIn, enabled: flagChecker(feature.FlagOktaConnections), identity: nil, emaEnabled: flagChecker(feature.FlagEMAProviders), servers: nil}
+	r.xaaReadiness = &xaaReadinessService{logger: r.logger, connections: connections, signIn: signIn, enabled: flagChecker(feature.FlagOktaConnections), identity: nil, emaEnabled: flagChecker(feature.FlagEMAProviders), servers: nil, flags: flags}
 	return r
 }
 
@@ -106,7 +110,7 @@ func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, sign
 // for clients that recorded none.
 func (r *PostgresReader) WithXAAIdentityChaining(governor IdentityChainingGovernor, outbound *url.URL) *PostgresReader {
 	if r.xaaReadiness != nil && r.db != nil {
-		r.xaaReadiness.identity = &postgresXAAIdentityInspector{logger: r.logger, db: r.db, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil}}
+		r.xaaReadiness.identity = &postgresXAAIdentityInspector{logger: r.logger, db: r.db, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil}, flags: r.xaaReadiness.flags}
 		r.xaaReadiness.servers = &postgresXAAServerReader{reader: r, authEnforcement: authenforcement.NewGate(r.db)}
 	}
 	return r
@@ -484,6 +488,10 @@ type postgresXAAIdentityInspector struct {
 	db       *pgxpool.Pool
 	governor IdentityChainingGovernor
 	origins  remotesessions.CallbackOrigins
+
+	// flags decides per organization whether resource ownership comes from
+	// client associations; nil keeps issuer bindings.
+	flags feature.Provider
 }
 
 type identityChainingResourceResolver interface {
@@ -565,7 +573,7 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 	for _, diagnosticResource := range resources {
 		// Every deployment serving Platform MCP wires a protected resource
 		// prober into logins, so their scope requests consult resource rows.
-		results, err := remotesessions.InspectIdentityChainingForTenant(ctx, i.db, projectID, organizationID, userIssuerID, scope, diagnosticResource, true)
+		results, err := remotesessions.InspectIdentityChainingForTenant(ctx, i.db, projectID, organizationID, userIssuerID, scope, diagnosticResource, true, feature.UpstreamIssuerFromAssociations(ctx, i.flags, organizationID))
 		if err != nil {
 			return out, nil, fmt.Errorf("inspect XAA readiness identity chaining: %w", err)
 		}

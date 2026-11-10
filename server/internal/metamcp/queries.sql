@@ -131,7 +131,9 @@ WHERE meta_mcp_servers.id = meta_mcp_server_members.meta_mcp_server_id
   AND meta_mcp_server_members.mcp_server_id = @mcp_server_id
   AND meta_mcp_server_members.project_id = @project_id
   AND meta_mcp_server_members.deleted IS FALSE
-RETURNING meta_mcp_server_members.*, meta_mcp_servers.name AS meta_mcp_server_name;
+RETURNING meta_mcp_server_members.*,
+          meta_mcp_servers.name AS meta_mcp_server_name,
+          meta_mcp_servers.user_session_issuer_id AS meta_mcp_server_user_session_issuer_id;
 
 -- name: CreateMetaMCPMember :one
 INSERT INTO meta_mcp_server_members (

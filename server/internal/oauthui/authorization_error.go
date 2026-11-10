@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
@@ -255,9 +256,13 @@ type authorizationErrorView struct {
 	// Destination identifies the callback host or native application scheme.
 	Destination string
 
-	// Reference is the request's trace ID, which administrators and support
-	// can look up. Empty when the request is not traced.
-	Reference string
+	// ConnectionReference is the id of the stored connection row, which the person gives
+	// their administrator. Empty when no row will be stored.
+	ConnectionReference string
+
+	// TraceID is the request's trace ID, which support can look up. Empty when the
+	// request is not traced.
+	TraceID string
 
 	// Time is when the request was refused, in UTC.
 	Time string
@@ -278,7 +283,8 @@ func technicalDetailsText(view authorizationErrorView) string {
 	var text strings.Builder
 	text.WriteString("Speakeasy authorization error")
 	for _, field := range []struct{ label, value string }{
-		{"Reference", view.Reference},
+		{"Reference", view.ConnectionReference},
+		{"Trace ID", view.TraceID},
 		{"Error ID", view.ErrorID},
 		{"Time", view.Time},
 		{"Error", view.Code},
@@ -351,9 +357,9 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 			}
 		}
 	}
-	reference := ""
+	traceIDText := ""
 	if traceID := trace.SpanContextFromContext(ctx).TraceID(); traceID.IsValid() {
-		reference = traceID.String()
+		traceIDText = traceID.String()
 	}
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
@@ -375,10 +381,11 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 		Description:    page.Description,
 		// Native application schemes require template.URL after scheme validation;
 		// html/template still escapes the attribute's contents.
-		CallbackURL: template.URL(page.CallbackURL), //nolint:gosec // G203: registered callback validated above; native schemes must remain clickable.
-		Destination: destination,
-		Reference:   reference,
-		Time:        time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
+		CallbackURL:         template.URL(page.CallbackURL), //nolint:gosec // G203: registered callback validated above; native schemes must remain clickable.
+		Destination:         destination,
+		ConnectionReference: contextvalues.ConnectionReference(ctx),
+		TraceID:             traceIDText,
+		Time:                time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		// Built from the other fields below.
 		TechnicalDetails: "",
 		ScriptNonce:      base64.RawURLEncoding.EncodeToString(nonce),

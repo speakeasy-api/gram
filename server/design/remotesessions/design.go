@@ -266,7 +266,7 @@ var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurat
 	Attribute("client_mode", String, "How to provide the OAuth client.", func() {
 		Enum("auto", "existing", "manual")
 	})
-	Attribute("existing_client_id", String, "An existing visible remote-session client to link. Required only for existing mode.", func() {
+	Attribute("existing_client_id", String, "An existing visible remote-session client to link. Required only for existing mode. Linking shares the client with every server that already uses it: a person holds one upstream grant per client, so signing in through one server replaces the grant another server obtained. To give this server its own client on the same upstream registration, use manual mode with client_configuration.template_client_id instead.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("client_configuration", ServerIdentityClientConfiguration, "Client settings for auto or manual mode. Forbidden for existing mode.")
@@ -344,10 +344,11 @@ var ServerIdentityImpactResult = Type("ServerIdentityImpactResult", func() {
 })
 
 var ServerIdentityClientConfiguration = Type("ServerIdentityClientConfiguration", func() {
-	Description("Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.")
+	Description("Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id, client_secret and template_client_id and uses scope, audience, and token_endpoint_auth_method as registration preferences.")
 
 	Attribute("client_id", String, "The out-of-band OAuth client identifier. Manual mode only.")
 	Attribute("client_secret", String, "The out-of-band OAuth client secret. Manual mode only; encrypted before persistence.")
+	remotesessionclients.TemplateClientAttribute()
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the provider token endpoint, or the preferred method for DCR.", func() {
 		Enum("client_secret_basic", "client_secret_post", "none")
 	})

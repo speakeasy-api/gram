@@ -132,6 +132,8 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	billingDetailReader, _ := reader.(BillingDetailReader)
 	registryReader, _ := reader.(RegistryReader)
 	serverHealthReader, _ := reader.(MCPServerHealthReader)
+	hookFleetReader, _ := reader.(HookFleetReader)
+	customDomainReader, _ := reader.(CustomDomainReader)
 	var promotions *catalogpromotion.Service
 	if provider, ok := reader.(interface {
 		CatalogPromotionService() *catalogpromotion.Service
@@ -139,7 +141,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 		promotions = provider.CatalogPromotionService()
 	}
 	runtime := &Runtime{catalogPromotions: promotions, authenticator: authenticator, server: server, resourceURL: resourceURL}
-	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, reader != nil && filteredActivityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, projectReader != nil && serverHealthReader != nil, runtime)
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, reader != nil && filteredActivityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, projectReader != nil && serverHealthReader != nil, hookFleetReader != nil, customDomainReader != nil, runtime)
 	registerOrganizationTools(server, reader)
 	registerUserTools(server, userReader)
 	registerProjectTools(server, reader, projectReader)
@@ -165,6 +167,8 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	}
 	registerCatalogPromotionTools(server, promotionReader)
 	registerServerHealthTools(server, reader, projectReader, serverHealthReader)
+	registerHookFleetTools(server, reader, hookFleetReader)
+	registerCustomDomainTools(server, reader, customDomainReader)
 	return runtime
 }
 

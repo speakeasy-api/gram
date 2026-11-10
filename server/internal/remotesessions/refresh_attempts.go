@@ -69,8 +69,7 @@ func (s *RefreshService) invalidClientHappened(ctx context.Context, attribution 
 	if !attribution.attempt.IsZero() {
 		scope = attribution.attempt.Scope()
 	}
-	// Detached: a cancelled request reads as logs off on a feature cache miss.
-	if !s.connections.Stores(context.WithoutCancel(ctx), scope) {
+	if !s.connections.Stores(scope) {
 		return mcpconnectionattempts.CodeRefreshInvalidClient, false
 	}
 	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), emaBindingLookupTimeout)

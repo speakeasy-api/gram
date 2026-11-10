@@ -235,6 +235,7 @@ var textOnlyTools = map[string]string{
 	"get_workload_assertion_reuse":         textOnlyForModel,
 	"get_inbound_ema_trust":                textOnlyForModel,
 	"get_network_ingress":                  textOnlyForModel,
+	"get_custom_domain_status":             textOnlyForModel,
 	"describe_tools":                       textOnlyForModel,
 	"execute_tool":                         "returns another MCP server's own result, which that server presents",
 	"search_speakeasy_docs":                "returns doc passages for the model to read and cite; it is also a first-run tool, and its card link would push tools/list past the host budget",

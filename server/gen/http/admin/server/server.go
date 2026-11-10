@@ -85,6 +85,7 @@ type Server struct {
 	SetMcpServerScopePin                    http.Handler
 	GetMcpServerToolCalls                   http.Handler
 	GetHookClients                          http.Handler
+	GetOrganizationHookFleet                http.Handler
 	ListRegistryPromotionCandidates         http.Handler
 	GetRegistryPromotionCandidate           http.Handler
 	PromoteRegistryCandidate                http.Handler
@@ -128,6 +129,7 @@ type Server struct {
 	BackfillMcpConnectGrants                http.Handler
 	GetProjectRedeployPreview               http.Handler
 	RedeployProject                         http.Handler
+	ListCustomDomains                       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -221,6 +223,7 @@ func New(
 			{"SetMcpServerScopePin", "POST", "/admin/project.setMcpServerScopePin"},
 			{"GetMcpServerToolCalls", "GET", "/admin/project.mcpServerToolCalls"},
 			{"GetHookClients", "GET", "/admin/hookClients.get"},
+			{"GetOrganizationHookFleet", "GET", "/admin/organizationHookFleet.get"},
 			{"ListRegistryPromotionCandidates", "GET", "/admin/registry.promotionCandidates"},
 			{"GetRegistryPromotionCandidate", "POST", "/admin/registry.promotionCandidate"},
 			{"PromoteRegistryCandidate", "POST", "/admin/registry.promoteCandidate"},
@@ -264,6 +267,7 @@ func New(
 			{"BackfillMcpConnectGrants", "POST", "/admin/mcpConnectGrants.backfill"},
 			{"GetProjectRedeployPreview", "GET", "/admin/project.redeployPreview"},
 			{"RedeployProject", "POST", "/admin/project.redeploy"},
+			{"ListCustomDomains", "GET", "/admin/customDomains.list"},
 		},
 		Login:                                   NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                                NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -329,6 +333,7 @@ func New(
 		SetMcpServerScopePin:                    NewSetMcpServerScopePinHandler(e.SetMcpServerScopePin, mux, decoder, encoder, errhandler, formatter),
 		GetMcpServerToolCalls:                   NewGetMcpServerToolCallsHandler(e.GetMcpServerToolCalls, mux, decoder, encoder, errhandler, formatter),
 		GetHookClients:                          NewGetHookClientsHandler(e.GetHookClients, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationHookFleet:                NewGetOrganizationHookFleetHandler(e.GetOrganizationHookFleet, mux, decoder, encoder, errhandler, formatter),
 		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesHandler(e.ListRegistryPromotionCandidates, mux, decoder, encoder, errhandler, formatter),
 		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateHandler(e.GetRegistryPromotionCandidate, mux, decoder, encoder, errhandler, formatter),
 		PromoteRegistryCandidate:                NewPromoteRegistryCandidateHandler(e.PromoteRegistryCandidate, mux, decoder, encoder, errhandler, formatter),
@@ -372,6 +377,7 @@ func New(
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsHandler(e.BackfillMcpConnectGrants, mux, decoder, encoder, errhandler, formatter),
 		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewHandler(e.GetProjectRedeployPreview, mux, decoder, encoder, errhandler, formatter),
 		RedeployProject:                         NewRedeployProjectHandler(e.RedeployProject, mux, decoder, encoder, errhandler, formatter),
+		ListCustomDomains:                       NewListCustomDomainsHandler(e.ListCustomDomains, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -444,6 +450,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SetMcpServerScopePin = m(s.SetMcpServerScopePin)
 	s.GetMcpServerToolCalls = m(s.GetMcpServerToolCalls)
 	s.GetHookClients = m(s.GetHookClients)
+	s.GetOrganizationHookFleet = m(s.GetOrganizationHookFleet)
 	s.ListRegistryPromotionCandidates = m(s.ListRegistryPromotionCandidates)
 	s.GetRegistryPromotionCandidate = m(s.GetRegistryPromotionCandidate)
 	s.PromoteRegistryCandidate = m(s.PromoteRegistryCandidate)
@@ -487,6 +494,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.BackfillMcpConnectGrants = m(s.BackfillMcpConnectGrants)
 	s.GetProjectRedeployPreview = m(s.GetProjectRedeployPreview)
 	s.RedeployProject = m(s.RedeployProject)
+	s.ListCustomDomains = m(s.ListCustomDomains)
 }
 
 // MethodNames returns the methods served.
@@ -558,6 +566,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSetMcpServerScopePinHandler(mux, h.SetMcpServerScopePin)
 	MountGetMcpServerToolCallsHandler(mux, h.GetMcpServerToolCalls)
 	MountGetHookClientsHandler(mux, h.GetHookClients)
+	MountGetOrganizationHookFleetHandler(mux, h.GetOrganizationHookFleet)
 	MountListRegistryPromotionCandidatesHandler(mux, h.ListRegistryPromotionCandidates)
 	MountGetRegistryPromotionCandidateHandler(mux, h.GetRegistryPromotionCandidate)
 	MountPromoteRegistryCandidateHandler(mux, h.PromoteRegistryCandidate)
@@ -601,6 +610,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountBackfillMcpConnectGrantsHandler(mux, h.BackfillMcpConnectGrants)
 	MountGetProjectRedeployPreviewHandler(mux, h.GetProjectRedeployPreview)
 	MountRedeployProjectHandler(mux, h.RedeployProject)
+	MountListCustomDomainsHandler(mux, h.ListCustomDomains)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -4057,6 +4067,60 @@ func NewGetHookClientsHandler(
 	})
 }
 
+// MountGetOrganizationHookFleetHandler configures the mux to serve the "admin"
+// service "getOrganizationHookFleet" endpoint.
+func MountGetOrganizationHookFleetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organizationHookFleet.get", f)
+}
+
+// NewGetOrganizationHookFleetHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getOrganizationHookFleet"
+// endpoint.
+func NewGetOrganizationHookFleetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationHookFleetRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationHookFleetResponse(encoder)
+		encodeError    = EncodeGetOrganizationHookFleetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationHookFleet")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountListRegistryPromotionCandidatesHandler configures the mux to serve the
 // "admin" service "listRegistryPromotionCandidates" endpoint.
 func MountListRegistryPromotionCandidatesHandler(mux goahttp.Muxer, h http.Handler) {
@@ -6343,6 +6407,59 @@ func NewRedeployProjectHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "redeployProject")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListCustomDomainsHandler configures the mux to serve the "admin"
+// service "listCustomDomains" endpoint.
+func MountListCustomDomainsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/customDomains.list", f)
+}
+
+// NewListCustomDomainsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listCustomDomains" endpoint.
+func NewListCustomDomainsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListCustomDomainsRequest(mux, decoder)
+		encodeResponse = EncodeListCustomDomainsResponse(encoder)
+		encodeError    = EncodeListCustomDomainsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listCustomDomains")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

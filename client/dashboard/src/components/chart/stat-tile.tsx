@@ -11,7 +11,7 @@ import { MetricCard as UiMetricCard } from "@/components/ui/MetricCard";
 export const StatTileGroup = UiMetricCard.Group;
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatCompact } from "@/lib/format";
-import { ThresholdConfig } from "./chartUtils";
+import type { ThresholdConfig } from "./chartUtils";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Link } from "react-router";
 

@@ -471,6 +471,97 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: logout
+  /admin/customDomains.list:
+    get:
+      description: Lists live custom domains across organizations with their designated CNAME targets and observed DNS routing methods.
+      operationId: adminListCustomDomains
+      parameters:
+        - allowEmptyValue: true
+          description: Only the domain owned by this organization.
+          in: query
+          name: organization_id
+          schema:
+            description: Only the domain owned by this organization.
+            type: string
+        - allowEmptyValue: true
+          description: Only domains last observed using this routing method. unknown also matches domains not yet checked.
+          in: query
+          name: dns_routing_method
+          schema:
+            description: Only domains last observed using this routing method. unknown also matches domains not yet checked.
+            enum:
+              - per_domain_cname
+              - shared_cname
+              - a_record
+              - unknown
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminListCustomDomainsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listCustomDomains admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listCustomDomains
+      x-speakeasy-react-hook:
+        name: AdminListCustomDomains
   /admin/hookClients.get:
     get:
       description: 'Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization''s new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.'
@@ -4152,6 +4243,97 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: updateOrganization
+  /admin/organizationHookFleet.get:
+    get:
+      description: 'The hooks installs of one organization: which versions, install routes and endpoints its users'' machines use, which machines have gone quiet, and how much traffic still reaches the legacy endpoints.'
+      operationId: adminGetOrganizationHookFleet
+      parameters:
+        - allowEmptyValue: true
+          description: Organization to report on.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Organization to report on.
+            type: string
+        - allowEmptyValue: true
+          description: Window in days.
+          in: query
+          name: window_days
+          schema:
+            default: 30
+            description: Window in days.
+            format: int64
+            maximum: 89
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminHookFleetResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getOrganizationHookFleet admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getOrganizationHookFleet
+      x-speakeasy-react-hook:
+        name: AdminGetOrganizationHookFleet
   /admin/organizations.bulkUpdateAccountType:
     post:
       tags:
@@ -8896,6 +9078,71 @@ components:
           format: int64
       required:
         - projects_signaled
+    AdminCustomDomain:
+      type: object
+      properties:
+        activated:
+          type: boolean
+          description: Whether the domain is provisioned in ingress.
+        created_at:
+          type: string
+          description: When the domain was registered.
+          format: date-time
+        dns_checked_at:
+          type: string
+          description: When DNS configuration was observed. Absent until a DNS observation has run.
+          format: date-time
+        dns_configuration_status:
+          type: string
+          description: 'Advisory public DNS observation: matched, wrong_target, unconfirmed, not_found, check_failed, or not_configured. Does not establish endpoint availability.'
+        dns_routing_method:
+          type: string
+          description: 'How the latest health check observed the domain''s DNS routing traffic. One of: per_domain_cname, shared_cname, a_record (also covers flattened CNAME, ALIAS and ANAME records, which resolve to addresses), unknown. Absent until the first health check.'
+        dns_target:
+          type: string
+          description: The domain's designated CNAME target (<dns_target_token>.<suffix>). Absent when the admin server has no target suffix configured or the token is not yet assigned.
+        dns_target_token:
+          type: string
+          description: The random DNS label of the domain's designated CNAME target. Absent until assigned.
+        domain:
+          type: string
+          description: The custom domain name.
+        health_checked_at:
+          type: string
+          description: When the domain health was last checked.
+          format: date-time
+        health_issue:
+          type: string
+          description: Why the domain was last observed as unhealthy.
+        health_status:
+          type: string
+          description: 'Infrastructure and certificate status: unknown, healthy, or unhealthy. Unknown until a complete observation has run, or when an older worker has overwritten the health result.'
+        id:
+          type: string
+          description: The custom domain ID.
+          format: uuid
+        organization_id:
+          type: string
+          description: The organization that owns the domain.
+        organization_name:
+          type: string
+          description: The organization name.
+        organization_slug:
+          type: string
+          description: The organization slug.
+        verified:
+          type: boolean
+          description: Whether the domain passed DNS verification.
+      description: A live custom domain with its designated CNAME target and the DNS routing method health checks last observed.
+      required:
+        - id
+        - organization_id
+        - organization_name
+        - organization_slug
+        - domain
+        - verified
+        - activated
+        - created_at
     AdminCustomerUsage:
       type: object
       properties:
@@ -9111,6 +9358,188 @@ components:
         - sessions
         - inference
         - device_agents
+    AdminHookFleetBucket:
+      type: object
+      properties:
+        events:
+          type: integer
+          description: Hook events sent with this value across every install. Zero for routes.
+          format: int64
+        installs:
+          type: integer
+          description: Installs whose latest value is this one.
+          format: int64
+        value:
+          type: string
+          description: The route or endpoint generation. Empty when unknown.
+      description: Installs and events for one value of a breakdown.
+      required:
+        - value
+        - installs
+        - events
+    AdminHookFleetInstall:
+      type: object
+      properties:
+        endpoint_generation:
+          type: string
+          description: 'The hooks endpoint the install last sent to: legacy_unkeyed, legacy_keyed, ingest_script or ingest_binary. Empty for delivery failure reports only.'
+        errors:
+          type: integer
+          description: Delivery failures the install reported in the window.
+          format: int64
+        events:
+          type: integer
+          description: Hook events recorded in the window.
+          format: int64
+        first_seen:
+          type: string
+          description: First hook in the window.
+          format: date-time
+        harness:
+          type: string
+          description: The agent the hooks run in, such as claude, codex or cursor.
+        hostname:
+          type: string
+          description: The machine's hostname. Empty when the install sent none.
+        install_route:
+          type: string
+          description: How the hooks were installed, such as marketplace or download. Empty when unknown.
+        last_seen:
+          type: string
+          description: Most recent hook.
+          format: date-time
+        project_id:
+          type: string
+          description: The project the install reports to. Empty for traffic that named no project.
+        quiet:
+          type: boolean
+          description: True when the install has sent nothing for quiet_after_days or longer.
+        user_email:
+          type: string
+          description: The user the install reports as. Empty when the install sent no identity.
+        version:
+          type: string
+          description: The hooks binary version. Empty for the legacy curl hooks and for installs that sent no version.
+        version_status:
+          type: string
+          description: How the version compares to the release Speakeasy ships.
+          enum:
+            - current
+            - behind
+            - unsupported
+            - unknown
+      description: 'One hooks install: a project, user, machine and harness. Version, generation and route are the latest the install sent.'
+      required:
+        - project_id
+        - user_email
+        - hostname
+        - harness
+        - version
+        - version_status
+        - endpoint_generation
+        - install_route
+        - first_seen
+        - last_seen
+        - events
+        - errors
+        - quiet
+    AdminHookFleetResult:
+      type: object
+      properties:
+        generations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHookFleetBucket'
+          description: Installs and events per endpoint generation, largest first.
+        installs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHookFleetInstall'
+          description: Installs, most recently seen first.
+        latest_version:
+          type: string
+          description: The hooks release Speakeasy currently ships. Versions below it are behind.
+        legacy_events:
+          type: integer
+          description: Hook events sent to the legacy endpoints in the window.
+          format: int64
+        minimum_version:
+          type: string
+          description: The oldest supported hooks version. Versions below it are unsupported. Absent when no minimum is set.
+        organization_id:
+          type: string
+          description: The organization ID.
+        quiet_after_days:
+          type: integer
+          description: Days without traffic after which an install counts as quiet.
+          format: int64
+        quiet_installs:
+          type: integer
+          description: Returned installs that have gone quiet. Only a window longer than quiet_after_days can return quiet installs.
+          format: int64
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHookFleetBucket'
+          description: Installs per install route, largest first.
+        since:
+          type: string
+          description: Start of the window. Counts cover the whole UTC day it falls on.
+          format: date-time
+        total_installs:
+          type: integer
+          description: Installs returned. Not the organization's full install count when truncated is true.
+          format: int64
+        truncated:
+          type: boolean
+          description: True when the organization has more installs than the response holds. Breakdowns then cover only the installs returned.
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHookFleetVersion'
+          description: Installs per version, newest version first.
+        window_days:
+          type: integer
+          description: Length of the window in days.
+          format: int64
+      description: The hooks installs of one organization over a window, with version, route and endpoint breakdowns.
+      required:
+        - organization_id
+        - window_days
+        - since
+        - latest_version
+        - quiet_after_days
+        - truncated
+        - total_installs
+        - quiet_installs
+        - legacy_events
+        - versions
+        - routes
+        - generations
+        - installs
+    AdminHookFleetVersion:
+      type: object
+      properties:
+        installs:
+          type: integer
+          description: Installs whose latest version is this one.
+          format: int64
+        status:
+          type: string
+          description: How the version compares to the release Speakeasy ships.
+          enum:
+            - current
+            - behind
+            - unsupported
+            - unknown
+        version:
+          type: string
+          description: The hooks binary version, or empty for installs with no version.
+      description: Installs on one hooks version.
+      required:
+        - version
+        - status
+        - installs
     AdminInferenceHookCell:
       type: object
       properties:
@@ -9258,6 +9687,16 @@ components:
         - period_start
         - period_end
         - spend_usd
+    AdminListCustomDomainsResult:
+      type: object
+      properties:
+        custom_domains:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminCustomDomain'
+          description: Every matching live custom domain, ordered by domain name. Organizations have at most one live custom domain, so the list is not paginated.
+      required:
+        - custom_domains
     AdminListOrganizationActivityResult:
       type: object
       properties:

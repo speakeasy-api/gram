@@ -11,7 +11,7 @@ export default function SignalsIntelligence(): JSX.Element {
 
   return (
     <TabbedPage
-      title="Signals intelligence"
+      title="Signals Intelligence"
       description="Explore patterns in agent conversations and the signals that measure them."
       stage="preview"
       activeTab={activeTab}

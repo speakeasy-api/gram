@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { AlertCircle, ChevronDown, Plus, X } from "lucide-react";
 import { type ClipboardEvent, useCallback, useRef, useState } from "react";
 import { parseDotEnvPaste } from "./dotEnvUtils";
-import { EnvVarState } from "./environmentVariableUtils";
+import type { EnvVarState } from "./environmentVariableUtils";
 
 interface Environment {
   id: string;

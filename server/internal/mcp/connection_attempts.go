@@ -34,6 +34,9 @@ import (
 const connectionAttemptEndTTL = 2 * time.Hour
 
 const (
+	// attemptEndingReferenceWait is how long a failure response waits for its ending to be accepted.
+	attemptEndingReferenceWait = 200 * time.Millisecond
+
 	// attemptEndingTimeout bounds one claim of an attempt's ending.
 	attemptEndingTimeout = 5 * time.Second
 
@@ -525,27 +528,53 @@ func (a *attemptEndings) drain(ctx context.Context) error {
 	}
 }
 
-// endAttemptOnce ends an attempt from a path that can repeat, off the request path.
+// endAttemptOnce ends an attempt from a path that can repeat, off the request path. A failure
+// someone will read a reference for waits up to attemptEndingReferenceWait for the ending to be accepted.
 // If the marker can't be read or too many are waiting, the attempt stays open rather than ending twice.
 func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
 	if attempt.IsZero() {
 		return
 	}
-	s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
+	wanted := contextvalues.ConnectionReferenceWanted(ctx) && mcpconnectionattempts.FailureWorthAReference(what)
+	claimed := make(chan struct{})
+	reference := ""
+	if !s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
+		defer close(claimed)
+		// Its own slot, so an ending accepted after the wait can't label a later error.
+		ctx = contextvalues.WithConnectionReferenceSlot(ctx)
 		s.claimAttemptEnding(ctx, logger, attempt, step, what, opts...)
-	})
+		reference = contextvalues.ConnectionReference(ctx)
+	}) {
+		if wanted {
+			contextvalues.SetConnectionReference(ctx, "")
+		}
+		return
+	}
+	if !wanted {
+		return
+	}
+	// The accepted row's id, or none past the wait.
+	select {
+	case <-claimed:
+		contextvalues.SetConnectionReference(ctx, reference)
+	case <-time.After(attemptEndingReferenceWait):
+		contextvalues.SetConnectionReference(ctx, "")
+	case <-ctx.Done():
+		contextvalues.SetConnectionReference(ctx, "")
+	}
 }
 
 // runAttemptEnding bounds all ending work, including readiness reads, off the response path.
-func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, work func(context.Context)) {
+// It reports whether the work was taken on.
+func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, work func(context.Context)) bool {
 	if s.connections == nil || s.userSessionRefreshReplayCoordination == nil || s.attemptEndings == nil {
-		return
+		return false
 	}
 	select {
 	case s.attemptEndings.slots <- struct{}{}:
 	default:
 		logger.WarnContext(ctx, "too many connection attempt endings waiting; leaving this one open")
-		return
+		return false
 	}
 	claimCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), attemptEndingTimeout)
 	s.attemptEndings.wg.Go(func() {
@@ -553,6 +582,7 @@ func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, wor
 		defer func() { <-s.attemptEndings.slots }()
 		work(claimCtx)
 	})
+	return true
 }
 
 func (s *Service) claimAttemptEnding(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {

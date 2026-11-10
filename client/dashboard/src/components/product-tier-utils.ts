@@ -1,4 +1,4 @@
-import { ProductTier } from "@/hooks/useProductTier";
+import type { ProductTier } from "@/hooks/useProductTier";
 
 // Editorial tier chips: hairline border on the card surface, tier expressed
 // through text color only — no filled washes.

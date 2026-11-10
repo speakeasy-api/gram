@@ -138,18 +138,19 @@ VALUES
    jsonb_build_object('operation', @operation::text, 'operation_id', @operation_id::uuid),
    now() - @age::interval);
 
--- Expiry carries the version and database-time deadline.
+-- Expiry carries the version and database-time deadline. Speakeasy records it
+-- on its own, so it lands on the audit log page's System view.
 -- name: ActivityInsertKillswitchExpiredAuditLog :exec
 INSERT INTO audit_logs
   (id, organization_id, project_id, actor_id, actor_type, actor_display_name,
-   action, subject_id, subject_type, after_snapshot, metadata, created_at)
+   action, subject_id, subject_type, after_snapshot, metadata, acting_surface, created_at)
 VALUES
   (@id, @organization_id, NULL,
    'system', 'user', 'System', 'killswitch:expire',
    @subject_id,
    'killswitch_prescription', NULL,
    jsonb_build_object('version', 1, 'expired_at', now() - interval '1 day'),
-   now() - interval '23 hours');
+   'system', now() - interval '23 hours');
 
 -- name: ActivityDeleteSpendRuleEvents :exec
 DELETE FROM spend_rule_events WHERE organization_id = @organization_id;

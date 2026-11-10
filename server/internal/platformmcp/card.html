@@ -472,7 +472,14 @@
         // A result without a card, such as a text-only tool's, clears any earlier card,
         // hides the frame and reports a one-pixel height so the host can
         // collapse it.
-        function render(meta) {
+        //
+        // Neither MCP Apps nor ChatGPT lets a result opt out of the view: the
+        // view is linked on the tool, fixed at tools/list. call_platform_tool
+        // and execute link it because they reach card tools, so their
+        // text-only and failed results still get a frame. Whether a one-pixel
+        // frame collapses is up to the host. ChatGPT can be asked to drop the
+        // widget, so done=true (a result has arrived) with no card does that.
+        function render(meta, done) {
           var card = meta && meta[CARD_KEY];
           root.innerHTML = typeof card === "string" ? card : "";
           frame.hidden = root.innerHTML === "";
@@ -483,6 +490,14 @@
             width: document.documentElement.scrollWidth,
             height: frame.hidden ? 1 : frame.offsetHeight,
           });
+          if (
+            done &&
+            frame.hidden &&
+            window.openai &&
+            typeof window.openai.requestClose === "function"
+          ) {
+            window.openai.requestClose();
+          }
         }
 
         window.addEventListener("message", function (event) {
@@ -498,7 +513,7 @@
             applyHostContext(message.result.hostContext);
             notify("ui/notifications/initialized", {});
           } else if (message.method === "ui/notifications/tool-result") {
-            render(message.params && message.params._meta);
+            render(message.params && message.params._meta, true);
           } else if (
             message.method === "ui/notifications/host-context-changed"
           ) {
@@ -559,10 +574,30 @@
           protocolVersion: "2026-01-26",
         });
 
-        // ChatGPT also exposes the result directly on window.openai.
+        // ChatGPT also exposes the result directly on window.openai. The
+        // widget can mount before the result lands, with both globals still
+        // null; that is not an empty result, so it does not close the widget.
+        // toolResponseMetadata can be the result's _meta itself or an
+        // envelope that keeps the MCP result, with its _meta, inside.
+        function openAIMeta(metadata) {
+          if (!metadata || metadata[CARD_KEY] !== undefined) {
+            return metadata;
+          }
+          var results = [metadata.mcp_tool_result, metadata.call_tool_result];
+          for (var i = 0; i < results.length; i++) {
+            if (results[i] && results[i]._meta) {
+              return results[i]._meta;
+            }
+          }
+          return metadata;
+        }
         function renderFromOpenAI() {
           setTheme(window.openai.theme);
-          render(window.openai.toolResponseMetadata);
+          render(
+            openAIMeta(window.openai.toolResponseMetadata),
+            window.openai.toolOutput != null ||
+              window.openai.toolResponseMetadata != null,
+          );
         }
         if (window.openai) {
           renderFromOpenAI();
