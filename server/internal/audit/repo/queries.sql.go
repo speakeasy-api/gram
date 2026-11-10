@@ -325,14 +325,19 @@ const listAuditActorsOnSubjects = `-- name: ListAuditActorsOnSubjects :many
 SELECT subject_id, action, actor_type, actor_id, is_internal, created_at
 FROM audit_logs
 WHERE organization_id = $1
-  AND subject_id = ANY($2::text[])
-  AND created_at > $3
-  AND created_at < $4
+  AND (
+    subject_id = ANY($2::text[])
+    OR (subject_type = ANY($3::text[]) AND action = ANY($4::text[]))
+  )
+  AND created_at > $5
+  AND created_at < $6
 `
 
 type ListAuditActorsOnSubjectsParams struct {
 	OrganizationID string
 	SubjectIds     []string
+	SubjectTypes   []string
+	Actions        []string
 	After          pgtype.Timestamptz
 	Before         pgtype.Timestamptz
 }
@@ -346,11 +351,13 @@ type ListAuditActorsOnSubjectsRow struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
-// Who changed any of these subjects in an organization within a time range.
+// Who changed any of these subjects, or did any of these actions, in an organization within a time range.
 func (q *Queries) ListAuditActorsOnSubjects(ctx context.Context, arg ListAuditActorsOnSubjectsParams) ([]ListAuditActorsOnSubjectsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditActorsOnSubjects,
 		arg.OrganizationID,
 		arg.SubjectIds,
+		arg.SubjectTypes,
+		arg.Actions,
 		arg.After,
 		arg.Before,
 	)

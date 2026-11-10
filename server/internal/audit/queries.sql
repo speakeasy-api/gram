@@ -273,10 +273,13 @@ SET created_at = @created_at
 WHERE id = ANY(@ids::uuid[]);
 
 -- name: ListAuditActorsOnSubjects :many
--- Who changed any of these subjects in an organization within a time range.
+-- Who changed any of these subjects, or did any of these actions, in an organization within a time range.
 SELECT subject_id, action, actor_type, actor_id, is_internal, created_at
 FROM audit_logs
 WHERE organization_id = @organization_id
-  AND subject_id = ANY(@subject_ids::text[])
+  AND (
+    subject_id = ANY(@subject_ids::text[])
+    OR (subject_type = ANY(@subject_types::text[]) AND action = ANY(@actions::text[]))
+  )
   AND created_at > @after
   AND created_at < @before;

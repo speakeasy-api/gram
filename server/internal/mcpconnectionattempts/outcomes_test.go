@@ -165,6 +165,69 @@ func TestFixFixedBy(t *testing.T) {
 	}
 }
 
+func TestFixedByCountsOrganizationChangesThatFixTheReason(t *testing.T) {
+	t.Parallel()
+	between := outcomeStart.Add(30 * time.Minute)
+	org := func(action string, byAdmin bool) mcpconnectionattempts.Change {
+		return mcpconnectionattempts.Change{SubjectID: "elsewhere-in-org", Action: action, ByAdmin: byAdmin, At: between}
+	}
+	tests := []struct {
+		reason    mcpconnectionattempts.Code
+		fixes     string
+		unrelated string
+	}{
+		{reason: mcpconnectionattempts.CodeNoServerAccess, fixes: "access_member:update_role", unrelated: "killswitch:deactivate"},
+		{reason: mcpconnectionattempts.CodeToolPermissionDenied, fixes: "access_role:update", unrelated: "ai_tool_decision:set"},
+		{reason: mcpconnectionattempts.CodeResourceNotAvailable, fixes: "access_grant:create_temporary", unrelated: "risk_policy:update"},
+		{reason: mcpconnectionattempts.CodeApprovalNeedsAdmin, fixes: "access_challenge:resolve", unrelated: "organization_invitation:create"},
+		{reason: mcpconnectionattempts.CodeNotOrgMember, fixes: "organization_invitation:create", unrelated: "access_role:update"},
+		{reason: mcpconnectionattempts.CodeSubjectNotProvisioned, fixes: "organization_invitation:update_role", unrelated: "directory_role_mapping:set"},
+		{reason: mcpconnectionattempts.CodeAIToolBlocked, fixes: "ai_tool_decision:set", unrelated: "access_role:update"},
+		{reason: mcpconnectionattempts.CodePolicyBlocked, fixes: "risk_policy:update", unrelated: "risk_policy:bypass_request_create"},
+		{reason: mcpconnectionattempts.CodeMCPToolCallsPaused, fixes: "killswitch:deactivate", unrelated: "killswitch:activate"},
+		{reason: mcpconnectionattempts.CodeUsageLimitReached, fixes: "organization:payg_activated", unrelated: "organization:onboarding_updated"},
+		{reason: mcpconnectionattempts.CodeSubjectNotAdmitted, fixes: "workload-admission:admit", unrelated: "workload-admission:withdraw"},
+		{reason: mcpconnectionattempts.CodeCIMDAdmissionDenied, fixes: "user-session-issuer-cimd-client:add", unrelated: "access_role:update"},
+		{reason: mcpconnectionattempts.CodeCustomDomainNotReady, fixes: "custom_domains:update", unrelated: "access_role:update"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.reason.String(), func(t *testing.T) {
+			t.Parallel()
+			failure := fixSummary(outcomeStart, mcpconnectionattempts.OutcomeBlocked)
+			failure.FinalReason = tc.reason.String()
+			success := fixSummary(outcomeStart.Add(time.Hour), mcpconnectionattempts.OutcomeConnected)
+			success.SignedIn = true
+			fix := mcpconnectionattempts.Fix{Failure: failure, Failed: failure.End(outcomeStart), Success: success}
+
+			require.Equal(t, mcpconnectionattempts.FixedByAdminChange, fix.FixedBy([]mcpconnectionattempts.Change{org(tc.fixes, true)}), "credited")
+			require.Equal(t, mcpconnectionattempts.FixedByUnattributed, fix.FixedBy(nil), "nothing changed")
+			require.Equal(t, mcpconnectionattempts.FixedByUnattributed, fix.FixedBy([]mcpconnectionattempts.Change{org(tc.unrelated, true)}), "an unrelated change")
+			require.Equal(t, mcpconnectionattempts.FixedByUnattributed, fix.FixedBy([]mcpconnectionattempts.Change{org(tc.fixes, false)}), "Speakeasy's change elsewhere")
+			late := org(tc.fixes, true)
+			late.At = outcomeStart.Add(2 * time.Hour)
+			require.Equal(t, mcpconnectionattempts.FixedByUnattributed, fix.FixedBy([]mcpconnectionattempts.Change{late}), "a change after the success")
+			require.Equal(t, mcpconnectionattempts.FixedBySystemChange, fix.FixedBy([]mcpconnectionattempts.Change{{SubjectID: "server-fix", Action: "mcp-server:update", ByAdmin: false, At: between}}), "Speakeasy's change on the server")
+		})
+	}
+}
+
+func TestFixedByForAdminReasonsThePersonCanGetPast(t *testing.T) {
+	t.Parallel()
+	ended := func(reason mcpconnectionattempts.Code, signedIn bool) mcpconnectionattempts.Fix {
+		failure := fixSummary(outcomeStart, mcpconnectionattempts.OutcomeFailed)
+		failure.FinalReason = reason.String()
+		success := fixSummary(outcomeStart.Add(time.Hour), mcpconnectionattempts.OutcomeConnected)
+		success.SignedIn = signedIn
+		return mcpconnectionattempts.Fix{Failure: failure, Failed: failure.End(outcomeStart), Success: success}
+	}
+	require.Equal(t, mcpconnectionattempts.FixedByRetry, ended(mcpconnectionattempts.CodeTunnelAtCapacity, false).FixedBy(nil), "capacity frees up")
+	require.Equal(t, mcpconnectionattempts.FixedByReconnect, ended(mcpconnectionattempts.CodeRefreshRejected, true).FixedBy(nil), "a new sign-in replaces the refused renewal")
+	require.Equal(t, mcpconnectionattempts.FixedByUnattributed, ended(mcpconnectionattempts.CodeRefreshRejected, false).FixedBy(nil), "no sign-in, so a retry cannot explain it")
+	require.Equal(t, mcpconnectionattempts.FixedByUnattributed, ended(mcpconnectionattempts.CodeProviderOAuthInvalidClient, true).FixedBy(nil), "fixed on the provider's side")
+	require.Equal(t, mcpconnectionattempts.FixedByAdminChange, ended(mcpconnectionattempts.CodeProviderOAuthInvalidClient, true).FixedBy([]mcpconnectionattempts.Change{{SubjectID: "server-fix", Action: "mcp-server:update", ByAdmin: true, At: outcomeStart.Add(30 * time.Minute)}}))
+	require.Equal(t, mcpconnectionattempts.FixedByReconnect, ended(mcpconnectionattempts.CodeInvalidBearerToken, true).FixedBy(nil), "the person fixes their own failures")
+}
+
 func TestIsAdminActor(t *testing.T) {
 	t.Parallel()
 	require.True(t, mcpconnectionattempts.IsAdminActor("user", "user_123", false))
@@ -251,7 +314,7 @@ func TestLabelsKeepEveryValueTheWriterProduces(t *testing.T) {
 	}
 	for _, fix := range []mcpconnectionattempts.FixedBy{
 		mcpconnectionattempts.FixedByNothing, mcpconnectionattempts.FixedByAdminChange, mcpconnectionattempts.FixedBySystemChange,
-		mcpconnectionattempts.FixedByReconnect, mcpconnectionattempts.FixedByRetry,
+		mcpconnectionattempts.FixedByReconnect, mcpconnectionattempts.FixedByRetry, mcpconnectionattempts.FixedByUnattributed,
 	} {
 		require.Equal(t, string(fix), mcpconnectionattempts.FixedByLabel(fix))
 	}

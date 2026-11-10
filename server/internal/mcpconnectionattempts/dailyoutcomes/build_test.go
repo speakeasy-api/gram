@@ -40,6 +40,7 @@ const (
 	daysAgoRepublish      = 7
 	daysAgoRepublishFails = 12
 	daysAgoEndingProvider = 27
+	daysAgoAdminReason    = 22
 )
 
 const catalogApp = "https://claude.ai/oauth/claude-code-client-metadata"
@@ -121,11 +122,16 @@ func (f *fixture) insertStored(table string, day time.Time, key string, attempts
 
 func (f *fixture) audit(org, subjectID, action, actorType, actorID string, internal bool, at time.Time) {
 	f.t.Helper()
+	f.auditOn(org, "mcp_server", subjectID, action, actorType, actorID, internal, at)
+}
+
+func (f *fixture) auditOn(org, subjectType, subjectID, action, actorType, actorID string, internal bool, at time.Time) {
+	f.t.Helper()
 	q := auditrepo.New(f.db)
 	inserted, err := q.InsertAuditLog(f.t.Context(), auditrepo.InsertAuditLogParams{
 		OrganizationID: org, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorID: actorID, ActorType: actorType,
 		ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""), Action: action,
-		SubjectID: subjectID, SubjectType: "mcp_server", SubjectDisplayName: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""),
+		SubjectID: subjectID, SubjectType: subjectType, SubjectDisplayName: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""),
 		BeforeSnapshot: nil, AfterSnapshot: nil, Metadata: nil, ActingSurface: conv.ToPGTextEmpty(""), ActingClientID: conv.ToPGTextEmpty(""), IsInternal: internal,
 	})
 	require.NoError(f.t, err)
@@ -245,6 +251,45 @@ func TestBuildDayNamesWhatFixedEachFailure(t *testing.T) {
 		"|dcr||mcp_request|failed|invalid_bearer_token|admin_change":  2,
 		"|dcr||mcp_request|failed|invalid_bearer_token|system_change": 2,
 		"|dcr||mcp_request|failed|invalid_bearer_token|":              2,
+	}, f.stored(mainTable, day))
+}
+
+func TestBuildDayCreditsOrganizationChangesForAdminReasons(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	day := f.day(daysAgoAdminReason)
+	app := mcpconnectionattempts.AppDCR
+	subject := urn.NewUserSubject("user-" + uuid.NewString())
+	person := mcpconnectionattempts.Subject(&subject)
+
+	var rows []mcpconnectionattempts.Row
+	// Each case gets its own server and its own hours, so one case's change falls outside another's window.
+	pair := func(start time.Time) {
+		server := uuid.New()
+		failure := f.attempt(server, app, start)
+		success := f.attempt(server, app, start.Add(time.Hour))
+		rows = append(rows,
+			f.row(failure, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, true, 0, person),
+			f.row(success, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn, false, 0, person),
+			f.row(success, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute, person),
+		)
+	}
+	credited, unattributed, unrelated, staff := day.Add(time.Hour), day.Add(4*time.Hour), day.Add(7*time.Hour), day.Add(10*time.Hour)
+	for _, start := range []time.Time{credited, unattributed, unrelated, staff} {
+		pair(start)
+	}
+	f.write(rows...)
+
+	f.auditOn(f.org, "access_member", "member-"+uuid.NewString(), "access_member:update_role", "user", "user_admin", false, credited.Add(30*time.Minute))
+	f.auditOn(f.org, "killswitch_prescription", "killswitch-"+uuid.NewString(), "killswitch:deactivate", "user", "user_admin", false, unrelated.Add(30*time.Minute))
+	f.auditOn(f.org, "access_member", "member-"+uuid.NewString(), "access_member:update_role", "user", "user_staff", true, staff.Add(30*time.Minute))
+	f.auditOn("org-"+uuid.NewString(), "access_member", "member-"+uuid.NewString(), "access_member:update_role", "user", "user_other_admin", false, unattributed.Add(30*time.Minute))
+
+	f.build(day)
+	require.Equal(t, map[string]uint64{
+		"|dcr||inbound_token|connected||":                         4,
+		"|dcr||mcp_request|blocked|no_server_access|admin_change": 1,
+		"|dcr||mcp_request|blocked|no_server_access|unattributed": 3,
 	}, f.stored(mainTable, day))
 }
 

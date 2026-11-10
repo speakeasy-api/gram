@@ -332,7 +332,7 @@ func (b *Builder) addFixes(ctx context.Context, counts *tally, failures []mcpcon
 			}
 			after, before = minTime(after, fix.Failed.At), maxTime(before, fix.Success.StartedAt)
 		}
-		changes, err := mcpconnectionattempts.ListChanges(ctx, b.db, org, slices.Collect(maps.Keys(subjects)), after, before)
+		changes, err := mcpconnectionattempts.ListChanges(ctx, b.db, org, slices.Collect(maps.Keys(subjects)), mcpconnectionattempts.AuditActions(fixes), after, before)
 		if err != nil {
 			return fmt.Errorf("read changes: %w", err)
 		}
