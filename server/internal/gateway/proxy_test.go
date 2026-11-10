@@ -3246,6 +3246,17 @@ func TestToolProxy_Do_HTTPTool_ArgumentVariablesReportedAsCaller(t *testing.T) {
 	require.Equal(t, "argument-key", sentKey)
 	require.Equal(t, []string{"api_key"}, report.CallerVariables)
 	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "API_KEY", System: false, ClientGrant: false, Carrier: "X-Api-Key"}}, report.Sent)
+	require.Empty(t, report.ServerVariable)
+
+	userConfig.Set("TEST_SERVER_URL", mockServer.URL)
+	report = &toolconfig.CredentialReport{}
+	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig:  userConfig,
+		Credentials: report,
+	}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
+	require.NoError(t, err)
+	require.Equal(t, "TEST_SERVER_URL", report.ServerVariable)
 }
 
 func TestToolProxy_Do_HTTPTool_RedirectStrippedCredentialNotReported(t *testing.T) {

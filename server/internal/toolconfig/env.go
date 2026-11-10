@@ -181,6 +181,9 @@ type CredentialReport struct {
 	// CallerVariables lists the variables the tool call's own arguments set; a credential from one is the caller's.
 	CallerVariables []string
 
+	// ServerVariable is the user configuration variable the server URL came from, or "" for the tool's own URL or a system one.
+	ServerVariable string
+
 	// Challenges are the provider response's WWW-Authenticate values.
 	Challenges []string
 }

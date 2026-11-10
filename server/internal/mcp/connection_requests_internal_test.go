@@ -646,6 +646,8 @@ func TestHTTPToolRejectionHappened(t *testing.T) {
 		"caller_access_token": credentialSourceCaller,
 		"caller_secret":       credentialSourceCaller,
 		"environment_key":     credentialSourceSaved,
+		"caller_server_url":   credentialSourceCaller,
+		"saved_server_url":    credentialSourceSaved,
 	}
 	none := mcpconnectionattempts.Code{}
 
@@ -655,6 +657,7 @@ func TestHTTPToolRejectionHappened(t *testing.T) {
 		sent    []toolconfig.AppliedCredential
 		failure toolconfig.ClientGrantFailure
 		callers []string
+		server  string
 		header  string
 		want    mcpconnectionattempts.Code
 		who     mcpconnectionattempts.WhoFixes
@@ -676,6 +679,10 @@ func TestHTTPToolRejectionHappened(t *testing.T) {
 		{name: "tool call arguments override a saved key", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, callers: []string{"environment_key"}, want: none},
 		{name: "tool call arguments override a sign-in", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, callers: []string{"PERSON_ACCESS_TOKEN"}, want: none},
 		{name: "tool call arguments override another variable", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, callers: []string{"REGION"}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "caller's server URL", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, server: "CALLER_SERVER_URL", want: none},
+		{name: "tool call arguments set the server URL", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, server: "SAVED_SERVER_URL", callers: []string{"saved_server_url"}, want: none},
+		{name: "saved server URL", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, server: "SAVED_SERVER_URL", want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "caller's server URL with a refused client grant", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantRejected, server: "CALLER_SERVER_URL", want: none},
 		{name: "no credential", status: http.StatusUnauthorized, want: none},
 		{name: "saved key 401", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "saved key 403 without a challenge", status: http.StatusForbidden, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, want: none},
@@ -694,7 +701,7 @@ func TestHTTPToolRejectionHappened(t *testing.T) {
 			if tc.header != "" {
 				challenges = []string{tc.header}
 			}
-			got := httpToolRejectionHappened(tc.status, &toolconfig.CredentialReport{Challenges: challenges, Sent: tc.sent, GrantFailure: tc.failure, CallerVariables: tc.callers}, sources)
+			got := httpToolRejectionHappened(tc.status, &toolconfig.CredentialReport{Challenges: challenges, Sent: tc.sent, GrantFailure: tc.failure, CallerVariables: tc.callers, ServerVariable: tc.server}, sources)
 			require.Equal(t, tc.want, got)
 			if tc.want == none {
 				return

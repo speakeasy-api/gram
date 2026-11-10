@@ -1220,6 +1220,9 @@ func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTo
 
 		envVar := env.UserConfig.Get(tool.ServerEnvVar)
 		if envVar != "" {
+			if env.Credentials != nil {
+				env.Credentials.ServerVariable = tool.ServerEnvVar
+			}
 			return envVar
 		} else {
 			logger.WarnContext(ctx, "provided variables for server not found", attr.SlogEnvVarName(tool.ServerEnvVar))

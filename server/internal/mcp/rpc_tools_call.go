@@ -689,7 +689,8 @@ const (
 )
 
 // httpToolRejectionHappened says who fixes an HTTP tool call whose provider rejected its credential (see [remotemcp.CredentialRejected]),
-// from the credentials the call actually sent. A caller's own credential, or none, writes nothing.
+// from the credentials the call actually sent. A caller's own credential, or none, writes nothing, and so does a
+// provider the caller chose through the server URL.
 func httpToolRejectionHappened(status int, report *toolconfig.CredentialReport, sources map[string]credentialSource) mcpconnectionattempts.Code {
 	var none mcpconnectionattempts.Code
 	if report == nil || !remotemcp.CredentialRejected(status, report.Challenges) {
@@ -705,6 +706,11 @@ func httpToolRejectionHappened(status int, report *toolconfig.CredentialReport, 
 			return source
 		}
 		return credentialSourceSaved
+	}
+
+	// The caller chose the provider; a relative token URL resolves against its URL too.
+	if report.ServerVariable != "" && sourceOf(toolconfig.AppliedCredential{Variable: report.ServerVariable, System: false, ClientGrant: false, Carrier: ""}) == credentialSourceCaller {
+		return none
 	}
 
 	var sent remotemcp.UpstreamCredentialSent
