@@ -232,7 +232,8 @@ func withRowTrace(ctx context.Context, row Row) context.Context {
 }
 
 // exportSeverity also decides what is exported: every final row that did not connect,
-// and non-final rows only when someone other than the person has to fix them.
+// non-final rows someone other than the person has to fix, and non-final failures the
+// person or app has to fix, at WARN since the attempt may still recover.
 func exportSeverity(row Row) (log.Severity, string, bool) {
 	meaning, ok := MeaningOf(row.Reason)
 	if !ok {
@@ -241,7 +242,13 @@ func exportSeverity(row Row) (log.Severity, string, bool) {
 	if !row.IsFinal {
 		switch WhoFixes(row.WhoFixes) {
 		case WhoAdmin, WhoProvider, WhoSpeakeasy:
-		case WhoNobody, WhoPerson, WhoApp:
+		case WhoPerson, WhoApp:
+			// Only failures: needs_sign_in and other normal sign-in steps are not.
+			if meaning.Outcome != OutcomeFailed {
+				return log.SeverityUndefined, "", false
+			}
+			return log.SeverityWarn, "WARN", true
+		case WhoNobody:
 			return log.SeverityUndefined, "", false
 		default:
 			return log.SeverityUndefined, "", false

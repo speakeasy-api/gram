@@ -327,8 +327,11 @@ func TestExportSeverity_ByCatalogOutcome(t *testing.T) {
 		{name: "failed", code: CodeIDPUnavailable, final: true, severity: log.SeverityError, text: "ERROR"},
 		{name: "blocked", code: CodeNoServerAccess, final: true, severity: log.SeverityWarn, text: "WARN"},
 		{name: "declined", code: CodeCanceled, final: true, severity: log.SeverityInfo, text: "INFO"},
-		{name: "non-final failed", code: CodeProviderOAuthInvalidClient, final: false, severity: log.SeverityError, text: "ERROR"},
+		{name: "non-final admin failure stays error", code: CodeProviderOAuthInvalidClient, final: false, severity: log.SeverityError, text: "ERROR"},
 		{name: "non-final blocked", code: CodeNoServerAccess, final: false, severity: log.SeverityWarn, text: "WARN"},
+		{name: "non-final person failure", code: CodeInvalidBearerToken, final: false, severity: log.SeverityWarn, text: "WARN"},
+		{name: "non-final app failure", code: CodeRegistrationInvalid, final: false, severity: log.SeverityWarn, text: "WARN"},
+		{name: "final person failure", code: CodeInvalidBearerToken, final: true, severity: log.SeverityError, text: "ERROR"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -341,15 +344,17 @@ func TestExportSeverity_ByCatalogOutcome(t *testing.T) {
 	}
 }
 
-func TestExportSeverity_LeavesOutNonFinalRowsNoAdminCanFix(t *testing.T) {
+func TestExportSeverity_LeavesOutNonFinalRowsThatAreNotFailures(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		name string
 		what Happened
 	}{
-		{name: "person", what: CodeNeedsSignIn},
-		{name: "app", what: CodeRegistrationInvalid},
+		{name: "needs sign-in", what: CodeNeedsSignIn},
+		{name: "person blocked", what: CodeToolNotApproved},
+		{name: "person declined", what: CodeCanceled},
+		{name: "app blocked", what: CodeClientNotCIMD},
 		{name: "success", what: ResultAccepted},
 		{name: "connected with a reason", what: CodeRefreshedUnverified},
 	} {
@@ -374,6 +379,19 @@ func TestExportRecord_NonFinalRowSaysSoAndHasNoOutcome(t *testing.T) {
 	require.False(t, got[string(attr.ExtMcpConnectionFinalKey)].AsBool())
 	require.NotContains(t, got, string(attr.ExtMcpConnectionOutcomeKey))
 	require.Equal(t, log.SeverityError, record.Severity())
+}
+
+func TestExportRecord_NonFinalPersonFailureIsAWarning(t *testing.T) {
+	t.Parallel()
+
+	record, ok := exportRecord(exportTestRow(t, CodeInvalidBearerToken, false))
+	require.True(t, ok)
+
+	got := recordAttributes(record)
+	require.Contains(t, got, string(attr.ExtMcpConnectionFinalKey))
+	require.False(t, got[string(attr.ExtMcpConnectionFinalKey)].AsBool())
+	require.Equal(t, log.SeverityWarn, record.Severity())
+	require.Equal(t, "WARN", record.SeverityText())
 }
 
 func TestExportRecordID_KeepsAnAttemptsRowsApart(t *testing.T) {
