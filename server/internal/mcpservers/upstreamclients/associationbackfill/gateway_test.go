@@ -593,10 +593,9 @@ func TestRunTreatsAGatewayMemberItsSoleAssociationSettlesAsConfigured(t *testing
 	}
 }
 
-// Configuration settles nothing when it does not name exactly one of the
-// issuer's clients, or when a client never associated with the member holds
-// grants for it: requests route by those grants today.
-func TestRunLeavesAGatewayMemberConfigurationDoesNotSettleForConfiguration(t *testing.T) {
+// Existing outbound associations settle shared authorization server inference,
+// but not grants for an unrecorded client or a member with no live association.
+func TestRunGatewayConfigurationAcceptsAssociationsAndRejectsUnrecordedGrants(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	gatewayIssuer := f.userIssuer()
@@ -606,14 +605,21 @@ func TestRunLeavesAGatewayMemberConfigurationDoesNotSettleForConfiguration(t *te
 	twoAssociated, first := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://one.example.com/mcp")
 	second := f.boundClient(remoteIssuer, gatewayIssuer)
 	f.associate(twoAssociated, second, false)
+	// A detached outbound client with grants must not be re-associated.
+	detached := f.boundClient(remoteIssuer, gatewayIssuer)
+	f.associate(twoAssociated, detached, true)
+	f.grant(gatewayIssuer, detached, "https://one.example.com/mcp")
 
-	// One associated client, but grants for a client never associated.
+	// Two associated clients, but grants for a client never associated.
 	foreignGrant, foreignGrantClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://two.example.com/mcp")
 	foreign := f.boundClient(remoteIssuer, gatewayIssuer)
+	f.associate(foreignGrant, first, false)
 	f.grant(gatewayIssuer, foreign, "https://two.example.com/mcp")
 
-	// One associated client, but grants for two clients never associated.
+	// Two associated clients, but grants for two clients never associated.
 	twoForeignGrants, twoForeignGrantsClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://three.example.com/mcp")
+	twoForeignGrantsSecond := f.boundClient(remoteIssuer, gatewayIssuer)
+	f.associate(twoForeignGrants, twoForeignGrantsSecond, false)
 	f.grant(gatewayIssuer, foreign, "https://three.example.com/mcp")
 	f.grant(gatewayIssuer, second, "https://three.example.com/mcp")
 
@@ -623,16 +629,16 @@ func TestRunLeavesAGatewayMemberConfigurationDoesNotSettleForConfiguration(t *te
 	f.associate(onlyDetached, f.boundClient(remoteIssuer, gatewayIssuer), true)
 
 	f.gateway(gatewayIssuer, twoAssociated, foreignGrant, twoForeignGrants, onlyDetached)
-	for range 2 {
-		report := f.run(true)
-		require.Equal(t, GatewayOutcomeAmbiguous, gatewayResultFor(t, report, twoAssociated).Outcome)
+	for _, apply := range []bool{false, true, true} {
+		report := f.run(apply)
+		require.Equal(t, GatewayOutcomeConfigured, gatewayResultFor(t, report, twoAssociated).Outcome)
 		require.Equal(t, GatewayOutcomeConflict, gatewayResultFor(t, report, foreignGrant).Outcome)
 		require.Equal(t, GatewayOutcomeAmbiguous, gatewayResultFor(t, report, twoForeignGrants).Outcome)
 		require.Equal(t, GatewayOutcomeAmbiguous, gatewayResultFor(t, report, onlyDetached).Outcome)
-		require.Equal(t, 4, report.Gaps)
-		require.ElementsMatch(t, []uuid.UUID{first, second}, f.associations(twoAssociated))
-		require.Equal(t, []uuid.UUID{foreignGrantClient}, f.associations(foreignGrant))
-		require.Equal(t, []uuid.UUID{twoForeignGrantsClient}, f.associations(twoForeignGrants))
+		require.Equal(t, 3, report.Gaps)
+		require.ElementsMatch(t, []uuid.UUID{first, second}, f.associations(twoAssociated), "the detached grant-bearing client is not added")
+		require.ElementsMatch(t, []uuid.UUID{foreignGrantClient, first}, f.associations(foreignGrant))
+		require.ElementsMatch(t, []uuid.UUID{twoForeignGrantsClient, twoForeignGrantsSecond}, f.associations(twoForeignGrants))
 		require.Empty(t, f.associations(onlyDetached))
 	}
 }

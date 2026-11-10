@@ -475,7 +475,8 @@ func (s *Service) callPlatformToolsetTool(
 		GramEmail:  gramEmail,
 		GramChatID: chatIDHeader,
 		// Platform toolsets serve Speakeasy's own tools, never customer functions.
-		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		Credentials: nil,
 	}
 
 	var mcpURL string

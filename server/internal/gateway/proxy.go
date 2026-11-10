@@ -702,6 +702,9 @@ func (tp *ToolProxy) doHTTP(
 	if toolCallBody.EnvironmentVariables != nil {
 		for k, v := range toolCallBody.EnvironmentVariables {
 			env.UserConfig.Set(k, v)
+			if env.Credentials != nil {
+				env.Credentials.CallerVariables = append(env.Credentials.CallerVariables, k)
+			}
 		}
 	}
 
@@ -881,17 +884,24 @@ func (tp *ToolProxy) doHTTP(
 		Policy:                    tp.policy,
 		ResponseStatusCodeCapture: &responseStatusCode,
 		Attributes:                attrRecorder,
-		VerifyResponse:            func(resp *http.Response) error { return nil },
-		RetryConfig:               httpToolRetryConfig(),
-		Timeout:                   httpToolCallTimeout,
-		ID:                        descriptor.ID,
-		Name:                      descriptor.Name,
-		DeploymentID:              descriptor.DeploymentID,
-		ProjectID:                 descriptor.ProjectID,
-		ProjectSlug:               descriptor.ProjectSlug,
-		OrganizationID:            descriptor.OrganizationID,
-		OrganizationSlug:          descriptor.OrganizationSlug,
-		DisableKeepAlives:         false,
+		VerifyResponse: func(resp *http.Response) error {
+			// The challenge is kept for classification only; it is not forwarded.
+			if env.Credentials != nil {
+				env.Credentials.Challenges = resp.Header.Values("WWW-Authenticate")
+				env.Credentials.KeepCarried(resp.Request)
+			}
+			return nil
+		},
+		RetryConfig:       httpToolRetryConfig(),
+		Timeout:           httpToolCallTimeout,
+		ID:                descriptor.ID,
+		Name:              descriptor.Name,
+		DeploymentID:      descriptor.DeploymentID,
+		ProjectID:         descriptor.ProjectID,
+		ProjectSlug:       descriptor.ProjectSlug,
+		OrganizationID:    descriptor.OrganizationID,
+		OrganizationSlug:  descriptor.OrganizationSlug,
+		DisableKeepAlives: false,
 	})
 }
 
@@ -1210,6 +1220,9 @@ func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTo
 
 		envVar := env.UserConfig.Get(tool.ServerEnvVar)
 		if envVar != "" {
+			if env.Credentials != nil {
+				env.Credentials.ServerVariable = tool.ServerEnvVar
+			}
 			return envVar
 		} else {
 			logger.WarnContext(ctx, "provided variables for server not found", attr.SlogEnvVarName(tool.ServerEnvVar))
