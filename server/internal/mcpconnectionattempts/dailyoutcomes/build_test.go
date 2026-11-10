@@ -39,6 +39,7 @@ const (
 	daysAgoPlanRecent     = 3
 	daysAgoRepublish      = 7
 	daysAgoRepublishFails = 12
+	daysAgoEndingProvider = 27
 )
 
 const catalogApp = "https://claude.ai/oauth/claude-code-client-metadata"
@@ -465,4 +466,25 @@ func TestBuildDayReportsTheFirstSwapWhenPublishingAgainFails(t *testing.T) {
 	result, err := f.b.BuildDay(t.Context(), day, f.now)
 	require.Error(t, err)
 	require.True(t, result.Swapped, "the first swap already replaced the stored day")
+}
+
+// A gateway attempt that signs in at one member's provider and fails at another's
+// belongs to the provider that failed.
+func TestBuildDayCountsTheProviderThatEndedTheAttempt(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	day := f.day(daysAgoEndingProvider)
+	for range 3 {
+		scope := mcpconnectionattempts.GatewayScope("org-"+uuid.NewString(), uuid.New(), uuid.New(), mcpconnectionattempts.AppDCR)
+		a := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(time.Hour), scope)
+		f.write(
+			f.row(a, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn, false, time.Minute, mcpconnectionattempts.Provider("https://accounts.google.com")),
+			f.row(a, mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeProviderUnavailable, true, 2*time.Minute, mcpconnectionattempts.Provider("https://linear.app")),
+		)
+	}
+
+	f.build(day)
+	require.Equal(t, map[string]uint64{
+		"linear.app|dcr||provider_token|failed|provider_unavailable|": 3,
+	}, f.stored(mainTable, day))
 }
