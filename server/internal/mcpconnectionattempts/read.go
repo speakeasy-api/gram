@@ -75,9 +75,11 @@ type AttemptFilter struct {
 	// PeopleFailingBefore is the exclusive end of PeopleFailingFrom's range.
 	PeopleFailingBefore time.Time
 
-	// ConnectedOnly keeps only attempts that ended connected. It applies after the
-	// attempt is reduced, so it matches End for any now: only a final row can connect.
-	ConnectedOnly bool
+	// FixCandidatesOnly keeps only attempts that ended connected or carry a reason: the
+	// successes that can fix a failure and the failures that show it was not fixed yet.
+	// It applies after the attempt is reduced, so it keeps every attempt End can call
+	// connected, failed or blocked for any now.
+	FixCandidatesOnly bool
 }
 
 func (f AttemptFilter) where() (string, []any, error) {
@@ -125,8 +127,8 @@ func ReadAttempts(ctx context.Context, ch driver.Conn, filter AttemptFilter, eac
 		return err
 	}
 	having := ""
-	if filter.ConnectedOnly {
-		having = ` HAVING has_final AND final_outcome = '` + string(OutcomeConnected) + `'`
+	if filter.FixCandidatesOnly {
+		having = ` HAVING (has_final AND (final_outcome = '` + string(OutcomeConnected) + `' OR final_reason != '')) OR (NOT has_final AND last_reason != '')`
 	}
 	rows, err := ch.Query(ctx, `SELECT`+attemptColumns+` FROM `+eventsTable+` WHERE `+where+` GROUP BY organization_id, attempt_id`+having, args...)
 	if err != nil {

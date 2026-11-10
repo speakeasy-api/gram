@@ -264,7 +264,7 @@ func TestBuildDayCreditsOrganizationChangesForAdminReasons(t *testing.T) {
 
 	var rows []mcpconnectionattempts.Row
 	// Each case gets its own server and its own hours, so one case's change falls outside another's window.
-	pair := func(start time.Time) {
+	pair := func(start time.Time, failedAgain bool) {
 		server := uuid.New()
 		failure := f.attempt(server, app, start)
 		success := f.attempt(server, app, start.Add(time.Hour))
@@ -273,23 +273,29 @@ func TestBuildDayCreditsOrganizationChangesForAdminReasons(t *testing.T) {
 			f.row(success, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn, false, 0, person),
 			f.row(success, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute, person),
 		)
+		if failedAgain {
+			again := f.attempt(server, app, start.Add(40*time.Minute))
+			rows = append(rows, f.row(again, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, true, 0, person))
+		}
 	}
-	credited, unattributed, unrelated, staff := day.Add(time.Hour), day.Add(4*time.Hour), day.Add(7*time.Hour), day.Add(10*time.Hour)
-	for _, start := range []time.Time{credited, unattributed, unrelated, staff} {
-		pair(start)
+	credited, unattributed, unrelated, staff, otherPerson, stillFailing := day.Add(time.Hour), day.Add(4*time.Hour), day.Add(7*time.Hour), day.Add(10*time.Hour), day.Add(13*time.Hour), day.Add(16*time.Hour)
+	for _, start := range []time.Time{credited, unattributed, unrelated, staff, otherPerson, stillFailing} {
+		pair(start, start.Equal(stillFailing))
 	}
 	f.write(rows...)
 
-	f.auditOn(f.org, "access_member", "member-"+uuid.NewString(), "access_member:update_role", "user", "user_admin", false, credited.Add(30*time.Minute))
+	f.auditOn(f.org, "access_member", subject.ID, "access_member:update_role", "user", "user_admin", false, credited.Add(30*time.Minute))
 	f.auditOn(f.org, "killswitch_prescription", "killswitch-"+uuid.NewString(), "killswitch:deactivate", "user", "user_admin", false, unrelated.Add(30*time.Minute))
-	f.auditOn(f.org, "access_member", "member-"+uuid.NewString(), "access_member:update_role", "user", "user_staff", true, staff.Add(30*time.Minute))
-	f.auditOn("org-"+uuid.NewString(), "access_member", "member-"+uuid.NewString(), "access_member:update_role", "user", "user_other_admin", false, unattributed.Add(30*time.Minute))
+	f.auditOn(f.org, "access_member", subject.ID, "access_member:update_role", "user", "user_staff", true, staff.Add(30*time.Minute))
+	f.auditOn("org-"+uuid.NewString(), "access_member", subject.ID, "access_member:update_role", "user", "user_other_admin", false, unattributed.Add(30*time.Minute))
+	f.auditOn(f.org, "access_member", "user-"+uuid.NewString(), "access_member:update_role", "user", "user_admin", false, otherPerson.Add(30*time.Minute))
+	f.auditOn(f.org, "access_role", "role-"+uuid.NewString(), "access_role:update", "user", "user_admin", false, stillFailing.Add(20*time.Minute))
 
 	f.build(day)
 	require.Equal(t, map[string]uint64{
-		"|dcr||inbound_token|connected||":                         4,
+		"|dcr||inbound_token|connected||":                         6,
 		"|dcr||mcp_request|blocked|no_server_access|admin_change": 1,
-		"|dcr||mcp_request|blocked|no_server_access|unattributed": 3,
+		"|dcr||mcp_request|blocked|no_server_access|unattributed": 6,
 	}, f.stored(mainTable, day))
 }
 

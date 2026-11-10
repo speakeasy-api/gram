@@ -141,7 +141,7 @@ func TestReadAttemptsNeedsBothEndsOfThePeopleRange(t *testing.T) {
 	}
 }
 
-func TestReadAttemptsConnectedOnly(t *testing.T) {
+func TestReadAttemptsFixCandidatesOnly(t *testing.T) {
 	t.Parallel()
 	ch, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -165,13 +165,12 @@ func TestReadAttemptsConnectedOnly(t *testing.T) {
 	}
 	require.NoError(t, AppendRows(t.Context(), ch, rows))
 
-	filter := AttemptFilter{StartedFrom: day, StartedBefore: day.AddDate(0, 0, 1), OrganizationID: org, ConnectedOnly: true}
-	var ids []uuid.UUID
+	filter := AttemptFilter{StartedFrom: day, StartedBefore: day.AddDate(0, 0, 1), OrganizationID: org, FixCandidatesOnly: true}
+	got := map[uuid.UUID]Outcome{}
 	require.NoError(t, ReadAttempts(t.Context(), ch, filter, func(s AttemptSummary) {
-		require.Equal(t, OutcomeConnected, s.End(time.Now()).Outcome)
-		ids = append(ids, s.AttemptID)
+		got[s.AttemptID] = s.End(time.Now()).Outcome
 	}))
-	require.Equal(t, []uuid.UUID{connected.ID()}, ids)
+	require.Equal(t, map[uuid.UUID]Outcome{connected.ID(): OutcomeConnected, failed.ID(): OutcomeFailed}, got, "the open attempt has no reason")
 }
 
 func TestReadAttemptsBreaksAProviderTieLikeSummarize(t *testing.T) {
