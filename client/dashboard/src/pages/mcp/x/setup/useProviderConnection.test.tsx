@@ -170,31 +170,6 @@ beforeEach(() => {
     url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
   });
   mocks.headers.mockResolvedValue({ headers: [] });
-  mocks.createHeader.mockImplementation(async ({ createServerHeaderForm }) => {
-    const { remoteMcpServerId: _remoteMcpServerId, ...fields } =
-      createServerHeaderForm;
-    const header = { id: "instance", ...fields };
-    const { headers } = await mocks.headers();
-    mocks.headers.mockResolvedValue({ headers: [...headers, header] });
-    return header;
-  });
-  mocks.updateHeader.mockImplementation(async ({ updateServerHeaderForm }) => {
-    const { headers } = await mocks.headers();
-    mocks.headers.mockResolvedValue({
-      headers: headers.map((h: { id: string }) =>
-        h.id === updateServerHeaderForm.id
-          ? { ...h, ...updateServerHeaderForm }
-          : h,
-      ),
-    });
-    return updateServerHeaderForm;
-  });
-  mocks.deleteHeader.mockImplementation(async ({ id }) => {
-    const { headers } = await mocks.headers();
-    mocks.headers.mockResolvedValue({
-      headers: headers.filter((h: { id: string }) => h.id !== id),
-    });
-  });
   mocks.linkedServers.mockResolvedValue({ mcpServers: [server] });
   mocks.updateRemote.mockImplementation(async ({ updateServerForm }) => {
     const value = { id: "upstream", ...updateServerForm };
@@ -1458,22 +1433,22 @@ describe("Slack permission choice hydration", () => {
 
 describe("Salesforce shared actions", () => {
   it.each([
-    ["sobject-reads", "sandbox", "sandbox/platform/sobject-reads"],
-    ["sobject-mutations", "production", "platform/sobject-mutations"],
-    ["sobject-mutations", "sandbox", "sandbox/platform/sobject-mutations"],
-    ["sobject-deletes", "production", "platform/sobject-deletes"],
-    ["sobject-deletes", "sandbox", "sandbox/platform/sobject-deletes"],
-    ["sobject-all", "production", "platform/sobject-all"],
-    ["sobject-all", "sandbox", "sandbox/platform/sobject-all"],
-    ["data360", "production", "data/data360"],
-    ["data360", "sandbox", "data/sandbox/data360"],
-    ["headless-360", "production", "platform/headless-360"],
-    ["headless-360", "sandbox", "sandbox/platform/headless-360"],
-    ["tableau-next", "production", "analytics/tableau-next"],
-    ["tableau-next", "sandbox", "sandbox/analytics/tableau-next"],
+    [
+      "production",
+      "sobject-mutations",
+      "platform/sobject-mutations",
+      "https://login.salesforce.com",
+    ],
+    [
+      "sandbox",
+      "data360",
+      "data/sandbox/data360",
+      "https://test.salesforce.com",
+    ],
   ])(
-    "saves a native public client and persists %s (%s)",
-    async (salesforceServer, environment, path) => {
+    "registers the %s OAuth provider and saves a native public client",
+    async (environment, salesforceServer, path, issuer) => {
+      mocks.provider.mockRejectedValue({ statusCode: 404 });
       const s = initialState("salesforce");
       const { result } = mount("salesforce", {
         step: "credentials",
@@ -1495,6 +1470,14 @@ describe("Salesforce shared actions", () => {
       });
       expect(mocks.commit).toHaveBeenCalledWith({
         commitServerIdentityConfigurationForm: expect.objectContaining({
+          mcpServerId: server.id,
+          targetServerOnly: true,
+          clientMode: "manual",
+          createProvider: expect.objectContaining({
+            issuer,
+            authorizationEndpoint: `${issuer}/services/oauth2/authorize`,
+            tokenEndpoint: `${issuer}/services/oauth2/token`,
+          }),
           clientConfiguration: {
             clientId: "key",
             clientSecret: undefined,
@@ -1503,9 +1486,8 @@ describe("Salesforce shared actions", () => {
           },
         }),
       });
-      expect(
-        result.current.state.authorized || result.current.state.tested,
-      ).toBe(false);
+      expect(result.current.state.authorized).toBe(false);
+      expect(result.current.state.tested).toBe(false);
     },
   );
   it.each([

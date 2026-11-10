@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   dispatch: vi.fn<Dispatch<Action>>(),
   provider: "github",
   initiallyValidated: false,
+  initialStep: "test",
+  salesforcePath: "own",
   pending: "",
   error: "",
   loading: false,
@@ -71,11 +73,15 @@ vi.mock("./provider-setup", async (importOriginal) => {
       );
       return {
         ...state,
-        step: "test",
+        step: mocks.initialStep,
         saved: true,
         authorized: true,
         tested: mocks.initiallyValidated,
-        values: { ...state.values, org: "example-org" },
+        values: {
+          ...state.values,
+          org: "example-org",
+          path: mocks.salesforcePath,
+        },
       };
     },
   };
@@ -85,6 +91,7 @@ vi.mock("./useProviderConnection", () => ({
     mocks.dispatch.mockImplementation(dispatch);
     return {
       dispatch,
+      next: () => dispatch({ type: "next" }),
       pending: mocks.pending || null,
       error: mocks.error || null,
       errorStep: "test",
@@ -154,6 +161,8 @@ beforeEach(() => {
   mocks.create.mockReturnValue(mocks.fire);
   mocks.provider = "github";
   mocks.initiallyValidated = false;
+  mocks.initialStep = "test";
+  mocks.salesforcePath = "own";
   mocks.pending = "";
   mocks.error = "";
   mocks.loading = false;
@@ -320,4 +329,25 @@ describe("Salesforce instance header entry", () => {
       ).toBeNull();
     },
   );
+});
+
+it("allows Salesforce installation instructions but disables Continue at the support handoff", async () => {
+  mocks.provider = "salesforce";
+  mocks.initialStep = "install";
+  mocks.salesforcePath = "support";
+  const user = userEvent.setup();
+  render(<Setup />);
+  const next = () =>
+    screen.getByRole<HTMLButtonElement>("button", { name: "Continue" });
+  expect(next().disabled).toBe(false);
+  await user.click(next());
+  expect(
+    screen
+      .getByRole("button", { name: /Finish with support/ })
+      .getAttribute("aria-current"),
+  ).toBe("step");
+  expect(next().disabled).toBe(true);
+  expect(screen.queryByRole("button", { name: "Complete setup" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  expect(next().disabled).toBe(false);
 });

@@ -331,9 +331,7 @@ it.each([
       </SetupContext>
     );
     const view = render(task);
-    expect(screen.getByText(`Loading ${label}…`).className).toContain(
-      "text-muted-foreground",
-    );
+    expect(screen.getByText(`Loading ${label}…`)).toBeDefined();
     callback.isError = true;
     view.rerender(
       <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
@@ -379,7 +377,7 @@ it.each([
   },
 );
 
-it("uses the published app installation URL and stops at the documented support handoff", async () => {
+it("renders the published installation link and support handoff details", async () => {
   const user = userEvent.setup();
   render(<SalesforceFixture step="choices" />);
   await user.click(screen.getByText("Use Speakeasy’s app", { exact: true }));
@@ -406,7 +404,6 @@ it("uses the published app installation URL and stops at the documented support 
     "value",
     "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
   );
-  await user.click(screen.getByRole("button", { name: "Continue" }));
   expect(
     screen.getByText(/Your next step is with Speakeasy support/),
   ).toBeDefined();

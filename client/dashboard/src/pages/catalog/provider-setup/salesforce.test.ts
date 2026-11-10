@@ -173,6 +173,9 @@ describe("documented Salesforce connection contract", () => {
     expect(rail).toContain("install");
     expect(rail).toContain("support");
     expect(rail).not.toContain("credentials");
+    const handoff = reduce({ ...s, step: "install" }, { type: "next" });
+    expect(handoff.step).toBe("support");
+    expect(reduce(handoff, { type: "next" }).step).toBe("support");
     expect(ready({ ...s, saved: true, authorized: true, tested: true })).toBe(
       false,
     );
