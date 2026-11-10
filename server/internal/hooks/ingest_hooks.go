@@ -198,7 +198,7 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	if err != nil {
 		return nil, err
 	}
-	return detailed.Result, nil
+	return s.withVersionStatus(ctx, detailed.Result), nil
 }
 
 func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *AuthenticatedIngestResult, err error) {

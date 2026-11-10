@@ -494,6 +494,10 @@ func (s *Service) handleSessionStart(ctx context.Context, ev *hookevents.Session
 	continueVal := true
 	result := makeHookResult(ev.RawEventType)
 	result.Continue = &continueVal
+	if s.versionPolicy.Latest != nil {
+		notice := legacyHooksNotice
+		result.SystemMessage = &notice
+	}
 	return result, nil
 }
 
