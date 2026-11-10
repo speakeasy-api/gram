@@ -206,7 +206,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -4781,6 +4781,11 @@ func ParseEndpoint(
 		adminGetHookClientsRefreshFlag           = adminGetHookClientsFlags.String("refresh", "", "")
 		adminGetHookClientsAdminSessionTokenFlag = adminGetHookClientsFlags.String("admin-session-token", "", "")
 
+		adminGetOrganizationHookFleetFlags                 = flag.NewFlagSet("get-organization-hook-fleet", flag.ExitOnError)
+		adminGetOrganizationHookFleetOrganizationIDFlag    = adminGetOrganizationHookFleetFlags.String("organization-id", "REQUIRED", "")
+		adminGetOrganizationHookFleetWindowDaysFlag        = adminGetOrganizationHookFleetFlags.String("window-days", "30", "")
+		adminGetOrganizationHookFleetAdminSessionTokenFlag = adminGetOrganizationHookFleetFlags.String("admin-session-token", "", "")
+
 		adminListRegistryPromotionCandidatesFlags                 = flag.NewFlagSet("list-registry-promotion-candidates", flag.ExitOnError)
 		adminListRegistryPromotionCandidatesCursorFlag            = adminListRegistryPromotionCandidatesFlags.String("cursor", "", "")
 		adminListRegistryPromotionCandidatesStatusFlag            = adminListRegistryPromotionCandidatesFlags.String("status", "active", "")
@@ -6562,6 +6567,7 @@ func ParseEndpoint(
 	adminSetMcpServerScopePinFlags.Usage = adminSetMcpServerScopePinUsage
 	adminGetMcpServerToolCallsFlags.Usage = adminGetMcpServerToolCallsUsage
 	adminGetHookClientsFlags.Usage = adminGetHookClientsUsage
+	adminGetOrganizationHookFleetFlags.Usage = adminGetOrganizationHookFleetUsage
 	adminListRegistryPromotionCandidatesFlags.Usage = adminListRegistryPromotionCandidatesUsage
 	adminGetRegistryPromotionCandidateFlags.Usage = adminGetRegistryPromotionCandidateUsage
 	adminPromoteRegistryCandidateFlags.Usage = adminPromoteRegistryCandidateUsage
@@ -9782,6 +9788,9 @@ func ParseEndpoint(
 
 			case "get-hook-clients":
 				epf = adminGetHookClientsFlags
+
+			case "get-organization-hook-fleet":
+				epf = adminGetOrganizationHookFleetFlags
 
 			case "list-registry-promotion-candidates":
 				epf = adminListRegistryPromotionCandidatesFlags
@@ -13155,6 +13164,9 @@ func ParseEndpoint(
 			case "get-hook-clients":
 				endpoint = c.GetHookClients()
 				data, err = adminc.BuildGetHookClientsPayload(*adminGetHookClientsWindowDaysFlag, *adminGetHookClientsRefreshFlag, *adminGetHookClientsAdminSessionTokenFlag)
+			case "get-organization-hook-fleet":
+				endpoint = c.GetOrganizationHookFleet()
+				data, err = adminc.BuildGetOrganizationHookFleetPayload(*adminGetOrganizationHookFleetOrganizationIDFlag, *adminGetOrganizationHookFleetWindowDaysFlag, *adminGetOrganizationHookFleetAdminSessionTokenFlag)
 			case "list-registry-promotion-candidates":
 				endpoint = c.ListRegistryPromotionCandidates()
 				data, err = adminc.BuildListRegistryPromotionCandidatesPayload(*adminListRegistryPromotionCandidatesCursorFlag, *adminListRegistryPromotionCandidatesStatusFlag, *adminListRegistryPromotionCandidatesLimitFlag, *adminListRegistryPromotionCandidatesAdminSessionTokenFlag)
@@ -32651,6 +32663,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    set-mcp-server-scope-pin: Sets or clears the scopes pinned on the protected resource behind a remote-backed MCP server (admin view, no auth scoping). The pin applies to every live server in the project with the same upstream URL. Audited as the staff member.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-tool-calls: Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.`)
 	fmt.Fprintln(os.Stderr, `    get-hook-clients: Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-hook-fleet: The hooks installs of one organization: which versions, install routes and endpoints its users' machines use, which machines have gone quiet, and how much traffic still reaches the legacy endpoints.`)
 	fmt.Fprintln(os.Stderr, `    list-registry-promotion-candidates: List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.`)
 	fmt.Fprintln(os.Stderr, `    get-registry-promotion-candidate: Refresh health evidence for one exact remote MCP deployment before staff review.`)
 	fmt.Fprintln(os.Stderr, `    promote-registry-candidate: Publish an explicitly reviewed public catalogue entry and queue setup documentation. Customer credentials are never copied.`)
@@ -34054,6 +34067,28 @@ func adminGetHookClientsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-hook-clients --window-days 2 --refresh false --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationHookFleetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-hook-fleet", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -window-days INT")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `The hooks installs of one organization: which versions, install routes and endpoints its users' machines use, which machines have gone quiet, and how much traffic still reaches the legacy endpoints.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -window-days INT: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-hook-fleet --organization-id \"abc123\" --window-days 2 --admin-session-token \"abc123\"")
 }
 
 func adminListRegistryPromotionCandidatesUsage() {

@@ -10,6 +10,7 @@ import {
   ServerIcon,
   SlidersHorizontalIcon,
   UsersIcon,
+  WebhookIcon,
 } from "lucide-react";
 import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
@@ -124,6 +125,10 @@ export function RecordNav({
   });
   const onCoverage = !!matchRoute({
     to: "/organizations/$idOrSlug/coverage",
+    params: { idOrSlug },
+  });
+  const onHooks = !!matchRoute({
+    to: "/organizations/$idOrSlug/hooks",
     params: { idOrSlug },
   });
 
@@ -321,6 +326,19 @@ export function RecordNav({
                 >
                   <LayoutGridIcon />
                   <span>Coverage</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={onHooks} tooltip="Hooks">
+                <Link
+                  to="/organizations/$idOrSlug/hooks"
+                  params={{ idOrSlug }}
+                  {...currentProps(onHooks)}
+                >
+                  <WebhookIcon />
+                  <span>Hooks</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

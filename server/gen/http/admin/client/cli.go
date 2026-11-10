@@ -2392,6 +2392,48 @@ func BuildGetHookClientsPayload(adminGetHookClientsWindowDays string, adminGetHo
 	return v, nil
 }
 
+// BuildGetOrganizationHookFleetPayload builds the payload for the admin
+// getOrganizationHookFleet endpoint from CLI flags.
+func BuildGetOrganizationHookFleetPayload(adminGetOrganizationHookFleetOrganizationID string, adminGetOrganizationHookFleetWindowDays string, adminGetOrganizationHookFleetAdminSessionToken string) (*admin.GetOrganizationHookFleetPayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetOrganizationHookFleetOrganizationID
+	}
+	var windowDays int
+	{
+		if adminGetOrganizationHookFleetWindowDays != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminGetOrganizationHookFleetWindowDays, 10, strconv.IntSize)
+			windowDays = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
+			}
+			if windowDays < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
+			}
+			if windowDays > 90 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 90, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationHookFleetAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationHookFleetAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationHookFleetPayload{}
+	v.OrganizationID = organizationID
+	v.WindowDays = windowDays
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListRegistryPromotionCandidatesPayload builds the payload for the admin
 // listRegistryPromotionCandidates endpoint from CLI flags.
 func BuildListRegistryPromotionCandidatesPayload(adminListRegistryPromotionCandidatesCursor string, adminListRegistryPromotionCandidatesStatus string, adminListRegistryPromotionCandidatesLimit string, adminListRegistryPromotionCandidatesAdminSessionToken string) (*admin.ListRegistryPromotionCandidatesPayload, error) {
