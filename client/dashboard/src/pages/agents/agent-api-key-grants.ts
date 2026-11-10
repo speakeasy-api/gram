@@ -21,7 +21,7 @@ export type NarrowingDimension = "disposition" | "tool";
 /** Which inventory names the resources a selector of this kind identifies. */
 export type ResourceInventory = "mcp" | "project";
 
-export interface GrantNarrowing {
+interface GrantNarrowing {
   resourceId?: string;
   /** Legacy editor state: ignored; candidate project restrictions are preserved. */
   projectId?: string;
