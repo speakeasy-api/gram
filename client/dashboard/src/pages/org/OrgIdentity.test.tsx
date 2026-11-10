@@ -70,6 +70,15 @@ vi.mock("./slack-workspaces/SlackWorkspaces", () => ({
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: mocks.enabled ? "enabled" : "disabled" }),
 }));
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    tasks: [],
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: () => mocks.admin,
@@ -89,14 +98,8 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: vi.fn() }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    setup: {
-      Link: ({ children }: { children: ReactNode }) => (
-        <a href="/example/setup?task=identity-provider">{children}</a>
-      ),
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: undefined }),
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => mocks.features(),

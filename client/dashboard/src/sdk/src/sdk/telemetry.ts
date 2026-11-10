@@ -11,6 +11,7 @@ import { telemetryGetMetaMcpServerUsage } from "../funcs/telemetryGetMetaMcpServ
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetOrganizationGatewayOverview } from "../funcs/telemetryGetOrganizationGatewayOverview.js";
 import { telemetryGetOrganizationGatewayUsage } from "../funcs/telemetryGetOrganizationGatewayUsage.js";
+import { telemetryGetOrgMcpServerActivity } from "../funcs/telemetryGetOrgMcpServerActivity.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetProjectOverview } from "../funcs/telemetryGetProjectOverview.js";
 import { telemetryGetToolUsageClients } from "../funcs/telemetryGetToolUsageClients.js";
@@ -49,6 +50,7 @@ import { GetMcpServerActivityResult } from "../models/components/getmcpserveract
 import { GetMetaMcpServerUsageResult } from "../models/components/getmetamcpserverusageresult.js";
 import { GetMetricsSummaryResult } from "../models/components/getmetricssummaryresult.js";
 import { GetObservabilityOverviewResult } from "../models/components/getobservabilityoverviewresult.js";
+import { GetOrgMcpServerActivityResult } from "../models/components/getorgmcpserveractivityresult.js";
 import { GetProjectOverviewResult } from "../models/components/getprojectoverviewresult.js";
 import { GetToolUsageClientsResult } from "../models/components/gettoolusageclientsresult.js";
 import { GetToolUsageClientToolBreakdownResult } from "../models/components/gettoolusageclienttoolbreakdownresult.js";
@@ -113,6 +115,10 @@ import {
   GetOrganizationGatewayUsageRequest,
   GetOrganizationGatewayUsageSecurity,
 } from "../models/operations/getorganizationgatewayusage.js";
+import {
+  GetOrgMcpServerActivityRequest,
+  GetOrgMcpServerActivitySecurity,
+} from "../models/operations/getorgmcpserveractivity.js";
 import {
   GetProjectMetricsSummaryRequest,
   GetProjectMetricsSummarySecurity,
@@ -355,6 +361,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetObservabilityOverviewResult> {
     return unwrapAsync(telemetryGetObservabilityOverview(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getOrgMcpServerActivity telemetry
+   *
+   * @remarks
+   * Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.
+   */
+  async getOrgMcpServerActivity(
+    request: GetOrgMcpServerActivityRequest,
+    security?: GetOrgMcpServerActivitySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetOrgMcpServerActivityResult> {
+    return unwrapAsync(telemetryGetOrgMcpServerActivity(
       this,
       request,
       security,

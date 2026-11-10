@@ -79,7 +79,7 @@ func buildDynamicSessionTools(
 
 	return []*toolListEntry{
 		{
-			Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
+			Title: "Search Tools", OutputSchema: nil, Icons: nil, Execution: nil,
 			Name:        searchToolsToolName,
 			Description: findDescription,
 			InputSchema: buildDynamicSearchToolsSchema(availableTags),
@@ -87,7 +87,7 @@ func buildDynamicSessionTools(
 		},
 		describeToolsTool,
 		{
-			Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
+			Title: "Run a Tool", OutputSchema: nil, Icons: nil, Execution: nil,
 			Name:        executeToolToolName,
 			Description: executeDescription,
 			InputSchema: dynamicExecuteToolSchema,
@@ -99,10 +99,6 @@ func buildDynamicSessionTools(
 func buildDescribeToolsTool(tools []*types.Tool) (*toolListEntry, error) {
 	toolNames := []string{}
 	for _, tool := range tools {
-		if conv.IsProxyTool(tool) {
-			return nil, fmt.Errorf("build describe tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
-		}
-
 		baseTool, err := conv.ToBaseTool(tool)
 		if err != nil {
 			continue
@@ -131,7 +127,7 @@ func buildDescribeToolsTool(tools []*types.Tool) (*toolListEntry, error) {
 	}`, strings.Join(toolNames[:exampleCount], ", "))
 
 	return &toolListEntry{
-		Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
+		Title: "Get Tool Details", OutputSchema: nil, Icons: nil, Execution: nil,
 		Name:        describeToolsToolName,
 		Description: description,
 		InputSchema: json.RawMessage(schemaJSON),
@@ -227,10 +223,6 @@ func handleSearchToolsCall(
 func buildToolSearchResultEntries(tools []*types.Tool, searchResults []*rag.ToolSearchResult) ([]*toolListEntry, error) {
 	toolsByURN := make(map[string]*types.Tool, len(tools))
 	for _, tool := range tools {
-		if conv.IsProxyTool(tool) {
-			return nil, fmt.Errorf("search tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
-		}
-
 		baseTool, err := conv.ToBaseTool(tool)
 		if err != nil {
 			continue
@@ -315,10 +307,6 @@ func handleDescribeToolsCall(
 	// Build a map of tools by name for quick lookup
 	toolsByName := make(map[string]*types.Tool)
 	for _, tool := range toolset.Tools {
-		if conv.IsProxyTool(tool) {
-			return nil, fmt.Errorf("describe tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
-		}
-
 		baseTool, err := conv.ToBaseTool(tool)
 		if err != nil {
 			continue

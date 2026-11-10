@@ -16,19 +16,98 @@ afterEach(() => {
 });
 
 describe("KeyCredentialChoice", () => {
-  it("asks nothing of a server with one credential", () => {
-    mocks.choices = [
-      { id: "a", name: "Token", clientType: "static_credential" },
-    ];
+  it("asks nothing of a server without shared credentials", () => {
+    mocks.choices = [];
     const { container } = render(
       <KeyCredentialChoice
         serverId="s"
         serverName="GitHub"
         value={undefined}
-        onChange={() => undefined}
+        onChange={() => {}}
       />,
     );
     expect(container.innerHTML).toBe("");
+  });
+
+  it("asks for a server's only shared credential unless told to pick it", () => {
+    mocks.choices = [
+      { id: "a", name: "Token", clientType: "static_credential" },
+    ];
+    const onChange = vi.fn();
+    render(
+      <KeyCredentialChoice
+        serverId="s"
+        serverName="Example"
+        value={undefined}
+        onChange={(id) => {
+          onChange(id);
+        }}
+      />,
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("combobox", {
+        name: "Credential the key uses on Example",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: /Token · Static credential/ }),
+    );
+    expect(onChange).toHaveBeenCalledWith("a");
+  });
+
+  it("picks and names a server's only shared credential when told to", () => {
+    mocks.choices = [
+      { id: "a", name: "Token", clientType: "static_credential" },
+    ];
+    const onChange = vi.fn();
+    render(
+      <KeyCredentialChoice
+        serverId="s"
+        serverName="Example"
+        pickSole
+        value={undefined}
+        onChange={(id) => {
+          onChange(id);
+        }}
+      />,
+    );
+    expect(onChange).toHaveBeenCalledWith("a");
+    expect(screen.getByText("Uses Token · Static credential")).toBeTruthy();
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("lists the connected account beside a shared credential on a server that offers accounts", () => {
+    mocks.choices = [
+      { id: "a", name: "Token", clientType: "static_credential" },
+    ];
+    const onChange = vi.fn();
+    render(
+      <KeyCredentialChoice
+        serverId="s"
+        serverName="Linear"
+        accounts
+        value={undefined}
+        onChange={(id) => {
+          onChange(id);
+        }}
+      />,
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("combobox", {
+        name: "Credential the key uses on Linear",
+      }),
+    );
+    expect(
+      screen.getByRole("option", {
+        name: "The account connected for this agent",
+      }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("option", { name: /Token · Static credential/ }),
+    );
+    expect(onChange).toHaveBeenCalledWith("a");
   });
 
   it("asks which credential to use when a server offers several", () => {

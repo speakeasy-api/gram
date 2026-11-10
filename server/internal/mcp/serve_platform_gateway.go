@@ -22,16 +22,21 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // platformGatewayTools are the organization gateway tools Platform MCP may
@@ -70,6 +75,8 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 	if actor, ok := contextvalues.AuthenticatedActor(ctx); !ok || actor.Type != urn.PrincipalTypeUser || actor.ID != userID {
 		return nil, errPlatformGatewayIdentity
 	}
+	// As on a gateway: one recorded check per server the call names.
+	ctx = authz.WithOneChallengePerResource(ctx)
 	if _, delegated := principalcredential.FromContext(ctx); delegated {
 		return nil, errPlatformGatewayIdentity
 	}
@@ -82,7 +89,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 	if err != nil {
 		return nil, fmt.Errorf("load organization: %w", err)
 	}
-	metaServer, endpoint, unavailable, err := s.organizationGatewayRows(ctx, organization, orggateway.PlatformAvailability)
+	metaServer, endpoint, unavailable, err := s.organizationGatewayRows(ctx, organization, platformGatewayAvailability)
 	if err != nil {
 		return nil, fmt.Errorf("resolve organization gateway: %w", err)
 	}
@@ -91,9 +98,12 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		return platformGatewayResult(marshalToolErrorResult(ctx, logger, id, "Your organization's gateway is not available ("+string(unavailable)+"); ask an organization administrator to review the Organization Gateway on the MCP Servers page.", serverInfoMetaServer))
 	}
 	resolved := NewResolvedMcpEndpointFromMetaMcpServer(endpoint, metaServer, organization.ID, mcproute.OrganizationGateway)
-	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
-		return nil, fmt.Errorf("load organization gateway issuer: %w", err)
-	}
+
+	// Platform MCP holds no gateway connection to record credential choices
+	// on and signs nobody in through an organization issuer, so each proxied
+	// member is decided by what it offers the caller. Before the organization
+	// enforces, use of the decided client keeps the connect-equivalent rule.
+	choices := s.unchosenMemberChoices(resolved, urn.NewUserSubject(userID))
 
 	connectRoot, connectURL := "", ""
 	if root, err := resolved.RootURL(requestorigin.BaseURL(ctx, s.serverURL.String())); err != nil {
@@ -101,17 +111,19 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 	} else {
 		connectRoot, connectURL = root, root+"/connect/first-party"
 	}
+	skipped := new(remotesessions.SkippedClients)
 	gate := &metaGateContext{
+		fromRequest:         mcpconnectionattempts.FromRequest(nil),
+		skippedUpstreams:    skipped,
+		request:             nil,
 		projectID:           uuid.Nil,
 		metaServerID:        metaServer.ID,
 		agentID:             uuid.Nil,
 		organizationGateway: true,
 		organizationID:      organization.ID,
 		tokens:              nil,
-		projectTokens:       s.newOrganizationGatewayTokens(resolved, urn.NewUserSubject(userID)),
-		// Credential choices belong to one gateway connection; Platform MCP
-		// holds none, so each member routes through its project's clients.
-		memberChoices:       nil,
+		projectTokens:       s.newOrganizationGatewayTokens(nil, resolved, urn.NewUserSubject(userID), skipped),
+		memberChoices:       choices,
 		userSessionIssuerID: metaServer.UserSessionIssuerID.UUID,
 		connectRoot:         connectRoot,
 		chainUpstream:       nil,
@@ -121,6 +133,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		authentication:      nil,
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
+		deniedMembers:       nil,
 		execute:             false,
 		discoveryMode:       metamcp.DiscoveryModeProgressive,
 		authenticated:       true,
@@ -132,6 +145,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		connectURL:          connectURL,
 		consentDiagnostics:  nil,
+		agentFix:            nil,
 		skillsOverMCP:       nil,
 		servedCredentials:   nil,
 	}
@@ -150,6 +164,17 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		return platformGatewayResult(marshalToolErrorResult(ctx, logger, id, shareable.Error(), serverInfoMetaServer))
 	}
 	return platformGatewayResult(body, err)
+}
+
+// platformGatewayAvailability is the organization gateway's availability as
+// Platform MCP serves it: without an issuer, which only signs people in to the
+// gateway's own URL.
+func platformGatewayAvailability(ctx context.Context, db usersessionsrepo.DBTX, organization orgsrepo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error) {
+	unavailable, err := orggateway.PlatformServed(ctx, db, organization)
+	if err != nil {
+		return uuid.Nil, unavailable, fmt.Errorf("platform gateway availability: %w", err)
+	}
+	return uuid.Nil, unavailable, nil
 }
 
 // platformGatewayResult unwraps the tools/call result from a JSON-RPC response.
@@ -201,11 +226,16 @@ func (s *Service) searchPlatformGatewayTools(ctx context.Context, logger *slog.L
 		return nil, err
 	}
 	if args.Server != "" {
-		member, ok := findMetaMember(members, args.Server)
+		member, ok := s.findNamedMember(ctx, gate, members, args.Server)
 		if !ok {
 			return nil, unknownMetaMemberError(ctx, logger, gate, args.Server)
 		}
 		members = []metaMember{member}
+	}
+	if args.Server == "" {
+		// A search across every server names none of them, so it records no
+		// authorization check for any.
+		ctx = authz.WithoutChallenges(ctx)
 	}
 
 	var mu sync.Mutex
@@ -225,11 +255,11 @@ func (s *Service) searchPlatformGatewayTools(ctx context.Context, logger *slog.L
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				failed = append(failed, codemode.FailedMember{Server: member.slug, Reason: "catalog_unavailable"})
+				failed = append(failed, codemode.FailedMember{Server: member.slug, Reason: "catalog_unavailable", Message: ""})
 				return nil
 			}
 			if catalog.incomplete {
-				failed = append(failed, codemode.FailedMember{Server: member.slug, Reason: "catalog_incomplete"})
+				failed = append(failed, codemode.FailedMember{Server: member.slug, Reason: "catalog_incomplete", Message: ""})
 			}
 			for _, entry := range catalog.entries {
 				definition, err := json.Marshal(entry)

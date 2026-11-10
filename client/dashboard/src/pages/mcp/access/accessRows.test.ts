@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
@@ -224,6 +225,17 @@ describe("a person and the roles they are in", () => {
     ]);
 
     expect(scopeState(row, "view", catalog).note).toBe("included in Manage");
+  });
+
+  it("names the stronger line when the row's own rule for every server grants it", () => {
+    // Clearing View leaves it allowed through Manage; the line says so
+    // rather than reading as set on its own.
+    const row = rowFor([
+      role("Collaborator", { appliesTo: "all_resources", level: "manage" }),
+    ]);
+
+    expect(scopeState(row, "view", catalog).note).toBe("included in Manage");
+    expect(scopeState(row, "manage", catalog).note).toBeUndefined();
   });
 
   it("reads a row's own block for every server as blocked", () => {

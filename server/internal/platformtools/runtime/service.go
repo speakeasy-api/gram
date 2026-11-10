@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -32,6 +33,7 @@ import (
 	platformplugins "github.com/speakeasy-api/gram/server/internal/platformtools/plugins"
 	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
+	"github.com/speakeasy-api/gram/server/internal/platformtools/threadcontext"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	platformusers "github.com/speakeasy-api/gram/server/internal/platformtools/users"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -49,9 +51,16 @@ var _ gateway.PlatformExecutor = (*Service)(nil)
 type Option func(*config)
 
 type config struct {
-	deps           platformtools.Dependencies
-	extras         []platformtools.ExternalTool
-	featureChecker platformtools.FeatureChecker
+	threadAuthorizer *authz.Engine
+	deps             platformtools.Dependencies
+	extras           []platformtools.ExternalTool
+	featureChecker   platformtools.FeatureChecker
+}
+
+// WithThreadContextAuthorizer enables explicit thread selection using existing
+// caller grants. Automatic assistant calls do not need this option.
+func WithThreadContextAuthorizer(engine *authz.Engine) Option {
+	return func(c *config) { c.threadAuthorizer = engine }
 }
 
 func WithTriggerTools(app *bgtriggers.App) Option {
@@ -98,6 +107,7 @@ func NewService(
 	options ...Option,
 ) *Service {
 	cfg := config{
+		threadAuthorizer: nil,
 		deps: platformtools.Dependencies{
 			Logger:           logger,
 			DB:               db,
@@ -116,6 +126,11 @@ func NewService(
 	}
 
 	executors, gates := platformtools.BuildExecutors(cfg.deps, cfg.extras...)
+	for name, executor := range executors {
+		executors[name] = platformtools.WithThreadFallback(executor, func(ctx context.Context, threadID uuid.UUID, write bool) (contextvalues.AssistantPrincipal, string, error) {
+			return threadcontext.Resolve(ctx, db, cfg.threadAuthorizer, threadID, write)
+		})
+	}
 
 	return &Service{
 		logger:         logger.With(attr.SlogComponent("platform_tools")),

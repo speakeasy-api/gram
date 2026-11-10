@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/Button";
-import { Spinner } from "@/components/ui/Spinner";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
-import { ReactNode, Suspense } from "react";
+import type { ReactNode } from "react";
+import { Suspense } from "react";
 import { ErrorBoundary as ReactErrorBoundary } from "react-error-boundary";
 import { handleError, toError } from "@/lib/errors";
 import { useOrgRoutes } from "@/routes";
@@ -136,11 +137,7 @@ export function ContentErrorBoundary({
   fallback,
   resetKeys,
 }: ContentErrorBoundaryProps): JSX.Element {
-  const defaultFallback = (
-    <div className="flex items-center justify-center p-8">
-      <Spinner />
-    </div>
-  );
+  const defaultFallback = <SplashScreen />;
 
   return (
     <ReactErrorBoundary

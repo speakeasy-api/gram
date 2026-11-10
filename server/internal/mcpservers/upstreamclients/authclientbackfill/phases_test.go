@@ -804,7 +804,7 @@ func TestRun_EMAMatchesAPersistedProtectedResource(t *testing.T) {
 	require.Equal(t, []uuid.UUID{ema[0].ID}, f.links(server))
 }
 
-func TestRun_EMAMatchesATunneledServerUnderItsOwnIssuer(t *testing.T) {
+func TestRun_EMAMatchesATunneledServerByItsAssociationProvider(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	usi := f.userSessionIssuer()
@@ -822,15 +822,21 @@ func TestRun_EMAMatchesATunneledServerUnderItsOwnIssuer(t *testing.T) {
 	require.NoError(t, f.q.SetServerUserSessionIssuerFixture(t.Context(), SetServerUserSessionIssuerFixtureParams{UserSessionIssuerID: uuid.NullUUID{UUID: usi, Valid: true}, ID: serverID}))
 	f.binding(usi, issuerID, clientID, resource, []string{})
 
-	// Without its own derived issuer the tunneled server is not reached.
+	// Without an association naming the binding's provider the tunneled
+	// server is not reached, whatever its column says.
 	report := f.run(false)
 	require.Len(t, results(report, KindEMA, OutcomeAmbiguous), 1)
-
 	require.NoError(t, f.q.SetServerRemoteSessionIssuerFixture(t.Context(), SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true}, ID: serverID}))
+	report = f.run(false)
+	require.Len(t, results(report, KindEMA, OutcomeAmbiguous), 1)
+
+	// The association also backfills the server's own OAuth client beside
+	// the EMA client.
+	f.associate(serverID, clientID)
 	f.run(true)
 	ema := f.live(TypeEMA)
 	require.Len(t, ema, 1)
-	require.Equal(t, []uuid.UUID{ema[0].ID}, f.links(serverID))
+	require.Contains(t, f.links(serverID), ema[0].ID)
 }
 
 func TestRun_EMAScopesFollowTheBindings(t *testing.T) {

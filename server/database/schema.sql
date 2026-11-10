@@ -2576,6 +2576,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_dashboard_target_uniq
 ON trigger_instances (project_id, target_ref)
 WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
 
+-- One Speakeasy Slack app trigger routes to each managed assistant.
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_speakeasy_slack_target_uniq
+ON trigger_instances (project_id, target_ref)
+WHERE definition_slug = 'speakeasy_slack' AND status = 'active' AND deleted IS FALSE;
+
 -- trigger_thread_routes records how events on one external conversation (a
 -- trigger correlation id such as a Slack thread) reach a trigger target:
 -- whether the target is subscribed to it, and which of the target's
@@ -2701,6 +2706,20 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   unhealthy_since timestamptz,
   certificate_expires_at timestamptz,
   consecutive_failures INTEGER CONSTRAINT custom_domains_consecutive_failures_check CHECK (consecutive_failures >= 0),
+  -- Random, immutable DNS label forming this domain's per-domain CNAME target
+  -- (<token>.<suffix>). Cleared on soft delete.
+  dns_target_token TEXT CONSTRAINT custom_domains_dns_target_token_check CHECK (
+    dns_target_token IS NULL
+    OR (
+      dns_target_token <> ''
+      AND char_length(dns_target_token) <= 63
+    )
+  ),
+  -- Routing method the health checks last observed (for example per-domain
+  -- CNAME, shared CNAME or A record). Allowed values are enforced in code.
+  dns_routing_method TEXT,
+  dns_configuration_status TEXT,
+  dns_checked_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2726,6 +2745,12 @@ COMMENT ON COLUMN custom_domains.health_checked_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.unhealthy_since IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.certificate_expires_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.consecutive_failures IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_target_token IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_routing_method IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_configuration_status IS 'Advisory DNS configuration observation, independent of ownership and infrastructure health.
+@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_checked_at IS 'Time of the DNS observation; matches health_checked_at only when both observations came from the same check.
+@access: confidential';
 COMMENT ON COLUMN custom_domains.created_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.updated_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.deleted_at IS '@access: confidential';
@@ -2737,6 +2762,10 @@ WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_key
 ON custom_domains (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_dns_target_token_key
+ON custom_domains (dns_target_token)
 WHERE deleted IS FALSE;
 
 -- Tenant-qualified target for resources that pin a custom domain by id. Hard
@@ -3106,6 +3135,13 @@ CREATE TABLE IF NOT EXISTS external_keys (
   project_id uuid,
   external_credential_id uuid NOT NULL,
   provider TEXT NOT NULL,
+  -- What the key is for: 'sign' (asymmetric, backs JSON Web Key Sets) or
+  -- 'encrypt' (symmetric, wraps organization data encryption keys). Fixed at
+  -- creation because a KMS key's purpose cannot change. Validated in
+  -- application code.
+  purpose TEXT NOT NULL DEFAULT 'sign',
+  -- Signing keys record a JOSE algorithm (RS256, ES256). Encryption keys
+  -- record the provider's symmetric algorithm.
   algorithm TEXT NOT NULL,
   name TEXT NOT NULL,
   -- Reference to the access grant the customer configured on their KMS key: the
@@ -3144,6 +3180,7 @@ COMMENT ON COLUMN external_keys.organization_id IS '@access: confidential';
 COMMENT ON COLUMN external_keys.project_id IS '@access: confidential';
 COMMENT ON COLUMN external_keys.external_credential_id IS '@access: confidential';
 COMMENT ON COLUMN external_keys.provider IS '@access: confidential';
+COMMENT ON COLUMN external_keys.purpose IS '@access: confidential';
 COMMENT ON COLUMN external_keys.algorithm IS '@access: confidential';
 COMMENT ON COLUMN external_keys.name IS '@access: confidential';
 COMMENT ON COLUMN external_keys.customer_grant_reference IS '@access: restricted';
@@ -3432,6 +3469,211 @@ AS $$
       ))
   );
 $$;
+
+-- Organization data encryption uses envelope encryption. An organization has
+-- one key encryption key (KEK): a symmetric KMS key referenced by an
+-- external_keys row with purpose 'encrypt'. Speakeasy mints it on first use
+-- unless the customer supplies their own. The KEK wraps one data encryption
+-- key (DEK) per use case, and the DEK encrypts the application data. KMS is
+-- only called to wrap and unwrap DEKs, so switching KEKs re-wraps DEKs and
+-- never rewrites application rows.
+
+-- KEKs that Speakeasy minted in its own KMS key ring. A row here is the
+-- managed-by marker: customer key APIs refuse to edit or delete these keys,
+-- and only keys under the configured managed key ring may appear here.
+CREATE TABLE IF NOT EXISTS managed_encryption_keys (
+  external_key_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  -- Set once Speakeasy disabled the KMS key and removed its grant after the
+  -- key stopped wrapping any DEK. NULL on an unused key means that cleanup is
+  -- still pending and the sweep retries it.
+  kms_disabled_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT managed_encryption_keys_pkey PRIMARY KEY (external_key_id),
+  CONSTRAINT managed_encryption_keys_external_key_tenant_fkey FOREIGN KEY (organization_id, external_key_id) REFERENCES external_keys (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT managed_encryption_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN managed_encryption_keys.external_key_id IS '@access: confidential';
+COMMENT ON COLUMN managed_encryption_keys.organization_id IS '@access: confidential';
+COMMENT ON COLUMN managed_encryption_keys.kms_disabled_at IS '@access: confidential';
+COMMENT ON COLUMN managed_encryption_keys.created_at IS '@access: confidential';
+COMMENT ON COLUMN managed_encryption_keys.updated_at IS '@access: confidential';
+
+-- Serves the KMS cleanup sweep and the managed-key FK cascade.
+CREATE INDEX IF NOT EXISTS managed_encryption_keys_organization_id_external_key_id_idx
+ON managed_encryption_keys (organization_id, external_key_id);
+
+-- The organization's encryption configuration: which KEK currently wraps its
+-- DEKs, and whether a switch to another KEK is in flight.
+CREATE TABLE IF NOT EXISTS organization_encryption_configs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- speakeasy_managed | customer_managed (app-validated). Follows the KEK.
+  mode TEXT NOT NULL,
+  -- active | switching | suspended (app-validated).
+  state TEXT NOT NULL,
+  -- The KEK new DEKs are wrapped with and the first one tried on unwrap.
+  kek_external_key_id uuid NOT NULL,
+  -- The KEK being switched away from. Set only while state is 'switching';
+  -- its wraps stay readable until the switch completes or rolls back.
+  previous_kek_external_key_id uuid,
+  switch_started_at timestamptz,
+  switch_completed_at timestamptz,
+  -- Set when the KEK became unusable (disabled, grant removed, destroyed).
+  -- Suspended organizations fail closed on every encrypt and decrypt.
+  suspended_at timestamptz,
+  suspended_reason TEXT,
+  -- Result of the last background KEK health probe. NULL error means it
+  -- succeeded.
+  last_kek_check_at timestamptz,
+  last_kek_check_error TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT organization_encryption_configs_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_encryption_configs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Tenant-qualified so a config can never use another organization's key.
+  CONSTRAINT organization_encryption_configs_kek_tenant_fkey FOREIGN KEY (organization_id, kek_external_key_id) REFERENCES external_keys (organization_id, id),
+  CONSTRAINT organization_encryption_configs_previous_kek_tenant_fkey FOREIGN KEY (organization_id, previous_kek_external_key_id) REFERENCES external_keys (organization_id, id)
+);
+
+COMMENT ON COLUMN organization_encryption_configs.id IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.mode IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.state IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.kek_external_key_id IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.previous_kek_external_key_id IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.switch_started_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.switch_completed_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.suspended_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.suspended_reason IS 'Provider error summary; never carries key material or ciphertext.
+@access: restricted';
+COMMENT ON COLUMN organization_encryption_configs.last_kek_check_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.last_kek_check_error IS 'Provider error summary; never carries key material or ciphertext.
+@access: restricted';
+COMMENT ON COLUMN organization_encryption_configs.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_configs.deleted IS '@access: confidential';
+
+-- One live configuration per organization.
+CREATE UNIQUE INDEX IF NOT EXISTS organization_encryption_configs_organization_id_key
+ON organization_encryption_configs (organization_id)
+WHERE deleted IS FALSE;
+
+-- Composite FK target so data_encryption_keys pin their config to one org.
+CREATE UNIQUE INDEX IF NOT EXISTS organization_encryption_configs_organization_id_id_key
+ON organization_encryption_configs (organization_id, id);
+
+-- Back the KEK FKs (NO ACTION) and the external key delete guard.
+CREATE INDEX IF NOT EXISTS organization_encryption_configs_kek_tenant_idx
+ON organization_encryption_configs (organization_id, kek_external_key_id);
+
+CREATE INDEX IF NOT EXISTS organization_encryption_configs_previous_kek_tenant_idx
+ON organization_encryption_configs (organization_id, previous_kek_external_key_id)
+WHERE previous_kek_external_key_id IS NOT NULL;
+
+-- One DEK version for one (organization, use case). The key material lives
+-- only in data_encryption_key_wraps, wrapped by a KEK.
+CREATE TABLE IF NOT EXISTS data_encryption_keys (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  encryption_config_id uuid NOT NULL,
+  -- Registered consumer name, e.g. 'tailscale-gateway-state'. Bound into the
+  -- associated data of every ciphertext the DEK produces.
+  use_case TEXT NOT NULL CHECK (use_case <> ''),
+  -- active | decrypt_only | revoked (app-validated). Only the active DEK
+  -- encrypts; decrypt_only DEKs still decrypt rows written before a rotation.
+  state TEXT NOT NULL,
+  activated_at timestamptz,
+  retired_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT data_encryption_keys_pkey PRIMARY KEY (id),
+  CONSTRAINT data_encryption_keys_config_tenant_fkey FOREIGN KEY (organization_id, encryption_config_id) REFERENCES organization_encryption_configs (organization_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN data_encryption_keys.id IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_keys.organization_id IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_keys.encryption_config_id IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_keys.use_case IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_keys.state IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_keys.activated_at IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_keys.retired_at IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_keys.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_keys.created_at IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_keys.updated_at IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_keys.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_keys.deleted IS '@access: confidential';
+
+-- At most one DEK encrypts for each (organization, use case).
+CREATE UNIQUE INDEX IF NOT EXISTS data_encryption_keys_organization_id_use_case_active_key
+ON data_encryption_keys (organization_id, use_case)
+WHERE state = 'active' AND deleted IS FALSE;
+
+-- Composite FK target so wraps pin their DEK to one org.
+CREATE UNIQUE INDEX IF NOT EXISTS data_encryption_keys_organization_id_id_key
+ON data_encryption_keys (organization_id, id);
+
+-- Non-partial so the config FK cascade also reaches soft-deleted rows.
+CREATE INDEX IF NOT EXISTS data_encryption_keys_config_tenant_idx
+ON data_encryption_keys (organization_id, encryption_config_id);
+
+-- A DEK wrapped by one KEK. A DEK has one wrap per KEK it is readable under:
+-- one in steady state, two while the organization switches KEKs.
+CREATE TABLE IF NOT EXISTS data_encryption_key_wraps (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  data_encryption_key_id uuid NOT NULL,
+  external_key_id uuid NOT NULL,
+  -- KMS-reported key version that produced the wrap, so the health probe can
+  -- re-wrap after the provider rotates the key's primary version.
+  external_key_version TEXT,
+  -- KMS ciphertext of the 32-byte DEK.
+  wrapped_key bytea NOT NULL CHECK (octet_length(wrapped_key) > 0),
+  last_unwrapped_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT data_encryption_key_wraps_pkey PRIMARY KEY (id),
+  CONSTRAINT data_encryption_key_wraps_dek_tenant_fkey FOREIGN KEY (organization_id, data_encryption_key_id) REFERENCES data_encryption_keys (organization_id, id) ON DELETE CASCADE,
+  -- NO ACTION: a KEK that still wraps a DEK must never be removed, or the
+  -- data it protects becomes unreadable.
+  CONSTRAINT data_encryption_key_wraps_external_key_tenant_fkey FOREIGN KEY (organization_id, external_key_id) REFERENCES external_keys (organization_id, id)
+);
+
+COMMENT ON COLUMN data_encryption_key_wraps.id IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_key_wraps.organization_id IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_key_wraps.data_encryption_key_id IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_key_wraps.external_key_id IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_key_wraps.external_key_version IS '@access: restricted';
+COMMENT ON COLUMN data_encryption_key_wraps.wrapped_key IS '@access: secret-restricted';
+COMMENT ON COLUMN data_encryption_key_wraps.last_unwrapped_at IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_key_wraps.created_at IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_key_wraps.updated_at IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_key_wraps.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN data_encryption_key_wraps.deleted IS '@access: confidential';
+
+-- One live wrap per (DEK, KEK).
+CREATE UNIQUE INDEX IF NOT EXISTS data_encryption_key_wraps_dek_external_key_key
+ON data_encryption_key_wraps (data_encryption_key_id, external_key_id)
+WHERE deleted IS FALSE;
+
+-- Non-partial so the DEK FK cascade also reaches soft-deleted rows.
+CREATE INDEX IF NOT EXISTS data_encryption_key_wraps_dek_tenant_idx
+ON data_encryption_key_wraps (organization_id, data_encryption_key_id);
+
+-- Backs the KEK FK (NO ACTION) and the external key delete guard. Non-partial
+-- because the FK check has to see soft-deleted rows.
+CREATE INDEX IF NOT EXISTS data_encryption_key_wraps_external_key_tenant_idx
+ON data_encryption_key_wraps (organization_id, external_key_id);
 
 -- Customer-hosted MCP servers connected through outbound tunnels. Gram stores
 -- the durable management/source record; live connection routing is cached in
@@ -3940,6 +4182,9 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- Administrator-chosen label. NULL means unset, and readers show client_id.
   display_name TEXT,
 
+  -- Opt-in: send the MCP client's name upstream as speakeasy_client_name on /authorize.
+  forward_client_name boolean NOT NULL DEFAULT FALSE,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -4023,6 +4268,7 @@ COMMENT ON COLUMN remote_session_clients.resource_tos_uri IS '@access: restricte
 COMMENT ON COLUMN remote_session_clients.upstream_rejected_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.identity_provider_connection_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.credential_owner IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.forward_client_name IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.created_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.updated_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.deleted_at IS '@access: confidential';
@@ -5465,6 +5711,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_sessions_refresh_token_hash_key
 ON user_sessions (refresh_token_hash)
 WHERE deleted IS FALSE;
 
+-- Finds a used or revoked refresh token by hash; live rows use the index above.
+CREATE INDEX IF NOT EXISTS user_sessions_spent_refresh_token_hash_idx
+ON user_sessions (refresh_token_hash)
+WHERE deleted IS TRUE AND refresh_token_hash IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS user_sessions_subject_idx
 ON user_sessions (subject_urn, user_session_issuer_id)
 WHERE deleted IS FALSE;
@@ -6708,6 +6959,13 @@ CREATE INDEX IF NOT EXISTS chat_messages_inference_identity_idx
 ON chat_messages (project_id, external_message_id)
 WHERE origin = 'anthropic-inference' AND external_message_id IS NOT NULL;
 
+-- Whether a project has stored any message from a Claude transcript upload
+-- (Claude Cowork sessions shipped on Stop). The setup wizard reads it to mark
+-- the Claude organization instructions card done once capture works.
+CREATE INDEX IF NOT EXISTS chat_messages_claude_transcript_project_idx
+ON chat_messages (project_id)
+WHERE origin = 'claude-transcript';
+
 -- Partial index over unanalyzed messages only. Shrinks toward zero at steady
 -- state, making FetchUnanalyzedMessageIDs an index-only scan on a tiny set.
 CREATE INDEX IF NOT EXISTS chat_messages_risk_analyzed_at_null_idx
@@ -7729,11 +7987,18 @@ CREATE TABLE IF NOT EXISTS slack_directory_connections (
   last_sync_failed_at timestamptz,
   -- Store a typed failure code and omit the raw provider response.
   last_error_code TEXT,
+  -- The project whose managed assistant answers mentions and direct messages
+  -- sent to the Speakeasy app in this workspace. NULL leaves the app silent.
+  default_project_id uuid,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT slack_directory_connections_pkey PRIMARY KEY (id),
-  CONSTRAINT slack_directory_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL
+  CONSTRAINT slack_directory_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  -- Composite so the routed project is pinned to the connection's
+  -- organization. Only the project column is nulled on delete because
+  -- organization_id is NOT NULL.
+  CONSTRAINT slack_directory_connections_default_project_id_fkey FOREIGN KEY (organization_id, default_project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL (default_project_id)
 );
 
 COMMENT ON COLUMN slack_directory_connections.id IS '@access: confidential';
@@ -7750,12 +8015,25 @@ COMMENT ON COLUMN slack_directory_connections.last_full_sync_generation IS '@acc
 COMMENT ON COLUMN slack_directory_connections.last_full_sync_succeeded_at IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.last_sync_failed_at IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.last_error_code IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.default_project_id IS 'Project whose managed assistant answers the Speakeasy app in this workspace.
+@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.created_at IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.updated_at IS '@access: confidential';
 
 -- Reconnect the same workspace in place; disconnection does not release its key.
 CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_connections_org_team_key
 ON slack_directory_connections (organization_id, slack_team_id);
+
+-- A project answers in at most one workspace, so its assistant's Slack replies
+-- resolve to exactly one bot token.
+CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_connections_default_project_id_key
+ON slack_directory_connections (default_project_id)
+WHERE default_project_id IS NOT NULL;
+
+-- Find the workspace that routes Slack events by team.
+CREATE INDEX IF NOT EXISTS slack_directory_connections_slack_team_id_idx
+ON slack_directory_connections (slack_team_id)
+WHERE default_project_id IS NOT NULL AND disconnected_at IS NULL;
 
 -- Store verified members of the connected workspace. Seeing an external Slack
 -- Connect user in a shared channel does not establish membership. Full syncs
@@ -9380,6 +9658,7 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   effect TEXT,
   drop_resource TEXT,
   selectors JSONB NOT NULL,
+  expires_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -9409,6 +9688,8 @@ COMMENT ON COLUMN principal_grants.drop_resource IS 'Deprecated. Formerly ''*'' 
 @access: confidential';
 COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.
 @access: opaque-restricted';
+COMMENT ON COLUMN principal_grants.expires_at IS 'When a temporary grant stops authorizing new requests. NULL = permanent. A row whose expires_at has passed grants nothing and is ignored by every reader.
+@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
 ON principal_grants (organization_id, principal_urn, scope, selectors);
@@ -9419,6 +9700,11 @@ ON principal_grants (organization_id, principal_urn, scope, COALESCE(effect, 'al
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
 USING GIN (selectors);
+
+-- Listing an organization's temporary grants.
+CREATE INDEX IF NOT EXISTS principal_grants_org_expires_at_idx
+ON principal_grants (organization_id, expires_at)
+WHERE expires_at IS NOT NULL;
 
 -- Grants the default auth permission backfill wrote, kept after the grant is
 -- deleted: a rerun never restores what an admin removed, and a rollback
@@ -9511,6 +9797,7 @@ ON agent_connection_blocks (remote_session_client_id);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  is_internal boolean NOT NULL DEFAULT false,
   seq BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
   organization_id TEXT NOT NULL,
   project_id uuid,
@@ -9572,6 +9859,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 COMMENT ON COLUMN audit_logs.id IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.is_internal IS '@access: confidential';
 COMMENT ON COLUMN audit_logs.seq IS '@access: confidential';
 COMMENT ON COLUMN audit_logs.organization_id IS '@access: confidential';
 COMMENT ON COLUMN audit_logs.project_id IS '@access: confidential';
@@ -9612,6 +9900,7 @@ ON audit_logs (organization_id, subject_id, seq DESC);
 -- audit_logs so both read back through the same API shape.
 CREATE TABLE IF NOT EXISTS security_audit_logs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  is_internal boolean NOT NULL DEFAULT false,
   -- Starts high so that sequence values below the start stay free for entries
   -- moved here from audit_logs, which keep their audit_logs seq and so sort
   -- before every entry written here, in their original order.
@@ -9658,6 +9947,7 @@ CREATE TABLE IF NOT EXISTS security_audit_logs (
 );
 
 COMMENT ON COLUMN security_audit_logs.id IS '@access: confidential';
+COMMENT ON COLUMN security_audit_logs.is_internal IS '@access: confidential';
 COMMENT ON COLUMN security_audit_logs.seq IS '@access: confidential';
 COMMENT ON COLUMN security_audit_logs.organization_id IS '@access: confidential';
 COMMENT ON COLUMN security_audit_logs.project_id IS '@access: confidential';
@@ -14084,7 +14374,8 @@ CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_connection_idx
 ON admin_mcp_write_proposals (connection_id);
 
 -- Staff-only lifecycle and refusal trail. Survives rolled-back writes. Stores
--- bounded reason codes only: no prompts, arguments, results or credentials.
+-- the operation, its target and bounded reason codes: no prompts, arguments,
+-- results or credentials.
 CREATE TABLE IF NOT EXISTS admin_mcp_write_events (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   proposal_id uuid,
@@ -14093,6 +14384,11 @@ CREATE TABLE IF NOT EXISTS admin_mcp_write_events (
   event TEXT NOT NULL,
   reason_code TEXT,
   request_id TEXT,
+  operation TEXT,
+  -- Null for platform-global operations and rows written before this column.
+  organization_id TEXT,
+  resource_kind TEXT,
+  resource_id TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
@@ -14114,6 +14410,10 @@ COMMENT ON COLUMN admin_mcp_write_events.oauth_client_id IS '@access: confidenti
 COMMENT ON COLUMN admin_mcp_write_events.event IS '@access: confidential';
 COMMENT ON COLUMN admin_mcp_write_events.reason_code IS '@access: confidential';
 COMMENT ON COLUMN admin_mcp_write_events.request_id IS '@access: restricted';
+COMMENT ON COLUMN admin_mcp_write_events.operation IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_write_events.organization_id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_write_events.resource_kind IS '@access: restricted';
+COMMENT ON COLUMN admin_mcp_write_events.resource_id IS '@access: restricted';
 COMMENT ON COLUMN admin_mcp_write_events.created_at IS '@access: confidential';
 COMMENT ON COLUMN admin_mcp_write_events.updated_at IS '@access: confidential';
 
@@ -16512,6 +16812,8 @@ CREATE TABLE IF NOT EXISTS registry_promotion_candidates (
   curation_retry_key text,
   curation_retry_revision text,
   curation_retry_action text,
+  docs_outcome text,
+  docs_review_since timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT registry_promotion_candidates_pkey PRIMARY KEY (id),
@@ -16568,6 +16870,10 @@ COMMENT ON COLUMN registry_promotion_candidates.docs_revision IS '@access: confi
 COMMENT ON COLUMN registry_promotion_candidates.docs_retry_key IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.docs_retry_revision IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.docs_retry_by IS '@access: confidential-pii';
+COMMENT ON COLUMN registry_promotion_candidates.docs_outcome IS 'How guide delivery resolved: requested (factory issue filed), existing_guide (guide already on the setup-docs default branch) or guide_in_review (an open guide PR is pending). NULL with docs_queued_at set means requested (resolved before this was recorded); NULL with docs_queued_at NULL means delivery has not resolved yet.
+@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_review_since IS 'When delivery first found an open guide PR for this slug; cleared on any other outcome. Drives the stalled-review alert.
+@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.curation_status IS 'Staff curation state, independent of observed eligibility.
 @access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.curation_revision IS 'Compare-and-swap revision for staff curation changes.

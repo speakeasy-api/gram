@@ -53,6 +53,7 @@ type Endpoints struct {
 	ListToolUsageTraces              goa.Endpoint
 	GetToolUsageFilterOptions        goa.Endpoint
 	GetMcpServerActivity             goa.Endpoint
+	GetOrgMcpServerActivity          goa.Endpoint
 	ListHooksTraces                  goa.Endpoint
 }
 
@@ -98,6 +99,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListToolUsageTraces:              NewListToolUsageTracesEndpoint(s, a.APIKeyAuth),
 		GetToolUsageFilterOptions:        NewGetToolUsageFilterOptionsEndpoint(s, a.APIKeyAuth),
 		GetMcpServerActivity:             NewGetMcpServerActivityEndpoint(s, a.APIKeyAuth),
+		GetOrgMcpServerActivity:          NewGetOrgMcpServerActivityEndpoint(s, a.APIKeyAuth),
 		ListHooksTraces:                  NewListHooksTracesEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -141,6 +143,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListToolUsageTraces = m(e.ListToolUsageTraces)
 	e.GetToolUsageFilterOptions = m(e.GetToolUsageFilterOptions)
 	e.GetMcpServerActivity = m(e.GetMcpServerActivity)
+	e.GetOrgMcpServerActivity = m(e.GetOrgMcpServerActivity)
 	e.ListHooksTraces = m(e.ListHooksTraces)
 }
 
@@ -2157,6 +2160,29 @@ func NewGetMcpServerActivityEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.GetMcpServerActivity(ctx, p)
+	}
+}
+
+// NewGetOrgMcpServerActivityEndpoint returns an endpoint function that calls
+// the method "getOrgMcpServerActivity" of service "telemetry".
+func NewGetOrgMcpServerActivityEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrgMcpServerActivityPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrgMcpServerActivity(ctx, p)
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ettle/strcase"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentR "github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	externalmcpR "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	mcpmetadataR "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -52,14 +50,6 @@ type functionManifestVariable struct {
 type authInputManifest struct {
 	Type     string `json:"type"`
 	Variable string `json:"variable"`
-}
-
-type externalMCPHeaderDefinition struct {
-	Name        string  `json:"name"`
-	IsSecret    bool    `json:"isSecret"`
-	IsRequired  bool    `json:"isRequired"`
-	Description *string `json:"description,omitempty"`
-	Placeholder *string `json:"placeholder,omitempty"`
 }
 
 func groupDefinitionsByToolsetURN[T any](
@@ -158,7 +148,6 @@ func DescribeToolsetEntries(
 	toolsRepo := tr.New(db)
 	variationsRepo := vr.New(db)
 	templatesRepo := templatesR.New(db)
-	externalmcpRepo := externalmcpR.New(db)
 	resourcesRepo := resourcesR.New(db)
 	mcpmetadataRepo := mcpmetadataR.New(db)
 
@@ -266,15 +255,6 @@ func DescribeToolsetEntries(
 	allToolUrns := slices.Collect(maps.Keys(allToolUrnsSet))
 	allResourceUrns := slices.Collect(maps.Keys(allResourceUrnsSet))
 
-	externalMCPUrnsSet := make(map[string]bool)
-	for _, toolUrn := range allToolUrns {
-		var parsedUrn urn.Tool
-		if err := parsedUrn.UnmarshalText([]byte(toolUrn)); err == nil && parsedUrn.Kind == urn.ToolKindExternalMCP {
-			externalMCPUrnsSet[toolUrn] = true
-		}
-	}
-	externalMCPUrns := slices.Collect(maps.Keys(externalMCPUrnsSet))
-
 	originsByToolsetID := make(map[uuid.UUID]*types.ToolsetOrigin, len(origins))
 	for _, o := range origins {
 		originsByToolsetID[o.ToolsetID] = &types.ToolsetOrigin{RegistrySpecifier: o.RegistrySpecifier}
@@ -307,7 +287,6 @@ func DescribeToolsetEntries(
 	funcDefsCh := make(chan []tr.FindFunctionToolEntriesByUrnRow, 1)
 	promptDefsCh := make(chan []templatesR.PeekTemplatesByUrnsRow, 1)
 	resourceDefsCh := make(chan []resourcesR.FindFunctionResourceEntriesByUrnRow, 1)
-	externalMCPDefsCh := make(chan []externalmcpR.GetExternalMCPToolDefinitionsByURNsRow, 1)
 
 	eg1, eg1Ctx := errgroup.WithContext(ctx)
 	eg1.Go(func() error {
@@ -355,15 +334,6 @@ func DescribeToolsetEntries(
 		resourceDefsCh <- rows
 		return nil
 	})
-	eg1.Go(func() error {
-		defer close(externalMCPDefsCh)
-		rows, err := externalmcpRepo.GetExternalMCPToolDefinitionsByURNs(eg1Ctx, externalmcpR.GetExternalMCPToolDefinitionsByURNsParams{ProjectID: pid, ToolUrns: externalMCPUrns})
-		if err != nil {
-			return fmt.Errorf("batch external mcp tools: %w", err)
-		}
-		externalMCPDefsCh <- rows
-		return nil
-	})
 	if err := eg1.Wait(); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to batch fetch toolset tool definitions").LogError(ctx, logger)
 	}
@@ -373,7 +343,6 @@ func DescribeToolsetEntries(
 	funcToolDefs := <-funcDefsCh
 	promptToolDefs := <-promptDefsCh
 	resourceDefs := <-resourceDefsCh
-	externalMCPDefs := <-externalMCPDefsCh
 
 	urnToVariedName := make(map[string]string, len(allVariations))
 	for _, variation := range allVariations {
@@ -407,11 +376,6 @@ func DescribeToolsetEntries(
 			return definition.ResourceUrn.String()
 		},
 	)
-	externalMCPDefByUrn := make(map[string]externalmcpR.GetExternalMCPToolDefinitionsByURNsRow, len(externalMCPDefs))
-	for _, d := range externalMCPDefs {
-		externalMCPDefByUrn[d.ToolUrn] = d
-	}
-
 	// Wave 2: security/server definitions depend on wave 1's httpDefs (need
 	// their DeploymentID/OpenAPIv3DocumentID/Security columns), so this runs
 	// after wave 1 — nothing left to parallelize it with at this point.
@@ -454,7 +418,6 @@ func DescribeToolsetEntries(
 			tools = make([]*types.ToolEntry, 0, len(toolUrns))
 		}
 		var functionEnvVars []*types.FunctionEnvironmentVariable
-		var externalMCPHeaderDefinitions []*types.ExternalMCPHeaderDefinition
 		toolsetEnvLookups := make([]ToolEnvLookupParams, 0, len(toolUrns))
 		for _, def := range funcDefsByToolsetID[toolset.ID] {
 			envVars, err := extractFunctionEnvVars(ctx, logger, def.Variables, def.AuthInput)
@@ -506,22 +469,6 @@ func DescribeToolsetEntries(
 				})
 				continue
 			}
-
-			if def, ok := externalMCPDefByUrn[toolUrn]; ok {
-				tools = append(tools, &types.ToolEntry{
-					Type:        types.ToolType(urn.ToolKindExternalMCP),
-					ID:          def.ID.String(),
-					Name:        def.Slug + ":proxy",
-					ToolUrn:     def.ToolUrn,
-					Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
-					HTTPMethod:  nil,
-				})
-				headerDefs, err := extractExternalMCPHeaderDefinitions(ctx, logger, def.HeaderDefinitions, def.Slug)
-				if err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "failed to extract external mcp header definitions").LogError(ctx, logger)
-				}
-				externalMCPHeaderDefinitions = append(externalMCPHeaderDefinitions, headerDefs...)
-			}
 		}
 		if len(toolUrns) > 0 {
 			tools = append(tools, platformtools.FindToolEntries(toolUrns, platformExtras...)...)
@@ -572,7 +519,7 @@ func DescribeToolsetEntries(
 			SecurityVariables:            securityVars,
 			ServerVariables:              serverVars,
 			FunctionEnvironmentVariables: dedupeFunctionEnvVars(functionEnvVars),
-			ExternalMcpHeaderDefinitions: dedupeExternalMCPHeaderDefinitions(externalMCPHeaderDefinitions),
+			ExternalMcpHeaderDefinitions: []*types.ExternalMCPHeaderDefinition{},
 			Description:                  conv.FromPGText[string](toolset.Description),
 			McpSlug:                      hosting.McpSlug,
 			McpEnabled:                   &hosting.McpEnabled,
@@ -687,6 +634,8 @@ func DescribeToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset tools").LogError(ctx, logger)
 	}
 
+	toolsetTools = adaptPlatformToolSchemas(ctx, toolsetTools, platformExtras...)
+
 	err = ApplyVariations(ctx, logger, tx, pid, toolVariationsGroupID, toolsetTools.Tools)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to toolset").LogError(ctx, logger)
@@ -775,18 +724,10 @@ func DescribeToolset(
 	}
 
 	functionEnvVars := dedupeFunctionEnvVars(toolsetTools.FunctionEnvVars)
-	externalMCPHeaderDefinitions := dedupeExternalMCPHeaderDefinitions(toolsetTools.ExternalMCPHeaderDefinitions)
 
 	for _, functionEnvironmentVariable := range functionEnvVars {
 		if functionEnvironmentVariable != nil && functionEnvironmentVariable.AuthInputType != nil && *functionEnvironmentVariable.AuthInputType == "oauth2" {
 			oauth2AuthCodeSecurityCount++
-		}
-	}
-
-	for _, tool := range toolsetTools.Tools {
-		if tool.ExternalMcpToolDefinition != nil && tool.ExternalMcpToolDefinition.RequiresOauth {
-			oauth2AuthCodeSecurityCount++
-			break
 		}
 	}
 
@@ -824,7 +765,7 @@ func DescribeToolset(
 		SecurityVariables:            toolsetTools.SecurityVars,
 		ServerVariables:              toolsetTools.ServerVars,
 		FunctionEnvironmentVariables: functionEnvVars,
-		ExternalMcpHeaderDefinitions: externalMCPHeaderDefinitions,
+		ExternalMcpHeaderDefinitions: []*types.ExternalMCPHeaderDefinition{},
 		Description:                  conv.FromPGText[string](toolset.Description),
 		Tools:                        toolsetTools.Tools,
 		ToolsetVersion:               toolsetVersion,
@@ -856,7 +797,7 @@ func DescribeToolset(
 // GetToolsetsSummary builds ToolsetSummary results for a set of toolsets
 // using batch queries across all projects. Instead of running per-project
 // queries (which incur ~18ms query planning overhead each × N projects),
-// it fires 5 batch queries in parallel — one per tool type — resolving all
+// it fires 4 batch queries in parallel — one per tool type — resolving all
 // projects' deployments in a single CTE. Results are filtered in Go against
 // each toolset's URN set.
 func GetToolsetsSummary(
@@ -889,17 +830,15 @@ func GetToolsetsSummary(
 		projectIDs = append(projectIDs, pid)
 	}
 
-	// 5 batch queries in parallel — one round-trip each, no per-project overhead.
+	// 4 batch queries in parallel — one round-trip each, no per-project overhead.
 	toolsRepo := tr.New(tx)
 	tplRepo := templatesR.New(tx)
 	variationsRepo := vr.New(tx)
-	extMCPRepo := externalmcpR.New(tx)
 
 	httpToolsCh := make(chan []tr.FindHttpToolEntriesForProjectsRow, 1)
 	funcToolsCh := make(chan []tr.FindFunctionToolEntriesForProjectsRow, 1)
 	promptToolsCh := make(chan []templatesR.PeekTemplatesForProjectsRow, 1)
 	variationsCh := make(chan []vr.FindGlobalVariationsForProjectsRow, 1)
-	externalMCPToolsCh := make(chan []externalmcpR.FindExternalMCPToolEntriesForProjectsRow, 1)
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
@@ -938,15 +877,6 @@ func GetToolsetsSummary(
 		variationsCh <- rows
 		return nil
 	})
-	eg.Go(func() error {
-		defer close(externalMCPToolsCh)
-		rows, err := extMCPRepo.FindExternalMCPToolEntriesForProjects(egCtx, projectIDs)
-		if err != nil {
-			return fmt.Errorf("batch external mcp tools: %w", err)
-		}
-		externalMCPToolsCh <- rows
-		return nil
-	})
 	if err := eg.Wait(); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "batch fetch tool entries").LogError(ctx, logger)
 	}
@@ -955,7 +885,6 @@ func GetToolsetsSummary(
 	funcTools := <-funcToolsCh
 	promptTools := <-promptToolsCh
 	variations := <-variationsCh
-	externalMCPTools := <-externalMCPToolsCh
 
 	// Build variation name overrides: projectID → toolURN → name.
 	variationNames := make(map[uuid.UUID]map[string]string)
@@ -1055,35 +984,6 @@ func GetToolsetsSummary(
 		}
 	}
 
-	for _, def := range externalMCPTools {
-		projTools := toolsByProject[def.ProjectID]
-		if projTools == nil {
-			continue
-		}
-		if _, exists := projTools[def.ToolUrn]; exists {
-			continue
-		}
-		// Naming convention doubles as the proxy-vs-direct signal: proxy entries
-		// always end in ":proxy"; direct entries end in ":<tool-name>". Surfaces
-		// like the RBAC scope picker rely on this suffix to filter out proxy
-		// tools (which aren't RBAC-compatible) without an extra API field.
-		var name string
-		switch {
-		case def.Type == "direct" && def.Name.Valid && def.Name.String != "":
-			name = def.Slug + ":" + def.Name.String
-		default:
-			name = def.Slug + ":proxy"
-		}
-		projTools[def.ToolUrn] = &types.ToolEntry{
-			Type:        types.ToolType(urn.ToolKindExternalMCP),
-			ID:          def.ID.String(),
-			Name:        name,
-			ToolUrn:     def.ToolUrn,
-			Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
-			HTTPMethod:  nil,
-		}
-	}
-
 	idsByOrganization := make(map[string][]uuid.UUID)
 	for _, ts := range toolsets {
 		idsByOrganization[ts.OrganizationID] = append(idsByOrganization[ts.OrganizationID], ts.ID)
@@ -1139,6 +1039,34 @@ func GetToolsetsSummary(
 	return result, nil
 }
 
+// adaptPlatformToolSchemas keeps the cached base catalog caller-independent.
+// Copy platform definitions before adapting schemas or applying variations so
+// concurrent callers cannot change each other's view of the same cache entry.
+func adaptPlatformToolSchemas(ctx context.Context, cached *ToolsetBaseContents, extras ...platformtools.ExternalTool) *ToolsetBaseContents {
+	result := *cached
+	result.Tools = slices.Clone(cached.Tools)
+	var descriptors map[string]platformtools.ToolDescriptor
+	for i, tool := range cached.Tools {
+		if tool == nil || tool.PlatformToolDefinition == nil {
+			continue
+		}
+		if descriptors == nil {
+			descriptors = make(map[string]platformtools.ToolDescriptor)
+			for _, descriptor := range platformtools.ListPlatformTools(extras...) {
+				descriptors[descriptor.ToolURN().String()] = descriptor
+			}
+		}
+		clonedTool := *tool
+		definition := *tool.PlatformToolDefinition
+		if descriptor, ok := descriptors[definition.ToolUrn]; ok {
+			definition.Schema = string(platformtools.DescriptorForContext(ctx, descriptor).InputSchema)
+		}
+		clonedTool.PlatformToolDefinition = &definition
+		result.Tools[i] = &clonedTool
+	}
+	return &result
+}
+
 func readToolsetTools(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -1158,7 +1086,6 @@ func readToolsetTools(
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
 	var functionEnvVars []*types.FunctionEnvironmentVariable
-	var externalMCPHeaderDefinitions []*types.ExternalMCPHeaderDefinition
 
 	// NOTE: A slight shortcoming here is that the cache is keyed by the active deployment id, but the queries below don't strictly depend on
 	// the deployment ID fetched above. Technically the deployment could change at just the right time to mess up the cache.
@@ -1359,66 +1286,6 @@ func readToolsetTools(
 		}
 	}
 
-	// Fetch external MCP proxy tools
-	if activeDeploymentID != uuid.Nil {
-		externalmcpRepo := externalmcpR.New(tx)
-		externalMCPTools, err := externalmcpRepo.ListExternalMCPToolDefinitions(ctx, activeDeploymentID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external mcp tools for toolset").LogError(ctx, logger)
-		}
-
-		for _, def := range externalMCPTools {
-			// Only include if the tool URN is in the toolset's tool URNs
-			if !slices.Contains(toolUrns, def.ToolUrn) {
-				continue
-			}
-
-			tools = append(tools, &types.Tool{
-				ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{
-					ID:          def.ID.String(),
-					ProjectID:   pid.String(),
-					ToolUrn:     def.ToolUrn,
-					Type:        new(def.Type),
-					Name:        def.Name.String,
-					Description: def.Description.String,
-					Schema:      string(def.Schema),
-
-					DeploymentExternalMcpID:    def.ExternalMcpAttachmentID.String(),
-					DeploymentID:               def.DeploymentID.String(),
-					RegistryID:                 conv.PtrValOrEmpty(conv.FromNullableUUID(def.RegistryID), ""),
-					RegistryServerName:         def.RegistryServerName,
-					RegistrySpecifier:          def.RegistryServerSpecifier,
-					Slug:                       def.Slug,
-					RemoteURL:                  def.RemoteUrl,
-					TransportType:              def.TransportType.String(),
-					RequiresOauth:              def.RequiresOauth,
-					OauthVersion:               def.OauthVersion,
-					OauthAuthorizationEndpoint: conv.FromPGText[string](def.OauthAuthorizationEndpoint),
-					OauthTokenEndpoint:         conv.FromPGText[string](def.OauthTokenEndpoint),
-					OauthRegistrationEndpoint:  conv.FromPGText[string](def.OauthRegistrationEndpoint),
-					OauthScopesSupported:       def.OauthScopesSupported,
-					CreatedAt:                  def.CreatedAt.Time.Format(time.RFC3339),
-					UpdatedAt:                  def.UpdatedAt.Time.Format(time.RFC3339),
-					CanonicalName:              def.Name.String,
-					SchemaVersion:              nil,
-					Confirm:                    nil,
-					ConfirmPrompt:              nil,
-					Summarizer:                 nil,
-					Canonical:                  nil,
-					Variation:                  nil,
-					Annotations:                nil,
-				},
-			})
-
-			headerDefs, err := extractExternalMCPHeaderDefinitions(ctx, logger, def.HeaderDefinitions, def.Slug)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract external mcp header definitions").LogError(ctx, logger)
-			}
-			externalMCPHeaderDefinitions = append(externalMCPHeaderDefinitions, headerDefs...)
-
-		}
-	}
-
 	// Fetch resources - for now we only have function resources
 	var resources []*types.Resource
 	if len(resourceUrns) > 0 {
@@ -1470,15 +1337,14 @@ func readToolsetTools(
 	}
 
 	toolsetTools := ToolsetBaseContents{
-		DeploymentID:                 activeDeploymentID.String(),
-		ToolsetID:                    toolsetID.String(),
-		Version:                      toolsetVersion,
-		Tools:                        tools,
-		Resources:                    resources,
-		SecurityVars:                 securityVars,
-		ServerVars:                   serverVars,
-		FunctionEnvVars:              functionEnvVars,
-		ExternalMCPHeaderDefinitions: externalMCPHeaderDefinitions,
+		DeploymentID:    activeDeploymentID.String(),
+		ToolsetID:       toolsetID.String(),
+		Version:         toolsetVersion,
+		Tools:           tools,
+		Resources:       resources,
+		SecurityVars:    securityVars,
+		ServerVars:      serverVars,
+		FunctionEnvVars: functionEnvVars,
 	}
 
 	if toolsetCache != nil && activeDeploymentID != uuid.Nil {
@@ -1845,45 +1711,4 @@ func dedupeFunctionEnvVars(vars []*types.FunctionEnvironmentVariable) []*types.F
 		result = append(result, deduped[name])
 	}
 	return result
-}
-
-func extractExternalMCPHeaderDefinitions(ctx context.Context, logger *slog.Logger, headerData []byte, sourceSlug string) ([]*types.ExternalMCPHeaderDefinition, error) {
-	if len(headerData) == 0 {
-		return nil, nil
-	}
-
-	var headers []externalMCPHeaderDefinition
-	if err := json.Unmarshal(headerData, &headers); err != nil {
-		return nil, fmt.Errorf("parse external mcp header definitions: %w", err)
-	}
-
-	definitions := make([]*types.ExternalMCPHeaderDefinition, 0, len(headers))
-	for _, header := range headers {
-		definitions = append(definitions, &types.ExternalMCPHeaderDefinition{
-			Name:        strcase.ToSNAKE(sourceSlug + "_" + header.Name),
-			HeaderName:  header.Name,
-			Description: header.Description,
-			Placeholder: header.Placeholder,
-			Required:    header.IsRequired,
-			Secret:      header.IsSecret,
-		})
-	}
-
-	return definitions, nil
-}
-
-func dedupeExternalMCPHeaderDefinitions(definitions []*types.ExternalMCPHeaderDefinition) []*types.ExternalMCPHeaderDefinition {
-	seen := make(map[string]bool, len(definitions))
-	deduped := make([]*types.ExternalMCPHeaderDefinition, 0, len(definitions))
-	for _, definition := range definitions {
-		if definition == nil {
-			continue
-		}
-		if seen[definition.Name] {
-			continue
-		}
-		seen[definition.Name] = true
-		deduped = append(deduped, definition)
-	}
-	return deduped
 }

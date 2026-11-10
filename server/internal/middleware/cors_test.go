@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -74,4 +75,23 @@ func TestCORSMiddleware_VaryOrigin(t *testing.T) {
 		require.Equal(t, "*", h.Get("Access-Control-Allow-Origin"))
 		require.Empty(t, h.Get("Vary"))
 	})
+}
+
+// The dashboard on a platform origin reads the denial headers off a 403 to
+// explain it; a browser only hands them over when they are exposed.
+func TestCORSMiddleware_ExposesDenialHeaders(t *testing.T) {
+	t.Parallel()
+
+	const serverURL = "https://app.getgram.ai"
+	handler := CORSMiddleware("prod", serverURL, []string{"https://ai.speakeasy.com"}, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	req := httptest.NewRequest(http.MethodGet, serverURL+"/rpc/telemetry.logs", nil)
+	req.Header.Set("Origin", "https://ai.speakeasy.com")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	exposed := strings.Split(rec.Header().Get("Access-Control-Expose-Headers"), ", ")
+	require.Contains(t, exposed, HeaderRequiredScope)
+	require.Contains(t, exposed, HeaderRequiredResourceKind)
 }

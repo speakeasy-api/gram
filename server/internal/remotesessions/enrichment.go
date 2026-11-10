@@ -78,7 +78,8 @@ const (
 	interfaceStatusLimited  = "limited"
 	interfaceStatusRejected = "rejected"
 
-	interfaceReasonNoExp = "no exp"
+	interfaceReasonNoExp     = "no exp"
+	interfaceReasonExpPassed = "exp passed"
 
 	tokenTypeHintAccess  = "access_token"
 	tokenTypeHintRefresh = "refresh_token"
@@ -931,7 +932,7 @@ func (m *ChallengeManager) backfillRefreshDeadline(ctx context.Context, q *remot
 	if !access.ok() || !hasRefreshToken(sess) || sess.RefreshExpiresAt.Valid {
 		return nil
 	}
-	if prior, asked := storedInterfaceRecords(sess.Enrichment)[interfaceRefreshIntrospection]; asked && (prior.Status == interfaceStatusOK || prior.Reason == interfaceReasonNoExp) {
+	if prior, asked := storedInterfaceRecords(sess.Enrichment)[interfaceRefreshIntrospection]; asked && (prior.Status == interfaceStatusOK || prior.Reason == interfaceReasonNoExp || prior.Reason == interfaceReasonExpPassed) {
 		return nil
 	}
 	refreshToken, err := m.enc.Decrypt(sess.RefreshTokenEncrypted.String)
@@ -942,6 +943,9 @@ func (m *ChallengeManager) backfillRefreshDeadline(ctx context.Context, q *remot
 	record := refresh.interfaceRecord
 	switch {
 	case !refresh.ok():
+		return &record
+	case !refresh.expiresAt.IsZero() && !refresh.expiresAt.After(time.Now()):
+		record.fail(interfaceReasonExpPassed)
 		return &record
 	case !refresh.active || refresh.expiresAt.IsZero():
 		record.fail(interfaceReasonNoExp)

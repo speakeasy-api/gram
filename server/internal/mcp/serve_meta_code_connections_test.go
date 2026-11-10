@@ -92,6 +92,7 @@ func TestCodeConnectionsWorkWithoutToolPermission(t *testing.T) {
 	// The wrong browser user fails before any sign-in or credential handoff.
 	mock.upsertResult = "different-user"
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?state="+state.ID+"&code=idp-auth-code", nil).WithContext(ctx)
+	callback.AddCookie(started.Result().Cookies()[0])
 	rejected := httptest.NewRecorder()
 	require.ErrorContains(t, ti.service.HandleIDPCallback(rejected, callback), "Only the user who requested this connection")
 	require.Empty(t, rejected.Header().Get("Location"))
@@ -237,8 +238,8 @@ func TestCodeReconnectConsentGETKeepsBoundFocus(t *testing.T) {
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	slug := "focus-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
-	seedMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Bound tracker", "tracker", 0, "public")
-	seedMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Other server", "other", 1, "public")
+	seedMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Datadog", "tracker", 0, "public")
+	seedMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Datadog", "other", 1, "public")
 	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
 	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	require.NoError(t, err)
@@ -256,8 +257,9 @@ func TestCodeReconnectConsentGETKeepsBoundFocus(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect?state="+stateID+"&server=other", nil).WithContext(ctx)
 	require.NoError(t, ti.service.ServeConsent(response, req, endpoint))
 	require.Equal(t, http.StatusOK, response.Code)
-	require.Contains(t, response.Body.String(), "Bound tracker")
-	require.NotContains(t, response.Body.String(), "Other server")
+	require.Contains(t, response.Body.String(), "Datadog")
+	require.NotContains(t, response.Body.String(), mcpServerBySlug(t, ctx, ti, *auth.ProjectID, "other").String())
+	require.NotContains(t, response.Body.String(), ">other</span>")
 }
 
 func TestCodeServersVerifyProbesWithoutCallingBusinessTools(t *testing.T) {

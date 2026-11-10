@@ -52,7 +52,7 @@ func TestCatalogDetailsUseSnakeCaseJSONKeys(t *testing.T) {
 	t.Parallel()
 
 	encoded, err := json.Marshal(CatalogDetails{CatalogCandidate: CatalogCandidate{
-		ProviderKey: "provider", CatalogRef: "reviewed/mcp", ToolCount: 1, SetupIntent: "authorize", SupportsCIMD: true, AuthSetup: "cimd",
+		ProviderKey: "provider", CatalogRef: "reviewed/mcp", ToolCount: new(1), SetupIntent: "authorize", SupportsCIMD: true, AuthSetup: "cimd",
 	}, Transport: "streamable-http", ToolNames: []string{"tool"}})
 
 	require.NoError(t, err)
@@ -173,11 +173,42 @@ func TestCatalogCandidateFromEntryUsesConfiguredIdentity(t *testing.T) {
 		Title:             &title,
 		Description:       "description",
 		Version:           "1.2.3",
-		ToolCount:         4,
 	})
 
 	require.Equal(t, "reviewed-provider", candidate.ProviderKey)
 	require.Equal(t, "untrusted/entry", candidate.CatalogRef)
 	require.Equal(t, "Reviewed MCP", candidate.Name)
+	require.Nil(t, candidate.ToolCount)
 	require.Equal(t, "authorize", candidate.SetupIntent)
+}
+
+func TestCatalogUnknownToolEvidenceIsOmitted(t *testing.T) {
+	t.Parallel()
+	details, err := projectCatalogDetails(CatalogDescriptor{}, "example/mcp", &externalmcp.ServerDetails{
+		RemoteURL: "https://example.test/mcp", TransportType: "streamable-http",
+	})
+	require.NoError(t, err)
+	for _, value := range []any{details, CandidateInspection{ToolNames: details.ToolNames, ToolCount: details.ToolCount}} {
+		raw, err := json.Marshal(value)
+		require.NoError(t, err)
+		require.NotContains(t, string(raw), `"tool_count"`)
+		require.NotContains(t, string(raw), `"tool_names"`)
+	}
+}
+
+// A registry server's title, such as "Linear", names it on its card and in
+// the dashboard; its reverse-DNS registry name is the fallback.
+func TestCatalogDetailsNameTheServerByItsTitle(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ title, want string }{
+		{title: "Linear", want: "Linear"},
+		{title: "  ", want: "app.linear/mcp"},
+		{title: "", want: "app.linear/mcp"},
+	} {
+		details, err := projectCatalogDetails(CatalogDescriptor{}, "app.linear/mcp", &externalmcp.ServerDetails{
+			Name: "app.linear/mcp", Title: tc.title, RemoteURL: "https://mcp.linear.app/mcp", TransportType: "streamable-http",
+		})
+		require.NoError(t, err)
+		require.Equal(t, tc.want, details.Name)
+	}
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -179,33 +180,71 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	require.Empty(t, projectIDs)
 }
 
-func TestLoadGrantsAddsAssistantDefaultsOnlyForCanonicalSystemRole(t *testing.T) {
+func TestLoadGrantsHonorsRevokedSystemRoleAssistantGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	organizationID := "org_canonical_assistant_defaults"
+	organizationID := "org_revoked_assistant_grants"
 	seedOrganization(t, ctx, conn, organizationID)
 	require.NoError(t, SeedSystemRoleGrants(ctx, conn, organizationID))
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	assistantRead := AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")
+	assistantWrite := AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")
 
 	q := accessrepo.New(conn)
-	adminRole, err := q.GetGlobalRoleBySlug(ctx, SystemRoleAdmin)
-	require.NoError(t, err)
-	admin := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+adminRole.ID.String())
-	_, err = q.DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{
-		OrganizationID: organizationID,
-		PrincipalUrn:   admin,
-	})
-	require.NoError(t, err)
+	for _, tc := range []struct {
+		slug   string
+		checks []Check
+	}{
+		{slug: SystemRoleMember, checks: []Check{assistantRead}},
+		{slug: SystemRoleAdmin, checks: []Check{assistantRead, assistantWrite}},
+	} {
+		role, err := q.GetGlobalRoleBySlug(ctx, tc.slug)
+		require.NoError(t, err)
+		principal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+role.ID.String())
 
-	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{admin})
-	require.NoError(t, err)
-	require.True(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
-	require.True(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
+		grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{principal})
+		require.NoError(t, err)
+		for _, check := range tc.checks {
+			require.NoError(t, engine.Require(GrantsToContext(ctx, grants), check), "%s role must hold seeded %s", tc.slug, check.Scope)
+		}
 
-	grants, err = LoadGrants(ctx, conn, organizationID, []urn.Principal{
+		_, err = PatchRoleGrantsTx(ctx, conn, organizationID, tc.slug, principal.String(), nil, SystemRoleAssistantGrants(tc.slug))
+		require.NoError(t, err)
+
+		grants, err = LoadGrants(ctx, conn, organizationID, []urn.Principal{principal})
+		require.NoError(t, err)
+		require.NotEmpty(t, grants, "%s role keeps its other grants", tc.slug)
+		for _, grant := range grants {
+			require.NotEqual(t, ResourceKindAssistant, ResourceKindForScope(grant.Scope), "%s role must not regain %s", tc.slug, grant.Scope)
+		}
+		for _, check := range tc.checks {
+			var oopsErr *oops.ShareableError
+			require.ErrorAs(t, engine.Require(GrantsToContext(ctx, grants), check), &oopsErr, "%s role must lose revoked %s", tc.slug, check.Scope)
+			require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+		}
+	}
+
+	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString()),
 	})
 	require.NoError(t, err)
-	require.False(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
+	require.False(t, GrantsSatisfy(grants, assistantRead))
+}
+
+func TestSystemRoleAssistantGrants(t *testing.T) {
+	t.Parallel()
+
+	scopes := func(grants []*RoleGrant) []string {
+		out := make([]string, 0, len(grants))
+		for _, grant := range grants {
+			require.Nil(t, grant.Selectors)
+			out = append(out, grant.Scope)
+		}
+		return out
+	}
+	require.ElementsMatch(t, []string{string(ScopeAssistantRead), string(ScopeAssistantWrite)}, scopes(SystemRoleAssistantGrants(SystemRoleAdmin)))
+	require.ElementsMatch(t, []string{string(ScopeAssistantRead)}, scopes(SystemRoleAssistantGrants(SystemRoleMember)))
+	require.Empty(t, SystemRoleAssistantGrants("org-custom"))
 }

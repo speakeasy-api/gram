@@ -283,6 +283,7 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 		}
 	case errors.Is(err, pgx.ErrNoRows):
 		client, err = queries.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+			ForwardClientName:               false,
 			ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			OrganizationID:                  conv.ToPGText(request.OrganizationID),
 			RemoteSessionIssuerID:           issuerID,

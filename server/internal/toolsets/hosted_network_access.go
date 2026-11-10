@@ -38,7 +38,7 @@ func SetHostedNetworkAccessInTransaction(ctx context.Context, tx pgx.Tx, auditLo
 }
 
 func (s *Service) deleteHostedServer(ctx context.Context, tx pgx.Tx, actor *contextvalues.AuthContext, toolset repo.Toolset) (hostedmcp.DeleteResult, error) {
-	return hostedmcp.Delete(ctx, tx, s.tracerProvider, s.audit, hostedActor(actor), toolset) //nolint:wrapcheck // oops errors pass through.
+	return hostedmcp.Delete(ctx, tx, s.logger, s.tracerProvider, s.audit, s.revoker, hostedActor(actor), toolset) //nolint:wrapcheck // oops errors pass through.
 }
 
 // reconcileCustomDomains runs after commit for domains whose root was cleared.

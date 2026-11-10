@@ -70,6 +70,7 @@ export function buildListChatsQuery(
       offset: request?.offset,
       sortBy: request?.sortBy,
       sortOrder: request?.sortOrder,
+      pinnedFirst: request?.pinnedFirst,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
       gramChatSession: request?.gramChatSession,
@@ -116,6 +117,7 @@ export function queryKeyListChats(
     offset?: number | undefined;
     sortBy?: SortBy | undefined;
     sortOrder?: SortOrder | undefined;
+    pinnedFirst?: boolean | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
     gramChatSession?: string | undefined;

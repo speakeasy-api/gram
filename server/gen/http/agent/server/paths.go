@@ -17,6 +17,11 @@ func GetMyConnectionsAgentPath() string {
 	return "/rpc/agent.getMyConnections"
 }
 
+// GetClaudeObservabilityPluginAgentPath returns the URL path to the agent service getClaudeObservabilityPlugin HTTP endpoint.
+func GetClaudeObservabilityPluginAgentPath() string {
+	return "/rpc/agent.getClaudeObservabilityPlugin"
+}
+
 // HideMcpServerAgentPath returns the URL path to the agent service hideMcpServer HTTP endpoint.
 func HideMcpServerAgentPath() string {
 	return "/rpc/agent.hideMcpServer"
@@ -75,6 +80,11 @@ func ReportAIScanAgentPath() string {
 // ReportStateAgentPath returns the URL path to the agent service reportState HTTP endpoint.
 func ReportStateAgentPath() string {
 	return "/rpc/agent.reportState"
+}
+
+// ReportCrashAgentPath returns the URL path to the agent service reportCrash HTTP endpoint.
+func ReportCrashAgentPath() string {
+	return "/rpc/agent.reportCrash"
 }
 
 // CreateSessionHandoffAgentPath returns the URL path to the agent service createSessionHandoff HTTP endpoint.

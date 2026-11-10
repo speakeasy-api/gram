@@ -13,4 +13,8 @@ const (
 	HeaderDeviceHarnessVariant = "X-Gram-Device-Harness-Variant"
 	HeaderDeviceHarnessVersion = "X-Gram-Device-Harness-Version"
 	HeaderDeviceElapsedMS      = "X-Gram-Device-Elapsed-Ms"
+	HeaderDeviceInstallRoute   = "X-Gram-Device-Install-Route"
+	HeaderDeviceFailOpen       = "X-Gram-Device-Fail-Open"
+	HeaderDeviceDebugLog       = "X-Gram-Device-Debug-Log"
+	HeaderDeviceSpoolDepth     = "X-Gram-Device-Spool-Depth"
 )

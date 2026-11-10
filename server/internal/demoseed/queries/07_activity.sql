@@ -5,6 +5,9 @@
 -- name: ActivityDeleteAuditLogs :exec
 DELETE FROM audit_logs WHERE organization_id = @organization_id;
 
+-- name: ActivityDeleteSecurityAuditLogs :exec
+DELETE FROM security_audit_logs WHERE organization_id = @organization_id;
+
 -- name: ActivityInsertProjectAuditLog :exec
 INSERT INTO audit_logs (id, organization_id, project_id, actor_id, actor_type,
                         actor_display_name, action, subject_id, subject_type,
@@ -69,7 +72,7 @@ VALUES (@project_id, @organization_id, @parent_chat_id::uuid, @child_chat_id::uu
 
 -- name: ActivityInsertAssistantThread :exec
 INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, last_event_at)
-VALUES (@id, @assistant_id, @project_id, @correlation_id, @chat_id, 'dashboard', now() - interval '38 minutes');
+VALUES (@id, @assistant_id, @project_id, @correlation_id, @chat_id, @source_kind, now() - interval '38 minutes');
 
 -- Historical shortened trial: audit history shows both dates, not an extension.
 -- name: ActivityInsertTrialEndChangedAuditLog :exec
@@ -107,6 +110,20 @@ VALUES (@id, @organization_id,
         ),
         now() - interval '35 minutes');
 
+-- Security entries: an agent's runtime admitting and withdrawing its own
+-- workload identity on each start and teardown. They live in the security log
+-- and show under Security activity on the audit log page.
+-- name: ActivityInsertSecurityAuditLog :exec
+-- The actor's name is read from the seeded agent, as the runtime records it.
+INSERT INTO security_audit_logs (id, organization_id, project_id, actor_id, actor_type,
+                                 actor_display_name, action, subject_id, subject_type,
+                                 subject_display_name, acting_surface, created_at)
+VALUES (@id, @organization_id, @project_id::uuid, @actor_id, 'agent',
+        (SELECT agents.name FROM agents
+         WHERE agents.organization_id = @organization_id AND agents.id::text = @actor_id),
+        @action, @subject_id, 'workload_admission', @subject_display_name::text,
+        'system', now() - @age::interval);
+
 -- Killswitch mutation rows carry a bounded after snapshot plus their replay
 -- operation.
 -- name: ActivityInsertKillswitchAuditLog :exec
@@ -121,18 +138,19 @@ VALUES
    jsonb_build_object('operation', @operation::text, 'operation_id', @operation_id::uuid),
    now() - @age::interval);
 
--- Expiry carries the version and database-time deadline.
+-- Expiry carries the version and database-time deadline. Speakeasy records it
+-- on its own, so it lands on the audit log page's System view.
 -- name: ActivityInsertKillswitchExpiredAuditLog :exec
 INSERT INTO audit_logs
   (id, organization_id, project_id, actor_id, actor_type, actor_display_name,
-   action, subject_id, subject_type, after_snapshot, metadata, created_at)
+   action, subject_id, subject_type, after_snapshot, metadata, acting_surface, created_at)
 VALUES
   (@id, @organization_id, NULL,
    'system', 'user', 'System', 'killswitch:expire',
    @subject_id,
    'killswitch_prescription', NULL,
    jsonb_build_object('version', 1, 'expired_at', now() - interval '1 day'),
-   now() - interval '23 hours');
+   'system', now() - interval '23 hours');
 
 -- name: ActivityDeleteSpendRuleEvents :exec
 DELETE FROM spend_rule_events WHERE organization_id = @organization_id;

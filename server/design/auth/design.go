@@ -70,6 +70,17 @@ var _ = Service("auth", func() {
 			Attribute("org_name", String, "Optional organization name. When set, the organization is created for a new user during the auth callback.")
 			Attribute("email", String, "Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.")
 			Attribute("support_handoff", String, "Opaque, one-time organization support handoff. Never included in OAuth state.")
+			// Sign-up attribution. Present only from the sign-up page, which
+			// forwards the UTMs it was opened with and its analytics session so
+			// the server-side sign-up events can be attributed. Deliberately
+			// unvalidated here: values are trimmed and truncated in the handler,
+			// and a malformed one must never block a login.
+			Attribute("utm_source", String, "Optional sign-up attribution: UTM source.")
+			Attribute("utm_medium", String, "Optional sign-up attribution: UTM medium.")
+			Attribute("utm_campaign", String, "Optional sign-up attribution: UTM campaign.")
+			Attribute("utm_term", String, "Optional sign-up attribution: UTM term.")
+			Attribute("utm_content", String, "Optional sign-up attribution: UTM content.")
+			Attribute("analytics_session_id", String, "Optional sign-up attribution: the browser's product analytics session id.")
 		})
 
 		Result(func() {
@@ -87,6 +98,12 @@ var _ = Service("auth", func() {
 			// request logging middleware redacts it from logged URLs.
 			Param("email")
 			Param("support_handoff")
+			Param("utm_source")
+			Param("utm_medium")
+			Param("utm_campaign")
+			Param("utm_term")
+			Param("utm_content")
+			Param("analytics_session_id")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {

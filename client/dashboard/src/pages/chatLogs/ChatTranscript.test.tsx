@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -9,6 +10,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import { ChatTranscript, type TranscriptPagination } from "./ChatTranscript";
 import { buildTranscript, type DisplayItem } from "./transcript";
+
+// The contract, stated apart from the implementation's constant: a call with
+// no result reads Pending for ten minutes.
+const TEN_MINUTES_MS = 10 * 60 * 1000;
 
 // Layout has no viewport in happy-dom. Keep the real transcript and ToolUI;
 // only make every virtual row visible and isolate unrelated risk actions.
@@ -201,6 +206,114 @@ describe("Kit tool result status", () => {
     show(result(content));
     expect(screen.getByRole("img", { name: "Tool complete" })).toBeTruthy();
     expect(screen.queryByRole("img", { name: "Tool error" })).toBeNull();
+  });
+});
+
+describe("hook tool result status", () => {
+  function call(createdAt: Date): ChatMessage {
+    return {
+      id: "invocation",
+      role: "assistant",
+      seq: 1,
+      generation: 0,
+      model: "",
+      content: null,
+      createdAt,
+      toolCalls: JSON.stringify([
+        {
+          id: "call",
+          type: "function",
+          function: { name: "mcp__speakeasy__execute_tool", arguments: "{}" },
+        },
+      ]),
+    };
+  }
+  function showCall(messages: ChatMessage[]) {
+    const rows = buildTranscript(messages);
+    return render(
+      <ChatTranscript
+        items={rows.map((row) => ({ type: "row", id: row.id, row }))}
+        ctx={{ dimNonRisk: false }}
+        pagination={pagination}
+      />,
+    );
+  }
+
+  it("renders a hook failure as failed, with its error as the output", () => {
+    showCall([
+      call(new Date()),
+      {
+        ...result('{"content":[{"type":"text","text":"MCP error -32603"}]}'),
+        finishReason: "error",
+      },
+    ]);
+    expect(screen.getByRole("img", { name: "Tool error" }).className).toContain(
+      "text-destructive",
+    );
+    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Tool complete" })).toBeNull();
+    // The error is the call's output: expanding the row shows it.
+    const row = screen.getByRole("button", { name: /execute_tool/ });
+    expect(row.hasAttribute("disabled")).toBe(false);
+    // Expanding a row draws the ToolUI section toggles inside the row toggle,
+    // which React reports as nested buttons. That markup predates this test,
+    // so only that warning is allowed.
+    const nestingWarning = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    fireEvent.click(row);
+    fireEvent.click(screen.getByRole("button", { name: /Output/ }));
+    expect(screen.getByText(/MCP error -32603/)).toBeTruthy();
+    for (const [message] of nestingWarning.mock.calls) {
+      expect(String(message)).toMatch(/descendant of|nested/);
+    }
+    nestingWarning.mockRestore();
+  });
+
+  it("renders a call with no result yet as pending, never complete", () => {
+    showCall([call(new Date())]);
+    expect(screen.getByRole("img", { name: "Tool pending" })).toBeTruthy();
+    expect(screen.getByText("Pending")).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Tool complete" })).toBeNull();
+  });
+
+  it("renders a call with no result for a long time as unknown", () => {
+    showCall([call(new Date(Date.now() - TEN_MINUTES_MS))]);
+    expect(screen.getByRole("img", { name: "Tool unknown" })).toBeTruthy();
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Tool complete" })).toBeNull();
+  });
+
+  it("turns a pending call unknown at ten minutes without another update", () => {
+    vi.useFakeTimers();
+    try {
+      showCall([call(new Date(Date.now() - TEN_MINUTES_MS + 1000))]);
+      expect(screen.getByText("Pending")).toBeTruthy();
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(screen.getByText("Unknown")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows a group with an unanswered call as not complete", () => {
+    const rows = buildTranscript([
+      call(new Date(0)),
+      { ...result("ok"), id: "other", toolCallId: "other-call" },
+    ]).filter((row) => row.kind === "tool");
+    render(
+      <ChatTranscript
+        items={[{ type: "toolGroup", id: "group", rows }]}
+        ctx={{ dimNonRisk: false }}
+        pagination={pagination}
+      />,
+    );
+    const header = screen.getByRole("button", { name: /Executed/ });
+    expect(
+      within(header).getByRole("img", { name: "Tool unknown" }),
+    ).toBeTruthy();
   });
 });
 

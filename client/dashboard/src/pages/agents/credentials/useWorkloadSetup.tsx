@@ -1,4 +1,5 @@
 import { useOrganization, useProject } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
 import { WorkloadIssuerSelector } from "./WorkloadIssuerSelector";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { AssertionReuseField } from "../WorkloadIssuerPolicy";
@@ -12,14 +13,18 @@ import {
   queryKeyWorkloadIdentities,
   useWorkloadIdentities,
 } from "@gram/client/react-query/workloadIdentities.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   customSetupInstructions,
   CUSTOM_PLATFORM_KEY,
 } from "./CustomSetupInstructions";
 import { platformSetup } from "./platformSetups";
-import { ComputedStatus } from "./SetupFields";
+import {
+  ComputedStatus,
+  ShadowingIssuers,
+  type ProjectIssuer,
+} from "./SetupFields";
 import type {
   PlatformSetup,
   SetupContext,
@@ -47,6 +52,12 @@ import { useSetupValues, type SetupValues } from "./workloadTokenEndpoints";
 
 export interface WorkloadSetup {
   exchange: SetupValues;
+  /**
+   * Whether the platform takes its tokens from a shared authorization server,
+   * so one is chosen for it. False until the platform's setup is known, and
+   * for a platform that gets its tokens its own way.
+   */
+  usesSharedServer: boolean;
   /** The platform's steps, each of which is a step of the wizard. */
   steps: SetupStep[];
   /**
@@ -83,6 +94,7 @@ export function useWorkloadSetup({
   readOnly = false,
   setupOverride,
   targetProjectId,
+  requireOneProvider = false,
   servers = [],
 }: {
   /** The servers the agent may call, for steps that name one to call. */
@@ -91,6 +103,12 @@ export function useWorkloadSetup({
   setupOverride?: PlatformSetup;
   /** An inference exchange cannot use another project’s issuer. */
   targetProjectId?: string;
+  /**
+   * Refuse to connect until the agent's servers share one MCP authentication
+   * provider, rechecked here because the providers may finish loading after
+   * the step that shows the mismatch.
+   */
+  requireOneProvider?: boolean;
   /** The catalog's policy for the platform, absent for a custom one. */
   entry: CatalogEntry | undefined;
   /** The chosen platform, which may be the custom one. Null until chosen. */
@@ -148,7 +166,22 @@ export function useWorkloadSetup({
   const [connecting, setConnecting] = useState(false);
   const [reuseIssuer, setReuseIssuer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const setupValues = useSetupValues(targetProjectId);
+  // The catalog's platforms come from the same map the picker offers tiles
+  // from, plus the custom flow for everything the catalog does not know.
+  const setup =
+    setupOverride ??
+    (platformKey === CUSTOM_PLATFORM_KEY
+      ? customSetupInstructions()
+      : entry === undefined
+        ? undefined
+        : platformSetup(entry));
+
+  // A platform whose runtime gets its tokens its own way doesn't take them from
+  // one shared provider, so its servers needn't share one.
+  const setupValues = useSetupValues(
+    targetProjectId,
+    setup?.ownTokenExchange ? [] : servers,
+  );
 
   // The issuer this flow has already trusted, so a retry after a later failure
   // does not try to trust it a second time. The URL rather than a flag: a
@@ -167,16 +200,6 @@ export function useWorkloadSetup({
   const registerIssuer = useRegisterWorkloadIssuerMutation();
   const admitSubject = useAdmitWorkloadSubjectMutation();
   const withdrawSubject = useWithdrawWorkloadSubjectMutation();
-
-  // The catalog's platforms come from the same map the picker offers tiles
-  // from, plus the custom flow for everything the catalog does not know.
-  const setup =
-    setupOverride ??
-    (platformKey === CUSTOM_PLATFORM_KEY
-      ? customSetupInstructions()
-      : entry === undefined
-        ? undefined
-        : platformSetup(entry));
 
   const customFlow = platformKey === CUSTOM_PLATFORM_KEY;
   const selectedIssuer = issuers.find((issuer) =>
@@ -210,10 +233,6 @@ export function useWorkloadSetup({
   };
   const platformName = entry?.displayName ?? "this platform";
 
-  const isTrusted =
-    connection !== null &&
-    (connection.issuer === trustedIssuer ||
-      connectedIssuer(connection.issuer, issuers) !== undefined);
   // The rule the agent holds as far as this flow knows: the one it saved,
   // or else the one being edited. The prop is read rather than seeded into
   // state because the admission arrives a render or two after the first.
@@ -240,6 +259,27 @@ export function useWorkloadSetup({
       : keptProjectSlug !== undefined
         ? { gramProject: keptProjectSlug, projectScoped: true }
         : { projectScoped: false };
+  // A catalog platform's new rule is written at the organization tier, so
+  // only an organization-tier issuer counts as already trusting it there. A
+  // project's own row for the same URL would skip the registration that
+  // admission needs, and the admission would then find no issuer at its tier.
+  // A replacement that keeps a project's tier may use that project's issuer.
+  const organizationTier = !customFlow && !tier?.projectScoped;
+  const tierIssuers = organizationTier
+    ? issuers.filter((issuer) => issuer.projectId === "")
+    : issuers;
+  const isTrusted =
+    connection !== null &&
+    (connection.issuer === trustedIssuer ||
+      connectedIssuer(connection.issuer, tierIssuers) !== undefined);
+  // A project that trusts the same issuer on its own takes precedence in that
+  // project: its MCP servers match a token against the project's rules, not
+  // the organization-tier one this flow saves, so a job reaches them as a
+  // different identity or not at all. The rule is organization-wide, so every
+  // project is checked, not only this one.
+  const { shadows, unchecked } = useProjectIssuers(
+    organizationTier && connection !== null ? connection.issuer : null,
+  );
   const conflicting =
     connection === null || ours
       ? undefined
@@ -267,6 +307,17 @@ export function useWorkloadSetup({
     if (current?.projectId && keptProjectSlug === undefined) {
       setError(
         "This access rule belongs to a project you cannot open. Ask an organization admin to change it.",
+      );
+      return false;
+    }
+    if (
+      requireOneProvider &&
+      (setupValues.checking || setupValues.mismatch !== null)
+    ) {
+      setError(
+        setupValues.checking
+          ? "Still checking which shared authorization server this agent's servers use. Try again in a moment."
+          : "Some of this agent's servers aren't on the shared authorization server chosen for it. Go back to Agent sign-in to fix it.",
       );
       return false;
     }
@@ -394,6 +445,7 @@ export function useWorkloadSetup({
 
   return {
     exchange: setupValues,
+    usesSharedServer: setup !== undefined && setup.ownTokenExchange !== true,
     steps: setup?.steps ?? [],
     requirements: setup?.requirements ?? null,
     // A disabled fieldset disables every control inside it, the catalog's
@@ -430,6 +482,18 @@ export function useWorkloadSetup({
         ) : (
           <div className="space-y-4">
             {step.body(context)}
+            {step.phase === "create" && shadows.length > 0 && (
+              <ShadowingIssuers shadows={shadows} platformName={platformName} />
+            )}
+            {step.phase === "create" && unchecked.length > 0 && (
+              <p className="text-muted-foreground text-sm">
+                Speakeasy could not check whether{" "}
+                {unchecked.map((project) => project.name).join(", ")} also{" "}
+                {unchecked.length === 1 ? "trusts" : "trust"} {platformName} on
+                {unchecked.length === 1 ? " its" : " their"} own, nor any
+                project you cannot open.
+              </p>
+            )}
             {step.phase === "create" && !isTrusted && (
               <AssertionReuseField
                 checked={
@@ -456,6 +520,59 @@ export function useWorkloadSetup({
     error,
     values,
   };
+}
+
+/** How long one project's issuers, read for the warning, are reused. */
+const PROJECT_ISSUERS_STALE_TIME_MS = 60_000;
+
+/**
+ * Every project that trusts this issuer URL on its own, with that issuer.
+ * Workload identities are listed per project, so each project the reader can
+ * open is read once there is an issuer to look for; one that cannot be read
+ * is reported as unchecked rather than taken as trusting nothing. Projects
+ * the reader cannot open are not listed to them, so they are never checked.
+ *
+ * The reads are keyed apart from the policy lists the setup invalidates after
+ * every save: a save never writes another project's issuers, so refetching
+ * every project then would only make Connect wait.
+ */
+function useProjectIssuers(issuer: string | null): {
+  shadows: ProjectIssuer[];
+  unchecked: { name: string }[];
+} {
+  const organization = useOrganization();
+  const sdk = useSdkClient();
+  const projects = (organization.projects ?? []).filter(
+    (project) => project.slug,
+  );
+  const reads = useQueries({
+    queries: projects.map((project) => ({
+      queryKey: ["workload-setup-project-issuers", organization.id, project.id],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        sdk.workloadIdentities.list({ gramProject: project.slug }, undefined, {
+          signal,
+        }),
+      enabled: issuer !== null,
+      retry: false,
+      throwOnError: false,
+      staleTime: PROJECT_ISSUERS_STALE_TIME_MS,
+      // One read per project; returning to the tab is no reason to repeat it.
+      refetchOnWindowFocus: false,
+    })),
+  });
+  if (issuer === null) return { shadows: [], unchecked: [] };
+  const shadows = projects.flatMap((project, index) =>
+    (reads[index]?.data?.issuers ?? [])
+      .filter(
+        (row) =>
+          row.organizationId === organization.id &&
+          row.projectId === project.id &&
+          row.issuer === issuer,
+      )
+      .map((row) => ({ project, issuer: row })),
+  );
+  const unchecked = projects.filter((_, index) => reads[index]?.isError);
+  return { shadows, unchecked };
 }
 
 /**

@@ -25,7 +25,9 @@ const (
 
 	DelegatedPolicyVersion6 DelegatedPolicyVersion = 6
 
-	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion6
+	DelegatedPolicyVersion7 DelegatedPolicyVersion = 7
+
+	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion7
 
 	// IssuedDelegatedPolicyVersion preserves the general delegated/MCP issuance
 	// contract. Reader support (Current) does not advance existing issuers.

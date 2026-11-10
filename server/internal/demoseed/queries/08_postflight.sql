@@ -25,7 +25,7 @@ WHERE organization_id = @org_id::text;
 -- name: PostflightSecurityOnboardingInvalid :one
 SELECT (
   (SELECT preset FROM organization_onboarding WHERE organization_id = @org_id::text) IS DISTINCT FROM 'security'
-  OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = @org_id::text AND hidden_at IS NULL) <> 9
+  OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = @org_id::text AND hidden_at IS NULL) <> 8
   OR EXISTS (SELECT 1 FROM organization_setup_tasks WHERE organization_id = @org_id::text
     AND ((task_key IN ('anthropic-admin-controls', 'platform-mcp')) IS DISTINCT FROM (hidden_at IS NOT NULL)))
 )::boolean AS invalid;
@@ -379,6 +379,8 @@ SELECT count(*) FROM (
   SELECT 1 FROM session_quarantines WHERE organization_id = @org_id::text AND project_id <> @project_id::uuid
   UNION ALL
   SELECT 1 FROM audit_logs WHERE organization_id = @org_id::text AND project_id <> @project_id::uuid
+  UNION ALL
+  SELECT 1 FROM security_audit_logs WHERE organization_id = @org_id::text AND project_id <> @project_id::uuid
 ) x;
 
 -- The gateway is only a gateway if its members survived the reseed, and an
@@ -407,18 +409,6 @@ WHERE l.project_id = @project_id::uuid AND l.deleted IS FALSE
   AND (l.target_kind = 'organization_gateway'
     OR (l.target_kind = 'mcp_server' AND ms.id IS NOT NULL)
     OR (l.target_kind = 'meta_mcp_server' AND mm.id IS NOT NULL));
-
--- The approval policy is only usable when the approvals server it points
--- agents at has an endpoint and sits in the Default plugin.
-
--- name: PostflightCountApprovalsServers :one
-SELECT count(*)
-FROM mcp_servers s
-JOIN mcp_endpoints e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
-JOIN plugin_servers ps ON ps.mcp_server_id = s.id AND ps.deleted IS FALSE
-JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = s.project_id AND p.is_default IS TRUE AND p.deleted IS FALSE
-WHERE s.project_id = @project_id::uuid AND s.builtin_backend = 'approvals'
-  AND s.deleted IS FALSE;
 
 -- A hosted toolset's canonical wrapper mirrors the toolset's name and tool
 -- variations group, and serves from at least one endpoint.
@@ -515,8 +505,20 @@ SELECT count(*) FROM (
 -- name: PostflightCountMDMDevices :one
 SELECT count(*) FROM mdm_devices WHERE organization_id = @org_id::text;
 
--- State reports: one attested machine and one enforcing an older policy.
--- Without them every active device reads unreported.
+-- Machines only their agents list: serials no MDM device holds.
+-- name: PostflightCountAgentOnlyDeviceSyncs :one
+SELECT count(*)
+FROM device_agent_device_syncs d
+WHERE d.organization_id = @org_id::text
+  AND NOT EXISTS (
+    SELECT 1 FROM mdm_devices m
+    WHERE m.organization_id = d.organization_id
+      AND LOWER(m.serial_number) = LOWER(d.serial_number)
+  );
+
+-- State reports: three attested machines (one only its agent lists, one a
+-- Windows desktop that reports no serial) and one enforcing an older policy. Without them every active device reads
+-- unreported.
 
 -- name: PostflightCountDeviceAgentStateReports :one
 SELECT count(*) FROM device_agent_state_reports WHERE organization_id = @org_id::text;
@@ -562,8 +564,17 @@ WHERE organization_id = @org_id::text AND project_id = @project_id::uuid
 SELECT count(*) FROM mcp_server_auth_clients
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
 
+-- name: PostflightCountMCPReviews :one
+-- The MCP reviews queue needs its one seeded request awaiting a decision.
+SELECT count(*) FROM mcp_approval_requests
+WHERE organization_id = @org_id::text AND deleted IS FALSE AND status = 'requested';
+
 -- name: PostflightCountApprovals :one
 -- The Tool approvals tab needs its four seeded approval requests: pending,
 -- used, denied and expired.
 SELECT count(*) FROM risk_policy_approvals
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
+
+-- name: PostflightCountSecurityAuditLogs :one
+SELECT count(*) FROM security_audit_logs
+WHERE organization_id = @org_id::text;

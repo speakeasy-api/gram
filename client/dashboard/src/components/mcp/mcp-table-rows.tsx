@@ -8,7 +8,6 @@ import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
-import { ExternalMcpIcon } from "./MCPToolsetIcon";
 import {
   hostedToolCountLabel,
   MCP_SERVER_KIND_LABEL,
@@ -182,19 +181,10 @@ export function MCPServerTableRow({
       href={mcpServerHref(routes, server, oauthStatus)}
       ariaLabel={`Open MCP server ${name}`}
       icon={
-        hosted ? (
-          <ExternalMcpIcon
-            externalMcpSlug={toolset?.externalMcpSlugs[0]}
-            alt={name}
-            className="h-6 w-6"
-            fallbackClassName="h-5 w-5"
-          />
-        ) : (
-          <SourceMcpIcon
-            mcpServerId={server.id}
-            className="h-5 w-5 object-contain"
-          />
-        )
+        <SourceMcpIcon
+          mcpServerId={server.id}
+          className="h-5 w-5 object-contain"
+        />
       }
     >
       <NameCell name={name}>

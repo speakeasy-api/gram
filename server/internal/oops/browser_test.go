@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
@@ -40,6 +41,16 @@ func TestBrowserErrHandlePreservesPublicError(t *testing.T) {
 	require.Equal(t, original.Code, machine.Code)
 	require.Equal(t, original.Header(), machine.Header())
 	require.JSONEq(t, original.Body.String(), machine.Body.String())
+}
+
+func TestBrowserErrHandleNamesProviderOnOutage(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
+		return oops.WithBrowserProvider(oops.WithBrowserReason(oops.E(oops.CodeUnavailable, nil, "provider down"), oauthui.ReasonProviderUnavailable), "auth.example.com")
+	}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/callback", nil))
+	require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	require.Contains(t, response.Body.String(), "auth.example.com")
 }
 
 func TestBrowserErrHandleMasksUnexpectedError(t *testing.T) {
@@ -87,4 +98,32 @@ func TestBrowserErrorAnnotationsCompose(t *testing.T) {
 		require.NotContains(t, response.Body.String(), "Close this tab")
 		require.Contains(t, response.Body.String(), "Speakeasy dashboard")
 	}
+}
+
+// A fault's message is for developers; the page keeps its error ID instead.
+func TestBrowserErrHandleHidesFaultMessage(t *testing.T) {
+	t.Parallel()
+	fault := oops.E(oops.CodeUnexpected, errors.New("invariant"), "resolve upstream tokens for validation")
+	response := httptest.NewRecorder()
+	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
+		return fault
+	}).ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/connect", nil))
+	body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusInternalServerError)
+	require.Equal(t, oops.CodeUnexpected.UserMessage(), body.Description)
+	require.NotContains(t, response.Body.String(), "resolve upstream tokens for validation")
+	require.Contains(t, response.Body.String(), fault.AsGoa(t.Context()).ID)
+}
+
+// An invariant violation is a fault too: our-side copy, whatever its status.
+func TestBrowserErrHandleTreatsInvariantViolationAsOurs(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
+		return oops.E(oops.CodeInvariantViolation, errors.New("broken"), "two clients share an issuer")
+	}).ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/connect", nil))
+	require.Equal(t, http.StatusUnprocessableEntity, response.Code)
+	page := strings.Join(strings.Fields(response.Body.String()), " ")
+	require.Contains(t, page, "This is a problem on our side")
+	require.Contains(t, page, "with Speakeasy support")
+	require.NotContains(t, page, "two clients share an issuer")
 }

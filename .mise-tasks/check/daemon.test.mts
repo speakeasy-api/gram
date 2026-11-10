@@ -51,3 +51,41 @@ for (const [name, addressVar, portVar] of daemons) {
     });
   }
 }
+
+const viteDaemons = [
+  ["admin-dashboard", "GRAM_ADMIN_HOST", "GRAM_ADMIN_DASHBOARD_PORT"],
+  ["dashboard", "GRAM_HOST", "GRAM_SITE_PORT"],
+] as const;
+
+const viteHosts = [
+  [undefined, "localhost"],
+  ["", "localhost"],
+  ["devbox.example.ts.net", "devbox.example.ts.net"],
+] as const;
+
+for (const [name, hostVar, portVar] of viteDaemons) {
+  for (const [host, expected] of viteHosts) {
+    test(`${name} probes ${hostVar}=${String(host)} as ${expected}`, () => {
+      const env = {
+        ...process.env,
+        GRAM_HTTP_SCHEME: "https",
+        usage_name: name,
+        [portVar]: "23456",
+        [hostVar]: host,
+      };
+      if (host === undefined) delete env[hostVar];
+      const result = spawnSync(
+        "bash",
+        [
+          "-c",
+          'mise() { printf "%s" "$4"; }; source "$1"',
+          "check-daemon-test",
+          task,
+        ],
+        { env, encoding: "utf8" },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, `https://${expected}:23456/`);
+    });
+  }
+}

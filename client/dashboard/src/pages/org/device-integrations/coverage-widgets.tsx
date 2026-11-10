@@ -12,11 +12,12 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { formatRelativeTime } from "@/lib/dates";
 import type { DeviceIntegrationCoverage } from "@gram/client/models/components/deviceintegrationcoverage.js";
+import type { FleetCoverage } from "@gram/client/models/components/fleetcoverage.js";
 import type {
+  FleetDevice,
   CoverageBucket,
-  ManagedDevice,
   PolicyState,
-} from "@gram/client/models/components/manageddevice.js";
+} from "@gram/client/models/components/fleetdevice.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
@@ -25,19 +26,24 @@ import { cn } from "@/lib/utils";
 import { memo, useDeferredValue, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import {
+  AGENT_ONLY,
   BUCKETS,
   type CoverageDisplay,
   coverageDisplay,
   deviceCoverageKey,
+  deviceName,
   LINKED_DEVICE_PARAM,
   type LinkedDeviceState,
   matchesCoverageFilter,
+  matchesSourceFilter,
+  osLabel,
   POLICY_STATES,
+  SOURCE_OPTIONS,
   UNMANAGED_USERS,
 } from "./coverage-states";
 import { DeviceDetailSheet } from "./device-detail-sheet";
 
-function CoverageBadge({ device }: { device: ManagedDevice }): JSX.Element {
+function CoverageBadge({ device }: { device: FleetDevice }): JSX.Element {
   const display = coverageDisplay(deviceCoverageKey(device));
   const Icon = display.icon;
   return (
@@ -52,11 +58,16 @@ function CoverageBadge({ device }: { device: ManagedDevice }): JSX.Element {
   );
 }
 
+// The MDM pages pass an inventory's coverage; the Devices tab passes the
+// fleet's, which has no MDM gaps to show until an MDM is connected.
 export function CoverageSummaryTiles({
   coverage,
 }: {
-  coverage: DeviceIntegrationCoverage;
+  coverage: DeviceIntegrationCoverage | FleetCoverage;
 }): JSX.Element {
+  const fleet = "agentOnlyDevices" in coverage ? coverage : null;
+  const inventory = "agentOnlyDevices" in coverage ? null : coverage;
+  const showGaps = fleet ? fleet.mdmConnected : true;
   const tiles: { key: string; display: CoverageDisplay; count: number }[] = [
     // agent_active, split by whether each device enforces its policy. The
     // three problem states appear only when non-zero, so a healthy fleet
@@ -86,21 +97,45 @@ export function CoverageSummaryTiles({
       BUCKETS.agent_other_device,
       coverage.agentOtherDevice,
     ),
-    { key: "no_agent", display: BUCKETS.no_agent, count: coverage.noAgent },
-    { key: "no_email", display: BUCKETS.no_email, count: coverage.noEmail },
-    {
-      key: "unresolved_email",
-      display: BUCKETS.unresolved_email,
-      count: coverage.unresolvedEmail,
-    },
-    { key: "missing", display: BUCKETS.missing, count: coverage.missing },
-    // Not a device bucket: agent USERS the MDM knows no device for — the
-    // inverse gap the ticket's bucket list requires.
-    {
-      key: "unmanaged_agent_users",
-      display: UNMANAGED_USERS,
-      count: coverage.unmanagedAgentUsers,
-    },
+    // Without an MDM nothing lists the devices that lack the agent, so these
+    // would be a row of zeros that reads as full coverage.
+    ...(showGaps
+      ? [
+          {
+            key: "no_agent",
+            display: BUCKETS.no_agent,
+            count: coverage.noAgent,
+          },
+          {
+            key: "no_email",
+            display: BUCKETS.no_email,
+            count: coverage.noEmail,
+          },
+          {
+            key: "unresolved_email",
+            display: BUCKETS.unresolved_email,
+            count: coverage.unresolvedEmail,
+          },
+          {
+            key: "missing",
+            display: BUCKETS.missing,
+            count: coverage.missing,
+          },
+        ]
+      : []),
+    // The inverse gap. An inventory counts agent USERS it knows no device
+    // for; the fleet lists those machines, so it counts them instead.
+    ...(inventory
+      ? [
+          {
+            key: "unmanaged_agent_users",
+            display: UNMANAGED_USERS,
+            count: inventory.unmanagedAgentUsers,
+          },
+        ]
+      : fleet?.mdmConnected
+        ? nonZero("agent_only", AGENT_ONLY, fleet.agentOnlyDevices)
+        : []),
   ];
 
   return (
@@ -155,8 +190,14 @@ function CoverageStatTile({
 
 // Memoized so parent form/typing state changes (e.g. the configure sheet on
 // the detail page) don't re-render up to 200 device rows per keystroke.
-export const ManagedDeviceTable = memo(function ManagedDeviceTable({
+//
+// "inventory" is one MDM's synced devices. "fleet" is the Devices tab: every
+// device the org can see, where the MDM-only parts (check-in, source) only
+// mean something once an MDM is connected.
+export const DeviceTable = memo(function DeviceTable({
   devices,
+  variant = "inventory",
+  mdmConnected = true,
   isLoading,
   isError = false,
   onRetry,
@@ -164,7 +205,9 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
   onLoadMore,
   isLoadingMore = false,
 }: {
-  devices: ManagedDevice[];
+  devices: FleetDevice[];
+  variant?: "inventory" | "fleet";
+  mdmConnected?: boolean;
   isLoading: boolean;
   // A failed inventory fetch must never masquerade as an empty fleet.
   isError?: boolean;
@@ -176,11 +219,15 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
   const [search, setSearch] = useState("");
   // Keep the input responsive; the table filter recomputation trails behind.
   const deferredSearch = useDeferredValue(search);
-  const { values, setValue, clearValue, clearAll } =
-    useFilterState(DEVICE_FILTERS);
-  // Keep the raw (possibly undefined) reference: defaulting to a fresh []
+  const showSource = variant === "fleet" && mdmConnected;
+  const filters = showSource ? FLEET_FILTERS : DEVICE_FILTERS;
+  const { values, setValue, clearValue, clearAll } = useFilterState(filters);
+  // Keep the raw (possibly undefined) references: defaulting to a fresh []
   // here would change the memo dependency every render.
   const selectedBuckets = values.coverage;
+  const selectedSources = showSource
+    ? (values as { source?: string[] }).source
+    : undefined;
 
   const filteredDevices = useMemo(() => {
     const normalizedSearch = deferredSearch.trim().toLowerCase();
@@ -193,14 +240,26 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
           device.userEmail,
           device.externalId,
         ].some((value) => value?.toLowerCase().includes(normalizedSearch));
-      return matchesSearch && matchesCoverageFilter(device, selectedBuckets);
+      return (
+        matchesSearch &&
+        matchesCoverageFilter(device, selectedBuckets) &&
+        matchesSourceFilter(device, selectedSources)
+      );
     });
-  }, [devices, deferredSearch, selectedBuckets]);
+  }, [devices, deferredSearch, selectedBuckets, selectedSources]);
 
-  const columns = useMemo(() => deviceColumns(), []);
+  const columns = useMemo(
+    () =>
+      deviceColumns({
+        userHeader: variant === "fleet" ? "User" : "Assigned user",
+        showMdmCheckIn: mdmConnected,
+        showSource,
+      }),
+    [variant, mdmConnected, showSource],
+  );
   // The device outlives `open`, so the sheet keeps its content while it
   // slides out. A refreshed list replaces the clicked snapshot.
-  const [selected, setSelected] = useState<ManagedDevice | null>(null);
+  const [selected, setSelected] = useState<FleetDevice | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const selectedDevice = selected
     ? (devices.find((device) => device.id === selected.id) ?? selected)
@@ -253,7 +312,11 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
   if (isError) {
     return (
       <Stack gap={2} align="start">
-        <Text muted>Could not load the device inventory.</Text>
+        <Text muted>
+          {variant === "fleet"
+            ? "Could not load devices."
+            : "Could not load the device inventory."}
+        </Text>
         {onRetry ? (
           <Button variant="secondary" size="sm" onClick={onRetry}>
             <Button.Text>Retry</Button.Text>
@@ -274,9 +337,12 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
           debounceMs={300}
         />
         <Page.Toolbar.Filters
-          schema={DEVICE_FILTERS}
+          schema={filters}
           values={values}
-          optionsById={{ coverage: COVERAGE_OPTIONS }}
+          optionsById={{
+            coverage: mdmConnected ? COVERAGE_OPTIONS : AGENT_COVERAGE_OPTIONS,
+            source: SOURCE_OPTIONS,
+          }}
           onChange={setValue as (id: string, value: FilterValue) => void}
           onClear={clearValue as (id: string) => void}
           onClearAll={clearAll}
@@ -306,8 +372,9 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
             </Button.Text>
           </Button>
           <Text muted small>
-            Showing {devices.length} synced devices so far — search covers only
-            loaded devices.
+            Showing {devices.length}{" "}
+            {variant === "fleet" ? "devices" : "synced devices"} so far — search
+            covers only loaded devices.
           </Text>
         </Stack>
       ) : null}
@@ -329,20 +396,49 @@ const COVERAGE_OPTIONS = [
       : coverageDisplay(key).label,
   value: key,
 }));
+// Without an MDM every device is agent-only, which is only ever agent_active
+// or agent_stale; the MDM gap buckets would match nothing.
+const AGENT_COVERAGE_OPTIONS = COVERAGE_OPTIONS.filter(
+  ({ value }) =>
+    Object.hasOwn(POLICY_STATES, value) ||
+    value === "agent_active" ||
+    value === "agent_stale",
+);
 const DEVICE_FILTERS = defineFilters([
   { id: "coverage", label: "Coverage", kind: "multiselect", pinned: true },
 ]);
+const FLEET_FILTERS = defineFilters([
+  { id: "coverage", label: "Coverage", kind: "multiselect", pinned: true },
+  { id: "source", label: "Source", kind: "multiselect", pinned: true },
+]);
 
-function deviceColumns(): Column<ManagedDevice>[] {
+function deviceColumns({
+  userHeader,
+  showMdmCheckIn,
+  showSource,
+}: {
+  userHeader: string;
+  showMdmCheckIn: boolean;
+  showSource: boolean;
+}): Column<FleetDevice>[] {
   return [
     {
       key: "device",
       header: "Device",
       render: (device) => (
         <Stack gap={0.5} className="min-w-0">
-          <Text variant="body" className="truncate font-medium">
-            {device.hostname ?? device.externalId}
-          </Text>
+          <Stack direction="horizontal" align="center" gap={2}>
+            <Text variant="body" className="truncate font-medium">
+              {deviceName(device)}
+            </Text>
+            {showSource && !device.inInventory ? (
+              <SimpleTooltip tooltip={AGENT_ONLY.detail}>
+                <Badge variant="neutral" className="shrink-0">
+                  <Badge.Text>{AGENT_ONLY.label}</Badge.Text>
+                </Badge>
+              </SimpleTooltip>
+            ) : null}
+          </Stack>
           <Text muted small className="truncate font-mono text-xs">
             {deviceSubtitle(device)}
           </Text>
@@ -351,14 +447,16 @@ function deviceColumns(): Column<ManagedDevice>[] {
     },
     {
       key: "user",
-      header: "Assigned user",
+      header: userHeader,
       render: (device) => <AssignedUserCell device={device} />,
     },
-    ...trailingDeviceColumns,
+    agentLastSeenColumn,
+    ...(showMdmCheckIn ? [mdmCheckInColumn] : []),
+    coverageColumn,
   ];
 }
 
-function AssignedUserCell({ device }: { device: ManagedDevice }) {
+function AssignedUserCell({ device }: { device: FleetDevice }) {
   if (!device.userEmail) {
     return (
       <Text muted small className="truncate">
@@ -382,39 +480,42 @@ function AssignedUserCell({ device }: { device: ManagedDevice }) {
   );
 }
 
-const trailingDeviceColumns: Column<ManagedDevice>[] = [
-  {
-    key: "agentLastSeen",
-    header: "Agent last seen",
-    width: "130px",
-    render: (device) => (
-      <Text muted small className="whitespace-nowrap">
-        {formatRelativeTime(device.agentLastSeenAt ?? null) ?? "—"}
-      </Text>
-    ),
-  },
-  {
-    key: "mdmCheckIn",
-    header: "MDM check-in",
-    width: "130px",
-    render: (device) => (
-      <Text muted small className="whitespace-nowrap">
-        {formatRelativeTime(device.mdmLastCheckInAt ?? null) ?? "—"}
-      </Text>
-    ),
-  },
-  {
-    key: "coverage",
-    header: "Coverage",
-    width: "220px",
-    render: (device) => <CoverageBadge device={device} />,
-  },
-];
+const agentLastSeenColumn: Column<FleetDevice> = {
+  key: "agentLastSeen",
+  header: "Agent last seen",
+  width: "130px",
+  render: (device) => (
+    <Text muted small className="whitespace-nowrap">
+      {formatRelativeTime(device.agentLastSeenAt ?? null) ?? "—"}
+    </Text>
+  ),
+};
 
-function deviceSubtitle(device: ManagedDevice): string {
-  const parts = [
-    device.serialNumber,
-    [device.osName, device.osVersion].filter(Boolean).join(" "),
-  ].filter((part) => part && part.length > 0);
-  return parts.join(" · ") || device.externalId;
+const mdmCheckInColumn: Column<FleetDevice> = {
+  key: "mdmCheckIn",
+  header: "MDM check-in",
+  width: "130px",
+  render: (device) => (
+    <Text muted small className="whitespace-nowrap">
+      {formatRelativeTime(device.mdmLastCheckInAt ?? null) ?? "—"}
+    </Text>
+  ),
+};
+
+const coverageColumn: Column<FleetDevice> = {
+  key: "coverage",
+  header: "Coverage",
+  width: "220px",
+  render: (device) => <CoverageBadge device={device} />,
+};
+
+// An agent-only machine has no MDM OS, so it shows the agent's.
+function deviceSubtitle(device: FleetDevice): string {
+  const os =
+    [device.osName, device.osVersion].filter(Boolean).join(" ") ||
+    (device.agentState?.os ? osLabel(device.agentState.os) : "");
+  const parts = [device.serialNumber, os].filter(
+    (part) => part && part.length > 0,
+  );
+  return parts.join(" · ") || device.externalId || "";
 }

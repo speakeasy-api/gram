@@ -87,3 +87,33 @@ func TestUpstreamCancelTarget(t *testing.T) {
 		})
 	}
 }
+
+func TestStreamEndReasonPrefersShutdownOverRotation(t *testing.T) {
+	t.Parallel()
+
+	_, cancel := context.WithCancel(t.Context())
+	sr := newStreamReader(io.NopCloser(strings.NewReader("")), time.Hour, cancel)
+	defer func() { _ = sr.Close() }()
+	sr.rotate()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/mcp/id", http.NoBody)
+	require.Equal(t, StreamEndMaxAge, streamEndReason(req, sr, errors.New("read canceled")))
+
+	// A shutdown that lands as the stream rotates is the more useful label:
+	// the drain reaches every stream, the age only this one.
+	sr.drained.Store(true)
+	require.Equal(t, StreamEndShutdown, streamEndReason(req, sr, errors.New("read canceled")))
+}
+
+func TestStreamAge(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, time.November, 5, 12, 0, 0, 0, time.UTC)
+
+	disabled := (&Proxy{MaxStreamAge: 0}).streamAge(start)
+	require.False(t, disabled.reached(start.Add(24*time.Hour)), "no maximum age is never reached")
+	require.NotPanics(t, disabled.afterDeadline(func() { t.Error("a disabled age must not fire") }))
+
+	age := (&Proxy{MaxStreamAge: 55 * time.Minute}).streamAge(start)
+	require.False(t, age.reached(start.Add(55*time.Minute-time.Nanosecond)))
+	require.True(t, age.reached(start.Add(55*time.Minute)))
+}
