@@ -749,6 +749,39 @@ func (m *ChallengeManager) ResolveClientAccessTokens(
 	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, chosen, skipUnusable)
 }
 
+// ResolveAssociatedAccessTokens resolves the caller's credentials for the
+// clients associated with one MCP server, with the per-client behavior of
+// ResolveAccessTokens, or of ResolveAvailableAccessTokens when skipUnusable
+// is set. Only associated clients the user session issuer still binds for the
+// project are resolved, since the caller signs in to them through it. Clients
+// the issuer binds for other servers are never resolved, so they cannot
+// collide with this server's credentials.
+func (m *ChallengeManager) ResolveAssociatedAccessTokens(
+	ctx context.Context,
+	attribution RefreshAttribution,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	associatedClientIDs map[uuid.UUID]bool,
+	skipUnusable bool,
+) (map[uuid.UUID]UpstreamToken, error) {
+	if len(associatedClientIDs) == 0 {
+		return nil, nil
+	}
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
+	if err != nil {
+		return nil, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	clients = slices.DeleteFunc(clients, func(c remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
+		return !associatedClientIDs[c.ClientID]
+	})
+	if len(clients) == 0 {
+		return nil, nil
+	}
+	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
+}
+
 func (m *ChallengeManager) resolveBoundAccessTokens(
 	ctx context.Context,
 	attribution RefreshAttribution,

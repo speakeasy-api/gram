@@ -348,3 +348,38 @@ func TestAuthClientRemoteSessionStatuses_SkipAGrantConsentedInAnotherOrganizatio
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, inOrgB[r.clientID].Status)
 }
+
+// A server's associated client resolves alone, even when the sign-in also
+// binds two clients of another authorization server for other servers.
+func TestResolveAssociatedAccessTokens_IgnoresAnotherProvidersDuplicateClients(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAuthClientTokenFixture(t, "assoc-other-duplicates")
+	otherClientID, otherIssuerID := seedActiveClient(t, ctx, f.ti.conn, f.projectID, f.signInA, f.organizationID, "assoc-other-duplicates-2")
+	sibling := seedRemoteClientAtTier(t, ctx, f.ti.conn, conv.ToNullUUID(f.projectID), conv.ToPGText(f.organizationID), otherIssuerID, "assoc-other-duplicates-sibling", f.signInA)
+	subject := urn.NewUserSubject("assoc-other-duplicates-user")
+	f.consent(t, subject, f.signInA, f.clientID, "own-token")
+	f.consent(t, subject, f.signInA, otherClientID, "other-token")
+	f.consent(t, subject, f.signInA, sibling, "sibling-token")
+
+	_, err := f.mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, f.projectID, f.organizationID, f.signInA, subject)
+	require.Error(t, err, "every bound client resolving together trips the one-client-per-provider invariant")
+
+	tokens, err := f.mgr.ResolveAssociatedAccessTokens(ctx, remotesessions.RefreshAttribution{}, f.projectID, f.organizationID, f.signInA, subject, map[uuid.UUID]bool{f.clientID: true}, true)
+	require.NoError(t, err)
+	require.Len(t, tokens, 1)
+	require.Equal(t, "own-token", tokens[f.issuerID].Token)
+	require.Equal(t, f.clientID, tokens[f.issuerID].RemoteSessionClientID)
+}
+
+// An associated client the sign-in does not bind resolves nothing: the caller
+// cannot have signed in to it there.
+func TestResolveAssociatedAccessTokens_SkipsAnAssociatedClientTheSignInDoesNotBind(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAuthClientTokenFixture(t, "assoc-unbound")
+	subject := urn.NewUserSubject("assoc-unbound-user")
+	f.consent(t, subject, f.signInA, f.clientID, "token-from-a")
+
+	tokens, err := f.mgr.ResolveAssociatedAccessTokens(ctx, remotesessions.RefreshAttribution{}, f.projectID, f.organizationID, f.signInB, subject, map[uuid.UUID]bool{f.clientID: true}, true)
+	require.NoError(t, err)
+	require.Empty(t, tokens)
+}

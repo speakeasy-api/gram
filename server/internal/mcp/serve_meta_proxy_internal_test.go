@@ -417,3 +417,42 @@ func TestMemberAuthFailure_NoConnectPageNamesAdministrator(t *testing.T) {
 	require.EqualError(t, memberAuthFailure(member, memberDial{anonymous: true}, http.StatusUnauthorized), `server "m" requires authentication and has no credential for this caller. Ask your administrator to connect it`)
 	require.EqualError(t, memberAuthFailure(member, memberDial{}, http.StatusUnauthorized), `server "m" rejected the stored credential. Ask your administrator to reconnect it`)
 }
+
+// A proxied member with associations resolves from its own clients; any other
+// member keeps its project's credentials.
+func TestMemberTokens_ProxiedMemberResolvesFromItsAssociations(t *testing.T) {
+	t.Parallel()
+
+	projectTokens := map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): {Token: "project"}}
+	memberTokens := map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): {Token: "member"}}
+	var resolvedFor []uuid.UUID
+	gate := metaGateContext{projectTokens: &projectTokenCache{
+		resolve: func(context.Context, uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+			return projectTokens, nil
+		},
+		resolveMember: func(_ context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+			resolvedFor = append(resolvedFor, member.serverID)
+			return memberTokens, nil
+		},
+		byProject: map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
+		byMember:  map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
+	}}
+
+	associated := metaMember{serverID: uuid.New(), slug: "associated", backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{uuid.New(): true}}
+	for range 2 {
+		got, err := gate.memberTokens(t.Context(), associated)
+		require.NoError(t, err)
+		require.Equal(t, memberTokens, got)
+	}
+	require.Equal(t, []uuid.UUID{associated.serverID}, resolvedFor, "a member's credentials resolve once per request")
+
+	unassociated := metaMember{serverID: uuid.New(), slug: "unassociated", backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{}}
+	got, err := gate.memberTokens(t.Context(), unassociated)
+	require.NoError(t, err)
+	require.Equal(t, projectTokens, got)
+
+	hosted := metaMember{serverID: uuid.New(), slug: "hosted", backend: metaMemberBackendHosted}
+	got, err = gate.memberTokens(t.Context(), hosted)
+	require.NoError(t, err)
+	require.Equal(t, projectTokens, got)
+}
