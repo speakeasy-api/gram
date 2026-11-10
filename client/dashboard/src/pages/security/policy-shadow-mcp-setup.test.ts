@@ -3,6 +3,7 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { describe, expect, it } from "vitest";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import {
+  initialShadowMCPDisposition,
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   shadowMCPAllowAllPostureLocked,
@@ -19,6 +20,25 @@ const blockingShadowMCPPolicy = {
   enabled: true,
   sources: ["shadow_mcp"],
 } satisfies Pick<RiskPolicy, "action" | "enabled" | "sources">;
+
+describe("initialShadowMCPDisposition", () => {
+  it("starts a new policy on allow_all", () => {
+    expect(initialShadowMCPDisposition(null)).toBe("allow_all");
+  });
+
+  it.each([
+    ["allow_all", "allow_all"],
+    ["block_all", "block_all"],
+  ] as const)("keeps a saved %s policy's disposition", (stored, expected) => {
+    expect(initialShadowMCPDisposition({ shadowMcpDisposition: stored })).toBe(
+      expected,
+    );
+  });
+
+  it("reads a policy saved before dispositions existed as block_all", () => {
+    expect(initialShadowMCPDisposition({})).toBe("block_all");
+  });
+});
 
 describe("isBlockingShadowMCPPolicy", () => {
   it("recognizes an enabled blocking Shadow MCP policy", () => {

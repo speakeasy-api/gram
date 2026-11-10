@@ -9,6 +9,20 @@ type OriginalPolicy = Pick<RiskPolicy, "action" | "enabled" | "sources">;
  * create. */
 export type ShadowMCPDisposition = "block_all" | "allow_all";
 
+/** The disposition the editor starts on. A saved policy keeps its own, and
+ *  one saved before dispositions existed is block_all. A new policy starts on
+ *  allow_all: block_all with the default Everyone audience would block every
+ *  server for the whole organization in one click, so a block-everything
+ *  posture has to be chosen on purpose. */
+export function initialShadowMCPDisposition(
+  policy: { shadowMcpDisposition?: string | undefined } | null,
+): ShadowMCPDisposition {
+  if (!policy) return "allow_all";
+  return policy.shadowMcpDisposition === "allow_all"
+    ? "allow_all"
+    : "block_all";
+}
+
 export function isShadowMCPBlockConfiguration(
   sources: readonly string[],
   action: string,

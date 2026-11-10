@@ -8,6 +8,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { Children, isValidElement, type ReactNode } from "react";
 import { MemoryRouter } from "react-router";
@@ -366,6 +367,54 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
       ]);
       expect(mocks.modeRenders.at(-1)).toBe("block");
     });
+  });
+});
+
+describe("StandardPolicyEditor new Shadow MCP block policy", () => {
+  afterEach(cleanup);
+
+  beforeEach(() => {
+    mocks.selectionRenders.length = 0;
+    mocks.modeRenders.length = 0;
+    mocks.step = "action";
+    mocks.kind = null;
+    mocks.category = null;
+    vi.clearAllMocks();
+    vi.mocked(useSdkClient).mockReturnValue({
+      access: { listShadowMCPInventory: vi.fn() },
+    } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  it("defaults to allowing every server and blocking the ones picked", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(shadowMCPPolicyInventoryQueryKey("project-1"), []);
+
+    const view = render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <StandardPolicyEditor
+              policy={null}
+              prefill={{
+                categories: new Set(["shadow_mcp"]),
+                action: "block",
+                mcpServerIds: [],
+              }}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(mocks.modeRenders.at(-1)).toBe("block"));
+    const page = within(view.container);
+    const allowAll = page.getByRole("radio", { name: /Allow all servers/ });
+    expect(allowAll.getAttribute("aria-checked")).toBe("true");
+    const blockAll = page.getByRole("radio", { name: /Block all servers/ });
+    expect(blockAll.getAttribute("aria-checked")).toBe("false");
+    expect(blockAll.hasAttribute("disabled")).toBe(false);
   });
 });
 

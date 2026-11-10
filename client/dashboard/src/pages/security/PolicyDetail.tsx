@@ -97,6 +97,7 @@ import {
   type PolicyNewPrefill,
 } from "./policy-new-prefill";
 import {
+  initialShadowMCPDisposition,
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
@@ -3345,10 +3346,7 @@ export function StandardPolicyEditor({
     ShadowMCPDecisionConflict[] | null
   >(null);
   const [shadowMCPDisposition, setShadowMCPDisposition] =
-    useState<ShadowMCPDisposition>(
-      () =>
-        (policy?.shadowMcpDisposition as ShadowMCPDisposition) ?? "block_all",
-    );
+    useState<ShadowMCPDisposition>(() => initialShadowMCPDisposition(policy));
   const [userMessage, setUserMessage] = useState(
     policy?.userMessage ?? draft?.userMessage ?? "",
   );
