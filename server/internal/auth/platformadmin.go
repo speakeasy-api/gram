@@ -27,51 +27,52 @@ func RequirePlatformAdmin(ctx context.Context, logger *slog.Logger) (*contextval
 	return authCtx, logger, nil
 }
 
-// PlatformAdminEntitlementReader checks the current durable users.admin value.
+// PlatformAdminEntitlementReader checks the current durable users.admin value
+// and returns the actor display name from the same authoritative row.
 type PlatformAdminEntitlementReader interface {
-	IsPlatformAdmin(context.Context, string) (bool, error)
+	GetPlatformAdminIdentity(context.Context, string) (isAdmin bool, displayName string, err error)
 }
 
 // RequireFreshPlatformAdminSession authorizes incident-sensitive platform paths.
 // It accepts only an ordinary validated Gram session, rejects impersonation and
 // alternate credentials, and re-reads the durable platform-admin entitlement.
-func RequireFreshPlatformAdminSession(ctx context.Context, logger *slog.Logger, reader PlatformAdminEntitlementReader) (*contextvalues.AuthContext, *slog.Logger, error) {
+func RequireFreshPlatformAdminSession(ctx context.Context, logger *slog.Logger, reader PlatformAdminEntitlementReader) (*contextvalues.AuthContext, string, *slog.Logger, error) {
 	authCtx, logger, err := platformAdminContext(ctx, logger)
 	if err != nil {
-		return nil, logger, err
+		return nil, "", logger, err
 	}
 	if !contextvalues.HasValidatedGramSession(ctx) || authCtx.SessionID == nil || *authCtx.SessionID == "" || authCtx.UserID == "" || authCtx.Email == nil || strings.TrimSpace(*authCtx.Email) == "" {
-		return nil, logger, oops.C(oops.CodeUnauthorized)
+		return nil, "", logger, oops.C(oops.CodeUnauthorized)
 	}
 	if authCtx.APIKeyID != "" || authCtx.APIKeyName != "" || len(authCtx.APIKeyScopes) != 0 || authCtx.OrgWidePluginHooksKey {
-		return nil, logger, oops.C(oops.CodeForbidden)
+		return nil, "", logger, oops.C(oops.CodeForbidden)
 	}
 	if _, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
-		return nil, logger, oops.C(oops.CodeForbidden)
+		return nil, "", logger, oops.C(oops.CodeForbidden)
 	}
 	if _, ok := contextvalues.GetOAuthClientID(ctx); ok {
-		return nil, logger, oops.C(oops.CodeForbidden)
+		return nil, "", logger, oops.C(oops.CodeForbidden)
 	}
 	if _, ok := contextvalues.GetActingSurface(ctx); ok {
-		return nil, logger, oops.C(oops.CodeForbidden)
+		return nil, "", logger, oops.C(oops.CodeForbidden)
 	}
 	if contextvalues.IsSupportSession(ctx) || contextvalues.IsLegacyImpersonatedSession(ctx) {
-		return nil, logger, oops.C(oops.CodeForbidden)
+		return nil, "", logger, oops.C(oops.CodeForbidden)
 	}
 	if _, ok := contextvalues.GetRBACScopeOverride(ctx); ok {
-		return nil, logger, oops.C(oops.CodeForbidden)
+		return nil, "", logger, oops.C(oops.CodeForbidden)
 	}
 	if reader == nil {
-		return nil, logger, oops.E(oops.CodeUnavailable, nil, "service is temporarily unavailable")
+		return nil, "", logger, oops.E(oops.CodeUnavailable, nil, "service is temporarily unavailable")
 	}
-	isAdmin, err := reader.IsPlatformAdmin(ctx, authCtx.UserID)
+	isAdmin, displayName, err := reader.GetPlatformAdminIdentity(ctx, authCtx.UserID)
 	if err != nil {
-		return nil, logger, oops.E(oops.CodeUnavailable, err, "service is temporarily unavailable")
+		return nil, "", logger, oops.E(oops.CodeUnavailable, err, "service is temporarily unavailable")
 	}
 	if !isAdmin {
-		return nil, logger, oops.C(oops.CodeForbidden)
+		return nil, "", logger, oops.C(oops.CodeForbidden)
 	}
-	return authCtx, logger, nil
+	return authCtx, displayName, logger, nil
 }
 
 func platformAdminContext(ctx context.Context, logger *slog.Logger) (*contextvalues.AuthContext, *slog.Logger, error) {

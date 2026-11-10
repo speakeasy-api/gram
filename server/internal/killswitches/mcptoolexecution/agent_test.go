@@ -144,9 +144,9 @@ func TestAgentCheckpointsUseRealEvaluator(t *testing.T) {
 			require.NoError(t, err)
 			evaluator, err := killswitches.NewEvaluator(conn, registry, time.Second, nil, testenv.NewLogger(t))
 			require.NoError(t, err)
-			private, err := newCheckpoint(registry, evaluator, time.Second)
+			private, err := newCheckpoint(registry, evaluator, time.Second, enforcedRollout(orgID))
 			require.NoError(t, err)
-			hosted, err := NewHostedCheckpoint(conn, nil, testenv.NewLogger(t), nil)
+			hosted, err := NewHostedCheckpoint(conn, nil, testenv.NewLogger(t), nil, enforcedRollout(orgID))
 			require.NoError(t, err)
 			evaluate := func(ctx context.Context) (killswitches.TransportDisposition, error) {
 				if surface == "hosted" {

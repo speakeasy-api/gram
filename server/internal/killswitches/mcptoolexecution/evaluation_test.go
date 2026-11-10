@@ -27,7 +27,7 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 	source := ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: true}}
 	recorder := &coverageRecorder{}
-	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), nil, recorder)
+	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), testenv.NewLogger(t), recorder, enforcedRollout(orgID))
 	require.NoError(t, err)
 	ctx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 
@@ -108,7 +108,7 @@ func TestHostedCheckpoint_DerivationErrorsTakePrecedenceOverUnsupportedInputs(t 
 	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 	serverSource := ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: true}}
 	recorder := &coverageRecorder{}
-	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), nil, recorder)
+	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), nil, recorder, enforcedRollout(orgID))
 	require.NoError(t, err)
 
 	unsupportedIdentityCtx := testIdentityContext(t, mcpidentity.KindAnonymous, "")

@@ -95,7 +95,7 @@ func (s *Service) platformOwnProjectExemption(ctx context.Context, logger *slog.
 }
 
 func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.CreateGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
-	authCtx, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
+	authCtx, _, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
 	if err != nil {
 		return nil, fmt.Errorf("authorize platform credential request: %w", err)
 	}
@@ -165,7 +165,7 @@ func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *a
 // UpdateGcpIamPlatformCredential replaces a platform GCP credential's name and
 // auth configuration (full replace, like the organization update).
 func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.UpdateGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
-	authCtx, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
+	authCtx, _, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
 	if err != nil {
 		return nil, fmt.Errorf("authorize platform credential request: %w", err)
 	}
@@ -370,7 +370,7 @@ func (s *Service) VerifyGcpIamPlatformCredential(ctx context.Context, payload *a
 }
 
 func (s *Service) DeleteGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.DeleteGcpIamPlatformCredentialPayload) error {
-	authCtx, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
+	authCtx, _, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
 	if err != nil {
 		return fmt.Errorf("authorize platform credential request: %w", err)
 	}

@@ -14,6 +14,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -65,7 +66,12 @@ func newIntegrationServiceWithAdmin(t *testing.T, grantAdmin bool) (*Service, *p
 	_, servers := seedProjectServers(t, db, orgID, "project", "Server", "Server")
 	registry, err := mcptoolexecution.NewRegistry(db)
 	require.NoError(t, err)
-	lifecycle, err := killswitches.NewLifecycleService(db, registry, mcptoolexecution.NewCustomerLifecycleValidator(), killswitches.NewAuditBeforeCommitHook(audit.NewLogger()))
+	features := &feature.InMemory{}
+	features.SetFlag(feature.FlagMCPKillswitchEnforce, orgID, true)
+	lifecycle, err := killswitches.NewLifecycleService(
+		db, registry, mcptoolexecution.NewCustomerLifecycleValidator(), killswitches.NewAuditBeforeCommitHook(audit.NewLogger()),
+		killswitches.WithBeforeApplyHook(rolloutBeforeApply(features)),
+	)
 	require.NoError(t, err)
 	facade, err := killswitches.NewFacade(lifecycle)
 	require.NoError(t, err)
@@ -76,7 +82,7 @@ func newIntegrationServiceWithAdmin(t *testing.T, grantAdmin bool) (*Service, *p
 	require.True(t, ok)
 	server, ok := registry.ResourceAdapter(mcptoolexecution.ResourceKindMCPServer)
 	require.True(t, ok)
-	return &Service{db: db, authorized: authorized, user: user, server: server}, db, orgID, userID, servers, authzEngine
+	return &Service{db: db, authorized: authorized, generic: facade, user: user, server: server, features: features}, db, orgID, userID, servers, authzEngine
 }
 
 func insertForeignServer(t *testing.T, db *pgxpool.Pool) uuid.UUID {
