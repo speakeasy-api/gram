@@ -534,6 +534,18 @@ export function NavButton({
   );
 }
 
+// The active rule inside a stage section, in the stage's label colour, and the
+// same colour on the group marker that stands in for it in the icon rail.
+const stageActiveRuleClass: Record<ReleaseStage, string> = {
+  preview: "before:bg-[color:var(--text-default-warning)]",
+  beta: "before:bg-[color:var(--text-default-information)]",
+};
+const stageIconRailMarkerClass: Record<ReleaseStage, string> = {
+  preview:
+    "group-data-[collapsible=icon]:before:bg-[color:var(--text-default-warning)]",
+  beta: "group-data-[collapsible=icon]:before:bg-[color:var(--text-default-information)]",
+};
+
 // ---------------------------------------------------------------------------
 // Collapsible nav group (Connect, Build, etc.)
 // ---------------------------------------------------------------------------
@@ -543,12 +555,15 @@ export function CollapsibleNavGroup({
   Icon,
   defaultHref,
   stage,
+  activeStage,
   children,
 }: {
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
   defaultHref?: string;
   stage?: ReleaseStage;
+  /** Stage of the active leaf's section, if it sits in one. */
+  activeStage?: ReleaseStage;
   children: React.ReactNode;
 }): React.JSX.Element {
   const { openGroups, toggleGroup, openGroup, activeGroup } =
@@ -589,6 +604,13 @@ export function CollapsibleNavGroup({
                 : "text-muted-foreground hover:text-foreground font-medium",
               isActiveGroup && !isOpen && ACTIVE_ITEM,
               isActiveGroup && isOpen && ACTIVE_MARKER_ICON_RAIL,
+              // The marker stands in for the active leaf, so it takes the
+              // leaf's stage colour when that leaf is in a stage section.
+              isActiveGroup &&
+                activeStage &&
+                (isOpen
+                  ? stageIconRailMarkerClass[activeStage]
+                  : stageActiveRuleClass[activeStage]),
             )}
           >
             <Icon
@@ -647,12 +669,6 @@ export function CollapsibleNavGroup({
     </Collapsible>
   );
 }
-
-// The active rule inside a stage section, in the stage's label colour.
-const stageActiveRuleClass: Record<ReleaseStage, string> = {
-  preview: "before:bg-[color:var(--text-default-warning)]",
-  beta: "before:bg-[color:var(--text-default-information)]",
-};
 
 // ---------------------------------------------------------------------------
 // Sub-item inside a CollapsibleNavGroup

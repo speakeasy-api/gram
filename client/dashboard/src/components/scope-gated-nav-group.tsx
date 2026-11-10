@@ -5,8 +5,14 @@ import {
 } from "@/components/nav-menu";
 import { ReleaseStage } from "@/components/release-stage-badge";
 
-// Stable items lead each group; staged items follow, most mature first.
-const STAGE_ORDER: ReleaseStage[] = ["beta", "preview"];
+// Stable items lead each group; staged items follow, most mature first. Keyed
+// by stage so a new stage fails to compile until it is given a place here —
+// otherwise its items would match neither list and vanish from the group.
+const STAGE_SECTIONS: Record<ReleaseStage, true> = {
+  beta: true,
+  preview: true,
+};
+const STAGE_ORDER = Object.keys(STAGE_SECTIONS) as ReleaseStage[];
 import { useRBAC } from "@/hooks/useRBAC";
 import { AppRoute } from "@/routes";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -60,6 +66,7 @@ export function ScopeGatedNavGroup({
       Icon={Icon}
       defaultHref={first.item.href()}
       stage={stage}
+      activeStage={visible.find((entry) => entry.item.active)?.item.stage}
     >
       {visible
         .filter((entry) => !entry.item.stage)
