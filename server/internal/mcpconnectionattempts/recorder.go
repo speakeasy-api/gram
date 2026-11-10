@@ -58,6 +58,10 @@ const (
 	// writer and joining it. Cancelled I/O returns at once; the rest is headroom.
 	writerJoinMargin = 2 * time.Second
 
+	// minDrainWindow is the least drain time ShutdownAndWait keeps from a budget too small
+	// for writerJoinMargin, so a short budget still drains a healthy backlog.
+	minDrainWindow = 500 * time.Millisecond
+
 	// writerJoinGrace is added to the insert timeout for the wait on a cancelled writer. A
 	// cancelled insert returns at once; this bounds a driver that ignores cancellation.
 	writerJoinGrace = time.Second
@@ -662,7 +666,7 @@ func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
 	drainCtx := ctx
 	if deadline, ok := ctx.Deadline(); ok {
 		var cancel context.CancelFunc
-		drainCtx, cancel = context.WithDeadline(ctx, deadline.Add(-writerJoinMargin))
+		drainCtx, cancel = context.WithTimeout(ctx, drainWindow(time.Until(deadline)))
 		defer cancel()
 	}
 	first, before, err := r.stopAndDrain(drainCtx)
@@ -683,6 +687,16 @@ func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
 	}
 	return err
 }
+
+// drainWindow is how much of the remaining budget the drain gets: all but writerJoinMargin,
+// and never less than minDrainWindow or the whole budget when that is smaller.
+func drainWindow(remaining time.Duration) time.Duration {
+	return max(remaining-writerJoinMargin, min(remaining, minDrainWindow))
+}
+
+// MaxShutdownOverrun is the longest ShutdownAndWait can run past its ctx deadline with the
+// default insert timeout: the writer join plus both bounded shutdown logs.
+const MaxShutdownOverrun = defaultInsertTimeout + writerJoinGrace + 2*drainLogWait
 
 // stopAndDrain stops admission once and waits for the writer to drain until ctx ends.
 // first is true for the call that stopped it, with the drop totals from that moment.

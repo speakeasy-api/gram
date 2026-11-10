@@ -10,7 +10,26 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/httpstream"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
+
+// runShutdownTimeout is the budget runShutdown gives its funcs before returning, after
+// which the command closes its datastore clients.
+const runShutdownTimeout = 30 * time.Second
+
+// connectionRecorderShutdownTimeout is the connection recorder's share of runShutdownTimeout.
+// With mcpconnectionattempts.MaxShutdownOverrun it still ends before ClickHouse closes.
+const connectionRecorderShutdownTimeout = 20 * time.Second
+
+// connectionRecorderShutdown is the recorder's runShutdown func, bounded so its writer is
+// joined before runShutdown returns.
+func connectionRecorderShutdown(recorder *mcpconnectionattempts.Recorder) func(context.Context) error {
+	return func(ctx context.Context) error {
+		ctx, cancel := context.WithTimeout(ctx, connectionRecorderShutdownTimeout)
+		defer cancel()
+		return recorder.ShutdownAndWait(ctx)
+	}
+}
 
 func runShutdown(logger *slog.Logger, logCtx context.Context, shutdownFuncs []func(context.Context) error) error {
 	ctx := context.Background()
@@ -20,7 +39,7 @@ func runShutdown(logger *slog.Logger, logCtx context.Context, shutdownFuncs []fu
 
 	done := make(chan struct{})
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, runShutdownTimeout)
 	defer cancel()
 
 	for _, shutdown := range shutdownFuncs {
