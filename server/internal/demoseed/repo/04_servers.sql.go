@@ -289,7 +289,7 @@ type ServersInsertAuthClientRoleGrantsParams struct {
 	BlockID      uuid.UUID
 }
 
-// Engineers may use the shared the Shared or Own Token Server token; Contractors are blocked from
+// Engineers may use the Shared or Own Token Server's shared token; Contractors are blocked from
 // it on every server that offers it. Cleared by id at the top of the seed.
 func (q *Queries) ServersInsertAuthClientRoleGrants(ctx context.Context, arg ServersInsertAuthClientRoleGrantsParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAuthClientRoleGrants,
@@ -1739,7 +1739,7 @@ type ServersInsertRemovedGitHubMemberParams struct {
 	GithubServerID uuid.UUID
 }
 
-// the Shared or Own Token Server was a member until three days ago. Its dispatches are still in
+// The Shared or Own Token Server was a member until three days ago. Its dispatches are still in
 // ClickHouse (gwgone rows), so the Activity section can show that a removed
 // member drops out of Calls by member while the gateway totals keep them.
 func (q *Queries) ServersInsertRemovedGitHubMember(ctx context.Context, arg ServersInsertRemovedGitHubMemberParams) error {
@@ -2267,8 +2267,8 @@ type ServersPickGatewayGitHubCredentialParams struct {
 	McpServerID   uuid.UUID
 }
 
-// Sets the organization gateway's seeded the Shared or Own Token Server choices to the caller's own
-// the Shared or Own Token Server token. The server offers two credentials, so a choice that names
+// Sets the organization gateway's seeded Shared or Own Token Server choices
+// to the caller's own token. The server offers two credentials, so a choice that names
 // neither resolves to no credential under enforcement.
 func (q *Queries) ServersPickGatewayGitHubCredential(ctx context.Context, arg ServersPickGatewayGitHubCredentialParams) (int64, error) {
 	result, err := q.db.Exec(ctx, serversPickGatewayGitHubCredential,

@@ -238,7 +238,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				LinearClientID:     s.det("remote-identity-client-linear"),
 				SlackServerID:      s.det("mcpserver-slack"),
 			})
-		}, 0, "demo seed postflight: %d upstream client choices are not the intended the Per-User OAuth Server client or Slack no-auth choice"},
+		}, 0, "demo seed postflight: %d upstream client choices are not the intended Per-User OAuth Server client or Slack no-auth choice"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDIssuanceProfileChoices(ctx, repo.PostflightIDIssuanceProfileChoicesParams{
 				ProjectID:      proj,
@@ -363,7 +363,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				DirectGrant:      s.det("github-direct-grant"),
 				WildcardGrant:    s.det("github-wildcard-grant"),
 			})
-		}, 3, "demo seed postflight: expected 3 the Shared or Own Token Server Check Access grants, found %d"},
+		}, 3, "demo seed postflight: expected 3 Check Access grants for the Shared or Own Token Server, found %d"},
 		{byOrg(s.q.PostflightIDSlackIdentityMappings), 6, "demo seed postflight: expected 6 Slack mapping examples, found %d"},
 		{byProj(s.q.PostflightIDMessageParticipants), 3, "demo seed postflight: expected 3 message participants, found %d"},
 		{byOrg(s.q.PostflightIDSlackDirectoryMemberships), 10, "demo seed postflight: expected 10 Slack workspace memberships, found %d"},

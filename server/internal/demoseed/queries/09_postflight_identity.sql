@@ -275,7 +275,7 @@ WHERE (SELECT count(*) FROM live) = 32
   );
 
 -- Count live choices outside the intended set: the Per-User OAuth Server through its main client,
--- Slack with no upstream authentication, the organization gateway's the Shared or Own Token Server
+-- Slack with no upstream authentication, the organization gateway's Shared or Own Token Server
 -- choice of the caller's own token and its tunneled inventory choice, each on a
 -- seeded session.
 -- name: PostflightIDMisassignedUpstreamClientChoices :one

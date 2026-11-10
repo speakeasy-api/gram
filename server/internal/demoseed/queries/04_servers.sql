@@ -824,7 +824,7 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid;
 
--- Engineers may use the shared the Shared or Own Token Server token; Contractors are blocked from
+-- Engineers may use the Shared or Own Token Server's shared token; Contractors are blocked from
 -- it on every server that offers it. Cleared by id at the top of the seed.
 -- name: ServersInsertAuthClientRoleGrants :exec
 INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)

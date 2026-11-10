@@ -814,7 +814,7 @@ type PostflightIDMisassignedUpstreamClientChoicesParams struct {
 }
 
 // Count live choices outside the intended set: the Per-User OAuth Server through its main client,
-// Slack with no upstream authentication, the organization gateway's the Shared or Own Token Server
+// Slack with no upstream authentication, the organization gateway's Shared or Own Token Server
 // choice of the caller's own token and its tunneled inventory choice, each on a
 // seeded session.
 func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Context, arg PostflightIDMisassignedUpstreamClientChoicesParams) (int64, error) {
@@ -877,7 +877,7 @@ SELECT count(*) FROM remote_session_issuers
 WHERE project_id = $1::uuid AND deleted IS FALSE
 `
 
-// the Per-User OAuth Server's remote identity provider, the identity chaining example, Jamf
+// The Per-User OAuth Server's remote identity provider, the identity chaining example, Jamf
 // Pro, and the two EMA services' authorization servers.
 func (q *Queries) PostflightIDProjectRemoteSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectRemoteSessionIssuers, projectID)
