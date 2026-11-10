@@ -122,7 +122,17 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 // domain Kubernetes resources. The domain-scoped Temporal workflow serializes
 // calls and schedules another pass when desired state changes during Apply.
 func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args ReconcileCustomDomainArgs) error {
-	desired, err := c.domains.GetCustomDomainRouteConfig(ctx, args.CustomDomainID)
+	organizationID, err := c.domains.GetCustomDomainOrganizationIDForReconcile(ctx, args.CustomDomainID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load custom domain organization").LogError(ctx, c.logger)
+	}
+	desired, err := c.domains.GetCustomDomainRouteConfig(ctx, customdomainsRepo.GetCustomDomainRouteConfigParams{
+		ID:             args.CustomDomainID,
+		OrganizationID: organizationID,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}

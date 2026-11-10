@@ -94,7 +94,18 @@ LEFT JOIN LATERAL (
       AND e.deleted IS FALSE
     LIMIT 1
 ) AS root_endpoint ON TRUE
-WHERE d.id = @id;
+WHERE d.id = @id
+  AND d.organization_id = @organization_id;
+
+-- name: GetCustomDomainOrganizationIDForReconcile :one
+-- Internal reconcile workflow lookup. The workflow is keyed by custom domain
+-- ID alone, so this resolves the owning organization before the
+-- organization-scoped GetCustomDomainRouteConfig read. Not reachable from
+-- user-facing handlers. Includes deleted rows so reconciliation can clean up
+-- their resources.
+SELECT organization_id
+FROM custom_domains
+WHERE id = @id;
 
 -- name: LockRootMcpEndpointSelection :many
 -- The caller locks the parent custom-domain row first. Sort endpoint locks to

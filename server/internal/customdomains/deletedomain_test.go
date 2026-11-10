@@ -268,7 +268,10 @@ func TestDeleteDomain_CheckpointsDerivedNamesWhenApplyNeverPersisted(t *testing.
 	// Apply never persisted names; the tombstone must checkpoint derived ones
 	// so the pending-cleanup retry path can rediscover it.
 	require.Error(t, ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{SessionToken: nil}))
-	pending, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	pending, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.True(t, pending.Deleted)
 	require.Equal(t, "delete-checkpoint-example-com", pending.IngressName.String)
@@ -285,7 +288,10 @@ func TestDeleteDomain_CheckpointsDerivedNamesWhenApplyNeverPersisted(t *testing.
 	require.Equal(t, "delete-checkpoint-example-com", calls[0].ResourceName)
 	require.Equal(t, "delete-checkpoint-example-com-tls", calls[0].SecretName)
 
-	cleaned, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	cleaned, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.False(t, cleaned.IngressName.Valid)
 	require.False(t, cleaned.CertSecretName.Valid)
@@ -319,7 +325,10 @@ func TestEnsureCustomDomainResourceNames_NeverRepopulatesTombstone(t *testing.T)
 	})
 	require.NoError(t, err)
 	require.Zero(t, rows)
-	route, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.False(t, route.IngressName.Valid)
 	require.False(t, route.CertSecretName.Valid)
@@ -357,7 +366,10 @@ func TestDeleteDomain_RetryCompletesPendingCleanup(t *testing.T) {
 	})
 
 	require.Error(t, ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{SessionToken: nil}))
-	pending, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	pending, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.True(t, pending.IngressName.Valid)
 
@@ -372,7 +384,10 @@ func TestDeleteDomain_RetryCompletesPendingCleanup(t *testing.T) {
 	require.Equal(t, "retry-ingress", calls[0].ResourceName)
 	require.Equal(t, "retry-secret", calls[0].SecretName)
 
-	cleaned, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	cleaned, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.False(t, cleaned.IngressName.Valid)
 	require.False(t, cleaned.CertSecretName.Valid)
@@ -420,7 +435,10 @@ func TestDeleteDomain_AuditSnapshotKeepsDNSTargetToken(t *testing.T) {
 	require.Equal(t, "abcdefgh23", beforeSnapshot["DNSTargetToken"])
 	require.Equal(t, "abcdefgh23."+testDNSTargetSuffix, beforeSnapshot["DNSTarget"])
 
-	tombstone, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	tombstone, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.True(t, tombstone.Deleted)
 	require.False(t, tombstone.DnsTargetToken.Valid, "a deleted domain releases its token")

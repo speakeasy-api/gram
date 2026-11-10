@@ -289,7 +289,10 @@ func TestEnsureDNSTargetToken_SkipsDomainThatIsNotLive(t *testing.T) {
 		require.Empty(t, token)
 	}
 
-	tombstone, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	tombstone, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.False(t, tombstone.DnsTargetToken.Valid)
 }
@@ -322,7 +325,10 @@ func TestDeleteCustomDomain_FreesTokenForReuse(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, ti.repo.DeleteCustomDomain(ctx, "org-free-deleted"))
-	tombstone, err := ti.repo.GetCustomDomainRouteConfig(ctx, deleted.ID)
+	tombstone, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             deleted.ID,
+		OrganizationID: deleted.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.True(t, tombstone.Deleted)
 	require.False(t, tombstone.DnsTargetToken.Valid)

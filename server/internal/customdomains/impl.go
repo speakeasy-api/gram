@@ -167,9 +167,9 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 		return nil, err
 	}
 
-	repo := repo.New(s.db)
+	repository := repo.New(s.db)
 
-	domain, err := repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	domain, err := repository.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
 	}
@@ -179,7 +179,10 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 		isUpdating = workflowInfo.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING
 	}
 
-	route, err := repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err := repository.GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load custom domain route").LogError(ctx, s.logger)
 	}
@@ -196,9 +199,9 @@ func (s *Service) ListDomains(ctx context.Context, _ *gen.ListDomainsPayload) (*
 		return nil, err
 	}
 
-	repo := repo.New(s.db)
+	repository := repo.New(s.db)
 
-	domain, err := repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	domain, err := repository.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &gen.ListCustomDomainsResult{Domains: []*gen.CustomDomain{}, DNSConfig: s.dnsConfig()}, nil
 	}
@@ -211,7 +214,10 @@ func (s *Service) ListDomains(ctx context.Context, _ *gen.ListDomainsPayload) (*
 		isUpdating = workflowInfo.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING
 	}
 
-	route, err := repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err := repository.GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load custom domain route").LogError(ctx, s.logger)
 	}
@@ -332,7 +338,10 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 	// A reverify of an existing domain keeps its root mapping; the response
 	// must not present it as unmapped.
 	rootMcpEndpointID := uuid.Nil
-	if route, err := repo.New(s.db).GetCustomDomainRouteConfig(ctx, domain.ID); err == nil {
+	if route, err := repo.New(s.db).GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	}); err == nil {
 		rootMcpEndpointID = route.RootMcpEndpointID
 	} else {
 		s.logger.WarnContext(ctx, "failed to load root endpoint for registration response", attr.SlogError(err), attr.SlogURLDomain(domain.Domain))
@@ -388,7 +397,10 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
 	}
-	routeBefore, err := repository.GetCustomDomainRouteConfig(ctx, domain.ID)
+	routeBefore, err := repository.GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load custom domain route before update").LogError(ctx, s.logger)
 	}
@@ -493,7 +505,10 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domain for root endpoint update").LogError(ctx, s.logger)
 	}
-	beforeRoute, err := repository.GetCustomDomainRouteConfig(ctx, domain.ID)
+	beforeRoute, err := repository.GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load current root endpoint").LogError(ctx, s.logger)
 	}
@@ -701,7 +716,10 @@ func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get custom domain after health check").LogError(ctx, s.logger)
 	}
-	route, err := repository.GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err := repository.GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load custom domain route after health check").LogError(ctx, s.logger)
 	}
@@ -766,7 +784,10 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 	// Snapshot before the cascade below clears the root mapping and the delete
 	// clears the DNS target token, so the audit log keeps the token-to-domain
 	// mapping.
-	routeBefore, err := repo.New(dbtx).GetCustomDomainRouteConfig(ctx, domain.ID)
+	routeBefore, err := repo.New(dbtx).GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load custom domain route before deletion").LogError(ctx, s.logger)
 	}

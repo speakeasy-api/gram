@@ -481,6 +481,24 @@ func (q *Queries) GetCustomDomainDNSTargetToken(ctx context.Context, arg GetCust
 	return dns_target_token, err
 }
 
+const getCustomDomainOrganizationIDForReconcile = `-- name: GetCustomDomainOrganizationIDForReconcile :one
+SELECT organization_id
+FROM custom_domains
+WHERE id = $1
+`
+
+// Internal reconcile workflow lookup. The workflow is keyed by custom domain
+// ID alone, so this resolves the owning organization before the
+// organization-scoped GetCustomDomainRouteConfig read. Not reachable from
+// user-facing handlers. Includes deleted rows so reconciliation can clean up
+// their resources.
+func (q *Queries) GetCustomDomainOrganizationIDForReconcile(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainOrganizationIDForReconcile, id)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
+}
+
 const getCustomDomainRouteConfig = `-- name: GetCustomDomainRouteConfig :one
 SELECT
     d.id,
@@ -513,7 +531,13 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) AS root_endpoint ON TRUE
 WHERE d.id = $1
+  AND d.organization_id = $2
 `
+
+type GetCustomDomainRouteConfigParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
 
 type GetCustomDomainRouteConfigRow struct {
 	ID                uuid.UUID
@@ -533,8 +557,8 @@ type GetCustomDomainRouteConfigRow struct {
 
 // Canonical desired-state read for reconciliation and health. Keep root
 // eligibility here so both paths agree on whether the secondary route exists.
-func (q *Queries) GetCustomDomainRouteConfig(ctx context.Context, id uuid.UUID) (GetCustomDomainRouteConfigRow, error) {
-	row := q.db.QueryRow(ctx, getCustomDomainRouteConfig, id)
+func (q *Queries) GetCustomDomainRouteConfig(ctx context.Context, arg GetCustomDomainRouteConfigParams) (GetCustomDomainRouteConfigRow, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainRouteConfig, arg.ID, arg.OrganizationID)
 	var i GetCustomDomainRouteConfigRow
 	err := row.Scan(
 		&i.ID,
