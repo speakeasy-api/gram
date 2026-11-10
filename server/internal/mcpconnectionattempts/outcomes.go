@@ -78,7 +78,9 @@ type AttemptSummary struct {
 	// RemoteSessionClientID is the earliest provider connection named, empty when none.
 	RemoteSessionClientID string `ch:"remote_client"`
 
-	// ProviderHost is the earliest provider named.
+	// ProviderHost is the provider on the row that decided how the attempt ended (its
+	// earliest final row, else its latest row), else the earliest provider named. A
+	// gateway attempt that checks several members belongs to the member that ended it.
 	ProviderHost string `ch:"provider"`
 
 	// ClientFamily is the earliest AI app client named, otherwise the browser.
@@ -163,7 +165,13 @@ func Summarize(rows []Row) AttemptSummary {
 	s.LastStep, s.LastReason, s.LastAt = last.Step, last.Reason, last.EventTime
 	s.SubjectURN = earliest(rows, func(r Row) bool { return r.SubjectURN != "" }, func(r Row) string { return r.SubjectURN })
 	s.RemoteSessionClientID = earliest(rows, func(r Row) bool { return r.RemoteSessionClientID != "" }, func(r Row) string { return r.RemoteSessionClientID })
-	s.ProviderHost = earliest(rows, func(r Row) bool { return r.ProviderHost != "" }, func(r Row) string { return r.ProviderHost })
+	s.ProviderHost = last.ProviderHost
+	if final != nil {
+		s.ProviderHost = final.ProviderHost
+	}
+	if s.ProviderHost == "" {
+		s.ProviderHost = earliest(rows, func(r Row) bool { return r.ProviderHost != "" }, func(r Row) string { return r.ProviderHost })
+	}
 	s.ClientFamily = earliest(rows, func(r Row) bool { return r.ClientFamily != "" && r.ClientFamily != FamilyBrowser }, func(r Row) string { return r.ClientFamily })
 	if s.ClientFamily == "" && browser {
 		s.ClientFamily = FamilyBrowser

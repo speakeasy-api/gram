@@ -262,35 +262,23 @@ func newProviderTally() *providerTally {
 type providerAttempt struct {
 	AttemptSummary
 
-	// EndingProvider is the provider on the row that decided how the attempt ended, empty when that row names none.
-	EndingProvider string `ch:"ending_provider"`
-
-	// AttributedProvider is the provider on the row that decided how the attempt
-	// ended, else its earliest provider, so a gateway attempt that checks several
-	// members is counted against the member that failed.
-	AttributedProvider string `ch:"attributed_provider"`
-
 	// ReconnectLoop says a needs-sign-in or rejected row came after a provider sign-in.
 	ReconnectLoop bool `ch:"reconnect_loop"`
 }
 
 // providerAttemptsQuery reduces each attempt that started in a range and reached a
-// provider; filter narrows it after the reduction. The ending row is picked with the
-// same tie-breaks as the ending columns.
+// provider; filter narrows it after the reduction. Its provider is the shared one:
+// the provider that ended the attempt, else the earliest.
 func providerAttemptsQuery(filter string) string {
 	return `
 	SELECT` + attemptEndingColumns + `,
-		toString(if(countIf(is_final) > 0,
-			argMinIf(provider_host, (event_time, step, outcome, reason), is_final),
-			argMax(provider_host, (event_time, step, reason)))) AS ending_provider,
-		if(ending_provider != '', ending_provider, provider) AS attributed_provider,
 		toBool(countIf(step = 'provider_sign_in' AND step_result = 'signed_in') > 0
 			AND maxIf(event_time, reason IN ('rejected_by_member', 'needs_sign_in')) > minIf(event_time, step = 'provider_sign_in' AND step_result = 'signed_in')) AS reconnect_loop
 	FROM ` + eventsTable + `
 	WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
 		AND NOT has(?, organization_id)
 	GROUP BY organization_id, attempt_id
-	HAVING attributed_provider != ''` + filter
+	HAVING provider != ''` + filter
 }
 
 // providerDetailsQuery groups attempts that ended in a range by provider and ending,
@@ -299,7 +287,7 @@ func providerAttemptsQuery(filter string) string {
 // reason means abandoned. The range keeps only attempts whose live window is over.
 func providerDetailsQuery(filter string) string {
 	return `
-	SELECT attributed_provider AS detail_provider,
+	SELECT provider AS detail_provider,
 		multiIf(has_final, final_outcome, last_reason = '', 'abandoned', has(?, last_reason), 'not_failed', 'failed') AS detail_outcome,
 		if(has_final, final_step, last_step) AS detail_step,
 		if(has_final, final_reason, last_reason) AS detail_reason,
@@ -312,7 +300,7 @@ func providerDetailsQuery(filter string) string {
 
 // providerDetail is one row of providerDetailsQuery.
 type providerDetail struct {
-	// Provider is the raw attributed host.
+	// Provider is the raw host of the provider that ended the attempts.
 	Provider string `ch:"detail_provider"`
 
 	// Outcome is how the attempts ended.
@@ -425,7 +413,7 @@ func providerFilter(provider string, args []any) (string, []any) {
 	if provider == "" || provider == LabelOther {
 		return "", args
 	}
-	return " AND attributed_provider = ?", append(args, provider)
+	return " AND provider = ?", append(args, provider)
 }
 
 // readStatus counts the attempts that ended in the last OutageWindow, per attempt so
@@ -444,7 +432,7 @@ func (h *ProviderHealth) readStatus(ctx context.Context, now time.Time, provider
 		if err := rows.ScanStruct(&a); err != nil {
 			return fmt.Errorf("scan provider attempt: %w", err)
 		}
-		if label, ok := keep(a.AttributedProvider); ok {
+		if label, ok := keep(a.ProviderHost); ok {
 			tally(label).add(a, now, statusFrom)
 		}
 	}

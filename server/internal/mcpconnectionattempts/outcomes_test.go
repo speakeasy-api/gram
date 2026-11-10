@@ -299,3 +299,23 @@ func TestIsConfigChange(t *testing.T) {
 		require.False(t, mcpconnectionattempts.IsConfigChange(action), action)
 	}
 }
+
+func TestSummarizeTakesTheProviderThatEndedTheAttempt(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, time.November, 5, 10, 0, 0, 0, time.UTC)
+	a := mcpconnectionattempts.AttemptAt(uuid.New(), start, mcpconnectionattempts.GatewayScope("org-a", uuid.New(), uuid.New(), mcpconnectionattempts.AppDCR))
+	row := func(step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, final bool, after time.Duration, opts ...mcpconnectionattempts.Option) mcpconnectionattempts.Row {
+		r, err := mcpconnectionattempts.RowAt(a, step, what, final, start.Add(after), opts...)
+		require.NoError(t, err)
+		return r
+	}
+	signIn := row(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn, false, time.Minute, mcpconnectionattempts.Provider("https://accounts.google.com"))
+
+	failed := mcpconnectionattempts.Summarize([]mcpconnectionattempts.Row{signIn,
+		row(mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeProviderUnavailable, true, 2*time.Minute, mcpconnectionattempts.Provider("https://linear.app"))})
+	require.Equal(t, "linear.app", failed.ProviderHost, "the member that ended the attempt")
+
+	noHost := mcpconnectionattempts.Summarize([]mcpconnectionattempts.Row{signIn,
+		row(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, true, 2*time.Minute)})
+	require.Equal(t, "accounts.google.com", noHost.ProviderHost, "an ending row with no provider falls back to the earliest")
+}
