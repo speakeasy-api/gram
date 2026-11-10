@@ -38,7 +38,7 @@ func testAuditReads() *recordingFilteredActivityReader {
 func TestAuditLogEntriesFullFidelity(t *testing.T) {
 	t.Parallel()
 	reads := testAuditReads()
-	log := &gen.AuditLog{
+	log := &gen.AdminAuditLog{
 		ID: "event-1", ProjectID: new("project-id"), ProjectSlug: new("project-slug"),
 		ActorID: "staff-id", ActorType: "user", ActorDisplayName: new("Staff member"), ActorSlug: new("staff-slug"),
 		Action: "assistant:run", ActingSurface: "admin_mcp", ActingClientID: new("staff-client"),
@@ -46,7 +46,7 @@ func TestAuditLogEntriesFullFidelity(t *testing.T) {
 		BeforeSnapshot: json.RawMessage(`{"nested":[1,true,null,"<untrusted>"]}`), AfterSnapshot: json.RawMessage(`["after",{"enabled":true}]`),
 		Metadata: map[string]any{"nested": map[string]any{"email": "example@example.test", "count": float64(2)}}, CreatedAt: "2026-01-01T00:00:00Z",
 	}
-	reads.result.Logs = []*gen.AuditLog{log}
+	reads.result.Logs = []*gen.AdminAuditLog{log}
 	cursor := testActivityCursor(100)
 	next := testActivityCursor(99)
 	reads.result.NextCursor = &next
@@ -65,7 +65,7 @@ func TestAuditLogEntriesFullFidelity(t *testing.T) {
 	entry := output.Entries[0]
 	require.JSONEq(t, string(log.BeforeSnapshot), string(entry.BeforeSnapshot))
 	require.JSONEq(t, string(log.AfterSnapshot), string(entry.AfterSnapshot))
-	roundtrip := gen.AuditLog{
+	roundtrip := gen.AdminAuditLog{
 		ID: entry.ID, ProjectID: entry.ProjectID, ProjectSlug: entry.ProjectSlug,
 		ActorID: entry.ActorID, ActorType: entry.ActorType, ActorDisplayName: entry.ActorDisplayName, ActorSlug: entry.ActorSlug,
 		Action: entry.Action, ActingSurface: entry.ActingSurface, ActingClientID: entry.ActingClientID,
@@ -82,7 +82,7 @@ func TestAuditLogEntriesEmptyAndMaximumPages(t *testing.T) {
 	for _, count := range []int{0, maxOrganizationActivityPage} {
 		reads := testAuditReads()
 		for range count {
-			reads.result.Logs = append(reads.result.Logs, &gen.AuditLog{ID: "event"})
+			reads.result.Logs = append(reads.result.Logs, &gen.AdminAuditLog{ID: "event"})
 		}
 		_, body, data := callStaffReadTool(t, reads, "list_audit_log_entries", `{"organization_id":"org-a"}`)
 		require.NotContains(t, body, `"isError":true`)
@@ -128,12 +128,12 @@ func TestAuditLogEntriesBackendFailuresDoNotLeakPartialDetails(t *testing.T) {
 	}{
 		{name: "backend error", err: errors.New("private database failure")},
 		{name: "nil page"},
-		{name: "51 rows", page: &gen.AdminListOrganizationActivityResult{Logs: make([]*gen.AuditLog, 51)}},
-		{name: "nil row after details", page: &gen.AdminListOrganizationActivityResult{Logs: []*gen.AuditLog{{ID: "private-event"}, nil}}},
+		{name: "51 rows", page: &gen.AdminListOrganizationActivityResult{Logs: make([]*gen.AdminAuditLog, 51)}},
+		{name: "nil row after details", page: &gen.AdminListOrganizationActivityResult{Logs: []*gen.AdminAuditLog{{ID: "private-event"}, nil}}},
 		{name: "long next cursor", page: &gen.AdminListOrganizationActivityResult{NextCursor: new(strings.Repeat("x", 129))}},
-		{name: "invalid before", page: &gen.AdminListOrganizationActivityResult{Logs: []*gen.AuditLog{{ID: "private-event", BeforeSnapshot: json.RawMessage(`{"private":`)}}}},
-		{name: "invalid after", page: &gen.AdminListOrganizationActivityResult{Logs: []*gen.AuditLog{{ID: "private-event", AfterSnapshot: json.RawMessage(`{"private":`)}}}},
-		{name: "invalid metadata", page: &gen.AdminListOrganizationActivityResult{Logs: []*gen.AuditLog{{ID: "private-event", Metadata: map[string]any{"private": math.NaN()}}}}},
+		{name: "invalid before", page: &gen.AdminListOrganizationActivityResult{Logs: []*gen.AdminAuditLog{{ID: "private-event", BeforeSnapshot: json.RawMessage(`{"private":`)}}}},
+		{name: "invalid after", page: &gen.AdminListOrganizationActivityResult{Logs: []*gen.AdminAuditLog{{ID: "private-event", AfterSnapshot: json.RawMessage(`{"private":`)}}}},
+		{name: "invalid metadata", page: &gen.AdminListOrganizationActivityResult{Logs: []*gen.AdminAuditLog{{ID: "private-event", Metadata: map[string]any{"private": math.NaN()}}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -153,8 +153,8 @@ func TestAuditLogEntriesSerializedByteLimit(t *testing.T) {
 	t.Parallel()
 	for _, extra := range []int{0, 1} {
 		reads := testAuditReads()
-		log := &gen.AuditLog{ID: "private-event", BeforeSnapshot: json.RawMessage(`""`)}
-		reads.result.Logs = []*gen.AuditLog{log}
+		log := &gen.AdminAuditLog{ID: "private-event", BeforeSnapshot: json.RawMessage(`""`)}
+		reads.result.Logs = []*gen.AdminAuditLog{log}
 		_, _, baseline := callStaffReadTool(t, reads, "list_audit_log_entries", `{"organization_id":"org-a"}`)
 		require.NotEmpty(t, baseline)
 		log.BeforeSnapshot = json.RawMessage(`"` + strings.Repeat("x", maxAuditOutputBytes-len(baseline)+extra) + `"`)
@@ -209,7 +209,7 @@ func TestAuditLogEntriesSnapshotJSONValues(t *testing.T) {
 		t.Run(value, func(t *testing.T) {
 			t.Parallel()
 			reads := testAuditReads()
-			reads.result.Logs = []*gen.AuditLog{{BeforeSnapshot: json.RawMessage(value), AfterSnapshot: json.RawMessage(value)}}
+			reads.result.Logs = []*gen.AdminAuditLog{{BeforeSnapshot: json.RawMessage(value), AfterSnapshot: json.RawMessage(value)}}
 			_, body, data := callStaffReadTool(t, reads, "list_audit_log_entries", `{"organization_id":"org-a"}`)
 			require.NotContains(t, body, `"isError":true`)
 			var output ListAuditLogEntriesOutput
@@ -392,4 +392,22 @@ func TestAuditLogEntriesAvailableWithoutSummaryReader(t *testing.T) {
 // configuration log, with the security log exhausted.
 func testActivityCursor(seq int) string {
 	return base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, "activity:%d:done", seq))
+}
+
+func TestAuditLogEntriesInternalClassification(t *testing.T) {
+	t.Parallel()
+	reads := testAuditReads()
+	reads.result.Logs = []*gen.AdminAuditLog{{ID: "ordinary", IsInternal: new(false)}, {ID: "internal", IsInternal: new(true)}}
+	status, body, data := callStaffReadTool(t, reads, "list_audit_log_entries", `{"organization_id":"org-a"}`)
+	require.Equal(t, http.StatusOK, status)
+	require.NotContains(t, body, `"isError":true`)
+	var output ListAuditLogEntriesOutput
+	require.NoError(t, json.Unmarshal(data, &output))
+	require.Len(t, output.Entries, 2)
+	require.Equal(t, "ordinary", output.Entries[0].ID)
+	require.False(t, output.Entries[0].IsInternal)
+	require.Equal(t, "internal", output.Entries[1].ID)
+	require.True(t, output.Entries[1].IsInternal)
+	require.Contains(t, string(data), `"is_internal":false`)
+	require.Contains(t, string(data), `"is_internal":true`)
 }

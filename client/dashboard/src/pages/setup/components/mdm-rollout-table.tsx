@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { MDM_TARGETS, mdmGuideUrl, type MdmTarget } from "./mdm-targets";
 
 function GuideLink({

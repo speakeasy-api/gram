@@ -21,18 +21,12 @@ import (
 // implemented write operation attached, following every page.
 func listAllAdminTools(t *testing.T) []json.RawMessage {
 	t.Helper()
-	operations := make(map[WriteOperation]bool)
-	for _, op := range AllWriteOperations {
-		if op.implemented() {
-			operations[op] = true
-		}
-	}
 	principal := staffPrincipal()
 	principal.Scopes = append(principal.Scopes, ScopeWrite)
 	runtime := NewRuntime(&testAuthenticator{principal: principal}, "https://admin.example.test/admin-mcp")
 	runtime.catalogPromotions = &catalogpromotion.Service{}
-	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
-	require.NoError(t, AttachWrites(runtime, &StaffOAuth{Approval: &StaffProposalApproval{}}, deps, WriteConfig{Enabled: true, Operations: operations}))
+	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ProjectRedeployer: &fakeProjectRedeployer{}, ImageUploads: &fakeImageUploads{}}
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true}))
 	handler := runtime.Handler()
 
 	tools := []json.RawMessage{}
@@ -144,17 +138,17 @@ func TestToolListSatisfiesMCPToolSchema(t *testing.T) {
 		names[tool.Name] = true
 	}
 	// Every write tool is present, including those past the first page.
-	for _, name := range []string{"execute_admin_proposal", "get_admin_proposal_status", "prepare_set_organization_feature", "prepare_create_registry_entry", "prepare_set_registry_icons", "prepare_update_support_matrix", "create_image_upload_url"} {
+	for _, name := range []string{"set_organization_feature", "create_registry_entry", "set_registry_icons", "update_support_matrix", "create_image_upload_url"} {
 		require.True(t, names[name], "%s missing from tools/list", name)
 	}
 }
 
 func TestToolDefinitionCheckRejectsNonObjectPropertySchemas(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, checkMCPToolDefinition(json.RawMessage(`{"name":"ok","inputSchema":{"type":"object","properties":{"any":{}}},"outputSchema":{"type":"object","properties":{"preview":{"type":"object"}}}}`)))
+	require.NoError(t, checkMCPToolDefinition(json.RawMessage(`{"name":"ok","inputSchema":{"type":"object","properties":{"any":{}}},"outputSchema":{"type":"object","properties":{"result":{"type":"object"}}}}`)))
 	for _, value := range []string{"true", "false", "null"} {
 		for _, field := range []string{"inputSchema", "outputSchema"} {
-			tool := `{"name":"bad","inputSchema":{"type":"object"},"` + field + `":{"type":"object","properties":{"preview":` + value + `}}}`
+			tool := `{"name":"bad","inputSchema":{"type":"object"},"` + field + `":{"type":"object","properties":{"result":` + value + `}}}`
 			require.ErrorContains(t, checkMCPToolDefinition(json.RawMessage(tool)), "want a JSON object", "%s under %s", value, field)
 		}
 	}
@@ -195,8 +189,8 @@ func TestAuditLogEntriesListedSchema(t *testing.T) {
 		require.True(t, ok)
 		fields, ok := item["properties"].(map[string]any)
 		require.True(t, ok)
-		require.Len(t, fields, 19)
-		for _, name := range []string{"id", "project_id", "project_slug", "actor_id", "actor_type", "actor_display_name", "actor_slug", "action", "acting_surface", "acting_client_id", "category", "subject_id", "subject_type", "subject_display_name", "subject_slug", "before_snapshot", "after_snapshot", "metadata", "created_at"} {
+		require.Len(t, fields, 20)
+		for _, name := range []string{"id", "is_internal", "project_id", "project_slug", "actor_id", "actor_type", "actor_display_name", "actor_slug", "action", "acting_surface", "acting_client_id", "category", "subject_id", "subject_type", "subject_display_name", "subject_slug", "before_snapshot", "after_snapshot", "metadata", "created_at"} {
 			require.Contains(t, fields, name)
 		}
 		for _, name := range []string{"before_snapshot", "after_snapshot"} {
@@ -210,4 +204,39 @@ func TestAuditLogEntriesListedSchema(t *testing.T) {
 		return
 	}
 	t.Fatal("list_audit_log_entries missing from tools/list")
+}
+
+func TestActivityAuditLogInternalSchema(t *testing.T) {
+	t.Parallel()
+	tools := listAllAdminTools(t)
+	found := 0
+	for _, raw := range tools {
+		var tool struct {
+			Name         string         `json:"name"`
+			OutputSchema map[string]any `json:"outputSchema"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &tool))
+		field := "activity"
+		switch tool.Name {
+		case "list_organization_activity":
+		case "list_audit_log_entries":
+			field = "entries"
+		default:
+			continue
+		}
+		found++
+		properties, ok := tool.OutputSchema["properties"].(map[string]any)
+		require.True(t, ok, tool.Name)
+		fieldSchema, ok := properties[field].(map[string]any)
+		require.True(t, ok, tool.Name)
+		items, ok := fieldSchema["items"].(map[string]any)
+		require.True(t, ok, tool.Name)
+		require.Contains(t, items["required"], "is_internal", tool.Name)
+		itemProperties, ok := items["properties"].(map[string]any)
+		require.True(t, ok, tool.Name)
+		internal, ok := itemProperties["is_internal"].(map[string]any)
+		require.True(t, ok, tool.Name)
+		require.Equal(t, "boolean", internal["type"], tool.Name)
+	}
+	require.Equal(t, 2, found)
 }

@@ -12,7 +12,7 @@ import (
 
 func TestSuggestedMetadataUsesObservedResource(t *testing.T) {
 	t.Parallel()
-	result := suggestedMetadata(repo.GetSourceRow{SourceName: "Private deployment label", RemoteName: "Example", ResourceName: "Example MCP", Url: "https://mcp.example.com/mcp", ResourceDocumentation: "https://docs.example.com/setup", RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, RequiresUpstreamAuth: true})
+	result := suggestedMetadata(repo.GetSourceRow{SourceName: "Private deployment label", RemoteName: "Example", ResourceName: "Example MCP", Url: "https://mcp.example.com/mcp", ResourceDocumentation: "https://docs.example.com/setup", AssociationProviderIds: []uuid.UUID{uuid.New()}, RequiresUpstreamAuth: true})
 	require.Equal(t, "Example MCP", result.Title)
 	require.Equal(t, "com.example.mcp/example-mcp", result.Name)
 	require.Equal(t, "example-mcp", result.DocsSlug)
@@ -20,6 +20,29 @@ func TestSuggestedMetadataUsesObservedResource(t *testing.T) {
 	require.Equal(t, "https://docs.example.com/setup", result.DocumentationURL)
 	require.Equal(t, "oauth", result.AuthMode)
 	require.Empty(t, result.Description)
+}
+
+func TestSuggestedMetadataAuthModeFollowsAssociationProviders(t *testing.T) {
+	t.Parallel()
+	several := suggestedMetadata(repo.GetSourceRow{ResourceName: "Example", Url: "https://mcp.example.com/mcp", AssociationProviderIds: []uuid.UUID{uuid.New(), uuid.New()}, RequiresUpstreamAuth: true})
+	require.Equal(t, "oauth", several.AuthMode, "several associated providers are still OAuth")
+	none := suggestedMetadata(repo.GetSourceRow{ResourceName: "Example", Url: "https://mcp.example.com/mcp", RequiresUpstreamAuth: true})
+	require.Empty(t, none.AuthMode, "no associated provider leaves the auth mode to staff when the server needs upstream auth")
+}
+
+func TestSuggestedMetadataReusesTheGuideForADocumentedEndpoint(t *testing.T) {
+	t.Parallel()
+	result := suggestedMetadata(repo.GetSourceRow{ResourceName: "Team Chat Tools", Url: "https://mcp.slack.com/mcp"})
+	require.Equal(t, "slack", result.DocsSlug)
+	require.Equal(t, "com.slack.mcp/team-chat-tools", result.Name, "the registry name still comes from the title")
+}
+
+func TestSuggestedMetadataFallsBackToTheTitleSlugWithoutAGuide(t *testing.T) {
+	t.Parallel()
+	result := suggestedMetadata(repo.GetSourceRow{ResourceName: "Slack", Url: "https://mcp.example.com/mcp"})
+	require.Equal(t, "slack", result.DocsSlug, "a title that happens to match a guide is still only a title")
+	result = suggestedMetadata(repo.GetSourceRow{ResourceName: "Team Chat Tools", Url: "https://mcp.example.com/mcp"})
+	require.Equal(t, "team-chat-tools", result.DocsSlug)
 }
 
 func TestSuggestedMetadataOmitsUnsafeEndpoints(t *testing.T) {

@@ -159,38 +159,7 @@ func remoteMCPDisplayName(rawURL string, name pgtype.Text) string {
 // matching audit event. Both dashboard workflows use it so their source records
 // cannot diverge while the atomic workflow adds its linked MCP server.
 func createRemoteMCPSource(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, input remoteMCPSourceInput) (repo.RemoteMcpServer, error) {
-	if authCtx == nil || authCtx.ProjectID == nil {
-		return repo.RemoteMcpServer{}, oops.E(oops.CodeBadRequest, nil, "invalid remote MCP source input")
-	}
-	return CreateRemoteMCPSourceInTransaction(ctx, tx, auditLogger, RemoteMCPSourceTransactionInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		ActorUserID:    authCtx.UserID,
-		ActorEmail:     authCtx.Email,
-		Name:           input.Name,
-		URL:            input.URL,
-		TransportType:  input.TransportType,
-	})
-}
-
-// RemoteMCPSourceTransactionInput names the project and actor a remote MCP
-// source is created for when the caller has no request auth context, such as
-// a staff migration acting on a customer project.
-type RemoteMCPSourceTransactionInput struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	ActorUserID    string
-	ActorEmail     *string
-	Name           *string
-	URL            string
-	TransportType  string
-}
-
-// CreateRemoteMCPSourceInTransaction creates the remote_mcp_servers row and its
-// audit event in the caller's transaction. It neither probes the upstream nor
-// creates an issuer or client.
-func CreateRemoteMCPSourceInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input RemoteMCPSourceTransactionInput) (repo.RemoteMcpServer, error) {
-	if tx == nil || auditLogger == nil || input.ProjectID == uuid.Nil || input.OrganizationID == "" {
+	if tx == nil || auditLogger == nil || authCtx == nil || authCtx.ProjectID == nil {
 		return repo.RemoteMcpServer{}, oops.E(oops.CodeBadRequest, nil, "invalid remote MCP source input")
 	}
 	remoteID, err := uuid.NewV7()
@@ -203,7 +172,7 @@ func CreateRemoteMCPSourceInTransaction(ctx context.Context, tx pgx.Tx, auditLog
 	}
 	remote, err := repo.New(tx).CreateServer(ctx, repo.CreateServerParams{
 		ID:            remoteID,
-		ProjectID:     input.ProjectID,
+		ProjectID:     *authCtx.ProjectID,
 		Name:          normalizedRemoteMCPSourceName(input.Name),
 		Slug:          conv.ToPGText(remoteSlug),
 		TransportType: input.TransportType,
@@ -217,10 +186,10 @@ func CreateRemoteMCPSourceInTransaction(ctx context.Context, tx pgx.Tx, auditLog
 		return repo.RemoteMcpServer{}, oops.E(oops.CodeUnexpected, err, "create remote MCP server")
 	}
 	if err := auditLogger.LogRemoteMcpServerCreate(ctx, tx, audit.LogRemoteMcpServerCreateEvent{
-		OrganizationID:     input.OrganizationID,
-		ProjectID:          input.ProjectID,
-		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID),
-		ActorDisplayName:   input.ActorEmail,
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		ProjectID:          *authCtx.ProjectID,
+		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:   authCtx.Email,
 		ActorSlug:          nil,
 		RemoteMcpServerURN: urn.NewRemoteMcpServer(remote.ID),
 		RemoteMcpServerURL: remote.Url,
@@ -237,14 +206,7 @@ func requireLiveProjectForActiveOrganization(ctx context.Context, tx pgx.Tx, aut
 	if tx == nil || authCtx == nil || authCtx.ProjectID == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.E(oops.CodeBadRequest, nil, "invalid project ownership check")
 	}
-	var projectID uuid.UUID
-	err := tx.QueryRow(ctx, `
-SELECT id
-FROM projects
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-FOR UPDATE`, *authCtx.ProjectID, authCtx.ActiveOrganizationID).Scan(&projectID)
+	_, err := repo.New(tx).LockLiveProjectForRemoteMCPProvisioning(ctx, repo.LockLiveProjectForRemoteMCPProvisioningParams{ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return oops.E(oops.CodeNotFound, err, "project not found in active organization")
 	}

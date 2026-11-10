@@ -43,6 +43,7 @@ func (s *Service) GetSupportCoverage(ctx context.Context, payload *gen.GetSuppor
 			Surface:    cell.Surface,
 			Status:     cell.Status,
 			Value:      cell.Value,
+			Unit:       cell.Unit,
 			Detail:     cell.Detail,
 			LastSeen:   stampSupportCoverage(cell.LastSeen),
 		})

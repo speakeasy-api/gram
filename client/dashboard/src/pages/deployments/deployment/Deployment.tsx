@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { RefreshCcwIcon } from "lucide-react";
 import { Suspense } from "react";
 import { useParams } from "react-router";
@@ -29,10 +30,8 @@ import { AssetsTabContent } from "./AssetsTabContent";
 import { FailedSourcesSection } from "./FailedSourcesSection";
 import { LogsTabContent } from "./LogsTabContent";
 import { ToolsTabContent } from "./ToolsTabContent";
-import {
-  DeploymentPageSearchParams,
-  useDeploymentSearchParams,
-} from "./use-deployment-search-params";
+import type { DeploymentPageSearchParams } from "./use-deployment-search-params";
+import { useDeploymentSearchParams } from "./use-deployment-search-params";
 
 export default function DeploymentPage(): JSX.Element {
   const { deploymentId } = useParams();
@@ -64,34 +63,13 @@ function DeploymentPageContent({ deploymentId }: { deploymentId: string }) {
     throw error;
   }
 
-  if (isLoading || !deployment) {
-    return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <Skeleton>
-            <div className="h-4 w-1/3" />
-          </Skeleton>
-        </Page.Body>
-      </Page>
-    );
-  }
-
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>
-        <Suspense
-          fallback={
-            <Skeleton>
-              <div className="h-4 w-1/3" />
-            </Skeleton>
-          }
-        >
+      <Page.Body isLoading={isLoading || !deployment}>
+        <Suspense fallback={<SplashScreen />}>
           <DeploymentLogs deploymentId={deploymentId} />
         </Suspense>
       </Page.Body>

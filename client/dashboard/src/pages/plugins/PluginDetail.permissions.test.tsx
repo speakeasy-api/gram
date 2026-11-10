@@ -53,6 +53,15 @@ const toastError = vi.hoisted(() => vi.fn());
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: toastSuccess, error: toastError }),
 }));
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    tasks: [],
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     isLoading: state.loading,
@@ -87,18 +96,20 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/components/command-palette/recentlyVisited", () => ({
   useRecentLabelOverride: () => {},
 }));
-vi.mock("@/components/page-layout", async (importOriginal) => {
-  const { Page: ActualPage } =
-    await importOriginal<typeof import("@/components/page-layout")>();
+vi.mock("@/components/page-layout", async () => {
+  // Not importOriginal: loading the real page-layout here hands RequireScope
+  // (imported back through the page header) the real Page instead of this mock.
+  const { Toolbar } = await import("@/components/ui/Toolbar");
   const Container = ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   );
   return {
     Page: Object.assign(Container, {
-      Toolbar: ActualPage.Toolbar,
+      Toolbar,
       Header: Object.assign(Container, { Breadcrumbs: () => null }),
       Body: Container,
     }),
+    useInPageFrame: () => true,
   };
 });
 vi.mock("./use-plugin-assignments-visible", () => ({
@@ -386,8 +397,8 @@ describe("plugin detail permission boundary", () => {
 
   it("does not mount either query tree until grants are loaded", () => {
     state.loading = true;
-    const { container } = render(<PluginDetail />);
-    expect(container.innerHTML).toBe("");
+    render(<PluginDetail />);
+    expect(screen.getByRole("status", { name: "Loading" })).toBeTruthy();
     expect(adminQuery).not.toHaveBeenCalled();
   });
   it("mounts admin detail but not assignment queries for org readers", () => {

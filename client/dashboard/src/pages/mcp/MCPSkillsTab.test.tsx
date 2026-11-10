@@ -33,6 +33,7 @@ vi.mock("@/components/page-layout", () => {
         CTA: Section,
       }),
     },
+    useInPageFrame: () => true,
   };
 });
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -42,6 +43,15 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ session: "session-a" }),
   useProject: () => ({ id: "project-a", slug: "project-a" }),
   useOrganization: () => ({ id: "org-a" }),
+}));
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    tasks: [],
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
 }));
 vi.mock("@/hooks/useRBAC", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/hooks/useRBAC")>();

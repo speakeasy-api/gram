@@ -18,6 +18,7 @@ import { CodeBlock } from "./CodeBlock";
 import { PanelTab, PanelTabs } from "./PanelTabs";
 import {
   ACTION_DOCS,
+  ACTION_TAG,
   WORKFLOW_AGENTS,
   WORKFLOW_AGENT_OPTIONS,
   pluginGateways,
@@ -244,18 +245,24 @@ export function JobScopeChoice({
   );
 }
 
+/**
+ * Why forks cannot use a workflow that runs on pull requests, and the event
+ * that would let them.
+ */
+const FORK_NOTE = (
+  <>
+    On <code>pull_request</code>, forks get no GitHub token, and the job&apos;s{" "}
+    <code>if:</code> skips them. Don&apos;t run it on{" "}
+    <code>pull_request_target</code>: that event gives a fork&apos;s pull
+    request a token the rule admits.
+  </>
+);
+
 /** What the workflow's triggers and the rule mean together, by scope. */
 function ScopeNote({ scope }: { scope: JobScope }): JSX.Element {
   switch (scope.kind) {
     case "repository":
-      return (
-        <li>
-          On <code>pull_request</code>, forks get no GitHub token, and the
-          job&apos;s <code>if:</code> skips them. Don&apos;t run it on{" "}
-          <code>pull_request_target</code>: that event gives a fork&apos;s pull
-          request a token the rule admits.
-        </li>
-      );
+      return <li>{FORK_NOTE}</li>;
     case "branch":
       return (
         <li>
@@ -271,6 +278,13 @@ function ScopeNote({ scope }: { scope: JobScope }): JSX.Element {
           environment. Set its protection rules under Settings &gt; Environments
           before you add the workflow: GitHub creates an environment a workflow
           names with no rules.
+        </li>
+      );
+    case "pull_request":
+      return (
+        <li>
+          The rule admits only pull request jobs that use no environment, so the
+          workflow runs on pull requests alone. {FORK_NOTE}
         </li>
       );
   }
@@ -346,6 +360,11 @@ export function WorkflowStep({ scope }: { scope: JobScope }): JSX.Element {
               <strong>Run {selected.name}</strong> in the same job so it can use
               the configured MCP servers.
             </li>
+            <li>
+              The device agent action&apos;s <code>@{ACTION_TAG}</code> tag
+              moves to each {ACTION_TAG}.x release. If your team requires commit
+              pins, pin a release commit instead.
+            </li>
           </ul>
           <Links
             links={[
@@ -412,7 +431,7 @@ function ruleWarningText(
           cannot. A <code>pull_request_target</code> workflow with{" "}
           <code>id-token: write</code> is admitted too, and if it checks out the
           pull request&apos;s head, code from a fork runs as {agent}. To admit
-          fewer jobs, choose one branch or one environment.
+          fewer jobs, choose pull requests, one branch or one environment.
         </>,
       ];
     case "branch":
@@ -439,6 +458,20 @@ function ruleWarningText(
           deploy, under the repository&apos;s Settings &gt; Environments before
           you add the workflow. A workflow that names an environment nobody has
           set up creates it with no rules.
+        </>,
+      ];
+    case "pull_request":
+      return [
+        <>
+          Pull request jobs in <strong>{repository}</strong> can sign in as{" "}
+          {agent}, unless they use an environment. Jobs on pushed branches and
+          tags cannot. {rule}
+        </>,
+        <>
+          Anyone who can push a branch can run such a job with the workflow as
+          their branch has it, so nobody reviews it first. Forks get no token on{" "}
+          <code>pull_request</code>, but a <code>pull_request_target</code>{" "}
+          workflow is admitted too, a fork&apos;s pull request included.
         </>,
       ];
   }

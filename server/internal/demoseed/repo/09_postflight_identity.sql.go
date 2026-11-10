@@ -429,7 +429,7 @@ const postflightIDInertUpstreamSessions = `-- name: PostflightIDInertUpstreamSes
 SELECT count(*) FROM remote_sessions
 WHERE remote_session_client_id = $1::uuid
   AND deleted IS FALSE
-  AND access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT' AND refresh_token_encrypted IS NULL
+  AND access_token_encrypted <> '' AND refresh_token_encrypted IS NULL
   AND (validation_status IS NULL
        OR validation_status IN ('valid', 'rejected_by_member', 'inactive', 'unknown'))
 `
@@ -540,6 +540,11 @@ WHERE CASE match_kind
   -- the author wanted a wildcard and instead stored a literal matching
   -- nothing at all.
   WHEN 'exact' THEN subject LIKE '%*%'
+    -- A wimse:// or spiffe:// subject needs a trust domain, no user
+    -- information, port, query or fragment, and well-formed percent escapes.
+    OR (subject ~* '^(wimse|spiffe):' AND (
+      subject !~* '^(wimse|spiffe)://[^/?#@:]+(/[^?#]*)?$'
+      OR subject ~ '%(?![0-9A-Fa-f]{2})'))
   WHEN 'wildcard' THEN
     -- Enforced on read, so clearing the issuer flag is a kill switch. A rule
     -- written under an issuer that forbids wildcards is already inert.
@@ -550,6 +555,13 @@ WHERE CASE match_kind
     OR subject NOT LIKE '%*'
     OR left(subject, length(subject) - 1) = ''
     OR left(subject, length(subject) - 1) LIKE '%*%'
+    -- Whitespace before the "*" is part of the stem, so the rule matches
+    -- nothing while looking correct.
+    OR right(left(subject, length(subject) - 1), 1) IN (' ', E'\t', E'\r', E'\n')
+    -- The same identifier syntax, checked on the stem as far as it goes.
+    OR (left(subject, length(subject) - 1) ~* '^(wimse|spiffe):' AND (
+      left(subject, length(subject) - 1) !~* '^(wimse|spiffe)://[^/?#@:]+(/[^?#]*)?$'
+      OR left(subject, length(subject) - 1) ~ '%(?![0-9A-Fa-f]{2})'))
   ELSE TRUE
 END
 `
@@ -895,9 +907,8 @@ WHERE project_id = $1::uuid AND deleted IS FALSE
 // credential kind, plus the pre-column row. A rerun that dropped or
 // duplicated any of them would leave the badges telling a different story
 // than the one they were seeded to tell.
-// Two upstream MCP issuers, two independent gateway issuers, one
-// Connections issuer, and the approvals server's issuer; GitHub uses the
-// organization workforce issuer.
+// Two upstream MCP issuers, two independent gateway issuers, and one
+// Connections issuer; GitHub uses the organization workforce issuer.
 func (q *Queries) PostflightIDProjectUserSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectUserSessionIssuers, projectID)
 	var count int64
@@ -1061,7 +1072,7 @@ WHERE b.organization_id = $2::text AND b.project_id = $3::uuid
   AND b.user_session_issuer_id = us.user_session_issuer_id
   AND rs.subject_urn = b.attached_by_subject_id
   AND b.attached_by_subject_id = rs.subject_urn
-  AND rs.access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT'
+  AND rs.access_token_encrypted <> ''
   AND rs.refresh_token_encrypted IS NULL AND rs.auto_refresh IS FALSE
 `
 
@@ -1311,6 +1322,23 @@ func (q *Queries) PostflightIDSlackIdentityMappings(ctx context.Context, orgID s
 	return count, err
 }
 
+const postflightIDSlackbotSession = `-- name: PostflightIDSlackbotSession :one
+SELECT count(*) FROM assistant_threads t
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE t.project_id = $1::uuid
+  AND t.source_kind = 'speakeasy_slack'
+  AND t.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND c.session_surface = 'speakeasy-slack'
+`
+
+func (q *Queries) PostflightIDSlackbotSession(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDSlackbotSession, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDTriggerInstances = `-- name: PostflightIDTriggerInstances :one
 SELECT count(*) FROM trigger_instances
 WHERE organization_id = $1::text AND project_id = $2::uuid AND deleted IS FALSE
@@ -1395,7 +1423,7 @@ WITH live AS (
     AND credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 26
+WHERE (SELECT count(*) FROM live) = 32
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY($1::uuid[])
@@ -1455,7 +1483,7 @@ type PostflightIDUpstreamClientChoicesParams struct {
 }
 
 // Check both the total and the expected credential/server/client tuples so
-// twenty-six misassigned choices cannot satisfy postflight.
+// thirty-two misassigned choices cannot satisfy postflight.
 func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg PostflightIDUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDUpstreamClientChoices,
 		arg.LinearSessionIds,

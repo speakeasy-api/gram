@@ -5,6 +5,7 @@ import {
 } from "./types";
 import type { PolicyEffect, ResourceType, RoleGrant } from "./types";
 import type { Selector } from "@gram/client/models/components/selector.js";
+import { isProjectWideSelector } from "./computePanelState";
 
 type ProjectRef = { id: string; name: string };
 
@@ -184,7 +185,7 @@ export function computeRuleLabel(
     return `${tools.length} tools`;
   }
 
-  const projectSels = selectors.filter((s) => s.projectId);
+  const projectSels = selectors.filter(isProjectWideSelector);
   if (projectSels.length > 0) {
     if (projectSels.length === 1) {
       const name = projects.find(
@@ -250,7 +251,7 @@ export function computeRuleTooltip(
     return `${verb} access to ${tools.length} tools`;
   }
 
-  const projectSels = selectors.filter((s) => s.projectId);
+  const projectSels = selectors.filter(isProjectWideSelector);
   if (projectSels.length > 0) {
     if (projectSels.length === 1) {
       const name = projects.find(

@@ -78,8 +78,13 @@ type platformMCPConfig struct {
 	// AuditLogs shares customer audit authorization and masking.
 	AuditLogs platformmcp.CustomerAuditReader
 
+	// CustomDomainTargetSuffix is the normalized parent of designated CNAME destinations.
+	CustomDomainTargetSuffix string
 	// GatewaySessions shares dashboard session scoping and pagination.
 	GatewaySessions platformmcp.GatewaySessionManagement
+	// AgentAuthorizationChecks is the dashboard's authorization check listing
+	// the agent identity reads use.
+	AgentAuthorizationChecks platformmcp.AgentAuthorizationChecks
 	// GatewayProxy serves the caller's own MCP servers through their organization gateway.
 	GatewayProxy           platformmcp.GatewayProxy
 	DeploymentRedeploy     platformmcp.DeploymentRedeployManagement
@@ -112,7 +117,6 @@ type platformMCPConfig struct {
 	Encryption             *encryption.Client
 	Identity               *identity.Resolver
 	Sessions               *sessions.Manager
-	Registry               *externalmcp.RegistryClient
 	Catalog                *externalmcp.CatalogService
 	GuardianPolicy         *guardian.Policy
 	RemoteChallengeManager *remotesessions.ChallengeManager
@@ -262,6 +266,9 @@ const platformMCPLocalFixtureReadinessLifetime = 15 * time.Minute
 type AssistantSurface struct {
 	Tools      []platformmcp.Descriptor
 	Authorizer platformmcp.Authorizer
+	// ConsentSignIn lets a server card's Connect connect the server's sign-in
+	// provider on its consent page. Nil when Platform MCP is not configured.
+	ConsentSignIn *platformmcp.ConsentSignInConnector
 }
 
 func configurePlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
@@ -273,13 +280,14 @@ func configurePlatformMCP(ctx context.Context, config platformMCPConfig) (Assist
 
 func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
 	fixtureConfig := config.LocalFixture.Fixture
-	if config.Registry == nil || fixtureConfig == nil {
+	if fixtureConfig == nil {
 		return AssistantSurface{}, errors.New("local Platform MCP fixture configuration is incomplete")
 	}
 	if config.RegistryDiscoveryEnabled {
 		fixtureConfig.SetRegistryPrefix("/platform-mcp/local-fixture/registry")
 	}
-	if err := config.Registry.ClearCache(ctx, fixtureConfig.Registry().URL); err != nil {
+	fixtureRegistry := externalmcp.NewRegistryClient(config.Logger, config.TracerProvider, config.GuardianPolicy, cache.NewRedisCacheAdapter(config.Redis)).WithAllowedCIDRBlocks(platformMCPLocalFixtureLoopbackCIDRBlocks...)
+	if err := fixtureRegistry.ClearCache(ctx, fixtureConfig.Registry().URL); err != nil {
 		return AssistantSurface{}, fmt.Errorf("clear local Platform MCP fixture registry cache: %w", err)
 	}
 
@@ -318,7 +326,6 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	chaining := platformMCPIdentityChaining(config)
 	fixtureOAuth := localfixture.NewOAuthHTTP(fixtureConfig)
 	fixtureMCP := localfixture.NewMCPHTTP(fixtureOAuth)
-	fixtureRegistry := config.Registry.WithAllowedCIDRBlocks(platformMCPLocalFixtureLoopbackCIDRBlocks...)
 	catalog := platformmcp.NewDynamicRegistryCatalogSources(func(ctx context.Context) ([]platformmcp.RegistryCatalogSource, error) {
 		browserSources, err := loadBrowserPlatformMCPCatalogDescriptors(ctx, config.Catalog)
 		if err != nil {
@@ -470,6 +477,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.Logger, config.MeterProvider, config.DB, config.IdentityCommitter, config.GuardianPolicy, config.ServerURL)).
 		WithClientAdmission(platformmcp.NewClientAdmissionService(config.DB, config.AuditLogger)).
 		WithCardLogos(config.Logger, config.DB, config.AssetStorage).
+		WithCatalogLogos(config.Logger, config.GuardianPolicy.PooledClient()).
+		WithSignInConnectLinks(config.DB, config.ServerURL).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
 	feedback := platformmcp.NewFeedbackService(config.DB)
@@ -487,7 +496,6 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
 		WithAuthorization(config.Authz).
 		WithRemoteSessions(config.RemoteChallengeManager).
-		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(chaining).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger).
@@ -547,6 +555,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithAuditLogs(config.AuditLogs).
+		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
@@ -571,6 +580,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
+		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Encryption, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
 		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
@@ -590,7 +600,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithToolUsageBreakdown(config.ToolUsage).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
 		WithUserSearch(config.UserSearch).
-		WithToolCallSearch(config.ToolCallSearch)
+		WithToolCallSearch(config.ToolCallSearch).
+		WithAuthorization(config.Authz)
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, recallRiskFindingReader(config.RiskFindingList), budgets.SensitiveSessionRecall).
 		WithHandoffMinter(sessionhandoff.NewSessionHandoffMinter(config.Logger, config.DB, config.AssetStorage, config.ServerURL.String(), audit.NewLogger()))
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
@@ -637,7 +648,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader),
 		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
-	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
+	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDashboardLinks(config.DashboardURL, config.ServerURL, config.DB).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
 	runtime, err = withPlatformMCPSkills(runtime, config)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("serve local Platform MCP skills: %w", err)
@@ -646,7 +657,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
-	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
+	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer, ConsentSignIn: platformmcp.NewConsentSignInConnector(config.DB, registrations, authorizer)}, nil
 }
 
 // withPlatformMCPSkills serves the embedded Platform MCP skills over the
@@ -1087,7 +1098,6 @@ func newAgentConnectionStatuses(config platformMCPConfig) *platformmcp.PluginsSe
 	return platformmcp.NewPluginsService(config.DB, platformmcp.OperationBudget{}, config.JWTSigningKey).
 		WithAuthorization(config.Authz).
 		WithRemoteSessions(config.RemoteChallengeManager).
-		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(platformMCPIdentityChaining(config)).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger)
@@ -1272,6 +1282,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.Logger, config.MeterProvider, config.DB, config.IdentityCommitter, config.GuardianPolicy, config.ServerURL)).
 		WithClientAdmission(platformmcp.NewClientAdmissionService(config.DB, config.AuditLogger)).
 		WithCardLogos(config.Logger, config.DB, config.AssetStorage).
+		WithCatalogLogos(config.Logger, config.GuardianPolicy.PooledClient()).
+		WithSignInConnectLinks(config.DB, config.ServerURL).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
 	feedback := platformmcp.NewFeedbackService(config.DB)
@@ -1289,7 +1301,6 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
 		WithAuthorization(config.Authz).
 		WithRemoteSessions(config.RemoteChallengeManager).
-		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(chaining).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger).
@@ -1329,6 +1340,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
+		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
 		WithAuditLogs(config.AuditLogs).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
@@ -1354,6 +1366,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
+		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Encryption, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
 		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
@@ -1387,7 +1400,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithToolUsageBreakdown(config.ToolUsage).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
 		WithUserSearch(config.UserSearch).
-		WithToolCallSearch(config.ToolCallSearch)
+		WithToolCallSearch(config.ToolCallSearch).
+		WithAuthorization(config.Authz)
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, recallRiskFindingReader(config.RiskFindingList), budgets.SensitiveSessionRecall).
 		WithHandoffMinter(sessionhandoff.NewSessionHandoffMinter(config.Logger, config.DB, config.AssetStorage, config.ServerURL.String(), audit.NewLogger()))
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
@@ -1431,7 +1445,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader),
 		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
-	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
+	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDashboardLinks(config.DashboardURL, config.ServerURL, config.DB).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
 	runtime, err = withPlatformMCPSkills(runtime, config)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("serve browser Platform MCP skills: %w", err)
@@ -1440,7 +1454,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
-	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
+	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer, ConsentSignIn: platformmcp.NewConsentSignInConnector(config.DB, registrations, authorizer)}, nil
 }
 
 func newPlatformMCPDeploymentRedeploy(config platformMCPConfig, projects *platformmcp.PostgresReader, limitStore ratelimit.Store) *platformmcp.DeploymentRedeployService {

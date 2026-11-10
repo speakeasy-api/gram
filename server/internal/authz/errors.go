@@ -30,6 +30,18 @@ func Denied(scope Scope, selector Selector) error {
 	return &DeniedError{
 		Scope:    scope,
 		Selector: selector,
+		Blocked:  false,
+		cause:    ErrDenied,
+	}
+}
+
+// deniedByBlock is a refusal an explicit block grant produced. The caller may
+// already hold Scope, so granting it again would not lift the refusal.
+func deniedByBlock(scope Scope, selector Selector) error {
+	return &DeniedError{
+		Scope:    scope,
+		Selector: selector,
+		Blocked:  true,
 		cause:    ErrDenied,
 	}
 }
@@ -37,7 +49,9 @@ func Denied(scope Scope, selector Selector) error {
 type DeniedError struct {
 	Scope    Scope
 	Selector Selector
-	cause    error
+	// Blocked is set when a block grant, not a missing grant, refused the check.
+	Blocked bool
+	cause   error
 }
 
 func (e *DeniedError) Error() string {

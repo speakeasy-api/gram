@@ -186,3 +186,70 @@ func TestPersonalReadinessOfIdentityProviderClients(t *testing.T) {
 	require.Equal(t, consentClientReconnect, state)
 	require.Equal(t, registration.String(), connect)
 }
+
+// An outage leaves the connection in place, so the picker doesn't ask to connect first.
+func TestPersonalReadinessOfAConnectionInAnOutage(t *testing.T) {
+	t.Parallel()
+
+	registration := uuid.New()
+	card := remoteSessionCard{ClientID: registration.String(), Connected: true, Unavailable: true}
+	state, connect := personalReadiness(authClientTypeRemoteSession, validUUID(registration), []remoteSessionCard{card})
+	require.Equal(t, consentClientReady, state)
+	require.Empty(t, connect)
+}
+
+// A connection that needs a reconnect anyway is not made ready by an outage.
+func TestPersonalReadinessReconnectsThroughAnOutage(t *testing.T) {
+	t.Parallel()
+	for name, flagged := range map[string]remoteSessionCard{
+		"rejected":           {Rejected: true},
+		"inactive":           {Inactive: true},
+		"identity reconnect": {IdentityReconnect: true},
+	} {
+		for _, clientType := range []string{authClientTypeRemoteSession, authClientTypeEMA} {
+			t.Run(name+"/"+clientType, func(t *testing.T) {
+				t.Parallel()
+				registration := uuid.New()
+				card := flagged
+				card.ClientID, card.Connected, card.Chained, card.Unavailable = registration.String(), true, clientType == authClientTypeEMA, true
+				state, connect := personalReadiness(clientType, validUUID(registration), []remoteSessionCard{card})
+				require.Equal(t, consentClientReconnect, state)
+				require.Equal(t, registration.String(), connect)
+			})
+		}
+	}
+}
+
+func TestCardPanelHidesLiveDetailsDuringAnOutage(t *testing.T) {
+	t.Parallel()
+
+	panel := remoteSessionCard{Connected: true, Unavailable: true, TokenActive: true}.Panel()
+	require.False(t, panel.GrantLive)
+	require.False(t, panel.ShowToken)
+}
+
+func TestConsentCardsApprovable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		cards []remoteSessionCard
+		want  bool
+	}{
+		{name: "no cards", cards: nil, want: true},
+		{name: "connected but unavailable", cards: []remoteSessionCard{{Connected: true, Unavailable: true}}, want: false},
+		{name: "unavailable but chained", cards: []remoteSessionCard{{Connected: true, Unavailable: true, Chained: true}}, want: true},
+		{name: "never connected", cards: []remoteSessionCard{{}}, want: false},
+		{name: "expired", cards: []remoteSessionCard{{Expired: true}}, want: false},
+		{name: "unroutable", cards: []remoteSessionCard{{Unroutable: true}}, want: false},
+		{name: "expired and never connected", cards: []remoteSessionCard{{Expired: true}, {}}, want: false},
+		{name: "expired and connected", cards: []remoteSessionCard{{Expired: true}, {Connected: true}}, want: true},
+		{name: "expired and chained", cards: []remoteSessionCard{{Expired: true}, {Chained: true}}, want: true},
+		{name: "expired card chained", cards: []remoteSessionCard{{Expired: true, Chained: true}}, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, consentCardsApprovable(tc.cards))
+		})
+	}
+}

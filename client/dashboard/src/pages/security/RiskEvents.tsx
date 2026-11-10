@@ -36,6 +36,7 @@ import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { useRiskListMcpPlatformToolsets } from "@gram/client/react-query/riskListMcpPlatformToolsets.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { History } from "lucide-react";
@@ -826,9 +827,14 @@ function RiskEventsRows({
 
   if (isLoading) {
     return (
-      <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-        <Icon name="loader-circle" className="size-5 animate-spin" />
-        <span>Loading risk events...</span>
+      <div className="p-4">
+        <Skeleton label="Loading risk events">
+          <div className="h-14 w-full" />
+          <div className="h-14 w-full" />
+          <div className="h-14 w-full" />
+          <div className="h-14 w-full" />
+          <div className="h-14 w-full" />
+        </Skeleton>
       </div>
     );
   }

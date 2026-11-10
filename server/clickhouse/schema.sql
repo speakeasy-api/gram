@@ -274,6 +274,16 @@ COMMENT 'Pre-aggregated trace summaries for fast trace-level queries without nee
 -- table). Readers opt in via a WHERE start_time_unix_nano pre-filter.
 CREATE INDEX IF NOT EXISTS idx_trace_summaries_start_time ON trace_summaries (start_time_unix_nano) TYPE minmax GRANULARITY 1;
 
+-- Identity-filtered reads (one agent's tool calls on an agent identity page,
+-- say) cannot prune by the primary key either. Unlike the time index above,
+-- this prunes at granule granularity: rows sort by (project, trace_id) and
+-- agent ids are random relative to trace ids, so a granule holds a spread of
+-- agents and an agent whose traces are a small share of the project's is
+-- absent from most granules. The skip shrinks with the agent's share of the
+-- window, so it prunes little for an agent that dominates it. Readers opt in
+-- via a WHERE agent_id pre-filter (see toolUsageNormalizedEventsCTE).
+CREATE INDEX IF NOT EXISTS idx_trace_summaries_agent_id ON trace_summaries (agent_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS trace_summaries_mv TO trace_summaries AS
 SELECT
     trace_id,
@@ -1749,6 +1759,144 @@ WHERE event_urn = 'urn:telemetry:gram_service:log:mcp_network_request'
   AND surface IN ('public', 'private')
 GROUP BY gram_project_id, hour, server_kind, server_id, surface;
 
+CREATE TABLE IF NOT EXISTS mcp_connection_events (
+    organization_id String COMMENT 'Organization the attempt belongs to. Readers always filter on it.\n@access: confidential' CODEC(ZSTD),
+    project_id UUID COMMENT 'Project the attempt belongs to, nil when it belongs to none, such as an organization gateway or an identity provider renewal. Must be the same on every step of an attempt. Readers always filter on organization_id.\n@access: confidential',
+    attempt_id UUID COMMENT 'Shared by every step of one connection attempt.\n@access: confidential',
+    attempt_started_at DateTime64(9, 'UTC') COMMENT 'Time the attempt started, the same on every step. Partitioning, sort order, retention and rollup buckets all use it, so an attempt stays together.\n@access: confidential' CODEC(DoubleDelta, ZSTD),
+    event_time DateTime64(9, 'UTC') COMMENT 'Time this step ended.\n@access: confidential' CODEC(DoubleDelta, ZSTD),
+    server_kind LowCardinality(String) COMMENT 'Kind of server the attempt reached, such as mcp or meta, or provider_session or identity_provider when it reached no server.\n@access: confidential',
+    server_id String COMMENT 'ID of the MCP server or gateway the attempt reached, empty when it reached none. Must be the same on every step of an attempt.\n@access: confidential' CODEC(ZSTD),
+    member_id String COMMENT 'Gateway member MCP server ID for member-level steps, empty otherwise.\n@access: confidential' CODEC(ZSTD),
+    step LowCardinality(String) COMMENT 'Step this row records, such as discovery_member.\n@access: confidential',
+    step_result LowCardinality(String) COMMENT 'How this step ended, such as listed or needs_sign_in.\n@access: confidential',
+    outcome LowCardinality(String) COMMENT 'Overall result of the attempt, set on its final step only: connected, failed, blocked or declined. Abandoned is never stored, it is worked out when read.\n@access: confidential',
+    reason LowCardinality(String) COMMENT 'Reason code for the step result, empty for success.\n@access: confidential',
+    sub_reason LowCardinality(String) COMMENT 'Finer label within the reason, such as org_lookup_failed for a gate, empty otherwise.\n@access: confidential',
+    who_fixes LowCardinality(String) COMMENT 'Party that has to act: person, admin, app, provider or speakeasy. Empty when nothing needs fixing.\n@access: confidential',
+    grant_type LowCardinality(String) COMMENT 'OAuth grant type for token steps, empty otherwise.\n@access: confidential',
+    is_final Bool COMMENT 'True on the row that ends the attempt. An attempt with no such row is unfinished or abandoned.\n@access: confidential',
+    retries UInt32 COMMENT 'Retries spent within this step.\n@access: confidential',
+    auth_client_id String COMMENT 'ID in mcp_auth_clients, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    remote_session_issuer_id String COMMENT 'ID in remote_session_issuers of the upstream provider, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    user_session_issuer_id String COMMENT 'ID in user_session_issuers of the Speakeasy issuer, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    user_session_client_id String COMMENT 'ID in user_session_clients of the AI app, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    remote_session_client_id String COMMENT 'ID in remote_session_clients, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    subject_urn String COMMENT 'Session subject URN of the user, API key, agent or workload, empty before sign-in.\n@access: confidential-pii' CODEC(ZSTD),
+    user_session_id String COMMENT 'ID in user_sessions, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    remote_session_id String COMMENT 'ID in remote_sessions, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    trace_id String COMMENT 'Trace ID of the request that recorded this step.\n@access: confidential' CODEC(ZSTD),
+    provider_host String COMMENT 'Normalized issuer host of the provider, shared across orgs. A tenant host can name the customer.\n@access: restricted',
+    app_key String COMMENT 'Host of the client metadata URL for apps in the client catalog, other_metadata_url for any other metadata URL, or the client kind for apps without one.\n@access: restricted',
+    client_family LowCardinality(String) COMMENT 'Kind of client from the User-Agent, from a fixed list, otherwise other. Empty when no client made the request.\n@access: confidential',
+    client_version String COMMENT 'Client version from the User-Agent when it looks like a version, otherwise empty.\n@access: confidential' CODEC(ZSTD(1)),
+    repeats UInt32 COMMENT 'Rows like this one that the limiter held back, which this row stands for. Failures for a key are attempts plus repeats.\n@access: confidential',
+    device_key String COMMENT 'Keyed hash of the client IP, unique per organization. Cannot be reversed without the key. Identifies a device or network, not a person. Kept 30 days.\n@access: confidential-pii' CODEC(ZSTD)
+) ENGINE = MergeTree
+PARTITION BY toDate(attempt_started_at)
+ORDER BY (organization_id, project_id, server_kind, server_id, attempt_started_at, attempt_id, event_time)
+TTL toDateTime(attempt_started_at) + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
+COMMENT 'One row per step of an MCP connection attempt, successes included. Used for drill-in on one attempt, person or server. Rows are never updated. Kept 30 days.';
+
+CREATE INDEX IF NOT EXISTS idx_mcp_connection_events_attempt_id ON mcp_connection_events (attempt_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_mcp_connection_events_subject_urn ON mcp_connection_events (subject_urn) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_mcp_connection_events_device_key ON mcp_connection_events (device_key) TYPE bloom_filter(0.01) GRANULARITY 1;
+
+CREATE TABLE IF NOT EXISTS mcp_connection_attempt_summaries (
+    organization_id String COMMENT 'Organization the attempt belongs to. Readers always filter on it.\n@access: confidential',
+    project_id UUID COMMENT 'Project the attempt belongs to, nil when it belongs to none, such as an organization gateway or an identity provider renewal. Must be the same on every step of an attempt. Readers always filter on organization_id.\n@access: confidential',
+    server_kind LowCardinality(String) COMMENT 'Kind of server the attempt reached, such as mcp or meta, or provider_session or identity_provider when it reached no server.\n@access: confidential',
+    server_id String COMMENT 'ID of the MCP server or gateway the attempt reached, empty when it reached none.\n@access: confidential',
+    bucket DateTime('UTC') COMMENT 'UTC 30-minute bucket containing the start of the attempt, not the time of the step.\n@access: confidential',
+    step LowCardinality(String) COMMENT 'Step of the attempt. Step counts are only comparable within one step.\n@access: confidential',
+    step_result LowCardinality(String) COMMENT 'How the step ended.\n@access: confidential',
+    outcome LowCardinality(String) COMMENT 'Overall result of the attempt on final steps, empty on other steps.\n@access: confidential',
+    reason LowCardinality(String) COMMENT 'Reason code for the step result, empty for success.\n@access: confidential',
+    who_fixes LowCardinality(String) COMMENT 'Party that has to act: person, admin, app, provider or speakeasy.\n@access: confidential',
+    grant_type LowCardinality(String) COMMENT 'OAuth grant type for token steps, empty otherwise.\n@access: confidential',
+    member_id String COMMENT 'Gateway member MCP server ID for member-level steps, empty otherwise.\n@access: confidential',
+    provider_host String COMMENT 'Normalized issuer host of the provider. A tenant host can name the customer.\n@access: restricted',
+    app_key String COMMENT 'Host of the client metadata URL for apps in the client catalog, other_metadata_url for any other metadata URL, or the client kind for apps without one.\n@access: restricted',
+    client_family LowCardinality(String) COMMENT 'Kind of client from the User-Agent, from a fixed list, otherwise other. Empty when no client made the request.\n@access: confidential',
+    step_events SimpleAggregateFunction(sum, UInt64) COMMENT 'Step rows observed. An attempt can count more than once, so this is not a number of attempts.\n@access: confidential',
+    attempts_seen AggregateFunction(uniqExact, UUID) COMMENT 'Distinct attempts with a step here. Abandoned is seen minus ended, exact only per org, project, server and bucket. Per provider, step or person comes from mcp_connection_events at attempt level, for 30 days. A browser attempt can stay live about 60 minutes because each store restarts the 10-minute clock and the code lasts 10 more, so readers wait at least 120 minutes past the bucket start before calling an attempt abandoned.\n@access: confidential',
+    attempts_ended AggregateFunction(uniqExact, UUID) COMMENT 'Distinct attempts with a final step here, however late it arrived. See attempts_seen for how to read abandoned. A lost final row reads as abandoned.\n@access: confidential',
+    retries SimpleAggregateFunction(sum, UInt64) COMMENT 'Retries spent across these steps.\n@access: confidential',
+    repeats SimpleAggregateFunction(sum, UInt64) COMMENT 'Rows the limiter held back, which these rows stand for. Failures for a key are attempts plus repeats.\n@access: confidential',
+    recovered SimpleAggregateFunction(sum, UInt64) COMMENT 'Gateway members listed only after at least one retry.\n@access: confidential',
+    first_seen SimpleAggregateFunction(min, DateTime64(9, 'UTC')) COMMENT 'Time of the earliest step.\n@access: confidential',
+    last_seen SimpleAggregateFunction(max, DateTime64(9, 'UTC')) COMMENT 'Time of the latest step.\n@access: confidential'
+) ENGINE = AggregatingMergeTree
+PARTITION BY toMonday(bucket)
+PRIMARY KEY (organization_id, project_id, server_kind, server_id, bucket)
+ORDER BY (organization_id, project_id, server_kind, server_id, bucket, step, step_result, outcome, reason, who_fixes, grant_type, member_id, provider_host, app_key, client_family)
+TTL bucket + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
+COMMENT 'MCP connection attempts per 30-minute bucket of attempt start, for rates and trends. Filled by a view on mcp_connection_events. Abandoned is exact only per org, project, server and bucket. Kept 90 days.';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mcp_connection_attempt_summaries_mv TO mcp_connection_attempt_summaries AS
+SELECT
+    organization_id,
+    project_id,
+    server_kind,
+    server_id,
+    toStartOfInterval(toDateTime(attempt_started_at, 'UTC'), INTERVAL 30 MINUTE) AS bucket,
+    step,
+    step_result,
+    outcome,
+    reason,
+    who_fixes,
+    grant_type,
+    member_id,
+    provider_host,
+    app_key,
+    client_family,
+    toUInt64(count()) AS step_events,
+    uniqExactState(attempt_id) AS attempts_seen,
+    uniqExactStateIf(attempt_id, is_final) AS attempts_ended,
+    sum(toUInt64(mcp_connection_events.retries)) AS retries,
+    sum(toUInt64(mcp_connection_events.repeats)) AS repeats,
+    toUInt64(countIf(step = 'discovery_member' AND step_result = 'listed' AND mcp_connection_events.retries > 0)) AS recovered,
+    min(event_time) AS first_seen,
+    max(event_time) AS last_seen
+FROM mcp_connection_events
+GROUP BY organization_id, project_id, server_kind, server_id, bucket, step, step_result, outcome, reason, who_fixes, grant_type, member_id, provider_host, app_key, client_family;
+
+CREATE TABLE IF NOT EXISTS mcp_connection_outcomes_daily (
+    day Date COMMENT 'UTC day the attempts started.\n@access: confidential',
+    provider LowCardinality(String) COMMENT 'Known vendor, otherwise other. Only the daily job enforces that a value cannot name a customer.\n@access: opaque-confidential',
+    app LowCardinality(String) COMMENT 'Known app, otherwise other. Only the daily job enforces that a value cannot name a customer.\n@access: opaque-confidential',
+    client_family LowCardinality(String) COMMENT 'Kind of client, from a fixed list, otherwise other. Empty when no client made the request.\n@access: confidential',
+    step LowCardinality(String) COMMENT 'Step the attempt ended at.\n@access: confidential',
+    outcome LowCardinality(String) COMMENT 'Overall result of the attempt, including abandoned.\n@access: confidential',
+    reason LowCardinality(String) COMMENT 'Reason code, empty for success.\n@access: confidential',
+    fixed_by LowCardinality(String) COMMENT 'What fixed the failure: admin_change, system_change, reconnect or retry. Empty when it was not fixed or nothing failed.\n@access: confidential',
+    attempts UInt64 COMMENT 'Attempts counted.\n@access: confidential'
+) ENGINE = MergeTree
+PARTITION BY day
+ORDER BY (provider, app, client_family, step, day, outcome, reason, fixed_by)
+TTL day + INTERVAL 13 MONTH
+SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
+COMMENT 'Long-term daily counts of connection outcomes per provider and app, for trends beyond raw retention. No org, project or person. A daily job replaces each whole day atomically, so a day always holds one complete result. Kept 13 months.';
+
+CREATE TABLE IF NOT EXISTS mcp_connection_outcomes_daily_staging (
+    day Date COMMENT 'UTC day the attempts started.\n@access: confidential',
+    provider LowCardinality(String) COMMENT 'Known vendor, otherwise other. Only the daily job enforces that a value cannot name a customer.\n@access: opaque-confidential',
+    app LowCardinality(String) COMMENT 'Known app, otherwise other. Only the daily job enforces that a value cannot name a customer.\n@access: opaque-confidential',
+    client_family LowCardinality(String) COMMENT 'Kind of client, from a fixed list, otherwise other. Empty when no client made the request.\n@access: confidential',
+    step LowCardinality(String) COMMENT 'Step the attempt ended at.\n@access: confidential',
+    outcome LowCardinality(String) COMMENT 'Overall result of the attempt, including abandoned.\n@access: confidential',
+    reason LowCardinality(String) COMMENT 'Reason code, empty for success.\n@access: confidential',
+    fixed_by LowCardinality(String) COMMENT 'What fixed the failure: admin_change, system_change, reconnect or retry. Empty when it was not fixed or nothing failed.\n@access: confidential',
+    attempts UInt64 COMMENT 'Attempts counted.\n@access: confidential'
+) ENGINE = MergeTree
+PARTITION BY day
+ORDER BY (provider, app, client_family, step, day, outcome, reason, fixed_by)
+TTL day + INTERVAL 13 MONTH
+SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
+COMMENT 'Holds one day of mcp_connection_outcomes_daily while the daily job builds it. Only that job reads it. Its TTL must match the main table because REPLACE PARTITION copies TTL info onto the main table, so a shorter TTL here deletes main table rows.';
+
 CREATE TABLE IF NOT EXISTS authz_challenge_bucket_summaries (
     challenge_date Date COMMENT 'UTC date of the summarized challenge rows.\n@access: confidential',
 
@@ -2519,3 +2667,56 @@ CREATE TABLE IF NOT EXISTS tunnel_metric_snapshots (
 PARTITION BY toDate(bucket)
 ORDER BY (gram_project_id, source_id, bucket, kind, producer_id, server_id, method, client_family)
 TTL bucket + INTERVAL 90 DAY DELETE;
+
+-- One row per hooks install per day. An install is an org, project, user,
+-- hostname and harness, not a device id. Only rows a hooks endpoint wrote
+-- (those stamped with an endpoint generation) and delivery failure reports
+-- count, so OTEL, LiteLLM and imported sessions never create an install.
+-- Claude surfaces fold into one claude harness so replays and legacy rows,
+-- which carry the hook source instead of the device harness, match the live
+-- install.
+CREATE TABLE IF NOT EXISTS hook_install_summaries (
+    organization_id String COMMENT 'Organization the install reports to. Empty when the row could not be tied to an org.\n@access: confidential',
+    gram_project_id UUID COMMENT 'Project the install reports to.\n@access: confidential',
+    user_email String COMMENT 'Email of the user the hook events were attributed to, empty when none.\n@access: confidential-pii',
+    hostname String COMMENT 'Hostname the hook reported, empty when none.\n@access: confidential-pii',
+    harness LowCardinality(String) COMMENT 'Coding agent the hook ran in. All Claude surfaces read as claude.\n@access: confidential',
+    day Date COMMENT 'UTC day of the events.\n@access: confidential',
+    binary_version AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Latest reported speakeasy-hooks binary version.\n@access: confidential',
+    endpoint_generation AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Latest endpoint generation: legacy_unkeyed, legacy_keyed, ingest_script or ingest_binary.\n@access: confidential',
+    install_route AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Latest reported install route, such as marketplace or download.\n@access: confidential',
+    first_seen SimpleAggregateFunction(min, DateTime64(9, 'UTC')) COMMENT 'Time of the earliest event.\n@access: confidential',
+    last_seen SimpleAggregateFunction(max, DateTime64(9, 'UTC')) COMMENT 'Time of the latest event.\n@access: confidential',
+    event_count SimpleAggregateFunction(sum, UInt64) COMMENT 'Total hook rows recorded, delivery failure reports excluded. Denormalized sum of events_by_generation.\n@access: confidential',
+    events_by_generation SimpleAggregateFunction(sumMap, Map(String, UInt64)) COMMENT 'Hook rows recorded per endpoint generation, delivery failure reports excluded.\n@access: confidential',
+    error_count SimpleAggregateFunction(sum, UInt64) COMMENT 'Hook rows that carried an error, plus delivery failure reports.\n@access: confidential'
+) ENGINE = AggregatingMergeTree
+PARTITION BY toMonday(day)
+ORDER BY (organization_id, gram_project_id, user_email, hostname, harness, day)
+TTL day + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Daily per-install summary of hooks versions, endpoint generations, install routes and activity';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS hook_install_summaries_mv TO hook_install_summaries AS
+SELECT
+    toString(attributes.gram.org.id) AS organization_id,
+    gram_project_id,
+    user_email,
+    toString(attributes.gram.hook.hostname) AS hostname,
+    toLowCardinality(multiIf(
+        toString(attributes.gram.hook.device.harness) != '', if(startsWith(toString(attributes.gram.hook.device.harness), 'claude') OR toString(attributes.gram.hook.device.harness) = 'cowork', 'claude', toString(attributes.gram.hook.device.harness)),
+        startsWith(hook_source, 'claude') OR hook_source = 'cowork', 'claude',
+        hook_source)) AS harness,
+    toDate(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS day,
+    argMaxIfState(toString(attributes.gram.hook.device.binary_version), time_unix_nano, toString(attributes.gram.hook.device.binary_version) != '') AS binary_version,
+    argMaxIfState(toString(attributes.gram.hook.endpoint_generation), time_unix_nano, toString(attributes.gram.hook.endpoint_generation) != '') AS endpoint_generation,
+    argMaxIfState(toString(attributes.gram.hook.device.install_route), time_unix_nano, toString(attributes.gram.hook.device.install_route) != '') AS install_route,
+    min(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS first_seen,
+    max(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS last_seen,
+    toUInt64(countIf(event_source = 'hook')) AS event_count,
+    sumMapIf(map(toString(attributes.gram.hook.endpoint_generation), toUInt64(1)), event_source = 'hook') AS events_by_generation,
+    toUInt64(countIf(event_source = 'hook_diagnostic' OR toString(attributes.gram.hook.error) != '')) AS error_count
+FROM telemetry_logs
+WHERE event_source = 'hook_diagnostic'
+   OR (event_source = 'hook' AND toString(attributes.gram.hook.endpoint_generation) != '')
+GROUP BY organization_id, gram_project_id, user_email, hostname, harness, day;

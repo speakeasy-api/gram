@@ -81,6 +81,32 @@ var SystemRoleGrants = map[string][]*RoleGrant{
 	SystemRoleMember: roleGrantsForScopes(memberScopes),
 }
 
+// SystemRoleAssistantGrants returns the assistant-kind grants from a built-in
+// role's canonical grant set, or nil for any other role slug.
+func SystemRoleAssistantGrants(roleSlug string) []*RoleGrant {
+	var grants []*RoleGrant
+	for _, grant := range SystemRoleGrants[roleSlug] {
+		if ResourceKindForScope(Scope(grant.Scope)) == ResourceKindAssistant {
+			grants = append(grants, &RoleGrant{Scope: grant.Scope, Selectors: nil})
+		}
+	}
+	return grants
+}
+
+// LockRolePrincipalGrants holds the per-role grant write lock until dbtx's
+// transaction ends. PatchRoleGrantsTx takes it, so callers that read a role's
+// grants and then decide what to write can take it first to make that read
+// consistent with every concurrent role edit.
+func LockRolePrincipalGrants(ctx context.Context, dbtx repo.DBTX, orgID, principalURN string) error {
+	if err := repo.New(dbtx).LockRolePrincipalGrants(ctx, repo.LockRolePrincipalGrantsParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   principalURN,
+	}); err != nil {
+		return fmt.Errorf("lock grants for %s: %w", principalURN, err)
+	}
+	return nil
+}
+
 // SeedSystemRoleGrants bootstraps the fixed grant sets for system roles once.
 func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID string) error {
 	tx, err := db.Begin(ctx)
@@ -146,14 +172,16 @@ func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID 
 		if err != nil {
 			return fmt.Errorf("resolve %s role principal: %w", roleSlug, err)
 		}
-		existingGrants, err := q.GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
+		// Only permanent grants count as provisioned: a temporary grant given
+		// to the role must not stop its defaults from being written.
+		hasGrants, err := q.HasPermanentPrincipalGrants(ctx, repo.HasPermanentPrincipalGrantsParams{
 			OrganizationID: organizationID,
-			PrincipalUrns:  []string{principal.String()},
+			PrincipalUrn:   principal,
 		})
 		if err != nil {
 			return fmt.Errorf("list %s grants: %w", roleSlug, err)
 		}
-		if len(existingGrants) > 0 {
+		if hasGrants {
 			continue
 		}
 
@@ -184,6 +212,9 @@ func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSl
 	}
 
 	q := repo.New(dbtx)
+	if err := LockRolePrincipalGrants(ctx, dbtx, orgID, principal.String()); err != nil {
+		return nil, err
+	}
 	// An unrestricted removal deletes every wildcard row for the scope, not
 	// only the one this release would write: the editor shows any of them as
 	// "all", so removing "all" has to remove whichever one is stored.
@@ -303,6 +334,63 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 	}
 
 	return scoped, nil
+}
+
+// ScopeCoverage says how widely a principal holds one scope: on every
+// resource of its kind, or only on the ones its grants name.
+type ScopeCoverage struct {
+	Scope        Scope
+	Unrestricted bool
+	// Resources keys the selectors of the grants that name some resources
+	// (Selector.Key), so two holdings of the scope compare resource by
+	// resource. Empty when every grant is unrestricted.
+	Resources []string
+}
+
+// ScopeCoverageTx reads, in one query, which scopes each principal holds
+// grants for, whether any of those grants names every resource, and which
+// resources the others name. It reads inside the caller's transaction so a
+// membership change can be compared with the state it replaces. Principals
+// without grants have no entry.
+func ScopeCoverageTx(ctx context.Context, dbtx repo.DBTX, orgID string, principalURNs []string) (map[string][]ScopeCoverage, error) {
+	if len(principalURNs) == 0 {
+		return nil, nil
+	}
+	rows, err := repo.New(dbtx).GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
+		OrganizationID: orgID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list grants for principals: %w", err)
+	}
+	type key struct {
+		principal string
+		scope     Scope
+	}
+	index := make(map[key]int, len(rows))
+	coverage := make(map[string][]ScopeCoverage)
+	for _, row := range rows {
+		selector, err := SelectorFromRow(row.Selectors)
+		if err != nil {
+			return nil, err
+		}
+		principal := row.PrincipalUrn.String()
+		scope := Scope(row.Scope)
+		held := coverage[principal]
+		at, ok := index[key{principal, scope}]
+		if !ok {
+			at = len(held)
+			index[key{principal, scope}] = at
+			held = append(held, ScopeCoverage{Scope: scope, Unrestricted: false, Resources: nil})
+		}
+		if selector.CoversEveryResource() {
+			held[at].Unrestricted = true
+		} else {
+			held[at].Resources = append(held[at].Resources, selector.Key())
+		}
+		coverage[principal] = held
+	}
+	return coverage, nil
 }
 
 func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGrant, error) {

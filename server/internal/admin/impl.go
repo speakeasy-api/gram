@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,8 +42,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -66,6 +67,7 @@ import (
 
 type Service struct {
 	catalogPromotion     *catalogpromotion.Service
+	providerHealth       *mcpconnectionattempts.ProviderHealth
 	registry             *mcpregistry.Service
 	remoteSessions       *remotesessions.Service
 	assets               *assets.Service
@@ -106,6 +108,10 @@ type Service struct {
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
 
+	// projectRedeployer redeploys projects. Nil when this server has no
+	// Temporal connection.
+	projectRedeployer ProjectRedeployer
+
 	audit *audit.Logger
 
 	trial   trialemails.Notifier
@@ -113,19 +119,18 @@ type Service struct {
 
 	supportCoverage SupportCoverageReader
 	mcpServerHealth MCPServerHealthReader
-	hookClients     HookClientsReader
-	// deviceAgentVersions feeds the device agent grid on the same page.
-	deviceAgentVersions DeviceAgentVersionsReader
-	// hookClientsCache keeps the fleet-wide grids for a day, since each
-	// read scans weeks of telemetry.
-	hookClientsCache cache.TypedCacheObject[hookClientsSnapshot]
-	// hookClientsRefreshing holds the windows with a background refresh in
-	// flight on this replica.
-	hookClientsRefreshing *sync.Map
 
-	// externalMCPMigrator lists and migrates external-MCP-backed servers. Nil
-	// leaves those methods unavailable.
-	externalMCPMigrator *migration.Migrator
+	// scopes reads and writes remote MCP server scope pins.
+	scopes *remotemcp.StaffScopes
+	// HookClientsCache shares snapshot storage with the nightly worker.
+	*HookClientsCache
+
+	hookFleet         HookFleetReader
+	hookFleetVersions HookFleetVersions
+
+	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets. Empty leaves targets out of listCustomDomains.
+	customDomainTargetSuffix string
 }
 
 type BillingOperations interface {
@@ -135,8 +140,10 @@ type BillingOperations interface {
 	// GetCustomerUsage reads usage for many organizations in one query, returning one entry per organization in request order.
 	GetCustomerUsage(context.Context, []usage.CustomerUsageOrganization, usage.CustomerUsageInterval) (*usage.CustomerUsageReport, error)
 	GetStripeCustomer(context.Context, string) (*stripeclient.CustomerDetails, error)
-	// GetStripeSubscriptionByID loads a live Stripe subscription so an assignment can verify its customer.
-	GetStripeSubscriptionByID(context.Context, string) (*stripeclient.SubscriptionState, error)
+	// GetStripeSubscriptionByID loads a live Stripe subscription to verify its identity.
+	// Pass stripeclient.RequireAdoptionEligibility for catalog validation when linking;
+	// omit it for tolerant reads of an existing linked subscription.
+	GetStripeSubscriptionByID(context.Context, string, ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error)
 	GetStripeSubscriptionForOrganization(context.Context, string) (*usage.StripeSubscription, error)
 	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
 }
@@ -254,7 +261,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{catalogPromotion: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -274,25 +281,20 @@ func NewService(
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,
 		audit:                audit.NewLogger(),
+		scopes:               remotemcp.NewStaffScopes(logger, db, audit.NewLogger()),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:                 trialNotifier,
-		billing:               billing,
-		supportCoverage:       supportCoverage,
-		mcpServerHealth:       mcpServerHealth,
-		hookClients:           nil,
-		deviceAgentVersions:   nil,
-		hookClientsRefreshing: &sync.Map{},
-		hookClientsCache: cache.NewTypedObjectCache[hookClientsSnapshot](
-			logger.With(attr.SlogCacheNamespace("admin_hook_clients")),
-			adminCache,
-			cache.SuffixNone,
-		),
-
-		externalMCPMigrator: nil,
+		trial:                    trialNotifier,
+		billing:                  billing,
+		supportCoverage:          supportCoverage,
+		mcpServerHealth:          mcpServerHealth,
+		HookClientsCache:         NewHookClientsCache(logger, adminCache, nil, nil),
+		hookFleet:                nil,
+		hookFleetVersions:        HookFleetVersions{Latest: nil, Minimum: nil},
+		customDomainTargetSuffix: "",
 	}
 }
 
@@ -312,7 +314,8 @@ func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*ge
 
 func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *gen.ProductFeatures {
 	return &gen.ProductFeatures{
-		LogsEnabled: snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
+		ProviderSetupEnabled: new(snapshot.ProviderSetupEnabled),
+		LogsEnabled:          snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled: snapshot.AuthzChallengeLoggingEnabled, SsoEnabled: snapshot.SsoEnabled, ScimEnabled: snapshot.ScimEnabled,
 		HooksBrowserLoginEnabled: snapshot.HooksBrowserLoginEnabled, HooksFailOpenEnabled: snapshot.HooksFailOpenEnabled,
 		CustomModelKeysEnabled: snapshot.CustomModelKeysEnabled, SkillsEnabled: snapshot.SkillsEnabled, SkillCaptureMetadataOnly: snapshot.SkillCaptureMetadataOnly,
@@ -347,6 +350,22 @@ func (s *Service) GetOrganizationFeaturesStrict(ctx context.Context, organizatio
 		return nil, fmt.Errorf("read organization features: %w", err)
 	}
 	return productFeaturesResult(snapshot), nil
+}
+
+func (s *Service) SetOrganizationProviderSetup(ctx context.Context, payload *gen.SetOrganizationProviderSetupPayload) (*gen.ProductFeatures, error) {
+	if _, ok := contextvalues.GetAdminAuthContext(ctx); !ok {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	actor, displayName, _ := adminActor(ctx)
+	err = productfeatures.NewMutator(s.productFeatures, s.audit).SetFeature(ctx, organizationID, productfeatures.FeatureProviderSetup, payload.Enabled, productfeatures.MutationActor{Principal: actor, DisplayName: displayName, Slug: nil})
+	if err != nil {
+		return nil, fmt.Errorf("set provider setup rollout: %w", err)
+	}
+	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
 }
 
 func (s *Service) SetOrganizationFeature(ctx context.Context, payload *gen.SetOrganizationFeaturePayload) (*gen.ProductFeatures, error) {
@@ -477,6 +496,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetSpendBreakdown = service.preauthorizeAdmin(server.GetSpendBreakdown)
 	server.ListCustomerUsage = service.preauthorizeAdmin(server.ListCustomerUsage)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
+	server.SetOrganizationProviderSetup = service.strictAdminJSON(server.SetOrganizationProviderSetup, func() any { return new(adminserver.SetOrganizationProviderSetupRequestBody) })
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
 	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
@@ -495,9 +515,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListGlobalIssuerConvergenceCandidates = service.preauthorizeAdmin(server.ListGlobalIssuerConvergenceCandidates)
 	server.GetGlobalIssuerMigratePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerMigratePreflight)
 	server.MigrateToGlobalIssuer = service.strictAdminJSON(server.MigrateToGlobalIssuer, func() any { return new(adminserver.MigrateToGlobalIssuerRequestBody) })
-	server.ListExternalMcpMigrationCandidates = service.preauthorizeAdmin(server.ListExternalMcpMigrationCandidates)
-	server.PreviewExternalMcpMigration = service.strictAdminJSON(server.PreviewExternalMcpMigration, func() any { return new(adminserver.PreviewExternalMcpMigrationRequestBody) })
-	server.MigrateExternalMcpServers = service.strictAdminJSON(server.MigrateExternalMcpServers, func() any { return new(adminserver.MigrateExternalMcpServersRequestBody) })
 	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
 	server.ListRegistryEntries = service.preauthorizeAdmin(server.ListRegistryEntries)
 	server.GetRegistryEntry = service.preauthorizeAdmin(server.GetRegistryEntry)
@@ -511,6 +528,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.SetRegistryEntryPublished = service.strictAdminJSON(server.SetRegistryEntryPublished, func() any { return new(adminserver.SetRegistryEntryPublishedRequestBody) })
 	server.GetSupportMatrix = service.preauthorizeAdmin(server.GetSupportMatrix)
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
+	server.SetMcpServerScopePin = service.strictAdminJSON(server.SetMcpServerScopePin, func() any { return new(adminserver.SetMcpServerScopePinRequestBody) })
 	server.CreateSignupOffer = service.strictAdminJSON(server.CreateSignupOffer, func() any { return new(adminserver.CreateSignupOfferRequestBody) })
 	server.UpdateSignupOffer = service.strictAdminJSON(server.UpdateSignupOffer, func() any { return new(adminserver.UpdateSignupOfferRequestBody) })
 	server.ListUpstreamOAuthMigrationOrganizations = service.preauthorizeAdmin(server.ListUpstreamOAuthMigrationOrganizations)
@@ -547,7 +565,7 @@ func (w *adminCallbackWriter) WriteHeader(status int) {
 				SameSite: http.SameSiteLaxMode,
 			}
 			location := w.Header().Get("Location")
-			if strings.HasPrefix(location, "/admin-mcp/connect?state=") || strings.HasPrefix(location, "/admin-mcp/proposals/") {
+			if strings.HasPrefix(location, "/admin-mcp/connect?state=") {
 				mcpCookie.Value = cookie.Value
 			} else {
 				mcpCookie.MaxAge = -1
@@ -822,13 +840,24 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.C(oops.CodeNotFound)
 	}
 
-	return adminProjectDetailFromIDRow(row), nil
+	detail := adminProjectDetailFromIDRow(row)
+	activeDeploymentID, err := deploymentsrepo.New(s.db).GetActiveDeploymentID(ctx, row.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup active deployment").LogError(ctx, s.logger)
+	default:
+		detail.ActiveDeploymentID = new(activeDeploymentID.String())
+	}
+
+	return detail, nil
 }
 
 func adminProjectDetailFromIDRow(row repo.AdminGetProjectDetailByIDRow) *gen.AdminProjectDetail {
 	logo := uuidPtr(row.LogoAssetID)
 	runner := conv.FromPGText[string](row.FunctionsRunnerVersion)
 	return &gen.AdminProjectDetail{
+		ActiveDeploymentID:     nil,
 		ID:                     row.ID.String(),
 		Name:                   row.Name,
 		Slug:                   row.Slug,
@@ -1126,9 +1155,11 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		Action:                 conv.PtrToPGTextEmpty(filter.Action),
 		SubjectType:            conv.PtrToPGTextEmpty(filter.SubjectType),
 		IncludeAssistantEvents: true,
+		IncludeInternalEvents:  true,
 		SubjectID:              conv.PtrToPGTextEmpty(filter.SubjectID),
 		SubjectIds:             nil,
 		ActingSurface:          conv.PtrToPGTextEmpty(filter.ActingSurface),
+		Origin:                 pgtype.Text{String: "", Valid: false},
 		CreatedFrom:            conv.PtrToPGTimestamptz(filter.From),
 		CreatedTo:              conv.PtrToPGTimestamptz(filter.To),
 	}
@@ -1160,7 +1191,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 
 	const pageSize = 50
 	page, next := mergeActivity(configuration, security, cursor, pageSize)
-	logs := make([]*gen.AuditLog, 0, len(page))
+	logs := make([]*gen.AdminAuditLog, 0, len(page))
 	for _, entry := range page {
 		log, err := adminActivityLog(entry.row, entry.category)
 		if err != nil {
@@ -1177,7 +1208,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 	return &gen.AdminListOrganizationActivityResult{Logs: logs, NextCursor: nextCursor}, nil
 }
 
-func adminActivityLog(row auditrepo.ListAuditLogsRow, category audit.Category) (*gen.AuditLog, error) {
+func adminActivityLog(row auditrepo.ListAuditLogsRow, category audit.Category) (*gen.AdminAuditLog, error) {
 	var metadata map[string]any
 	if len(row.Metadata) > 0 {
 		var decoded any
@@ -1202,11 +1233,12 @@ func adminActivityLog(row auditrepo.ListAuditLogsRow, category audit.Category) (
 		actingSurface = string(audit.SurfaceUnknown)
 	}
 
-	return &gen.AuditLog{
+	return &gen.AdminAuditLog{
 		ID: row.ID.String(), ProjectID: conv.FromNullableUUID(row.ProjectID), ProjectSlug: conv.FromPGText[string](row.ProjectSlug),
 		ActorID: row.ActorID, ActorType: row.ActorType, ActorDisplayName: actorDisplayName, ActorSlug: conv.FromPGText[string](row.ActorSlug),
 		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID), Category: new(string(category)),
-		SubjectID: row.SubjectID, SubjectType: row.SubjectType, SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName), SubjectSlug: conv.FromPGText[string](row.SubjectSlug),
+		IsInternal: new(row.IsInternal),
+		SubjectID:  row.SubjectID, SubjectType: row.SubjectType, SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName), SubjectSlug: conv.FromPGText[string](row.SubjectSlug),
 		BeforeSnapshot: row.BeforeSnapshot, AfterSnapshot: row.AfterSnapshot, Metadata: metadata, CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
 }

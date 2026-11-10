@@ -346,11 +346,19 @@ func TestEnvelopeCursorMCPRedactsRawTransport(t *testing.T) {
 // rewritten wherever a payload carries secret-bearing top-level keys, not only
 // when the structured mcp block was populated.
 func TestScrubRawPayloadRunsOnEveryEvent(t *testing.T) {
-	scrubbed := scrubRawPayload([]byte(`{"hook_event_name":"beforeShellExecution","command":"curl -H authorization: bearer sekrit-1"}`))
+	scrubbed := scrubRawPayload([]byte(`{"hook_event_name":"beforeShellExecution","command":"curl -H authorization: bearer sekrit-1"}`), agenthooks.ProviderCursor)
 	require.NotContains(t, string(scrubbed), "sekrit-1")
 
 	verbatim := []byte(`{"hook_event_name":"stop","final_message":"done",  "spacing":"preserved"}`)
-	require.Equal(t, string(verbatim), string(scrubRawPayload(verbatim)), "payloads needing no rewrite pass through verbatim")
+	require.Equal(t, string(verbatim), string(scrubRawPayload(verbatim, agenthooks.ProviderCursor)), "payloads needing no rewrite pass through verbatim")
+}
+
+// Only the OpenClaw shim's mcpServers list is dropped from the echo; another
+// provider's field of that name is its own and stays.
+func TestScrubRawPayloadDropsOnlyOpenClawMCPServers(t *testing.T) {
+	frame := []byte(`{"hook_event_name":"before_tool_call","mcpServers":[{"name":"speakeasy","url":"https://app.example.com/mcp"}]}`)
+	require.NotContains(t, string(scrubRawPayload(frame, agenthooks.ProviderOpenClaw)), "mcpServers")
+	require.Equal(t, string(frame), string(scrubRawPayload(frame, agenthooks.ProviderCursor)))
 }
 
 // TestSendRetriesTransientConnectionFailure pins the relay-level transport
@@ -645,6 +653,22 @@ func TestAgentKeyReadFromPluginConfig(t *testing.T) {
 	loaded := LoadConfig(cfg)
 	require.Equal(t, "env-org-key", loaded.HooksAPIKey)
 	require.False(t, loaded.AgentKey)
+}
+
+// TestInstallRouteReadFromPluginConfig: the install_route in speakeasy.json
+// reaches the relay config, and the environment can override it.
+func TestInstallRouteReadFromPluginConfig(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://gram.test","project":"default","install_route":"download"}`), 0o600))
+
+	cfg, _ := SplitInlineFlags(Config{}, []string{"--config=" + cfgPath})
+	require.Equal(t, "download", cfg.InstallRoute)
+	t.Setenv("SPEAKEASY_AI_HOOKS_INSTALL_ROUTE", "")
+	t.Setenv("GRAM_HOOKS_INSTALL_ROUTE", "")
+	require.Equal(t, "download", LoadConfig(cfg).InstallRoute)
+
+	t.Setenv("SPEAKEASY_AI_HOOKS_INSTALL_ROUTE", "mdm")
+	require.Equal(t, "mdm", LoadConfig(cfg).InstallRoute)
 }
 
 // TestServerErrorBlocksToolCall pins the non-2xx posture with credentials

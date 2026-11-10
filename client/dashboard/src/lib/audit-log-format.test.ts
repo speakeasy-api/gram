@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { describe, expect, it } from "vitest";
 import { AUDIT_ACTIONS } from "./audit-actions";
@@ -6,6 +7,7 @@ import {
   formatSubjectLabel,
   getActorLabel,
   renderVerb,
+  sensitiveScopesAdded,
 } from "./audit-log-format";
 
 function log(partial: Partial<AuditLog> & { action: string }): AuditLog {
@@ -19,6 +21,33 @@ function log(partial: Partial<AuditLog> & { action: string }): AuditLog {
     ...partial,
   } as AuditLog;
 }
+
+describe("sensitiveScopesAdded", () => {
+  it("reads the scopes a role change recorded", () => {
+    expect(
+      sensitiveScopesAdded(
+        log({
+          action: "access_role:update",
+          metadata: { sensitive_scopes_added: ["log:read", "chat:read"] },
+        }),
+      ),
+    ).toEqual(["log:read", "chat:read"]);
+  });
+
+  it("is empty for rows without the field or with the wrong shape", () => {
+    expect(sensitiveScopesAdded(log({ action: "access_role:update" }))).toEqual(
+      [],
+    );
+    expect(
+      sensitiveScopesAdded(
+        log({
+          action: "access_role:update",
+          metadata: { sensitive_scopes_added: "log:read" },
+        }),
+      ),
+    ).toEqual([]);
+  });
+});
 
 describe("renderVerb", () => {
   it("humanizes known actions in past tense", () => {

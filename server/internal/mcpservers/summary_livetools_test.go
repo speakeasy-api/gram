@@ -5,14 +5,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
-	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	packagesrepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -75,30 +72,6 @@ func seedSummaryFunctionTool(t *testing.T, ctx context.Context, ti *testInstance
 	require.NoError(t, err)
 }
 
-// seedSummaryExternalTools attaches one external MCP to the deployment; a :proxy URN gets a proxy definition.
-func seedSummaryExternalTools(t *testing.T, ctx context.Context, ti *testInstance, deploymentID uuid.UUID, slug string, tools ...urn.Tool) {
-	t.Helper()
-	repo := externalmcprepo.New(ti.conn)
-	attachment, err := repo.CreateExternalMCPAttachment(ctx, externalmcprepo.CreateExternalMCPAttachmentParams{
-		DeploymentID: deploymentID, Name: slug, Slug: slug, RegistryServerSpecifier: "io.example/" + slug,
-	})
-	require.NoError(t, err)
-	for _, tool := range tools {
-		params := externalmcprepo.CreateExternalMCPToolDefinitionParams{
-			ExternalMcpAttachmentID: attachment.ID, ToolUrn: tool.String(), Type: string(externalmcptypes.ExternalMCPToolTypeProxy),
-			RemoteUrl: "https://example.com/mcp", TransportType: externalmcptypes.TransportTypeStreamableHTTP, OauthVersion: "none",
-		}
-		if tool.Name != "proxy" {
-			params.Type = string(externalmcptypes.ExternalMCPToolTypeDirect)
-			params.Name = pgtype.Text{String: tool.Name, Valid: true}
-			params.Description = pgtype.Text{String: tool.Name, Valid: true}
-			params.Schema = []byte(`{"type":"object"}`)
-		}
-		_, err := repo.CreateExternalMCPToolDefinition(ctx, params)
-		require.NoError(t, err)
-	}
-}
-
 // seedSummaryPackageTool publishes a package from another project with one HTTP tool and installs it on consumerDeploymentID.
 func seedSummaryPackageTool(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, consumerDeploymentID uuid.UUID, toolURN urn.Tool, name string) {
 	t.Helper()
@@ -145,7 +118,7 @@ func TestMcpServerSummary_CountsOnlyToolsTheToolsetServes(t *testing.T) {
 	live := urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets")
 	sameName := urn.NewTool(urn.ToolKindHTTP, "mirror", "list_pets")
 	packaged := urn.NewTool(urn.ToolKindHTTP, "vendor", "get_rates")
-	direct := urn.NewTool(urn.ToolKindExternalMCP, "acme", "search")
+	external := urn.NewTool(urn.ToolKindExternalMCP, "acme", "search")
 	prompt := urn.NewTool(urn.ToolKindPrompt, "prompts", "greet")
 	never := urn.NewTool(urn.ToolKindHTTP, "gone", "never_deployed")
 	unregisteredPlatform := urn.NewTool(urn.ToolKindPlatform, "nowhere", "missing")
@@ -161,7 +134,6 @@ func TestMcpServerSummary_CountsOnlyToolsTheToolsetServes(t *testing.T) {
 	latest := seedSummaryDeployment(t, ctx, ti, orgID, projectID)
 	seedSummaryHTTPTool(t, ctx, ti, projectID, latest, live, "list_pets")
 	seedSummaryHTTPTool(t, ctx, ti, projectID, latest, sameName, "list_pets")
-	seedSummaryExternalTools(t, ctx, ti, latest, "acme", direct)
 	seedSummaryPackageTool(t, ctx, ti, orgID, latest, packaged, "get_rates")
 	_, err := templatesrepo.New(ti.conn).CreateTemplate(ctx, templatesrepo.CreateTemplateParams{
 		ProjectID: projectID, ToolUrn: prompt, Name: "greet", Prompt: "Hello", Arguments: []byte("{}"), ToolsHint: []string{}, ToolUrnsHint: []string{},
@@ -169,12 +141,12 @@ func TestMcpServerSummary_CountsOnlyToolsTheToolsetServes(t *testing.T) {
 	require.NoError(t, err)
 
 	toolset := seedSummaryToolset(t, ctx, ti, orgID, projectID, []urn.Tool{
-		removed, renamedOld, live, sameName, packaged, direct, prompt, never, platform, unregisteredPlatform,
+		removed, renamedOld, live, sameName, packaged, external, prompt, never, platform, unregisteredPlatform,
 	})
 	server := seedSummaryServer(t, ctx, ti, projectID, toolset.ID)
 
-	// list_pets (two URNs, one name), get_rates from the package, acme search, greet, and the registered platform tool.
-	const want = 5
+	// list_pets (two URNs, one name), get_rates from the package, greet, and the registered platform tool.
+	const want = 4
 	described := describeSummaryToolset(t, ctx, ti, projectID, toolset)
 	require.Len(t, described.Tools, want)
 	require.Equal(t, want, getSummaryServer(t, ctx, ti, server.ID).Toolset.ToolCount)
@@ -182,14 +154,13 @@ func TestMcpServerSummary_CountsOnlyToolsTheToolsetServes(t *testing.T) {
 		require.Equal(t, len(described.Tools), listSummaryServers(t, ctx, ti, forOrg)[server.ID.String()].Toolset.ToolCount)
 	}
 
-	// A live proxy is still excluded, though the toolset page lists it.
+	// An external MCP URN counts for nothing, on the summary and the toolset page alike.
 	proxy := urn.NewTool(urn.ToolKindExternalMCP, "zeta", "proxy")
-	seedSummaryExternalTools(t, ctx, ti, latest, "zeta", proxy)
-	addSummaryToolsetVersion(t, ctx, ti, toolset, 2, []urn.Tool{live, packaged, direct, prompt, platform, proxy})
+	addSummaryToolsetVersion(t, ctx, ti, toolset, 2, []urn.Tool{live, packaged, external, prompt, platform, proxy})
 	got := getSummaryServer(t, ctx, ti, server.ID).Toolset
 	require.Equal(t, want, got.ToolCount)
 	require.False(t, got.ExternalMcpProxyOnly)
-	require.Len(t, describeSummaryToolset(t, ctx, ti, projectID, toolset).Tools, want+1)
+	require.Len(t, describeSummaryToolset(t, ctx, ti, projectID, toolset).Tools, want)
 }
 
 func TestMcpServerSummary_NoDeploymentCountsOnlyPlatformTools(t *testing.T) {

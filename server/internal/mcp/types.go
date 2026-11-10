@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
 var (
@@ -80,10 +81,12 @@ func (m *McpInputs) toInternal() *mcpInputs {
 			securityKeys:          ot.SecurityKeys,
 			remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			Token:                 ot.Token,
+			shared:                false,
 		}
 	}
 
 	return &mcpInputs{
+		request:          nil,
 		projectID:        m.ProjectID,
 		organizationID:   "",
 		toolset:          m.Toolset,
@@ -113,7 +116,6 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		// record some real client wrote for the same toolset and session,
 		// which would attribute an agent-workflow call to that client.
 		clientInfoScope:          internalClientInfoScope,
-		skipProxyTools:           false,
 		toolsetID:                uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		toolsetIsPublic:          nil,
 		tags:                     nil,
@@ -121,5 +123,6 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		identityCoverageRecorded: false,
 		toolSelection:            nil,
 		skillsOverMCP:            nil,
+		upstreamRejection:        mcpconnectionattempts.Code{},
 	}
 }

@@ -1,8 +1,10 @@
-import { Icon, IconProps } from "@/components/ui/Icon";
-import { IconName } from "@/components/ui/Icon/names";
+import type { IconProps } from "@/components/ui/Icon";
+import { Icon } from "@/components/ui/Icon";
+import type { IconName } from "@/components/ui/Icon/names";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { ReleaseStage } from "./components/release-stage-badge";
+import type { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 
@@ -24,6 +26,11 @@ type AppRouteBasic = {
   // only for features that are genuinely pre-GA. Page-level badges live on
   // <Page.Section.Title stage="..." /> and must be set separately.
   stage?: ReleaseStage;
+  // Nested pages opt into the command palette with the scopes that may open
+  // them. Tabs leave this unset and stay out. Palette registration checks
+  // only these scopes; the page owns any further eligibility, such as
+  // billing state, and registration must not fetch it.
+  commandPalette?: Scope[];
 };
 
 type GoToFunction = (...params: string[]) => void;
@@ -67,6 +74,7 @@ type RouteEntry = {
       subPages?: Record<string, RouteEntry>;
       outsideMainLayout?: boolean;
       legacyRedirect?: boolean;
+      commandPalette?: Scope[];
     }
 );
 
@@ -157,7 +165,7 @@ const ROUTE_STRUCTURE = {
     },
   },
   signalsIntelligence: {
-    title: "Signals intelligence",
+    title: "Signals Intelligence",
     url: "signals-intelligence",
     icon: "radio",
     stage: "preview",
@@ -278,6 +286,7 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
+
       // The Organization Gateway. A static segment beside `add`,
       // `catalog` and `sources`, with the same latent toolset-slug collision.
       // It lives under MCP rather than the organization settings because it
@@ -330,6 +339,7 @@ const ROUTE_STRUCTURE = {
         title: "MCP Server Details",
         url: ":mcpServerSlug",
         subPages: {
+          setup: { title: "MCP Server Setup", url: "setup" },
           overview: {
             title: "MCP Server Overview",
             url: "overview",
@@ -562,15 +572,35 @@ const ROUTE_STRUCTURE = {
             title: "Agent Permissions",
             url: "permissions",
           },
+          // Which MCP servers the agent calls, and how Speakeasy signs in to
+          // each. Changed here, not by walking the setup wizard again.
+          mcpSignIn: {
+            title: "Agent MCP Sign-in",
+            url: "mcp-sign-in",
+          },
+          // An agent's activity is the changes made to it and by it, so the
+          // tab is named for what it is. People keep `activity`; an agent's
+          // old `activity` links are sent on to this one.
+          auditTrail: {
+            title: "Agent Audit Trail",
+            url: "audit-trail",
+          },
+          // How the agent proves who it is to Speakeasy: its keys, the
+          // platforms that sign in as it, and issuing another key the way
+          // its first one was issued.
           credentials: {
-            title: "Agent Credentials",
+            title: "Agent Sign-in",
+            url: "sign-in",
+          },
+          // The sections this one was renamed from. Kept so the links and
+          // bookmarks that name them still resolve: the page itself sends
+          // the old segment on to the new one.
+          legacyCredentials: {
+            title: "Agent Sign-in",
             url: "credentials",
           },
-          // The section this one was renamed from. Kept so the links and
-          // bookmarks that name it still resolve: the page itself sends the
-          // old segment on to the new one.
           provisioning: {
-            title: "Agent Credentials",
+            title: "Agent Sign-in",
             url: "provisioning",
           },
           sessions: {
@@ -641,6 +671,13 @@ const ROUTE_STRUCTURE = {
     title: "Watchdog",
     url: "watchdog",
     icon: "radar",
+    // Layout route: renders the signal list (index) or one signal's detail.
+    subPages: {
+      signal: {
+        title: "Signal",
+        url: ":ruleId",
+      },
+    },
   },
   // Retired page: old links and bookmarks, including its drill-downs, land on
   // Watchdog.
@@ -1037,8 +1074,16 @@ const ORG_ROUTE_STRUCTURE = {
     url: "billing",
     icon: "credit-card",
     subPages: {
-      setup: { title: "Billing setup", url: "setup" },
-      paymentMethod: { title: "Payment method", url: "payment-method" },
+      setup: {
+        title: "Billing setup",
+        url: "setup",
+        commandPalette: ["org:read", "org:admin"],
+      },
+      paymentMethod: {
+        title: "Payment method",
+        url: "payment-method",
+        commandPalette: ["org:read", "org:admin"],
+      },
     },
   },
   team: {

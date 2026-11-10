@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Role } from "@gram/client/models/components/role.js";
 import { describe, expect, it } from "vitest";
 import {

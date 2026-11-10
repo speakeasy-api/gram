@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import { canAutoConfigureFromDiscovered, WizardContext } from "./machine";
 import type { DiscoveredOAuth } from "./machine-types";
 

@@ -113,7 +113,7 @@ func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *Resolve
 	}
 	if !enforced {
 		if len(requested) > 0 {
-			return nil, nil, oops.NewOAuthError(http.StatusBadRequest, "invalid_request", tokenParamUpstreamAuthClient+" is not accepted for this organization yet", nil)
+			return nil, nil, oops.NewOAuthError(http.StatusBadRequest, "invalid_request", tokenParamUpstreamAuthClient+" is not accepted for this organization yet", errChoiceNotAccepted)
 		}
 		return nil, nil, nil
 	}
@@ -130,7 +130,7 @@ func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *Resolve
 	}
 	for serverID := range requested {
 		if !inScope[serverID] {
-			return nil, nil, oops.NewOAuthError(http.StatusBadRequest, "invalid_request", tokenParamUpstreamAuthClient+" names a server this token does not reach", nil)
+			return nil, nil, oops.NewOAuthError(http.StatusBadRequest, "invalid_request", tokenParamUpstreamAuthClient+" names a server this token does not reach", errChoiceServerNotReached)
 		}
 	}
 	if len(servers) == 0 {
@@ -152,7 +152,7 @@ func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *Resolve
 	for _, server := range servers {
 		auth := options[server.id]
 		if auth == nil {
-			return nil, nil, setupRequired("a server's upstream sign-in is not set up")
+			return nil, nil, setupRequired("a server's upstream sign-in is not set up", errChoiceNotSetUp)
 		}
 		if err := s.headlessReadiness(ctx, endpoint, subject, server, auth); err != nil {
 			return nil, nil, err
@@ -247,19 +247,19 @@ func decideHeadlessChoice(server consentAuthServer, auth *consentServerAuth, cho
 	switch auth.Status {
 	case consentAuthNoAuth:
 		if named && choice.clientID.Valid {
-			return nil, setupRequired("the server needs no upstream authentication, so it takes no credential")
+			return nil, setupRequired("the server needs no upstream authentication, so it takes no credential", errChoiceTakesNoCredential)
 		}
 		return nil, nil
 	case consentAuthSetupIncomplete:
-		return nil, setupRequired("a server's upstream sign-in is not set up")
+		return nil, setupRequired("a server's upstream sign-in is not set up", errChoiceNotSetUp)
 	case consentAuthNoAccess:
-		return nil, accessDenied("you may not use any of a server's upstream credentials")
+		return nil, accessDenied("you may not use any of a server's upstream credentials", errChoiceNoneAllowed)
 	case consentAuthChoose:
 	}
 
 	if named {
 		if !choice.clientID.Valid {
-			return nil, setupRequired("a server needs upstream authentication, so it needs a credential")
+			return nil, setupRequired("a server needs upstream authentication, so it needs a credential", errChoiceNeedsCredential)
 		}
 		for i := range auth.Options {
 			option := &auth.Options[i]
@@ -267,12 +267,12 @@ func decideHeadlessChoice(server consentAuthServer, auth *consentServerAuth, cho
 				continue
 			}
 			if !option.Usable() {
-				return nil, setupRequired("the credential chosen for a server is not ready: set it up or connect it first")
+				return nil, setupRequired("the credential chosen for a server is not ready: set it up or connect it first", errChoiceNotReady)
 			}
 			return option, nil
 		}
 		// Denied, from another tenant, or not offered: the subject may not use it.
-		return nil, accessDenied("you may not use the credential chosen for a server")
+		return nil, accessDenied("you may not use the credential chosen for a server", errChoiceDenied)
 	}
 
 	var ready []*consentAuthClientOption
@@ -283,11 +283,11 @@ func decideHeadlessChoice(server consentAuthServer, auth *consentServerAuth, cho
 	}
 	switch len(ready) {
 	case 0:
-		return nil, setupRequired("no upstream credential for a server is ready: set one up or connect it first")
+		return nil, setupRequired("no upstream credential for a server is ready: set one up or connect it first", errChoiceNoneReady)
 	case 1:
 		return ready[0], nil
 	}
-	return nil, oops.NewOAuthError(http.StatusBadRequest, tokenErrorSelectionRequired, fmt.Sprintf("server %s offers several upstream credentials; name one with %s=%s:<auth_client_id> or configure an issuance profile", server.id, tokenParamUpstreamAuthClient, server.id), nil)
+	return nil, oops.NewOAuthError(http.StatusBadRequest, tokenErrorSelectionRequired, fmt.Sprintf("server %s offers several upstream credentials; name one with %s=%s:<auth_client_id> or configure an issuance profile", server.id, tokenParamUpstreamAuthClient, server.id), errChoiceNotNamed)
 }
 
 // headlessReadiness marks the personal options of a server ready or not from
@@ -307,7 +307,7 @@ func (s *Service) headlessReadiness(ctx context.Context, endpoint *ResolvedMcpEn
 			}
 			reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
 				ProjectID: server.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
-				Subject: subject, RegistrationID: option.registrationID.UUID, SkipUnusable: false,
+				Subject: subject, RegistrationID: option.registrationID.UUID, SkipUnusable: false, Attribution: remotesessions.RefreshAttribution{},
 			})
 			if err != nil {
 				return fmt.Errorf("check upstream connection: %w", err)
@@ -325,10 +325,48 @@ func (s *Service) headlessReadiness(ctx context.Context, endpoint *ResolvedMcpEn
 	return nil
 }
 
-func setupRequired(description string) error {
-	return oops.NewOAuthError(http.StatusBadRequest, tokenErrorSetupRequired, description, nil)
+func setupRequired(description string, cause headlessChoiceError) error {
+	return oops.NewOAuthError(http.StatusBadRequest, tokenErrorSetupRequired, description, cause)
 }
 
-func accessDenied(description string) error {
-	return oops.NewOAuthError(http.StatusBadRequest, "access_denied", description, nil)
+func accessDenied(description string, cause headlessChoiceError) error {
+	return oops.NewOAuthError(http.StatusBadRequest, "access_denied", description, cause)
 }
+
+// headlessChoiceError is why a headless upstream choice was refused. It is
+// the refusal's internal cause, never part of the response.
+type headlessChoiceError string
+
+func (p headlessChoiceError) Error() string { return string(p) }
+
+const (
+	// errChoiceNotAccepted names a choice in an organization that does not take them yet.
+	errChoiceNotAccepted headlessChoiceError = "choice_not_accepted"
+
+	// errChoiceServerNotReached names a choice for a server the token does not reach.
+	errChoiceServerNotReached headlessChoiceError = "choice_server_not_reached"
+
+	// errChoiceTakesNoCredential names a credential for a server that needs none.
+	errChoiceTakesNoCredential headlessChoiceError = "credential_not_needed" //nolint:gosec // a reason code, not a credential
+
+	// errChoiceNeedsCredential names no credential for a server that needs one.
+	errChoiceNeedsCredential headlessChoiceError = "credential_needed" //nolint:gosec // a reason code, not a credential
+
+	// errChoiceNotSetUp is a server whose upstream sign-in is not set up.
+	errChoiceNotSetUp headlessChoiceError = "sign_in_not_set_up"
+
+	// errChoiceNotReady names a credential that is not set up or connected yet.
+	errChoiceNotReady headlessChoiceError = "credential_not_ready"
+
+	// errChoiceNoneReady is a server with no ready credential and none named.
+	errChoiceNoneReady headlessChoiceError = "no_credential_ready"
+
+	// errChoiceDenied names a credential the subject may not use.
+	errChoiceDenied headlessChoiceError = "credential_denied"
+
+	// errChoiceNoneAllowed is a server whose credentials the subject may not use.
+	errChoiceNoneAllowed headlessChoiceError = "no_credential_allowed"
+
+	// errChoiceNotNamed is a server with several ready credentials and none named.
+	errChoiceNotNamed headlessChoiceError = "credential_not_chosen"
+)

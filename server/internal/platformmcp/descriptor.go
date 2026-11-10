@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -191,10 +192,18 @@ type Registrar struct {
 	// progressive surface hands out the paragraphs that name a tool when that
 	// tool is described.
 	instructions string
+	// cardLinks builds the dashboard links on result cards. Without a
+	// dashboard URL, cards are drawn without a page link.
+	cardLinks cardLinks
+}
+
+// withDashboardLinks lets result cards link to dashboard pages.
+func (r *Registrar) withDashboardLinks(links cardLinks) {
+	r.cardLinks = links
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: ""}
+	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: "", cardLinks: cardLinks{dashboardURL: nil, serverURL: nil, projectSlug: nil}}
 }
 
 func (r *Registrar) withLogger(logger *slog.Logger) {
@@ -405,6 +414,20 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 		if tool.OutputSchema == nil {
 			tool.OutputSchema = inferOutputSchema[Out](tool.Name)
 		}
+		// Every external tool draws its results as an MCP Apps card unless it
+		// is listed as text-only. The card rides in _meta, so text and
+		// structured content stay exactly what other clients read.
+		spec, carded := toolCardSpec(tool.Name)
+		if carded {
+			tool.Meta = withCardToolMeta(tool.Meta)
+		}
+		cardTitle := cmp.Or(tool.Title, cardFallbackTitle(tool.Name))
+		card := func(ctx context.Context, result *mcp.CallToolResult, output Out, input In) *mcp.CallToolResult {
+			if !carded {
+				return result
+			}
+			return withResultCard(ctx, r.cardLinks, cardTitle, spec, result, output, input)
+		}
 		mcp.AddTool(r.server, tool, func(ctx context.Context, request *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
 			var result *mcp.CallToolResult
 			var output Out
@@ -413,12 +436,12 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 				result, output, err = handler(ctx, request, input)
 			}
 			if err == nil {
-				return result, output, nil
+				return card(ctx, result, output, input), output, nil
 			}
 			// A denial is projected from its fields wherever it was raised, so a
 			// handler that wraps one still answers with permission_denied.
 			if result, ok := externalAuthorizationToolResult(err); ok {
-				return result, output, nil
+				return card(ctx, result, output, input), output, nil
 			}
 			return nil, output, r.failSafe(ctx, tool.Name, err)
 		})
@@ -611,7 +634,6 @@ var wireTypeSchemas = map[reflect.Type]*jsonschema.Schema{
 			string(MCPBackendRemote),
 			string(MCPBackendTunneled),
 			string(MCPBackendUnproxied),
-			string(MCPBackendBuiltin),
 			string(MCPBackendLegacy),
 		},
 	},

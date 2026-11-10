@@ -1,3 +1,5 @@
+import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
+import { setupProviderForUrl } from "@/pages/mcp/x/setup/provider-setup";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
@@ -45,14 +47,8 @@ import {
   tunnelAgentReadiness,
   useTunneledMcpConnections,
 } from "@/pages/mcp/x/tabs/tunnelStatus";
-import { useAllRemoteSessionClients } from "@/lib/remote-identity";
-import {
-  deriveIdentityMode,
-  findPassThroughAuthorizationHeader,
-  type IdentityMode,
-} from "@/lib/remote-identity";
+import { type IdentityMode } from "@/lib/remote-identity";
 import { IdentityExplainerDialog } from "@/lib/remote-identity";
-import { useUpstreamProbe } from "@/lib/remote-identity";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -62,7 +58,6 @@ import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServ
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
 import { McpServerNetworkAccessMode } from "@gram/client/models/components/mcpserver.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
-import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import {
@@ -92,8 +87,7 @@ import {
   UPSTREAM_AUTH_STATUS,
 } from "@/lib/auth-clients";
 import { enumPresentation } from "@/lib/enum";
-import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
-import { useMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
+import { useMcpServerAuthenticationReadiness } from "@/hooks/useMcpServerAuthenticationReadiness";
 import * as React from "react";
 import { Link, useLocation, useParams } from "react-router";
 
@@ -398,6 +392,7 @@ export function McpServerCardStatus({
 }
 
 export function McpServerXSidebarNav(): React.JSX.Element | null {
+  const providerSetupRollout = useProviderSetupRollout();
   const routes = useRoutes();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -471,57 +466,16 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     mcpServer?.tunneledMcpServerId ?? "",
   );
 
-  const userSessionIssuerId = mcpServer?.userSessionIssuerId;
-  // A remote identity provider is attached when this server's issuer has at
-  // least one remote session client pairing.
+  const authReadiness = useMcpServerAuthenticationReadiness(mcpServer);
   const {
-    items: remoteSessionClients,
-    isLoading: isLoadingRemoteSessionClients,
-    isError: isRemoteSessionClientsError,
-  } = useAllRemoteSessionClients(
-    { userSessionIssuerId },
-    { enabled: !!userSessionIssuerId },
-  );
-  const hasRemoteIdentityProvider = remoteSessionClients.length > 0;
-  const {
-    data: remoteHeadersResult,
-    isLoading: isLoadingRemoteHeaders,
-    isError: isRemoteHeadersError,
-  } = useRemoteMcpServerHeaders({ remoteMcpServerId }, undefined, {
-    enabled: remoteMcpServerId !== "",
-  });
-  const remoteHeaders = remoteHeadersResult?.headers ?? [];
-  const remoteIdentityMode = deriveIdentityMode(
-    remoteSessionClients.length,
-    remoteHeaders,
-  );
-  const passThroughAuthorization =
-    findPassThroughAuthorizationHeader(remoteHeaders);
-  const identityUnavailable =
-    isRemoteSessionClientsError || isRemoteHeadersError;
-  // Enforcing organizations configure upstream identity through credentials,
-  // so the summary reads their status instead of the legacy identity mode.
-  const upstreamAuth = useUpstreamAuthEnforcement();
-  const enforcedIdentity =
-    remoteMcpServerId !== "" && upstreamAuth === "enforced";
-  const upstreamAuthQuery = useMcpServerAuthentication(
-    { mcpServerId: mcpServer?.id ?? "" },
-    undefined,
-    { enabled: enforcedIdentity && !!mcpServer?.id, throwOnError: false },
-  );
-  // Only worth probing when nothing is configured: that is the one state where
-  // the upstream's answer changes what the pill should say.
-  const identityProbeStatus = useUpstreamProbe(
-    remoteMcpServerId,
-    enforcedIdentity
-      ? upstreamAuthQuery.data?.status === "no_auth_required"
-      : upstreamAuth === "legacy" &&
-          !identityUnavailable &&
-          remoteIdentityMode === "none" &&
-          !passThroughAuthorization &&
-          !isLoadingRemoteSessionClients &&
-          !isLoadingRemoteHeaders,
-  );
+    remoteIdentityMode,
+    passThroughAuthorization,
+    identityUnavailable,
+    isLoadingRemoteIdentity,
+    upstreamAuth,
+    upstreamAuthQuery,
+    identityProbeStatus,
+  } = authReadiness;
 
   // Mirrors PluginStatusBanner's isTrulyPublished: server membership in a
   // plugin alone isn't "included" if the marketplace repo was never
@@ -595,55 +549,6 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     hasScope("org:admin", organization.id) &&
     hasScope("mcp:read", mcpServer.id);
 
-  // A Remote MCP server's identity is derived, so the readiness item reads the
-  // same answer the pill does. Judging it on a bound client alone reported
-  // every working Service Account as incomplete while the pill said Service Account.
-  // Under enforcement it reads the credentials status instead, and a remote
-  // server is not settled until the enforcement state is known.
-  const legacyRemoteIdentity = !isRemoteBacked || upstreamAuth === "legacy";
-  const enforcedStatus = upstreamAuthQuery.data?.status;
-  const remoteIdentitySettled =
-    isRemoteBacked &&
-    (enforcedIdentity
-      ? enforcedStatus === "configured" ||
-        (enforcedStatus === "no_auth_required" &&
-          identityProbeStatus === "available")
-      : legacyRemoteIdentity &&
-        !identityUnavailable &&
-        (remoteIdentityMode !== "none" || identityProbeStatus === "available"));
-
-  let authenticationDescription =
-    "Attach an authorization server so users can access the upstream service.";
-  if (isUnproxied) {
-    authenticationDescription =
-      "Not applicable — the customer connects directly using the vendor's own credentials.";
-  } else if (enforcedIdentity) {
-    if (enforcedStatus === "configured") {
-      authenticationDescription =
-        "Credentials are set up for the upstream service.";
-    } else if (remoteIdentitySettled) {
-      authenticationDescription =
-        "The upstream service accepts requests without credentials.";
-    } else {
-      authenticationDescription =
-        "Add a credential so Speakeasy can sign in to the upstream service.";
-    }
-  } else if (!legacyRemoteIdentity) {
-    authenticationDescription = "The identity status is not available yet.";
-  } else if (remoteIdentityMode === "user" && hasRemoteIdentityProvider) {
-    authenticationDescription =
-      "An authorization server is attached to this server.";
-  } else if (remoteIdentityMode === "agent" && isRemoteBacked) {
-    authenticationDescription =
-      "A shared credential is configured for the upstream service.";
-  } else if (remoteIdentitySettled) {
-    authenticationDescription =
-      "The upstream service accepts requests without credentials.";
-  } else if (isTunneledBacked) {
-    authenticationDescription =
-      "Speakeasy authentication is configured; upstream authorization servers are optional.";
-  }
-
   // Source detail pages are gone; the description still explains the backend,
   // but there is no separate page to send anyone to.
   let sourceDescription = "Connect an MCP server as this server's source.";
@@ -684,12 +589,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         {
           key: "authentication",
           label: "Authentication",
-          description: authenticationDescription,
-          ready:
-            isUnproxied ||
-            remoteIdentitySettled ||
-            (legacyRemoteIdentity && hasRemoteIdentityProvider) ||
-            (isTunneledBacked && !!userSessionIssuerId),
+          description: authReadiness.description,
+          ready: authReadiness.ready,
           href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
         },
         {
@@ -720,6 +621,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
                     ? "Marketplace needs publishing before this plugin is installable."
                     : "Add this server to a plugin so your team can install it.",
                 ready: isTrulyIncluded,
+                // Distribution is a later choice, not part of making the
+                // server work, so it never counts as a step left.
+                optional: true,
                 href: routes.plugins.href(),
               },
             ]
@@ -728,6 +632,20 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     : [];
 
   const items: DetailSidebarNavItem[] = [
+    ...(providerSetupRollout === "enabled" &&
+    mcpServer?.remoteMcpServerId &&
+    setupProviderForUrl(upstreamUrl) &&
+    hasScope("mcp:write", mcpServer.id)
+      ? [
+          {
+            key: "setup",
+            title: "Setup",
+            Icon: Wrench,
+            href: mcpServerTabHref(routes, idOrSlug, "setup"),
+            active: activeTab === "setup",
+          },
+        ]
+      : []),
     {
       key: "overview",
       title: "Overview",
@@ -889,7 +807,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             identityProbeStatus === "authentication-required"
           }
           unavailable={identityUnavailable}
-          loading={isLoadingRemoteSessionClients || isLoadingRemoteHeaders}
+          loading={isLoadingRemoteIdentity}
           settingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
         />
       ) : null}

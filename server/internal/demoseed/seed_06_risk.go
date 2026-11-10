@@ -15,7 +15,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // seedRiskAndChats: Risk policies, exclusions, chats, messages, findings.
@@ -191,17 +193,8 @@ func (s *seeder) seedRiskPolicies(ctx context.Context) error {
 	if err := s.seedToolApprovals(ctx); err != nil {
 		return err
 	}
-	// The approval policy's first save gives the project its approvals
-	// server, so the demo has one too.
-	if err := s.q.RiskInsertApprovalsServer(ctx, repo.RiskInsertApprovalsServerParams{
-		IssuerID:     s.det("issuer-approvals"),
-		ServerID:     s.det("mcpserver-approvals"),
-		ProjectID:    s.projectID(),
-		EndpointID:   s.det("endpoint-approvals"),
-		EndpointSlug: s.spec.OrgSlug + "-default-approvals",
-		OrgID:        s.orgID(),
-	}); err != nil {
-		return fmt.Errorf("insert demo approvals server: %w", err)
+	if err := s.seedMCPReview(ctx); err != nil {
+		return err
 	}
 
 	// The same canonical target has two grants, so Platform MCP demonstrates
@@ -500,6 +493,39 @@ func (s *seeder) seedToolApprovals(ctx context.Context) error {
 		if err := s.q.RiskInsertApproval(ctx, params); err != nil {
 			return fmt.Errorf("insert demo approval %s: %w", r.key, err)
 		}
+	}
+	return nil
+}
+
+// seedMCPReview files one MCP server review a support engineer asked for, so
+// the MCP reviews queue has a request waiting on an admin.
+func (s *seeder) seedMCPReview(ctx context.Context) error {
+	const target = "https://mcp.notion.com/mcp"
+	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(target)
+	if !ok {
+		return fmt.Errorf("canonicalize demo mcp review target %q", target)
+	}
+	reviewID := s.det("mcpreview-notion")
+	if err := s.q.RiskInsertMCPReview(ctx, repo.RiskInsertMCPReviewParams{
+		ID:             reviewID,
+		OrganizationID: s.orgID(),
+		ProjectID:      s.projectID(),
+		TargetKind:     mcpapproval.TargetKindServerURL,
+		TargetRaw:      target,
+		TargetKey:      inventoryURL.CanonicalURL,
+	}); err != nil {
+		return fmt.Errorf("insert demo mcp review: %w", err)
+	}
+	if err := s.q.RiskInsertMCPReviewRequester(ctx, repo.RiskInsertMCPReviewRequesterParams{
+		ID:                   s.det("mcpreview-notion-requester"),
+		OrganizationID:       s.orgID(),
+		ProjectID:            s.projectID(),
+		McpApprovalRequestID: reviewID,
+		UserID:               s.userID("amara"),
+		UserEmail:            s.email("amara"),
+		Note:                 "Support keeps its escalation runbooks in Notion; we want the agent to cite them in replies.",
+	}); err != nil {
+		return fmt.Errorf("insert demo mcp review requester: %w", err)
 	}
 	return nil
 }

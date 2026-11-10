@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { PluginAudience } from "@gram/client/models/components/pluginaudience.js";
 import type { Role } from "@gram/client/models/components/role.js";

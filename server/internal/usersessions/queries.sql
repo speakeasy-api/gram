@@ -695,6 +695,10 @@ WHERE issuer.id = @user_session_issuer_id
   AND session.deleted IS FALSE;
 
 -- name: ListUserSessionIssuerClientIDConflicts :many
+-- A client_id on both issuers blocks migration unless both rows were resolved
+-- from the same Client ID Metadata Document: those describe one client and
+-- merge onto the target's row. A source CIMD row that an issuance selection
+-- profile pins to the source issuer cannot be merged and still blocks.
 SELECT source.client_id
 FROM user_session_clients AS source
 JOIN user_session_clients AS target
@@ -703,6 +707,17 @@ JOIN user_session_clients AS target
  AND target.deleted IS FALSE
 WHERE source.user_session_issuer_id = @source_issuer_id
   AND source.deleted IS FALSE
+  AND NOT (
+    source.client_id_metadata_uri IS NOT NULL
+    AND target.client_id_metadata_uri IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM issuance_selection_profiles AS profile
+      WHERE profile.user_session_issuer_id = source.user_session_issuer_id
+        AND profile.user_session_client_id = source.id
+        AND profile.deleted IS FALSE
+    )
+  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer
@@ -715,6 +730,134 @@ WHERE source.user_session_issuer_id = @source_issuer_id
       )
   )
 ORDER BY source.client_id;
+
+-- Merging a source CIMD client into the target issuer's client for the same
+-- metadata document URL. ListMergeableCimdClientPairs decides which clients
+-- merge; the steps after it each take one pair and run in order, each seeing
+-- the previous step's writes.
+
+-- name: ListMergeableCimdClientPairs :many
+-- Pairs each live source client resolved from a Client ID Metadata Document
+-- with the target issuer's live client for the same document URL. A source
+-- client an issuance selection profile pins to the source issuer is left out:
+-- the profile's foreign key keeps it on that issuer.
+SELECT source.id AS source_client_id, target.id AS target_client_id
+FROM user_session_clients AS source
+JOIN user_session_clients AS target
+  ON target.user_session_issuer_id = @target_issuer_id
+ AND target.client_id = source.client_id
+ AND target.client_id_metadata_uri IS NOT NULL
+ AND target.deleted IS FALSE
+WHERE source.user_session_issuer_id = @source_issuer_id
+  AND source.client_id_metadata_uri IS NOT NULL
+  AND source.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM issuance_selection_profiles AS profile
+    WHERE profile.user_session_issuer_id = source.user_session_issuer_id
+      AND profile.user_session_client_id = source.id
+      AND profile.deleted IS FALSE
+  )
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  )
+ORDER BY source.id;
+
+-- name: MoveDuplicateConsentResourcesToClient :execrows
+-- Where the same subject approved the same upstream set through both clients,
+-- approval evidence for resources only the source consent covers moves onto
+-- the target consent.
+UPDATE user_session_consent_resources AS resource
+SET user_session_consent_id = target_consent.id,
+    updated_at = clock_timestamp()
+FROM user_session_consents AS source_consent
+JOIN user_session_consents AS target_consent
+  ON target_consent.user_session_client_id = @target_client_id
+ AND target_consent.subject_urn = source_consent.subject_urn
+ AND target_consent.remote_set_hash = source_consent.remote_set_hash
+ AND target_consent.deleted IS FALSE
+WHERE source_consent.user_session_client_id = @source_client_id
+  AND source_consent.deleted IS FALSE
+  AND resource.user_session_consent_id = source_consent.id
+  AND resource.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM user_session_consent_resources AS existing
+    WHERE existing.user_session_consent_id = target_consent.id
+      AND existing.resource = resource.resource
+      AND existing.deleted IS FALSE
+  );
+
+-- name: RetireDuplicateConsentResources :execrows
+-- Evidence still on a source consent the target duplicates covers resources
+-- the target consent already holds, so it is retired with the consent.
+UPDATE user_session_consent_resources AS resource
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM user_session_consents AS source_consent
+JOIN user_session_consents AS target_consent
+  ON target_consent.user_session_client_id = @target_client_id
+ AND target_consent.subject_urn = source_consent.subject_urn
+ AND target_consent.remote_set_hash = source_consent.remote_set_hash
+ AND target_consent.deleted IS FALSE
+WHERE source_consent.user_session_client_id = @source_client_id
+  AND source_consent.deleted IS FALSE
+  AND resource.user_session_consent_id = source_consent.id
+  AND resource.deleted IS FALSE;
+
+-- name: RetireDuplicateConsents :execrows
+-- The target consent is authoritative for a subject and upstream set it
+-- already covers.
+UPDATE user_session_consents AS source_consent
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE source_consent.user_session_client_id = @source_client_id
+  AND source_consent.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_consents AS target_consent
+    WHERE target_consent.user_session_client_id = @target_client_id
+      AND target_consent.subject_urn = source_consent.subject_urn
+      AND target_consent.remote_set_hash = source_consent.remote_set_hash
+      AND target_consent.deleted IS FALSE
+  );
+
+-- name: RepointConsentsToClient :execrows
+-- Remaining source consents move to the target client with its tenancy.
+UPDATE user_session_consents AS consent
+SET user_session_client_id = target.id,
+    project_id = target.project_id,
+    organization_id = target.organization_id,
+    updated_at = clock_timestamp()
+FROM user_session_clients AS target
+WHERE target.id = @target_client_id
+  AND target.deleted IS FALSE
+  AND consent.user_session_client_id = @source_client_id
+  AND consent.deleted IS FALSE;
+
+-- name: RepointSessionsToClient :execrows
+-- Sessions keep their refresh tokens; only the client they belong to changes.
+-- Their issuer and tenancy move with the rest of the source sessions.
+UPDATE user_sessions AS session
+SET user_session_client_id = @target_client_id::uuid,
+    updated_at = clock_timestamp()
+WHERE session.user_session_client_id = @source_client_id::uuid
+  AND session.deleted IS FALSE;
+
+-- name: RetireMergedUserSessionClient :execrows
+UPDATE user_session_clients AS client
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE client.id = @source_client_id
+  AND client.deleted IS FALSE;
 
 -- name: CountUserSessionIssuerPrincipalBindingConflicts :one
 SELECT COUNT(*)::int
@@ -1561,6 +1704,23 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: GetExpiredUserSessionByRefreshTokenHash :one
+-- Finds a session retired by reaching its deadline, by refresh-token hash for
+-- the issuer and client that presented it, so a refusal can say the token
+-- expired. Rows retired earlier (rotated or revoked) do not match: their reuse
+-- stays "unknown or already used". Project scoping is intentionally NOT
+-- applied here -- the OAuth surface is public and the issuer_id is the
+-- authoritative scope.
+SELECT subject_urn
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND user_session_client_id = @user_session_client_id::uuid
+  AND refresh_token_hash = @refresh_token_hash::text
+  AND refresh_token_hash IS NOT NULL
+  AND deleted IS TRUE
+  AND deleted_at >= refresh_expires_at
+LIMIT 1;
+
 -- name: GetUserSessionPolicyByJTI :one
 -- Serve-path lookup for immutable session policy, keyed the same way
 -- runtime requests are addressed (issuer + jti). Deliberately narrow: request
@@ -2283,7 +2443,9 @@ ORDER BY tb.original_trigger_id;
 
 -- name: RecordUpstreamClientSelections :execrows
 -- Records, for one inbound credential, the upstream OAuth client it uses for
--- every MCP server it can reach, or an explicit no-auth choice. An existing
+-- every MCP server it can reach, or an explicit no-auth choice. A NULL
+-- scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
+-- recording to those servers, and an empty array records nothing. An existing
 -- client choice is never replaced. An existing no-auth choice is replaced
 -- only once the server has an associated client and one is decided for the
 -- credential: the no-auth choice is unusable by then, and recording the
@@ -2341,6 +2503,8 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
+      AND (sqlc.narg('scope_mcp_server_ids')::uuid[] IS NULL
+           OR s.id = ANY(sqlc.narg('scope_mcp_server_ids')::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -2984,3 +3148,62 @@ ORDER BY members.name, members.id, ri.slug, ri.id;
 -- temporarily make the gateway unavailable for new connections.
 SELECT id FROM user_session_issuers
 WHERE organization_id = @organization_id AND project_id IS NULL AND deleted IS FALSE;
+
+-- name: GetReconnectSessionPolicy :one
+-- Resolve the original credential across refresh rotation, without reviving
+-- revoked/expired connections or borrowing another client's catalogue.
+SELECT us.tool_selection
+FROM user_sessions AS us
+JOIN user_session_clients AS c ON c.id = us.user_session_client_id
+WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
+  AND us.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND us.organization_id = @organization_id::text
+  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND c.user_session_issuer_id = us.user_session_issuer_id
+  AND us.subject_urn = @subject_urn
+  AND c.client_id = @client_id::text
+  AND c.deleted IS FALSE
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+ORDER BY us.created_at DESC
+LIMIT 1
+FOR UPDATE OF us;
+
+-- name: SoftDeleteReconnectUpstreamChoices :exec
+-- Retire only active choices in the reviewed scope; preserve prior history.
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE credential_kind = 'user_session'
+  AND credential_id = @credential_id::uuid
+  AND organization_id = @organization_id::text
+  AND mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND deleted IS FALSE;
+
+-- name: UpdateReconnectSessionPolicy :many
+UPDATE user_sessions AS us SET tool_selection = @tool_selection, updated_at = clock_timestamp()
+WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
+  AND us.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND us.organization_id = @organization_id::text
+  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND us.subject_urn = @subject_urn
+  AND us.tool_selection -> 'catalog' ->> 'id' = @catalog_id::text
+  AND EXISTS (SELECT 1 FROM user_session_clients AS c
+    WHERE c.id = us.user_session_client_id AND c.client_id = @client_id::text
+      AND c.user_session_issuer_id = us.user_session_issuer_id AND c.deleted IS FALSE)
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+RETURNING us.jti;
+
+-- name: SeedWorkloadAgentAssignmentFixture :exec
+-- Test fixture: workload identity writes belong to the workload identity
+-- management API.
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
+VALUES (@organization_id, @workload_issuer_id, @subject, @agent_id);
+
+-- name: SeedWorkloadAdmissionFixture :one
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, name)
+VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject, @name)
+RETURNING id;
+
+-- name: WithdrawWorkloadAdmissionFixture :exec
+UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = @id;

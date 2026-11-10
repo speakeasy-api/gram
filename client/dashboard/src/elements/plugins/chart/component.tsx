@@ -6,9 +6,10 @@ import {
   isJsonRenderTree,
   type JsonRenderNode,
 } from "@/elements/lib/generative-ui";
-import { SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
+import type { SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 import { AlertCircleIcon } from "lucide-react";
-import { ElementType, FC, useMemo } from "react";
+import type { ElementType, FC } from "react";
+import { useMemo } from "react";
 import { MacOSWindowFrame } from "../components/MacOSWindowFrame";
 import { PluginLoadingState } from "../components/PluginLoadingState";
 

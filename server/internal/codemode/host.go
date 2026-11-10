@@ -41,10 +41,26 @@ var ErrConsentRequired = errors.New("consent required")
 type ConnectionRequiredError struct {
 	// Server is the member slug to pass to Connect.
 	Server string
+
+	// ReferenceLine is the line a person gives their admin, empty when there is none.
+	ReferenceLine string
 }
 
 func (e *ConnectionRequiredError) Error() string {
 	return fmt.Sprintf("server %q requires the user to connect", e.Server)
+}
+
+// MemberRefusalError is a member failure whose message is safe to show the program.
+type MemberRefusalError struct {
+	Message string
+	// ConsentRequired makes it read as ErrConsentRequired.
+	ConsentRequired bool
+}
+
+func (e *MemberRefusalError) Error() string { return e.Message }
+
+func (e *MemberRefusalError) Is(target error) bool {
+	return e.ConsentRequired && target == ErrConsentRequired
 }
 
 // ErrExecutionRevoked is terminal for the admitted execution, even if its
@@ -242,15 +258,21 @@ func (h *CatalogHost) Search(ctx context.Context, args SearchArgs) (*SearchPage,
 				if groupCtx.Err() != nil {
 					return groupCtx.Err()
 				}
-				reason := "catalog_unavailable"
+				reason, message := "catalog_unavailable", ""
 				if errors.Is(err, ErrConsentRequired) {
 					reason = "consent_required"
 				}
-				failed = append(failed, FailedMember{Server: server.Slug, Reason: reason})
+				if refused, ok := errors.AsType[*MemberRefusalError](err); ok {
+					message = refused.Message
+					if !refused.ConsentRequired {
+						reason = "member_refused"
+					}
+				}
+				failed = append(failed, FailedMember{Server: server.Slug, Reason: reason, Message: message})
 				return nil
 			}
 			if catalog.Incomplete {
-				failed = append(failed, FailedMember{Server: server.Slug, Reason: "catalog_incomplete"})
+				failed = append(failed, FailedMember{Server: server.Slug, Reason: "catalog_incomplete", Message: ""})
 			}
 			for _, tool := range catalog.Tools {
 				if !h.permitted(tool.Path) {
@@ -344,7 +366,9 @@ func (h *CatalogHost) Call(ctx context.Context, path string, arguments json.RawM
 	}
 	raw, err := h.backend.Call(ctx, path, arguments)
 	if err != nil {
-		if _, connect := errors.AsType[*ConnectionRequiredError](err); connect || errors.Is(err, ErrExecutionRevoked) || errors.Is(err, ErrConsentRequired) {
+		_, connect := errors.AsType[*ConnectionRequiredError](err)
+		_, refused := errors.AsType[*MemberRefusalError](err)
+		if connect || refused || errors.Is(err, ErrExecutionRevoked) || errors.Is(err, ErrConsentRequired) {
 			return nil, &callNotDispatchedError{cause: fmt.Errorf("invoke tool: %w", err)}
 		}
 		var dispatch *DispatchError

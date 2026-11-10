@@ -33,12 +33,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -49,9 +51,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -64,7 +68,6 @@ type Service struct {
 	db                       *pgxpool.Pool
 	policy                   *guardian.Policy
 	repo                     *repo.Queries
-	environmentRepo          *environmentsRepo.Queries
 	auth                     *auth.Auth
 	authz                    *authz.Engine
 	toolsets                 *Toolsets
@@ -78,6 +81,8 @@ type Service struct {
 	pluginsGitHubEnabled     bool
 	networkAccessEligibility networkaccess.EligibilityChecker
 	publicationRequests      plugins.PublicationRequests
+	// revoker handles grants orphaned when a deleted hosted server releases its issuer.
+	revoker *remotesessions.UpstreamRevoker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -93,6 +98,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	pluginsGitHubEnabled bool,
+	revoker *remotesessions.UpstreamRevoker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
@@ -105,7 +111,6 @@ func NewService(
 		repo:                     repo.New(db),
 		auth:                     auth.New(logger, db, sessions, authzEngine),
 		authz:                    authzEngine,
-		environmentRepo:          environmentsRepo.New(db),
 		toolsets:                 NewToolsets(db),
 		domainsRepo:              domainsRepo.New(db),
 		usageRepo:                usageRepo.New(db),
@@ -117,6 +122,7 @@ func NewService(
 		pluginsGitHubEnabled:     pluginsGitHubEnabled,
 		networkAccessEligibility: networkaccess.DenyAllChecker{},
 		publicationRequests:      plugins.PublicationRequests{Enabled: false},
+		revoker:                  revoker,
 	}
 }
 
@@ -173,6 +179,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		OrganizationID:          authCtx.ActiveOrganizationID,
 		OrganizationSlug:        authCtx.OrganizationSlug,
 		ProjectID:               *authCtx.ProjectID,
+		Authz:                   s.authz,
 		ActorUserID:             authCtx.UserID,
 		ActorEmail:              authCtx.Email,
 		Name:                    payload.Name,
@@ -305,20 +312,6 @@ func TriggerToolsetIndex(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		logger.ErrorContext(ctx, "failed to load active deployment for toolset indexing", attr.SlogError(err))
 		return fmt.Errorf("load active deployment for toolset indexing: %w", err)
 	}
-	hasProxy, err := repo.New(db).ToolsetHasExternalMCPProxy(ctx, repo.ToolsetHasExternalMCPProxyParams{
-		ToolsetID: toolsetID,
-		ProjectID: projectID,
-	})
-	if err != nil {
-		logger.ErrorContext(ctx, "failed to check toolset for external MCP proxy before indexing", attr.SlogError(err))
-		return fmt.Errorf("check toolset for external MCP proxy before indexing: %w", err)
-	}
-	if hasProxy {
-		// The current indexer cannot embed proxy tools, so this toolset is
-		// never hosting from the index.
-		return ErrToolsetIndexNotRequired
-	}
-
 	_, err = background.ExecuteIndexToolset(ctx, temporalEnv, background.IndexToolsetParams{
 		ProjectID:             projectID,
 		ToolsetID:             toolsetID,
@@ -496,15 +489,14 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.Description = pgtype.Text{String: *payload.Description, Valid: true}
 	}
 
-	if payload.DefaultEnvironmentSlug != nil {
-		_, err := s.environmentRepo.WithTx(dbtx).GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
-			Slug:      conv.ToLower(*payload.DefaultEnvironmentSlug),
-			ProjectID: *authCtx.ProjectID,
-		})
+	// Changing the default environment takes environment:read on the new one,
+	// as linking does; resubmitting the current one needs nothing more.
+	if payload.DefaultEnvironmentSlug != nil && conv.ToLower(*payload.DefaultEnvironmentSlug) != existingToolset.DefaultEnvironmentSlug.String {
+		environment, err := environments.ResolveReadableEnvironment(ctx, logger, s.authz, dbtx, *authCtx.ProjectID, toolconfig.Slug(string(*payload.DefaultEnvironmentSlug)))
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error finding environment")
+			return nil, err
 		}
-		updateParams.DefaultEnvironmentSlug = conv.ToPGText(conv.ToLower(*payload.DefaultEnvironmentSlug))
+		updateParams.DefaultEnvironmentSlug = conv.ToPGText(environment.Slug)
 	}
 
 	if payload.ToolSelectionMode != nil {
@@ -606,6 +598,11 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// The hosted server's associations are pruned before commit, which needs
+	// the project's writer scope ahead of every lock below.
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock upstream client writer scope")
+	}
 	if err := networkingressRepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle")
 	}
@@ -659,6 +656,11 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	if err != nil {
 		return err
 	}
+	// The tombstoned hosted server's associations go with it, and so do the
+	// typed links derived from them.
+	if err := upstreamclients.ReconcileInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, nil); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "prune deleted hosted server upstream clients").LogError(ctx, logger)
+	}
 	if carried {
 		if err := s.requestPluginPublication(ctx, dbtx, authCtx); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, logger)
@@ -685,6 +687,9 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	if carried {
 		s.publishPluginsAfterToolsetChange(ctx, authCtx)
 	}
+
+	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
+	s.revoker.RevokeAllDetached(ctx, hostedDeleted.OrphanedCredentials)
 
 	resultsCleaner := background.TemporalRiskPolicyResultsCleaner{TemporalEnv: s.temporalEnv, Logger: logger}
 	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, hostedDeleted.DeletedRiskPolicies)
@@ -790,6 +795,13 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		return nil, err
 	}
 
+	// The clone's default environment reaches every tool it runs, so it is
+	// copied only for a caller who can read it.
+	defaultEnvironmentSlug, err := readableDefaultEnvironmentSlug(ctx, dbtx, s.authz, *authCtx.ProjectID, originalToolset.DefaultEnvironmentSlug)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize default environment").LogError(ctx, logger)
+	}
+
 	// Generate new slug with _copy suffix
 	slugSuffix, err := conv.GenerateRandomSlug(5)
 	if err != nil {
@@ -810,7 +822,7 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Description:            originalToolset.Description,
-		DefaultEnvironmentSlug: originalToolset.DefaultEnvironmentSlug,
+		DefaultEnvironmentSlug: defaultEnvironmentSlug,
 	}
 
 	// Try to create the cloned toolset, handling name conflicts.

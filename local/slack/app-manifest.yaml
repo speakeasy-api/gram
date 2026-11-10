@@ -1,10 +1,12 @@
 # Slack app manifest for testing Speakeasy against your own Slack workspace:
-# tool approval requests sent to approvers as DMs, and the member directory.
+# tool approval requests sent to approvers as DMs, the member directory, and
+# the project assistant answering @mentions and direct messages.
 #
 #   1. Open https://api.slack.com/apps?new_app=1, choose "From a manifest",
 #      pick your test workspace and paste this file.
 #   2. Replace YOUR-TUNNEL-HOST below with a public HTTPS tunnel to your local
-#      server (GRAM_SERVER_URL), so Slack can deliver button clicks. For
+#      server (GRAM_SERVER_URL), so Slack can deliver button clicks and
+#      events. For
 #      example: cloudflared tunnel --url "$GRAM_SERVER_URL" --no-tls-verify
 #   3. Install the app to the workspace, then run `mise run zero:slack` and
 #      paste the Bot User OAuth Token and the Signing Secret when asked.
@@ -12,14 +14,14 @@
 # Keep the app's tokens and secrets in mise.local.toml only. Never commit them.
 display_information:
   name: Speakeasy (dev)
-  description: Sends Speakeasy tool approval requests to approvers, and reads the member directory.
+  description: Sends Speakeasy tool approval requests to approvers, reads the member directory, and answers questions about your Speakeasy project.
 features:
   app_home:
     home_tab_enabled: false
-    # Approval requests arrive in the app's Messages tab. Approvers answer
-    # with the buttons, not by typing.
+    # Approval requests arrive in the app's Messages tab, and people message
+    # the project assistant there.
     messages_tab_enabled: true
-    messages_tab_read_only_enabled: true
+    messages_tab_read_only_enabled: false
   bot_user:
     display_name: Speakeasy (dev)
     always_online: false
@@ -31,10 +33,17 @@ oauth_config:
     - https://localhost:8080/rpc/slackDirectoryConnections.callback
   scopes:
     bot:
+      - app_mentions:read
       - chat:write
+      - im:history
       - users:read
       - users:read.email
 settings:
+  event_subscriptions:
+    request_url: https://YOUR-TUNNEL-HOST/slack/events
+    bot_events:
+      - app_mention
+      - message.im
   interactivity:
     is_enabled: true
     request_url: https://YOUR-TUNNEL-HOST/slack/interactions

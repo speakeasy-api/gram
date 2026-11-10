@@ -173,8 +173,9 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	// is echoed, not upgraded — this is what lets mainstream clients connect.
 	require.Equal(t, mcpversions.Version20250326, result.ProtocolVersion)
 	require.Equal(t, "Speakeasy Gateway", result.ServerInfo.Name)
-	// Instructions are deliberately generic: the member inventory belongs to
-	// list_servers, so neither the meta server's name nor its members appear.
+	// The caller's servers lead, so agents see the gateway's reach first.
+	require.True(t, strings.HasPrefix(result.Instructions, `Tools from these servers: "member alpha".`+"\n\n"), "instructions=%s", result.Instructions)
+	require.True(t, strings.HasSuffix(result.Instructions, metamcp.Instructions))
 	require.Contains(t, result.Instructions, "list_servers")
 	require.Contains(t, result.Instructions, "describe_tools")
 	// The two rules agents get wrong: guessing arguments, and reading an
@@ -194,6 +195,7 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member alpha", "member-alpha-"+uuid.NewString()[:8], 0, mcpservers.VisibilityPrivate)
 
 	const custom = "Always call list_servers first. Ticketing lives in the support member."
 	setInstructions := func(instructions pgtype.Text) {
@@ -230,8 +232,8 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 		stored pgtype.Text
 		want   string
 	}{
-		{name: "custom replaces default", stored: conv.ToPGText(custom), want: custom},
-		{name: "reset restores default", stored: pgtype.Text{}, want: metamcp.Instructions},
+		{name: "custom replaces default and server line", stored: conv.ToPGText(custom), want: custom},
+		{name: "reset restores default", stored: pgtype.Text{}, want: `Tools from these servers: "member alpha".` + "\n\n" + metamcp.Instructions},
 	} {
 		// Exercise setting and resetting the same endpoint sequentially.
 		setInstructions(tc.stored)

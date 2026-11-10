@@ -1076,6 +1076,7 @@ func TestGenerateObservabilityPluginsIncludeBootstrapLayout(t *testing.T) {
 		HooksAPIKey:  "gram_local_secret_xyz",
 		ProjectSlug:  "acme-prod",
 		BrowserLogin: true,
+		InstallRoute: InstallRouteMarketplace,
 	}
 	files, err := GeneratePluginPackages(nil, cfg)
 	require.NoError(t, err)
@@ -1090,7 +1091,8 @@ func TestGenerateObservabilityPluginsIncludeBootstrapLayout(t *testing.T) {
   "project": "acme-prod",
   "org": "org_123",
   "hooks_api_key": "gram_local_secret_xyz",
-  "browser_login": true
+  "browser_login": true,
+  "install_route": "marketplace"
 }`, string(files[root+"/speakeasy.json"]), "%s/speakeasy.json", root)
 		require.NotEmpty(t, files[root+"/hooks/bootstrap.sh"], "%s/hooks/bootstrap.sh", root)
 		require.NotContains(t, string(files[root+"/hooks/bootstrap.sh"]), cfg.HooksAPIKey)
@@ -2529,6 +2531,212 @@ setTimeout(() => process.exit(0), 5500)
 	// A run ID that only ctx carries still pairs the two hooks.
 	require.Len(t, ends[""], 1, "agent_end with a ctx-only run ID is sent once")
 	require.Equal(t, "from ctx", ends[""][0]["finalMessage"])
+}
+
+// runOpenClawShim runs driver against the generated OpenClaw shim with a fake
+// daemon that records every frame and acknowledges it, and returns the frames.
+func runOpenClawShim(t *testing.T, driver string) []map[string]any {
+	t.Helper()
+	nodePath, err := exec.LookPath("node")
+	require.NoError(t, err, "node is required to run the generated shim")
+	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}, "openclaw")
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.js"), files["index.js"], 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"type":"module"}`), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "hooks"), 0o700))
+	daemon := "while IFS= read -r line; do\n" +
+		"  printf '%s\\n' \"$line\" >>\"$FRAMES\"\n" +
+		"  seq=$(printf '%s' \"$line\" | sed -n 's/^{\"seq\":\\([0-9]*\\).*/\\1/p')\n" +
+		"  printf '{\"seq\":%s}\\n' \"$seq\"\n" +
+		"done\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hooks", "bootstrap.sh"), []byte(daemon), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "driver.mjs"), []byte(driver), 0o600))
+
+	framesPath := filepath.Join(dir, "frames.ndjson")
+	cmd := exec.CommandContext(t.Context(), nodePath, "driver.mjs")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "FRAMES="+framesPath)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "shim driver failed: %s", out)
+
+	raw, err := os.ReadFile(framesPath)
+	require.NoError(t, err)
+	var frames []map[string]any
+	for line := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
+		var frame map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &frame))
+		frames = append(frames, frame)
+	}
+	return frames
+}
+
+// framesByHook indexes recorded shim frames by hook name.
+func framesByHook(frames []map[string]any) map[string]map[string]any {
+	byHook := map[string]map[string]any{}
+	for _, frame := range frames {
+		hook, _ := frame["hook"].(string)
+		byHook[hook] = frame
+	}
+	return byHook
+}
+
+// OpenClaw names MCP tools <server>__<tool> and keeps the server URL only in
+// its config, so the shim sends each configured server's name and URL on tool
+// frames. Headers, env and command carry credentials and never leave the
+// process, and the URL loses its userinfo, query and fragment.
+func TestGenerateOpenClawShimSendsConfiguredMCPServersOnToolFrames(t *testing.T) {
+	t.Parallel()
+	frames := runOpenClawShim(t, `import plugin from "./index.js"
+const handlers = {}
+const config = {
+  mcp: {
+    servers: {
+      speakeasy: {
+        url: "https://user:pass@app.example.com/agent-mcp/agent-1?token=secret#frag",
+        transport: "streamable-http",
+        headers: { Authorization: "Bearer gram_agent_secret" },
+      },
+      disabled: { url: "https://disabled.example.com/mcp", enabled: false },
+      local: { command: "npx", args: ["server"], env: { API_KEY: "env-secret" } },
+      broken: { url: "not a url" },
+    },
+  },
+}
+plugin.register({
+  config: { mcp: { servers: { stale: { url: "https://stale.example.com/mcp" } } } },
+  runtime: { config: { current: () => config } },
+  on(name, fn) { handlers[name] = fn },
+})
+const ctx = { runId: "r1", sessionId: "s1", agentId: "main" }
+await handlers.before_tool_call({ toolName: "speakeasy__list_servers", toolCallId: "t1", params: {} }, ctx)
+handlers.after_tool_call({ toolName: "speakeasy__list_servers", toolCallId: "t1", params: {}, result: {} }, ctx)
+handlers.session_start({ sessionId: "s1" }, ctx)
+setTimeout(() => process.exit(0), 500)
+`)
+	byHook := framesByHook(frames)
+	want := []any{map[string]any{"name": "speakeasy", "url": "https://app.example.com/agent-mcp/agent-1"}}
+	for _, hook := range []string{"before_tool_call", "after_tool_call"} {
+		frame, ok := byHook[hook]
+		require.True(t, ok, "%s frame missing", hook)
+		require.Equal(t, want, frame["mcpServers"], hook)
+		_, inCtx := frame["ctx"].(map[string]any)["mcpServers"]
+		require.False(t, inCtx, "mcpServers rides the frame, not ctx")
+	}
+	sessionStart, ok := byHook["session_start"]
+	require.True(t, ok, "session_start frame missing")
+	_, ok = sessionStart["mcpServers"]
+	require.False(t, ok, "only tool frames carry the MCP servers")
+
+	for _, frame := range frames {
+		encoded, err := json.Marshal(frame)
+		require.NoError(t, err)
+		for _, secret := range []string{"gram_agent_secret", "env-secret", "token=secret", "user:pass", "stale.example.com"} {
+			require.NotContains(t, string(encoded), secret)
+		}
+	}
+}
+
+// OpenClaw's Codex harness fires after_tool_call for an MCP tool only from
+// Codex's PostToolUse, which a failed call never gets. At agent_end the shim
+// reports each call of the run still waiting for its result from the run's
+// transcript, a failed one with its text as the error, and drops a late
+// after_tool_call for a call it already reported. A call with no transcript
+// result, and a call of another run, are not reported.
+func TestGenerateOpenClawShimReportsUnfinishedCallsAtAgentEnd(t *testing.T) {
+	t.Parallel()
+	frames := runOpenClawShim(t, `import plugin from "./index.js"
+const handlers = {}
+plugin.register({ on(name, fn) { handlers[name] = fn } })
+const ctx = { runId: "r1", sessionId: "s1", agentId: "main" }
+const other = { runId: "r2", sessionId: "s2", agentId: "main" }
+const pre = (id, c) => handlers.before_tool_call({ toolName: "mcp__speakeasy__execute_tool", toolCallId: id, runId: c.runId, params: { name: id } }, { ...c, toolCallId: id })
+await pre("ok", ctx)
+handlers.after_tool_call({ toolName: "mcp__speakeasy__execute_tool", toolCallId: "ok", runId: "r1", params: { name: "ok" }, result: { content: [] } }, { ...ctx, toolCallId: "ok" })
+await pre("bad", ctx)
+await pre("quiet", ctx)
+await pre("lost", ctx)
+await pre("elsewhere", other)
+handlers.agent_end({ runId: "r1", success: true, messages: [
+  { role: "toolResult", toolCallId: "bad", toolName: "mcp__speakeasy__execute_tool", isError: true, content: [{ type: "text", text: "MCP error -32603: internal error" }], details: { status: "failed" } },
+  { role: "toolResult", toolCallId: "quiet", toolName: "mcp__speakeasy__execute_tool", isError: false, content: [{ type: "text", text: "done" }] },
+  { role: "toolResult", toolCallId: "elsewhere", toolName: "mcp__speakeasy__execute_tool", isError: true, content: [{ type: "text", text: "not this run" }] },
+] }, ctx)
+handlers.after_tool_call({ toolName: "mcp__speakeasy__execute_tool", toolCallId: "bad", runId: "r1", params: { name: "bad" }, result: { content: [] } }, { ...ctx, toolCallId: "bad" })
+setTimeout(() => process.exit(0), 2500)
+`)
+
+	afters := map[string][]map[string]any{}
+	for _, frame := range frames {
+		if frame["hook"] != "after_tool_call" {
+			continue
+		}
+		event, _ := frame["event"].(map[string]any)
+		id, _ := event["toolCallId"].(string)
+		afters[id] = append(afters[id], event)
+	}
+	require.Len(t, afters["ok"], 1, "a call OpenClaw reported is sent once")
+	require.Len(t, afters["bad"], 1, "a failed call is reported once, and its late after_tool_call is dropped")
+	bad := afters["bad"][0]
+	require.Equal(t, "MCP error -32603: internal error", bad["error"])
+	require.Equal(t, "mcp__speakeasy__execute_tool", bad["toolName"])
+	require.Equal(t, "r1", bad["runId"])
+	require.Equal(t, map[string]any{"name": "bad"}, bad["params"], "the report carries the call's own params")
+	require.Equal(t, map[string]any{
+		"content": []any{map[string]any{"type": "text", "text": "MCP error -32603: internal error"}},
+		"details": map[string]any{"status": "failed"},
+	}, bad["result"])
+	require.Len(t, afters["quiet"], 1, "a successful call with no after_tool_call is reported from its result")
+	require.NotContains(t, afters["quiet"][0], "error")
+	require.Empty(t, afters["lost"], "a call with no transcript result has an unknown outcome and is not reported")
+	require.Empty(t, afters["elsewhere"], "a call of another run is not reported")
+
+	for _, frame := range frames {
+		if frame["hook"] != "agent_end" {
+			continue
+		}
+		event, _ := frame["event"].(map[string]any)
+		require.NotContains(t, event, "messages", "agent_end still drops the transcript")
+	}
+}
+
+// Without a live config accessor the shim reads api.config, and a config read
+// that throws still forwards the hook, just without servers.
+func TestGenerateOpenClawShimMCPServersFallBackAndNeverBreakHooks(t *testing.T) {
+	t.Parallel()
+	frames := runOpenClawShim(t, `import plugin from "./index.js"
+const fallback = {}
+plugin.register({
+  config: { mcp: { servers: { speakeasy: { url: "https://app.example.com/agent-mcp/agent-1" } } } },
+  on(name, fn) { fallback[name] = fn },
+})
+const throwing = {}
+plugin.register({
+  runtime: { config: { current: () => { throw new Error("config unavailable") } } },
+  on(name, fn) { throwing[name] = fn },
+})
+const ctx = (runId) => ({ runId, sessionId: "s-" + runId, agentId: "main" })
+await fallback.before_tool_call({ toolName: "speakeasy__list_servers", toolCallId: "fallback", params: {} }, ctx("fallback"))
+const reply = await throwing.before_tool_call({ toolName: "speakeasy__list_servers", toolCallId: "throwing", params: {} }, ctx("throwing"))
+if (reply?.block) throw new Error("a config read failure must not block the call")
+setTimeout(() => process.exit(0), 500)
+`)
+	byCall := map[string]map[string]any{}
+	for _, frame := range frames {
+		event, _ := frame["event"].(map[string]any)
+		callID, _ := event["toolCallId"].(string)
+		byCall[callID] = frame
+	}
+	require.Equal(t, []any{map[string]any{"name": "speakeasy", "url": "https://app.example.com/agent-mcp/agent-1"}}, byCall["fallback"]["mcpServers"])
+	throwing, ok := byCall["throwing"]
+	require.True(t, ok, "the hook is still forwarded when the config read throws")
+	_, ok = throwing["mcpServers"]
+	require.False(t, ok)
 }
 
 // Some OpenClaw releases load plugins inside short-lived CLI commands such as

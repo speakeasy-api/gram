@@ -47,7 +47,8 @@ INSERT INTO security_audit_logs (
   after_snapshot,
   metadata,
   acting_surface,
-  acting_client_id
+  acting_client_id,
+  is_internal
 ) VALUES (
   $1,
   $2,
@@ -64,7 +65,8 @@ INSERT INTO security_audit_logs (
   $13,
   $14,
   $15,
-  $16
+  $16,
+  $17
 )
 RETURNING id, organization_id
 `
@@ -86,6 +88,7 @@ type InsertSecurityAuditLogParams struct {
 	Metadata           []byte
 	ActingSurface      pgtype.Text
 	ActingClientID     pgtype.Text
+	IsInternal         bool
 }
 
 type InsertSecurityAuditLogRow struct {
@@ -113,6 +116,7 @@ func (q *Queries) InsertSecurityAuditLog(ctx context.Context, arg InsertSecurity
 		arg.Metadata,
 		arg.ActingSurface,
 		arg.ActingClientID,
+		arg.IsInternal,
 	)
 	var i InsertSecurityAuditLogRow
 	err := row.Scan(&i.ID, &i.OrganizationID)
@@ -207,9 +211,14 @@ SELECT
 FROM security_audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
+  AND NOT is_internal
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
+  )
+  AND (
+    $3::text IS NULL
+    OR ($3::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
   )
 GROUP BY action
 ORDER BY count DESC, action ASC
@@ -218,6 +227,7 @@ ORDER BY count DESC, action ASC
 type ListSecurityActionFacetsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
+	Origin         pgtype.Text
 }
 
 type ListSecurityActionFacetsRow struct {
@@ -229,7 +239,7 @@ type ListSecurityActionFacetsRow struct {
 // Mirrors ListAuditActionFacets in audit/queries.sql over security_audit_logs; keep
 // the parameters and columns identical so the generated types convert.
 func (q *Queries) ListSecurityActionFacets(ctx context.Context, arg ListSecurityActionFacetsParams) ([]ListSecurityActionFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listSecurityActionFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listSecurityActionFacets, arg.OrganizationID, arg.ProjectID, arg.Origin)
 	if err != nil {
 		return nil, err
 	}
@@ -254,9 +264,14 @@ WITH filtered_logs AS (
   FROM security_audit_logs
   WHERE organization_id = $1
     AND subject_type <> 'assistant'
+    AND NOT is_internal
     AND (
       $2::uuid IS NULL
       OR project_id = $2::uuid
+    )
+    AND (
+      $3::text IS NULL
+      OR ($3::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
     )
 ), actor_counts AS (
   SELECT
@@ -298,6 +313,7 @@ ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC
 type ListSecurityActorFacetsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
+	Origin         pgtype.Text
 }
 
 type ListSecurityActorFacetsRow struct {
@@ -311,7 +327,7 @@ type ListSecurityActorFacetsRow struct {
 // Mirrors ListAuditActorFacets in audit/queries.sql over security_audit_logs; keep
 // the parameters and columns identical so the generated types convert.
 func (q *Queries) ListSecurityActorFacets(ctx context.Context, arg ListSecurityActorFacetsParams) ([]ListSecurityActorFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listSecurityActorFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listSecurityActorFacets, arg.OrganizationID, arg.ProjectID, arg.Origin)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +353,7 @@ func (q *Queries) ListSecurityActorFacets(ctx context.Context, arg ListSecurityA
 }
 
 const listSecurityAuditLogs = `-- name: ListSecurityAuditLogs :many
-SELECT a.id, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug, u.display_name AS actor_user_display_name
+SELECT a.id, a.is_internal, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug, u.display_name AS actor_user_display_name
 FROM security_audit_logs a
 LEFT JOIN projects p ON p.id = a.project_id
 LEFT JOIN organization_user_relationships actor_membership
@@ -373,25 +389,32 @@ WHERE a.organization_id = $1
     )
     OR a.subject_type = $7::text
   )
+  AND ($9::boolean OR NOT a.is_internal)
   AND (
-    $9::text IS NULL
-    OR a.subject_id = $9::text
+    $10::text IS NULL
+    OR a.subject_id = $10::text
   )
   AND (
-    coalesce(cardinality($10::text[]), 0) = 0
-    OR a.subject_id = ANY($10::text[])
+    coalesce(cardinality($11::text[]), 0) = 0
+    OR a.subject_id = ANY($11::text[])
   )
   AND (
-    $11::text IS NULL
-    OR COALESCE(a.acting_surface, 'unknown') = $11::text
+    $12::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = $12::text
+  )
+  -- Origin splits the log by who initiated a change: 'system' is Speakeasy
+  -- acting on its own (background jobs), 'user' is everything else.
+  AND (
+    $13::text IS NULL
+    OR ($13::text = 'system') = (a.acting_surface IS NOT DISTINCT FROM 'system')
   )
   AND (
-    $12::timestamptz IS NULL
-    OR a.created_at >= $12::timestamptz
+    $14::timestamptz IS NULL
+    OR a.created_at >= $14::timestamptz
   )
   AND (
-    $13::timestamptz IS NULL
-    OR a.created_at < $13::timestamptz
+    $15::timestamptz IS NULL
+    OR a.created_at < $15::timestamptz
   )
 ORDER BY a.seq DESC
 LIMIT 51
@@ -406,15 +429,18 @@ type ListSecurityAuditLogsParams struct {
 	Action                 pgtype.Text
 	SubjectType            pgtype.Text
 	IncludeAssistantEvents bool
+	IncludeInternalEvents  bool
 	SubjectID              pgtype.Text
 	SubjectIds             []string
 	ActingSurface          pgtype.Text
+	Origin                 pgtype.Text
 	CreatedFrom            pgtype.Timestamptz
 	CreatedTo              pgtype.Timestamptz
 }
 
 type ListSecurityAuditLogsRow struct {
 	ID                   uuid.UUID
+	IsInternal           bool
 	Seq                  int64
 	OrganizationID       string
 	ProjectID            uuid.NullUUID
@@ -450,9 +476,11 @@ func (q *Queries) ListSecurityAuditLogs(ctx context.Context, arg ListSecurityAud
 		arg.Action,
 		arg.SubjectType,
 		arg.IncludeAssistantEvents,
+		arg.IncludeInternalEvents,
 		arg.SubjectID,
 		arg.SubjectIds,
 		arg.ActingSurface,
+		arg.Origin,
 		arg.CreatedFrom,
 		arg.CreatedTo,
 	)
@@ -465,6 +493,7 @@ func (q *Queries) ListSecurityAuditLogs(ctx context.Context, arg ListSecurityAud
 		var i ListSecurityAuditLogsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.IsInternal,
 			&i.Seq,
 			&i.OrganizationID,
 			&i.ProjectID,
@@ -504,9 +533,14 @@ SELECT
 FROM security_audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
+  AND NOT is_internal
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
+  )
+  AND (
+    $3::text IS NULL
+    OR ($3::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
   )
 GROUP BY COALESCE(acting_surface, 'unknown')
 ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
@@ -515,6 +549,7 @@ ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
 type ListSecuritySurfaceFacetsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
+	Origin         pgtype.Text
 }
 
 type ListSecuritySurfaceFacetsRow struct {
@@ -526,7 +561,7 @@ type ListSecuritySurfaceFacetsRow struct {
 // Mirrors ListAuditSurfaceFacets in audit/queries.sql over security_audit_logs; keep
 // the parameters and columns identical so the generated types convert.
 func (q *Queries) ListSecuritySurfaceFacets(ctx context.Context, arg ListSecuritySurfaceFacetsParams) ([]ListSecuritySurfaceFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listSecuritySurfaceFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listSecuritySurfaceFacets, arg.OrganizationID, arg.ProjectID, arg.Origin)
 	if err != nil {
 		return nil, err
 	}
@@ -561,7 +596,7 @@ WITH batch AS (
   DELETE FROM audit_logs
   USING batch
   WHERE audit_logs.id = batch.id
-  RETURNING audit_logs.id, audit_logs.seq, audit_logs.organization_id, audit_logs.project_id, audit_logs.actor_id, audit_logs.actor_type, audit_logs.actor_display_name, audit_logs.actor_slug, audit_logs.action, audit_logs.subject_id, audit_logs.subject_type, audit_logs.subject_display_name, audit_logs.subject_slug, audit_logs.before_snapshot, audit_logs.after_snapshot, audit_logs.metadata, audit_logs.acting_surface, audit_logs.acting_client_id, audit_logs.created_at
+  RETURNING audit_logs.id, audit_logs.is_internal, audit_logs.seq, audit_logs.organization_id, audit_logs.project_id, audit_logs.actor_id, audit_logs.actor_type, audit_logs.actor_display_name, audit_logs.actor_slug, audit_logs.action, audit_logs.subject_id, audit_logs.subject_type, audit_logs.subject_display_name, audit_logs.subject_slug, audit_logs.before_snapshot, audit_logs.after_snapshot, audit_logs.metadata, audit_logs.acting_surface, audit_logs.acting_client_id, audit_logs.created_at
 )
 INSERT INTO security_audit_logs (
   id,
@@ -582,6 +617,7 @@ INSERT INTO security_audit_logs (
   metadata,
   acting_surface,
   acting_client_id,
+  is_internal,
   created_at
 )
 SELECT
@@ -603,6 +639,7 @@ SELECT
   metadata,
   acting_surface,
   acting_client_id,
+  is_internal,
   created_at
 FROM moved
 `

@@ -1,11 +1,13 @@
 package platformmcp
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -473,34 +475,57 @@ func (s *AccessReadService) getMemberMCPAccess(ctx context.Context, principal Pr
 	if err != nil {
 		return GetMemberMCPAccessOutput{}, fmt.Errorf("load platform mcp access member grants: %w", err)
 	}
-	roles, err := s.roles.ListRoles(ctx, principal.OrganizationID)
+	servers, truncated, err := grantedMCPAccess(ctx, s.db, s.roles, principal.OrganizationID, grants)
 	if err != nil {
-		return GetMemberMCPAccessOutput{}, fmt.Errorf("list member access role names: %w", err)
+		return GetMemberMCPAccessOutput{}, fmt.Errorf("explain member mcp access: %w", err)
 	}
-	roleNames := make(map[string]string, len(roles.Roles))
-	for _, role := range roles.Roles {
+	output := GetMemberMCPAccessOutput{Servers: make([]MemberMCPAccessRow, 0, len(servers)), Truncated: truncated}
+	for _, server := range servers {
+		output.Servers = append(output.Servers, server.access)
+	}
+	return output, nil
+}
+
+// grantedMCPServer is one MCP server and what a set of grants allows on it.
+type grantedMCPServer struct {
+	server platformrepo.ListPlatformMCPInventoryRow
+	access MemberMCPAccessRow
+}
+
+// grantedMCPAccess evaluates grants against every MCP server in the
+// organization with the dashboard's access explanation, so blocks, roles and
+// grants to everyone count as the MCP endpoint counts them. Servers come back
+// by project name, then server name; truncated is true when the organization
+// holds more servers than one read evaluates.
+func grantedMCPAccess(ctx context.Context, db platformrepo.DBTX, roles *access.RoleManager, organizationID string, grants []authz.Grant) ([]grantedMCPServer, bool, error) {
+	listed, err := roles.ListRoles(ctx, organizationID)
+	if err != nil {
+		return nil, false, fmt.Errorf("list access role names: %w", err)
+	}
+	roleNames := make(map[string]string, len(listed.Roles))
+	for _, role := range listed.Roles {
 		roleNames[role.PrincipalUrn] = role.Name
 	}
 	//nolint:exhaustruct // Optional inventory filters intentionally stay unset.
-	rows, err := platformrepo.New(s.db).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
-		OrganizationID: principal.OrganizationID, SkipAuthorizationFilter: true, LimitValue: maxMemberMCPAccessServers + 1,
+	rows, err := platformrepo.New(db).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
+		OrganizationID: organizationID, SkipAuthorizationFilter: true, LimitValue: maxMemberMCPAccessServers + 1,
 	})
 	if err != nil {
-		return GetMemberMCPAccessOutput{}, fmt.Errorf("list platform mcp access inventory: %w", err)
+		return nil, false, fmt.Errorf("list platform mcp access inventory: %w", err)
 	}
 	truncated := len(rows) > maxMemberMCPAccessServers
 	if truncated {
 		rows = rows[:maxMemberMCPAccessServers]
 	}
-	output := GetMemberMCPAccessOutput{Servers: make([]MemberMCPAccessRow, 0, len(rows)), Truncated: truncated}
+	servers := make([]grantedMCPServer, 0, len(rows))
 	for _, row := range rows {
 		name := conv.Default(row.McpName.String, row.McpSlug.String)
 		if name == "" {
 			name = row.McpServerID.String()
 		}
-		effective, rules, err := access.SummarizeMCPAccessRules(grants, row.McpServerID.String(), row.ProjectID.String(), roleNames)
+		effective, rules, err := access.SummarizeMCPAccessRules(serverConnectGrants(grants, row), row.McpServerID.String(), row.ProjectID.String(), roleNames)
 		if err != nil {
-			return GetMemberMCPAccessOutput{}, fmt.Errorf("explain member access to MCP %q: %w", name, err)
+			return nil, false, fmt.Errorf("explain access to MCP %q: %w", name, err)
 		}
 		//nolint:exhaustruct // Access mode helpers only consume endpoint-kind fields.
 		item := platformrepo.GetPlatformMCPInventoryItemRow{
@@ -521,23 +546,41 @@ func (s *AccessReadService) getMemberMCPAccess(ctx context.Context, principal Pr
 				toolAccess, connectionAccess = "none", "none"
 			}
 		}
-		output.Servers = append(output.Servers, MemberMCPAccessRow{
+		servers = append(servers, grantedMCPServer{server: row, access: MemberMCPAccessRow{
 			ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName, MCPID: row.McpServerID.String(), MCPName: name,
 			Backend: accessBackend(item), Visibility: row.Visibility, AuthorizationMode: mode, ConnectionAccess: connectionAccess,
 			CanConnect: canConnect, ToolAccess: toolAccess, CanView: effective.CanView, CanManage: effective.CanManage, Rules: rules,
-		})
+		}})
 	}
-	sort.Slice(output.Servers, func(i, j int) bool {
-		left, right := output.Servers[i], output.Servers[j]
-		if left.ProjectName != right.ProjectName {
-			return left.ProjectName < right.ProjectName
-		}
-		if left.MCPName != right.MCPName {
-			return left.MCPName < right.MCPName
-		}
-		return left.MCPID < right.MCPID
+	slices.SortFunc(servers, func(a, b grantedMCPServer) int {
+		return cmp.Or(cmp.Compare(a.access.ProjectName, b.access.ProjectName), cmp.Compare(a.access.MCPName, b.access.MCPName), cmp.Compare(a.access.MCPID, b.access.MCPID))
 	})
-	return output, nil
+	return servers, truncated, nil
+}
+
+// serverConnectGrants returns grants as they reach server. The dashboard's
+// Access page names a toolset-backed server by its toolset ID, which the
+// organization gateway checks, while the server's own endpoint checks the
+// server's ID, so a grant naming either one reaches the server.
+func serverConnectGrants(grants []authz.Grant, server platformrepo.ListPlatformMCPInventoryRow) []authz.Grant {
+	if !server.ToolsetID.Valid || server.ToolsetID.UUID == server.McpServerID {
+		return grants
+	}
+	toolsetID := server.ToolsetID.UUID.String()
+	var aliases []authz.Grant
+	for _, grant := range grants {
+		if grant.Selector[authz.SelectorKeyResourceID] != toolsetID {
+			continue
+		}
+		alias := grant
+		alias.Selector = maps.Clone(grant.Selector)
+		alias.Selector[authz.SelectorKeyResourceID] = server.McpServerID.String()
+		aliases = append(aliases, alias)
+	}
+	if len(aliases) == 0 {
+		return grants
+	}
+	return slices.Concat(grants, aliases)
 }
 
 func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principal, input GetMCPAccessInput) (GetMCPAccessOutput, error) {
@@ -975,8 +1018,6 @@ func accessBackend(row platformrepo.GetPlatformMCPInventoryItemRow) string {
 		return "hosted"
 	case row.UnproxiedMcpServerID.Valid:
 		return "unproxied"
-	case row.BuiltinBackend.Valid:
-		return "built_in"
 	default:
 		return "legacy"
 	}

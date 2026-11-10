@@ -40,6 +40,7 @@ func (l *Logger) LogChatSessionAccess(ctx context.Context, dbtx repo.DBTX, event
 	action := ActionChatSessionAccess
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -124,6 +125,7 @@ func (l *Logger) LogChatSessionMove(ctx context.Context, dbtx repo.DBTX, event L
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -202,6 +204,7 @@ func (l *Logger) LogChatSessionRecall(ctx context.Context, dbtx repo.DBTX, event
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -282,6 +285,7 @@ func (l *Logger) LogChatSessionHandoffExport(ctx context.Context, dbtx repo.DBTX
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

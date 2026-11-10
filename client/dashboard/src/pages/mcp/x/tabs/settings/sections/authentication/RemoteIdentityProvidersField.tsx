@@ -1,6 +1,7 @@
 import { FieldError } from "@/components/ui/Field";
 import { RequireScope } from "@/components/require-scope";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { remoteSessionScopeTier } from "@/lib/sources";
 import { IssuerLink, IssuerLogo, ScopeBadge } from "@/lib/remote-identity";
 import { issuerDisplayName } from "@/pages/remote-identity-providers/issuerDisplay";
@@ -57,9 +58,7 @@ export function RemoteIdentityProvidersField({
   let providerControls: ReactNode;
   if (isLoading) {
     providerControls = (
-      <Text muted small>
-        Loading…
-      </Text>
+      <Skeleton label="Loading authorization servers" className="h-9 w-48" />
     );
   } else if (associatedIssuers.length === 0 && isError) {
     providerControls = loadError;

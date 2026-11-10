@@ -34,9 +34,7 @@ vi.mock("@/components/page-templates", async () => {
       scopeAll,
       resourceId,
       children,
-    }: ComponentProps<
-      typeof import("@/components/page-templates").FormPage
-    >) =>
+    }: ComponentProps<typeof import("@/components/page-templates").FormPage>) =>
       scope ? (
         <RequireScope
           scope={scope}
@@ -58,8 +56,18 @@ vi.mock("@/components/page-layout", () => {
       Header: Object.assign(Frame, { Breadcrumbs: () => null }),
       Body: Frame,
     }),
+    useInPageFrame: () => true,
   };
 });
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    tasks: [],
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => {
   const hasScope = (scope: string, resourceId?: string) =>
     resourceId

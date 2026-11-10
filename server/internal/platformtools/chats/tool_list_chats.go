@@ -114,6 +114,9 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		Offset:            input.Offset,
 		SortBy:            input.SortBy,
 		SortOrder:         input.SortOrder,
+		// Pinned-first ordering is a dashboard layout concern; the tool lists
+		// by the requested sort only.
+		PinnedFirst: false,
 	})
 	if err != nil {
 		return fmt.Errorf("list chats: %w", err)

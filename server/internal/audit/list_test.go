@@ -30,6 +30,7 @@ func TestListAuditLogs_IncludeAssistantEvents(t *testing.T) {
 	queries := repo.New(conn)
 	for _, subjectType := range []string{"project", "assistant"} {
 		_, err := queries.InsertAuditLog(ctx, repo.InsertAuditLogParams{
+			IsInternal:     false,
 			OrganizationID: orgID, ActorID: "user:test", ActorType: "user",
 			Action: "test:create", SubjectID: uuid.NewString(), SubjectType: subjectType,
 		})
@@ -73,6 +74,7 @@ func TestListAuditLogs_Window(t *testing.T) {
 	stamps := make([]time.Time, 0, 3)
 	for i := range 3 {
 		row, err := queries.InsertAuditLog(ctx, repo.InsertAuditLogParams{
+			IsInternal:     false,
 			OrganizationID: orgID, ActorID: "user:test", ActorType: "user",
 			Action: "test:create", SubjectID: uuid.NewString(), SubjectType: "project",
 		})
@@ -154,6 +156,7 @@ func TestListAuditLogs_ActorNameIsTenantScoped(t *testing.T) {
 	queries := repo.New(conn)
 	for _, actor := range actors {
 		_, err := queries.InsertAuditLog(ctx, repo.InsertAuditLogParams{
+			IsInternal:     false,
 			OrganizationID: readingOrg, ActorID: actor.id, ActorType: "user",
 			ActorDisplayName: conv.ToPGText(actor.id + "@example.test"),
 			Action:           "test:create", SubjectID: uuid.NewString(), SubjectType: "project",
@@ -176,6 +179,77 @@ func TestListAuditLogs_ActorNameIsTenantScoped(t *testing.T) {
 		"a soft-deleted membership still names the person who acted")
 	require.Empty(t, resolved[actors[2].id],
 		"an actor from another organization must not be named here")
+}
+
+func TestListAuditLogs_InternalClassification(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	orgID := uuid.NewString()
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{ID: orgID, Name: "Test Organization", Slug: "test-" + orgID[:8]})
+	require.NoError(t, err)
+	q := repo.New(conn)
+	for _, subject := range []string{"catalog_promotion", "mcp_server"} {
+		for _, internal := range []bool{false, true} {
+			actor, action, surface := "visible", "visible:create", "dashboard"
+			if internal {
+				actor, action, surface = "hidden", "hidden:create", "platform_mcp"
+			}
+			_, err = q.InsertAuditLog(ctx, repo.InsertAuditLogParams{OrganizationID: orgID, ActorID: actor, ActorType: "system", Action: action, SubjectID: subject, SubjectType: subject, IsInternal: internal, ActingSurface: pgtype.Text{String: surface, Valid: true}})
+			require.NoError(t, err)
+		}
+	}
+	base := repo.ListAuditLogsParams{OrganizationID: orgID}
+	for _, filter := range []string{"none", "action", "subject_type", "subject_id", "subject_ids"} {
+		p := base
+		switch filter {
+		case "action":
+			p.Action = pgtype.Text{String: "hidden:create", Valid: true}
+		case "subject_type":
+			p.SubjectType = pgtype.Text{String: "mcp_server", Valid: true}
+		case "subject_id":
+			p.SubjectID = pgtype.Text{String: "mcp_server", Valid: true}
+		case "subject_ids":
+			p.SubjectIds = []string{"mcp_server"}
+		}
+		rows, err := q.ListAuditLogs(ctx, p)
+		require.NoError(t, err)
+		switch filter {
+		case "none":
+			require.Len(t, rows, 2)
+		case "action":
+			require.Empty(t, rows)
+		default:
+			require.Len(t, rows, 1, filter)
+		}
+		for _, row := range rows {
+			require.False(t, row.IsInternal, filter)
+		}
+	}
+	actors, err := q.ListAuditActorFacets(ctx, repo.ListAuditActorFacetsParams{OrganizationID: orgID})
+	require.NoError(t, err)
+	require.Len(t, actors, 1)
+	actions, err := q.ListAuditActionFacets(ctx, repo.ListAuditActionFacetsParams{OrganizationID: orgID})
+	require.NoError(t, err)
+	require.Len(t, actions, 1)
+	surfaces, err := q.ListAuditSurfaceFacets(ctx, repo.ListAuditSurfaceFacetsParams{OrganizationID: orgID})
+	require.NoError(t, err)
+	require.Len(t, surfaces, 1)
+	base.IncludeInternalEvents = true
+	rows, err := q.ListAuditLogs(ctx, base)
+	require.NoError(t, err)
+	require.Len(t, rows, 4)
+	for i, row := range rows {
+		p := base
+		p.CursorSeq = pgtype.Int8{Int64: row.Seq, Valid: true}
+		next, err := q.ListAuditLogs(ctx, p)
+		require.NoError(t, err)
+		require.Len(t, next, len(rows)-i-1)
+		for j := range next {
+			require.Equal(t, rows[i+1+j], next[j])
+		}
+	}
 }
 
 func TestListAuditLogsActorTypeIsOptional(t *testing.T) {

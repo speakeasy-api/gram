@@ -96,7 +96,7 @@ func (q *Queries) ActivityInsertAnthropicInferenceConfig(ctx context.Context, ar
 
 const activityInsertAssistantThread = `-- name: ActivityInsertAssistantThread :exec
 INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, last_event_at)
-VALUES ($1, $2, $3, $4, $5, 'dashboard', now() - interval '38 minutes')
+VALUES ($1, $2, $3, $4, $5, $6, now() - interval '38 minutes')
 `
 
 type ActivityInsertAssistantThreadParams struct {
@@ -105,6 +105,7 @@ type ActivityInsertAssistantThreadParams struct {
 	ProjectID     uuid.UUID
 	CorrelationID string
 	ChatID        uuid.UUID
+	SourceKind    string
 }
 
 func (q *Queries) ActivityInsertAssistantThread(ctx context.Context, arg ActivityInsertAssistantThreadParams) error {
@@ -114,6 +115,7 @@ func (q *Queries) ActivityInsertAssistantThread(ctx context.Context, arg Activit
 		arg.ProjectID,
 		arg.CorrelationID,
 		arg.ChatID,
+		arg.SourceKind,
 	)
 	return err
 }
@@ -304,14 +306,14 @@ func (q *Queries) ActivityInsertKillswitchAuditLog(ctx context.Context, arg Acti
 const activityInsertKillswitchExpiredAuditLog = `-- name: ActivityInsertKillswitchExpiredAuditLog :exec
 INSERT INTO audit_logs
   (id, organization_id, project_id, actor_id, actor_type, actor_display_name,
-   action, subject_id, subject_type, after_snapshot, metadata, created_at)
+   action, subject_id, subject_type, after_snapshot, metadata, acting_surface, created_at)
 VALUES
   ($1, $2, NULL,
    'system', 'user', 'System', 'killswitch:expire',
    $3,
    'killswitch_prescription', NULL,
    jsonb_build_object('version', 1, 'expired_at', now() - interval '1 day'),
-   now() - interval '23 hours')
+   'system', now() - interval '23 hours')
 `
 
 type ActivityInsertKillswitchExpiredAuditLogParams struct {
@@ -320,7 +322,8 @@ type ActivityInsertKillswitchExpiredAuditLogParams struct {
 	SubjectID      string
 }
 
-// Expiry carries the version and database-time deadline.
+// Expiry carries the version and database-time deadline. Speakeasy records it
+// on its own, so it lands on the audit log page's System view.
 func (q *Queries) ActivityInsertKillswitchExpiredAuditLog(ctx context.Context, arg ActivityInsertKillswitchExpiredAuditLogParams) error {
 	_, err := q.db.Exec(ctx, activityInsertKillswitchExpiredAuditLog, arg.ID, arg.OrganizationID, arg.SubjectID)
 	return err

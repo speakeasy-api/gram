@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { describe, expect, it } from "vitest";
 import { groupConsecutiveByActor } from "./audit-log-feed";

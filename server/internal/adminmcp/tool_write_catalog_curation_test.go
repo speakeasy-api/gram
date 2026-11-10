@@ -2,105 +2,93 @@ package adminmcp
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
-	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/stretchr/testify/require"
 )
 
 type curationFake struct {
 	candidate catalogpromotion.Candidate
-	invalid   bool
+	fail      error
 	calls     atomic.Int32
 }
 
 func (f *curationFake) ValidateCurationTx(_ context.Context, _ pgx.Tx, org string, id uuid.UUID, revision, action string) (catalogpromotion.Candidate, error) {
-	if !curationTransition(f.candidate.Status, action) || f.invalid || org != f.candidate.OrganizationID || id.String() != f.candidate.ID || revision != f.candidate.CurationRevision {
+	if !curationTransition(f.candidate.Status, action) || org != f.candidate.OrganizationID || id.String() != f.candidate.ID || revision != f.candidate.CurationRevision {
 		return catalogpromotion.Candidate{}, catalogpromotion.ErrStale
 	}
 	return f.candidate, nil
 }
 func (f *curationFake) CurateTx(_ context.Context, _ pgx.Tx, request catalogpromotion.CurationRequest, _ string) (catalogpromotion.Candidate, error) {
 	f.calls.Add(1)
+	if f.fail != nil {
+		return catalogpromotion.Candidate{}, f.fail
+	}
+	if request.RetryKey == "" {
+		return catalogpromotion.Candidate{}, catalogpromotion.ErrInvalid
+	}
 	result := f.candidate
 	result.Status = curationStatus(request.Action)
 	result.CurationRevision = uuid.NewString()
 	return result, nil
 }
-func TestCatalogCurationRequiresApprovalAndReplaysReceipt(t *testing.T) {
-	t.Parallel()
-	f := newProposalFixture(t, "catalog_curation")
-	project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
-	require.NoError(t, err)
-	mutator := &curationFake{candidate: catalogpromotion.Candidate{ID: uuid.NewString(), OrganizationID: f.orgA, CurationRevision: uuid.NewString(), Status: "candidate", ProjectID: project.ID.String()}}
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationCurateRegistryPromotionCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
-	w := &catalogCurationWriter{store: f.store, writes: writes, baseURL: "https://staff.example.test/admin-mcp", mutator: mutator, now: time.Now}
-	input := PrepareCatalogCurationInput{OrganizationID: f.orgA, PromotionID: mutator.candidate.ID, CurationRevision: mutator.candidate.CurationRevision, RetryKey: "curate-example", Action: "reject"}
-	ctx := writeContext(t, f)
-	prepared, err := w.prepare(ctx, input)
-	require.NoError(t, err)
-	require.Zero(t, mutator.calls.Load())
-	replay, err := w.prepare(ctx, input)
-	require.NoError(t, err)
-	require.Equal(t, prepared.ProposalID, replay.ProposalID)
-	require.True(t, replay.Replay)
-	tools := newWriteTools(f.store, writes, w.baseURL, map[WriteOperation]operationWriter{OperationCurateRegistryPromotionCandidate: w}) //nolint:exhaustive // Only this operation is enabled.
-	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
-	require.ErrorIs(t, err, ErrProposalNotApproved)
-	proposal, err := f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
-	require.NoError(t, err)
-	require.False(t, proposal.PlatformGlobal)
-	require.True(t, proposal.Target.ProjectID.Valid)
-	require.Equal(t, project.ID, proposal.Target.ProjectID.UUID)
-	require.Equal(t, f.orgA, proposal.Target.OrganizationID)
-	view, err := w.view(proposal)
-	require.NoError(t, err)
-	require.Contains(t, view.SideEffects, "until restored")
-	_, err = f.store.Approve(ctx, proposal.ID, "user:other-staff", proposal.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
-	require.Error(t, err)
-	_, err = f.store.Approve(ctx, proposal.ID, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
-	require.NoError(t, err)
-	result, err := tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
-	require.NoError(t, err)
-	require.Equal(t, string(ProposalSucceeded), result.Status)
-	result, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
-	require.NoError(t, err)
-	require.True(t, result.Replay)
-	require.Equal(t, int32(1), mutator.calls.Load())
+func newCurationWriter(f writeFixture) (*catalogCurationWriter, *curationFake, CatalogCurationInput) {
+	mutator := &curationFake{candidate: catalogpromotion.Candidate{ID: uuid.NewString(), OrganizationID: f.orgA, CurationRevision: uuid.NewString(), Status: "candidate", ProjectID: uuid.NewString()}}
+	writes := WriteConfig{Enabled: true}
+	w := &catalogCurationWriter{runner: f.runner, writes: writes, mutator: mutator}
+	return w, mutator, CatalogCurationInput{OrganizationID: f.orgA, PromotionID: mutator.candidate.ID, CurationRevision: mutator.candidate.CurationRevision, Action: "reject"}
 }
-func TestCatalogCurationRejectsChangedStateAfterApproval(t *testing.T) {
+
+func TestCatalogCurationAppliesAndRecordsEvent(t *testing.T) {
 	t.Parallel()
-	f := newProposalFixture(t, "catalog_curation_stale")
-	project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
+	f := newWriteFixture(t, "catalog_curation")
+	w, mutator, input := newCurationWriter(f)
+	receipt, err := w.apply(writeContext(t, f), input)
 	require.NoError(t, err)
-	mutator := &curationFake{candidate: catalogpromotion.Candidate{ID: uuid.NewString(), OrganizationID: f.orgA, CurationRevision: uuid.NewString(), Status: "candidate", ProjectID: project.ID.String()}}
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationCurateRegistryPromotionCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
-	w := &catalogCurationWriter{store: f.store, writes: writes, baseURL: "", mutator: mutator, now: time.Now}
+	require.Equal(t, mutator.candidate.ID, receipt.PromotionID)
+	require.Equal(t, "rejected", receipt.Status)
+	require.Contains(t, receipt.SideEffects, "until restored")
+	require.Equal(t, int32(1), mutator.calls.Load())
+	require.Equal(t, 1, countWriteEvents(t, f.db, OperationCurateRegistryPromotionCandidate, f.orgA, writeEventExecuted))
+}
+
+func TestCatalogCurationRejectsChangedRevisionAndOtherTenant(t *testing.T) {
+	t.Parallel()
+	f := newWriteFixture(t, "catalog_curation_stale")
+	w, mutator, input := newCurationWriter(f)
 	ctx := writeContext(t, f)
-	prepared, err := w.prepare(ctx, PrepareCatalogCurationInput{OrganizationID: f.orgA, PromotionID: mutator.candidate.ID, CurationRevision: mutator.candidate.CurationRevision, RetryKey: "curate", Action: "archive"})
-	require.NoError(t, err)
-	proposal, err := f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
-	require.NoError(t, err)
-	_, err = f.store.Approve(ctx, proposal.ID, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
-	require.NoError(t, err)
+	otherTenant := input
+	otherTenant.OrganizationID = f.orgB
+	_, err := w.apply(ctx, otherTenant)
+	require.ErrorIs(t, err, ErrStaleState)
 	mutator.candidate.CurationRevision = uuid.NewString()
-	tools := newWriteTools(f.store, writes, "", map[WriteOperation]operationWriter{OperationCurateRegistryPromotionCandidate: w}) //nolint:exhaustive // Only this operation is enabled.
-	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+	_, err = w.apply(ctx, input)
 	require.ErrorIs(t, err, ErrStaleState)
 	require.Zero(t, mutator.calls.Load())
-	proposal.Target.OrganizationID = f.orgB
-	_, err = storedCatalogCuration(proposal)
-	require.ErrorIs(t, err, ErrProposalInvalidated)
+	require.Equal(t, 1, countWriteEvents(t, f.db, OperationCurateRegistryPromotionCandidate, f.orgA, writeEventFailed))
 }
+
+func TestCatalogCurationHidesMutatorFailure(t *testing.T) {
+	t.Parallel()
+	f := newWriteFixture(t, "catalog_curation_failure")
+	w, mutator, input := newCurationWriter(f)
+	mutator.fail = errors.New("private database details")
+	_, err := w.apply(writeContext(t, f), input)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "private database details")
+	require.Zero(t, countWriteEvents(t, f.db, OperationCurateRegistryPromotionCandidate, f.orgA, writeEventExecuted))
+	require.Equal(t, 1, countWriteEvents(t, f.db, OperationCurateRegistryPromotionCandidate, f.orgA, writeEventFailed))
+}
+
 func TestCatalogCurationRequiresWriteScope(t *testing.T) {
 	t.Parallel()
-	w := &catalogCurationWriter{writes: WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationCurateRegistryPromotionCandidate: true}}} //nolint:exhaustive // Only this operation is enabled.
-	_, err := w.prepare(writePrincipalContext(t, []string{ScopeRead}), PrepareCatalogCurationInput{})
+	w := &catalogCurationWriter{writes: WriteConfig{Enabled: true}}
+	_, err := w.apply(writePrincipalContext(t, []string{ScopeRead}), CatalogCurationInput{})
 	require.ErrorIs(t, err, ErrWriteScope)
 }
 

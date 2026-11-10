@@ -1,6 +1,14 @@
 import { Page } from "@/components/page-layout";
-import { IdentityRail } from "@/components/identity-rail";
-import { identityRailItems } from "@/components/identity-rail-items";
+import {
+  IdentityRail,
+  type IdentityRailItem,
+} from "@/components/identity-rail";
+import { useAgentMcpSignInAttention } from "./useAgentMcpSignInAttention";
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+import {
+  identityRailItems,
+  identitySectionCrumbs,
+} from "@/components/identity-rail-items";
 import {
   removeResourceVisits,
   useRecentLabelOverride,
@@ -14,7 +22,6 @@ import {
 } from "@/components/route-not-found-state";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { getInitials } from "@/lib/initials";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
@@ -25,11 +32,8 @@ import {
 } from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
-import {
-  AgentHeaderActions,
-  AgentIdentityProfile,
-  AgentRenameAction,
-} from "./AgentIdentityProfile";
+import { AgentIdentityProfile } from "./AgentIdentityProfile";
+import { AgentName } from "@/pages/agents/agent-admin";
 import { useIdentitySubject } from "./useIdentitySubject";
 import {
   useCallback,
@@ -209,14 +213,24 @@ function IdentityDetailContent(): JSX.Element {
 
   const identity = identityQuery.data;
   const context: IdentityOutletContext = { identity, urn };
+  const railItems = identityRailItems(
+    routes,
+    encodedUrn ?? "",
+    // The Findings filter is that page's own, not a setting to
+    // carry into the other sections and back.
+    withoutFindingsFilter(location.search),
+    identity.kind,
+  );
 
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs
-          substitutions={
-            encodedUrn ? { [encodedUrn]: identity.displayName } : undefined
-          }
+          // The section crumb names the page the way its tab does.
+          substitutions={{
+            ...identitySectionCrumbs(railItems),
+            ...(encodedUrn ? { [encodedUrn]: identity.displayName } : {}),
+          }}
           // The identity's own path has no page on it, so its crumb points
           // at the section the page opens on.
           urlSubstitutions={
@@ -260,16 +274,17 @@ function IdentityDetailContent(): JSX.Element {
         >
           <IdentityHeader
             identity={identity}
-            nameAction={
-              identity.agent && (
-                <AgentRenameAction
-                  agent={identity.agent}
-                  refresh={() => void identityQuery.refetch()}
-                />
-              )
-            }
-            actions={
-              identity.agent && <AgentHeaderActions agent={identity.agent} />
+            renderName={
+              identity.agent
+                ? (className) =>
+                    identity.agent && (
+                      <AgentName
+                        agent={identity.agent}
+                        className={className}
+                        refresh={() => identityQuery.refetch()}
+                      />
+                    )
+                : undefined
             }
           />
         </div>
@@ -291,24 +306,17 @@ function IdentityDetailContent(): JSX.Element {
                 } as CSSProperties)
           }
         >
-          <IdentityRail
-            items={identityRailItems(
-              routes,
-              encodedUrn ?? "",
-              // The Findings filter is that page's own, not a setting to
-              // carry into the other sections and back.
-              withoutFindingsFilter(location.search),
-              identity.kind,
-            )}
-            // Narrow, the rail is a scrollable row above the content: hiding
-            // it left the other sub-pages reachable only by editing the URL.
-            // Sticks clear of the header above it rather than under it: both
-            // are pinned to the same scroll container, and the header wins
-            // on z-index, so a smaller offset parks the rail out of sight.
-            // The offset is the measured header height, set on the parent;
-            // the 12rem fallback holds for the frame before it is measured.
-            className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-[var(--identity-rail-top,12rem)] lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"
-          />
+          {/* Only someone who can change the agent reads its servers, so
+              only they get the count. */}
+          {identity.agent?.permissions.write ? (
+            <AgentIdentityRail
+              agent={identity.agent}
+              items={railItems}
+              className={RAIL_CLASS_NAME}
+            />
+          ) : (
+            <IdentityRail items={railItems} className={RAIL_CLASS_NAME} />
+          )}
           {/* Room under the last section: without it the danger zone and
               the federated access panel sit flush against the viewport. */}
           <div className="min-w-0 flex-1 pb-24">
@@ -334,14 +342,14 @@ function IdentityDetailContent(): JSX.Element {
 
 function IdentityHeader({
   identity,
-  nameAction,
-  actions,
+  renderName,
 }: {
   identity: IdentityModel;
-  /** A control on the name itself (rename), shown beside it on hover. */
-  nameAction?: ReactNode;
-  /** Controls on the subject itself, in the header's top right. */
-  actions?: ReactNode;
+  /**
+   * The title, when it is more than text: an agent's is renamed in place.
+   * Given the title's typography so every header reads the same.
+   */
+  renderName?: (className: string) => ReactNode;
 }): JSX.Element {
   const primaryEmail = identity.emails[0];
   // Tobias is for names. When the only name we have is the address itself, the
@@ -370,20 +378,19 @@ function IdentityHeader({
             <AvatarFallback>{getInitials(identity.displayName)}</AvatarFallback>
           </Avatar>
           <div className="flex min-w-0 flex-col gap-1">
-            <div className="group/name flex min-w-0 items-center gap-1">
-              <h1
-                className={
-                  nameIsAddress
-                    ? "truncate font-mono text-xl"
-                    : "text-display-sm truncate font-thin"
-                }
-              >
-                {identity.displayName}
-              </h1>
-              {nameAction && (
-                <span className="shrink-0 opacity-0 transition-opacity group-hover/name:opacity-100 focus-within:opacity-100">
-                  {nameAction}
-                </span>
+            <div className="flex min-w-0 items-center gap-1">
+              {renderName ? (
+                renderName("text-display-sm font-thin")
+              ) : (
+                <h1
+                  className={
+                    nameIsAddress
+                      ? "truncate font-mono text-xl"
+                      : "text-display-sm truncate font-thin"
+                  }
+                >
+                  {identity.displayName}
+                </h1>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -399,9 +406,6 @@ function IdentityHeader({
             </div>
           </div>
         </div>
-        {actions && (
-          <div className="flex shrink-0 items-center gap-2">{actions}</div>
-        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -429,16 +433,41 @@ function IdentityDetailLoading(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body fullWidth className="gap-0">
-        <div
-          aria-label="Loading identity"
-          className="mx-auto w-full max-w-[1270px] flex-1 space-y-8 px-8 py-8"
-        >
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-64 w-full" />
-          <Skeleton className="h-48 w-full" />
-        </div>
-      </Page.Body>
+      <Page.Body isLoading>{null}</Page.Body>
     </Page>
+  );
+}
+
+// Narrow, the rail is a scrollable row above the content: hiding it left the
+// other sub-pages reachable only by editing the URL. Sticks clear of the
+// header above it rather than under it: both are pinned to the same scroll
+// container, and the header wins on z-index, so a smaller offset parks the
+// rail out of sight. The offset is the measured header height, set on the
+// parent; the 12rem fallback holds for the frame before it is measured.
+const RAIL_CLASS_NAME =
+  "border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-[var(--identity-rail-top,12rem)] lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0";
+
+/**
+ * An agent's rail, with a red count on its MCP sign-in tab of the servers
+ * someone has to sign in to, so an expired or missing connection is seen
+ * from any of its tabs.
+ */
+function AgentIdentityRail({
+  agent,
+  items,
+  className,
+}: {
+  agent: ManagedAgent;
+  items: IdentityRailItem[];
+  className: string;
+}): JSX.Element {
+  const attention = useAgentMcpSignInAttention(agent);
+  return (
+    <IdentityRail
+      className={className}
+      items={items.map((item) =>
+        item.key === "mcp-sign-in" ? { ...item, badge: attention } : item,
+      )}
+    />
   );
 }

@@ -63,6 +63,7 @@ func (l *Logger) LogPluginCreate(ctx context.Context, dbtx repo.DBTX, event LogP
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -115,6 +116,7 @@ func (l *Logger) LogPluginUpdate(ctx context.Context, dbtx repo.DBTX, event LogP
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -154,6 +156,7 @@ type LogPluginDeleteEvent struct {
 func (l *Logger) LogPluginDelete(ctx context.Context, dbtx repo.DBTX, event LogPluginDeleteEvent) error {
 	action := ActionPluginDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -226,6 +229,7 @@ func (l *Logger) LogPluginServerAdd(ctx context.Context, dbtx repo.DBTX, event L
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -289,6 +293,7 @@ func (l *Logger) LogPluginServerUpdate(ctx context.Context, dbtx repo.DBTX, even
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -341,6 +346,7 @@ func (l *Logger) LogPluginServerRemove(ctx context.Context, dbtx repo.DBTX, even
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -398,6 +404,7 @@ func (l *Logger) LogPluginAssignmentsSet(ctx context.Context, dbtx repo.DBTX, ev
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -453,6 +460,7 @@ func (l *Logger) LogPluginPublish(ctx context.Context, dbtx repo.DBTX, event Log
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -517,6 +525,7 @@ func (l *Logger) LogPluginMarketplaceSettingsUpdate(ctx context.Context, dbtx re
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

@@ -148,7 +148,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// duplicated any of them would leave the badges telling a different
 		// story than the one they were seeded to tell.
 		// Two upstream MCP issuers, two independent gateway issuers, one
-		// Connections issuer, and the approvals server's issuer; GitHub uses the
+		// Connections issuer, and Notion's issuer; GitHub and DeepWiki use the
 		// organization workforce issuer.
 		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 6, "demo seed postflight: expected 6 project user session issuers, found %d"},
 		{byProj(s.q.PostflightIDGatewayIssuers), 2, "demo seed postflight: expected 2 distinct gateway issuers, found %d"},
@@ -216,7 +216,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID()},
+				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion"), s.det("mcpserver-deepwiki")},
 				GithubServerID:     s.det("mcpserver-github"),
 				GithubAuthClientID: s.det("auth-client-github-forwarded"),
 				ProjectID:          proj,
@@ -226,11 +226,11 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				SlackServerID:      s.det("mcpserver-slack"),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 			})
-		}, 26, "demo seed postflight: expected exactly 26 matching upstream client choices, found %d"},
+		}, 32, "demo seed postflight: expected exactly 32 matching upstream client choices, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID()},
+				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion"), s.det("mcpserver-deepwiki")},
 				GithubServerID:     s.det("mcpserver-github"),
 				GithubAuthClientID: s.det("auth-client-github-forwarded"),
 				ProjectID:          proj,
@@ -283,6 +283,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 			return s.q.PostflightIDAssistantAgentBindings(ctx, repo.PostflightIDAssistantAgentBindingsParams{OrgID: org, ProjectID: proj})
 		}, 1, "demo seed postflight: expected 1 assistant binding, found %d"},
 		{byProj(s.q.PostflightIDAssistantThreads), 2, "demo seed postflight: expected 2 assistant threads, found %d"},
+		{byProj(s.q.PostflightIDSlackbotSession), 1, "demo seed postflight: expected 1 Slackbot session, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDTriggerWorkloadBindings(ctx, repo.PostflightIDTriggerWorkloadBindingsParams{OrgID: org, ProjectID: proj})
 		}, 1, "demo seed postflight: expected 1 root binding, found %d"},

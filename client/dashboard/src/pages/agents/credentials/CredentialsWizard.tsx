@@ -1,5 +1,7 @@
 import { toast } from "sonner";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
@@ -50,7 +52,10 @@ import {
   type AllServersRefusal,
   type ServerSelection,
 } from "./StepServers";
-import { keyCredentialChoices } from "./keyCredentialChoices";
+import {
+  keyCredentialChoices,
+  keyCredentialPlan,
+} from "./keyCredentialChoices";
 import { StepVerify, type VerifyState } from "./StepVerify";
 import { CredentialPicker } from "./CredentialPicker";
 import { SignInPath } from "./SignInPath";
@@ -65,6 +70,7 @@ import {
   type JobScope,
 } from "./githubActions";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
+import { SharedServerChoice } from "./SetupFields";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
   CONNECT_SCOPE,
@@ -77,15 +83,20 @@ import {
 } from "@/pages/agents/agentPolicyEdit";
 import { useAgentsCreatePolicyGrantMutation } from "@gram/client/react-query/agentsCreatePolicyGrant.js";
 import { useAgentsDeletePolicyGrantMutation } from "@gram/client/react-query/agentsDeletePolicyGrant.js";
-import { invalidateAllListAPIKeys } from "@gram/client/react-query/listAPIKeys.js";
+import {
+  invalidateAllListAPIKeys,
+  useListAPIKeys,
+} from "@gram/client/react-query/listAPIKeys.js";
 import type { ExtendAgentKeyGrantForm } from "@gram/client/models/components/extendagentkeygrantform.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
+import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicyGrantCheck } from "@gram/client/models/components/agentpolicygrantcheck.js";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import {
   catalogEntryForIssuer,
+  SUBJECT_CHOICE,
   useCatalogEntries,
   valuesFromIssuer,
   valuesFromSubject,
@@ -130,6 +141,9 @@ type Credential = "api-key" | "workload";
 
 /** Keys live 90 days unless the agent page rotates them sooner. */
 const KEY_LIFETIME_DAYS = 90;
+
+// The session cookie authenticates the dashboard; the header is a placeholder.
+const keysSecurity = { sessionHeaderGramSession: "" };
 
 // Stopgap (AIM-862): an agent that may connect to servers cannot sign in to
 // them without mcp:auth, and nothing here can choose auth clients yet, so it is
@@ -203,6 +217,7 @@ const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
   ["org_id", "Anthropic organization"],
   ["owner", "Repository"],
   ["repo", "Repository"],
+  [SUBJECT_CHOICE, "Jobs"],
   ["branch", "Branch"],
   ["environment", "Environment"],
   ["project", "Cluster"],
@@ -215,19 +230,28 @@ const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
 ]);
 
 /**
- * The rail's row for the branch or environment a GitHub Actions rule is
- * narrowed to, once it is named. None for the whole repository.
+ * The rail's row for what a GitHub Actions rule narrows the repository to:
+ * its pull requests, or a branch or environment once it is named. None for
+ * the whole repository.
  */
 function githubActionsScopeRow(
   scope: JobScope,
 ): { label: string; value: ReactNode }[] {
-  if (scope.kind === "repository" || scope.name === "") return [];
-  return [
-    {
-      label: scope.kind === "branch" ? "Branch" : "Environment",
-      value: <code className="text-xs break-all">{scope.name}</code>,
-    },
-  ];
+  switch (scope.kind) {
+    case "repository":
+      return [];
+    case "pull_request":
+      return [{ label: "Jobs", value: "Pull requests" }];
+    case "branch":
+    case "environment":
+      if (scope.name === "") return [];
+      return [
+        {
+          label: scope.kind === "branch" ? "Branch" : "Environment",
+          value: <code className="text-xs break-all">{scope.name}</code>,
+        },
+      ];
+  }
 }
 
 /**
@@ -289,10 +313,22 @@ function GrantedScopes({
   );
 }
 
+/** The server picker and the sign-in step, by their index in `STEPS`. */
+const SERVERS_STEP = 1;
+const SIGN_IN_STEP = 2;
+/**
+ * The Agent sign-in step. An existing agent edits only from here on: its name
+ * is renamed in the agent page's header, and its servers changed on the MCP
+ * sign-in tab (`section`).
+ */
+export const AGENT_SIGN_IN_STEP = 3;
+
 export function CredentialsWizard({
   agent,
   initialPlatformKey,
-  editing = false,
+  editing: editingProp = false,
+  signInOnly = false,
+  section = false,
   grants,
   onDone,
   onBusy,
@@ -305,11 +341,27 @@ export function CredentialsWizard({
    */
   initialPlatformKey?: string;
   /**
-   * Change what an agent already is — its name, its reach — rather than
-   * provision it again. The credential steps are not part of that: a key is
-   * issued from the agent's own page, and a platform from this flow.
+   * Change what an agent already is rather than provision it again. Opened
+   * from its credentials tab to change how it signs in to Speakeasy.
    */
   editing?: boolean;
+  /**
+   * Issue another key to an agent that already exists, the same way its
+   * first key was issued: only the Agent sign-in, Install and Verify steps,
+   * for the servers it already reaches. The servers and their sign-in belong
+   * to the agent, not to one key, so they are not asked again. Needs `agent`,
+   * `editing` and `grants`.
+   */
+  signInOnly?: boolean;
+  /**
+   * The agent page's MCP sign-in tab: which servers an existing agent reaches
+   * and how Speakeasy signs in to each. Implies `editing`. Only the server
+   * picker and the sign-in step are shown, with no stepper or summary: the
+   * agent is already set up, and the tab is not a walk through setting it up
+   * again. There is no save button: each change saves as it is made, on
+   * Continue from the picker, on removing a server, and on a new connection.
+   */
+  section?: boolean;
   /** The servers the agent already reaches, for the editing flow. */
   grants?: AgentPolicyGrant[];
   /**
@@ -327,6 +379,7 @@ export function CredentialsWizard({
    */
   verifyPollMs?: number;
 }): JSX.Element {
+  const editing = editingProp || section;
   const sdk = useSdkClient();
   const organization = useOrganization();
   const project = useProject();
@@ -374,6 +427,33 @@ export function CredentialsWizard({
   // is delivered. Every step is a destination because none of them creates
   // anything until the key is issued.
   const existing = agent !== undefined;
+  // An agent opened again usually has a working key already. The install
+  // step cannot show it, but must not read as if the agent were unconnected.
+  // Same options and permission gate as the agent's own pages, so all of them
+  // read one cached list and none sends a request it would be refused.
+  const agentKeys = useListAPIKeys({ agentId: agent?.id ?? "" }, keysSecurity, {
+    queryKeyHashFn: (key) => JSON.stringify([organization.id, key]),
+    enabled: existing && agent.permissions.authorize,
+    retry: false,
+    throwOnError: false,
+  });
+  // `null` only once a read confirms there is no live key; `undefined` while
+  // the list is not read, loading or failed, so the step claims neither. A
+  // disabled query still reports a list cached before authorize was lost.
+  const existingKey = useMemo(() => {
+    if (!existing) return null;
+    if (!agent.permissions.authorize || !agentKeys.isSuccess) return undefined;
+    const now = Date.now();
+    const live = agentKeys.data.keys.filter(
+      (key) => !key.expiresAt || key.expiresAt.getTime() > now,
+    );
+    if (live.length === 0) return null;
+    const lastUsedAt = live
+      .map((key) => key.lastAccessedAt)
+      .filter((at): at is Date => at !== undefined)
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    return { lastUsedAt };
+  }, [existing, agent, agentKeys.isSuccess, agentKeys.data]);
 
   // Opened for a named platform: the credential is settled and the agent is
   // named after what will be signing in, so the flow starts at the servers —
@@ -386,17 +466,33 @@ export function CredentialsWizard({
   // back to. Replace rather than push: the browser's Back belongs to the
   // page the reader came from, and the wizard has its own Back.
   const [params, setParams] = useSearchParams();
-  const defaultStep = initialPlatformKey === undefined ? 0 : 1;
+  // Issuing another key starts at Agent sign-in: the steps before it describe
+  // the agent itself, which already exists.
+  const firstStep = signInOnly ? AGENT_SIGN_IN_STEP : 0;
+  const defaultStep = signInOnly
+    ? AGENT_SIGN_IN_STEP
+    : initialPlatformKey === undefined
+      ? 0
+      : 1;
   // Presence first: `Number(null)` and `Number("")` are both 0, which reads as
   // a deep link to the first step and leaves `defaultStep` unreachable.
   const linked = params.get("step");
   const fromUrl =
     linked === null || linked.trim() === "" ? Number.NaN : Number(linked);
-  const step =
+  // Editing is a tab on the agent's page, not a flow with an address per
+  // step: it has two views, and which one is open is only this page's.
+  // It opens on the sign-in view; the picker opens only from its button.
+  const [editStep, setEditStep] = useState(SIGN_IN_STEP);
+  const urlStep =
     Number.isInteger(fromUrl) && fromUrl >= 0 ? fromUrl : defaultStep;
+  const step = section ? editStep : urlStep;
   // Stable, so an effect that corrects the step can depend on it.
   const setStep = useCallback(
     (next: number) => {
+      if (section) {
+        setEditStep(next);
+        return;
+      }
       setParams(
         (current) => {
           const updated = new URLSearchParams(current);
@@ -406,7 +502,7 @@ export function CredentialsWizard({
         { replace: true },
       );
     },
-    [setParams],
+    [section, setParams],
   );
   const [name, setName] = useState(agent?.name ?? "");
   // Names are unique in the organization, case aside. Asking once typing
@@ -482,7 +578,9 @@ export function CredentialsWizard({
   // while the reader has not chosen something else.
   const adopted = useRef(false);
   useEffect(() => {
-    if (adopted.current || !editing || admitted === undefined) return;
+    // Issuing a key is an API key whatever else the agent signs in with.
+    if (adopted.current || !editing || signInOnly || admitted === undefined)
+      return;
     // Both, not just the admission: the entry is looked up in the catalog, so
     // running before it arrives latches the custom key, and `adopted` then
     // stops the real platform from ever being recognised.
@@ -490,7 +588,7 @@ export function CredentialsWizard({
     adopted.current = true;
     setCredential("workload");
     setPlatformKey(admittedEntry?.key ?? CUSTOM_PLATFORM_KEY);
-  }, [editing, admitted, admittedEntry, catalog.isPending]);
+  }, [editing, signInOnly, admitted, admittedEntry, catalog.isPending]);
   // The catalog loads after the first render, so the preset name is filled
   // in when it arrives rather than in a state initializer that has nothing
   // to read yet. Only while the field is still untouched.
@@ -526,6 +624,11 @@ export function CredentialsWizard({
   // agent's gateway never lists the servers just added. Kept across a retry,
   // because the grants a failed save already wrote are not in the next diff.
   const keysMissing = useRef<ExtendAgentKeyGrantForm[]>([]);
+  // Servers just added on the MCP sign-in tab whose keys wait for the reader
+  // to choose, on the server's row, how they sign in there.
+  const [choicePending, setChoicePending] = useState<Set<string>>(
+    () => new Set(),
+  );
   useEffect(() => {
     if (reconciled || grants === undefined) return;
     if (inventory.isLoading || inventory.isError) return;
@@ -573,6 +676,14 @@ export function CredentialsWizard({
     null,
   );
   const hookEvents = !existing && (createdHookEvents ?? canGrantHookEvents);
+  // An existing agent that already holds hook ingestion keeps it on a key
+  // issued here, or reinstalling its hooks plugin with a new setup command
+  // leaves the plugin unable to send events. Its policy is not changed.
+  const existingHookEvents =
+    existing &&
+    (grants ?? []).some(
+      (grant) => grant.effect === "allow" && grant.scope === HOOKS_INGEST_SCOPE,
+    );
   const [secret, setSecret] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -802,6 +913,67 @@ export function CredentialsWizard({
             ? "Could not check that you can reach the servers you chose. Check again above the list."
             : "Checking that you can reach the servers you chose…"
           : null;
+  // The blanket sign-in grant is written only for an agent that reaches a
+  // server: one that reaches nothing has no auth client to use. A new agent
+  // gets it when created, an edited one when it holds no mcp:auth yet.
+  // Whether the person saving may give it is asked as soon as the first
+  // server is chosen, so a refusal stops the flow on the server step.
+  const reachesServers = allServers || selected.length > 0;
+  const writesAuthGrant =
+    reachesServers &&
+    (editing
+      ? (grants ?? []).every((grant) => grant.scope !== AUTH_GRANT.scope)
+      : !existing);
+  const enforcement = useUpstreamAuthEnforcement();
+  const authCheck = useQuery({
+    queryKey: ["agent-auth-check", organization.id, user.id, agentId ?? null],
+    queryFn: async ({ signal }) => {
+      const { results } = await sdk.agents.checkPolicyGrants(
+        {
+          checkAgentPolicyGrantsForm: {
+            ...(agentId ? { agentId } : {}),
+            policyGrants: [AUTH_GRANT],
+          },
+        },
+        undefined,
+        { signal },
+      );
+      return results[0];
+    },
+    enabled: writesAuthGrant,
+    retry: false,
+    throwOnError: false,
+  });
+  const authRefused = writesAuthGrant && authCheck.data?.allowed === false;
+  // An edit writes grants one by one, so saving while the check is still out
+  // could write the servers and then be refused the sign-in grant. Creating
+  // sends every grant in one request, which the server accepts or refuses
+  // whole, so it does not wait.
+  const authPending = editing && writesAuthGrant && authCheck.isLoading;
+  const authPendingNote = `Checking that you can give this agent ${AUTH_GRANT.scope}…`;
+  // Which registrations a connection is assigned through depends on whether
+  // the organization enforces upstream auth, so nothing is written until that
+  // is known. An unreadable answer assigns through each server's own
+  // credentials, which never attach another server's sign-in.
+  const enforcementPending = enforcement === "loading";
+  const enforcementPendingNote =
+    "Checking how this organization's servers sign in…";
+  const typedConnections = enforcement !== "legacy";
+  // Where the organization enforces mcp:auth, an agent without it cannot sign
+  // in to any upstream, so a refused grant stops the flow before anything is
+  // written. Elsewhere sign-in does not need it yet, so the grant is left out
+  // instead of failing the save. An unknown answer keeps the grant, and the
+  // server decides.
+  const authStop = !authRefused
+    ? null
+    : enforcement === "loading"
+      ? "Checking whether this organization requires sign-in permission…"
+      : enforcement !== "enforced"
+        ? null
+        : authCheck.data?.limitedBy === "owner"
+          ? `This agent's owner cannot give it ${AUTH_GRANT.scope}, which this organization requires to sign in to any server. Ask an administrator to review the owner's access.`
+          : `You cannot give this agent ${AUTH_GRANT.scope}, which this organization requires to sign in to any server. Ask an administrator for access.`;
+  const includeAuthGrant = !(authRefused && enforcement === "legacy");
   // The rows the picker offers. Under "All servers" they are the ones those
   // wildcards reach, so an organization-wide one shows every project's;
   // otherwise it is the project the agent is bound to.
@@ -966,12 +1138,18 @@ export function CredentialsWizard({
     if (!projectID) {
       throw new Error("This project is still loading. Try again in a moment.");
     }
+    if (authStop) throw new Error(authStop);
     if (refusedChoice) throw new Error(refusedChoice);
     // Whether the agent sends hook events is read from the caller's grants,
     // so it is not decided while they are still loading.
     if (rbacLoading) {
       throw new Error(
         "Your permissions are still loading. Try again in a moment.",
+      );
+    }
+    if (enforcementPending) {
+      throw new Error(
+        "Checking how this organization's servers sign in. Try again in a moment.",
       );
     }
     // "All servers" is one wildcard selector rather than today's inventory
@@ -1003,7 +1181,7 @@ export function CredentialsWizard({
         // the server refuses a request that names a grant twice.
         policyGrants: uniqueGrants([
           ...agentPolicyGrantsFromDraft(draft),
-          AUTH_GRANT,
+          ...(includeAuthGrant && reachesServers ? [AUTH_GRANT] : []),
           ...(hookEvents
             ? [hooksIngestPolicyGrant(organization.id, projectID)]
             : []),
@@ -1062,7 +1240,11 @@ export function CredentialsWizard({
     if (agent === undefined || grants === undefined) return;
     // The selection is only the agent's reach once the grants have been
     // reconciled into it; before that every grant would read as withdrawn.
-    if (!reconciled || saving) return;
+    if (!reconciled || saving || authPending || enforcementPending) return;
+    if (authStop) {
+      setError(authStop);
+      return;
+    }
     if (refusedChoice) {
       setError(refusedChoice);
       return;
@@ -1070,7 +1252,9 @@ export function CredentialsWizard({
     setSaving(true);
     setError(null);
     try {
-      if (name.trim() !== agent.name) {
+      // The tab never edits the name, and the page renames the agent in
+      // place while the tab is open: a mounted name would undo that.
+      if (!section && name.trim() !== agent.name) {
         await renameAgent.mutateAsync({
           request: { renameAgentForm: { id: agent.id, name: name.trim() } },
         });
@@ -1152,6 +1336,8 @@ export function CredentialsWizard({
         });
       }
       if (
+        includeAuthGrant &&
+        reachesServers &&
         ![...appliedPolicies.current.values()].some(
           (grant) => grant.scope === AUTH_GRANT.scope,
         )
@@ -1183,29 +1369,41 @@ export function CredentialsWizard({
         try {
           // The credential picked on MCP sign-in for each added server, as a
           // key issued now would carry it.
-          const choices = await keyCredentialChoices(
-            sdk,
-            selected
-              .filter((entry) =>
-                keysMissing.current.some(
-                  (form) =>
-                    form.selector.resourceId === entry.server.resourceId,
-                ),
-              )
-              .map((entry) => ({
-                ...entry.server,
-                authClientId: entry.authClientId,
-              })),
+          const picks = selected
+            .filter((entry) =>
+              keysMissing.current.some(
+                (form) => form.selector.resourceId === entry.server.resourceId,
+              ),
+            )
+            .map((entry) => ({
+              ...entry.server,
+              authClientId: entry.authClientId,
+            }));
+          // The tab asks on each server's row how the keys sign in there, so
+          // a server with a real choice waits for it rather than failing the
+          // save or defaulting to the connected account unasked.
+          const plan = section
+            ? await keyCredentialPlan(sdk, picks, { askWhenAccounts: true })
+            : {
+                choices: await keyCredentialChoices(sdk, picks),
+                undecided: [],
+              };
+          const waiting = new Set(
+            plan.undecided.map((pick) => pick.resourceId),
           );
+          const ready = keysMissing.current.filter(
+            (form) => !waiting.has(form.selector.resourceId),
+          );
+          const choices = plan.choices;
+          // Known from the plan, so a failed extension below still leaves
+          // these rows asking.
+          setChoicePending(new Set(plan.undecided.map((pick) => pick.id)));
           for (
             let start = 0;
-            start < keysMissing.current.length;
+            start < ready.length;
             start += EXTEND_KEYS_BATCH
           ) {
-            const batch = keysMissing.current.slice(
-              start,
-              start + EXTEND_KEYS_BATCH,
-            );
+            const batch = ready.slice(start, start + EXTEND_KEYS_BATCH);
             await sdk.keys.extendAgentKeys({
               extendAgentKeysForm: {
                 agentId: agent.id,
@@ -1218,7 +1416,9 @@ export function CredentialsWizard({
               },
             });
           }
-          keysMissing.current = [];
+          keysMissing.current = keysMissing.current.filter((form) =>
+            waiting.has(form.selector.resourceId),
+          );
           void invalidateAllListAPIKeys(queryClient);
         } catch (failure) {
           toast.warning(
@@ -1284,6 +1484,7 @@ export function CredentialsWizard({
         allServers ? listedServers : selected.map((entry) => entry.server),
         undefined,
         true,
+        typedConnections,
       );
       if (missing.length)
         toast.warning(
@@ -1292,9 +1493,9 @@ export function CredentialsWizard({
       await queryClient.invalidateQueries({
         queryKey: ["owner-connections"],
       });
-      // Saving is the end of editing: what follows are the platform's own
-      // settings, which this flow only describes. It returns to the agent's
-      // own page, where the change shows.
+      // Saving is the end of editing. The full flow returns to the agent's
+      // own page, where the change shows; the MCP sign-in tab stays put and
+      // re-reads the saved grants into itself.
       onDone(agent.id);
     } catch (failure) {
       setError(
@@ -1307,6 +1508,44 @@ export function CredentialsWizard({
     }
   };
 
+  // The MCP sign-in tab saves each change as it is made. A change only asks
+  // for a save: it runs after the render that holds the change, since save
+  // reads the selection from state, and waits out a save already running and
+  // the checks a save waits for.
+  const [savePending, setSavePending] = useState(false);
+  const requestSave = () => setSavePending(true);
+  useEffect(() => {
+    if (!savePending || saving || !reconciled) return;
+    if (authPending || enforcementPending) return;
+    setSavePending(false);
+    void save();
+    // save is rebuilt every render; these are what decide when it may run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savePending, saving, reconciled, authPending, enforcementPending]);
+
+  // The picker changes a draft until Continue saves it. Back puts the saved
+  // selection back, so a change abandoned there is not saved by the next one.
+  const pickerStart = useRef<{
+    selected: ServerSelection[];
+    allServers: boolean;
+  } | null>(null);
+  const openPicker = () => {
+    pickerStart.current = { selected, allServers };
+    setStep(SERVERS_STEP);
+  };
+  const cancelPicker = () => {
+    const start = pickerStart.current;
+    if (start) {
+      setSelected(start.selected);
+      setAllServers(start.allServers);
+    }
+    setStep(SIGN_IN_STEP);
+  };
+  const confirmPicker = () => {
+    setStep(SIGN_IN_STEP);
+    requestSave();
+  };
+
   // What the reader last decided, marked on the rail. The rail is a growing
   // block of text, and without this it looks the same before and after a
   // click: the mark is how a glance confirms the choice landed.
@@ -1317,7 +1556,14 @@ export function CredentialsWizard({
       ? inventory.servers.filter((server) =>
           reachCoversProject(allServersProjectIDs, server.projectId),
         )
-      : selected.map((entry) => entry.server);
+      : // A selection holds the server as it was when ticked; read it back
+        // from the list so a change made since, such as a server moved to
+        // another provider in its settings, shows here.
+        selected.map(
+          (entry) =>
+            inventory.servers.find((server) => server.id === entry.server.id) ??
+            entry.server,
+        );
 
   const attachSelectedConnections = async (
     targetId: string,
@@ -1332,6 +1578,7 @@ export function CredentialsWizard({
           reach,
           signal,
           allServers,
+          typedConnections,
         );
         if (missing.length)
           toast.warning(
@@ -1347,6 +1594,7 @@ export function CredentialsWizard({
   };
 
   const workload = useWorkloadSetup({
+    requireOneProvider: !editing,
     entry: credential === "workload" ? platform : undefined,
     platformKey: credential === "workload" ? platformKey : null,
     agentName: name.trim(),
@@ -1358,6 +1606,10 @@ export function CredentialsWizard({
               resourceId: server.resourceId,
               name: server.name,
               mcpUrl: server.mcpUrl,
+              issuerId: server.issuerId,
+              projectSlug: server.projectSlug,
+              projectId: server.projectId,
+              slug: server.slug,
             },
           ]
         : [],
@@ -1434,9 +1686,13 @@ export function CredentialsWizard({
       setStep(defaultStep);
       return;
     }
+    if (step < firstStep) {
+      setStep(firstStep);
+      return;
+    }
     if (step <= lastStep) return;
     setStep(lastStep);
-  }, [existing, step, defaultStep, lastStep, setStep]);
+  }, [existing, step, defaultStep, firstStep, lastStep, setStep]);
 
   /**
    * Create the agent, discover what it may delegate, issue its first key, and
@@ -1538,9 +1794,10 @@ export function CredentialsWizard({
       );
       // Hook ingestion names the organization rather than a server, so only
       // discovery that names no server returns it. Asked for only when the
-      // agent was created with it, and bounded to the agent's project.
+      // agent was created with it or already holds it, and bounded to the
+      // agent's project.
       const hookGrants =
-        hookEvents && scopedProjectID
+        (hookEvents || existingHookEvents) && scopedProjectID
           ? hooksIngestKeyGrants(
               await discoverUnscopedGrants(
                 sdk.agents,
@@ -1598,8 +1855,8 @@ export function CredentialsWizard({
   );
   const summary = (
     <WizardSummary
-      step={step + 1}
-      stepCount={stepNames.length}
+      step={step + 1 - firstStep}
+      stepCount={stepNames.length - firstStep}
       name={name}
       rows={[
         {
@@ -1628,7 +1885,9 @@ export function CredentialsWizard({
                         allServers
                           ? `${CONNECT_SCOPE} on all servers in the project`
                           : `${CONNECT_SCOPE} on the selected servers`,
-                        `${AUTH_GRANT.scope} on all auth clients`,
+                        ...(includeAuthGrant
+                          ? [`${AUTH_GRANT.scope} on all auth clients`]
+                          : []),
                         ...(recordsSessions ? [HOOKS_INGEST_SCOPE] : []),
                         // What the platform's runtime needs beyond the
                         // servers, such as a device agent's plugin sync.
@@ -1691,7 +1950,7 @@ export function CredentialsWizard({
               },
             ]
           : []),
-        // The one branch or environment the rule narrows the repository to.
+        // What the rule narrows the repository to, if anything.
         ...(credential === "workload" && platformKey === GITHUB_ACTIONS_KEY
           ? githubActionsScopeRow(jobScope(workload.values))
           : []),
@@ -1768,7 +2027,7 @@ export function CredentialsWizard({
     />
   );
 
-  const body = () => {
+  const body = (at: number = step) => {
     // Past the credential step, a federated agent is following its platform's
     // own setup, one of its steps per wizard step.
     if (workloadStep !== undefined) {
@@ -1781,7 +2040,7 @@ export function CredentialsWizard({
         />
       );
     }
-    switch (step) {
+    switch (at) {
       case 0:
         return (
           <div className="space-y-6">
@@ -1862,6 +2121,8 @@ export function CredentialsWizard({
       case 2:
         return (
           <StepAuthentication
+            // On the agent's MCP sign-in tab the tab's own title says this.
+            showHeader={!section}
             servers={
               allServers ? listedServers : selected.map((entry) => entry.server)
             }
@@ -1877,7 +2138,53 @@ export function CredentialsWizard({
                 );
               } else
                 setSelected(selected.filter((entry) => entry.server.id !== id));
+              if (section) requestSave();
             }}
+            // A new connection is assigned to the agent by a save.
+            onConnected={section ? requestSave : undefined}
+            // On the tab only servers whose keys wait for the answer ask it:
+            // a key's credential is fixed when the server is added to it.
+            credentialChoice={
+              allServers
+                ? undefined
+                : {
+                    show: (serverId) => !section || choicePending.has(serverId),
+                    value: (serverId) =>
+                      selected.find((entry) => entry.server.id === serverId)
+                        ?.authClientId,
+                    onChange: (serverId, authClientId) => {
+                      const current = selected.find(
+                        (entry) => entry.server.id === serverId,
+                      )?.authClientId;
+                      if ((current ?? "") === authClientId) return;
+                      setSelected((entries) =>
+                        entries.map((entry) =>
+                          entry.server.id === serverId
+                            ? { ...entry, authClientId }
+                            : entry,
+                        ),
+                      );
+                      if (section && authClientId) requestSave();
+                    },
+                  }
+            }
+            listAction={
+              section ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  // Until the stored grants are in the selection the picker
+                  // would open on none, and Back would restore none.
+                  disabled={saving || !reconciled}
+                  onClick={openPicker}
+                >
+                  <Button.LeftIcon>
+                    <Plus className="size-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Add servers</Button.Text>
+                </Button>
+              ) : undefined
+            }
           />
         );
       case 3:
@@ -1901,7 +2208,10 @@ export function CredentialsWizard({
               // Settled for an agent that exists: what it signs in with was
               // decided when it was registered, and changing it here would
               // mean removing a credential rather than editing one.
-              disabled={editing}
+              // Issuing another key keeps the API key live, so the step does
+              // not read as if a key could not be issued.
+              disabled={editing && !signInOnly}
+              keyOnly={signInOnly}
               onChooseApiKey={() => {
                 setCredential("api-key");
                 setHighlight("Agent sign-in");
@@ -1912,6 +2222,14 @@ export function CredentialsWizard({
                 setHighlight("Platform");
               }}
             />
+            {credential === "workload" &&
+              platformKey !== null &&
+              workload.usesSharedServer && (
+                <SharedServerChoice
+                  setupValues={workload.exchange}
+                  onMoved={inventory.refetch}
+                />
+              )}
           </div>
         );
       case 4:
@@ -1926,6 +2244,7 @@ export function CredentialsWizard({
             onIssue={() => void provision()}
             issuing={provisioning || minting}
             secret={secret}
+            existingKey={existingKey}
             gatewayURL={gatewayURL}
             serverCount={allServers ? "all" : selected.length}
           />
@@ -1941,8 +2260,9 @@ export function CredentialsWizard({
     }
   };
 
-  const blocked =
-    step === 0
+  const blocked = authStop
+    ? authStop
+    : step === 0
       ? !name.trim()
         ? "Name this agent."
         : nameState === "taken"
@@ -1974,20 +2294,24 @@ export function CredentialsWizard({
   const footer = () => {
     // Editing writes after authentication. Past it the flow is the ordinary
     // one for an agent that exists: adding a credential it does not have.
-    if (editing && step < 3) {
+    // The app opens editing only from the Agent sign-in step now, so these
+    // views are reached by the tests of the save they share with the tab.
+    if (editing && step < AGENT_SIGN_IN_STEP) {
       return (
         <WizardFooter
           note={
             step === 0
               ? (blocked ??
                 "Renaming an agent is recorded in the organization audit log.")
-              : refusedChoice
-                ? refusedChoice
-                : reconciled
+              : (authStop ??
+                (authPending ? authPendingNote : null) ??
+                (enforcementPending ? enforcementPendingNote : null) ??
+                refusedChoice ??
+                (reconciled
                   ? "Changing what an agent reaches is recorded in the organization audit log."
                   : inventory.isError
                     ? "The server list could not be loaded, so the servers this agent reaches are not known. Retry the list before saving."
-                    : "Reading the servers this agent reaches…"
+                    : "Reading the servers this agent reaches…"))
           }
           onBack={step === 0 ? undefined : () => setStep(step - 1)}
           primary={
@@ -1999,7 +2323,14 @@ export function CredentialsWizard({
               <Button
                 // Nothing may be written until the stored grants are in the
                 // selection: the diff against an empty one withdraws them all.
-                disabled={saving || !reconciled || refusedChoice !== null}
+                disabled={
+                  saving ||
+                  !reconciled ||
+                  refusedChoice !== null ||
+                  authStop !== null ||
+                  authPending ||
+                  enforcementPending
+                }
                 onClick={() => void save()}
               >
                 {saving ? "Saving…" : "Save changes and exit"}
@@ -2078,13 +2409,37 @@ export function CredentialsWizard({
             note =
               "Using a platform's tokens needs permission to manage workload identities. Choose an API key instead.";
           }
+          // Its one token works only at servers sharing a provider, so a new
+          // agent is not created until they do.
+          const mismatched =
+            !editing &&
+            platformKey !== null &&
+            workload.exchange.mismatch !== null;
+          if (mismatched && !refused) {
+            note =
+              workload.exchange.mismatch?.target === null
+                ? "Set up a shared authorization server for this agent's servers, or remove the ones that sign people in, to continue."
+                : "Move this agent's servers onto the shared authorization server you chose, or remove the ones that aren't, to continue.";
+          }
+          // Until the providers load, a mismatch can't be ruled out.
+          const checkingProviders =
+            !editing && platformKey !== null && workload.exchange.checking;
+          if (checkingProviders && !refused && !mismatched) {
+            note =
+              "Checking which shared authorization server the servers use…";
+          }
           return (
             <WizardFooter
               note={note}
-              onBack={() => setStep(2)}
+              onBack={signInOnly ? undefined : () => setStep(2)}
               primary={
                 <Button
-                  disabled={refused || workload.steps.length === 0}
+                  disabled={
+                    refused ||
+                    mismatched ||
+                    checkingProviders ||
+                    workload.steps.length === 0
+                  }
                   onClick={() => setStep(4)}
                 >
                   Continue
@@ -2093,21 +2448,42 @@ export function CredentialsWizard({
             />
           );
         }
+        // An existing agent's key reaches the servers read back from its
+        // grants. Until that read has landed the reach is empty, and a key
+        // issued then would reach none of them.
+        const readingReach = editing && !reconciled;
+        // A failed read never reconciles, so it is said, with a way to retry,
+        // rather than left reading forever.
+        if (readingReach && inventory.isError) {
+          return (
+            <WizardFooter
+              note="The server list could not be loaded, so the servers this key would reach are not known."
+              onBack={signInOnly ? undefined : () => setStep(2)}
+              primary={
+                <Button onClick={() => inventory.refetch()}>Try again</Button>
+              }
+            />
+          );
+        }
         return (
           <WizardFooter
             note={
-              existing
-                ? "Issuing a key is recorded in the organization audit log."
-                : !project.id
-                  ? "Reading the project this agent will belong to…"
-                  : "Creating the agent is recorded in the organization audit log."
+              readingReach
+                ? "Reading the servers this agent reaches…"
+                : existing
+                  ? "Issuing a key is recorded in the organization audit log."
+                  : !project.id
+                    ? "Reading the project this agent will belong to…"
+                    : "Creating the agent is recorded in the organization audit log."
             }
-            onBack={() => setStep(2)}
+            onBack={signInOnly ? undefined : () => setStep(2)}
             primary={
               <Button
                 // An agent belongs to the project it is made in, so there is
                 // nothing to create until that project has resolved.
-                disabled={provisioning || (!existing && !project.id)}
+                disabled={
+                  provisioning || readingReach || (!existing && !project.id)
+                }
                 onClick={() => void provision()}
               >
                 {provisioning
@@ -2174,35 +2550,88 @@ export function CredentialsWizard({
     }
   };
 
+  const errorAlert = error && (
+    <p
+      role="alert"
+      className="border-destructive text-destructive border p-3 text-sm"
+    >
+      {error}
+    </p>
+  );
+
+  // A tab on the agent's page: no steps to count and no summary of a draft,
+  // because nothing here is a draft. The agent page already names it. The
+  // servers' sign-in is the tab; the picker opens over it.
+  if (section) {
+    return (
+      <div className="space-y-6">
+        {errorAlert}
+        <div>{body(SIGN_IN_STEP)}</div>
+        <Dialog
+          open={step === SERVERS_STEP}
+          onOpenChange={(open) => {
+            if (!open) cancelPicker();
+          }}
+        >
+          {/* Only the picker scrolls: Cancel and Continue stay in view at any
+              window height. */}
+          <Dialog.Content className="flex max-h-[85vh] max-w-3xl flex-col overflow-hidden">
+            <Dialog.Title className="sr-only">Add MCP servers</Dialog.Title>
+            <Dialog.Description className="sr-only">
+              Pick the MCP servers this agent calls. Continue saves them.
+            </Dialog.Description>
+            <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+              {body(SERVERS_STEP)}
+            </div>
+            <Dialog.Footer className="shrink-0 items-center gap-3 sm:justify-between">
+              <Text small muted>
+                {blocked ??
+                  (allServers
+                    ? "All servers selected."
+                    : `${selected.length} of ${listedServers.length} servers selected.`)}
+              </Text>
+              <div className="flex gap-2">
+                <Button variant="tertiary" onClick={cancelPicker}>
+                  Cancel
+                </Button>
+                <Button disabled={!!blocked || saving} onClick={confirmPicker}>
+                  Continue
+                </Button>
+              </div>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <WizardStepper
-        steps={stepNames}
-        current={step}
+        // Issuing another key shows only the steps it walks through, so the
+        // count reads "1 of 3" rather than starting on step 4.
+        steps={stepNames.slice(firstStep)}
+        current={step - firstStep}
         // While creating, only a step already completed is a destination: the
         // ones ahead are built from choices not yet made. Provisioning an
         // existing agent has no such order, so every step is reachable until
         // the key is issued.
         // Editing has settled everything a credential step would ask.
-        settledFrom={editing ? 3 : undefined}
+        // Issuing another key is the credential steps themselves, so none of
+        // them is settled.
+        settledFrom={editing && !signInOnly ? AGENT_SIGN_IN_STEP : undefined}
         forward={existing && !secret}
         // Verify watches a key being used, so it has nothing to watch until
         // one is issued. Without this an existing agent could jump straight
         // to it and finish the flow having provisioned nothing.
-        onJump={(next) =>
+        onJump={(index) => {
+          const next = index + firstStep;
           setStep(
             secret || credential === "workload" ? next : Math.min(next, 4),
-          )
-        }
+          );
+        }}
       />
-      {error && (
-        <p
-          role="alert"
-          className="border-destructive text-destructive border p-3 text-sm"
-        >
-          {error}
-        </p>
-      )}
+      {errorAlert}
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-16">
         <div>{body()}</div>
         {/* The cell stretches to the row's height on purpose: a sticky child

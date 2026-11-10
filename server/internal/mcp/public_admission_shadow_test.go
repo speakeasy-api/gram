@@ -39,7 +39,7 @@ func TestShadowPublicHostedAdmissionUsesVisibility(t *testing.T) {
 	h := newShadowHarness(t, true)
 	project, server := uuid.New(), uuid.New()
 	toolset := &toolsetsrepo.Toolset{ID: server, ProjectID: project, OrganizationID: shadowOrg}
-	_, authenticated, err := h.service.admitHostedRequest(t.Context(), toolset, &hostedServing{isPublic: true}, authz.MCPCheck(authz.ScopeMCPConnect, server.String(), project.String()))
+	_, authenticated, err := h.service.admitHostedRequest(t.Context(), nil, toolset, &hostedServing{isPublic: true}, authz.MCPCheck(authz.ScopeMCPConnect, server.String(), project.String()))
 	require.NoError(t, err)
 	require.False(t, authenticated)
 	require.Equal(t, map[attribute.Set]int64{shadowKey(mandatorySurfaceHostedConnect, mandatoryCallerAnonymous, "anonymous", true, "allow", "visibility", "none"): 1}, h.points(t))
@@ -73,7 +73,7 @@ func TestShadowPrivateHostedAdmissionStillDeniesAnonymous(t *testing.T) {
 	h := newShadowHarness(t, true)
 	project, server := uuid.New(), uuid.New()
 	toolset := &toolsetsrepo.Toolset{ID: server, ProjectID: project, OrganizationID: shadowOrg}
-	_, _, err := h.service.admitHostedRequest(t.Context(), toolset, &hostedServing{isPublic: false}, authz.MCPCheck(authz.ScopeMCPConnect, server.String(), project.String()))
+	_, _, err := h.service.admitHostedRequest(t.Context(), nil, toolset, &hostedServing{isPublic: false}, authz.MCPCheck(authz.ScopeMCPConnect, server.String(), project.String()))
 	require.Error(t, err)
 	require.Equal(t, map[attribute.Set]int64{shadowKey(mandatorySurfaceHostedConnect, mandatoryCallerAnonymous, "anonymous", false, "deny", "none", "unauthenticated"): 1}, h.points(t))
 }

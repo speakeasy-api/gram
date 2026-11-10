@@ -1112,8 +1112,8 @@ ORDER BY b.id;
 -- chains only a request whose own inbound issuer the binding names. It is a
 -- remote server whose valid persisted protected resource names the binding's
 -- resource, or, with no valid persisted record, whose URL names it; or a
--- tunneled server whose resource identifier names it under its own derived
--- issuer. A remote server whose valid record lists authorization servers
+-- tunneled server whose resource identifier names it and whose client
+-- associations name the binding's issuer as their one provider. A remote server whose valid record lists authorization servers
 -- without the binding's issuer is returned as issuer_not_allowed, since the
 -- runtime would refuse it. direct reports that the server's own issuer is the
 -- binding's.
@@ -1191,7 +1191,25 @@ WHERE b.id = @binding_id::uuid
       OR (rp.id IS NULL AND r.url = b.resource)
     ))
     OR (t.id IS NOT NULL
-        AND s.remote_session_issuer_id = b.remote_session_issuer_id
+        AND ARRAY(
+              -- The one live provider the server's live client associations name.
+              SELECT DISTINCT c.remote_session_issuer_id
+              FROM mcp_server_remote_session_clients AS a
+              JOIN remote_session_clients AS c
+                ON c.id = a.remote_session_client_id
+               AND c.deleted IS FALSE
+               AND (c.project_id = a.project_id
+                    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+              JOIN remote_session_issuers AS provider
+                ON provider.id = c.remote_session_issuer_id
+               AND provider.deleted IS FALSE
+               AND (provider.project_id = a.project_id
+                    OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+              WHERE a.mcp_server_id = s.id
+                AND a.project_id = s.project_id
+                AND a.organization_id = b.organization_id
+                AND a.deleted IS FALSE
+            )::uuid[] = ARRAY[b.remote_session_issuer_id]::uuid[]
         AND t.resource_identifier = b.resource)
   )
 ORDER BY s.id;
@@ -1425,7 +1443,25 @@ WHERE s.id = @mcp_server_id::uuid
           OR (rp.id IS NULL AND r.url = b.resource)
         ))
         OR (t.id IS NOT NULL
-            AND s.remote_session_issuer_id = b.remote_session_issuer_id
+            AND ARRAY(
+                  -- The one live provider the server's live client associations name.
+                  SELECT DISTINCT c.remote_session_issuer_id
+                  FROM mcp_server_remote_session_clients AS a
+                  JOIN remote_session_clients AS c
+                    ON c.id = a.remote_session_client_id
+                   AND c.deleted IS FALSE
+                   AND (c.project_id = a.project_id
+                        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+                  JOIN remote_session_issuers AS provider
+                    ON provider.id = c.remote_session_issuer_id
+                   AND provider.deleted IS FALSE
+                   AND (provider.project_id = a.project_id
+                        OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+                  WHERE a.mcp_server_id = s.id
+                    AND a.project_id = s.project_id
+                    AND a.organization_id = p.organization_id
+                    AND a.deleted IS FALSE
+                )::uuid[] = ARRAY[b.remote_session_issuer_id]::uuid[]
             AND t.resource_identifier = b.resource)
       )
   )
@@ -2306,11 +2342,14 @@ ORDER BY l.auth_client_id, l.project_id;
 -- name: ListServerAccessGrants :many
 -- Grants that can satisfy mcp:connect, held by anyone but API keys, whose
 -- policies are provisioned separately. Like grant loading, effect is ignored.
+-- Temporary grants are skipped: a permanent default must not be derived from
+-- access that ends.
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = ANY(@scopes::text[])
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn, scope, id;
 
 -- name: ListAgentRolePrincipals :many
@@ -2714,6 +2753,17 @@ ORDER BY kind, id;
 SELECT s.id FROM mcp_servers s
 JOIN projects p ON p.id = s.project_id
 WHERE s.id = @server_id::uuid AND p.organization_id = @organization_id::text
+FOR UPDATE OF s;
+
+-- name: LockServersForAuthClientSync :exec
+-- Locks the servers a synchronization is about to link in UUID order, which is
+-- the order LockEMAPreparationServer walks them in. The link insert takes a
+-- foreign-key lock on each server it records, and it records them in
+-- association order, so without this the two orders disagree and deadlock.
+SELECT s.id FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE s.id = ANY(@mcp_server_ids::uuid[]) AND p.organization_id = @organization_id::text
+ORDER BY s.id
 FOR UPDATE OF s;
 
 -- name: GetEMABindingLockScope :one
