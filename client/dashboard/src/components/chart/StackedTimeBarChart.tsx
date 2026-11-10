@@ -48,6 +48,12 @@ function renderStripTooltip({
       border: `${TOOLTIP.borderWidth}px solid ${TOOLTIP.borderColor}`,
     });
     document.body.appendChild(el);
+    // Fixed to the viewport, so any scroll would leave it behind the strip.
+    // Capture, because the page scrolls inside containers, not the window.
+    window.addEventListener("scroll", hideStripTooltip, {
+      capture: true,
+      passive: true,
+    });
   }
 
   if (tooltip.opacity === 0 || tooltip.dataPoints.length === 0) {
@@ -86,7 +92,12 @@ function renderStripTooltip({
   );
   const above = canvas.top - height - STRIP_TOOLTIP_GAP;
   const top =
-    above >= STRIP_TOOLTIP_GAP ? above : canvas.bottom + STRIP_TOOLTIP_GAP;
+    above >= STRIP_TOOLTIP_GAP
+      ? above
+      : Math.min(
+          canvas.bottom + STRIP_TOOLTIP_GAP,
+          window.innerHeight - height - STRIP_TOOLTIP_GAP,
+        );
   el.style.left = `${left}px`;
   el.style.top = `${top}px`;
   el.style.opacity = "1";
@@ -151,8 +162,10 @@ export function StackedTimeBarChart({
   }, [dataSignature, resetZoom]);
 
   // The strip tooltip lives on the body, so it outlives the chart unless
-  // hidden when the chart goes away mid-hover.
-  useEffect(() => (compact ? hideStripTooltip : undefined), [compact]);
+  // hidden when the chart goes away mid-hover — including when it swaps to
+  // the no-data state, which unmounts the Bar.
+  const hasData = labels.length > 0 && datasets.length > 0;
+  useEffect(() => (compact ? hideStripTooltip : undefined), [compact, hasData]);
 
   // Chart.js resolves bar sizing from the dataset, not from the scale, so the
   // strip's near-continuous bars have to be set here.

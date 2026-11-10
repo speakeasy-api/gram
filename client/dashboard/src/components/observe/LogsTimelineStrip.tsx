@@ -202,7 +202,6 @@ export function LogsTimelineStrip({
               size="sm"
               onClick={onToggleMaximised}
               aria-label={maximised ? "Minimize timeline" : "Maximize timeline"}
-              aria-pressed={maximised}
             >
               <Icon name={maximised ? "minimize-2" : "maximize-2"} />
             </Button>
