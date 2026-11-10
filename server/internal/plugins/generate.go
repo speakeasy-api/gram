@@ -424,7 +424,7 @@ const (
 	// of repeating "platform-mcp" twice. Cursor and Codex packages keep a
 	// client suffix because all five package roots share one repository.
 	platformMCPPluginName         = "speakeasy"
-	platformMCPDisplayName        = "Platform MCP"
+	platformMCPDisplayName        = "Speakeasy Platform"
 	platformMCPServerName         = "platform"
 	platformMCPCursorPluginName   = "speakeasy-cursor"
 	platformMCPCodexPluginName    = "speakeasy-codex"

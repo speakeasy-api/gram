@@ -41,6 +41,9 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 	require.Equal(t, PublicMarketplaceName, claude.Name)
 	require.Len(t, claude.Plugins, 1, "the public marketplace advertises only the first-party package")
 	require.Equal(t, platformMCPPluginName, claude.Plugins[0].Name)
+	// The Claude plugin directory held "Platform MCP" for resembling another
+	// publisher's listing, so the display name must name Speakeasy.
+	require.Equal(t, "Speakeasy Platform", claude.Plugins[0].DisplayName)
 
 	var codex codexMarketplaceManifest
 	require.NoError(t, json.Unmarshal(files[".agents/plugins/marketplace.json"], &codex))
@@ -96,6 +99,7 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 	var meta claudePluginMeta
 	require.NoError(t, json.Unmarshal(files["speakeasy/.claude-plugin/plugin.json"], &meta))
 	require.Equal(t, "0."+platformMCPGeneratorVersion+".17", meta.Version, "the CI counter must reach the manifest so installs refresh")
+	require.Equal(t, "Speakeasy Platform", meta.DisplayName)
 }
 
 // The public repository is world-readable, so nothing org-derived or secret may
