@@ -13,8 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -26,6 +27,10 @@ const (
 	// SlotDefault is the project-wide key slot. It applies to every
 	// responsibility slot that has no dedicated override row.
 	SlotDefault = "default"
+
+	// orgEncryptedKeyColumn is the column organization-encrypted keys are
+	// stored in; it is bound into their ciphertext.
+	orgEncryptedKeyColumn = "model_provider_keys.api_key_org_encrypted"
 )
 
 // ValidSlots lists every value the slot column accepts: the project-wide
@@ -59,16 +64,16 @@ func ValidSlots() []string {
 // Disabling resolution requires disabling or deleting the keys themselves.
 type Resolver struct {
 	db       *pgxpool.Pool
-	enc      *encryption.Client
+	keys     *cutover.Sealer
 	platform openrouter.PlatformKeyResolver
 }
 
 var _ openrouter.KeyResolver = (*Resolver)(nil)
 
-func NewResolver(db *pgxpool.Pool, enc *encryption.Client, provisioner openrouter.Provisioner) *Resolver {
+func NewResolver(db *pgxpool.Pool, keys *cutover.Sealer, provisioner openrouter.Provisioner) *Resolver {
 	return &Resolver{
 		db:       db,
-		enc:      enc,
+		keys:     keys,
 		platform: openrouter.PlatformKeyResolver{Provisioner: provisioner},
 	}
 }
@@ -93,7 +98,7 @@ func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID strin
 		return openrouter.ResolvedKey{}, fmt.Errorf("invalid project id for key resolution: %w", err)
 	}
 
-	encryptedKey, err := repo.New(r.db).GetKeyForResolution(ctx, repo.GetKeyForResolutionParams{
+	row, err := repo.New(r.db).GetKeyForResolution(ctx, repo.GetKeyForResolutionParams{
 		ProjectID:     projectUUID,
 		Slots:         []string{string(slot), SlotDefault},
 		PreferredSlot: string(slot),
@@ -114,7 +119,18 @@ func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID strin
 		return openrouter.ResolvedKey{}, fmt.Errorf("read model provider keys: %w", err)
 	}
 
-	key, err := r.enc.Decrypt(encryptedKey)
+	stored := cutover.Ciphertexts{Legacy: row.ApiKeyEncrypted, Org: row.ApiKeyOrgEncrypted}
+	key, err := r.keys.Open(ctx, orgID, orgEncryptedKeyColumn, stored, func(ctx context.Context, org string) error {
+		if err := repo.New(r.db).BackfillKeyOrgEncrypted(ctx, repo.BackfillKeyOrgEncryptedParams{
+			ApiKeyOrgEncrypted: conv.ToPGText(org),
+			ID:                 row.ID,
+			ProjectID:          projectUUID,
+			ApiKeyEncrypted:    row.ApiKeyEncrypted,
+		}); err != nil {
+			return fmt.Errorf("backfill model provider key: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return openrouter.ResolvedKey{}, fmt.Errorf("decrypt model provider key: %w", err)
 	}

@@ -127,6 +127,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/orgencryptionapi"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	otelchrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
@@ -884,6 +885,13 @@ func newStartCommand() *cli.Command {
 
 			auditLogger := newAuditLogger()
 
+			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			orgEncryptionService, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+			if err != nil {
+				return err
+			}
+			aiProviderKeys := cutover.New(logger, encryptionClient, cutover.AIProviderKeys, &cutover.OrgEncryption{Service: orgEncryptionService, Provisioner: orgEncryptionProvisioner, Flags: featureFlags})
+
 			emailService, err := newEmailService(ctx, c, logger, guardianPolicy)
 			if err != nil {
 				return err
@@ -907,7 +915,7 @@ func newStartCommand() *cli.Command {
 					c.String("openrouter-provisioning-key"),
 					productFeatures,
 					billingTracker,
-					encryptionClient,
+					aiProviderKeys,
 				)
 			}
 
@@ -1111,7 +1119,7 @@ func newStartCommand() *cli.Command {
 				logger,
 				guardianPolicy,
 				openRouter,
-				modelkeys.NewResolver(db, encryptionClient, openRouter),
+				modelkeys.NewResolver(db, aiProviderKeys, openRouter),
 				captureStrategy,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
@@ -1171,7 +1179,6 @@ func newStartCommand() *cli.Command {
 				platformtoolsruntime.WithExternalTools(assistantPlatformExtras),
 			)
 
-			gcpIdentity := newGCPIdentity(ctx, logger, c)
 			kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("build kms signing client factory: %w", err)
@@ -1179,10 +1186,6 @@ func newStartCommand() *cli.Command {
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 			identityProviderProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, callbackOrigins.Outbound)
-			if err != nil {
-				return err
-			}
-			_, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
 			if err != nil {
 				return err
 			}
@@ -1602,10 +1605,10 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("attach AHP hooks: %w", err)
 			}
 			hooks.AttachTranscript(mux, hooksService)
-			anthropicinference.Attach(mux, logger, anthropicinference.NewService(logger, meterProvider, db, chatWriter, riskScanner, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}), aiintegrations.NewAnthropicInferenceResolver(db, encryptionClient))
+			anthropicinference.Attach(mux, logger, anthropicinference.NewService(logger, meterProvider, db, chatWriter, riskScanner, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}), aiintegrations.NewAnthropicInferenceResolver(db, aiProviderKeys))
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)
-			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
+			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, aiProviderKeys, guardianPolicy, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 
 			var slackDirectoryProvider slackdirectoryconnections.Provider
 			if c.String("slack-client-id") != "" && c.String("slack-client-id") != "unset" && c.String("slack-client-secret") != "" && c.String("slack-client-secret") != "unset" {
@@ -1615,7 +1618,7 @@ func newStartCommand() *cli.Command {
 			slackdirectoryconnections.Attach(mux, slackdirectoryconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, cache.NewRedisCacheAdapter(redisClient), encryptionClient, slackDirectoryProvider, siteURL, background.NewSlackDirectorySyncScheduler(temporalEnv)))
 			dataexports.Attach(mux, dataexports.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient))
 			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
-			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
+			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, aiProviderKeys, openRouter, productFeatures, auditLogger))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			identityapi.Attach(mux, identityapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			authService := auth.NewService(
@@ -1754,7 +1757,7 @@ func newStartCommand() *cli.Command {
 			chatanalysis.Attach(mux, chatanalysis.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger,
 				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}))
 			openRouterAdminCoordinator := &background.TemporalOpenRouterAdminCoordinator{TemporalEnv: temporalEnv}
-			openrouterkeys.Attach(mux, openrouterkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, openRouter, encryptionClient, openRouterAdminCoordinator))
+			openrouterkeys.Attach(mux, openrouterkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, openRouter, aiProviderKeys, openRouterAdminCoordinator))
 			// Platform break-glass remains separately unavailable; this composition is
 			// intentionally customer-only and enforces ordinary live admin sessions.
 			// DNO-979 owns production definitions and authoritative validators. Keep
@@ -2244,6 +2247,7 @@ func newStartCommand() *cli.Command {
 						TunnelHTTPClient:               tunnelHTTPClient,
 						DB:                             db,
 						EncryptionClient:               encryptionClient,
+						AIProviderKeys:                 aiProviderKeys,
 						FeatureProvider:                featureFlags,
 						AssetStorage:                   assetStorage,
 						SlackClient:                    slackClient,

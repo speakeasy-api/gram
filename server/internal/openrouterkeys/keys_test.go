@@ -26,11 +26,11 @@ import (
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	orgmetarepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -366,12 +366,12 @@ func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
 	// waits for active connections to finish.
 	t.Cleanup(release)
 
-	ctx, ti := newTestServiceWithProvisioner(t, func(logger *slog.Logger, tracerProvider trace.TracerProvider, conn *pgxpool.Pool, enc *encryption.Client) openrouter.Provisioner {
+	ctx, ti := newTestServiceWithProvisioner(t, func(logger *slog.Logger, tracerProvider trace.TracerProvider, conn *pgxpool.Pool, keys *cutover.Sealer) openrouter.Provisioner {
 		policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 		require.NoError(t, err)
 		testBaseURL, err := openrouter.WithTestBaseURL(upstream.URL)
 		require.NoError(t, err)
-		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, enc, testBaseURL)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, keys, testBaseURL)
 	})
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "enablereal", "chat", "sk-or-enable-real")
@@ -1438,12 +1438,12 @@ func TestAdminCauseReconcileUsesReplacementHashAndOverlappingDesiredState(t *tes
 
 func newRealOpenRouterTestService(t *testing.T, baseURL string) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestServiceWithProvisioner(t, func(logger *slog.Logger, tracerProvider trace.TracerProvider, conn *pgxpool.Pool, enc *encryption.Client) openrouter.Provisioner {
+	return newTestServiceWithProvisioner(t, func(logger *slog.Logger, tracerProvider trace.TracerProvider, conn *pgxpool.Pool, keys *cutover.Sealer) openrouter.Provisioner {
 		policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 		require.NoError(t, err)
 		testBaseURL, err := openrouter.WithTestBaseURL(baseURL)
 		require.NoError(t, err)
-		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-secret", nil, nil, enc, testBaseURL)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-secret", nil, nil, keys, testBaseURL)
 	})
 }
 

@@ -18,8 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 )
 
 const (
@@ -34,6 +34,10 @@ const (
 	// its scope needs in external_organization_id.
 	ProviderChatGPTCompliance = "chatgpt_compliance"
 )
+
+// orgEncryptedAPIKeyColumn is the column organization-encrypted credentials
+// are stored in; it is bound into their ciphertext.
+const orgEncryptedAPIKeyColumn = "ai_integration_configs.api_key_org_encrypted"
 
 var (
 	codexExternalOrganizationIDPattern = regexp.MustCompile(`^org-[A-Za-z0-9_-]+$`)
@@ -250,7 +254,7 @@ type Store struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	repo   *repo.Queries
-	enc    *encryption.Client
+	keys   *cutover.Sealer
 }
 
 type Config struct {
@@ -303,12 +307,12 @@ type UpsertResult struct {
 	CreatedNewGeneration bool
 }
 
-func NewStore(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client) *Store {
+func NewStore(logger *slog.Logger, db *pgxpool.Pool, keys *cutover.Sealer) *Store {
 	return &Store{
 		logger: logger.With(attr.SlogComponent("aiintegrations")),
 		db:     db,
 		repo:   repo.New(db),
-		enc:    enc,
+		keys:   keys,
 	}
 }
 
@@ -342,7 +346,7 @@ func (s *Store) loadForOrgAndProviderRow(ctx context.Context, orgID string, prov
 		return emptyConfig(orgID, provider), nil, oops.E(oops.CodeUnexpected, err, "failed to load ai integration config")
 	}
 
-	cfg, err := s.configFromGetRow(row)
+	cfg, err := s.configFromGetRow(ctx, row)
 	if err != nil {
 		return emptyConfig(orgID, provider), nil, err
 	}
@@ -393,7 +397,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		}); err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to replace ai integration config")
 		}
-		encrypted, err := s.encryptAPIKey(apiKey)
+		sealed, err := s.encryptAPIKey(ctx, orgID, apiKey)
 		if err != nil {
 			return UpsertResult{}, err
 		}
@@ -402,7 +406,8 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			Provider:               provider,
 			ProjectID:              projectID,
 			ExternalOrganizationID: conv.PtrToPGTextEmpty(externalOrganizationID),
-			ApiKeyEncrypted:        encrypted,
+			ApiKeyEncrypted:        sealed.Legacy,
+			ApiKeyOrgEncrypted:     sealed.Org,
 			Enabled:                enabled,
 			BillingMode:            conv.PtrToPGTextEmpty(billingMode),
 		})
@@ -538,7 +543,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		}
 	}
 
-	cfg, err := s.configFromRows(row, syncRow)
+	cfg, err := s.configFromRows(ctx, row, syncRow)
 	if err != nil {
 		return UpsertResult{}, err
 	}
@@ -580,7 +585,7 @@ func (s *Store) ListEnabledConfigsByProvider(ctx context.Context, provider strin
 
 	configs := make([]Config, 0, len(rows))
 	for _, row := range rows {
-		cfg, err := s.configFromListRow(row)
+		cfg, err := s.configFromListRow(ctx, row)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to decrypt ai integration config",
 				attr.SlogError(err),
@@ -742,7 +747,7 @@ func (s *Store) GetUsagePollConfigBySyncID(ctx context.Context, syncID uuid.UUID
 	case err != nil:
 		return Config{}, "", oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll sync")
 	}
-	cfg, err := s.configFromUsagePollConfigBySyncIDRow(row)
+	cfg, err := s.configFromUsagePollConfigBySyncIDRow(ctx, row)
 	if err != nil {
 		return Config{}, "", err
 	}
@@ -760,7 +765,7 @@ func (s *Store) GetProviderUsagePollConfig(ctx context.Context, configID uuid.UU
 	case err != nil:
 		return Config{}, "", oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll config")
 	}
-	cfg, err := s.configFromProviderUsagePollConfigByIDRow(row)
+	cfg, err := s.configFromProviderUsagePollConfigByIDRow(ctx, row)
 	if err != nil {
 		return Config{}, "", err
 	}
@@ -781,7 +786,7 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID, sche
 	case err != nil:
 		return Config{}, oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll config")
 	}
-	cfg, err := s.configFromUsagePollConfigRow(row)
+	cfg, err := s.configFromUsagePollConfigRow(ctx, row)
 	if err != nil {
 		return Config{}, err
 	}
@@ -1009,10 +1014,10 @@ func decodeRowPollCheckpoint(encoded pgtype.Text, legacy pgtype.Timestamptz) (ti
 	return checkpoint, nil
 }
 
-func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromGetRow(ctx context.Context, row repo.GetConfigByOrgAndProviderRow) (Config, error) {
+	apiKey, err := openCredential(ctx, s.keys, s.repo, storedCredential{configID: row.ID, organizationID: row.OrganizationID, projectID: row.ProjectID, legacy: row.ApiKeyEncrypted, org: row.ApiKeyOrgEncrypted}, true)
 	if err != nil {
-		return emptyConfig(row.OrganizationID, row.Provider), err
+		return emptyConfig(row.OrganizationID, row.Provider), oops.E(oops.CodeUnexpected, err, "decrypt ai integration api key")
 	}
 	checkpoint, err := decodeRowPollCheckpoint(row.PollCheckpoint, row.PollWatermarkAt)
 	if err != nil {
@@ -1041,10 +1046,10 @@ func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config,
 	}, nil
 }
 
-func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromListRow(ctx context.Context, row repo.ListEnabledConfigsByProviderRow) (Config, error) {
+	apiKey, err := openCredential(ctx, s.keys, s.repo, storedCredential{configID: row.ID, organizationID: row.OrganizationID, projectID: row.ProjectID, legacy: row.ApiKeyEncrypted, org: row.ApiKeyOrgEncrypted}, true)
 	if err != nil {
-		return emptyConfig(row.OrganizationID, row.Provider), err
+		return emptyConfig(row.OrganizationID, row.Provider), oops.E(oops.CodeUnexpected, err, "decrypt ai integration api key")
 	}
 	checkpoint, err := decodeRowPollCheckpoint(row.PollCheckpoint, row.PollWatermarkAt)
 	if err != nil {
@@ -1073,10 +1078,10 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 	}, nil
 }
 
-func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromUsagePollConfigRow(ctx context.Context, row repo.GetUsagePollConfigByIDRow) (Config, error) {
+	apiKey, err := openCredential(ctx, s.keys, s.repo, storedCredential{configID: row.ID, organizationID: row.OrganizationID, projectID: row.ProjectID, legacy: row.ApiKeyEncrypted, org: row.ApiKeyOrgEncrypted}, true)
 	if err != nil {
-		return emptyConfig(row.OrganizationID, row.Provider), err
+		return emptyConfig(row.OrganizationID, row.Provider), oops.E(oops.CodeUnexpected, err, "decrypt ai integration api key")
 	}
 	checkpoint, err := decodeRowPollCheckpoint(row.PollCheckpoint, row.PollWatermarkAt)
 	if err != nil {
@@ -1105,10 +1110,10 @@ func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow)
 	}, nil
 }
 
-func (s *Store) configFromUsagePollConfigBySyncIDRow(row repo.GetUsagePollConfigBySyncIDRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromUsagePollConfigBySyncIDRow(ctx context.Context, row repo.GetUsagePollConfigBySyncIDRow) (Config, error) {
+	apiKey, err := openCredential(ctx, s.keys, s.repo, storedCredential{configID: row.ID, organizationID: row.OrganizationID, projectID: row.ProjectID, legacy: row.ApiKeyEncrypted, org: row.ApiKeyOrgEncrypted}, true)
 	if err != nil {
-		return emptyConfig(row.OrganizationID, row.Provider), err
+		return emptyConfig(row.OrganizationID, row.Provider), oops.E(oops.CodeUnexpected, err, "decrypt ai integration api key")
 	}
 	checkpoint, err := decodeRowPollCheckpoint(row.PollCheckpoint, row.PollWatermarkAt)
 	if err != nil {
@@ -1137,10 +1142,10 @@ func (s *Store) configFromUsagePollConfigBySyncIDRow(row repo.GetUsagePollConfig
 	}, nil
 }
 
-func (s *Store) configFromProviderUsagePollConfigByIDRow(row repo.GetProviderUsagePollConfigByIDRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromProviderUsagePollConfigByIDRow(ctx context.Context, row repo.GetProviderUsagePollConfigByIDRow) (Config, error) {
+	apiKey, err := openCredential(ctx, s.keys, s.repo, storedCredential{configID: row.ID, organizationID: row.OrganizationID, projectID: row.ProjectID, legacy: row.ApiKeyEncrypted, org: row.ApiKeyOrgEncrypted}, true)
 	if err != nil {
-		return emptyConfig(row.OrganizationID, row.Provider), err
+		return emptyConfig(row.OrganizationID, row.Provider), oops.E(oops.CodeUnexpected, err, "decrypt ai integration api key")
 	}
 	checkpoint, err := decodeRowPollCheckpoint(row.PollCheckpoint, row.PollWatermarkAt)
 	if err != nil {
@@ -1169,10 +1174,10 @@ func (s *Store) configFromProviderUsagePollConfigByIDRow(row repo.GetProviderUsa
 	}, nil
 }
 
-func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.EnsureSyncRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromRows(ctx context.Context, row repo.AiIntegrationConfig, syncRow repo.EnsureSyncRow) (Config, error) {
+	apiKey, err := openCredential(ctx, s.keys, s.repo, storedCredential{configID: row.ID, organizationID: row.OrganizationID, projectID: row.ProjectID, legacy: row.ApiKeyEncrypted, org: row.ApiKeyOrgEncrypted}, false)
 	if err != nil {
-		return emptyConfig(row.OrganizationID, row.Provider), err
+		return emptyConfig(row.OrganizationID, row.Provider), oops.E(oops.CodeUnexpected, err, "decrypt ai integration api key")
 	}
 	checkpoint, err := decodeRowPollCheckpoint(syncRow.PollCheckpoint, syncRow.PollWatermarkAt)
 	if err != nil {
@@ -1201,25 +1206,57 @@ func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.Ensure
 	}, nil
 }
 
-func (s *Store) encryptAPIKey(apiKey string) (string, error) {
+func (s *Store) encryptAPIKey(ctx context.Context, orgID string, apiKey string) (cutover.Ciphertexts, error) {
 	apiKey = strings.TrimSpace(apiKey)
 	if apiKey == "" {
-		return "", oops.E(oops.CodeInvalid, nil, "api_key is required")
+		return cutover.Ciphertexts{}, oops.E(oops.CodeInvalid, nil, "api_key is required")
 	}
-	ct, err := s.enc.Encrypt([]byte(apiKey))
+	sealed, err := s.keys.Seal(ctx, orgID, orgEncryptedAPIKeyColumn, []byte(apiKey))
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "encrypt ai integration api key")
+		return cutover.Ciphertexts{}, oops.E(oops.CodeUnexpected, err, "encrypt ai integration api key")
 	}
-	return ct, nil
+	return sealed, nil
 }
 
-func (s *Store) decryptAPIKey(stored string) (string, error) {
-	if stored == "" {
+// storedCredential is a config's credential as stored, with the row it was
+// read from.
+type storedCredential struct {
+	configID       uuid.UUID
+	organizationID string
+	projectID      uuid.UUID
+	legacy         string
+	org            pgtype.Text
+}
+
+// openCredential decrypts a config's credential. backfill stores, through q,
+// an organization-encrypted copy for an organization being moved to
+// organization encryption; callers inside a transaction pass false.
+func openCredential(ctx context.Context, keys *cutover.Sealer, q *repo.Queries, stored storedCredential, backfill bool) (string, error) {
+	// An empty value is a pending setup with no credentials, including demo
+	// fixtures.
+	if stored.legacy == "" {
 		return "", nil
 	}
-	plaintext, err := s.enc.Decrypt(stored)
+
+	var store cutover.Backfill
+	if backfill {
+		store = func(ctx context.Context, org string) error {
+			if err := q.BackfillConfigOrgEncrypted(ctx, repo.BackfillConfigOrgEncryptedParams{
+				ApiKeyOrgEncrypted: conv.ToPGText(org),
+				ID:                 stored.configID,
+				OrganizationID:     stored.organizationID,
+				ProjectID:          stored.projectID,
+				ApiKeyEncrypted:    stored.legacy,
+			}); err != nil {
+				return fmt.Errorf("backfill ai integration credential: %w", err)
+			}
+			return nil
+		}
+	}
+
+	plaintext, err := keys.Open(ctx, stored.organizationID, orgEncryptedAPIKeyColumn, cutover.Ciphertexts{Legacy: stored.legacy, Org: stored.org}, store)
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "decrypt ai integration api key")
+		return "", fmt.Errorf("decrypt ai integration credential: %w", err)
 	}
 	return plaintext, nil
 }

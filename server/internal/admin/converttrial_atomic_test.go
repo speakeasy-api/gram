@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -92,17 +91,16 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	t.Parallel()
 	ctx, svc, conn, provisioner := newRearmService(t)
 	const (
-		orgID            = "org_convert_audit"
-		sessionSentinel  = "bearer-session-token-privacy-sentinel"
-		emailSentinel    = "conversion-operator@privacy.invalid"
-		operatorName     = "Conversion Operator"
-		oidcSentinel     = "external-oidc-subject-privacy-sentinel"
-		workosSentinel   = "external-workos-privacy-sentinel"
-		nameSentinel     = "organization-name-privacy-sentinel"
-		slugSentinel     = "organization-slug-privacy-sentinel"
-		providerSentinel = "provider-payload-privacy-sentinel"
-		promptSentinel   = "prompt-privacy-sentinel"
-		spendSentinel    = "313131.313131"
+		orgID           = "org_convert_audit"
+		sessionSentinel = "bearer-session-token-privacy-sentinel"
+		emailSentinel   = "conversion-operator@privacy.invalid"
+		operatorName    = "Conversion Operator"
+		oidcSentinel    = "external-oidc-subject-privacy-sentinel"
+		workosSentinel  = "external-workos-privacy-sentinel"
+		nameSentinel    = "organization-name-privacy-sentinel"
+		slugSentinel    = "organization-slug-privacy-sentinel"
+		promptSentinel  = "prompt-privacy-sentinel"
+		spendSentinel   = "313131.313131"
 	)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{SessionID: sessionSentinel, Email: emailSentinel, OIDCSubject: oidcSentinel, Name: operatorName, HD: "privacy.invalid"})
 	endsAt := time.Now().UTC().Add(7 * 24 * time.Hour)
@@ -117,7 +115,6 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 7, disabled: true})
 	}
 	require.NoError(t, testrepo.New(conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), Disabled: true, DisableCauses: []string{"trial_demotion", "billing_inactive", "admin_lock"}}))
-	require.NoError(t, testrepo.New(conn).SetOpenRouterAPIKeyProviderPayloadFixture(ctx, testrepo.SetOpenRouterAPIKeyProviderPayloadFixtureParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), ProviderPayload: conv.ToPGText(providerSentinel)}))
 
 	payloadSessionToken := sessionSentinel
 	result, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID, AdminSessionToken: &payloadSessionToken})
@@ -206,7 +203,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	})
 	require.NoError(t, err)
 	for surface, data := range map[string][]byte{"audit row": fullAuditRow, "outbox envelope": envelope, "endpoint response": responseJSON} {
-		for _, forbidden := range []string{sessionSentinel, emailSentinel, workosSentinel, nameSentinel, slugSentinel, providerSentinel, promptSentinel, spendSentinel, "hash-", "sk-test"} {
+		for _, forbidden := range []string{sessionSentinel, emailSentinel, workosSentinel, nameSentinel, slugSentinel, promptSentinel, spendSentinel, "hash-", "sk-test"} {
 			require.NotContains(t, string(data), forbidden, "%s leaked %s", surface, forbidden)
 		}
 	}

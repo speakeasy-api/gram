@@ -21,8 +21,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	pfrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -102,6 +105,7 @@ type testInstance struct {
 	service     *modelkeys.Service
 	conn        *pgxpool.Pool
 	enc         *encryption.Client
+	keys        *cutover.Sealer
 	provisioner *stubProvisioner
 	features    *productfeatures.Client
 }
@@ -119,6 +123,34 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 // disabled path. Dedicated databases still retain cached values across -count
 // repetitions, so those variants also get a private Redis instance.
 func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestServiceWithKeys(t, redisDB, func(context.Context, *pgxpool.Pool) *cutover.Sealer {
+		return testenv.NewAIProviderKeys(t)
+	})
+}
+
+// newOrgEncryptedTestService is [newTestService] for an organization moved to
+// organization encryption.
+func newOrgEncryptedTestService(t *testing.T) (context.Context, *testInstance, *orgencryptiontest.Fixture) {
+	t.Helper()
+
+	var fixture *orgencryptiontest.Fixture
+	ctx, ti := newTestServiceWithKeys(t, 0, func(ctx context.Context, conn *pgxpool.Pool) *cutover.Sealer {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+
+		fixture = orgencryptiontest.New(t, conn)
+		flags := &feature.InMemory{}
+		flags.SetFlag(cutover.AIProviderKeys.Flag, authCtx.ActiveOrganizationID, true)
+
+		return cutover.New(testenv.NewLogger(t), testenv.NewEncryptionClient(t), cutover.AIProviderKeys, &cutover.OrgEncryption{Service: fixture.Service, Provisioner: fixture.Provisioner, Flags: flags})
+	})
+
+	return ctx, ti, fixture
+}
+
+func newTestServiceWithKeys(t *testing.T, redisDB int, keysFor func(context.Context, *pgxpool.Pool) *cutover.Sealer) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -144,6 +176,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	enc := testenv.NewEncryptionClient(t)
+	keys := keysFor(ctx, conn)
 
 	provisioner := &stubProvisioner{platformKey: "platform-key", usageErr: nil, usageCalls: 0}
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
@@ -154,7 +187,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 		conn,
 		sessionManager,
 		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
-		enc,
+		keys,
 		provisioner,
 		features,
 		audit.NewLogger(),
@@ -164,6 +197,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 		service:     svc,
 		conn:        conn,
 		enc:         enc,
+		keys:        keys,
 		provisioner: provisioner,
 		features:    features,
 	}

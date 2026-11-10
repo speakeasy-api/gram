@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
@@ -142,6 +143,10 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, fmt.Errorf("create private ingress encryption client: %w", err)
 	}
+	// Organization encryption is not configured in this process, so it reads and
+	// writes AI provider keys with the application key alone; every row keeps
+	// that copy while organizations move.
+	aiProviderKeys := cutover.New(logger, enc, cutover.AIProviderKeys, nil)
 	env := environments.NewEnvironmentEntries(logger, db, enc, metadatarepo.New(db))
 	r.Kubernetes, err = k8s.InitializeK8sClient(ctx, logger, c.String("environment"), "", "", "")
 	if err != nil {
@@ -165,7 +170,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if c.String("environment") == "local" {
 		openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 	} else {
-		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc)
+		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, aiProviderKeys)
 	}
 	tigrisStore, stop, err := newTigrisStore(ctx, c, logger)
 	if err != nil {
@@ -223,7 +228,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	r.cleanup = append(r.cleanup, efficacySignaler.Shutdown, analysisSignaler.Shutdown)
 	chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
 	chatWriter.AddObserver(analysis.NewObserver(logger, analysisSignaler))
-	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, enc, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
+	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, aiProviderKeys, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,

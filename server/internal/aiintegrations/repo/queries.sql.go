@@ -50,6 +50,38 @@ func (q *Queries) AdvanceWatermark(ctx context.Context, arg AdvanceWatermarkPara
 	return err
 }
 
+const backfillConfigOrgEncrypted = `-- name: BackfillConfigOrgEncrypted :exec
+UPDATE ai_integration_configs
+SET api_key_org_encrypted = $1
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id = $4
+  AND api_key_encrypted = $5
+  AND api_key_org_encrypted IS NULL
+`
+
+type BackfillConfigOrgEncryptedParams struct {
+	ApiKeyOrgEncrypted pgtype.Text
+	ID                 uuid.UUID
+	OrganizationID     string
+	ProjectID          uuid.UUID
+	ApiKeyEncrypted    string
+}
+
+// Stores the organization-encrypted copy of a credential read before it had
+// one. The application-key ciphertext must still be the one that was read, so
+// a credential replaced in the meantime is left alone.
+func (q *Queries) BackfillConfigOrgEncrypted(ctx context.Context, arg BackfillConfigOrgEncryptedParams) error {
+	_, err := q.db.Exec(ctx, backfillConfigOrgEncrypted,
+		arg.ApiKeyOrgEncrypted,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ApiKeyEncrypted,
+	)
+	return err
+}
+
 const clearSyncSchedulePauses = `-- name: ClearSyncSchedulePauses :one
 WITH cleared AS (
   UPDATE ai_integration_syncs
@@ -722,6 +754,7 @@ INSERT INTO ai_integration_configs (
   , project_id
   , external_organization_id
   , api_key_encrypted
+  , api_key_org_encrypted
   , enabled
   , billing_mode
 ) VALUES (
@@ -732,6 +765,7 @@ INSERT INTO ai_integration_configs (
   , $5
   , $6
   , $7
+  , $8
 )
 RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, api_key_org_encrypted, enabled, billing_mode, id, deleted
 `
@@ -742,6 +776,7 @@ type InsertConfigParams struct {
 	ProjectID              uuid.UUID
 	ExternalOrganizationID pgtype.Text
 	ApiKeyEncrypted        string
+	ApiKeyOrgEncrypted     pgtype.Text
 	Enabled                bool
 	BillingMode            pgtype.Text
 }
@@ -753,6 +788,7 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiI
 		arg.ProjectID,
 		arg.ExternalOrganizationID,
 		arg.ApiKeyEncrypted,
+		arg.ApiKeyOrgEncrypted,
 		arg.Enabled,
 		arg.BillingMode,
 	)
@@ -1276,25 +1312,28 @@ func (q *Queries) SoftDeleteConfig(ctx context.Context, arg SoftDeleteConfigPara
 const updateAnthropicInferenceConfig = `-- name: UpdateAnthropicInferenceConfig :one
 UPDATE ai_integration_configs
 SET api_key_encrypted = $1,
-    enabled = $2,
+    api_key_org_encrypted = $2,
+    enabled = $3,
     updated_at = clock_timestamp()
-WHERE id = $3 AND organization_id = $4
-  AND project_id = $5 AND provider = 'anthropic_inference'
+WHERE id = $4 AND organization_id = $5
+  AND project_id = $6 AND provider = 'anthropic_inference'
   AND deleted IS FALSE
 RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, api_key_org_encrypted, enabled, billing_mode, id, deleted
 `
 
 type UpdateAnthropicInferenceConfigParams struct {
-	ApiKeyEncrypted string
-	Enabled         bool
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
+	ApiKeyEncrypted    string
+	ApiKeyOrgEncrypted pgtype.Text
+	Enabled            bool
+	ID                 uuid.UUID
+	OrganizationID     string
+	ProjectID          uuid.UUID
 }
 
 func (q *Queries) UpdateAnthropicInferenceConfig(ctx context.Context, arg UpdateAnthropicInferenceConfigParams) (AiIntegrationConfig, error) {
 	row := q.db.QueryRow(ctx, updateAnthropicInferenceConfig,
 		arg.ApiKeyEncrypted,
+		arg.ApiKeyOrgEncrypted,
 		arg.Enabled,
 		arg.ID,
 		arg.OrganizationID,

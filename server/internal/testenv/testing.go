@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 )
 
 // NewCacheSuffix returns a cache suffix unique to this test invocation.
@@ -46,6 +47,14 @@ func NewEncryptionClient(t *testing.T) *encryption.Client {
 	enc, err := encryption.New("dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=")
 	require.NoError(t, err)
 	return enc
+}
+
+// NewAIProviderKeys returns the AI provider credential sealer over
+// NewEncryptionClient's key, with organization encryption off.
+func NewAIProviderKeys(t *testing.T) *cutover.Sealer {
+	t.Helper()
+
+	return cutover.New(NewLogger(t), NewEncryptionClient(t), cutover.AIProviderKeys, nil)
 }
 
 func NewLogger(*testing.T) *slog.Logger {

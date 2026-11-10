@@ -7220,25 +7220,6 @@ func (q *Queries) SetOpenRouterAPIKeyHashFixture(ctx context.Context, arg SetOpe
 	return err
 }
 
-const setOpenRouterAPIKeyProviderPayloadFixture = `-- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
-UPDATE openrouter_api_keys
-SET key = $1
-WHERE organization_id = $2
-  AND key_type = $3
-`
-
-type SetOpenRouterAPIKeyProviderPayloadFixtureParams struct {
-	ProviderPayload pgtype.Text
-	OrganizationID  string
-	KeyType         string
-}
-
-// Test-only privacy sentinel in the deprecated plaintext provider payload column.
-func (q *Queries) SetOpenRouterAPIKeyProviderPayloadFixture(ctx context.Context, arg SetOpenRouterAPIKeyProviderPayloadFixtureParams) error {
-	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyProviderPayloadFixture, arg.ProviderPayload, arg.OrganizationID, arg.KeyType)
-	return err
-}
-
 const setOpenRouterKeyLifecycleFixture = `-- name: SetOpenRouterKeyLifecycleFixture :execrows
 UPDATE openrouter_api_keys
 SET disabled = $1,

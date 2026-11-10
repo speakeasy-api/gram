@@ -18,9 +18,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
@@ -70,12 +70,12 @@ type PollAIData struct {
 func NewPollAIData(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
-	encryptionClient *encryption.Client,
+	keys *cutover.Sealer,
 	telemetryLogger *telemetry.Logger,
 	guardianPolicy *guardian.Policy,
 	chatWriter *chat.ChatMessageWriter,
 ) *PollAIData {
-	store := aiintegrations.NewStore(logger, db, encryptionClient)
+	store := aiintegrations.NewStore(logger, db, keys)
 	complianceHeartbeat := func(ctx context.Context, scope string, page int) {
 		activity.RecordHeartbeat(ctx, map[string]any{
 			"schedule": aiintegrations.ScheduleAnthropicCompliance,

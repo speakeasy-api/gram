@@ -9,7 +9,37 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const backfillKeyOrgEncrypted = `-- name: BackfillKeyOrgEncrypted :exec
+UPDATE model_provider_keys
+SET api_key_org_encrypted = $1
+WHERE id = $2
+  AND project_id = $3
+  AND api_key_encrypted = $4
+  AND api_key_org_encrypted IS NULL
+`
+
+type BackfillKeyOrgEncryptedParams struct {
+	ApiKeyOrgEncrypted pgtype.Text
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	ApiKeyEncrypted    string
+}
+
+// Stores the organization-encrypted copy of a key read before it had one. The
+// application-key ciphertext must still be the one that was read, so a key
+// replaced in the meantime is left alone.
+func (q *Queries) BackfillKeyOrgEncrypted(ctx context.Context, arg BackfillKeyOrgEncryptedParams) error {
+	_, err := q.db.Exec(ctx, backfillKeyOrgEncrypted,
+		arg.ApiKeyOrgEncrypted,
+		arg.ID,
+		arg.ProjectID,
+		arg.ApiKeyEncrypted,
+	)
+	return err
+}
 
 const getKeyByIDForUpdate = `-- name: GetKeyByIDForUpdate :one
 SELECT id, organization_id, project_id, slot, provider, api_key_encrypted, api_key_org_encrypted, enabled, created_at, updated_at, deleted_at, deleted
@@ -46,7 +76,7 @@ func (q *Queries) GetKeyByIDForUpdate(ctx context.Context, arg GetKeyByIDForUpda
 }
 
 const getKeyForResolution = `-- name: GetKeyForResolution :one
-SELECT api_key_encrypted
+SELECT id, api_key_encrypted, api_key_org_encrypted
 FROM model_provider_keys
 WHERE project_id = $1
   AND slot = ANY ($2::text[])
@@ -64,16 +94,22 @@ type GetKeyForResolutionParams struct {
 	PreferredSlot string
 }
 
-func (q *Queries) GetKeyForResolution(ctx context.Context, arg GetKeyForResolutionParams) (string, error) {
+type GetKeyForResolutionRow struct {
+	ID                 uuid.UUID
+	ApiKeyEncrypted    string
+	ApiKeyOrgEncrypted pgtype.Text
+}
+
+func (q *Queries) GetKeyForResolution(ctx context.Context, arg GetKeyForResolutionParams) (GetKeyForResolutionRow, error) {
 	row := q.db.QueryRow(ctx, getKeyForResolution,
 		arg.ProjectID,
 		arg.Slots,
 		arg.Provider,
 		arg.PreferredSlot,
 	)
-	var api_key_encrypted string
-	err := row.Scan(&api_key_encrypted)
-	return api_key_encrypted, err
+	var i GetKeyForResolutionRow
+	err := row.Scan(&i.ID, &i.ApiKeyEncrypted, &i.ApiKeyOrgEncrypted)
+	return i, err
 }
 
 const insertKey = `-- name: InsertKey :one
@@ -83,6 +119,7 @@ INSERT INTO model_provider_keys (
   , slot
   , provider
   , api_key_encrypted
+  , api_key_org_encrypted
   , enabled
 ) VALUES (
     $1
@@ -91,17 +128,19 @@ INSERT INTO model_provider_keys (
   , $4
   , $5
   , $6
+  , $7
 )
 RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, api_key_org_encrypted, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertKeyParams struct {
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	Slot            string
-	Provider        string
-	ApiKeyEncrypted string
-	Enabled         bool
+	OrganizationID     string
+	ProjectID          uuid.UUID
+	Slot               string
+	Provider           string
+	ApiKeyEncrypted    string
+	ApiKeyOrgEncrypted pgtype.Text
+	Enabled            bool
 }
 
 func (q *Queries) InsertKey(ctx context.Context, arg InsertKeyParams) (ModelProviderKey, error) {
@@ -111,6 +150,7 @@ func (q *Queries) InsertKey(ctx context.Context, arg InsertKeyParams) (ModelProv
 		arg.Slot,
 		arg.Provider,
 		arg.ApiKeyEncrypted,
+		arg.ApiKeyOrgEncrypted,
 		arg.Enabled,
 	)
 	var i ModelProviderKey
