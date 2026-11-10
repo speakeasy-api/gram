@@ -2593,11 +2593,14 @@ function useJustSaved(savedAt: number | undefined): boolean {
   const [shown, setShown] = useState(recent);
   useEffect(() => {
     if (savedAt === undefined) return;
+    const left = SAVED_FOR_MS - (Date.now() - savedAt);
+    // A remount after the window has passed shows nothing, not a flash.
+    if (left <= 0) {
+      setShown(false);
+      return;
+    }
     setShown(true);
-    const timer = setTimeout(
-      () => setShown(false),
-      SAVED_FOR_MS - (Date.now() - savedAt),
-    );
+    const timer = setTimeout(() => setShown(false), left);
     return () => clearTimeout(timer);
   }, [savedAt]);
   return shown;
