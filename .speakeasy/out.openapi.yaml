@@ -108030,7 +108030,7 @@ components:
           type: array
           items:
             type: string
-          description: Active OAuth client ids already present on both issuers. Non-empty blocks migration.
+          description: 'Active OAuth client ids present on both issuers that cannot be merged. Non-empty blocks migration. A client resolved from the same Client ID Metadata Document on both issuers is not listed: it merges onto the target''s client, keeping its sessions and consents, unless an issuance selection profile pins the source client to the source issuer.'
         consent_count:
           type: integer
           description: User-session consents that would move.
