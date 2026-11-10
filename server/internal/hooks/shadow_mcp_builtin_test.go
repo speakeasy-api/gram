@@ -12,8 +12,9 @@ import (
 // TestIngest_ShadowMCPBlockAllExemptsAgentBuiltinServers: a block_all Shadow
 // MCP policy governs MCP servers people configure, not the coding agent's own
 // in-process servers. Those arrive with no URL and no launch command, and only
-// then does their name exempt them: a stdio or remote server named like a
-// built-in is still denied.
+// then, with a loaded session inventory that confirms it, does their name
+// exempt them: a stdio or remote server named like a built-in, or any call
+// whose inventory cannot be read, is still denied.
 func TestIngest_ShadowMCPBlockAllExemptsAgentBuiltinServers(t *testing.T) {
 	t.Parallel()
 
@@ -22,12 +23,32 @@ func TestIngest_ShadowMCPBlockAllExemptsAgentBuiltinServers(t *testing.T) {
 		toolName   string
 		url        string
 		command    string
+		identity   string
 		inventory  []MCPServerEntry
 		wantDenied bool
 	}{
-		{name: "claude in chrome is allowed", toolName: "mcp__claude-in-chrome__tabs_context_mcp", wantDenied: false},
-		{name: "desktop app task tool is allowed", toolName: "mcp__ccd_turn__wrap_up", wantDenied: false},
-		{name: "desktop app browser pane is allowed", toolName: "mcp__Claude_Browser__navigate", wantDenied: false},
+		{name: "claude in chrome is allowed", toolName: "mcp__claude-in-chrome__tabs_context_mcp", inventory: []MCPServerEntry{}, wantDenied: false},
+		{name: "desktop app task tool is allowed", toolName: "mcp__ccd_turn__wrap_up", inventory: []MCPServerEntry{}, wantDenied: false},
+		{name: "desktop app browser pane is allowed", toolName: "mcp__Claude_Browser__navigate", inventory: []MCPServerEntry{}, wantDenied: false},
+		{
+			name:       "built-in name without a session inventory is denied",
+			toolName:   "mcp__claude-in-chrome__tabs_context_mcp",
+			inventory:  nil,
+			wantDenied: true,
+		},
+		{
+			name:       "built-in name with a launch command as server identity is denied",
+			toolName:   "mcp__claude-in-chrome__tabs_context_mcp",
+			identity:   "npx some-mcp",
+			inventory:  []MCPServerEntry{},
+			wantDenied: true,
+		},
+		{
+			name:       "unlisted ccd name is denied",
+			toolName:   "mcp__ccd_custom__run",
+			inventory:  []MCPServerEntry{},
+			wantDenied: true,
+		},
 		{
 			name:       "built-in name with a stdio command is denied",
 			toolName:   "mcp__claude-in-chrome__tabs_context_mcp",
@@ -76,6 +97,9 @@ func TestIngest_ShadowMCPBlockAllExemptsAgentBuiltinServers(t *testing.T) {
 				mcp.Command = &tc.command
 				mcp.ServerIdentity = &tc.command
 			}
+			if tc.identity != "" {
+				mcp.ServerIdentity = &tc.identity
+			}
 			callID := "call-1"
 			payload := canonicalIngestPayload("claude", "tool.requested", sessionID)
 			payload.Data = &gen.HookIngestData{
@@ -90,7 +114,7 @@ func TestIngest_ShadowMCPBlockAllExemptsAgentBuiltinServers(t *testing.T) {
 				require.Equal(t, "deny", result.Decision)
 				return
 			}
-			require.NotEqual(t, "deny", result.Decision)
+			require.Equal(t, "allow", result.Decision)
 		})
 	}
 }

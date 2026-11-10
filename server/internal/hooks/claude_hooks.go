@@ -1295,8 +1295,10 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 
 	// The agent's own in-process servers (Claude in Chrome, desktop app tools)
 	// never appear in `claude mcp list`, so without this they would read as
-	// missing from the configuration and be denied under block_all.
-	if shadowmcp.IsAgentBuiltinServer(serverPrefix, "", "") && !inventoryConfiguresMCPServer(entries, serverPrefix) {
+	// missing from the configuration and be denied under block_all. The
+	// inventory loaded above is what proves the server has no URL or command,
+	// which is why this runs only after the fail-closed missing-inventory deny.
+	if shadowmcp.IsAgentBuiltinServer(serverPrefix, inventoryServerProvenance(entries, serverPrefix)) {
 		if output != nil {
 			output.PermissionDecision = &allow
 		}

@@ -76,40 +76,57 @@ func (s *Service) enforceShadowMCPToolAccess(
 
 // isCanonicalAgentBuiltinMCPServer reports whether a canonical MCP tool call
 // targets one of the agent's own in-process servers, which Shadow MCP does not
-// govern. The call must carry no URL or launch command, and the session's MCP
-// inventory must not configure a server under the same name with one: a
-// user-configured stdio or remote server named like a built-in is still a
-// Shadow MCP server.
+// govern. The call must carry no URL, launch command, or other identity beyond
+// the server name, and the session's MCP inventory must load and configure no
+// server under the same name with one: a user-configured stdio or remote server
+// named like a built-in is still a Shadow MCP server, and an inventory that
+// cannot be read proves nothing, so the call stays under the policy.
 func (s *Service) isCanonicalAgentBuiltinMCPServer(ctx context.Context, payload *gen.IngestPayload, rawToolName string, evidence shadowmcp.AccessEvidence) bool {
 	serverName := toolref.MCPServerOf(rawToolName)
-	command := ""
-	if mcp := canonicalMCPData(payload); mcp != nil {
-		command = conv.PtrValOr(mcp.Command, "")
-	}
-	if !shadowmcp.IsAgentBuiltinServer(serverName, evidence.FullURL, command) {
+	if !shadowmcp.IsAgentBuiltinServer(serverName, canonicalPayloadProvenance(payload, serverName, evidence)) {
 		return false
 	}
 
 	entries, err := s.getCachedMCPList(ctx, canonicalSessionID(payload))
 	if err != nil {
-		return true
+		return false
 	}
-	return !inventoryConfiguresMCPServer(entries, serverName)
+	return shadowmcp.IsAgentBuiltinServer(serverName, inventoryServerProvenance(entries, serverName))
 }
 
-// inventoryConfiguresMCPServer reports whether any inventory entry addressed
-// by serverName (configured name or tool-name prefix) has a URL or launch
-// command, which marks the server as user configured rather than built in.
-func inventoryConfiguresMCPServer(entries []MCPServerEntry, serverName string) bool {
+// canonicalPayloadProvenance is the transport a canonical hook payload states
+// for its MCP server. The payload is authoritative about itself, so the result
+// is known. The evidence identity counts as a launch command whenever it is
+// more than the server's name: the relay copies a stdio command there, and a
+// session inventory resolution pins it to the configured target.
+func canonicalPayloadProvenance(payload *gen.IngestPayload, serverName string, evidence shadowmcp.AccessEvidence) shadowmcp.ServerProvenance {
+	command := ""
+	payloadServerName := ""
+	if mcp := canonicalMCPData(payload); mcp != nil {
+		command = strings.TrimSpace(conv.PtrValOr(mcp.Command, ""))
+		payloadServerName = strings.TrimSpace(conv.PtrValOr(mcp.ServerName, ""))
+	}
+
+	identity := strings.TrimSpace(evidence.ServerIdentity)
+	if command == "" && identity != serverName && identity != payloadServerName {
+		command = identity
+	}
+	return shadowmcp.ServerProvenance{Known: true, URL: evidence.FullURL, Command: command}
+}
+
+// inventoryServerProvenance is the transport a successfully loaded session
+// inventory configures for serverName, matched by configured name or tool-name
+// prefix. A server the inventory does not list resolves to no transport.
+func inventoryServerProvenance(entries []MCPServerEntry, serverName string) shadowmcp.ServerProvenance {
 	for _, entry := range entries {
 		if entry.Name != serverName && !mcpEntryMatchesPrefix(entry, serverName) {
 			continue
 		}
 		if entry.URL != "" || entry.Command != "" {
-			return true
+			return shadowmcp.ServerProvenance{Known: true, URL: entry.URL, Command: entry.Command}
 		}
 	}
-	return false
+	return shadowmcp.ServerProvenance{Known: true, URL: "", Command: ""}
 }
 
 func (s *Service) canBypassPolicy(

@@ -210,7 +210,8 @@ func (s *Scanner) Scan(ctx context.Context, orgID string, projectID uuid.UUID, p
 	requests := make([]BypassRequest, 0)
 	for i, message := range messages {
 		for _, call := range message.ToolCalls {
-			if candidate := s.scanCall(ctx, orgID, message.UserID, call, provenance[call.ID], trustedHosts); candidate != nil {
+			prov, provFound := provenance[call.ID]
+			if candidate := s.scanCall(ctx, orgID, message.UserID, call, prov, provFound, trustedHosts); candidate != nil {
 				candidates[i] = append(candidates[i], *candidate)
 				if candidate.bypassRequest != nil {
 					if _, ok := uniqueRequests[*candidate.bypassRequest]; !ok {
@@ -277,8 +278,10 @@ func (s *Scanner) lookupProvenance(ctx context.Context, projectID uuid.UUID, ids
 }
 
 // scanCall decides a single tool call, returning nil when the call is clean or
-// is not an MCP call at all.
-func (s *Scanner) scanCall(ctx context.Context, orgID string, userID string, call ToolCall, prov telemetryrepo.MCPProvenance, trustedHosts []string) *findingCandidate {
+// is not an MCP call at all. provFound reports whether the provenance lookup
+// returned a row for the call; a missing row is unknown provenance, not proof
+// that the server has no transport.
+func (s *Scanner) scanCall(ctx context.Context, orgID string, userID string, call ToolCall, prov telemetryrepo.MCPProvenance, provFound bool, trustedHosts []string) *findingCandidate {
 	if call.Name == "" || !toolref.IsMCPToolName(call.Name) {
 		return nil
 	}
@@ -299,11 +302,11 @@ func (s *Scanner) scanCall(ctx context.Context, orgID string, userID string, cal
 		return candidateForFinding(finding, userID, resolvedAccessEvidence(prov, match), call.Name, true)
 	}
 
-	// Unresolved provenance means the hook recorded neither a URL nor a launch
-	// command for the server, which is how the agent's own in-process servers
-	// (Claude in Chrome, desktop app tools) always arrive. They are not Shadow
-	// MCP, so they produce no finding.
-	if shadowmcp.IsAgentBuiltinServer(serverPrefix, "", "") {
+	// The agent's own in-process servers (Claude in Chrome, desktop app tools)
+	// are not Shadow MCP, so they produce no finding. Only a recorded row that
+	// shows no URL and no launch command proves that; a missing row or a failed
+	// lookup falls through to the signature check below.
+	if shadowmcp.IsAgentBuiltinServer(serverPrefix, recordedServerProvenance(prov, provFound, serverPrefix)) {
 		return nil
 	}
 
@@ -439,6 +442,24 @@ func resolvedServerIdentity(prov telemetryrepo.MCPProvenance, serverPrefix strin
 		return "", false
 	}
 	return match, true
+}
+
+// recordedServerProvenance is the transport a recorded provenance row proves
+// for serverPrefix. The provenance is known only when the lookup returned a row
+// whose match is the bare tool-name prefix: senders write that value only after
+// loading the session inventory and finding no URL or command for the server.
+// A missing row, a failed lookup, or a row carrying any other value is unknown.
+// A recorded server identity beyond the name counts as a launch command.
+func recordedServerProvenance(prov telemetryrepo.MCPProvenance, provFound bool, serverPrefix string) shadowmcp.ServerProvenance {
+	if !provFound || serverPrefix == "" || strings.TrimSpace(prov.Match) != serverPrefix {
+		return shadowmcp.UnknownServerProvenance()
+	}
+
+	command := ""
+	if identity := strings.TrimSpace(prov.ServerIdentity); identity != serverPrefix {
+		command = identity
+	}
+	return shadowmcp.ServerProvenance{Known: true, URL: strings.TrimSpace(prov.ServerURL), Command: command}
 }
 
 // isHostedIdentity reports whether a resolved server identity points at Speakeasy.
