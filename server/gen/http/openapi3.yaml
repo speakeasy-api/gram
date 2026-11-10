@@ -106096,6 +106096,13 @@ components:
                     type: boolean
                     description: Whether the route is enabled.
                     default: true
+                min_severity:
+                    type: string
+                    description: Lowest level this route sends. Only for mcp_connection_logs; defaults to error.
+                    enum:
+                        - info
+                        - warn
+                        - error
                 otel_destination_id:
                     type: string
                     description: OTEL destination configured on this route. Required when enabled.
@@ -108525,6 +108532,13 @@ components:
                     type: string
                     description: Route ID.
                     format: uuid
+                min_severity:
+                    type: string
+                    description: Lowest level this route sends. Set only on mcp_connection_logs routes, where it defaults to error.
+                    enum:
+                        - info
+                        - warn
+                        - error
                 otel_destination_id:
                     type: string
                     description: OTEL destination configured on this route. Omitted when no OTEL destination is selected.
@@ -136579,6 +136593,13 @@ components:
                     type: string
                     description: Route ID.
                     format: uuid
+                min_severity:
+                    type: string
+                    description: Lowest level this route sends. Only for mcp_connection_logs. Omit to keep the current level.
+                    enum:
+                        - info
+                        - warn
+                        - error
                 otel_destination_id:
                     type: string
                     description: OTEL destination configured on this route. Required when enabled.
@@ -137749,6 +137770,13 @@ components:
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
+                min_severity:
+                    type: string
+                    description: Lowest level this route sends. Only for mcp_connection_logs. Omit to keep the current level.
+                    enum:
+                        - info
+                        - warn
+                        - error
                 otel_destination_id:
                     type: string
                     description: OTEL destination configured on this route. Required when enabled.

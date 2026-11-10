@@ -24,6 +24,7 @@ type DataExportRouteSnapshot struct {
 	DataSource        string  `json:"data_source"`
 	Enabled           bool    `json:"enabled"`
 	OtelDestinationID *string `json:"otel_destination_id,omitempty"`
+	MinSeverity       *string `json:"min_severity,omitempty"`
 }
 
 type LogDataExportRouteCreateEvent struct {

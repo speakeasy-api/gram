@@ -129,9 +129,20 @@ func (s *Service) ListForOrg(ctx context.Context, _ *gen.ListForOrgPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organization data export routes").LogError(ctx, logger)
 	}
+	levelRows, err := queries.ListMCPConnectionLogRouteMinSeveritiesByOrganizationID(ctx, repo.ListMCPConnectionLogRouteMinSeveritiesByOrganizationIDParams{
+		DefaultMinSeverity: DefaultMCPConnectionLogMinSeverity,
+		OrganizationID:     authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization MCP connection log levels").LogError(ctx, logger)
+	}
+	levels := make(map[uuid.UUID]string, len(levelRows))
+	for _, level := range levelRows {
+		levels[level.DataExportRouteID] = level.MinSeverity
+	}
 	routes := make([]*gen.DataExportRoute, 0, len(routeRows))
 	for _, row := range routeRows {
-		routes = append(routes, buildDataExportRouteView(row))
+		routes = append(routes, buildDataExportRouteView(row, routeMinSeverity(row, levels)))
 	}
 
 	return &gen.ListDataExportsForOrgResult{
@@ -497,17 +508,30 @@ func (s *Service) ListRoutes(ctx context.Context, _ *gen.ListRoutesPayload) (*ge
 	}
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
-	rows, err := repo.New(s.db).ListDataExportRoutes(ctx, repo.ListDataExportRoutesParams{
+	queries := repo.New(s.db)
+	rows, err := queries.ListDataExportRoutes(ctx, repo.ListDataExportRoutesParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list data export routes").LogError(ctx, logger)
 	}
+	levelRows, err := queries.ListMCPConnectionLogRouteMinSeverities(ctx, repo.ListMCPConnectionLogRouteMinSeveritiesParams{
+		DefaultMinSeverity: DefaultMCPConnectionLogMinSeverity,
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		ProjectID:          *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list MCP connection log levels").LogError(ctx, logger)
+	}
+	levels := make(map[uuid.UUID]string, len(levelRows))
+	for _, level := range levelRows {
+		levels[level.DataExportRouteID] = level.MinSeverity
+	}
 
 	result := &gen.ListDataExportRoutesResult{Routes: make([]*gen.DataExportRoute, 0, len(rows))}
 	for _, row := range rows {
-		result.Routes = append(result.Routes, buildDataExportRouteView(row))
+		result.Routes = append(result.Routes, buildDataExportRouteView(row, routeMinSeverity(row, levels)))
 	}
 	return result, nil
 }
@@ -524,6 +548,10 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 	source, err := NormalizeDataSource(payload.DataSource)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid data_source")
+	}
+	minSeverity, err := normalizeRouteMinSeverity(source, payload.MinSeverity)
+	if err != nil {
+		return nil, err
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
 	dbtx, err := s.db.Begin(ctx)
@@ -551,6 +579,10 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create data export route").LogError(ctx, logger)
 	}
+	routeLevel, err := s.writeRouteMinSeverity(ctx, queries, authCtx, row, minSeverity)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := s.audit.LogDataExportRouteCreate(ctx, dbtx, audit.LogDataExportRouteCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
@@ -566,7 +598,7 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit data export route creation").LogError(ctx, logger)
 	}
-	return buildDataExportRouteView(row), nil
+	return buildDataExportRouteView(row, routeLevel), nil
 }
 
 func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePayload) (*gen.DataExportRoute, error) {
@@ -585,6 +617,10 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 	source, err := NormalizeDataSource(payload.DataSource)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid data_source")
+	}
+	minSeverity, err := normalizeRouteMinSeverity(source, payload.MinSeverity)
+	if err != nil {
+		return nil, err
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
 	dbtx, err := s.db.Begin(ctx)
@@ -610,6 +646,20 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 	if err != nil {
 		return nil, err
 	}
+	beforeLevel, err := s.readRouteMinSeverity(ctx, queries, authCtx, before)
+	if err != nil {
+		return nil, err
+	}
+	// The settings foreign key pins the data source, so they go before the route moves off it.
+	if before.DataSource == DataSourceMCPConnectionLogs && source != DataSourceMCPConnectionLogs {
+		if err := queries.DeleteMCPConnectionLogRouteSettings(ctx, repo.DeleteMCPConnectionLogRouteSettingsParams{
+			OrganizationID:    authCtx.ActiveOrganizationID,
+			ProjectID:         *authCtx.ProjectID,
+			DataExportRouteID: before.ID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "remove MCP connection log settings").LogError(ctx, logger)
+		}
+	}
 	after, err := queries.UpdateDataExportRoute(ctx, repo.UpdateDataExportRouteParams{
 		DataSource:        source,
 		Enabled:           payload.Enabled,
@@ -625,9 +675,15 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update data export route").LogError(ctx, logger)
 	}
+	afterLevel, err := s.writeRouteMinSeverity(ctx, queries, authCtx, after, minSeverity)
+	if err != nil {
+		return nil, err
+	}
 
 	beforeSnapshot := routeSnapshot(before)
+	beforeSnapshot.MinSeverity = beforeLevel
 	afterSnapshot := routeSnapshot(after)
+	afterSnapshot.MinSeverity = afterLevel
 	if err := s.audit.LogDataExportRouteUpdate(ctx, dbtx, audit.LogDataExportRouteUpdateEvent{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
@@ -644,7 +700,7 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit data export route update").LogError(ctx, logger)
 	}
-	return buildDataExportRouteView(after), nil
+	return buildDataExportRouteView(after, afterLevel), nil
 }
 
 func (s *Service) DeleteRoute(ctx context.Context, payload *gen.DeleteRoutePayload) error {
@@ -735,5 +791,55 @@ func routeSnapshot(row repo.DataExportRoute) *audit.DataExportRouteSnapshot {
 		DataSource:        row.DataSource,
 		Enabled:           row.Enabled,
 		OtelDestinationID: conv.FromNullableUUID(row.OtelDestinationID),
+		MinSeverity:       nil,
 	}
+}
+
+// normalizeRouteMinSeverity validates a requested minimum level. Nil means none was given.
+func normalizeRouteMinSeverity(source string, value *string) (*string, error) {
+	if value == nil {
+		return nil, nil
+	}
+	if source != DataSourceMCPConnectionLogs {
+		return nil, oops.E(oops.CodeInvalid, fmt.Errorf("min_severity on %q route", source), "min_severity is only supported on mcp_connection_logs routes")
+	}
+	level, err := NormalizeMinSeverity(*value)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "min_severity must be info, warn or error")
+	}
+	return &level, nil
+}
+
+// readRouteMinSeverity returns the stored level of an MCP connection logs route, or nil for other sources.
+func (s *Service) readRouteMinSeverity(ctx context.Context, queries *repo.Queries, authCtx *contextvalues.AuthContext, row repo.DataExportRoute) (*string, error) {
+	if row.DataSource != DataSourceMCPConnectionLogs {
+		return nil, nil
+	}
+	level, err := queries.GetMCPConnectionLogRouteMinSeverity(ctx, repo.GetMCPConnectionLogRouteMinSeverityParams{
+		DefaultMinSeverity: DefaultMCPConnectionLogMinSeverity,
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		ProjectID:          *authCtx.ProjectID,
+		DataExportRouteID:  row.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read MCP connection log level").LogError(ctx, s.logger)
+	}
+	return &level, nil
+}
+
+// writeRouteMinSeverity stores a requested level and returns the route's level after the write.
+func (s *Service) writeRouteMinSeverity(ctx context.Context, queries *repo.Queries, authCtx *contextvalues.AuthContext, row repo.DataExportRoute, minSeverity *string) (*string, error) {
+	if minSeverity == nil || row.DataSource != DataSourceMCPConnectionLogs {
+		return s.readRouteMinSeverity(ctx, queries, authCtx, row)
+	}
+	level, err := queries.UpsertMCPConnectionLogRouteSettings(ctx, repo.UpsertMCPConnectionLogRouteSettingsParams{
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+		MinSeverity:       *minSeverity,
+		DataExportRouteID: row.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "set MCP connection log level").LogError(ctx, s.logger)
+	}
+	return &level, nil
 }

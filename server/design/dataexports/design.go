@@ -295,6 +295,9 @@ var DataExportRoute = Type("DataExportRoute", func() {
 	})
 	Attribute("enabled", Boolean, "Whether the route is enabled.")
 	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Omitted when no OTEL destination is selected.", func() { Format(FormatUUID) })
+	Attribute("min_severity", String, "Lowest level this route sends. Set only on mcp_connection_logs routes, where it defaults to error.", func() {
+		Enum("info", "warn", "error")
+	})
 	Attribute("created_at", String, "Creation timestamp.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "Last update timestamp.", func() { Format(FormatDateTime) })
 	Required("id", "project_id", "data_source", "enabled", "created_at", "updated_at")
@@ -305,6 +308,9 @@ var CreateDataExportRouteForm = Type("CreateDataExportRouteForm", func() {
 	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs") })
 	Attribute("enabled", Boolean, "Whether the route is enabled.", func() { Default(true) })
 	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Required when enabled.", func() { Format(FormatUUID) })
+	Attribute("min_severity", String, "Lowest level this route sends. Only for mcp_connection_logs; defaults to error.", func() {
+		Enum("info", "warn", "error")
+	})
 	Required("data_source")
 })
 
@@ -314,6 +320,9 @@ var UpdateDataExportRouteForm = Type("UpdateDataExportRouteForm", func() {
 	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs") })
 	Attribute("enabled", Boolean, "Whether the route is enabled.")
 	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Required when enabled.", func() { Format(FormatUUID) })
+	Attribute("min_severity", String, "Lowest level this route sends. Only for mcp_connection_logs. Omit to keep the current level.", func() {
+		Enum("info", "warn", "error")
+	})
 	Required("id", "data_source", "enabled")
 })
 
