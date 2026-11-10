@@ -455,10 +455,15 @@ type agentServerTarget struct {
 func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentServerTarget, issuer uuid.UUID, registration uuid.NullUUID, clientType string) (authClientConnectionOwner, contextvalues.UpstreamCredential, error) {
 	var none authClientConnectionOwner
 	var noCredential contextvalues.UpstreamCredential
+	mode, err := s.authClientMode(ctx, target.organizationID)
+	if err != nil {
+		return none, noCredential, err
+	}
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
 		ProposeAllClients: false,
 		Proposed:          true, ProposedNoAuth: false, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedRegistrationID: registration, CredentialKind: upstreamclients.CredentialKindUserSession,
 		CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{target.serverID}, OrganizationID: target.organizationID,
+		TypedOnly: mode == feature.AuthClientResolverEnforced,
 	})
 	if err != nil {
 		return none, noCredential, fmt.Errorf("load agent member auth client: %w", err)
@@ -467,10 +472,6 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 		return none, noCredential, agentServerGapError(target.slug)
 	}
 	res := decideAuthClient(rows[0])
-	mode, err := s.authClientMode(ctx, target.organizationID)
-	if err != nil {
-		return none, noCredential, err
-	}
 	// Before typed enforcement, configured legacy credential headers remain
 	// served by the proxy even when no catalog client has been provisioned.
 	// This does not waive the enforced catalog/permit barrier.

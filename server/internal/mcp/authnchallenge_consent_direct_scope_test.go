@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -152,6 +153,62 @@ func TestConsentDirectScope_PersonalSessionIgnoresUnrelatedLegacyClient(t *testi
 		require.Equal(t, "Bearer selected-personal", request.auth)
 	}
 
+}
+
+// Removing an inherited offer leaves the association it came from. Consent then
+// approves the server as needing no upstream authentication, and the session it
+// issues does exactly that: the association decides nothing, so the call reaches
+// the upstream instead of asking to reconnect.
+func TestConsentDirectScope_DetachedOfferLeavesANoAuthServerUsable(t *testing.T) {
+	t.Parallel()
+	ctx, fx, member := seedDirectScopeConsent(t, true)
+	serverID := fx.endpoint.McpServerID.UUID
+	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "leftover", "", []uuid.UUID{fx.shared})
+	_, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: fx.orgID, ProjectID: fx.projectID, McpServerID: serverID, RemoteSessionClientID: registration})
+	require.NoError(t, err)
+	fixtures := authclientfixtures.New(fx.ti.conn)
+	inherited, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "remote_session", Source: "backfill", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: inherited, Source: "backfill"}))
+	require.NoError(t, fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, serverID))
+
+	verifier := "verifier-" + uuid.NewString()
+	sum := sha256.Sum256([]byte(verifier))
+	state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	state.CodeChallenge = base64.RawURLEncoding.EncodeToString(sum[:])
+	state.CodeChallengeMethod = "S256"
+	require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+	_, err = mcpendpointsrepo.New(fx.ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: fx.projectID, McpServerID: conv.ToNullUUID(serverID), Slug: fx.endpoint.Slug,
+	})
+	require.NoError(t, err)
+
+	grant := approveConsent(t, ctx, fx)
+	require.Empty(t, grant.AuthClientPicks)
+	require.Empty(t, grant.UpstreamClientPicks)
+	tokenResponse := postForm(t, fx.ti, fx.endpoint.Slug, "token", url.Values{
+		"grant_type": {"authorization_code"}, "code": {grant.Code},
+		"client_id": {grant.ClientID}, "redirect_uri": {grant.RedirectURI}, "code_verifier": {verifier},
+	})
+	require.Equal(t, http.StatusOK, tokenResponse.Code, tokenResponse.Body.String())
+	var token struct {
+		AccessToken string `json:"access_token"`
+	}
+	require.NoError(t, json.Unmarshal(tokenResponse.Body.Bytes(), &token))
+
+	member.drain()
+	for range 2 {
+		execution, err := servePublicHTTP(t, ctx, fx.ti, fx.endpoint.Slug, []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`), token.AccessToken, nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, execution.Code, execution.Body.String())
+		require.Contains(t, execution.Body.String(), `"tools"`)
+	}
+	requests := member.drain()
+	require.NotEmpty(t, requests, "the session must reach the upstream")
+	for _, request := range requests {
+		require.Empty(t, request.auth, "no upstream credential is sent")
+	}
 }
 
 func TestConsentDirectScope_InventoryCannotApproveAnotherChoice(t *testing.T) {

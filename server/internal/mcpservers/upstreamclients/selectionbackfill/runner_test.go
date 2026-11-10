@@ -673,6 +673,122 @@ func TestRecordUpstreamClientSelectionsCapturesTheAuthClient(t *testing.T) {
 	})
 }
 
+// recordTypedOnly records choices as issuance does for an organization that
+// enforces typed auth clients.
+func (f *fixture) recordTypedOnly(userIssuerID, credentialID uuid.UUID, picks map[uuid.UUID]uuid.UUID) int64 {
+	f.t.Helper()
+	servers, clients := []uuid.UUID{}, []uuid.UUID{}
+	for serverID, clientID := range picks {
+		servers = append(servers, serverID)
+		clients = append(clients, clientID)
+	}
+	n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(f.t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: userIssuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        credentialID,
+		Source:              upstreamclients.SelectionSourceIssuance,
+		PickedMcpServerIds:  servers,
+		PickedClientIds:     clients,
+		PickedAuthClientIds: nil,
+		TypedOnly:           true,
+	})
+	require.NoError(f.t, err)
+	return n
+}
+
+func TestRecordUpstreamClientSelectionsFromTypedStateAlone(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an association the server offers no auth client for decides nothing", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		inherited := f.client(issuer)
+		server := f.server(issuer, inherited)
+
+		legacy := f.session(issuer)
+		f.record(issuer, legacy)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: inherited}, f.selections(legacy), "the upstream client choice follows the association")
+
+		credential := f.session(issuer)
+		f.recordTypedOnly(issuer, credential, nil)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: uuid.Nil}, f.selections(credential))
+		named := f.namedAuthClient(credential, server)
+		require.True(t, named.NoAuth)
+		require.False(t, named.AuthClientID.Valid)
+	})
+
+	t.Run("an offered auth client is chosen without an association or an issuer binding", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client()
+		server := f.server(issuer)
+		authClient := f.authClient("remote_session", registration, server)
+
+		legacy := f.session(issuer)
+		f.record(issuer, legacy)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: uuid.Nil}, f.selections(legacy), "the upstream client choice sees no associated client")
+
+		credential := f.session(issuer)
+		f.recordTypedOnly(issuer, credential, nil)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
+		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+	})
+
+	t.Run("several offered auth clients are left to a pick among them", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		first, second, inherited := f.client(), f.client(), f.client(issuer)
+		server := f.server(issuer, inherited)
+		f.authClient("remote_session", first, server)
+		picked := f.authClient("remote_session", second, server)
+
+		credential := f.session(issuer)
+		f.recordTypedOnly(issuer, credential, nil)
+		require.Empty(t, f.selections(credential), "nothing is guessed")
+
+		f.recordTypedOnly(issuer, credential, map[uuid.UUID]uuid.UUID{server: inherited})
+		require.Empty(t, f.selections(credential), "a pick the server offers no auth client for is not recorded")
+
+		f.recordTypedOnly(issuer, credential, map[uuid.UUID]uuid.UUID{server: second})
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: second}, f.selections(credential))
+		require.Equal(t, uuid.NullUUID{UUID: picked, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+	})
+
+	t.Run("a server whose only OAuth client is disabled needs none", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client(issuer)
+		server := f.server(issuer, registration)
+		authClient := f.authClient("remote_session", registration, server)
+		require.NoError(t, authclientbackfill.New(f.pool).SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: authClient}))
+
+		credential := f.session(issuer)
+		f.recordTypedOnly(issuer, credential, nil)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: uuid.Nil}, f.selections(credential))
+		require.True(t, f.namedAuthClient(credential, server).NoAuth)
+	})
+
+	t.Run("a no-auth choice still names the server's headers beside an association", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		inherited := f.client(issuer)
+		server := f.server(issuer, inherited)
+		f.staticAuthorization(server)
+		headers := f.authClient("static_credential", uuid.Nil, server)
+
+		credential := f.session(issuer)
+		f.recordTypedOnly(issuer, credential, nil)
+		named := f.namedAuthClient(credential, server)
+		require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, named.AuthClientID)
+		require.False(t, named.NoAuth, "the association's client is not recorded in its place")
+	})
+}
+
 // A consent pick of a header-only auth client persists with no remote client
 // and no no-auth flag. Coverage reads it as usable exactly as
 // GetUpstreamClientSelection serves it, so the run reports no gap.

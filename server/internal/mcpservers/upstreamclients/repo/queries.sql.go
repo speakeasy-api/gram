@@ -409,20 +409,20 @@ WITH selected AS (
   SELECT no_auth, auth_client_id, remote_session_client_id, mcp_server_id, project_id, organization_id,
          FALSE AS ambiguous
   FROM upstream_client_selections
-  WHERE NOT $1::boolean
-    AND credential_kind = $2::text
-    AND credential_id = $3::uuid
-    AND mcp_server_id = ANY($4::uuid[])
-    AND organization_id = $5::text
+  WHERE NOT $2::boolean
+    AND credential_kind = $3::text
+    AND credential_id = $4::uuid
+    AND mcp_server_id = ANY($5::uuid[])
+    AND organization_id = $6::text
     AND deleted IS FALSE
   UNION ALL
-  SELECT $6::uuid IS NULL AND $7::uuid IS NULL,
+  SELECT $7::uuid IS NULL AND $8::uuid IS NULL,
          candidates.auth_client_id,
-         $6::uuid, m.id, m.project_id, p.organization_id,
+         $7::uuid, m.id, m.project_id, p.organization_id,
          candidates.ambiguous
   FROM mcp_servers AS m
   JOIN projects AS p ON p.id = m.project_id
-   AND p.organization_id = $5::text AND p.deleted IS FALSE
+   AND p.organization_id = $6::text AND p.deleted IS FALSE
   CROSS JOIN LATERAL (
     SELECT CASE WHEN count(*) = 1 THEN min(c.id::text)::uuid END AS auth_client_id,
            count(*) > 1 AS ambiguous
@@ -434,21 +434,21 @@ WITH selected AS (
     WHERE link.mcp_server_id = m.id AND link.organization_id = p.organization_id
       AND link.deleted IS FALSE
       -- Explicit no-auth proposals must not borrow a client's header coverage.
-      AND NOT $8::boolean
+      AND NOT $9::boolean
       AND (
         -- A named client is the only candidate, whatever its type.
-        ($7::uuid IS NOT NULL
-         AND c.id = $7::uuid)
-        OR ($7::uuid IS NULL
-            AND (($6::uuid IS NOT NULL
-                  AND c.remote_session_client_id = $6::uuid
+        ($8::uuid IS NOT NULL
+         AND c.id = $8::uuid)
+        OR ($8::uuid IS NULL
+            AND (($7::uuid IS NOT NULL
+                  AND c.remote_session_client_id = $7::uuid
                   AND c.client_type IN ('remote_session', 'service_account'))
-                 OR ($6::uuid IS NULL
+                 OR ($7::uuid IS NULL
                      AND c.client_type IN ('static_credential', 'pass_through'))))
       )
   ) AS candidates
-  WHERE $1::boolean AND NOT $9::boolean
-    AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
+  WHERE $2::boolean AND NOT $10::boolean
+    AND m.id = ANY($5::uuid[]) AND m.deleted IS FALSE
   UNION ALL
   -- Discovery evaluates every offered client in one metadata-only read, using
   -- the same authoritative header-source checks as a single proposed choice.
@@ -456,7 +456,7 @@ WITH selected AS (
          p.organization_id, FALSE
   FROM mcp_servers AS m
   JOIN projects AS p ON p.id = m.project_id
-   AND p.organization_id = $5::text AND p.deleted IS FALSE
+   AND p.organization_id = $6::text AND p.deleted IS FALSE
   JOIN mcp_server_auth_clients AS link ON link.mcp_server_id = m.id
    AND link.project_id = m.project_id AND link.organization_id = p.organization_id
    AND link.deleted IS FALSE
@@ -464,8 +464,8 @@ WITH selected AS (
    AND c.organization_id = p.organization_id
    AND (c.project_id IS NULL OR c.project_id = m.project_id)
    AND c.deleted IS FALSE
-  WHERE $1::boolean AND $9::boolean
-    AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
+  WHERE $2::boolean AND $10::boolean
+    AND m.id = ANY($5::uuid[]) AND m.deleted IS FALSE
 )
 SELECT sel.mcp_server_id,
        sel.ambiguous,
@@ -486,7 +486,8 @@ SELECT sel.mcp_server_id,
          AND rsi.deleted IS FALSE
        )::boolean AS registration_live,
        (
-         NOT copy.mirrored
+         $1::boolean
+         OR NOT copy.mirrored
          OR EXISTS (
            SELECT 1
            FROM mcp_server_remote_session_clients AS a
@@ -599,13 +600,13 @@ SELECT sel.mcp_server_id,
              AND link.organization_id = sel.organization_id
              AND link.deleted IS FALSE
          )
-         OR EXISTS (
+         OR (NOT $1::boolean AND EXISTS (
            SELECT 1
            FROM mcp_server_remote_session_clients AS a
            WHERE a.mcp_server_id = sel.mcp_server_id
              AND a.organization_id = sel.organization_id
              AND a.deleted IS FALSE
-         )
+         ))
        )::boolean AS server_has_oauth_clients,
        (copy.mirrored AND EXISTS (
          SELECT 1
@@ -693,12 +694,13 @@ CROSS JOIN LATERAL (
   )))::boolean AS mirrored
 ) AS copy
 LEFT JOIN remote_session_clients AS reg
-  ON reg.id = COALESCE(ac.remote_session_client_id, CASE WHEN $1::boolean THEN sel.remote_session_client_id END)
+  ON reg.id = COALESCE(ac.remote_session_client_id, CASE WHEN $2::boolean THEN sel.remote_session_client_id END)
 LEFT JOIN remote_session_issuers AS rsi
   ON rsi.id = reg.remote_session_issuer_id
 `
 
 type GetAuthClientSelectionParams struct {
+	TypedOnly              bool
 	Proposed               bool
 	CredentialKind         string
 	CredentialID           uuid.UUID
@@ -748,8 +750,12 @@ type GetAuthClientSelectionRow struct {
 // server's credential headers must be carried by it. A client or association
 // an administrator created is authoritative and mirrors nothing, so those
 // checks do not apply to it.
+// With typed_only, for an organization that enforces typed auth clients, an
+// offered client's registration counts as attached whatever is associated with
+// the server, and only auth client links say whether it has OAuth clients.
 func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientSelectionParams) ([]GetAuthClientSelectionRow, error) {
 	rows, err := q.db.Query(ctx, getAuthClientSelection,
+		arg.TypedOnly,
 		arg.Proposed,
 		arg.CredentialKind,
 		arg.CredentialID,

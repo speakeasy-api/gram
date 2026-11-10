@@ -154,7 +154,11 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 	}
 	frozen.ApprovalChallengeID = state.ID
 	b := state.CodeReconnect
-	if err := replaceReconnectUpstreamChoices(ctx, q, b.CredentialID, previous, frozen); err != nil {
+	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil {
+		return fail(err)
+	}
+	if err := replaceReconnectUpstreamChoices(ctx, q, b.CredentialID, previous, frozen, enforced); err != nil {
 		return fail(err)
 	}
 	policy.Selection = selection
@@ -229,13 +233,15 @@ func reconnectMemberIDs(catalogs ...*connectionCatalog) []uuid.UUID {
 // replaceReconnectUpstreamChoices runs inside the approval transaction, after
 // locking the connection. Removed members are retired; only the new catalogue's
 // members can receive choices. Other servers on the issuer are untouched.
-func replaceReconnectUpstreamChoices(ctx context.Context, q *usersessionsrepo.Queries, credentialID uuid.UUID, previous, next *connectionCatalog) error {
+// typedOnly records the choices from typed auth clients alone, as an
+// organization that enforces them does.
+func replaceReconnectUpstreamChoices(ctx context.Context, q *usersessionsrepo.Queries, credentialID uuid.UUID, previous, next *connectionCatalog, typedOnly bool) error {
 	if err := q.SoftDeleteReconnectUpstreamChoices(ctx, usersessionsrepo.SoftDeleteReconnectUpstreamChoicesParams{
 		CredentialID: credentialID, OrganizationID: next.OrganizationID, McpServerIds: reconnectMemberIDs(previous, next),
 	}); err != nil {
 		return fmt.Errorf("retire reviewed upstream choices: %w", err)
 	}
-	if _, err := q.RecordUpstreamClientSelections(ctx, next.upstreamChoices(credentialID)); err != nil {
+	if _, err := q.RecordUpstreamClientSelections(ctx, next.upstreamChoices(credentialID, typedOnly)); err != nil {
 		return fmt.Errorf("record reviewed upstream choices: %w", err)
 	}
 	return nil

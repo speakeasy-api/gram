@@ -1480,3 +1480,67 @@ func TestResolveAuthClientTrustsAdministratorConfiguration(t *testing.T) {
 		require.Equal(t, authClientReasonHeadersStale, f.resolve(f.choose(validUUID(id))).reason)
 	})
 }
+
+// Under enforcement an upstream OAuth association does not stand in for what
+// the auth clients a server offers say. An association no auth client ever
+// recorded is still setup to finish.
+func TestResolveAuthClientUnderEnforcementDecidesFromAuthClients(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_typed_only")
+	require.NoError(t, err)
+
+	t.Run("an offered client resolves without the association it was copied from", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		id := f.client(authClientTypeRemoteSession, validUUID(f.registration), true)
+		selector := f.choose(validUUID(id))
+		require.Equal(t, authClientReasonDetached, f.resolve(selector).reason, "before enforcement the copy is checked against the association")
+
+		f.enforce()
+		res := f.resolve(selector)
+		require.Equal(t, authClientResolved, res.outcome)
+		require.Equal(t, validUUID(f.registration), res.choice.clientID)
+
+		proposed, err := f.service.resolveAuthClientChoiceForConsent(t.Context(), f.orgID, f.serverID, f.projectID, id, urn.NewUserSubject("user_1"))
+		require.NoError(t, err)
+		require.Equal(t, authClientResolved, proposed.outcome, "consent validates a pick the same way")
+	})
+
+	t.Run("an association beside a header client is not an OAuth client", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.attach()
+		id := f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
+		require.NoError(t, f.q.SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: id}))
+		selector := f.choose(uuid.NullUUID{})
+
+		f.enforce()
+		res := f.resolve(selector)
+		require.Equal(t, authClientLegacy, res.outcome)
+		require.Equal(t, authClientReasonNoAuthDeclared, res.reason)
+	})
+
+	t.Run("an association left by a detached offer leaves no-auth usable", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.oauthClient(authClientTypeRemoteSession)
+		require.NoError(t, f.q.SoftDeleteServerAuthClientLinksFixture(t.Context(), f.serverID))
+
+		f.enforce()
+		res, err := f.service.resolveEnforcedAuthClient(t.Context(), f.choose(uuid.NullUUID{}), f.serverID, f.projectID, urn.NewUserSubject("user_1"))
+		require.NoError(t, err)
+		require.Equal(t, authClientNoAuth, res.outcome)
+	})
+
+	t.Run("an association no auth client ever recorded is still setup to finish", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.attach()
+
+		f.enforce()
+		res := f.resolve(f.choose(uuid.NullUUID{}))
+		require.Equal(t, authClientGap, res.outcome)
+		require.Equal(t, authClientReasonNoAuthStale, res.reason)
+	})
+}

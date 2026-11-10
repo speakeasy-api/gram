@@ -541,6 +541,9 @@ WHERE a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
 -- server's credential headers must be carried by it. A client or association
 -- an administrator created is authoritative and mirrors nothing, so those
 -- checks do not apply to it.
+-- With typed_only, for an organization that enforces typed auth clients, an
+-- offered client's registration counts as attached whatever is associated with
+-- the server, and only auth client links say whether it has OAuth clients.
 WITH selected AS (
   SELECT no_auth, auth_client_id, remote_session_client_id, mcp_server_id, project_id, organization_id,
          FALSE AS ambiguous
@@ -622,7 +625,8 @@ SELECT sel.mcp_server_id,
          AND rsi.deleted IS FALSE
        )::boolean AS registration_live,
        (
-         NOT copy.mirrored
+         @typed_only::boolean
+         OR NOT copy.mirrored
          OR EXISTS (
            SELECT 1
            FROM mcp_server_remote_session_clients AS a
@@ -735,13 +739,13 @@ SELECT sel.mcp_server_id,
              AND link.organization_id = sel.organization_id
              AND link.deleted IS FALSE
          )
-         OR EXISTS (
+         OR (NOT @typed_only::boolean AND EXISTS (
            SELECT 1
            FROM mcp_server_remote_session_clients AS a
            WHERE a.mcp_server_id = sel.mcp_server_id
              AND a.organization_id = sel.organization_id
              AND a.deleted IS FALSE
-         )
+         ))
        )::boolean AS server_has_oauth_clients,
        (copy.mirrored AND EXISTS (
          SELECT 1

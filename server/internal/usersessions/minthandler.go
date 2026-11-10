@@ -182,6 +182,10 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	if err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "link sign-in").LogError(ctx, s.logger)
 	}
+	enforced, err := s.authEnforcement.Enforced(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, s.logger)
+	}
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -235,6 +239,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		PickedClientIds:     []uuid.UUID{},
 		PickedAuthClientIds: nil,
 		ScopeMcpServerIds:   nil,
+		TypedOnly:           enforced,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)
 	}

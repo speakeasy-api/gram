@@ -2387,6 +2387,10 @@ func (s *Service) issueSession(
 	}
 	// A rotated session keeps the choices its credential already has.
 	if !issuance.CredentialID.Valid {
+		typedOnly, err := s.consentAuthChoicesEnforced(ctx, issuance.OrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, logger)
+		}
 		picks := usersessions_repo.RecordUpstreamClientSelectionsParams{
 			UserSessionIssuerID: issuance.UserSessionIssuerID,
 			CredentialKind:      upstreamclients.CredentialKindUserSession,
@@ -2396,9 +2400,10 @@ func (s *Service) issueSession(
 			PickedMcpServerIds:  nil,
 			PickedClientIds:     nil,
 			PickedAuthClientIds: nil,
+			TypedOnly:           typedOnly,
 		}
 		if issuance.Catalog != nil {
-			picks = issuance.Catalog.upstreamChoices(session.ID)
+			picks = issuance.Catalog.upstreamChoices(session.ID, typedOnly)
 		} else {
 			for serverID, clientID := range issuance.UpstreamClientPicks {
 				picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, serverID)
