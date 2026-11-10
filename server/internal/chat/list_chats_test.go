@@ -83,6 +83,13 @@ func seedAgent(t *testing.T, ctx context.Context, ti *chatTestInstance, ownerUse
 func seedAgentChat(t *testing.T, ctx context.Context, ti *chatTestInstance, agentID uuid.UUID, title string) uuid.UUID {
 	t.Helper()
 	chatID := seedChat(t, ctx, ti, "", "", title)
+	stampActingAgent(t, ctx, ti, chatID, agentID)
+	return chatID
+}
+
+// stampActingAgent records agentID as the agent acting on an existing chat.
+func stampActingAgent(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID, agentID uuid.UUID) {
+	t.Helper()
 	linked, err := hooksrepo.New(ti.conn).LinkChatActingAgent(ctx, hooksrepo.LinkChatActingAgentParams{
 		AgentID:   uuid.NullUUID{UUID: agentID, Valid: true},
 		ID:        chatID,
@@ -90,7 +97,6 @@ func seedAgentChat(t *testing.T, ctx context.Context, ti *chatTestInstance, agen
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), linked)
-	return chatID
 }
 
 // seedChatAtTime inserts a chat at a specific timestamp for date-range tests.
@@ -185,9 +191,11 @@ func seedRiskOnChatDisabledPolicy(t *testing.T, ctx context.Context, ti *chatTes
 	}))
 }
 
-// initSessionCtx creates a session-authenticated context and overrides ProjectID
-// to ti.projectID so that ListChats scopes to the same project as seeded chats.
-func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
+// projectSessionCtx creates a session-authenticated context and overrides
+// ProjectID to ti.projectID so that ListChats scopes to the same project as
+// seeded chats. Its grants are never prepared, so any enforced evaluation on
+// it fails until a caller prepares them.
+func projectSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	t.Helper()
 	ctx := testenv.InitAuthContext(t, t.Context(), ti.conn, ti.sessions)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -196,11 +204,17 @@ func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	authCtx.ActiveOrganizationID = ti.orgID
 	authCtx.OrganizationSlug = ti.orgID
 	authCtx.ProjectSlug = &ti.projectSlug
+	return contextvalues.SetAuthContext(ctx, authCtx)
+}
+
+// initSessionCtx is projectSessionCtx with admin grants prepared.
+func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
+	t.Helper()
 	// chat:write satisfies chat:read by expansion, so this is a fully-privileged
 	// session for chat purposes. Tests that need to distinguish the two use
 	// grantOrgAdminWithChatRead / grantOrgAdminWithChatWrite / memberSessionCtx.
 	return authztest.WithAdminGrants(
-		contextvalues.SetAuthContext(ctx, authCtx),
+		projectSessionCtx(t, ti),
 		authz.NewGrant(authz.ScopeChatWrite, authz.WildcardResource),
 	)
 }
@@ -711,13 +725,7 @@ func TestListChats_Member_AgentStampedOnOtherUsersChatHidden(t *testing.T) {
 		seedChat(t, ctx, ti, "other-user-id", "", "other users chat"),
 		seedChat(t, ctx, ti, "", "someone@example.com", "external users chat"),
 	} {
-		linked, err := hooksrepo.New(ti.conn).LinkChatActingAgent(ctx, hooksrepo.LinkChatActingAgentParams{
-			AgentID:   uuid.NullUUID{UUID: owned, Valid: true},
-			ID:        chatID,
-			ProjectID: ti.projectID,
-		})
-		require.NoError(t, err)
-		require.Equal(t, int64(1), linked)
+		stampActingAgent(t, ctx, ti, chatID, owned)
 	}
 
 	result, err := ti.service.ListChats(ctx, defaultPayload())

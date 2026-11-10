@@ -14,9 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // collectionFixture is one project holding a session of every ownership
@@ -69,13 +67,7 @@ func newCollectionFixture(t *testing.T) collectionFixture {
 		sessionForeignAgent: seedAgentChat(t, ctx, ti, foreign, "foreign agent"),
 	}
 	stamped := seedChat(t, ctx, ti, contractOtherUserID, "", "owned agent on other user's session")
-	linked, err := hooksrepo.New(ti.conn).LinkChatActingAgent(ctx, hooksrepo.LinkChatActingAgentParams{
-		AgentID:   uuid.NullUUID{UUID: owned, Valid: true},
-		ID:        stamped,
-		ProjectID: ti.projectID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), linked)
+	stampActingAgent(t, ctx, ti, stamped, owned)
 	chats[sessionAgentOnOthers] = stamped
 
 	sources := make(map[string]string, len(chats))
@@ -105,7 +97,8 @@ func (f collectionFixture) label(t *testing.T, id string) string {
 }
 
 // listed returns the labels ListChats shows, after checking that the page
-// total and the past-the-end fallback count agree with the page.
+// total, the past-the-end fallback count and the CountByUser total agree with
+// the page.
 func (f collectionFixture) listed(t *testing.T, ctx context.Context) []string {
 	t.Helper()
 	page, err := f.ti.service.ListChats(ctx, defaultPayload())
@@ -122,6 +115,10 @@ func (f collectionFixture) listed(t *testing.T, ctx context.Context) []string {
 	require.NoError(t, err)
 	require.Empty(t, empty.Chats)
 	require.Equal(t, page.Total, empty.Total, "fallback count scopes like the page")
+
+	counts, err := f.ti.service.CountByUser(ctx, &gen.CountByUserPayload{Limit: contractPageSizeLimit})
+	require.NoError(t, err)
+	require.Equal(t, page.Total, counts.Total, "per-user count total scopes like the page")
 
 	sort.Strings(labels)
 	return labels
@@ -272,7 +269,7 @@ func TestChatCollectionContract(t *testing.T) {
 				t.Helper()
 				// A session without prepared grants makes the project-level
 				// check error rather than deny.
-				return sessionCtxWithoutPreparedGrants(t, f.ti)
+				return projectSessionCtx(t, f.ti)
 			},
 			// Collections fall back to own sessions; point reads on anything
 			// else fail as unexpected rather than forbidden.
@@ -303,24 +300,39 @@ func TestChatCollectionContract(t *testing.T) {
 			refusals:    none,
 		},
 		{
-			name: "chat session token minted by an API key",
+			name: "chat session token minted by an API key for an external user",
 			ctx: func(t *testing.T, f collectionFixture) context.Context {
 				t.Helper()
-				return chatSessionTokenCtx(t, f.ti, contractExternalUser)
+				// The token carries the key creator's user ID. Collections
+				// follow the embedded external user, but point reads also
+				// open sessions the key creator owns.
+				return apiKeyChatSessionTokenCtx(t, f, contractExternalUser)
 			},
 			listed:      sortedLabels(sessionExternal),
-			transcripts: sortedLabels(sessionExternal),
-			overviews:   sortedLabels(sessionExternal),
+			transcripts: sortedLabels(sessionExternal, sessionOwn),
+			overviews:   sortedLabels(sessionExternal, sessionOwn),
+			refusals:    unauthorized,
+		},
+		{
+			name: "chat session token minted by an API key without an external user",
+			ctx: func(t *testing.T, f collectionFixture) context.Context {
+				t.Helper()
+				return apiKeyChatSessionTokenCtx(t, f, "")
+			},
+			listed:      ownScope,
+			transcripts: sortedLabels(sessionOwn),
+			overviews:   sortedLabels(sessionOwn),
 			refusals:    unauthorized,
 		},
 		{
 			name: "chat session token minted by a dashboard session",
 			ctx: func(t *testing.T, f collectionFixture) context.Context {
 				t.Helper()
-				// The token keeps the dashboard user's session, so point reads
-				// follow that user's ownership and grants, while collections
-				// follow the embedded external user.
-				ctx := authztest.WithExactGrants(t, initSessionCtx(t, f.ti))
+				// The token keeps the dashboard user's session but its
+				// authorization never prepares grants, so point reads open
+				// only what that user owns and every other read fails as
+				// unexpected. Collections follow the embedded external user.
+				ctx := projectSessionCtx(t, f.ti)
 				authCtx, ok := contextvalues.GetAuthContext(ctx)
 				require.True(t, ok)
 				embedded := *authCtx
@@ -330,7 +342,7 @@ func TestChatCollectionContract(t *testing.T) {
 			listed:      sortedLabels(sessionExternal),
 			transcripts: ownScope,
 			overviews:   ownScope,
-			refusals:    forbidden,
+			refusals:    []oops.Code{oops.CodeUnexpected},
 		},
 		{
 			name: "managed assistant",
@@ -361,20 +373,6 @@ func TestChatCollectionContract(t *testing.T) {
 	}
 }
 
-// sessionCtxWithoutPreparedGrants is a dashboard session whose grants were
-// never prepared, which makes any enforced evaluation fail.
-func sessionCtxWithoutPreparedGrants(t *testing.T, ti *chatTestInstance) context.Context {
-	t.Helper()
-	ctx := testenv.InitAuthContext(t, t.Context(), ti.conn, ti.sessions)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtx.ProjectID = &ti.projectID
-	authCtx.ActiveOrganizationID = ti.orgID
-	authCtx.OrganizationSlug = ti.orgID
-	authCtx.ProjectSlug = &ti.projectSlug
-	return contextvalues.SetAuthContext(ctx, authCtx)
-}
-
 // A caller restricted to their own sessions who has no user identity has no
 // own sessions to scope to, so every collection refuses rather than listing
 // nothing or everything.
@@ -396,4 +394,20 @@ func TestChatCollectionContract_OwnScopeWithoutUserIsRefused(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 	_, err = f.ti.service.ListSessionLinks(ctx, &gen.ListSessionLinksPayload{ChatIds: []string{f.chats[sessionOwn].String()}})
 	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+// apiKeyChatSessionTokenCtx mirrors what chatsessions.Manager.Authorize
+// installs for a chat-session token minted by an API key that the fixture's
+// caller created: the creator's user ID, the minting key's ID, no key scopes,
+// and the embedded external user, if any.
+func apiKeyChatSessionTokenCtx(t *testing.T, f collectionFixture, externalUserID string) context.Context {
+	t.Helper()
+	return contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{
+		UserID:               f.callerID,
+		APIKeyID:             uuid.NewString(),
+		APIKeyScopes:         nil,
+		ExternalUserID:       externalUserID,
+		ProjectID:            &f.ti.projectID,
+		ActiveOrganizationID: f.ti.orgID,
+	})
 }
