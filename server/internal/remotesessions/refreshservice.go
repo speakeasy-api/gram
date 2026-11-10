@@ -995,7 +995,12 @@ func (s *RefreshService) refresh(
 		// Legacy row minted before the resource column, with no caller value:
 		// derive the client's own so it is never replayed against another
 		// upstream's audience.
-		resource, err = s.FallbackResourceForClient(ctx, conv.FromPGTextOrEmpty[string](client.ClientOrganizationID), sess.RemoteSessionClientID)
+		var organizationID string
+		organizationID, err = q.GetRemoteSessionClientTenantOrganizationID(ctx, sess.RemoteSessionClientID)
+		if err != nil {
+			return zero, nil, nil, fmt.Errorf("read client organization for fallback resource: %w", err)
+		}
+		resource, err = s.FallbackResourceForClient(ctx, organizationID, sess.RemoteSessionClientID)
 		if err != nil {
 			return zero, nil, nil, fmt.Errorf("derive fallback resource: %w", err)
 		}

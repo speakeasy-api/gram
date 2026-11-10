@@ -3422,6 +3422,15 @@ WHERE a.remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
   AND a.deleted IS FALSE
 ORDER BY a.remote_session_client_id ASC, m.id DESC;
 
+-- name: GetRemoteSessionClientTenantOrganizationID :one
+-- The organization a client belongs to: its own for an organization client,
+-- its project's for a project client, and '' for a platform client.
+SELECT COALESCE(c.organization_id, p.organization_id, '')::text AS organization_id
+FROM remote_session_clients AS c
+LEFT JOIN projects AS p ON p.id = c.project_id AND p.deleted IS FALSE
+WHERE c.id = @id
+  AND c.deleted IS FALSE;
+
 -- name: ListOrganizationMcpServerNamesForIssuer :many
 -- Display names (and URL fallbacks) of MCP servers attached to any client of a
 -- given issuer. Used to populate the issuer delete-confirmation dialog and the

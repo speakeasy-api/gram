@@ -11,7 +11,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -20,6 +22,9 @@ import (
 type sharedIssuerFixture struct {
 	ti             *testInstance
 	organizationID string
+	projectID      uuid.UUID
+	userIssuerID   uuid.UUID
+	ownServerID    uuid.UUID
 	clientID       uuid.UUID
 	siblingID      uuid.UUID
 	ownURL         string
@@ -37,17 +42,20 @@ func seedSharedIssuerFixture(t *testing.T, slug string) (context.Context, shared
 	fx := sharedIssuerFixture{
 		ti:             ti,
 		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      *authCtx.ProjectID,
+		userIssuerID:   uuid.Nil,
+		ownServerID:    uuid.Nil,
 		clientID:       uuid.Nil,
 		siblingID:      uuid.Nil,
 		ownURL:         "https://own.example.com/mcp",
 		otherURL:       "https://other.example.com/mcp",
 	}
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-"+slug)
-	fx.clientID, _ = seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, fx.organizationID, "rsi-"+slug)
-	fx.siblingID, _ = seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, fx.organizationID, "rsi-sibling-"+slug)
-	own := seedRemoteMCPServerForIssuer(t, ctx, ti, userIssuerID, slug+"-own", fx.ownURL)
-	other := seedRemoteMCPServerForIssuer(t, ctx, ti, userIssuerID, slug+"-other", fx.otherURL)
-	associateClient(t, ctx, ti.conn, fx.organizationID, *authCtx.ProjectID, own, fx.clientID)
+	fx.userIssuerID = createUserSessionIssuer(t, ctx, ti.conn, "usi-"+slug)
+	fx.clientID, _ = seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, fx.userIssuerID, fx.organizationID, "rsi-"+slug)
+	fx.siblingID, _ = seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, fx.userIssuerID, fx.organizationID, "rsi-sibling-"+slug)
+	fx.ownServerID = seedRemoteMCPServerForIssuer(t, ctx, ti, fx.userIssuerID, slug+"-own", fx.ownURL)
+	other := seedRemoteMCPServerForIssuer(t, ctx, ti, fx.userIssuerID, slug+"-other", fx.otherURL)
+	associateClient(t, ctx, ti.conn, fx.organizationID, *authCtx.ProjectID, fx.ownServerID, fx.clientID)
 	associateClient(t, ctx, ti.conn, fx.organizationID, *authCtx.ProjectID, other, fx.siblingID)
 	return ctx, fx
 }
@@ -134,4 +142,37 @@ func TestResourceOwnersAmong_SharedIssuerFromAssociations(t *testing.T) {
 	foreign, err := remotesessions.ResourceOwnersAmong(ctx, fx.ti.conn, "org-not-"+fx.organizationID, []uuid.UUID{fx.clientID, fx.siblingID}, fx.ownURL, true)
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]bool{fx.clientID: false, fx.siblingID: false}, foreign, "another organization's caller sees no associations")
+}
+
+func TestFallbackResourceForClient_IgnoresDeletedAssociatedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedSharedIssuerFixture(t, "deleted-server")
+	_, err := mcpserversrepo.New(fx.ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: fx.ownServerID, ProjectID: fx.projectID})
+	require.NoError(t, err)
+	mgr := newFlaggedResolveManager(t, fx, true)
+
+	resource, err := mgr.FallbackResourceForClient(ctx, fx.organizationID, fx.clientID)
+	require.NoError(t, err)
+	require.Empty(t, resource, "the client's only associated server is deleted")
+
+	owners, err := remotesessions.ResourceOwnersAmong(ctx, fx.ti.conn, fx.organizationID, []uuid.UUID{fx.clientID, fx.siblingID}, fx.ownURL, true)
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]bool{fx.clientID: false, fx.siblingID: false}, owners)
+}
+
+func TestGetRemoteSessionClientTenantOrganizationID(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedSharedIssuerFixture(t, "tenant-org")
+	q := repo.New(fx.ti.conn)
+
+	organizationClient, err := q.GetRemoteSessionClientTenantOrganizationID(ctx, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, fx.organizationID, organizationClient)
+
+	projectClientID, _ := seedActiveClient(t, ctx, fx.ti.conn, fx.projectID, fx.userIssuerID, "", "rsi-tenant-org-project")
+	projectClient, err := q.GetRemoteSessionClientTenantOrganizationID(ctx, projectClientID)
+	require.NoError(t, err)
+	require.Equal(t, fx.organizationID, projectClient, "a project client belongs to its project's organization")
 }
