@@ -177,7 +177,7 @@ func TestExportRecord_CarriesTheAttemptAndTheCatalogText(t *testing.T) {
 
 	user := urn.NewUserSubject("user-secret-id")
 	memberID := uuid.New()
-	row := exportTestRow(t, CodeIDPUnavailable, true,
+	row := exportTestRow(t, CodeProviderUnavailable, true,
 		Provider("https://provider.example.test:8443/oauth"),
 		Member(memberID),
 		Retries(2),
@@ -197,7 +197,7 @@ func TestExportRecord_CarriesTheAttemptAndTheCatalogText(t *testing.T) {
 	record, ok := exportRecord(row)
 	require.True(t, ok)
 
-	meaning, known := MeaningOf(CodeIDPUnavailable.String())
+	meaning, known := MeaningOf(CodeProviderUnavailable.String())
 	require.True(t, known)
 	require.Equal(t, log.SeverityError, record.Severity())
 	require.Equal(t, "ERROR", record.SeverityText())
@@ -233,7 +233,7 @@ func TestExportRecord_CarriesTheAttemptAndTheCatalogText(t *testing.T) {
 	require.Equal(t, exportRecordID(row), got[string(attr.LogRecordUIDKey)].AsString(), "destinations dedupe redeliveries on it")
 	require.True(t, got[string(attr.ExtMcpConnectionFinalKey)].AsBool())
 	require.Equal(t, "failed", got[string(attr.ExtMcpConnectionOutcomeKey)].AsString())
-	require.Equal(t, CodeIDPUnavailable.String(), got[string(attr.ErrorTypeKey)].AsString())
+	require.Equal(t, CodeProviderUnavailable.String(), got[string(attr.ErrorTypeKey)].AsString())
 	require.Equal(t, meaning.WhatHappened, got[string(attr.ExtMcpConnectionUserMessageKey)].AsString())
 	require.Equal(t, meaning.WhatToDo, got[string(attr.ExtMcpConnectionUserNextStepKey)].AsString())
 	require.Equal(t, string(meaning.WhoFixes), got[string(attr.ExtMcpConnectionWhoFixesKey)].AsString())
@@ -272,7 +272,7 @@ func TestExportRecord_OneRowAttemptHasNoDuration(t *testing.T) {
 func TestExportRecord_FailureElsewhereLeavesOutTheHost(t *testing.T) {
 	t.Parallel()
 
-	row := exportTestRow(t, CodeIDPUnavailable, true, Provider("https://login.example.test:8443"), FailedElsewhere())
+	row := exportTestRow(t, CodeProviderUnavailable, true, Provider("https://login.example.test:8443"), FailedElsewhere())
 	require.Equal(t, "login.example.test:8443", row.ProviderHost, "the stored column is unchanged")
 
 	record, ok := exportRecord(row)
@@ -662,4 +662,29 @@ func TestExportRows_UnsettledPublishKeepsItsSlot(t *testing.T) {
 
 	require.Equal(t, int64(1), recorder.exporter.inFlight.Load())
 	require.Equal(t, int64(1), notExported(t, recorder, notExportedQueueFull))
+}
+
+func TestExportRecord_SpeakeasyFailureLeavesOutTheHost(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []Code{CodeInternalError, CodeKillswitchCheckUnavailable, CodeIDPUnavailable} {
+		row := exportTestRow(t, code, true, Provider("https://upstream.example.test:8443/mcp"))
+		require.Equal(t, "upstream.example.test:8443", row.ProviderHost, "the stored column is unchanged")
+
+		record, ok := exportRecord(row)
+		require.True(t, ok, code.String())
+		got := recordAttributes(record)
+		require.NotContains(t, got, string(attr.ServerAddressKey), code.String())
+		require.NotContains(t, got, string(attr.ServerPortKey), code.String())
+	}
+}
+
+func TestExportRecord_ProviderFailureNamesTheHost(t *testing.T) {
+	t.Parallel()
+
+	record, ok := exportRecord(exportTestRow(t, CodeProviderUnavailable, true, Provider("https://upstream.example.test:8443/mcp")))
+	require.True(t, ok)
+	got := recordAttributes(record)
+	require.Equal(t, "upstream.example.test", got[string(attr.ServerAddressKey)].AsString())
+	require.Equal(t, int64(8443), got[string(attr.ServerPortKey)].AsInt64())
 }

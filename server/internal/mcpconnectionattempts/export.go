@@ -282,10 +282,8 @@ func exportRecord(row Row) (log.Record, bool) {
 	if duration := row.EventTime.Sub(row.AttemptStartedAt); duration >= minAttemptDuration {
 		attrs = append(attrs, attr.ExtMcpConnectionDuration(duration))
 	}
-	// server.address is the external host that failed: the sign-in provider on sign-in and
-	// refresh steps, the upstream MCP server on MCP requests. Unknown means it is left out.
 	address, port := "", 0
-	if !row.failedElsewhere {
+	if addressNamesTheFailure(row) {
 		address, port = splitProviderHost(row.ProviderHost)
 	}
 	if port != 0 {
@@ -316,6 +314,13 @@ func exportRecord(row Row) (log.Record, bool) {
 		record.AddAttributes(log.KeyValueFromAttribute(kv))
 	}
 	return record, true
+}
+
+// addressNamesTheFailure reports whether the row's host is the external system that failed:
+// the sign-in provider on sign-in and refresh steps, the upstream MCP server on MCP requests.
+// A failure on Speakeasy's side, or one a call site marked as elsewhere, is not that host's.
+func addressNamesTheFailure(row Row) bool {
+	return !row.failedElsewhere && WhoFixes(row.WhoFixes) != WhoSpeakeasy
 }
 
 // splitProviderHost undoes NormalizeProviderHost's host:port and IPv6 brackets.
