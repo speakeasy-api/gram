@@ -15,8 +15,8 @@ import (
 )
 
 // attemptEndingColumns are the columns that decide how an attempt ended, plus its
-// provider (the one on the ending row, else the earliest) and weight. They reduce an attempt's rows in ClickHouse as Summarize does
-// in Go, with the same tie-breaks on equal times.
+// provider (the one on the ending row, else the earliest) and weight. They reduce an
+// attempt's rows in ClickHouse as Summarize does in Go, with the same tie-breaks on equal times.
 const attemptEndingColumns = `
 	organization_id,
 	attempt_id,
@@ -29,12 +29,9 @@ const attemptEndingColumns = `
 	toString(argMax((step, reason), (event_time, step, reason)).1) AS last_step,
 	toString(argMax((step, reason), (event_time, step, reason)).2) AS last_reason,
 	max(event_time) AS last_at,
-	if(toString(if(countIf(is_final) > 0,
-			argMinIf(provider_host, (event_time, step, outcome, reason), is_final),
-			argMax(provider_host, (event_time, step, reason)))) != '',
-		toString(if(countIf(is_final) > 0,
-			argMinIf(provider_host, (event_time, step, outcome, reason), is_final),
-			argMax(provider_host, (event_time, step, reason)))),
+	ifNull(nullIf(if(countIf(is_final) > 0,
+			argMinIf(provider_host, (event_time, step, outcome, reason, provider_host), is_final),
+			argMax(provider_host, (event_time, step, reason, provider_host))), ''),
 		argMinIf(provider_host, (event_time, provider_host), provider_host != '')) AS provider,
 	toUInt64(max(repeats)) + 1 AS weight`
 

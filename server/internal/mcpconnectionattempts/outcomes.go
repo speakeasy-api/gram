@@ -124,6 +124,30 @@ func earliest(rows []Row, keep func(Row) bool, value func(Row) string) string {
 	return value(*best)
 }
 
+// endingProvider is the provider on the row that decided how the attempt ended: the
+// earliest final row when there is one, else the latest row. Rows tied on the ending
+// order break on the provider host, as the SQL does.
+func endingProvider(rows []Row, hasFinal bool) string {
+	var best *Row
+	for i := range rows {
+		row := &rows[i]
+		switch {
+		case hasFinal && !row.IsFinal:
+			continue
+		case best == nil:
+			best = row
+		case hasFinal && rowOrder(*row, *best, func(r Row) []string { return []string{r.Step, r.Outcome, r.Reason, r.ProviderHost} }) < 0:
+			best = row
+		case !hasFinal && rowOrder(*row, *best, func(r Row) []string { return []string{r.Step, r.Reason, r.ProviderHost} }) > 0:
+			best = row
+		}
+	}
+	if best == nil {
+		return ""
+	}
+	return best.ProviderHost
+}
+
 // Summarize reduces one attempt's rows, in any order. It is the reference for the
 // SQL reduction, including how rows at the same time are broken.
 func Summarize(rows []Row) AttemptSummary {
@@ -165,10 +189,7 @@ func Summarize(rows []Row) AttemptSummary {
 	s.LastStep, s.LastReason, s.LastAt = last.Step, last.Reason, last.EventTime
 	s.SubjectURN = earliest(rows, func(r Row) bool { return r.SubjectURN != "" }, func(r Row) string { return r.SubjectURN })
 	s.RemoteSessionClientID = earliest(rows, func(r Row) bool { return r.RemoteSessionClientID != "" }, func(r Row) string { return r.RemoteSessionClientID })
-	s.ProviderHost = last.ProviderHost
-	if final != nil {
-		s.ProviderHost = final.ProviderHost
-	}
+	s.ProviderHost = endingProvider(rows, final != nil)
 	if s.ProviderHost == "" {
 		s.ProviderHost = earliest(rows, func(r Row) bool { return r.ProviderHost != "" }, func(r Row) string { return r.ProviderHost })
 	}
