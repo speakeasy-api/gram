@@ -658,7 +658,6 @@ func TestExportRows_UnsettledPublishKeepsItsSlot(t *testing.T) {
 	recorder := newExportRecorder(t, &scriptedConn{}, sink, withExportInFlight(1))
 
 	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true)})
-	time.Sleep(50 * time.Millisecond)
 	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true)})
 
 	require.Equal(t, int64(1), recorder.exporter.inFlight.Load())

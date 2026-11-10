@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -34,11 +35,11 @@ func TestConnectionLogSourceIsStampedOnlyByTheRecorderSink(t *testing.T) {
 		}
 		content, err := os.ReadFile(path)
 		if err != nil {
-			return err
+			return fmt.Errorf("read %s: %w", path, err)
 		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
-			return err
+			return fmt.Errorf("relative path of %s: %w", path, err)
 		}
 		for needle := range uses {
 			if strings.Contains(string(content), needle) {
