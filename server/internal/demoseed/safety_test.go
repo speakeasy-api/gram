@@ -65,7 +65,7 @@ func TestDemoSeedSafety(t *testing.T) {
 
 	// Provision the other tenant with the seed itself, including realistic MCP
 	// server dependents that the demo cleanup must not touch.
-	otherSeed, err := seedPostgres(ctx, logger, db, blob, otherTenantSpec)
+	otherSeed, err := seedPostgres(ctx, logger, db, blob, testenv.NewEncryptionClient(t), otherTenantSpec)
 	require.NoError(t, err)
 	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, otherTenantSpec.OrgID))
 	require.NoError(t, demoseedtest.PlantMCPServerDependents(
@@ -123,7 +123,7 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.True(t, fixtureOutside, "fixture produced no clickhouse rows; the isolation check would be vacuous")
 
 	// First real seed run.
-	require.NoError(t, Run(ctx, logger, db, ch, blob, DefaultSpec()))
+	require.NoError(t, Run(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), DefaultSpec()))
 
 	pgAfter1, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
@@ -151,7 +151,7 @@ func TestDemoSeedSafety(t *testing.T) {
 		"demo tamper fixture must plant one project-scoped onboarding milestone")
 
 	// Second real seed run.
-	require.NoError(t, Run(ctx, logger, db, ch, blob, DefaultSpec()))
+	require.NoError(t, Run(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), DefaultSpec()))
 
 	pgAfter2, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)

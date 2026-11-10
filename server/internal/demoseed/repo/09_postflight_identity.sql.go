@@ -429,7 +429,7 @@ const postflightIDInertUpstreamSessions = `-- name: PostflightIDInertUpstreamSes
 SELECT count(*) FROM remote_sessions
 WHERE remote_session_client_id = $1::uuid
   AND deleted IS FALSE
-  AND access_token_encrypted = '' AND refresh_token_encrypted IS NULL
+  AND access_token_encrypted <> '' AND refresh_token_encrypted IS NULL
   AND (validation_status IS NULL
        OR validation_status IN ('valid', 'rejected_by_member', 'inactive', 'unknown'))
 `
@@ -1060,7 +1060,7 @@ WHERE b.organization_id = $2::text AND b.project_id = $3::uuid
   AND b.user_session_issuer_id = us.user_session_issuer_id
   AND rs.subject_urn = b.attached_by_subject_id
   AND b.attached_by_subject_id = rs.subject_urn
-  AND rs.access_token_encrypted = ''
+  AND rs.access_token_encrypted <> ''
   AND rs.refresh_token_encrypted IS NULL AND rs.auto_refresh IS FALSE
 `
 
