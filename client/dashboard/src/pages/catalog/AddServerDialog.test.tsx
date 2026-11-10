@@ -12,6 +12,8 @@ import { MemoryRouter } from "react-router";
 import { catalogPresetState } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AddServerDialog, GuardrailOutcomeNotice } from "./AddServerDialog";
+import { readCatalogSetupHandoff } from "./catalog-setup-handoff";
+import { providerProgressKey } from "@/pages/mcp/x/setup/provider-setup";
 
 const mocks = vi.hoisted(() => ({
   getServerDetails: vi.fn(),
@@ -890,7 +892,13 @@ describe.each(["okta"] as const)(
       : "com.snowflake/cortex-mcp";
     const display = isOkta ? "Okta" : "Snowflake";
     const route = `/acme/projects/default/mcp/catalog/${encodeURIComponent(specifier)}/setup`;
-    const storageKey = `provider-setup:${provider}:v1:person-1:org-1:project-1:catalog%3A${encodeURIComponent(specifier)}:handoff`;
+    const progressKey = providerProgressKey(
+      provider,
+      "person-1",
+      "org-1",
+      "project-1",
+      `catalog:${specifier}`,
+    );
     const snowflake = {
       ...server,
       registrySpecifier: specifier,
@@ -960,11 +968,8 @@ describe.each(["okta"] as const)(
       fireEvent.click(button);
       await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith(route));
       expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
-      const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? "null");
-      expect(saved).toMatchObject({
-        identityMode: "user",
-        name: `${display} connection`,
-      });
+      const saved = readCatalogSetupHandoff(progressKey);
+      expect(saved).toMatchObject({ name: `${display} connection` });
     });
     it.each(["none", "agent"] as const)(
       "does not open setup for %s identity",
@@ -1001,8 +1006,8 @@ describe.each(["okta"] as const)(
           guardrail: catalogPresetState([]),
         }),
       ).toBe(true);
-      const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? "null");
-      expect(saved.guardrail.categories).toEqual(["secrets", "pii"]);
+      const saved = readCatalogSetupHandoff(progressKey);
+      expect(saved?.guardrail?.categories).toEqual(new Set(["secrets", "pii"]));
     });
     it.each(["loading", "disabled"] as const)(
       "never opens setup while rollout is %s",

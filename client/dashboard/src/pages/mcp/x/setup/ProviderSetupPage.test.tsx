@@ -12,6 +12,7 @@ import {
   type State,
 } from "@/pages/catalog/provider-setup/state";
 import { ProviderSetupPage } from "./ProviderSetupPage";
+import { providerSourceFingerprint } from "./provider-setup";
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
@@ -35,6 +36,8 @@ const mocks = vi.hoisted(() => ({
   snowflakeUrl:
     "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
   initiallyValidated: false,
+  initialStep: "test",
+  salesforcePath: "own",
   pending: "",
   error: "",
   loading: false,
@@ -98,7 +101,7 @@ vi.mock("./provider-setup", async (importOriginal) => {
       const state = initialState(provider);
       return {
         ...state,
-        step: "test",
+        step: mocks.initialStep,
         saved: true,
         authorized: true,
         tested: mocks.initiallyValidated,
@@ -106,6 +109,7 @@ vi.mock("./provider-setup", async (importOriginal) => {
           ...state.values,
           ...defaults,
           org: "example-org",
+          path: mocks.salesforcePath,
         },
         sourceFingerprint,
       };
@@ -124,6 +128,7 @@ vi.mock("./useProviderConnection", () => ({
     mocks.dispatch.mockImplementation(dispatch);
     return {
       dispatch,
+      next: () => dispatch({ type: "next" }),
       pending: mocks.pending || null,
       error: mocks.error || null,
       errorStep: "test",
@@ -245,6 +250,8 @@ beforeEach(() => {
   mocks.snowflakeUrl =
     "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP";
   mocks.initiallyValidated = false;
+  mocks.initialStep = "test";
+  mocks.salesforcePath = "own";
   mocks.pending = "";
   mocks.error = "";
   mocks.loading = false;
@@ -394,11 +401,9 @@ it("hands the native Snowflake source values and fingerprint into retained progr
       schema: "PUBLIC",
       serverName: "MCP",
     },
-    JSON.stringify([
-      server.remoteMcpServerId,
-      "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
-      "",
-    ]),
+    providerSourceFingerprint(server.remoteMcpServerId!, {
+      url: "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
+    }),
   );
 });
 

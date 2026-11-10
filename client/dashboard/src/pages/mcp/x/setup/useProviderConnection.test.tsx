@@ -177,31 +177,6 @@ beforeEach(() => {
     url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
   });
   mocks.headers.mockResolvedValue({ headers: [] });
-  mocks.createHeader.mockImplementation(async ({ createServerHeaderForm }) => {
-    const { remoteMcpServerId: _remoteMcpServerId, ...fields } =
-      createServerHeaderForm;
-    const header = { id: "instance", ...fields };
-    const { headers } = await mocks.headers();
-    mocks.headers.mockResolvedValue({ headers: [...headers, header] });
-    return header;
-  });
-  mocks.updateHeader.mockImplementation(async ({ updateServerHeaderForm }) => {
-    const { headers } = await mocks.headers();
-    mocks.headers.mockResolvedValue({
-      headers: headers.map((h: { id: string }) =>
-        h.id === updateServerHeaderForm.id
-          ? { ...h, ...updateServerHeaderForm }
-          : h,
-      ),
-    });
-    return updateServerHeaderForm;
-  });
-  mocks.deleteHeader.mockImplementation(async ({ id }) => {
-    const { headers } = await mocks.headers();
-    mocks.headers.mockResolvedValue({
-      headers: headers.filter((h: { id: string }) => h.id !== id),
-    });
-  });
   mocks.linkedServers.mockResolvedValue({ mcpServers: [server] });
   mocks.updateRemote.mockImplementation(async ({ updateServerForm }) => {
     const value = { id: "upstream", ...updateServerForm };
@@ -1549,6 +1524,14 @@ describe("Salesforce shared actions", () => {
       });
       expect(mocks.commit).toHaveBeenCalledWith({
         commitServerIdentityConfigurationForm: expect.objectContaining({
+          mcpServerId: server.id,
+          targetServerOnly: true,
+          clientMode: "manual",
+          createProvider: expect.objectContaining({
+            issuer,
+            authorizationEndpoint: `${issuer}/services/oauth2/authorize`,
+            tokenEndpoint: `${issuer}/services/oauth2/token`,
+          }),
           clientConfiguration: {
             clientId: "key",
             clientSecret: undefined,
@@ -1557,9 +1540,8 @@ describe("Salesforce shared actions", () => {
           },
         }),
       });
-      expect(
-        result.current.state.authorized || result.current.state.tested,
-      ).toBe(false);
+      expect(result.current.state.authorized).toBe(false);
+      expect(result.current.state.tested).toBe(false);
     },
   );
   it.each([
