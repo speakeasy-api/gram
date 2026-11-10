@@ -69,8 +69,8 @@ func mcpConnectionOutcomesDayWorkflowID(day time.Time) string {
 // fix lookahead is still open or just ended, and any day with raw events the long-term
 // table lacks. The first run after deploy backfills every day since raw events began.
 //
-// Temporal actions/month ≈ 30 starts + 30 plan activities + ~330 day starts + ~330 build
-// activities ≈ 720 per namespace (11 days rebuilt per run), plus a one-time backfill of
+// Temporal actions/month ≈ 30 starts + 30 plan activities + ~300 day starts + ~300 build
+// activities ≈ 660 per namespace (10 days rebuilt per run), plus a one-time backfill of
 // about 60. Fixed: one fleet-wide schedule.
 func MCPConnectionOutcomesSweepWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
@@ -108,8 +108,7 @@ func MCPConnectionOutcomesSweepWorkflow(ctx workflow.Context) error {
 		for i, future := range futures {
 			day := wave[i].Format(time.DateOnly)
 			if err := future.GetChildWorkflowExecution().Get(ctx, nil); err != nil {
-				var running *temporal.ChildWorkflowExecutionAlreadyStartedError
-				if errors.As(err, &running) {
+				if dayStillBuilding(err) {
 					logger.Info("connection outcome day is still building from an earlier run", "day", day)
 					continue
 				}
@@ -122,6 +121,12 @@ func MCPConnectionOutcomesSweepWorkflow(ctx workflow.Context) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// dayStillBuilding reports whether a day's build could not start because an earlier run's build of it is still going.
+func dayStillBuilding(err error) bool {
+	var running *temporal.ChildWorkflowExecutionAlreadyStartedError
+	return errors.As(err, &running)
 }
 
 // MCPConnectionOutcomesDayWorkflow rebuilds one day. The build is one activity, safe

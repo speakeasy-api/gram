@@ -55,8 +55,9 @@ const (
 	stagingTable = "mcp_connection_outcomes_daily_staging"
 )
 
-// BackfillStart is the first day with raw connection events.
-var BackfillStart = time.Date(2026, time.November, 4, 0, 0, 0, 0, time.UTC)
+// BackfillStart is the first whole day of raw connection events. They began on the
+// afternoon of 2026-11-04, and a partial day would read as a false dip.
+var BackfillStart = time.Date(2026, time.November, 5, 0, 0, 0, 0, time.UTC)
 
 // ErrDayOpen means the day can still gain attempts, so building it now would be wrong.
 var ErrDayOpen = errors.New("day is not closed yet")

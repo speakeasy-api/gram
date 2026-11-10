@@ -187,6 +187,7 @@ func newDemoSeedCommand() *cli.Command {
 			// The long-term outcomes table has no tenant, so only the local seed
 			// fills it, by running the daily job over the seeded days. Production
 			// never writes the demo organization's made-up attempts into it.
+			// Only the dev organization counts locally, so every provider, app and client name folds to other.
 			outcomes := dailyoutcomes.NewBuilder(logger, otel.GetMeterProvider(), db, ch)
 			now := time.Now()
 			for daysAgo := 1; daysAgo <= demoseed.ConnectionAttemptDays; daysAgo++ {
