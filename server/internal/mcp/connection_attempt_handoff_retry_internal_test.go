@@ -66,12 +66,12 @@ func TestRemoteSessionRefusalLeavesAttemptRetryable(t *testing.T) {
 			service := &Service{connections: rec.Recorder}
 			endpoint, state := directEndpoint(), openState()
 			session := uuid.New()
-			service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), endpoint, state, remotesessions.Client{}, validationTarget{}, session, tt.verdict, remotesessionmetrics.ValidationTriggerVerify)
+			service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), endpoint, state, remotesessions.Client{}, validationTarget{}, session, tt.verdict, probeFailure{}, remotesessionmetrics.ValidationTriggerVerify)
 			rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, tt.code)
 			rec.RequireNotEnded()
 			// The consent page can reconnect a rejected/inactive grant and verify again
 			// under the same challenge; only later approval completes the attempt.
-			service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), endpoint, state, remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeValid, remotesessionmetrics.ValidationTriggerVerify)
+			service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), endpoint, state, remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeValid, probeFailure{}, remotesessionmetrics.ValidationTriggerVerify)
 			rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultAllowed)
 			rec.RequireNotEnded()
 			rec.RequireOneAttempt()

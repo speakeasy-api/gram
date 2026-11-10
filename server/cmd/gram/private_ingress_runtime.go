@@ -302,7 +302,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, fmt.Errorf("build tunnel http client: %w", err)
 	}
 	protectedResources := protectedresource.NewProber(db, guardianPolicy)
-	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")))
+	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")), newConnectionLogExport(publishers.OTELLogs))
 	r.cleanup = append(r.cleanup, func(ctx context.Context) error {
 		drainCtx, cancel := context.WithTimeout(ctx, connectionRecorderDrainTimeout)
 		defer cancel()

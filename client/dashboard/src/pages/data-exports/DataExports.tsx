@@ -69,6 +69,10 @@ const DATA_SOURCE_OPTIONS: DataSourceOption[] = [
     value: DataSource.ToolCallLogs,
     label: "Tool call logs",
   },
+  {
+    value: DataSource.McpConnectionLogs,
+    label: "MCP connection logs",
+  },
 ];
 
 function renderDataSourceDescription(
@@ -134,6 +138,10 @@ function renderDataSourceDescription(
         telemetry instead.
       </>
     );
+  }
+
+  if (dataSource === DataSource.McpConnectionLogs) {
+    return "OTLP logs for failed MCP connections, including server problems an admin or service provider needs to fix. Blocked or declined connections, and connections through organization gateways, are not included.";
   }
 
   return "OTLP data";

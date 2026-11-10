@@ -156,6 +156,11 @@ func Provider(issuer string) Option {
 	return Option{apply: func(row *Row) { row.ProviderHost = NormalizeProviderHost(issuer) }}
 }
 
+// FailedElsewhere marks a row whose failure was not at the provider host it names, so the export leaves the host out.
+func FailedElsewhere() Option {
+	return Option{apply: func(row *Row) { row.failedElsewhere = true }}
+}
+
 // Member is the gateway member for member-level steps.
 func Member(id uuid.UUID) Option {
 	return Option{apply: func(row *Row) { row.MemberID = idString(id) }}
@@ -238,6 +243,9 @@ type Row struct {
 
 	// client waits here for the writer to read it. It is never stored or logged.
 	client requestClient
+
+	// failedElsewhere is for the export only and is never stored.
+	failedElsewhere bool
 }
 
 var errInvalidEvent = errors.New("invalid connection event")
@@ -314,6 +322,7 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		Repeats:               0,
 		DeviceKey:             "",
 		client:                requestClient{present: false, userAgent: "", forwardedFor: "", appFamily: attempt.scope.appFamily, reported: nil},
+		failedElsewhere:       false,
 	}
 	for _, opt := range opts {
 		if opt.apply != nil {
@@ -381,6 +390,7 @@ type Recorder struct {
 	limiter     *onceLimiter
 	logsEnabled func(context.Context, string) (bool, error)
 	deviceKeys  DeriveKey
+	exporter    *exporter
 	capture     func(Row)
 	cfg         config
 	steps       metric.Int64Counter
@@ -494,6 +504,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		limiter:     newOnceLimiter(),
 		logsEnabled: logsEnabled,
 		deviceKeys:  nil,
+		exporter:    nil,
 		capture:     nil,
 		cfg:         cfg,
 		steps:       steps,
@@ -521,6 +532,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	for _, opt := range opts {
 		opt(r)
 	}
+	r.startExport(meter)
 	go r.run()
 	return r
 }
@@ -534,6 +546,7 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		limiter:     nil,
 		logsEnabled: logsEnabled,
 		deviceKeys:  nil,
+		exporter:    nil,
 		capture:     capture,
 		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0},
 		steps:       nil,
@@ -840,8 +853,9 @@ func (r *Recorder) Shutdown(ctx context.Context) error {
 
 // ShutdownAndWait drains until shortly before ctx ends, then cancels in-flight I/O,
 // counts the backlog as dropped for shutdown, and joins the writer so its datastore can
-// close. The join outlasts ctx, bounded by writerJoinWait. The
-// logs callback and datastore driver must honor their operation contexts.
+// close. The join outlasts ctx, bounded by writerJoinWait. The logs callback and
+// datastore driver must honor their operation contexts. Connection log exports still
+// waiting for an ack stop waiting once the writer is cancelled.
 func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
 	if r == nil || r.stop == nil {
 		return nil
@@ -949,6 +963,7 @@ func (r *Recorder) logDrainLosses(ctx context.Context, before map[dropReason]int
 func (r *Recorder) run() {
 	defer close(r.done)
 	defer r.cancelWriter()
+	defer r.stopExport()
 
 	ticker := time.NewTicker(r.cfg.flushInterval)
 	defer ticker.Stop()
@@ -974,7 +989,9 @@ func (r *Recorder) run() {
 		batch = make([]Row, 0, r.cfg.maxBatch)
 		if len(rows) > 0 {
 			r.surviving(events(rows...), func() {
-				if !r.insert(rows) && stopping() {
+				if r.insert(rows) {
+					r.exportRows(rows)
+				} else if stopping() {
 					drainFailed = true
 				}
 			})

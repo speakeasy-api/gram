@@ -983,6 +983,7 @@ func newStartCommand() *cli.Command {
 				litellmHealthProcessor  *litellm.HealthProcessor
 				telemetryLoggerShutdown func(context.Context) error
 				publishersShutdown      func(context.Context) error
+				connectionsShutdown     func(context.Context) error
 				pubsubShutdown          func(context.Context) error
 				enforcementDispatcher   risk.EnforcementDispatcher
 				enforcementShutdown     func(context.Context) error
@@ -990,6 +991,8 @@ func newStartCommand() *cli.Command {
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
 				var errs []error
+				// The recorder publishes its exports, so only the publishers wait for it.
+				waitConnections := startShutdown(ctx, connectionsShutdown)
 				if litellmTraceProcessor != nil {
 					if err := litellmTraceProcessor.Shutdown(ctx); err != nil {
 						errs = append(errs, fmt.Errorf("shutdown LiteLLM trace processor: %w", err))
@@ -1014,6 +1017,7 @@ func newStartCommand() *cli.Command {
 				if tunnelMetricsShutdown != nil {
 					errs = append(errs, tunnelMetricsShutdown(ctx))
 				}
+				errs = append(errs, waitConnections())
 				if publishersShutdown != nil {
 					errs = append(errs, publishersShutdown(ctx))
 				}
@@ -1200,8 +1204,8 @@ func newStartCommand() *cli.Command {
 
 			// One prober per replica, shared by the proxy's on-use refresh and the login's probe.
 			protectedResources := protectedresource.NewProber(db, guardianPolicy)
-			connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")))
-			shutdownFuncs = append(shutdownFuncs, connectionRecorderShutdown(connectionRecorder))
+			connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")), newConnectionLogExport(publishers.OTELLogs))
+			connectionsShutdown = connectionRecorderShutdown(connectionRecorder)
 			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 			if err != nil {
 				return err
