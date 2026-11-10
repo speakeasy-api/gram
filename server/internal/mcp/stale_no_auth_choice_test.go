@@ -529,7 +529,8 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 					t.Helper()
 					refused, ok := errors.AsType[*codemode.MemberRefusalError](err)
 					require.True(t, ok, "got %v", err)
-					require.Equal(t, tc.message, refused.Message)
+					body, _ := contextvalues.SplitConnectionReference(refused.Message)
+					require.Equal(t, tc.message, body)
 					require.Equal(t, tc.fixable, errors.Is(err, codemode.ErrConsentRequired))
 				}
 				ran := false
