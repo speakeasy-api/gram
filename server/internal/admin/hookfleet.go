@@ -11,6 +11,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/hookversions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -21,15 +22,8 @@ type HookFleetReader interface {
 	HookInstalls(ctx context.Context, organizationID string, since time.Time, limit int) (telemetry.HookInstallPage, error)
 }
 
-// HookFleetVersions are the versions installs are classified against. Latest
-// is the release Speakeasy ships; Minimum, when set, is the oldest supported.
-type HookFleetVersions struct {
-	Latest  *semver.Version
-	Minimum *semver.Version
-}
-
 // SetHookFleet enables getOrganizationHookFleet. A nil reader leaves it unavailable.
-func (s *Service) SetHookFleet(reader HookFleetReader, versions HookFleetVersions) {
+func (s *Service) SetHookFleet(reader HookFleetReader, versions hookversions.Policy) {
 	s.hookFleet = reader
 	s.hookFleetVersions = versions
 }
@@ -37,13 +31,6 @@ func (s *Service) SetHookFleet(reader HookFleetReader, versions HookFleetVersion
 const (
 	hookFleetInstallLimit   = 1000
 	hookFleetQuietAfterDays = 3
-)
-
-const (
-	hookVersionCurrent     = "current"
-	hookVersionBehind      = "behind"
-	hookVersionUnsupported = "unsupported"
-	hookVersionUnknown     = "unknown"
 )
 
 func (s *Service) GetOrganizationHookFleet(ctx context.Context, payload *gen.GetOrganizationHookFleetPayload) (*gen.AdminHookFleetResult, error) {
@@ -69,7 +56,7 @@ func (s *Service) GetOrganizationHookFleet(ctx context.Context, payload *gen.Get
 	return result, nil
 }
 
-func summarizeHookFleet(page telemetry.HookInstallPage, versions HookFleetVersions, now time.Time) *gen.AdminHookFleetResult {
+func summarizeHookFleet(page telemetry.HookInstallPage, versions hookversions.Policy, now time.Time) *gen.AdminHookFleetResult {
 	quietBefore := now.AddDate(0, 0, -hookFleetQuietAfterDays)
 	result := &gen.AdminHookFleetResult{
 		OrganizationID: "",
@@ -105,16 +92,17 @@ func summarizeHookFleet(page telemetry.HookInstallPage, versions HookFleetVersio
 	}
 
 	for _, install := range page.Installs {
-		status := classifyHookVersion(install.BinaryVersion, versions)
+		status := string(versions.Classify(install.BinaryVersion, install.EndpointGeneration))
 		quiet := install.LastSeen.Before(quietBefore)
 		if quiet {
 			result.QuietInstalls++
 		}
 
-		v, ok := byVersion[install.BinaryVersion]
+		versionKey := install.BinaryVersion + "\x00" + status
+		v, ok := byVersion[versionKey]
 		if !ok {
 			v = &gen.AdminHookFleetVersion{Version: install.BinaryVersion, Status: status, Installs: 0}
-			byVersion[install.BinaryVersion] = v
+			byVersion[versionKey] = v
 		}
 		v.Installs++
 		bucket(byRoute, install.InstallRoute).Installs++
@@ -157,7 +145,7 @@ func summarizeHookFleet(page telemetry.HookInstallPage, versions HookFleetVersio
 		case bErr == nil:
 			return 1
 		default:
-			return cmp.Compare(a.Version, b.Version)
+			return cmp.Or(cmp.Compare(a.Version, b.Version), cmp.Compare(a.Status, b.Status))
 		}
 	})
 	result.Routes = sortedHookFleetBuckets(byRoute)
@@ -174,22 +162,4 @@ func sortedHookFleetBuckets(buckets map[string]*gen.AdminHookFleetBucket) []*gen
 		return cmp.Or(cmp.Compare(b.Installs, a.Installs), cmp.Compare(b.Events, a.Events), cmp.Compare(a.Value, b.Value))
 	})
 	return out
-}
-
-func classifyHookVersion(version string, versions HookFleetVersions) string {
-	if version == "" {
-		return hookVersionUnknown
-	}
-	parsed, err := semver.NewVersion(version)
-	if err != nil {
-		return hookVersionUnknown
-	}
-	switch {
-	case versions.Minimum != nil && parsed.LessThan(versions.Minimum):
-		return hookVersionUnsupported
-	case parsed.LessThan(versions.Latest):
-		return hookVersionBehind
-	default:
-		return hookVersionCurrent
-	}
 }

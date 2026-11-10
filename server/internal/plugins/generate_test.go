@@ -4755,3 +4755,12 @@ func TestDogfoodPluginFilesIncludesCopilot(t *testing.T) {
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.sh"])
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.ps1"])
 }
+
+func TestHooksVersionPolicy(t *testing.T) {
+	t.Parallel()
+	policy, err := HooksVersionPolicy()
+	require.NoError(t, err)
+	require.Equal(t, hooksBinaryVersion, policy.Latest.String())
+	require.NotNil(t, policy.Minimum)
+	require.False(t, policy.Latest.LessThan(policy.Minimum), "the minimum supported hooks version must not be newer than the shipped release")
+}

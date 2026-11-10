@@ -10,8 +10,11 @@ import (
 	"strings"
 	"unicode/utf16"
 
+	"github.com/Masterminds/semver/v3"
+
 	"github.com/speakeasy-api/gram/hooks/relay"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hookversions"
 )
 
 type hooksBinaryTarget struct {
@@ -100,6 +103,23 @@ func hooksDownloadHost(serverURL string) string {
 
 // LatestHooksVersion is the hooks release new installs get.
 func LatestHooksVersion() string { return hooksBinaryVersion }
+
+// hooksMinimumSupportedVersion is the oldest hooks release still supported.
+// Installs below it, and every legacy per-tool endpoint, are unsupported.
+const hooksMinimumSupportedVersion = "0.3.0"
+
+// HooksVersionPolicy is the version range installs are classified against.
+func HooksVersionPolicy() (hookversions.Policy, error) {
+	latest, err := semver.NewVersion(hooksBinaryVersion)
+	if err != nil {
+		return hookversions.Policy{Latest: nil, Minimum: nil}, fmt.Errorf("parse latest hooks version: %w", err)
+	}
+	minimum, err := semver.NewVersion(hooksMinimumSupportedVersion)
+	if err != nil {
+		return hookversions.Policy{Latest: nil, Minimum: nil}, fmt.Errorf("parse minimum hooks version: %w", err)
+	}
+	return hookversions.Policy{Latest: latest, Minimum: minimum}, nil
+}
 
 func renderHooksBootstrap(cfg GenerateConfig) []byte {
 	return renderHooksBootstrapForRelease(hooksBinaryVersion, hooksServedTargets(cfg.ServerURL), cfg.InstallFailOpen, hooksDownloadHost(cfg.ServerURL))

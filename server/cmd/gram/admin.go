@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
@@ -537,11 +536,11 @@ func newAdminCommand() *cli.Command {
 			adminService.SetMCPServerURL(mcpServerURL)
 			adminService.SetHookClients(telemetry.NewHookClients(chDB))
 			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(redisClient))
-			latestHooksVersion, err := semver.NewVersion(plugins.LatestHooksVersion())
+			hooksVersionPolicy, err := plugins.HooksVersionPolicy()
 			if err != nil {
-				return fmt.Errorf("parse latest hooks version: %w", err)
+				return err
 			}
-			adminService.SetHookFleet(telemetry.NewHookFleet(chDB), admin.HookFleetVersions{Latest: latestHooksVersion, Minimum: nil})
+			adminService.SetHookFleet(telemetry.NewHookFleet(chDB), hooksVersionPolicy)
 			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
 			adminService.SetStripeDashboardMode(c.String("stripe-api-key"))
