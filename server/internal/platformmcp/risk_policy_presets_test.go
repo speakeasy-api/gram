@@ -113,6 +113,8 @@ func TestCreateRiskPolicySchemaAcceptsPresetBranch(t *testing.T) {
 		"standard without policy":   `{"project_slug":"project","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`,
 		"scope with unknown field":  `{"project_slug":"project","preset":"secrets_and_credentials","mcp_scope":{"server":"github"},"idempotency_key":"key"}`,
 		"scope with bad annotation": `{"project_slug":"project","preset":"secrets_and_credentials","mcp_scope":{"all_servers":true,"tool_annotations":["dangerous"]},"idempotency_key":"key"}`,
+		"unknown disposition":       `{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"action":"block","sources":["shadow_mcp"],"shadow_mcp_disposition":"allow_some","idempotency_key":"key"}`,
+		"prompt with disposition":   `{"project_slug":"project","policy_type":"prompt_based","name":"policy","enabled":true,"prompt":"instruction","shadow_mcp_disposition":"allow_all","idempotency_key":"key"}`,
 		"prompt branch with preset": `{"project_slug":"project","policy_type":"prompt_based","name":"policy","enabled":true,"prompt":"instruction","preset":"prompt_injection","idempotency_key":"key"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -163,6 +165,11 @@ func TestCreateRiskPolicySchemaAcceptsPresetBranch(t *testing.T) {
 	for _, branch := range []map[string]property{standard, prompt, preset} {
 		require.Contains(t, branch["mcp_scope"].Description, "before the tool runs")
 	}
+	for _, branch := range []map[string]property{standard, preset} {
+		require.ElementsMatch(t, []any{"allow_all", "block_all"}, branch["shadow_mcp_disposition"].Enum)
+		require.Contains(t, branch["shadow_mcp_disposition"].Description, "allow_all (the default)")
+	}
+	require.NotContains(t, prompt, "shadow_mcp_disposition")
 
 	_, err = create.Invoke(ctx, json.RawMessage(`{"project_slug":"project","preset":"secrets_and_credentials","mcp_scope":{"servers":[{"mcp_server_id":"11111111-1111-4111-8111-111111111111","tools":["delete_repository"]}],"tool_annotations":["destructiveHint"]},"idempotency_key":"key"}`))
 	require.ErrorAs(t, err, &refusal, "a scoped request passes schema validation and reaches the handler")

@@ -68,6 +68,7 @@ type createRiskPolicyInput struct {
 	DetectionScopes        []riskDetectionScope `json:"detection_scopes,omitempty"`
 	Prompt                 string               `json:"prompt,omitempty"`
 	MCPScope               *riskPolicyMCPScope  `json:"mcp_scope,omitempty"`
+	ShadowMCPDisposition   string               `json:"shadow_mcp_disposition,omitempty"`
 	IdempotencyKey         string               `json:"idempotency_key"`
 }
 
@@ -115,6 +116,7 @@ type normalizedCreateRiskPolicy struct {
 	DetectionScopes        []riskDetectionScope `json:"detection_scopes"`
 	PromptDigest           string               `json:"prompt_digest,omitempty"`
 	MCPScope               *policycore.MCPScope `json:"mcp_scope,omitempty"`
+	ShadowMCPDisposition   string               `json:"shadow_mcp_disposition,omitempty"`
 }
 
 type preparedRiskPolicyCreate struct {
@@ -497,7 +499,7 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	normalized := normalizedCreateRiskPolicy{
 		ProjectSlug: project.Slug, PolicyType: input.PolicyType, Name: input.Name, Enabled: enabled,
 		Action: action, Score: score, UserMessage: input.UserMessage,
-		Sources: []string{}, PresidioEntities: []string{}, PresidioScoreThreshold: nil, PromptInjectionRules: []string{}, DisabledRules: []string{}, ApprovedEmailDomains: []string{}, DetectionScopes: []riskDetectionScope{}, PromptDigest: "", MCPScope: nil,
+		Sources: []string{}, PresidioEntities: []string{}, PresidioScoreThreshold: nil, PromptInjectionRules: []string{}, DisabledRules: []string{}, ApprovedEmailDomains: []string{}, DetectionScopes: []riskDetectionScope{}, PromptDigest: "", MCPScope: nil, ShadowMCPDisposition: "",
 	}
 	params := riskrepo.CreateRiskPolicyParams{
 		ID: uuid.Nil, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: input.Name,
@@ -512,7 +514,7 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	switch input.PolicyType {
 	case "prompt_based":
 		prompt := strings.TrimSpace(input.Prompt)
-		if prompt == "" || utf8.RuneCountInString(prompt) > maxRiskPolicyPromptRunes || len(input.Sources)+len(input.PresidioEntities)+len(input.PromptInjectionRules)+len(input.DisabledRules)+len(input.ApprovedEmailDomains)+len(input.DetectionScopes) > 0 || input.PresidioScoreThreshold != nil {
+		if prompt == "" || input.ShadowMCPDisposition != "" || utf8.RuneCountInString(prompt) > maxRiskPolicyPromptRunes || len(input.Sources)+len(input.PresidioEntities)+len(input.PromptInjectionRules)+len(input.DisabledRules)+len(input.ApprovedEmailDomains)+len(input.DetectionScopes) > 0 || input.PresidioScoreThreshold != nil {
 			return preparedRiskPolicyCreate{}, invalidRiskPolicyRequest()
 		}
 		if err := s.requirePromptPolicies(ctx, principal, project); err != nil {
@@ -562,6 +564,12 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 		normalized.ApprovedEmailDomains, normalized.DetectionScopes = domains, scopes
 		params.Sources, params.PresidioEntities, params.AnalyzerConfig = sources, entities, analyzer
 		params.PromptInjectionRules, params.DisabledRules = promptRules, disabledRules
+		disposition, err := createShadowMCPDisposition(input.ShadowMCPDisposition, sources, action)
+		if err != nil {
+			return preparedRiskPolicyCreate{}, err
+		}
+		normalized.ShadowMCPDisposition = disposition
+		params.ShadowMcpDisposition = conv.ToPGTextEmpty(disposition)
 	default:
 		return preparedRiskPolicyCreate{}, invalidRiskPolicyRequest()
 	}
@@ -576,6 +584,28 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	}
 	params.ID = id
 	return preparedRiskPolicyCreate{normalized: normalized, params: params}, nil
+}
+
+// createShadowMCPDisposition picks the default posture of a new policy that
+// detects shadow_mcp and blocks. Like the dashboard, a new policy allows every
+// shadow MCP server unless it is blocked (allow_all) when the caller does not
+// choose; block_all must be asked for. Any other policy shape takes no
+// disposition. The disposition cannot change after create.
+func createShadowMCPDisposition(requested string, sources []string, action string) (string, error) {
+	if requested != "" && requested != shadowmcp.DispositionAllowAll && requested != shadowmcp.DispositionBlockAll {
+		return "", invalidRiskPolicyRequest()
+	}
+	blocksShadowMCP := action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP)
+	if !blocksShadowMCP {
+		if requested != "" {
+			return "", invalidRiskPolicyRequest()
+		}
+		return "", nil
+	}
+	if requested == "" {
+		return shadowmcp.DispositionAllowAll, nil
+	}
+	return requested, nil
 }
 
 // prepareMCPScope canonicalizes a requested scope and applies the same rules

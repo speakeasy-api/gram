@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -238,13 +239,14 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	require.Equal(t, promptCreated.Policy.ID, safeResult.Policy.ID)
 
 	legacyBlockingInput := map[string]any{
-		"project_slug":    project.Slug,
-		"policy_type":     "standard",
-		"name":            "Legacy blocking policy",
-		"enabled":         true,
-		"action":          "block",
-		"sources":         []string{"shadow_mcp"},
-		"idempotency_key": "legacy-blocking-policy-key",
+		"project_slug":           project.Slug,
+		"policy_type":            "standard",
+		"name":                   "Legacy blocking policy",
+		"enabled":                true,
+		"action":                 "block",
+		"sources":                []string{"shadow_mcp"},
+		"shadow_mcp_disposition": "block_all",
+		"idempotency_key":        "legacy-blocking-policy-key",
 	}
 	_, legacyBlocking, err := handlers.CreatePolicy(ctx, nil, legacyBlockingInput)
 	require.NoError(t, err)
@@ -252,7 +254,7 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	require.NoError(t, err)
 	legacyStored, err := riskrepo.New(conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: legacyBlockingID, ProjectID: project.ID})
 	require.NoError(t, err)
-	require.False(t, legacyStored.ShadowMcpDisposition.Valid, "legacy block_all posture has no stored disposition")
+	require.Equal(t, shadowmcp.DispositionBlockAll, legacyStored.ShadowMcpDisposition.String, "an explicit block_all request is stored")
 
 	legacyAllowedURL := "https://legacy-allowed.example.test/mcp"
 	require.NoError(t, policybypass.ReplacePolicyURLAudience(ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, legacyBlockingID.String(), legacyAllowedURL, []urn.Principal{authz.AllUsersPrincipal()}))
@@ -275,6 +277,81 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	requireRiskMutationRefusal(t, err, unavailableCode)
 	_, _, err = unavailableRiskMutationTool[UpdateRiskExclusionToolOutput]()(ctx, nil, map[string]any{})
 	requireRiskMutationRefusal(t, err, unavailableCode)
+}
+
+func TestRiskPolicyMutationHandlersCreateShadowMCPDisposition(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_risk_policy_shadow_disposition")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	principal.ClientID = "test-client"
+	principal.Surface = SurfacePlatformMCP
+	ctx = ContextWithPrincipal(ctx, principal)
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
+	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-policy-test-key")
+	require.NoError(t, err)
+	policies := risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil)
+	handlers, err := NewRiskPolicyMutationHandlers(conn, controls, policies)
+	require.NoError(t, err)
+
+	storedDisposition := func(t *testing.T, policyID string) pgtype.Text {
+		t.Helper()
+		id, err := uuid.Parse(policyID)
+		require.NoError(t, err)
+		stored, err := riskrepo.New(conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: id, ProjectID: project.ID})
+		require.NoError(t, err)
+		return stored.ShadowMcpDisposition
+	}
+
+	blockingInput := map[string]any{
+		"project_slug":    project.Slug,
+		"policy_type":     "standard",
+		"name":            "Shadow MCP blocklist",
+		"enabled":         true,
+		"action":          "block",
+		"sources":         []string{"shadow_mcp"},
+		"idempotency_key": "default-disposition-key",
+	}
+	_, created, err := handlers.CreatePolicy(ctx, nil, blockingInput)
+	require.NoError(t, err)
+	disposition := storedDisposition(t, created.Policy.ID)
+	require.True(t, disposition.Valid)
+	require.Equal(t, shadowmcp.DispositionAllowAll, disposition.String, "a new blocking shadow MCP policy allows every server unless it is blocked")
+
+	_, replayed, err := handlers.CreatePolicy(ctx, nil, blockingInput)
+	require.NoError(t, err)
+	require.Equal(t, created.Policy.ID, replayed.Policy.ID)
+
+	flagging := map[string]any{
+		"project_slug":    project.Slug,
+		"policy_type":     "standard",
+		"name":            "Shadow MCP flag",
+		"enabled":         true,
+		"action":          "flag",
+		"sources":         []string{"shadow_mcp"},
+		"idempotency_key": "flag-disposition-key",
+	}
+	_, flagged, err := handlers.CreatePolicy(ctx, nil, flagging)
+	require.NoError(t, err)
+	require.False(t, storedDisposition(t, flagged.Policy.ID).Valid, "a policy that does not block shadow MCP takes no disposition")
+
+	for name, overrides := range map[string]map[string]any{
+		"disposition on a flag policy":          {"action": "flag", "shadow_mcp_disposition": "allow_all"},
+		"disposition without shadow_mcp source": {"sources": []string{"gitleaks"}, "shadow_mcp_disposition": "block_all"},
+	} {
+		input := cloneRiskMutationInput(blockingInput)
+		maps.Copy(input, overrides)
+		input["name"] = "Rejected " + name
+		input["idempotency_key"] = "rejected-" + name
+		_, _, err := handlers.CreatePolicy(ctx, nil, input)
+		require.Error(t, err, name)
+		var refusal *ToolRefusalError
+		require.ErrorAs(t, err, &refusal, name)
+	}
 }
 
 func cloneRiskMutationInput(input map[string]any) map[string]any {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/speakeasy-api/gram/server/internal/risk/presets"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // registerRiskToolsWithMutations is the single handler-selection seam used by
@@ -198,7 +199,7 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 	if catalogAvailable && handlers != nil && handlers.Controls != nil {
 		if handlers.CreatePolicy != nil {
 			createPolicy = handlers.CreatePolicy
-			createPolicyDescription = "Create a risk policy in an explicit project with idempotent replay safety: a standard policy from allowlisted detectors, a prompt-based policy from a judge instruction, or a policy expanded from a use-case preset (see list_risk_presets and suggest_risk_policy) with optional overrides. A preset policy is enabled unless enabled is false."
+			createPolicyDescription = "Create a risk policy in an explicit project with idempotent replay safety: a standard policy from allowlisted detectors, a prompt-based policy from a judge instruction, or a policy expanded from a use-case preset (see list_risk_presets and suggest_risk_policy) with optional overrides. A preset policy is enabled unless enabled is false. A policy that blocks shadow_mcp defaults to shadow_mcp_disposition allow_all, which blocks no server until an administrator blocks one from the dashboard; pass block_all to block every Shadow MCP server that is not allowed."
 		}
 		if handlers.UpdatePolicy != nil {
 			updatePolicy = handlers.UpdatePolicy
@@ -411,6 +412,7 @@ func createRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	standard["approved_email_domains"] = boundedArraySchema(stringSchema("Canonical email domain.", 1, 253), 0, 50, true)
 	standard["approved_email_domains"].Description = "Email domains treated as corporate by the account_identity source; sessions from other domains are flagged."
 	standard["detection_scopes"] = detectionScopesSchema(catalog)
+	standard["shadow_mcp_disposition"] = shadowMCPDispositionSchema()
 
 	prompt := riskPolicyCreateCommonProperties(catalog)
 	prompt["policy_type"] = describedConstSchema("prompt_based", policycatalog.PolicyTypeDescriptions["prompt_based"])
@@ -423,6 +425,7 @@ func createRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	preset["approved_email_domains"] = boundedArraySchema(stringSchema("Canonical email domain.", 1, 253), 0, 50, true)
 	preset["approved_email_domains"].Description = "Email domains treated as corporate; required for the non_corporate_accounts preset to detect anything."
 	preset["prompt"] = stringSchema("Replaces the preset's judge instruction; only for prompt-based presets.", 1, 4000)
+	preset["shadow_mcp_disposition"] = shadowMCPDispositionSchema()
 	delete(preset, "enabled")
 	preset["enabled"] = &jsonschema.Schema{Type: "boolean", Description: "Defaults to true."}
 	return &jsonschema.Schema{Type: "object", OneOf: []*jsonschema.Schema{
@@ -502,6 +505,12 @@ func riskPolicyCreateCommonProperties(catalog policycatalog.Catalog) map[string]
 		"idempotency_key": stringSchema("Caller key retained for 24-hour replay safety.", 1, 128),
 		"mcp_scope":       riskPolicyMCPScopeSchema(),
 	}
+}
+
+func shadowMCPDispositionSchema() *jsonschema.Schema {
+	schema := enumSchema(shadowmcp.DispositionAllowAll, shadowmcp.DispositionBlockAll)
+	schema.Description = "Only for a policy that detects shadow_mcp with the block action, and fixed once created. allow_all (the default) permits every Shadow MCP server until an administrator blocks it from the dashboard, so the new policy blocks nothing at first. block_all blocks every Shadow MCP server unless an administrator allows it from the dashboard."
+	return schema
 }
 
 func riskPolicyMCPScopeSchema() *jsonschema.Schema {
