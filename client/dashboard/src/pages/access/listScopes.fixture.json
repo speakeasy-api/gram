@@ -405,7 +405,7 @@
     {
       "slug": "chat:read",
       "label": "View agent sessions",
-      "description": "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.",
+      "description": "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions and those of agents they own or edit.",
       "resource_type": "chat",
       "category": "session",
       "sensitive": true,
@@ -417,7 +417,7 @@
     {
       "slug": "chat:write",
       "label": "Manage agent sessions",
-      "description": "Rename, delete, and give feedback on other members' agent sessions, and read their transcripts. Everyone keeps their own.",
+      "description": "Rename, delete, and give feedback on other members' agent sessions, and read their transcripts. Everyone keeps their own sessions and those of agents they own or edit.",
       "resource_type": "chat",
       "category": "session",
       "sensitive": true,
