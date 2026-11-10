@@ -47,12 +47,15 @@ function OktaPermissions(): JSX.Element {
         <InProvider
           actions={[
             <>
-              As a Super Administrator, open the app’s{" "}
-              <strong>Okta API Scopes</strong> tab.
+              Select the <strong>Okta API Scopes</strong> tab.
             </>,
             <>
-              Click <strong>Grant</strong> for each API scope needed by the
+              Click <strong>Grant</strong> for the API scopes required by the
               tools you want to use.
+            </>,
+            <>
+              Go to the <strong>General</strong> tab and confirm that{" "}
+              <strong>Proof Key for Code Exchange (PKCE)</strong> is selected.
             </>,
           ]}
         />
@@ -64,34 +67,6 @@ function OktaPermissions(): JSX.Element {
         >
           Find the API scopes for your tools
         </a>
-      </Section>
-      <Section title="Configure app authentication">
-        <InProvider
-          actions={[
-            <>
-              Open the app’s <strong>General</strong> tab.
-            </>,
-            <>
-              Click <strong>Edit</strong> in <strong>Client Credentials</strong>
-              .
-            </>,
-            <>
-              Set <strong>Client authentication</strong> to{" "}
-              <strong>
-                {s.values.oktaAppType === "web" ? "Client secret" : "None"}
-              </strong>
-              .
-            </>,
-            ...(s.values.oktaAppType === "web"
-              ? [
-                  <>
-                    Select <strong>Proof Key for Code Exchange (PKCE)</strong>.
-                  </>,
-                ]
-              : []),
-            <>Save the changes.</>,
-          ]}
-        />
       </Section>
       {s.values.appChoice === "existing" && (
         <Section title="Assign people">

@@ -773,22 +773,16 @@ it.each(["web", "native"])(
     expect(screen.getByLabelText("Client ID")).toBeDefined();
     expect(!!screen.queryByLabelText("Client Secret")).toBe(appType === "web");
     view.rerender(content("permissions"));
-    expect(!!screen.queryByText("Proof Key for Code Exchange (PKCE)")).toBe(
-      appType === "web",
-    );
-    const authentication = screen.getByRole("heading", {
-      name: "Configure app authentication",
-    }).parentElement!.textContent!;
-    expect(authentication).toContain(
-      `Set Client authentication to ${appType === "web" ? "Client secret" : "None"}.`,
-    );
-    expect(authentication.indexOf("Open the app’s General tab.")).toBeLessThan(
-      authentication.indexOf("Click Edit in Client Credentials."),
-    );
-    if (appType === "web")
-      expect(authentication.indexOf("Client authentication")).toBeLessThan(
-        authentication.indexOf("Proof Key for Code Exchange"),
-      );
+    expect(
+      screen.getAllByRole("listitem").map((item) => item.textContent),
+    ).toEqual([
+      "Select the Okta API Scopes tab.",
+      "Click Grant for the API scopes required by the tools you want to use.",
+      "Go to the General tab and confirm that Proof Key for Code Exchange (PKCE) is selected.",
+    ]);
+    expect(
+      screen.queryByRole("heading", { name: "Configure app authentication" }),
+    ).toBeNull();
     expect(screen.queryByLabelText("Okta API scopes")).toBeNull();
     expect(
       screen
@@ -896,7 +890,7 @@ it("guides granting scopes in Okta without collecting or copying them", () => {
   expect(screen.queryByLabelText("Scopes to grant")).toBeNull();
   expect(screen.queryByRole("button", { name: /copy/i })).toBeNull();
   expect(
-    screen.getByText(/for each API scope needed by the tools/),
+    screen.getByText(/for the API scopes required by the tools/),
   ).toBeDefined();
   expect(
     screen
