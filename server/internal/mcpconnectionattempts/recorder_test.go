@@ -1271,6 +1271,7 @@ func TestShutdownAndWait_AWedgedWriterAndABlockedLogStillReturn(t *testing.T) {
 	cfg := testConfig()
 	cfg.maxBatch = 1
 	cfg.insertTimeout = 50 * time.Millisecond
+	cfg.logsCheckTimeout = 50 * time.Millisecond
 	handler := &blockingLogHandler{entered: make(chan struct{}, 1), release: release}
 	recorder := newRecorder(slog.New(handler), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
 	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
@@ -1283,7 +1284,7 @@ func TestShutdownAndWait_AWedgedWriterAndABlockedLogStillReturn(t *testing.T) {
 	select {
 	case err := <-finished:
 		require.ErrorIs(t, err, errWriterStillRunning)
-	case <-time.After(10 * time.Second):
+	case <-time.After(writerJoinWait(cfg.insertTimeout, cfg.logsCheckTimeout) + 2*drainLogWait + 2*time.Second):
 		t.Fatal("ShutdownAndWait waited on a blocked log call")
 	}
 }
@@ -1350,4 +1351,44 @@ func TestRecord_UnstoredRowStoredAfterAllCountsAsAStep(t *testing.T) {
 	require.NoError(t, recorder.Shutdown(t.Context()))
 	require.Equal(t, int64(1), conn.rows.Load())
 	require.Equal(t, int64(1), stepsCounted(t, recorder))
+}
+
+// MaxShutdownOverrun must cover the join on a writer stuck in a logs check.
+func TestMaxShutdownOverrun_CoversALogsCheckOnTheWriter(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, MaxShutdownOverrun, writerJoinWait(defaultInsertTimeout, defaultLogsCheckTimeout)+2*drainLogWait)
+	require.Greater(t, writerJoinWait(defaultInsertTimeout, defaultLogsCheckTimeout), defaultLogsCheckTimeout+logsCheckLockRelease)
+}
+
+// A writer in a logs check that outlasts the insert timeout, as a lock release can, is still joined.
+func TestShutdownAndWait_JoinsAWriterInASlowLogsCheck(t *testing.T) {
+	t.Parallel()
+
+	var checks atomic.Int64
+	release := make(chan struct{})
+	slowCheck := func(context.Context, string) (bool, error) {
+		checks.Add(1)
+		<-release
+		return true, nil
+	}
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}, mu: sync.Mutex{}, traces: nil}
+	cfg := testConfig()
+	cfg.insertTimeout = 100 * time.Millisecond
+	cfg.logsCheckTimeout = 100 * time.Millisecond
+	recorder := newTestRecorderWithLogs(t, conn, slowCheck, cfg)
+	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return checks.Load() == 1 }, 10*time.Second, time.Millisecond)
+	// The check ignores cancellation, like the detached lock release, and outlasts the insert timeout and grace.
+	time.AfterFunc(1500*time.Millisecond, func() { close(release) })
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+
+	err := recorder.ShutdownAndWait(ctx)
+	require.NotErrorIs(t, err, errWriterStillRunning)
+	select {
+	case <-recorder.done:
+	default:
+		t.Fatal("ShutdownAndWait returned before the writer exited")
+	}
 }

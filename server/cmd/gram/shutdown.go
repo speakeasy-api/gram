@@ -19,7 +19,7 @@ const runShutdownTimeout = 30 * time.Second
 
 // connectionRecorderShutdownTimeout is the connection recorder's share of runShutdownTimeout.
 // With mcpconnectionattempts.MaxShutdownOverrun it still ends before ClickHouse closes.
-const connectionRecorderShutdownTimeout = 20 * time.Second
+const connectionRecorderShutdownTimeout = 18 * time.Second
 
 // connectionRecorderShutdown is the recorder's runShutdown func, bounded so its writer is
 // joined before runShutdown returns.

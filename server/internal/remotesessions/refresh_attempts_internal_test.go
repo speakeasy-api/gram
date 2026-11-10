@@ -296,6 +296,8 @@ func TestRecordRefresh_LogsOffInvalidClientIsNotCountedAsAStep(t *testing.T) {
 	t.Cleanup(func() { _ = recorder.ShutdownAndWait(context.WithoutCancel(t.Context())) })
 	s := &RefreshService{connections: recorder}
 	scope := mcpconnectionattempts.ProviderSessionScope("org-logs-off", uuid.New(), mcpconnectionattempts.AppDCR)
+	// The first answer is a miss that starts a background check; the row waits for it to be remembered.
+	require.Eventually(t, func() bool { return !recorder.Stores(scope) }, 5*time.Second, time.Millisecond)
 	client := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{IssuerRegistrationEndpoint: pgtype.Text{String: "https://idp.example.com/register", Valid: true}}
 	what, ok := refreshHappened(remotesessionmetrics.RefreshOutcomeInvalidClient, client, nil)
 	require.True(t, ok)
@@ -336,4 +338,22 @@ func TestInvalidClientHappened_ACancelledRequestStillChecksLogs(t *testing.T) {
 
 	what, _ := s.invalidClientHappened(ctx, RefreshIn(scope), boundSession())
 	require.Equal(t, mcpconnectionattempts.CodeProviderOAuthInvalidClient, what, "logs read as on, so the lookup ran and timed out")
+}
+
+// A logs check that has no remembered answer doesn't hold the refresh: it runs in the background.
+func TestRefreshStores_ASlowLogsCheckDoesNotHoldTheRefresh(t *testing.T) {
+	t.Parallel()
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	slowLogsOff := func(context.Context, string) (bool, error) {
+		<-release
+		return false, nil
+	}
+	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), nil, slowLogsOff)
+	t.Cleanup(func() { _ = recorder.ShutdownAndWait(context.WithoutCancel(t.Context())) })
+	scope := mcpconnectionattempts.ProviderSessionScope("org-slow-logs", uuid.New(), mcpconnectionattempts.AppDCR)
+
+	started := time.Now()
+	require.True(t, recorder.Stores(scope), "a miss leaves the decision to the writer")
+	require.Less(t, time.Since(started), 100*time.Millisecond)
 }
