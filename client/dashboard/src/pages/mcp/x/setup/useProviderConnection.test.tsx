@@ -2471,7 +2471,7 @@ describe("Snowflake shared actions", () => {
 
 describe("Okta native OAuth contract", () => {
   it.each(["web", "native"])(
-    "saves %s credentials with exact scopes, PKCE and resolved upstream",
+    "saves %s credentials without a scope override, with PKCE and resolved upstream",
     async (appType) => {
       mocks.provider.mockRejectedValue({ statusCode: 404 });
       mocks.remote.mockResolvedValue({
@@ -2482,7 +2482,6 @@ describe("Okta native OAuth contract", () => {
         ...initialState("okta").values,
         oktaOrg: "example.okta.com",
         oktaAppType: appType,
-        oktaScopes: "okta.users.read okta.apps.read",
         clientId: "example-client",
         clientSecret: appType === "web" ? "example-secret" : "",
       };
@@ -2509,7 +2508,7 @@ describe("Okta native OAuth contract", () => {
           clientId: "example-client",
           tokenEndpointAuthMethod:
             appType === "web" ? "client_secret_basic" : "none",
-          scope: ["okta.users.read", "okta.apps.read"],
+          scope: undefined,
         },
       });
       expect(
@@ -2523,7 +2522,7 @@ describe("Okta native OAuth contract", () => {
   );
 });
 
-it("restores a saved Native Okta client without reading a secret", async () => {
+it("restores a saved Native Okta client with discovered scopes and without reading a secret", async () => {
   mocks.remote.mockResolvedValue({
     id: "upstream",
     url: "https://example.okta.com/mcp",
@@ -2541,7 +2540,7 @@ it("restores a saved Native Okta client without reading a secret", async () => {
     id: "client",
     clientId: "example-client",
     tokenEndpointAuthMethod: "none",
-    scope: ["okta.users.read"],
+    scope: [],
     callbackUrl: "https://platform.example/callback",
   });
   const { result } = mount(
@@ -2552,7 +2551,6 @@ it("restores a saved Native Okta client without reading a secret", async () => {
   await waitFor(() => expect(result.current.state.saved).toBe(true));
   expect(result.current.state.values).toMatchObject({
     oktaAppType: "native",
-    oktaScopes: "okta.users.read",
     clientSecret: "",
   });
   expect(result.current.state.authorized).toBe(false);
@@ -2575,7 +2573,6 @@ it("retries failed Okta credential saving against the resolved changed org witho
       values: {
         ...initialState("okta").values,
         oktaOrg: "other.okta.com",
-        oktaScopes: "okta.apps.read",
         clientId: "example-client",
         clientSecret: "example-secret",
       },
@@ -2634,7 +2631,6 @@ it.each(["web", "native"])(
           ...initialState("okta").values,
           oktaOrg: "example.okta.com",
           oktaAppType: appType,
-          oktaScopes: "okta.users.read",
         },
       },
       { url: "https://example.okta.com/mcp", instanceUrl: "" },

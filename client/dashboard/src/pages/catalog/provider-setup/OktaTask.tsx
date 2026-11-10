@@ -1,7 +1,7 @@
 import { AppWindow, Monitor } from "lucide-react";
 import { useNewRemoteSessionClientCallbackUrl } from "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js";
 import { useSetup } from "./setup-context";
-import { oktaOrg, oktaScopes, oktaScopeGuide } from "./okta";
+import { oktaOrg, oktaScopeGuide } from "./okta";
 import {
   AppChoice,
   CallbackUrlStatus,
@@ -41,29 +41,8 @@ export function OktaCredentialInstructions(): JSX.Element | null {
 
 function OktaPermissions(): JSX.Element {
   const { s } = useSetup();
-  const scopes = oktaScopes(s.values.oktaScopes);
-  const apiScopes = scopes?.filter((scope) => scope.startsWith("okta."));
-  const refreshTokens = scopes?.includes("offline_access");
   return (
     <>
-      <SetupField
-        field="oktaScopes"
-        label="Okta API scopes"
-        multiline
-        placeholder="okta.users.read&#10;okta.apps.read"
-      />
-      <p className="mt-3">Separate scopes with spaces, commas, or new lines.</p>
-      <a
-        href={oktaScopeGuide}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-link-primary underline"
-      >
-        Scope-to-tool guide
-      </a>
-      {apiScopes && (
-        <CopyValue label="Scopes to grant" value={apiScopes.join(" ")} />
-      )}
       <Section title="Grant API scopes">
         <InProvider
           actions={[
@@ -72,10 +51,19 @@ function OktaPermissions(): JSX.Element {
               <strong>Okta API Scopes</strong> tab.
             </>,
             <>
-              Select <strong>Grant</strong> for each Okta API scope you entered.
+              Click <strong>Grant</strong> for each API scope needed by the
+              tools you want to use.
             </>,
           ]}
         />
+        <a
+          href={oktaScopeGuide}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-block text-link-primary underline"
+        >
+          Find the API scopes for your tools
+        </a>
       </Section>
       <Section title="Configure app authentication">
         <InProvider
@@ -105,26 +93,6 @@ function OktaPermissions(): JSX.Element {
           ]}
         />
       </Section>
-      {refreshTokens && (
-        <Section title="Enable refresh tokens">
-          <InProvider
-            actions={[
-              <>
-                Open the app’s <strong>General</strong> tab.
-              </>,
-              <>
-                Click <strong>Edit</strong> in <strong>General Settings</strong>
-                .
-              </>,
-              <>
-                Enable <strong>Refresh Token</strong> under{" "}
-                <strong>Grant type</strong>.
-              </>,
-              <>Save the changes.</>,
-            ]}
-          />
-        </Section>
-      )}
       {s.values.appChoice === "existing" && (
         <Section title="Assign people">
           <InProvider

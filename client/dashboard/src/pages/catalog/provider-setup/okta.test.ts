@@ -1,14 +1,15 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import {
-  oktaConnection,
-  oktaOrg,
-  oktaScopes,
-  oktaSelectionForUrl,
-} from "./okta";
+import { oktaConnection, oktaOrg, oktaSelectionForUrl } from "./okta";
 import { initialState, reduce, ready, validate } from "./state";
 
 describe("native Okta setup", () => {
+  it("continues past grant instructions without collecting scopes", () => {
+    const s = initialState("okta");
+    s.step = "permissions";
+    expect(validate(s)).toEqual({});
+    expect(reduce(s, { type: "next" }).step).toBe("credentials");
+  });
   it("resolves the org into the actual upstream and org authorization server", () => {
     expect(oktaOrg("https://EXAMPLE.okta.com/")).toBe(
       "https://example.okta.com",
@@ -44,30 +45,11 @@ describe("native Okta setup", () => {
   ])("rejects unsupported org %s", (value) => {
     expect(oktaOrg(value)).toBeNull();
   });
-  it("requests only explicit scopes, deduplicating without adding access", () => {
-    expect(
-      oktaScopes(
-        "okta.users.read\nokta.apps.read okta.users.read offline_access",
-      ),
-    ).toEqual(["okta.users.read", "okta.apps.read", "offline_access"]);
-    expect(oktaScopes("okta.governance.accessCertifications.read")).toEqual([
-      "okta.governance.accessCertifications.read",
-    ]);
-    for (const value of [
-      "",
-      "openid profile",
-      "okta.*",
-      "okta.users.read,unknown",
-      "https://example.test",
-    ])
-      expect(oktaScopes(value)).toBeNull();
-  });
   it("requires a secret only for Web apps and invalidates changed configuration", () => {
     let s = initialState("okta");
     s.step = "credentials";
     Object.assign(s.values, {
       oktaOrg: "example.okta.com",
-      oktaScopes: "okta.users.read",
       clientId: "example-client",
     });
     expect(validate(s).clientSecret).toBeTruthy();
@@ -77,8 +59,8 @@ describe("native Okta setup", () => {
     expect(ready(s)).toBe(true);
     s = reduce(s, {
       type: "field",
-      field: "oktaScopes",
-      value: "okta.apps.read",
+      field: "oktaOrg",
+      value: "other.okta.com",
     });
     expect(s).toMatchObject({
       saved: false,

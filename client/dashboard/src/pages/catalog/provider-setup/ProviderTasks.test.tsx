@@ -789,10 +789,10 @@ it.each(["web", "native"])(
       expect(authentication.indexOf("Client authentication")).toBeLessThan(
         authentication.indexOf("Proof Key for Code Exchange"),
       );
-    expect(screen.getByLabelText("Okta API scopes")).toBeDefined();
+    expect(screen.queryByLabelText("Okta API scopes")).toBeNull();
     expect(
       screen
-        .getByRole("link", { name: "Scope-to-tool guide" })
+        .getByRole("link", { name: "Find the API scopes for your tools" })
         .getAttribute("href"),
     ).toContain("scope-based-tool-loading");
     expect(screen.queryByText(/Assign the people or groups/)).toBeNull();
@@ -831,13 +831,11 @@ function OktaTaskFixture({
   step,
   appType = "web",
   appChoice = "new",
-  scopes = "okta.users.read",
   saved = false,
 }: {
   step: string;
   appType?: string;
   appChoice?: string;
-  scopes?: string;
   saved?: boolean;
 }) {
   const dispatch = vi.fn<() => void>();
@@ -846,7 +844,6 @@ function OktaTaskFixture({
     oktaOrg: "https://example.okta.com",
     oktaAppType: appType,
     appChoice,
-    oktaScopes: scopes,
   });
   return (
     <SetupContext
@@ -893,24 +890,20 @@ it.each(["web", "native"])(
   },
 );
 
-it("shows refresh-token actions only when offline_access is selected", () => {
-  const view = render(<OktaTaskFixture step="permissions" />);
-  expect(screen.queryByText("Refresh Token")).toBeNull();
-  expect(screen.queryByText(/refresh tokens/i)).toBeNull();
+it("guides granting scopes in Okta without collecting or copying them", () => {
+  render(<OktaTaskFixture step="permissions" />);
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect(screen.queryByLabelText("Scopes to grant")).toBeNull();
+  expect(screen.queryByRole("button", { name: /copy/i })).toBeNull();
   expect(
-    screen.getByRole("heading", { name: "Grant API scopes" }),
+    screen.getByText(/for each API scope needed by the tools/),
   ).toBeDefined();
-  expect(screen.queryByRole("heading", { name: "Assign people" })).toBeNull();
-  view.rerender(
-    <OktaTaskFixture
-      step="permissions"
-      scopes="okta.users.read offline_access"
-    />,
-  );
-  expect(screen.getByText("Refresh Token")).toBeDefined();
-  expect(screen.getByLabelText("Scopes to grant").getAttribute("value")).toBe(
-    "okta.users.read",
-  );
+  expect(
+    screen
+      .getByRole("link", { name: "Find the API scopes for your tools" })
+      .getAttribute("href"),
+  ).toContain("scope-based-tool-loading");
+  expect(screen.queryByText("Refresh Token")).toBeNull();
 });
 
 it("keeps later assignment instructions only for existing Okta apps", () => {

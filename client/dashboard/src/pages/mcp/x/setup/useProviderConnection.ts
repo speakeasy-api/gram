@@ -1,6 +1,5 @@
 import {
   oktaConnection,
-  oktaScopes,
   oktaSelectionForUrl,
 } from "@/pages/catalog/provider-setup/okta";
 import {
@@ -151,14 +150,11 @@ function providerOAuthConfig(
       return providers[s.provider];
   }
 }
-function providerScopes(
-  provider: State["provider"],
-  access: string,
-  scopes: string,
-): string[] {
+function providerScopes(provider: State["provider"], access: string): string[] {
   switch (provider) {
     case "okta":
-      return oktaScopes(scopes) ?? [];
+      // Leave the client unpinned so the existing sign-in flow discovers scopes.
+      return [];
     case "slack":
       return scopesFor({ values: { access } });
     case "salesforce":
@@ -261,8 +257,8 @@ export function useProviderConnection(
   const name = config.name;
   const access = s.values.access;
   const requestedScopes = useMemo(
-    () => providerScopes(providerKey, access, s.values.oktaScopes),
-    [access, providerKey, s.values.oktaScopes],
+    () => providerScopes(providerKey, access),
+    [access, providerKey],
   );
   const sdk = useSdkClient();
   const session = useSession();
@@ -418,7 +414,7 @@ export function useProviderConnection(
         authorized: false,
         tested: false,
         ...(!status.data ? { saved: false } : {}),
-        ...(["snowflake", "okta"].includes(providerKey) &&
+        ...(providerKey === "snowflake" &&
         status.data &&
         !sameScopes(status.data.client.scope, requestedScopes)
           ? { saved: false, configChanged: true }
@@ -442,28 +438,18 @@ export function useProviderConnection(
   ]);
   useEffect(() => {
     if (!status.isSuccess || hydrated.current) return;
-    if (
-      providerKey === "okta" &&
-      status.data &&
-      !s.configChanged &&
-      !s.values.oktaScopes
-    ) {
-      dispatch({
-        type: "field",
-        field: "oktaScopes",
-        value: (status.data.client.scope ?? []).join(" "),
-        source: "configuration",
-      });
+    if (providerKey === "okta" && status.data && !s.configChanged) {
+      const savedAppType =
+        status.data.client.tokenEndpointAuthMethod === "none"
+          ? "native"
+          : "web";
       dispatch({
         type: "field",
         field: "oktaAppType",
-        value:
-          status.data.client.tokenEndpointAuthMethod === "none"
-            ? "native"
-            : "web",
+        value: savedAppType,
         source: "configuration",
       });
-      if ((status.data.client.scope ?? []).length) return;
+      if (s.values.oktaAppType !== savedAppType) return;
     }
     hydrated.current = true;
     if (
@@ -486,7 +472,7 @@ export function useProviderConnection(
             : "read",
         });
       const scopeMismatch =
-        (["snowflake", "okta"].includes(providerKey) || s.accessChosen) &&
+        (providerKey === "snowflake" || s.accessChosen) &&
         !sameScopes(status.data.client.scope, requestedScopes);
       dispatch({
         type: "connection",
@@ -511,7 +497,6 @@ export function useProviderConnection(
     dispatch,
     providerKey,
     s.accessChosen,
-    s.values.oktaScopes,
     s.values.oktaAppType,
     s.values,
     requestedScopes,
@@ -1067,7 +1052,7 @@ export function useProviderConnection(
                   : s.values.clientSecret.trim(),
               tokenEndpointAuthMethod:
                 selectedConnection?.authMethod ?? "client_secret_post",
-              scope: requestedScopes,
+              scope: providerKey === "okta" ? undefined : requestedScopes,
             },
           },
         },

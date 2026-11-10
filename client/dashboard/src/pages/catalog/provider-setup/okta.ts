@@ -78,29 +78,3 @@ export function oktaConnection(values: {
         : ("client_secret_basic" as const),
   };
 }
-/** No scopes are added implicitly, including refresh-token or OIDC scopes. */
-export function oktaScopes(value: string): string[] | null {
-  const scopes = [
-    ...new Set(
-      value
-        .trim()
-        .split(/[\s,]+/)
-        .filter(Boolean),
-    ),
-  ];
-  if (
-    !scopes.length ||
-    scopes.length > 100 ||
-    !scopes.some((s) => s.startsWith("okta."))
-  )
-    return null;
-  if (
-    !scopes.every((s) =>
-      /^(?:okta\.[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)+|openid|profile|email|offline_access)$/.test(
-        s,
-      ),
-    )
-  )
-    return null;
-  return scopes;
-}

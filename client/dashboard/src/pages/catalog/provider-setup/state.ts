@@ -1,5 +1,5 @@
 import { salesforceConnection, salesforceMyDomain } from "./salesforce";
-import { oktaConnection, oktaOrg, oktaScopes } from "./okta";
+import { oktaConnection, oktaOrg } from "./okta";
 import {
   snowflakeConnection,
   publicSnowflakeHost,
@@ -23,7 +23,6 @@ const defaultValues = {
   org: "",
   oktaOrg: "",
   oktaAppType: "web",
-  oktaScopes: "",
   integration: "native",
   environment: "production",
   salesforceServer: "sobject-reads",
@@ -167,9 +166,7 @@ export function ready(s: State): boolean {
   return (
     s.saved &&
     (s.provider !== "okta" ||
-      (!s.configChanged &&
-        !!oktaConnection(s.values) &&
-        !!oktaScopes(s.values.oktaScopes))) &&
+      (!s.configChanged && !!oktaConnection(s.values))) &&
     (s.provider !== "snowflake" ||
       (!s.configChanged &&
         !!snowflakeConnection(s.values) &&
@@ -190,12 +187,6 @@ export function validate(s: State): State["errors"] {
     )
       errors.oktaOrg =
         "Enter your public Okta org URL, such as https://example.okta.com, without a path or port.";
-    if (
-      ["permissions", "credentials"].includes(s.step) &&
-      !oktaScopes(s.values.oktaScopes)
-    )
-      errors.oktaScopes =
-        "Enter the exact Okta API scopes granted to your app, separated by spaces or commas. Include at least one okta API scope.";
     if (
       ["app", "credentials"].includes(s.step) &&
       !["web", "native"].includes(s.values.oktaAppType)
@@ -343,7 +334,7 @@ export function reduce(s: State, a: Action): State {
       if (s.values[a.field] === a.value) return s;
       const connectionChange =
         (s.provider === "okta" &&
-          ["oktaOrg", "oktaAppType", "oktaScopes"].includes(a.field)) ||
+          ["oktaOrg", "oktaAppType"].includes(a.field)) ||
         (s.provider === "snowflake" &&
           [
             "host",

@@ -676,12 +676,11 @@ it.each([
 );
 
 describe("Okta source-bound progress", () => {
-  it("keeps only non-secret configuration and resets stale org/app/scope choices", () => {
+  it("keeps only non-secret configuration and resets stale org/app choices", () => {
     const s = initialState("okta");
     Object.assign(s.values, {
       oktaOrg: "https://example.okta.com",
       oktaAppType: "native",
-      oktaScopes: "okta.apps.read",
       clientId: "example-client",
       clientSecret: "example-secret",
     });
@@ -690,6 +689,7 @@ describe("Okta source-bound progress", () => {
     s.configChanged = true;
     saveProviderProgress("okta-progress", s);
     const raw = sessionStorage.getItem("okta-progress")!;
+    expect(raw).not.toContain("oktaScopes");
     expect(raw).not.toContain("example-secret");
     expect(raw).not.toContain("example-client");
     const restored = loadProviderProgress(
@@ -698,7 +698,6 @@ describe("Okta source-bound progress", () => {
       { oktaOrg: "https://example.okta.com" },
       "source-one",
     );
-    expect(restored.values.oktaScopes).toBe("okta.apps.read");
     expect(restored.values.oktaAppType).toBe("native");
     expect(restored.step).toBe("credentials");
     expect(restored.saved).toBe(false);
@@ -709,7 +708,6 @@ describe("Okta source-bound progress", () => {
       "source-two",
     );
     expect(changed.values.oktaOrg).toBe("https://other.okta.com");
-    expect(changed.values.oktaScopes).toBe("");
     expect(changed.step).toBe("enable");
     expect(changed.tested).toBe(false);
   });

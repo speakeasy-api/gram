@@ -132,17 +132,14 @@ function Credentials() {
   const saved = s.saved;
   return (
     <>
-      {s.provider === "okta" &&
-        (s.errors.oktaOrg || s.errors.oktaScopes || s.errors.oktaAppType) && (
-          <Alert variant="error">
-            Review your Okta configuration before saving credentials.{" "}
-            <Correction step="organization">Review organization</Correction>
-            {" · "}
-            <Correction step="app">Review app type</Correction>
-            {" · "}
-            <Correction step="permissions">Review scopes</Correction>
-          </Alert>
-        )}
+      {s.provider === "okta" && (s.errors.oktaOrg || s.errors.oktaAppType) && (
+        <Alert variant="error">
+          Review your Okta configuration before saving credentials.{" "}
+          <Correction step="organization">Review organization</Correction>
+          {" · "}
+          <Correction step="app">Review app type</Correction>
+        </Alert>
+      )}
       {s.provider === "salesforce" && s.errors.salesforceServer && (
         <Alert variant="error">
           {s.errors.salesforceServer}{" "}
