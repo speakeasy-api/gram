@@ -885,6 +885,8 @@ WHERE registration.mcp_server_id = @mcp_server_id
        AND (provider.project_id = a.project_id
             OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
       WHERE a.mcp_server_id = server.id
+        AND a.project_id = registration.project_id
+        AND a.organization_id = registration.organization_id
         AND a.deleted IS FALSE
   )::uuid[]) = 0
 ORDER BY registration.id

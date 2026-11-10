@@ -890,6 +890,8 @@ WHERE s.id = $3::uuid
                    AND (provider.project_id = a.project_id
                         OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
                   WHERE a.mcp_server_id = s.id
+                    AND a.project_id = s.project_id
+                    AND a.organization_id = p.organization_id
                     AND a.deleted IS FALSE
                 )::uuid[] = ARRAY[b.remote_session_issuer_id]::uuid[]
             AND t.resource_identifier = b.resource)
@@ -2020,6 +2022,8 @@ WHERE b.id = $1::uuid
                AND (provider.project_id = a.project_id
                     OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
               WHERE a.mcp_server_id = s.id
+                AND a.project_id = s.project_id
+                AND a.organization_id = b.organization_id
                 AND a.deleted IS FALSE
             )::uuid[] = ARRAY[b.remote_session_issuer_id]::uuid[]
         AND t.resource_identifier = b.resource)

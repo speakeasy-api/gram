@@ -85,6 +85,8 @@ SELECT p.organization_id, m.project_id, m.id AS mcp_server_id, r.id AS remote_mc
        AND (provider.project_id = a.project_id
             OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
       WHERE a.mcp_server_id = m.id
+        AND a.project_id = m.project_id
+        AND a.organization_id = p.organization_id
         AND a.deleted IS FALSE
   )::uuid[] AS association_provider_ids,
   left(COALESCE(pr.resource_name,''),200)::text AS resource_name, left(COALESCE(pr.resource_documentation,''),2049)::text AS resource_documentation,
