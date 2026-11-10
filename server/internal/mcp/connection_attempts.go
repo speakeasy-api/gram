@@ -528,7 +528,8 @@ func (a *attemptEndings) drain(ctx context.Context) error {
 	}
 }
 
-// endAttemptOnce ends an attempt from a path that can repeat, off the request path.
+// endAttemptOnce ends an attempt from a path that can repeat, off the request path. A failure
+// someone will read a reference for waits up to attemptEndingReferenceWait for the ending to be accepted.
 // If the marker can't be read or too many are waiting, the attempt stays open rather than ending twice.
 func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
 	if attempt.IsZero() {

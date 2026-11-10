@@ -142,6 +142,49 @@ func TestReference_ARefreshThatLeftNoIDBlocksClaiming(t *testing.T) {
 	require.Empty(t, contextvalues.ConnectionReference(ctx))
 }
 
+func TestReference_AFailureThatLeftNoIDHidesAnEarlierOne(t *testing.T) {
+	t.Parallel()
+
+	recorder := NewCapturing(func(Row) {}, logsOn)
+	ctx := withSlot(t)
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	require.NotEmpty(t, contextvalues.ConnectionReference(ctx))
+
+	recorder.insertFailing.Store(true)
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeProviderUnreachable)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
+}
+
+func TestReference_ASuccessKeepsAnEarlierFailure(t *testing.T) {
+	t.Parallel()
+
+	recorder := NewCapturing(func(Row) {}, logsOn)
+	ctx := withSlot(t)
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	reference := contextvalues.ConnectionReference(ctx)
+	recorder.Once(ctx, testScope(), StepMCPRequest, ResultAccepted)
+	require.Equal(t, reference, contextvalues.ConnectionReference(ctx))
+}
+
+func TestReference_ALogsOnAnswerExpiresWithTheFlush(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		var enabled atomic.Bool
+		enabled.Store(true)
+		conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+		recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, func(context.Context, string) (bool, error) {
+			return enabled.Load(), nil
+		}, testConfig())
+
+		require.True(t, recorder.logsAllowForReference(t.Context(), "org"))
+		enabled.Store(false)
+		time.Sleep(referenceLogsOnTTL) //nolint:forbidigo // GG013: advances the synctest fake clock inside a synctest.Test bubble
+		require.False(t, recorder.logsAllowForReference(t.Context(), "org"), "logs turned off is seen within one flush")
+		require.NoError(t, recorder.Shutdown(t.Context()))
+	})
+}
+
 func TestReference_NonFailuresLeaveNone(t *testing.T) {
 	t.Parallel()
 
@@ -248,7 +291,7 @@ func TestReference_AFoldedRequestShowsTheRowItFoldsInto(t *testing.T) {
 	})
 }
 
-func TestOnceLimiter_TheNextAllowedRowIsStoredUnderTheFoldID(t *testing.T) {
+func TestOnceLimiter_TheNextAllowedRowTakesTheFoldID(t *testing.T) {
 	t.Parallel()
 
 	limiter := newOnceLimiter()

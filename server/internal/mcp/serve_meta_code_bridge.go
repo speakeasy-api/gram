@@ -429,7 +429,7 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 		if invocation.credential {
 			if slug, _, splitErr := metamcp.SplitQualifiedName(path); splitErr == nil {
 				if member, ok := findMetaMember(members, slug); ok && codeConnectAvailable(&callGate) && callGate.memberConnectURL(member) != "" {
-					failure = &codemode.ConnectionRequiredError{Server: member.slug}
+					failure = &codemode.ConnectionRequiredError{Server: member.slug, ReferenceLine: contextvalues.ConnectionReferenceLine(ctx)}
 				}
 			}
 		}

@@ -621,5 +621,6 @@ func TestMCPErrHandle_NoReferenceLeavesTheMessageAlone(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader("{}")))
 
+	require.Contains(t, rec.Body.String(), `"message":"Reconnect it"`)
 	require.NotContains(t, rec.Body.String(), "Reference")
 }

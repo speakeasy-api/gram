@@ -47,18 +47,19 @@ func ConnectionReferenceWanted(ctx context.Context) bool {
 	return ok
 }
 
-// set records a failure's id. Two different ids can't be told apart, so neither is shown.
+// set records a failure's id. Two different ids, or a failure that left none, can't be told
+// apart from the error shown, so nothing is shown.
 func (s *connectionReferenceSlot) set(reference string) {
 	switch {
-	case s.conflict || reference == "":
-	case s.reference != "" && s.reference != reference:
+	case s.conflict:
+	case reference == "" || (s.reference != "" && s.reference != reference):
 		s.reference, s.conflict = "", true
 	default:
 		s.reference = reference
 	}
 }
 
-// SetConnectionReference leaves a failure's id on ctx's slot.
+// SetConnectionReference leaves a failure's id on ctx's slot. "" is a failure that left no id.
 func SetConnectionReference(ctx context.Context, reference string) {
 	if slot, ok := ctx.Value(connectionReferenceKey{}).(*connectionReferenceSlot); ok {
 		slot.mu.Lock()

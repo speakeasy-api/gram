@@ -46,3 +46,11 @@ func TestRejectedResult_AnOversizedUpstreamMarkerCannotPanic(t *testing.T) {
 		require.LessOrEqual(t, len(content[0]["text"]), maxRejectionBytes)
 	}
 }
+
+func TestCallbackReply_ConnectionRequiredKeepsTheReferenceBeforeTheData(t *testing.T) {
+	t.Parallel()
+
+	reply := callbackReply(1, nil, &ConnectionRequiredError{Server: "tracker", ReferenceLine: "Reference: ref-1"})
+	require.NotNil(t, reply.Error)
+	require.Contains(t, *reply.Error, "\nReference: ref-1\nconnection_required: {\"server\":\"tracker\"}")
+}

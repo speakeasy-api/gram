@@ -28,3 +28,15 @@ func TestReplaceConnectionReference_ClearsAConflict(t *testing.T) {
 	ReplaceConnectionReference(ctx, "c")
 	require.Equal(t, "c", ConnectionReference(ctx))
 }
+
+func TestSetConnectionReference_AFailureWithNoIDShowsNone(t *testing.T) {
+	t.Parallel()
+
+	ctx := WithConnectionReferenceSlot(t.Context())
+	SetConnectionReference(ctx, "a")
+	SetConnectionReference(ctx, "")
+	require.Empty(t, ConnectionReference(ctx))
+
+	SetConnectionReference(ctx, "b")
+	require.Empty(t, ConnectionReference(ctx), "a later id can't undo the doubt")
+}

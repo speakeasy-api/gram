@@ -69,8 +69,12 @@ const (
 	// referenceLogsTimeout is how long a failure waits for its logs answer; a slower one shows no reference.
 	referenceLogsTimeout = 100 * time.Millisecond
 
-	// referenceLogsTTL is how long one logs answer serves references, so a failure loop costs one lookup.
-	referenceLogsTTL = 30 * time.Second
+	// referenceLogsOffTTL is how long a logs-off answer serves references. Staying stale only hides a reference.
+	referenceLogsOffTTL = 30 * time.Second
+
+	// referenceLogsOnTTL is how long a logs-on answer serves references. It matches the writer's own
+	// per-flush answer, so a reference outlives a logs-off change no longer than a queued row does.
+	referenceLogsOnTTL = defaultFlushInterval
 
 	// unknownTableCode is ClickHouse's UNKNOWN_TABLE, seen when code ships before its migration.
 	unknownTableCode = 60
@@ -400,6 +404,13 @@ type referableOrg struct {
 	at      time.Time
 }
 
+func (o referableOrg) ttl() time.Duration {
+	if o.allowed {
+		return referenceLogsOnTTL
+	}
+	return referenceLogsOffTTL
+}
+
 func newDropCounters() map[dropReason]*atomic.Int64 {
 	return map[dropReason]*atomic.Int64{
 		dropQueueFull:    {},
@@ -595,6 +606,7 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		decision, stopped := r.admitOnce(row)
 		if stopped {
 			r.drop(ctx, dropShutdown, 1, nil)
+			r.leaveReference(ctx, step, row.OrganizationID, uuid.Nil, what)
 			return false
 		}
 		r.dropLostRepeats(ctx, decision.lost)
@@ -623,6 +635,7 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 
 	if reason := r.enqueue(row); reason != "" {
 		r.drop(ctx, reason, events(row), nil)
+		r.leaveReference(ctx, step, row.OrganizationID, uuid.Nil, what)
 		return false
 	}
 	r.leaveReference(ctx, step, row.OrganizationID, row.AttemptID, what)
@@ -636,8 +649,12 @@ func (r *Recorder) leaveReference(ctx context.Context, step Step, organizationID
 	if step == StepDiscoveryMember || !contextvalues.ConnectionReferenceWanted(ctx) {
 		return
 	}
+	worth := FailureWorthAReference(what)
+	if !worth && step != StepProviderRefresh {
+		return
+	}
 	reference := ""
-	if FailureWorthAReference(what) && id != uuid.Nil && !r.insertFailing.Load() && r.logsAllowForReference(ctx, organizationID) {
+	if worth && id != uuid.Nil && !r.insertFailing.Load() && r.logsAllowForReference(ctx, organizationID) {
 		reference = id.String()
 	}
 	if step == StepProviderRefresh {
@@ -682,7 +699,7 @@ func (r *Recorder) logsAllowForReference(ctx context.Context, organizationID str
 	r.referableMu.Lock()
 	cached, ok := r.referableOrgs.Get(organizationID)
 	r.referableMu.Unlock()
-	if ok && time.Since(cached.at) < referenceLogsTTL {
+	if ok && time.Since(cached.at) < cached.ttl() {
 		return cached.allowed
 	}
 	answer := r.referenceChecks.DoChan(organizationID, func() (any, error) {
