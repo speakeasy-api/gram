@@ -69,7 +69,24 @@ SELECT p.organization_id, m.project_id, m.id AS mcp_server_id, r.id AS remote_mc
           AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
       )
     )
-  )::boolean AS upstream_auth_pending, m.remote_session_issuer_id,
+  )::boolean AS upstream_auth_pending,
+  ARRAY(
+      -- The distinct live providers the server's live client associations name.
+      SELECT DISTINCT c.remote_session_issuer_id
+      FROM mcp_server_remote_session_clients AS a
+      JOIN remote_session_clients AS c
+        ON c.id = a.remote_session_client_id
+       AND c.deleted IS FALSE
+       AND (c.project_id = a.project_id
+            OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+      JOIN remote_session_issuers AS provider
+        ON provider.id = c.remote_session_issuer_id
+       AND provider.deleted IS FALSE
+       AND (provider.project_id = a.project_id
+            OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+      WHERE a.mcp_server_id = m.id
+        AND a.deleted IS FALSE
+  )::uuid[] AS association_provider_ids,
   left(COALESCE(pr.resource_name,''),200)::text AS resource_name, left(COALESCE(pr.resource_documentation,''),2049)::text AS resource_documentation,
   md5(m.updated_at::text || r.updated_at::text || COALESCE(h.revision, '') || COALESCE(a.revision, '') || COALESCE(o.revision, ''))::text AS source_revision,
   GREATEST(m.updated_at, r.updated_at, h.updated_at, a.updated_at, o.updated_at)::timestamptz AS changed_at,
