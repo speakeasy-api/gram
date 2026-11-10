@@ -19,7 +19,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
@@ -548,12 +547,7 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 		})
 	})
 	mux.Use(middleware.DropInboundOTelBaggage)
-	mux.Use(func(h http.Handler) http.Handler {
-		return otelhttp.NewHandler(h, "http",
-			otelhttp.WithServerName("gram-mcp"),
-			otelhttp.WithPublicEndpointFn(middleware.IsOTelPublicEndpoint),
-		)
-	})
+	mux.Use(middleware.PublicHTTPTracing("gram-mcp"))
 	mux.Use(middleware.RouteLabelerMiddleware)
 	mux.Use(middleware.MCPProtocolVersionTelemetry)
 	mux.Use(middleware.NewHTTPLoggingMiddleware(logger))

@@ -56,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/requestip"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -1904,20 +1905,14 @@ func extractHTTPMetadata(r *http.Request) httpMetadata {
 
 	userAgent := r.Header.Get("User-Agent")
 
-	ipAddress := r.Header.Get("X-Forwarded-For")
-	if ipAddress == "" {
-		ipAddress = r.Header.Get("X-Real-IP")
-	}
-	if ipAddress == "" {
-		ipAddress = r.RemoteAddr
-	}
+	resolved, _ := requestip.FromContext(r.Context())
 
 	source := r.Header.Get(constants.HeaderSource)
 
 	return httpMetadata{
 		Origin:    origin,
 		UserAgent: userAgent,
-		IPAddress: ipAddress,
+		IPAddress: resolved.String(),
 		Source:    source,
 	}
 }
