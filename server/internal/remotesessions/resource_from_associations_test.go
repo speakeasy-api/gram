@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -175,4 +176,10 @@ func TestGetRemoteSessionClientTenantOrganizationID(t *testing.T) {
 	projectClient, err := q.GetRemoteSessionClientTenantOrganizationID(ctx, projectClientID)
 	require.NoError(t, err)
 	require.Equal(t, fx.organizationID, projectClient, "a project client belongs to its project's organization")
+
+	_, err = projectsrepo.New(fx.ti.conn).DeleteProject(ctx, fx.projectID)
+	require.NoError(t, err)
+	deletedProjectClient, err := q.GetRemoteSessionClientTenantOrganizationID(ctx, projectClientID)
+	require.NoError(t, err)
+	require.Equal(t, fx.organizationID, deletedProjectClient, "a deleted project still names its organization")
 }

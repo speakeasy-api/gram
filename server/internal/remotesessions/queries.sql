@@ -3424,10 +3424,11 @@ ORDER BY a.remote_session_client_id ASC, m.id DESC;
 
 -- name: GetRemoteSessionClientTenantOrganizationID :one
 -- The organization a client belongs to: its own for an organization client,
--- its project's for a project client, and '' for a platform client.
+-- its project's for a project client (deleted or not, so the flag still
+-- resolves for that organization), and '' for a platform client.
 SELECT COALESCE(c.organization_id, p.organization_id, '')::text AS organization_id
 FROM remote_session_clients AS c
-LEFT JOIN projects AS p ON p.id = c.project_id AND p.deleted IS FALSE
+LEFT JOIN projects AS p ON p.id = c.project_id
 WHERE c.id = @id
   AND c.deleted IS FALSE;
 

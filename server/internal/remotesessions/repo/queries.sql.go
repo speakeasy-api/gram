@@ -5390,13 +5390,14 @@ func (q *Queries) GetRemoteSessionClientRevocationTargetByID(ctx context.Context
 const getRemoteSessionClientTenantOrganizationID = `-- name: GetRemoteSessionClientTenantOrganizationID :one
 SELECT COALESCE(c.organization_id, p.organization_id, '')::text AS organization_id
 FROM remote_session_clients AS c
-LEFT JOIN projects AS p ON p.id = c.project_id AND p.deleted IS FALSE
+LEFT JOIN projects AS p ON p.id = c.project_id
 WHERE c.id = $1
   AND c.deleted IS FALSE
 `
 
 // The organization a client belongs to: its own for an organization client,
-// its project's for a project client, and ” for a platform client.
+// its project's for a project client (deleted or not, so the flag still
+// resolves for that organization), and ” for a platform client.
 func (q *Queries) GetRemoteSessionClientTenantOrganizationID(ctx context.Context, id uuid.UUID) (string, error) {
 	row := q.db.QueryRow(ctx, getRemoteSessionClientTenantOrganizationID, id)
 	var organization_id string
