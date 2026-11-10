@@ -24,8 +24,9 @@ const (
 )
 
 // ValidateShadowMCPDisposition rejects a disposition on anything other than a
-// blocking shadow MCP policy. An empty disposition is always valid: it means
-// the caller did not choose one and block_all semantics apply.
+// blocking shadow MCP policy. An empty disposition is always valid and leaves
+// the default to the caller: the management API stores none, so block_all
+// applies, while Platform MCP creates default to allow_all.
 func ValidateShadowMCPDisposition(disposition string, sources []string, action string) error {
 	switch disposition {
 	case "", ShadowMCPDispositionBlockAll, ShadowMCPDispositionAllowAll:
