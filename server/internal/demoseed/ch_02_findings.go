@@ -877,6 +877,20 @@ func (s *seeder) chfOrganizationGatewayCalls(ctx context.Context, ch driver.Conn
 	return s.chfInsertTelemetry(ctx, ch, "organization gateway call telemetry", rows)
 }
 
+// gatewayMemberServer resolves a gateway member key to its MCP server id: the
+// toolset-backed members are their toolsets' canonical wrappers, the remotes
+// their own servers.
+func (s *seeder) gatewayMemberServer(mkey string) uuid.UUID {
+	switch mkey {
+	case "support":
+		return s.supportServer()
+	case "ops":
+		return s.opsServer()
+	default:
+		return s.det("mcpserver-" + mkey)
+	}
+}
+
 // chfDispatchedCalls builds count member calls dispatched through gateway.
 // salt varies the draws per gateway and keeps trace ids distinct.
 func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTelemetryRow {
@@ -884,7 +898,7 @@ func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTeleme
 	for n := range count {
 		i := n + 1
 		mkey := chfGatewayMembers[hash64(salt+"mem", n)%10]
-		member := s.det("mcpserver-" + mkey).String()
+		member := s.gatewayMemberServer(mkey).String()
 		remote := s.det("remotemcp-" + mkey).String()
 		toolsetSlug := chfGatewayToolsets[mkey]
 		tools := chfGatewayTools[mkey]
