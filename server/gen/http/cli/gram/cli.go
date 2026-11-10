@@ -17775,7 +17775,7 @@ func dataExportsCreateRouteUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports create-route --body '{\n      \"data_source\": \"risk_findings\",\n      \"enabled\": false,\n      \"min_severity\": \"warn\",\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports create-route --body '{\n      \"data_source\": \"mcp_connection_logs\",\n      \"enabled\": false,\n      \"min_severity\": \"warn\",\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func dataExportsUpdateRouteUsage() {
@@ -17801,7 +17801,7 @@ func dataExportsUpdateRouteUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports update-route --body '{\n      \"data_source\": \"risk_findings\",\n      \"enabled\": false,\n      \"min_severity\": \"warn\",\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports update-route --body '{\n      \"data_source\": \"mcp_connection_logs\",\n      \"enabled\": false,\n      \"min_severity\": \"warn\",\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func dataExportsDeleteRouteUsage() {

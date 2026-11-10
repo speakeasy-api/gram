@@ -305,7 +305,10 @@ var DataExportRoute = Type("DataExportRoute", func() {
 
 var CreateDataExportRouteForm = Type("CreateDataExportRouteForm", func() {
 	Description("Form for creating the selected data source's export route.")
-	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs") })
+	Attribute("data_source", String, "Class of data exported by this route.", func() {
+		Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs")
+		Example("mcp_connection_logs")
+	})
 	Attribute("enabled", Boolean, "Whether the route is enabled.", func() { Default(true) })
 	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Required when enabled.", func() { Format(FormatUUID) })
 	Attribute("min_severity", String, "Lowest level this route sends. Only for mcp_connection_logs; defaults to error.", func() {
@@ -317,7 +320,10 @@ var CreateDataExportRouteForm = Type("CreateDataExportRouteForm", func() {
 var UpdateDataExportRouteForm = Type("UpdateDataExportRouteForm", func() {
 	Description("Full replacement form for the selected data source's export route. Omit otel_destination_id to clear its OTEL destination.")
 	Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
-	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs") })
+	Attribute("data_source", String, "Class of data exported by this route.", func() {
+		Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs")
+		Example("mcp_connection_logs")
+	})
 	Attribute("enabled", Boolean, "Whether the route is enabled.")
 	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Required when enabled.", func() { Format(FormatUUID) })
 	Attribute("min_severity", String, "Lowest level this route sends. Only for mcp_connection_logs. Omit to keep the current level.", func() {

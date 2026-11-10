@@ -277,7 +277,7 @@ func BuildCreateRoutePayload(dataExportsCreateRouteBody string, dataExportsCreat
 	{
 		err = json.Unmarshal([]byte(dataExportsCreateRouteBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data_source\": \"risk_findings\",\n      \"enabled\": false,\n      \"min_severity\": \"warn\",\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data_source\": \"mcp_connection_logs\",\n      \"enabled\": false,\n      \"min_severity\": \"warn\",\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		if !(body.DataSource == "product_telemetry" || body.DataSource == "risk_findings" || body.DataSource == "tool_call_logs" || body.DataSource == "mcp_connection_logs") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", body.DataSource, []any{"product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs"}))
@@ -339,7 +339,7 @@ func BuildUpdateRoutePayload(dataExportsUpdateRouteBody string, dataExportsUpdat
 	{
 		err = json.Unmarshal([]byte(dataExportsUpdateRouteBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data_source\": \"risk_findings\",\n      \"enabled\": false,\n      \"min_severity\": \"warn\",\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data_source\": \"mcp_connection_logs\",\n      \"enabled\": false,\n      \"min_severity\": \"warn\",\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		if !(body.DataSource == "product_telemetry" || body.DataSource == "risk_findings" || body.DataSource == "tool_call_logs" || body.DataSource == "mcp_connection_logs") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", body.DataSource, []any{"product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs"}))

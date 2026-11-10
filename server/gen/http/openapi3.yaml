@@ -106087,6 +106087,7 @@ components:
                 data_source:
                     type: string
                     description: Class of data exported by this route.
+                    example: mcp_connection_logs
                     enum:
                         - product_telemetry
                         - risk_findings
@@ -136581,6 +136582,7 @@ components:
                 data_source:
                     type: string
                     description: Class of data exported by this route.
+                    example: mcp_connection_logs
                     enum:
                         - product_telemetry
                         - risk_findings
@@ -137762,6 +137764,7 @@ components:
                 data_source:
                     type: string
                     description: Class of data exported by this route.
+                    example: mcp_connection_logs
                     enum:
                         - product_telemetry
                         - risk_findings
