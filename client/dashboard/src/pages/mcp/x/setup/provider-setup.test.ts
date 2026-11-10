@@ -708,6 +708,7 @@ describe("Okta source-bound progress", () => {
       "source-two",
     );
     expect(changed.values.oktaOrg).toBe("https://other.okta.com");
+    expect(changed.values.oktaAppType).toBe("web");
     expect(changed.step).toBe("enable");
     expect(changed.tested).toBe(false);
   });

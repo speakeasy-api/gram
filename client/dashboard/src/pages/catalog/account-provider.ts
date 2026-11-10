@@ -42,7 +42,14 @@ export function accountSelection(
 export function accountConnection(
   s: State,
 ): ReturnType<typeof oktaConnection> | ReturnType<typeof snowflakeConnection> {
-  return s.provider === "okta"
-    ? oktaConnection(s.values)
-    : snowflakeConnection(s.values);
+  switch (s.provider) {
+    case "okta":
+      return oktaConnection(s.values);
+    case "snowflake":
+      return snowflakeConnection(s.values);
+    case "github":
+    case "salesforce":
+    case "slack":
+      return null;
+  }
 }

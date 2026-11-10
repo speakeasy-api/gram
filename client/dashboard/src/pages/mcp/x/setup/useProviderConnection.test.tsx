@@ -2522,7 +2522,7 @@ describe("Okta native OAuth contract", () => {
   );
 });
 
-it("restores a saved Native Okta client with discovered scopes and without reading a secret", async () => {
+it("restores a saved Native Okta client without a scope override or reading a secret", async () => {
   mocks.remote.mockResolvedValue({
     id: "upstream",
     url: "https://example.okta.com/mcp",

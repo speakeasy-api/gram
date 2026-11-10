@@ -13,6 +13,7 @@ import {
 } from "./state";
 import { SetupContext } from "./setup-context";
 import { ProviderTask } from "./ProviderTasks";
+import { ExternalAction } from "./shared";
 
 const callback = vi.hoisted(() => ({
   data: { callbackUrl: "https://current.example/callback" },
@@ -30,6 +31,22 @@ afterEach(() => {
   callback.data.callbackUrl = "https://current.example/callback";
   callback.isError = false;
   callback.refetch.mockClear();
+});
+
+it("disables an external action even when its URL is known", () => {
+  render(
+    <ExternalAction
+      title="Open app"
+      label="Open Okta"
+      href="https://example.okta.com"
+      disabled
+    />,
+  );
+  expect(screen.queryByRole("link", { name: "Open Okta" })).toBeNull();
+  expect(
+    screen.getByRole<HTMLButtonElement>("button", { name: "Open Okta" })
+      .disabled,
+  ).toBe(true);
 });
 function SavedCredentials({ provider }: { provider: "slack" | "github" }) {
   const [s, dispatch] = useReducer(reduce, {

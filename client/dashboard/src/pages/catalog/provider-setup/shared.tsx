@@ -97,7 +97,7 @@ export function ExternalAction({
     </Button>
   );
   let action = disabledAction;
-  if (href)
+  if (href && !disabled)
     action = (
       <Button
         variant="primary"
