@@ -59,7 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
-// Tier names in audit snapshots. A subject can be admitted at both tiers
+// Tier names in audit snapshots and the withdraw response. A subject can be admitted at both tiers
 // independently and withdrawing one leaves the other in force, so an entry that
 // does not say which tier it describes cannot be acted on.
 const (
@@ -1012,7 +1012,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 	// The early, legible refusal. The issuer's permission is re-checked on every
 	// lookup, which is what makes clearing it revoke rules already written.
 	if err := workloadidentity.ValidateSubjectRule(matchKind, payload.Subject, issuerRow.AllowWildcardAdmission); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "subject rule refused")
+		return nil, oops.E(oops.CodeInvalid, err, "subject rule refused: %s", err.Error())
 	}
 
 	// Tenancy-scoped for the same reason as the issuer: another organization's
@@ -1060,7 +1060,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading workload issuer").LogError(ctx, s.logger)
 	}
 	if err := workloadidentity.ValidateSubjectRule(matchKind, payload.Subject, issuerRow.AllowWildcardAdmission); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "subject rule refused")
+		return nil, oops.E(oops.CodeInvalid, err, "subject rule refused: %s", err.Error())
 	}
 
 	admission, err := q.CreateWorkloadAdmission(ctx, repo.CreateWorkloadAdmissionParams{
@@ -1316,7 +1316,7 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 	return policy, nil
 }
 
-func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
+func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubjectPayload) (*gen.WithdrawnWorkloadSubjectPolicy, error) {
 	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
@@ -1460,7 +1460,11 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 		return nil, oops.E(oops.CodeUnexpected, err, "error committing transaction").LogError(ctx, s.logger)
 	}
 
-	return policy, nil
+	return &gen.WithdrawnWorkloadSubjectPolicy{
+		WithdrawnTier: tier(withdrawn.ProjectID),
+		Issuers:       policy.Issuers,
+		Admissions:    policy.Admissions,
+	}, nil
 }
 
 // isUniqueViolation reports a partial unique index rejecting a duplicate, which
