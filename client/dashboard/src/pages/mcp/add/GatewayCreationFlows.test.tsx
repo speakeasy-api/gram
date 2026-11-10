@@ -10,7 +10,6 @@ import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CreateRemoteMcp from "@/pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "@/pages/sources/tunneled-mcp/CreateTunneledMcp";
-import CreateFromSource from "./CreateFromSource";
 const state = vi.hoisted(() => ({
   flow: {
     gatewayId: "gateway" as string | null,
@@ -189,12 +188,6 @@ const cases = [
       }),
     button: "Add server",
   },
-  {
-    name: "source",
-    Component: CreateFromSource,
-    fill: () => fireEvent.click(screen.getByText("Select source")),
-    button: "Create",
-  },
 ];
 for (const { name, Component, fill, button } of cases) {
   describe(`${name} gateway creation`, () => {
@@ -215,14 +208,6 @@ for (const { name, Component, fill, button } of cases) {
         expect(state.flow.complete).toHaveBeenCalledWith("server"),
       );
       expect(location()).toBe(START);
-      if (name === "source")
-        expect(state.createServer).toHaveBeenCalledWith({
-          createMcpServerForm: {
-            name: "Source",
-            toolsetId: "toolset",
-            visibility: "private",
-          },
-        });
     });
     it("disables cancellation while attachment is in flight", () => {
       state.flow.isAttaching = true;
@@ -406,59 +391,4 @@ it("keeps the tunnel key and retry available after attachment failure", async ()
   );
   expect(state.flow.retry).toHaveBeenCalledOnce();
   expect(state.create).toHaveBeenCalledOnce();
-});
-
-describe("source wrapper recovery", () => {
-  async function failWrapper() {
-    state.createServer.mockRejectedValueOnce(new Error("Wrapper failed"));
-    render(<CreateFromSource />, { wrapper: Router });
-    fireEvent.click(screen.getByText("Select source"));
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
-    await screen.findByText("Wrapper failed");
-  }
-  it("fails closed when the uncertain wrapper is absent from read results", async () => {
-    await failWrapper();
-    fireEvent.click(screen.getByRole("button", { name: /Create|Retry/ }));
-    await screen.findByText(/manually locate and attach/);
-    expect(state.createToolset).toHaveBeenCalledOnce();
-    expect(state.createServer).toHaveBeenCalledOnce();
-    expect(state.flow.complete).not.toHaveBeenCalled();
-    expect(state.listServers).toHaveBeenCalledWith({ toolsetId: "toolset" });
-  });
-  it("recovers a lost wrapper response by exact toolset before retrying writes", async () => {
-    await failWrapper();
-    state.listServers.mockResolvedValue({ mcpServers: [{ id: "recovered" }] });
-    fireEvent.click(screen.getByRole("button", { name: /Create|Retry/ }));
-    await waitFor(() =>
-      expect(state.flow.complete).toHaveBeenCalledWith("recovered"),
-    );
-    expect(state.createToolset).toHaveBeenCalledOnce();
-    expect(state.createServer).toHaveBeenCalledOnce();
-    expect(state.listServers).toHaveBeenCalledWith({ toolsetId: "toolset" });
-  });
-  it.each(["read failure", "ambiguous wrappers"])(
-    "prevents writes on %s and remains retryable",
-    async (failure) => {
-      await failWrapper();
-      if (failure === "read failure")
-        state.listServers.mockRejectedValueOnce(new Error("Read failed"));
-      else
-        state.listServers.mockResolvedValueOnce({
-          mcpServers: [{ id: "one" }, { id: "two" }],
-        });
-      fireEvent.click(screen.getByRole("button", { name: /Create|Retry/ }));
-      await screen.findByText(
-        failure === "read failure" ? "Read failed" : /Multiple servers/,
-      );
-      expect(state.createToolset).toHaveBeenCalledOnce();
-      expect(state.createServer).toHaveBeenCalledOnce();
-      expect(state.flow.complete).not.toHaveBeenCalled();
-      state.listServers.mockResolvedValue({ mcpServers: [{ id: "server" }] });
-      fireEvent.click(screen.getByRole("button", { name: /Create|Retry/ }));
-      await waitFor(() =>
-        expect(state.flow.complete).toHaveBeenCalledWith("server"),
-      );
-      expect(state.createToolset).toHaveBeenCalledOnce();
-    },
-  );
 });

@@ -77,7 +77,7 @@ type newMemberDecision struct {
 	resolution   authClientResolution
 }
 
-// decideNewMemberChoices is the choice for each proxied member with none that
+// decideNewMemberChoices is the choice for each member with none that
 // joined after the credential was issued, where nobody has to pick.
 func (c *memberChoices) decideNewMemberChoices(ctx context.Context, logger *slog.Logger, members []metaMember, resolved map[uuid.UUID]authClientResolution) map[uuid.UUID]newMemberDecision {
 	if c.selector.credentialKindOrDefault() != upstreamclients.CredentialKindUserSession {
@@ -85,9 +85,6 @@ func (c *memberChoices) decideNewMemberChoices(ctx context.Context, logger *slog
 	}
 	var missing []uuid.UUID
 	for _, member := range members {
-		if member.backend != metaMemberBackendProxied {
-			continue
-		}
 		if _, ok := resolved[member.serverID]; !ok {
 			missing = append(missing, member.serverID)
 		}

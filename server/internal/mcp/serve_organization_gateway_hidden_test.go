@@ -356,19 +356,21 @@ func TestServeOrganizationGateway_DirectModeOmitsHiddenMemberTools(t *testing.T)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
-	hosted := seedHostedMetaMember(t, ctx, ti, decoy.ID, "Hosted tools", 3, mcpservers.VisibilityPublic, "alpha")
+	upstream := newCatalogUpstream(t, 1)
+	memberSlug := "listed-" + uuid.NewString()[:8]
+	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, decoy.ID, "Listed tools", memberSlug, 3, upstream.url)
 	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx.organizationGatewayFixture, metamcp.DiscoveryModeDirect)
 	listTools := makeMetaRPCBody(t, "tools/list", map[string]any{})
 
 	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, listTools)
 	require.NoError(t, err)
-	require.Contains(t, w.Body.String(), `"name":"`+hosted.slug+`--alpha"`)
+	require.Contains(t, w.Body.String(), `"name":"`+memberSlug+`--tool_000"`)
 
-	require.NoError(t, hiddenmcpservers.Hide(ctx, ti.conn, fx.organizationID, fx.subject.ID, hosted.serverID))
+	require.NoError(t, hiddenmcpservers.Hide(ctx, ti.conn, fx.organizationID, fx.subject.ID, memberID))
 	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, listTools)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	require.NotContains(t, w.Body.String(), hosted.slug+"--alpha")
+	require.NotContains(t, w.Body.String(), memberSlug+"--tool_000")
 }
 
 func TestServeOrganizationGateway_HideAndUnhideWithinOneSession(t *testing.T) {

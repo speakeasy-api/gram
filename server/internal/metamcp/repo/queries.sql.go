@@ -147,8 +147,7 @@ WHERE m.meta_mcp_server_id = $1
   AND m.mcp_server_id <> $3
   AND (s.remote_mcp_server_id = $4
     OR s.tunneled_mcp_server_id = $5
-    OR s.toolset_id = $6
-    OR s.unproxied_mcp_server_id = $7)
+    OR s.unproxied_mcp_server_id = $6)
 `
 
 type CountMetaMCPMembersSharingBackendParams struct {
@@ -157,7 +156,6 @@ type CountMetaMCPMembersSharingBackendParams struct {
 	McpServerID          uuid.UUID
 	RemoteMcpServerID    uuid.NullUUID
 	TunneledMcpServerID  uuid.NullUUID
-	ToolsetID            uuid.NullUUID
 	UnproxiedMcpServerID uuid.NullUUID
 }
 
@@ -175,7 +173,6 @@ func (q *Queries) CountMetaMCPMembersSharingBackend(ctx context.Context, arg Cou
 		arg.McpServerID,
 		arg.RemoteMcpServerID,
 		arg.TunneledMcpServerID,
-		arg.ToolsetID,
 		arg.UnproxiedMcpServerID,
 	)
 	var count int64
@@ -495,6 +492,35 @@ func (q *Queries) DeleteMetaMCPServer(ctx context.Context, arg DeleteMetaMCPServ
 	return i, err
 }
 
+const findMetaMCPServerHoldingMember = `-- name: FindMetaMCPServerHoldingMember :one
+SELECT meta.name
+FROM meta_mcp_server_members m
+JOIN meta_mcp_servers meta
+  ON meta.id = m.meta_mcp_server_id
+ AND meta.project_id = m.project_id
+ AND meta.deleted IS FALSE
+WHERE m.mcp_server_id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+ORDER BY m.created_at, m.id
+LIMIT 1
+`
+
+type FindMetaMCPServerHoldingMemberParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Name a live meta MCP server that @mcp_server_id is a live member of. Guards a
+// backend repoint that would turn a member into a hosted server, which no
+// gateway may hold.
+func (q *Queries) FindMetaMCPServerHoldingMember(ctx context.Context, arg FindMetaMCPServerHoldingMemberParams) (string, error) {
+	row := q.db.QueryRow(ctx, findMetaMCPServerHoldingMember, arg.McpServerID, arg.ProjectID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
 const findMetaMCPSiblingSharingBackend = `-- name: FindMetaMCPSiblingSharingBackend :one
 SELECT meta.name
 FROM meta_mcp_server_members mine
@@ -516,8 +542,7 @@ WHERE mine.mcp_server_id = $1
   AND mine.deleted IS FALSE
   AND (s.remote_mcp_server_id = $3
     OR s.tunneled_mcp_server_id = $4
-    OR s.toolset_id = $5
-    OR s.unproxied_mcp_server_id = $6)
+    OR s.unproxied_mcp_server_id = $5)
 LIMIT 1
 `
 
@@ -526,7 +551,6 @@ type FindMetaMCPSiblingSharingBackendParams struct {
 	ProjectID            uuid.UUID
 	RemoteMcpServerID    uuid.NullUUID
 	TunneledMcpServerID  uuid.NullUUID
-	ToolsetID            uuid.NullUUID
 	UnproxiedMcpServerID uuid.NullUUID
 }
 
@@ -540,7 +564,6 @@ func (q *Queries) FindMetaMCPSiblingSharingBackend(ctx context.Context, arg Find
 		arg.ProjectID,
 		arg.RemoteMcpServerID,
 		arg.TunneledMcpServerID,
-		arg.ToolsetID,
 		arg.UnproxiedMcpServerID,
 	)
 	var name string
@@ -814,7 +837,8 @@ SELECT
     m.mcp_server_id,
     m.sort_order,
     s.name AS mcp_server_name,
-    s.slug AS mcp_server_slug
+    s.slug AS mcp_server_slug,
+    (s.toolset_id IS NOT NULL)::boolean AS mcp_server_hosted
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
@@ -832,15 +856,18 @@ type ListMetaMCPMembersParams struct {
 }
 
 type ListMetaMCPMembersRow struct {
-	ID            uuid.UUID
-	McpServerID   uuid.UUID
-	SortOrder     int32
-	McpServerName pgtype.Text
-	McpServerSlug pgtype.Text
+	ID              uuid.UUID
+	McpServerID     uuid.UUID
+	SortOrder       int32
+	McpServerName   pgtype.Text
+	McpServerSlug   pgtype.Text
+	McpServerHosted bool
 }
 
 // List live memberships whose member server is itself still live, with the
-// member server's name and slug joined in for display.
+// member server's name and slug joined in for display. mcp_server_hosted
+// marks a membership written before hosted servers were refused; gateways
+// never serve it.
 func (q *Queries) ListMetaMCPMembers(ctx context.Context, arg ListMetaMCPMembersParams) ([]ListMetaMCPMembersRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPMembers, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
@@ -856,6 +883,7 @@ func (q *Queries) ListMetaMCPMembers(ctx context.Context, arg ListMetaMCPMembers
 			&i.SortOrder,
 			&i.McpServerName,
 			&i.McpServerSlug,
+			&i.McpServerHosted,
 		); err != nil {
 			return nil, err
 		}
@@ -1414,8 +1442,6 @@ SELECT
     s.remote_mcp_server_id AS mcp_server_remote_mcp_server_id,
     s.tunneled_mcp_server_id AS mcp_server_tunneled_mcp_server_id,
     s.unproxied_mcp_server_id AS mcp_server_unproxied_mcp_server_id,
-    s.environment_id AS mcp_server_environment_id,
-    s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
     ARRAY(
         SELECT DISTINCT c.remote_session_issuer_id
@@ -1467,8 +1493,6 @@ type ListServableMetaMCPMembersRow struct {
 	McpServerRemoteMcpServerID      uuid.NullUUID
 	McpServerTunneledMcpServerID    uuid.NullUUID
 	McpServerUnproxiedMcpServerID   uuid.NullUUID
-	McpServerEnvironmentID          uuid.NullUUID
-	McpServerToolVariationsGroupID  uuid.NullUUID
 	McpServerRemoteSessionIssuerID  uuid.NullUUID
 	McpServerAssociationProviderIds []uuid.UUID
 	TunneledResourceIdentifier      string
@@ -1480,8 +1504,9 @@ type ListServableMetaMCPMembersRow struct {
 // whose server has no slug (legacy pre-2026-05 rows), which the qualified
 // serverslug--toolname contract cannot address. The dashboard listing keeps
 // the unfiltered query so admins still see every member. Carries the backend
-// and dispatch columns the gateway runtime needs to classify and execute
-// against each member, including a tunneled member's recorded resource
+// and dispatch columns the gateway runtime needs to dispatch to each member,
+// and the toolset id so the runtime can refuse a hosted member written before
+// gateways refused them, including a tunneled member's recorded resource
 // identifier so credential routing needs no second read per dial. A member
 // whose tunneled source is soft-deleted reads as no identifier and routes
 // anonymously; the dial then fails member-scoped on the missing tunnel.
@@ -1507,8 +1532,6 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 			&i.McpServerRemoteMcpServerID,
 			&i.McpServerTunneledMcpServerID,
 			&i.McpServerUnproxiedMcpServerID,
-			&i.McpServerEnvironmentID,
-			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
 			&i.McpServerAssociationProviderIds,
 			&i.TunneledResourceIdentifier,

@@ -211,13 +211,16 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("bind demo linear remote session client: %w", err)
 	}
-	// The gateway serves Linear as a member, so its issuer binds Linear's
-	// client too, or no gateway sign-in could choose a client for Linear.
-	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-		RemoteSessionClientID: s.det("remote-identity-client-linear"),
-		UserSessionIssuerID:   s.det("issuer-gateway"),
-	}); err != nil {
-		return fmt.Errorf("bind demo linear remote session client to the gateway: %w", err)
+	// Both gateways serve Linear as a member, so each gateway's issuer binds
+	// Linear's client too, or no gateway sign-in could choose a client for
+	// Linear.
+	for _, gateway := range []string{"issuer-gateway", "issuer-code-gateway"} {
+		if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
+			RemoteSessionClientID: s.det("remote-identity-client-linear"),
+			UserSessionIssuerID:   s.det(gateway),
+		}); err != nil {
+			return fmt.Errorf("bind demo linear remote session client to %s: %w", gateway, err)
+		}
 	}
 	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
 		RemoteSessionIssuerID: s.det("remote-identity-provider-linear"),
@@ -258,16 +261,12 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo meta mcp server: %w", err)
 	}
 	if err := s.q.ServersInsertMetaMCPServerMembers(ctx, repo.ServersInsertMetaMCPServerMembersParams{
-		SupportMemberID: s.det("metamember-support"),
-		ProjectID:       proj,
-		MetaID:          s.det("metamcp-1"),
-		SupportServerID: s.det("mcpserver-support"),
-		OpsMemberID:     s.det("metamember-ops"),
-		OpsServerID:     s.det("mcpserver-ops"),
-		LinearMemberID:  s.det("metamember-linear"),
-		LinearServerID:  s.det("mcpserver-linear"),
-		SlackMemberID:   s.det("metamember-slack"),
-		SlackServerID:   s.det("mcpserver-slack"),
+		ProjectID:      proj,
+		MetaID:         s.det("metamcp-1"),
+		LinearMemberID: s.det("metamember-linear"),
+		LinearServerID: s.det("mcpserver-linear"),
+		SlackMemberID:  s.det("metamember-slack"),
+		SlackServerID:  s.det("mcpserver-slack"),
 	}); err != nil {
 		return fmt.Errorf("insert demo meta mcp server members: %w", err)
 	}
@@ -280,12 +279,12 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo code gateway: %w", err)
 	}
 	if err := s.q.ServersInsertCodeGatewayMembers(ctx, repo.ServersInsertCodeGatewayMembersParams{
-		SupportMemberID: s.det("metamember-code-support"),
-		ProjectID:       proj,
-		MetaID:          s.det("metamcp-code"),
-		SupportServerID: s.det("mcpserver-support"),
-		OpsMemberID:     s.det("metamember-code-ops"),
-		OpsServerID:     s.det("mcpserver-ops"),
+		ProjectID:      proj,
+		MetaID:         s.det("metamcp-code"),
+		LinearMemberID: s.det("metamember-code-linear"),
+		LinearServerID: s.det("mcpserver-linear"),
+		SlackMemberID:  s.det("metamember-code-slack"),
+		SlackServerID:  s.det("mcpserver-slack"),
 	}); err != nil {
 		return fmt.Errorf("insert demo code gateway members: %w", err)
 	}

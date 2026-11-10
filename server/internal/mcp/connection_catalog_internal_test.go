@@ -79,7 +79,7 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 			s := &Service{logger: slog.New(slog.NewJSONHandler(&logs, nil))}
 			member := metaMember{
 				serverID: uuid.New(), projectID: uuid.New(), slug: "source", name: "private server name",
-				backend: metaMemberBackendProxied, configuration: memberConfiguration{hash: "private configuration hash", typedHash: "private typed configuration hash"},
+				configuration:  memberConfiguration{hash: "private configuration hash", typedHash: "private typed configuration hash"},
 				chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, authClient: &authClientResolution{clientID: uuid.New()},
 			}
 			gate := &metaGateContext{

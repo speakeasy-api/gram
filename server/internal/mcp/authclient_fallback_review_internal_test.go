@@ -58,7 +58,7 @@ func TestEnforcedUnchosenGatewayKeepsLivePersonalConnectionWithIdentityFallback(
 			ctx := sessionContext(t, f.orgID, tc.grants...)
 			endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: f.signIn}
 			choices := f.service.unchosenMemberChoices(endpoint, subject)
-			members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}}
+			members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member"}}
 			choices.apply(ctx, testenv.NewLogger(t), members, true)
 			if !tc.wantServed {
 				require.Error(t, members[0].upstreamUnavailable)

@@ -749,20 +749,16 @@ WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
 -- agent was granted. The caller's mcp:connect check is what narrows the
 -- result, so enumerating widely here exposes nothing extra.
 --
--- Filtered exactly as ListServableMetaMCPMembers — disabled servers and
--- slugless legacy rows are excluded — so a server invisible to the stored
--- serving path is invisible to a derived one too. Carries the same backend
--- and dispatch columns that path needs, plus each member's project, since
--- members no longer share one, and each member's network access mode, which
--- the caller matches against the request's ingress surface so a private_only
--- server stays invisible on the public one. Also reports whether the backing
--- toolset's latest live version contains a Platform tool, so the organization
--- gateway can drop those toolsets the same way automatic plugin delivery does
--- (roledelivery.HasPlatformTool). The check runs here rather than in Go because
--- this query serves every gateway request, and returning every tool URN only to
--- reduce it to one flag would scale with toolset size. Ordered by project then
--- slug: a derived gateway has no operator-authored order, and slugs are unique
--- only within a project, so the pair is what makes the listing stable.
+-- Filtered as ListServableMetaMCPMembers — disabled servers and slugless
+-- legacy rows are excluded — so a server invisible to the stored serving path
+-- is invisible to a derived one too. Hosted servers (toolset_id set) are
+-- excluded as well: gateways never serve them. Carries the same backend and
+-- dispatch columns that path needs, plus each member's project, since members
+-- no longer share one, and each member's network access mode, which the
+-- caller matches against the request's ingress surface so a private_only
+-- server stays invisible on the public one. Ordered by project then slug: a
+-- derived gateway has no operator-authored order, and slugs are unique only
+-- within a project, so the pair is what makes the listing stable.
 -- association_provider_ids are the distinct live providers of the member's
 -- live client associations.
 SELECT
@@ -773,12 +769,9 @@ SELECT
     s.slug AS mcp_server_slug,
     s.visibility AS mcp_server_visibility,
     s.network_access_mode AS mcp_server_network_access_mode,
-    s.toolset_id AS mcp_server_toolset_id,
     s.remote_mcp_server_id AS mcp_server_remote_mcp_server_id,
     s.tunneled_mcp_server_id AS mcp_server_tunneled_mcp_server_id,
     s.unproxied_mcp_server_id AS mcp_server_unproxied_mcp_server_id,
-    s.environment_id AS mcp_server_environment_id,
-    s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
     ARRAY(
         SELECT DISTINCT c.remote_session_issuer_id
@@ -796,11 +789,7 @@ SELECT
         WHERE a.mcp_server_id = s.id
           AND a.deleted IS FALSE
     )::uuid[] AS mcp_server_association_provider_ids,
-    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier,
-    EXISTS (
-      SELECT 1 FROM unnest(latest.tool_urns) AS u(urn)
-      WHERE u.urn LIKE 'tools:platform:%'
-    )::boolean AS has_platform_tool
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
 FROM mcp_servers s
 JOIN projects p
   ON p.id = s.project_id
@@ -809,19 +798,11 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = s.project_id
  AND t.deleted IS FALSE
-LEFT JOIN toolsets backing
-  ON backing.id = s.toolset_id
- AND backing.project_id = s.project_id
- AND backing.deleted IS FALSE
-LEFT JOIN LATERAL (
-  SELECT v.tool_urns FROM toolset_versions v
-  WHERE v.toolset_id = backing.id AND v.deleted IS FALSE
-  ORDER BY v.version DESC LIMIT 1
-) latest ON true
 WHERE p.organization_id = @organization_id
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
+  AND s.toolset_id IS NULL
 ORDER BY s.project_id, s.slug;
 
 -- name: ListToolsetSummariesByIDs :many

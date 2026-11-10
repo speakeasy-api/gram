@@ -61,12 +61,13 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_UngatedMembersNeedNoSignIn(t 
 
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	hosted := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+	firstSlug := "member-first-" + uuid.NewString()[:8]
+	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "first member", firstSlug, 1, mcpservers.VisibilityPublic)
 	remoteSlug := "member-remote-" + uuid.NewString()[:8]
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", remoteSlug, 2, mcpservers.VisibilityPublic)
 
 	got := callConnectionStatus(t, ti, ctx, slug, "")
-	require.Equal(t, metamcp.SignInNotRequired, got.statuses[hosted.slug])
+	require.Equal(t, metamcp.SignInNotRequired, got.statuses[firstSlug])
 	require.Equal(t, metamcp.SignInNotRequired, got.statuses[remoteSlug])
 	require.Empty(t, got.connectURL, "an ungated gateway has no connect page")
 	require.Contains(t, got.text, "2 of 2 servers ready")

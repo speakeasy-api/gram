@@ -442,20 +442,21 @@ type mcpInputs struct {
 	// server, or on the legacy toolset-by-slug path the canonical wrapper when
 	// one exists. Nil otherwise and for internal (agent-workflow) callers.
 	mcpServerID *uuid.UUID
-	// mcpEndpointID: nil off the endpoint path and for gateway member dispatch.
+	// mcpEndpointID: nil off the endpoint path.
 	mcpEndpointID *uuid.UUID
 	// attributionServerID keeps legacy attribution separate from route authorization.
 	attributionServerID *uuid.UUID
 	// wrapperRBACResourceID overrides the resource id for per-tool mcp:connect
 	// checks: the fronting mcp_servers id when the request is wrapper-governed
 	// (AIS-633). Empty falls back to the described toolset's own id, which is
-	// what the meta-member and internal paths rely on.
+	// what the internal paths rely on.
 	wrapperRBACResourceID string
 	// wrapperIsPublic overrides the effective publicness read from the
 	// described toolset when non-nil (wrapper visibility governs). Nil falls
 	// back to the toolset flag.
 	wrapperIsPublic *bool
-	// metaMcpServerID is the gateway the call was dispatched through; attribution only.
+	// metaMcpServerID is the gateway a skill read was served through;
+	// attribution only.
 	metaMcpServerID string
 	// clientInfoScope overrides the key the session client-info record is
 	// stored and loaded under. The hosted path leaves it empty and keys by
@@ -1462,7 +1463,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 
 	// Token extraction — best effort for public MCPs with OAuth.
 	// We collect tokens if present but don't return 401 here.
-	// checkToolsetSecurity below enforces auth requirements and returns
+	// checkToolsetSecurityOutcome below enforces auth requirements and returns
 	// false when unsatisfied, which triggers the 401 + WWW-Authenticate response.
 	//
 	// Private MCPs still enforce identity auth at this level since that's user
@@ -1884,16 +1885,12 @@ func (s *Service) enforceHostedToolsCall(ctx context.Context, organizationID str
 	}
 }
 
-// checkToolsetSecurity loads the toolset's security variables and checks if the
-// request environment satisfies at least one scheme. Returns true if satisfied
-// (or if the toolset has no security requirements). isPublic is the effective
-// publicness the request is served under (wrapper visibility when a wrapper
-// fronts it), not necessarily the toolset's own flag.
-func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_repo.Toolset, isPublic bool, payload *mcpInputs) (bool, error) {
-	satisfied, _, err := s.checkToolsetSecurityOutcome(ctx, toolset, isPublic, payload)
-	return satisfied, err
-}
-
+// checkToolsetSecurityOutcome loads the toolset's security variables and
+// checks if the request environment satisfies at least one scheme. Returns true
+// if satisfied (or if the toolset has no security requirements), and otherwise
+// the connection outcome code to record. isPublic is the effective publicness
+// the request is served under (wrapper visibility when a wrapper fronts it),
+// not necessarily the toolset's own flag.
 func (s *Service) checkToolsetSecurityOutcome(ctx context.Context, toolset *toolsets_repo.Toolset, isPublic bool, payload *mcpInputs) (bool, mcpconnectionattempts.Code, error) {
 	projectID := mv.ProjectID(payload.projectID)
 	// Security-scheme detection must see the full, unfiltered toolset, so this

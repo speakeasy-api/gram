@@ -1,7 +1,4 @@
 import { Spinner } from "@/components/ui/Spinner";
-import { ensureToolsetWrapper } from "@/pages/mcp/gateway/ensureToolsetWrapper";
-import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
-import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { FormPage } from "@/components/page-templates";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -18,7 +15,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useListTools } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
 import { SearchBar } from "@/components/ui/SearchBar";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 
@@ -32,8 +29,6 @@ const VISIBLE_SOURCE_LIMIT = 10;
  * only route to a toolset was an empty one you then had to fill by hand.
  */
 export default function CreateFromSource(): JSX.Element {
-  const flow = useGatewayCreation();
-  const creationLocked = flow.createdServerId !== null || flow.isAttaching;
   const routes = useRoutes();
   const client = useSdkClient();
   const { openPanel } = useSidePanel();
@@ -49,14 +44,7 @@ export default function CreateFromSource(): JSX.Element {
   // different source should not leave the previous source's name behind.
   const [isNameOwned, setIsNameOwned] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const retainedToolset = useRef<Awaited<
-    ReturnType<typeof client.toolsets.create>
-  > | null>(null);
-  const seeded = useRef(false);
-  const wrapperAttempted = useRef(false);
-  const [hasRetainedToolset, setHasRetainedToolset] = useState(false);
-  const sourceSelectionLocked =
-    creationLocked || isCreating || hasRetainedToolset;
+  const sourceSelectionLocked = isCreating;
   const [error, setError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -111,44 +99,30 @@ export default function CreateFromSource(): JSX.Element {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (creationLocked || isCreating) return;
+    if (isCreating) return;
     if (!selected || !name.trim()) return;
     setError(null);
     setIsCreating(true);
     try {
-      const toolset =
-        retainedToolset.current ??
-        (await client.toolsets.create({
-          createToolsetRequestBody: { name: name.trim() },
-        }));
-      if (flow.gatewayId) {
-        retainedToolset.current = toolset;
-        setHasRetainedToolset(true);
-      }
+      const toolset = await client.toolsets.create({
+        createToolsetRequestBody: { name: name.trim() },
+      });
       // Created empty, then filled: the create call takes no tools, so the
       // seeding is a second write. A server with no tools is still a usable
       // landing point if this half fails, so the error is surfaced rather than
       // rolled back.
-      if (!seeded.current && toolUrns.length > 0) {
+      if (toolUrns.length > 0) {
         await client.toolsets.updateBySlug({
           slug: toolset.slug,
           updateToolsetRequestBody: { toolUrns },
         });
       }
-      if (flow.gatewayId) seeded.current = true;
       toast.success(
         toolUrns.length > 0
           ? `Created "${toolset.name}" with ${toolUrns.length} tool${toolUrns.length === 1 ? "" : "s"}`
           : `Created "${toolset.name}"`,
       );
-      if (flow.gatewayId) {
-        const reconcile = wrapperAttempted.current;
-        wrapperAttempted.current = true;
-        const serverId = await ensureToolsetWrapper(client, toolset, reconcile);
-        await flow.complete(serverId);
-      } else {
-        routes.toolset.tools.goTo(toolset.slug);
-      }
+      routes.toolset.tools.goTo(toolset.slug);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to create MCP server",
@@ -172,10 +146,7 @@ export default function CreateFromSource(): JSX.Element {
         noValidate
       >
         <Stack gap={8}>
-          <fieldset
-            disabled={creationLocked || isCreating || hasRetainedToolset}
-            className="contents"
-          >
+          <fieldset disabled={isCreating} className="contents">
             <Stack gap={4}>
               {isLoading && (
                 <Text small muted>
@@ -275,7 +246,6 @@ export default function CreateFromSource(): JSX.Element {
               )}
             </Stack>
           </fieldset>
-          <GatewayAttachmentStatus flow={flow} />
           {error && (
             <Alert variant="error" dismissible={false}>
               {error}
@@ -286,29 +256,21 @@ export default function CreateFromSource(): JSX.Element {
             <Button
               type="submit"
               variant="primary"
-              disabled={
-                creationLocked || !selected || !name.trim() || isCreating
-              }
+              disabled={!selected || !name.trim() || isCreating}
             >
               {isCreating ? (
                 <Button.LeftIcon>
                   <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               ) : null}
-              <Button.Text>
-                {isCreating
-                  ? "Creating"
-                  : hasRetainedToolset
-                    ? "Retry"
-                    : "Create"}
-              </Button.Text>
+              <Button.Text>{isCreating ? "Creating" : "Create"}</Button.Text>
             </Button>
             <Button
               type="button"
               variant="secondary"
-              disabled={isCreating || flow.isAttaching}
+              disabled={isCreating}
               onClick={() => {
-                if (!flow.cancel()) routes.mcp.add.goTo();
+                routes.mcp.add.goTo();
               }}
             >
               <Button.Text>Cancel</Button.Text>

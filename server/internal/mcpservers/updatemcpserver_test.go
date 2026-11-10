@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -1172,6 +1173,71 @@ func TestUpdateMcpServer_RejectsBackendSharedWithMetaMcpSibling(t *testing.T) {
 		EnvironmentID:     nil,
 		RemoteMcpServerID: &freeBackend,
 		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+}
+
+// A gateway member cannot be repointed at a toolset: gateways never hold a
+// hosted server.
+func TestUpdateMcpServer_RejectsRepointingGatewayMemberToToolset(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	member := seedMcpServerForBackend(t, ctx, ti, "member server", seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String())
+	meta, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                "hosted repoint holder",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = metamcprepo.New(ti.conn).CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{
+		ProjectID:       *authCtx.ProjectID,
+		MetaMcpServerID: meta.ID,
+		McpServerID:     uuid.MustParse(member),
+		SortOrder:       0,
+	})
+	require.NoError(t, err)
+
+	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		Name: "Repoint target", Slug: "repoint-target-" + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
+	toolsetID := toolset.ID.String()
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                member,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: nil,
+		ToolsetID:         &toolsetID,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, "hosted servers can't be gateway members")
+
+	// The same server off every gateway is free to become hosted.
+	_, err = metamcprepo.New(ti.conn).DeleteMetaMCPMembersByMetaMCPServerID(ctx, metamcprepo.DeleteMetaMCPMembersByMetaMCPServerIDParams{
+		MetaMcpServerID: meta.ID,
+		ProjectID:       *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                member,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: nil,
+		ToolsetID:         &toolsetID,
 		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)

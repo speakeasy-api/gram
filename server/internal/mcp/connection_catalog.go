@@ -86,13 +86,13 @@ type connectionCatalogMember struct {
 	ProjectID uuid.UUID `json:"project_id"`
 	// BackendHash detects changes to destinations, headers, and server settings.
 	BackendHash string `json:"backend_hash"`
-	// TypedBackendHash detects the same changes without a proxied member's
-	// derived authorization server. It is what the approval is compared on
-	// where typed auth clients choose upstream authentication; an approval
-	// stored before it was recorded has none.
+	// TypedBackendHash detects the same changes without a member's derived
+	// authorization server. It is what the approval is compared on where typed
+	// auth clients choose upstream authentication; an approval stored before
+	// it was recorded has none.
 	TypedBackendHash string `json:"typed_backend_hash,omitempty"`
-	// Auth binds a proxied member's shared-runtime choice; hosted members use
-	// their toolset's authentication and leave this nil.
+	// Auth binds the member's shared-runtime choice. A catalog recorded
+	// without one never matches at execution, so its member must reconnect.
 	Auth *connectionCatalogAuth `json:"auth,omitempty"`
 }
 
@@ -404,14 +404,7 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 	checks := []authz.Check{}
 	var dispositions map[string]string
 	private := member.visibility != "public"
-	if member.backend == metaMemberBackendHosted {
-		_, hosting, _, err := s.loadMemberToolset(ctx, s.logger, gate, member)
-		if err != nil {
-			return nil, err
-		}
-		private = gate.authenticated && !hosting.Public
-	}
-	if private && member.backend == metaMemberBackendProxied {
+	if private {
 		var err error
 		dispositions, err = s.remoteProxyManager.Dispositions(ctx, member.serverID.String(), member.projectID.String())
 		if err != nil {
@@ -427,14 +420,7 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 		entry.Name = name
 		catalog.entries = append(catalog.entries, &entry)
 		if private {
-			resourceID := member.serverID
-			disposition := dispositions[name]
-			if member.backend == metaMemberBackendHosted {
-				resourceID = member.toolsetID.UUID
-				// Cached discovery keeps consented annotations; execution checks the live tool disposition.
-				disposition = dispositionFromAnnotations(entry.Annotations)
-			}
-			checks = append(checks, authz.MCPToolCallCheck(resourceID.String(), authz.MCPToolCallDimensions{Tool: name, Disposition: disposition, ProjectID: member.projectID.String()}))
+			checks = append(checks, authz.MCPToolCallCheck(member.serverID.String(), authz.MCPToolCallDimensions{Tool: name, Disposition: dispositions[name], ProjectID: member.projectID.String()}))
 		}
 	}
 	if len(checks) > 0 {
@@ -501,7 +487,7 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 			map[string]bool{"member_recorded": found, "server_id_matches": found && approved.ServerID == member.serverID, "project_id_matches": found && approved.ProjectID == member.projectID})
 	}
 
-	if member.backend == metaMemberBackendProxied && (gate.execute || gate.catalogRef.Mode == toolfilter.CatalogModeLive) {
+	if gate.execute || gate.catalogRef.Mode == toolfilter.CatalogModeLive {
 		clientID := uuid.Nil
 		if member.authClient != nil {
 			clientID = member.authClient.clientID
@@ -609,8 +595,6 @@ func (s *Service) catalogConsentRemedy(ctx context.Context, logger *slog.Logger,
 		return staleChoiceReconnect
 	case !authentication.refreshableUserSession, gate.memberChoices == nil:
 		return staleChoiceReconnectThenAdmin
-	case member.backend != metaMemberBackendProxied:
-		return staleChoiceReconnect
 	}
 	fixable, err := s.consentCanReplaceChoice(ctx, gate, member)
 	switch {

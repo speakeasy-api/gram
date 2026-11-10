@@ -35,7 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	metadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -45,7 +44,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -674,39 +672,6 @@ func TestGatewayToolErrorsRecordNothing(t *testing.T) {
 	}
 }
 
-func TestGatewayHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
-	t.Parallel()
-	for _, oauth := range []bool{false, true} {
-		t.Run(fmt.Sprint(oauth), func(t *testing.T) {
-			t.Parallel()
-			ctx, ti := newTestMCPService(t)
-			auth := requireProjectAuthContext(t, ctx)
-			slug := "meta-" + uuid.NewString()
-			meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
-			member := seedHostedMetaMember(t, ctx, ti, meta.ID, "unconfigured", 0, mcpservers.VisibilityPublic)
-			tool := "test_tool"
-			want := mcpconnectionattempts.CodeCredentialMisconfigured
-			who := mcpconnectionattempts.WhoAdmin
-			if oauth {
-				ti.addToolWithDualSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
-				tool = "dual_sec_tool"
-				want, who = mcpconnectionattempts.CodeInvalidRemoteSession, mcpconnectionattempts.WhoPerson
-			} else {
-				ti.addToolWithSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
-			}
-			rec := mcpconnectionattemptstest.New(t)
-			ti.service.SetConnectionRecorder(rec.Recorder)
-			rpc := executeMetaTool(t, ti, slug, "", member.slug+"--"+tool)
-			text, isError := metaToolResultText(t, rpc)
-			require.True(t, isError)
-			require.Equal(t, fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug), text)
-			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, want)
-			require.Equal(t, string(who), row.WhoFixes)
-			require.Len(t, rec.Rows(), 1)
-		})
-	}
-}
-
 func TestGatewayUnknownCachedToolRecordsNothing(t *testing.T) {
 	t.Parallel()
 	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive)
@@ -853,31 +818,6 @@ func TestDirectHostedSecurityCheckFailureRecordsInternalError(t *testing.T) {
 	require.Len(t, rec.Rows(), 1)
 }
 
-// A gateway member's security check failing on our side writes one row for that member.
-func TestGatewayHostedSecurityCheckFailureRecordsInternalError(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestMCPService(t)
-	auth := requireProjectAuthContext(t, ctx)
-	slug := "meta-" + uuid.NewString()
-	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
-	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "unconfigured", 0, mcpservers.VisibilityPublic)
-	ti.addToolWithSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
-	ti.service.SetEnvironmentLoader(failingSystemEnv{})
-	rec := mcpconnectionattemptstest.New(t)
-	ti.service.SetConnectionRecorder(rec.Recorder)
-
-	body := makeMetaRPCBody(t, "tools/call", map[string]any{
-		"name":      "execute_tool",
-		"arguments": map[string]any{"name": member.slug + "--test_tool", "arguments": map[string]any{}},
-	})
-	resp, err := servePublicHTTP(t, t.Context(), ti, slug, body, "", nil)
-	require.NoError(t, err)
-	require.Contains(t, resp.Body.String(), `"code":-32603`)
-	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
-	require.Equal(t, member.serverID.String(), row.MemberID)
-	require.Len(t, rec.Rows(), 1)
-}
-
 // failingSystemEnv fails the security check's system environment read.
 type failingSystemEnv struct{ toolconfig.EnvironmentLoader }
 
@@ -987,60 +927,6 @@ func TestFreshRefreshOutrankedByReconnectKeepsTheReconnectRow(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.StepProviderRefresh.String(), rows[0].Step)
 	require.Equal(t, mcpconnectionattempts.StepMCPRequest.String(), rows[1].Step)
 	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession.String(), rows[1].Reason)
-}
-
-// A gateway call is past sign-in and takes no caller headers, so its rows stay as they were.
-func TestGatewayMemberSecurityOutcomeIgnoresDirectRules(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name       string
-		external   bool
-		schemes    bool
-		providedBy string
-		want       mcpconnectionattempts.Code
-	}{
-		{name: "external oauth without schemes", external: true, want: mcpconnectionattempts.CodeInvalidRemoteSession},
-		{name: "external oauth with api key", external: true, schemes: true, want: mcpconnectionattempts.CodeCredentialMisconfigured},
-		{name: "user provided variable", schemes: true, providedBy: "user", want: mcpconnectionattempts.CodeCredentialMisconfigured},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			ctx, ti := newTestMCPService(t)
-			auth := requireProjectAuthContext(t, ctx)
-			slug := "meta-" + uuid.NewString()
-			meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
-			tools := []string{"ping"}
-			tool := "ping"
-			if tc.schemes {
-				tools, tool = nil, "test_tool"
-			}
-			member := seedHostedMetaMember(t, ctx, ti, meta.ID, "unconfigured", 0, mcpservers.VisibilityPublic, tools...)
-			if tc.schemes {
-				ti.addToolWithSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
-			}
-			if tc.providedBy != "" {
-				setSecurityVariableProvidedBy(t, ctx, ti, member.toolsetID, *auth.ProjectID, tc.providedBy)
-			}
-			if tc.external {
-				external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, auth, oauthtest.ExternalOAuthToolsetOpts{Slug: "gateway-member", IsPublic: true})
-				toolset, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: member.toolsetID, ProjectID: *auth.ProjectID})
-				require.NoError(t, err)
-				_, err = toolsetsrepo.New(ti.conn).UpdateToolsetExternalOAuthServer(ctx, toolsetsrepo.UpdateToolsetExternalOAuthServerParams{
-					ExternalOauthServerID: uuid.NullUUID{UUID: external.ServerMetadata.ID, Valid: true},
-					Slug:                  toolset.Slug,
-					ProjectID:             toolset.ProjectID,
-				})
-				require.NoError(t, err)
-			}
-			rec := mcpconnectionattemptstest.New(t)
-			ti.service.SetConnectionRecorder(rec.Recorder)
-			text, isError := metaToolResultText(t, executeMetaTool(t, ti, slug, "", member.slug+"--"+tool))
-			require.True(t, isError)
-			require.Equal(t, fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug), text)
-			rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
-			require.Len(t, rec.Rows(), 1)
-		})
-	}
 }
 
 // A refused refresh wrote its row, so the gate adds none, and the caller still gets the reconnect challenge.

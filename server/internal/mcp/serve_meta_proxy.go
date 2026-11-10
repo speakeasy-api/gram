@@ -700,17 +700,14 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 // maxProxiedListPages bounds cursor-following on a member's tools/list.
 const maxProxiedListPages = 8
 
-// describeMetaMember reads one member's tool catalog through whichever
-// path serves it: the hosted model view, or the member's own tools/list.
+// describeMetaMember reads one member's tool catalog: the approved cached
+// view when the request serves one, otherwise the member's own tools/list.
 func (s *Service) describeMetaMember(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
 	if err := s.validateCatalogMember(ctx, gate, member, catalogCheckRecorded); err != nil {
 		return nil, err
 	}
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		return s.describeCachedMember(ctx, gate, member)
-	}
-	if member.backend == metaMemberBackendHosted {
-		return s.describeMemberToolset(ctx, logger, gate, member)
 	}
 	return s.describeProxiedMember(ctx, logger, gate, member)
 }

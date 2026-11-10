@@ -1212,7 +1212,7 @@ func TestResolveAuthClientsBatchesMemberChoices(t *testing.T) {
 	f.service.authClientPermitter = permitter
 	members := make([]metaMember, len(ids))
 	for i, id := range ids {
-		members[i] = metaMember{serverID: id, backend: metaMemberBackendProxied}
+		members[i] = metaMember{serverID: id}
 	}
 	choices := &memberChoices{selector: selector, subject: urn.NewUserSubject("test-user")}
 	before = pool.Stat().AcquireCount()
@@ -1268,7 +1268,7 @@ func TestAuthClientConsentUsesSharedResolver(t *testing.T) {
 
 		gateway := &recordingPermitter{asked: nil}
 		f.service.authClientPermitter = gateway
-		members := []metaMember{{serverID: f.serverID, backend: metaMemberBackendProxied}}
+		members := []metaMember{{serverID: f.serverID}}
 		choices := &memberChoices{selector: selector, subject: urn.NewUserSubject("user_1")}
 		choices.apply(t.Context(), testenv.NewLogger(t), members, true)
 		require.Len(t, gateway.asked, 1)

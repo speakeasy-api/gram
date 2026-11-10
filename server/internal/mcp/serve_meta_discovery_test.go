@@ -20,6 +20,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	testrepo "github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,15 +36,30 @@ func setGatewayMode(t *testing.T, ctx context.Context, ti *testInstance, id uuid
 	require.NoError(t, err)
 }
 
+// seedListedMember attaches a remote member whose upstream lists the named
+// tools, returning its slug and server id.
+func seedListedMember(t *testing.T, ctx context.Context, ti *testInstance, gatewayID uuid.UUID, name string, sortOrder int32, toolNames ...string) (string, uuid.UUID) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	tools := make([]any, 0, len(toolNames))
+	for _, toolName := range toolNames {
+		tools = append(tools, map[string]any{"name": toolName, "inputSchema": map[string]any{"type": "object"}})
+	}
+	memberSlug := "listed-" + uuid.NewString()[:8]
+	serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gatewayID, name, memberSlug, sortOrder, newListingUpstream(t, tools, nil))
+	return memberSlug, serverID
+}
+
 func TestGatewayDiscoveryDefaultChangesLive(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	denied := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Private tools", 2, mcpservers.VisibilityPublic, "hidden")
-	setToolsetMcpPrivate(t, ctx, ti, denied.toolsetID, *authCtx.ProjectID)
-	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
+	deniedSlug, deniedID := seedListedMember(t, ctx, ti, gateway.ID, "Private tools", 2, "hidden")
+	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{ID: deniedID, ProjectID: *authCtx.ProjectID, Visibility: mcpservers.VisibilityPrivate}))
+	memberSlug, _ := seedListedMember(t, ctx, ti, gateway.ID, "Listed tools", 1, "alpha")
 	request := makeMetaRPCBody(t, "tools/list", map[string]any{})
 	w, err := servePublicHTTP(t, t.Context(), ti, slug, request, "", nil)
 	require.NoError(t, err)
@@ -53,8 +69,8 @@ func TestGatewayDiscoveryDefaultChangesLive(t *testing.T) {
 	w, err = servePublicHTTP(t, t.Context(), ti, slug, request, "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), member.slug+"--alpha")
-	require.NotContains(t, w.Body.String(), denied.slug+"--hidden")
+	require.Contains(t, w.Body.String(), memberSlug+"--alpha")
+	require.NotContains(t, w.Body.String(), deniedSlug+"--hidden")
 	require.NotContains(t, w.Body.String(), `"name":"execute_tool"`)
 	require.Contains(t, w.Body.String(), `"inputSchema"`)
 	setGatewayMode(t, ctx, ti, gateway.ID, "progressive")
@@ -92,15 +108,15 @@ func TestGatewayModeOnlySessionIsBoundAndUnrestricted(t *testing.T) {
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
-	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha", "beta")
+	memberSlug, _ := seedListedMember(t, ctx, ti, gateway.ID, "Listed tools", 1, "alpha", "beta")
 	otherSlug := "gateway-" + uuid.NewString()
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, otherSlug, issuerID)
 	token := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuerID, slug, metamcp.DiscoveryModeDirect)
 	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), token, nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), member.slug+"--alpha")
-	require.Contains(t, w.Body.String(), member.slug+"--beta")
+	require.Contains(t, w.Body.String(), memberSlug+"--alpha")
+	require.Contains(t, w.Body.String(), memberSlug+"--beta")
 	require.NotContains(t, w.Body.String(), `"name":"execute_tool"`)
 	_, err = servePublicHTTP(t, t.Context(), ti, otherSlug, makeMetaRPCBody(t, "tools/list", map[string]any{}), token, nil)
 	require.ErrorContains(t, err, "invalid access token")
@@ -149,7 +165,7 @@ func TestGatewayDirectListsWholeInventoryInOneResponse(t *testing.T) {
 	for i := range names {
 		names[i] = fmt.Sprintf("tool_%03d", i)
 	}
-	seedHostedMetaMember(t, ctx, ti, gateway.ID, "Many tools", 1, mcpservers.VisibilityPublic, names...)
+	seedListedMember(t, ctx, ti, gateway.ID, "Many tools", 1, names...)
 	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
 	listing := listDirectGateway(t, ti, slug, map[string]any{})
 	require.Nil(t, listing.Error)
@@ -163,7 +179,7 @@ func TestGatewayDirectRejectsCursorFromAPaginatedListing(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
+	seedListedMember(t, ctx, ti, gateway.ID, "Listed tools", 1, "alpha")
 	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
 	listing := listDirectGateway(t, ti, slug, map[string]any{"cursor": "eyJvZmZzZXQiOjEwMH0"})
 	require.Nil(t, listing.Result)
@@ -376,7 +392,7 @@ func TestGatewayDirectOmitsAndRecordsAMemberThatFails(t *testing.T) {
 			authCtx, _ := contextvalues.GetAuthContext(ctx)
 			slug := "gateway-" + uuid.NewString()
 			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-			healthy := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
+			healthySlug, _ := seedListedMember(t, ctx, ti, gateway.ID, "Listed tools", 1, "alpha")
 			upstream := newScriptedUpstream(t, scriptedTools("tool", 3), 100)
 			upstream.fail(tc.status, "", tc.body, -1)
 			memberSlug := "failing-" + uuid.NewString()[:8]
@@ -385,7 +401,7 @@ func TestGatewayDirectOmitsAndRecordsAMemberThatFails(t *testing.T) {
 			started := time.Now()
 			listing := listDirectGateway(t, ti, slug, map[string]any{})
 			require.Nil(t, listing.Error)
-			require.Equal(t, []string{healthy.slug + "--alpha"}, listing.names())
+			require.Equal(t, []string{healthySlug + "--alpha"}, listing.names())
 			require.Less(t, time.Since(started), 4*time.Second)
 			// A persistent retryable failure is tried again while the listing's
 			// budget allows, at most maxMemberDescribeAttempts times in all.
@@ -458,7 +474,7 @@ func TestGatewayDirectOmitsAMemberWhoseRetryAfterOutlastsTheListing(t *testing.T
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	healthy := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
+	healthySlug, _ := seedListedMember(t, ctx, ti, gateway.ID, "Listed tools", 1, "alpha")
 	upstream := newScriptedUpstream(t, scriptedTools("tool", 3), 100)
 	upstream.fail(http.StatusTooManyRequests, "99999999999999999999", "rate limited", -1)
 	memberSlug := "limited-" + uuid.NewString()[:8]
@@ -467,7 +483,7 @@ func TestGatewayDirectOmitsAMemberWhoseRetryAfterOutlastsTheListing(t *testing.T
 	started := time.Now()
 	listing := listDirectGateway(t, ti, slug, map[string]any{})
 	require.Nil(t, listing.Error)
-	require.Equal(t, []string{healthy.slug + "--alpha"}, listing.names())
+	require.Equal(t, []string{healthySlug + "--alpha"}, listing.names())
 	require.Less(t, time.Since(started), time.Second)
 	require.Equal(t, int32(1), upstream.failures.Load())
 	requireOmittedMemberLog(t, omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 1)[0], http.StatusTooManyRequests, memberSlug)
@@ -482,7 +498,7 @@ func TestGatewayDirectOmitsMembersThatRejectTheCredential(t *testing.T) {
 			authCtx, _ := contextvalues.GetAuthContext(ctx)
 			slug := "gateway-" + uuid.NewString()
 			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-			member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
+			memberSlug, _ := seedListedMember(t, ctx, ti, gateway.ID, "Listed tools", 1, "alpha")
 			upstream := newScriptedUpstream(t, scriptedTools("tool", 3), 100)
 			upstream.fail(status, "", "", -1)
 			rejectingSlug := "rejecting-" + uuid.NewString()[:8]
@@ -496,7 +512,7 @@ func TestGatewayDirectOmitsMembersThatRejectTheCredential(t *testing.T) {
 			setGatewayMode(t, ctx, ti, gateway.ID, "direct")
 			listing := listDirectGateway(t, ti, slug, map[string]any{})
 			require.Nil(t, listing.Error)
-			require.Equal(t, []string{member.slug + "--alpha"}, listing.names())
+			require.Equal(t, []string{memberSlug + "--alpha"}, listing.names())
 			// A credential exclusion is not a failure, so only the failing
 			// member is recorded.
 			requireOmittedMemberLog(t, omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 1)[0], http.StatusBadRequest, failingSlug)
@@ -510,7 +526,7 @@ func TestDirectOmitsMalformedCatalogWhileProgressiveRemainsUsable(t *testing.T) 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	healthy := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 2, mcpservers.VisibilityPublic, "alpha")
+	healthySlug, _ := seedListedMember(t, ctx, ti, gateway.ID, "Listed tools", 2, "alpha")
 	upstream := newListingUpstream(t, []any{map[string]any{"name": "valid", "inputSchema": map[string]any{"type": "object"}}, map[string]any{"description": "missing name", "inputSchema": map[string]any{"type": "object"}}}, nil)
 	memberSlug := "catalog-" + uuid.NewString()[:8]
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Catalog member", memberSlug, 1, upstream)
@@ -520,7 +536,7 @@ func TestDirectOmitsMalformedCatalogWhileProgressiveRemainsUsable(t *testing.T) 
 	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
 	listing := listDirectGateway(t, ti, slug, map[string]any{})
 	require.Nil(t, listing.Error)
-	require.Equal(t, []string{healthy.slug + "--alpha"}, listing.names())
+	require.Equal(t, []string{healthySlug + "--alpha"}, listing.names())
 	requireOmittedMemberLog(t, omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 1)[0], http.StatusBadGateway, memberSlug)
 }
 
@@ -575,7 +591,7 @@ func TestGatewayDirectListsReachableMembersWhenOneIsDown(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
+	memberSlug, _ := seedListedMember(t, ctx, ti, gateway.ID, "Listed tools", 1, "alpha")
 	// Keep a deterministic unavailable upstream: closing the port lets another
 	// parallel test bind the same address and turn the member into a live one.
 	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -589,7 +605,7 @@ func TestGatewayDirectListsReachableMembersWhenOneIsDown(t *testing.T) {
 	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), member.slug+"--alpha")
+	require.Contains(t, w.Body.String(), memberSlug+"--alpha")
 	require.NotContains(t, w.Body.String(), downSlug+"--")
 	require.NotContains(t, w.Body.String(), `"error"`)
 	requireOmittedMemberLog(t, omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 1)[0], http.StatusServiceUnavailable, downSlug)

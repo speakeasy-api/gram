@@ -34,11 +34,9 @@ func approveChangedMember(gate *metaGateContext, member *metaMember, mode toolfi
 	gate.catalogRef = &toolfilter.CatalogReference{ID: uuid.New(), Mode: mode}
 	approved := connectionCatalogMember{ServerID: member.serverID, ProjectID: member.projectID, BackendHash: "approved", Auth: nil}
 	member.configuration = memberConfiguration{hash: "changed", typedHash: "changed"}
-	if member.backend == metaMemberBackendProxied {
-		approved.Auth = &connectionCatalogAuth{ClientID: uuid.Nil, RegistrationID: member.chosenClientID}
-		if signInChanged {
-			approved.Auth.RegistrationID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
-		}
+	approved.Auth = &connectionCatalogAuth{ClientID: uuid.Nil, RegistrationID: member.chosenClientID}
+	if signInChanged {
+		approved.Auth.RegistrationID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	}
 	gate.catalog = &connectionCatalog{ID: uuid.New(), Members: map[string]connectionCatalogMember{member.slug: approved}}
 }
@@ -56,7 +54,6 @@ func callChangedMember(t *testing.T, s *Service, gate *metaGateContext, member m
 // catalogConsentRemedyCases are the remedy forms a changed approval can take.
 func catalogConsentRemedyCases() map[string]struct {
 	gate          func(s *Service, member uuid.UUID) *metaGateContext
-	hosted        bool
 	signInChanged bool
 	remedy        staleChoiceRemedy
 	text          string
@@ -66,7 +63,6 @@ func catalogConsentRemedyCases() map[string]struct {
 } {
 	return map[string]struct {
 		gate          func(s *Service, member uuid.UUID) *metaGateContext
-		hosted        bool
 		signInChanged bool
 		remedy        staleChoiceRemedy
 		text          string
@@ -87,12 +83,6 @@ func catalogConsentRemedyCases() map[string]struct {
 				return staleChoiceRemedyGate(s, map[uuid.UUID]bool{member: true})
 			},
 			remedy: staleChoiceReconnect,
-			text:   `The settings for the "db" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`,
-			reason: mcpconnectionattempts.CodeConsentNotApproved, detail: consentRejectionConfigurationChanged, who: mcpconnectionattempts.WhoPerson,
-		},
-		"a hosted server needs no lookup": {
-			gate:   func(s *Service, _ uuid.UUID) *metaGateContext { return staleChoiceRemedyGate(s, nil) },
-			hosted: true, remedy: staleChoiceReconnect,
 			text:   `The settings for the "db" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`,
 			reason: mcpconnectionattempts.CodeConsentNotApproved, detail: consentRejectionConfigurationChanged, who: mcpconnectionattempts.WhoPerson,
 		},
@@ -133,12 +123,8 @@ func catalogConsentRemedyCases() map[string]struct {
 	}
 }
 
-func changedMember(serverID uuid.UUID, hosted bool) metaMember {
-	member := metaMember{slug: "db", serverID: serverID, projectID: uuid.New(), backend: metaMemberBackendProxied}
-	if hosted {
-		member.backend = metaMemberBackendHosted
-	}
-	return member
+func changedMember(serverID uuid.UUID) metaMember {
+	return metaMember{slug: "db", serverID: serverID, projectID: uuid.New()}
 }
 
 // A call refused because its approval no longer matches names the server and records whoever its message tells to act first.
@@ -150,7 +136,7 @@ func TestCatalogConsentCallNamesTheServerAndRecordsTheRemedy(t *testing.T) {
 			rec := mcpconnectionattemptstest.New(t)
 			s := &Service{connections: rec.Recorder, logger: testenv.NewLogger(t), staleNoAuthLog: newOnceLog(), telemLogger: noTelemetryLogs(t)}
 			serverID := uuid.New()
-			body := callChangedMember(t, s, tc.gate(s, serverID), changedMember(serverID, tc.hosted), tc.signInChanged)
+			body := callChangedMember(t, s, tc.gate(s, serverID), changedMember(serverID), tc.signInChanged)
 			want, err := json.Marshal(tc.text)
 			require.NoError(t, err)
 			require.Contains(t, body, string(want[1:len(want)-1]))
@@ -172,7 +158,7 @@ func TestCatalogConsentDescribeAndStatusFollowTheCall(t *testing.T) {
 			rec := mcpconnectionattemptstest.New(t)
 			s := &Service{connections: rec.Recorder, logger: testenv.NewLogger(t)}
 			serverID := uuid.New()
-			member := changedMember(serverID, tc.hosted)
+			member := changedMember(serverID)
 			gate := tc.gate(s, serverID)
 			gate.execute = true
 			approveChangedMember(gate, &member, toolfilter.CatalogModeLive, tc.signInChanged)
@@ -222,7 +208,7 @@ func TestCatalogConsentCodeModeServersConnectAndCallAgree(t *testing.T) {
 			rec := mcpconnectionattemptstest.New(t)
 			s := &Service{connections: rec.Recorder, logger: testenv.NewLogger(t)}
 			serverID := uuid.New()
-			member := changedMember(serverID, tc.hosted)
+			member := changedMember(serverID)
 			gate := tc.gate(s, serverID)
 			gate.execute = true
 			approveChangedMember(gate, &member, toolfilter.CatalogModeLive, tc.signInChanged)
@@ -277,7 +263,7 @@ func TestCatalogConsentFailedLookupRecordsOurError(t *testing.T) {
 		authentication: &issuerGateAuthentication{refreshableUserSession: true, subject: subject},
 		memberChoices:  &memberChoices{selector: &upstreamSelector{}, subject: subject, byServer: map[uuid.UUID]*memberTokens{}},
 	}
-	member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}
+	member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID}
 
 	body := callChangedMember(t, f.service, gate, member, true)
 	require.Contains(t, body, `The sign-in for the \"db\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again. If that doesn't help, ask your administrator.`)
@@ -306,7 +292,7 @@ func TestCatalogConsentNoSignInMemberReconnectsUnderEnforcement(t *testing.T) {
 		authentication: &issuerGateAuthentication{refreshableUserSession: true, subject: subject},
 		memberChoices:  &memberChoices{selector: &upstreamSelector{}, subject: subject, byServer: map[uuid.UUID]*memberTokens{}},
 	}
-	member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}
+	member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID}
 
 	body := callChangedMember(t, f.service, gate, member, false)
 	require.Contains(t, body, `The settings for the \"db\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`)
@@ -344,7 +330,7 @@ func TestCatalogConsentStatusReadsRecordNothing(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	s := &Service{logger: logger, staleNoAuthLog: newOnceLog(), upstreamIssuerParityLog: newOnceLog(), metrics: mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), logger)}
 	serverID := uuid.New()
-	member := changedMember(serverID, false)
+	member := changedMember(serverID)
 	gate := staleChoiceRemedyGate(s, map[uuid.UUID]bool{serverID: true})
 	gate.consentDiagnostics = &consentDiagnostics{seen: sync.Map{}}
 	approveChangedMember(gate, &member, toolfilter.CatalogModeLive, false)

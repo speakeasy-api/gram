@@ -132,7 +132,7 @@ func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 			// On a gateway, these refusals come from a selected member, never the gateway itself.
 			if scope != s.connectionServerScope() && ending.step == mcpconnectionattempts.StepMCPRequest && (ending.what == mcpconnectionattempts.CodeProviderServerError || ending.what == mcpconnectionattempts.CodeToolPermissionDenied || ending.what == mcpconnectionattempts.CodeUsageLimitReached || ending.what == mcpconnectionattempts.CodeProviderRejected || ending.what == mcpconnectionattempts.CodeMCPToolCallsPaused) {
 				scope = mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR)
-				opts = append(opts, mcpconnectionattempts.Member(s.det("mcpserver-support")))
+				opts = append(opts, mcpconnectionattempts.Member(s.det("mcpserver-linear")))
 			}
 			switch ending.step {
 			case mcpconnectionattempts.StepProviderRefresh:
@@ -315,7 +315,7 @@ func (s *seeder) stoppedAttemptRows(attempt mcpconnectionattempts.Attempt, key s
 	if first.ServerID != s.det("metamcp-1").String() {
 		return rows, nil
 	}
-	member, err := mcpconnectionattempts.RowAt(attempt, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, at, mcpconnectionattempts.Member(s.det("mcpserver-support")))
+	member, err := mcpconnectionattempts.RowAt(attempt, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, at, mcpconnectionattempts.Member(s.det("mcpserver-linear")))
 	if err != nil {
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}

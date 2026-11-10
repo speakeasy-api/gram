@@ -73,13 +73,12 @@ func TestCodeBridgePreservesUnknownOutcomeAfterUpstreamFailure(t *testing.T) {
 	require.EqualValues(t, 1, writes.Load(), "a failed result must not replay a write")
 }
 
-func TestCodeBridgeDiscoversHostedRemoteAndTunnelMembers(t *testing.T) {
+func TestCodeBridgeDiscoversRemoteAndTunnelMembers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
-	hosted := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted", 0, "public", "list")
 	remote := newRecordingUpstream(t, "ping")
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote", "remote", 1, remote.url)
 	tunnel := &fakeTunnelGateway{t: t, agentSessionID: "code-agent", backendSessionID: "code-backend", toolNames: []string{"ping"}}
@@ -90,7 +89,7 @@ func TestCodeBridgeDiscoversHostedRemoteAndTunnelMembers(t *testing.T) {
 	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service.Service, gateway.ID)
 	servers, err := host.Servers(ctx, codemode.PageArgs{})
 	require.NoError(t, err)
-	require.Len(t, servers.Items, 3)
+	require.Len(t, servers.Items, 2)
 	page, err := host.Search(ctx, codemode.SearchArgs{})
 	require.NoError(t, err)
 	require.False(t, page.Incomplete, "%+v", page.FailedMembers)
@@ -98,7 +97,6 @@ func TestCodeBridgeDiscoversHostedRemoteAndTunnelMembers(t *testing.T) {
 	for _, item := range page.Items {
 		paths = append(paths, item.Path)
 	}
-	require.Contains(t, paths, hosted.slug+"--list")
 	require.Contains(t, paths, "remote--ping")
 	require.Contains(t, paths, "tunnel--ping")
 	for _, path := range []string{"remote--ping", "tunnel--ping"} {
@@ -110,18 +108,6 @@ func TestCodeBridgeDiscoversHostedRemoteAndTunnelMembers(t *testing.T) {
 		require.True(t, result.OK, "%+v", result)
 		require.Contains(t, string(result.Content), "pong")
 	}
-	// The fixture has no HTTP URL. The shared executor reports this after
-	// accepting dispatch, so the bridge conservatively retains an unknown outcome.
-	result, err := host.Call(ctx, hosted.slug+"--list", json.RawMessage(`{}`))
-	require.NoError(t, err)
-	require.False(t, result.OK)
-	require.Equal(t, "unknown", result.Outcome)
-	require.Equal(t, "tool_call_outcome_unknown", result.Error)
-	result, err = host.Call(ctx, hosted.slug+"--missing", json.RawMessage(`{}`))
-	require.NoError(t, err)
-	require.Equal(t, "completed", result.Outcome)
-	require.Equal(t, "tool_call_rejected", result.Error)
-	require.Contains(t, string(result.Content), "tool not found")
 }
 
 func TestCodeBridgeSearchListsWorkingMembersWhenOneFails(t *testing.T) {
@@ -130,7 +116,8 @@ func TestCodeBridgeSearchListsWorkingMembersWhenOneFails(t *testing.T) {
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
-	hosted := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted", 0, "public", "list")
+	working := newRecordingUpstream(t, "list")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Working", "working", 0, working.url)
 	upstream := newScriptedUpstream(t, scriptedTools("tool", 3), 100)
 	upstream.fail(http.StatusServiceUnavailable, "", "", -1)
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Failing", "failing", 1, upstream.url)
@@ -141,7 +128,7 @@ func TestCodeBridgeSearchListsWorkingMembersWhenOneFails(t *testing.T) {
 	for _, item := range page.Items {
 		paths = append(paths, item.Path)
 	}
-	require.Equal(t, []string{hosted.slug + "--list"}, paths)
+	require.Equal(t, []string{"working--list"}, paths)
 	require.True(t, page.Incomplete)
 	require.Equal(t, []codemode.FailedMember{{Server: "failing", Reason: "catalog_unavailable"}}, page.FailedMembers)
 	// A persistent transient failure is tried again, at most three times in all.

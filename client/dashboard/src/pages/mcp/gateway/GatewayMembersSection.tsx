@@ -7,10 +7,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -28,8 +25,6 @@ import { useRoutes } from "@/routes";
 import { useNavigate } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
-import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 
 import { useQueryClient } from "@tanstack/react-query";
@@ -37,18 +32,15 @@ import {
   ArrowDown,
   ArrowUp,
   Blocks,
-  Boxes,
   Cable,
   ChevronDown,
   Cloud,
-  Code,
-  FileCode,
   Globe,
   Plus,
   Server,
   Trash2,
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
@@ -67,12 +59,7 @@ import {
   nextSortOrder,
   planReorder,
 } from "./memberRows";
-import {
-  useGatewayMemberRows,
-  useReconcileWrappers,
-} from "./useGatewayMemberRows";
-import { useToolsets } from "../../toolsets/useToolsets";
-import { memberWrappers } from "./ensureToolsetWrapper";
+import { useGatewayMemberRows } from "./useGatewayMemberRows";
 
 const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
   hosted: "Hosted",
@@ -118,9 +105,9 @@ const STATUS_BY_CLASSIFICATION: Record<
   { label: string; variant: "success" | "neutral" | "warning"; why: string }
 > = {
   hosted: {
-    label: "Available",
-    variant: "success",
-    why: "Toolset-backed, so the gateway executes its tools in-process.",
+    label: "Excluded",
+    variant: "warning",
+    why: "This server is hosted by Speakeasy, and hosted servers can't be used through a gateway. Remove it here; people connect to it at its own MCP URL instead.",
   },
   proxied: {
     label: "Unknown",
@@ -220,20 +207,12 @@ export function GatewayMembersSection({
 }): JSX.Element {
   const client = useSdkClient();
   const queryClient = useQueryClient();
-  const {
-    rows,
-    isLoading,
-    servers,
-    isError,
-    refetch,
-    membersUpdatedAt,
-    serversUpdatedAt,
-  } = useGatewayMemberRows(metaMcpServer.id);
-  const toolsets = useToolsets();
+  const { rows, isLoading, servers, isError, refetch, membersUpdatedAt } =
+    useGatewayMemberRows(metaMcpServer.id);
 
   const [addOpen, setAddOpen] = useState(false);
   const batchState = useMemo<AddBatchState>(
-    () => ({ wrappers: new Map(), orders: new Map(), completed: new Set() }),
+    () => ({ orders: new Map(), completed: new Set() }),
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- reset retry caches when navigating to another gateway
     [metaMcpServer.id],
   );
@@ -242,12 +221,6 @@ export function GatewayMembersSection({
   const latestMembersUpdatedAt = useRef(membersUpdatedAt);
   const [removeTarget, setRemoveTarget] = useState<MemberRow | null>(null);
   const [mutating, setMutating] = useState(false);
-  const markWrapperWritesSettled = useReconcileWrappers(
-    batchState,
-    servers,
-    serversUpdatedAt,
-    mutating,
-  );
 
   useEffect(() => {
     if (membersUpdatedAt) latestMembersUpdatedAt.current = membersUpdatedAt;
@@ -271,8 +244,6 @@ export function GatewayMembersSection({
       // endpoint and caches it; membership changes what those return.
       queryClient.invalidateQueries({ queryKey: ["gatewayInspection"] }),
       queryClient.invalidateQueries({ queryKey: ["gatewayDescribeServer"] }),
-      // Adding a toolset mints an mcp_servers wrapper the picker keys on.
-      invalidateAllMcpServers(queryClient, { refetchType: "all" }),
     ]);
 
   const runMutation = async (work: () => Promise<void>, failure: string) => {
@@ -310,10 +281,7 @@ export function GatewayMembersSection({
     runMutation(async () => {
       await client.metaMcp.removeMember({ id: row.member.id });
       const key = row.server
-        ? candidateKey(
-            { kind: "server", server: row.server },
-            batchState.wrappers,
-          )
+        ? candidateKey(row.server)
         : `server-${row.member.mcpServerId}`;
       batchState.completed.delete(key);
       batchState.orders.delete(key);
@@ -333,39 +301,6 @@ export function GatewayMembersSection({
         nextSortOrder(rows.map((row) => row.member)),
         batchState,
         {
-          createWrapper: async (toolset) => {
-            const findWrapper = async () => {
-              // Read from the server, not the picker cache: a previous create
-              // may have committed even when its response never reached us.
-              const mcpServers = memberWrappers(
-                (await client.mcpServers.list({ toolsetId: toolset.id }))
-                  .mcpServers,
-                toolset.id,
-              );
-              if (mcpServers.length > 1) {
-                throw new Error(
-                  "Multiple servers use this source. Select the intended existing server.",
-                );
-              }
-              return mcpServers[0]?.id;
-            };
-            const existing = await findWrapper();
-            if (existing) return existing;
-            try {
-              const wrapper = await client.mcpServers.create({
-                createMcpServerForm: {
-                  name: toolset.name,
-                  toolsetId: toolset.id,
-                  visibility: "private",
-                },
-              });
-              return wrapper.id;
-            } catch (error) {
-              const recovered = await findWrapper();
-              if (recovered) return recovered;
-              throw error;
-            }
-          },
           attach: async (mcpServerId, sortOrder) => {
             try {
               await client.metaMcp.addMember({
@@ -394,7 +329,6 @@ export function GatewayMembersSection({
       // Ignore responses received during the writes. Only a subsequent
       // successful refresh can retire optimistic duplicate protection.
       reconciledAt.current = latestMembersUpdatedAt.current;
-      markWrapperWritesSettled();
       try {
         await invalidateMembers();
       } catch {
@@ -594,17 +528,12 @@ export function GatewayMembersSection({
           if (!batchRunning.current) setAddOpen(open);
         }}
         servers={servers}
-        toolsets={toolsets.isError ? [] : toolsets}
-        toolsetsLoading={toolsets.isLoading}
-        toolsetsFailed={toolsets.isError}
         isLoading={isLoading}
         loadFailed={isError}
         onRetryLoad={() => {
           void refetch();
-          void toolsets.refetch();
         }}
         memberServerIds={new Set(rows.map((row) => row.member.mcpServerId))}
-        wrappers={batchState.wrappers}
         onAdd={handleAdd}
         gatewayId={metaMcpServer.id}
         adding={mutating}
@@ -661,14 +590,10 @@ export function AddServersSheet({
   open,
   onOpenChange,
   servers,
-  toolsets,
-  toolsetsLoading = false,
-  toolsetsFailed = false,
   isLoading,
   loadFailed,
   onRetryLoad,
   memberServerIds,
-  wrappers,
   onAdd,
   adding,
   projectId,
@@ -677,14 +602,10 @@ export function AddServersSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   servers: McpServer[];
-  toolsets: ToolsetEntry[];
-  toolsetsLoading?: boolean;
-  toolsetsFailed?: boolean;
   isLoading: boolean;
   loadFailed: boolean;
   onRetryLoad: () => void;
   memberServerIds: Set<string>;
-  wrappers?: ReadonlyMap<string, string>;
   onAdd: (candidates: AddCandidate[]) => Promise<AddResult[]>;
   adding: boolean;
   projectId: string;
@@ -695,35 +616,15 @@ export function AddServersSheet({
   const { hasScope, isLoading: permissionsLoading } = useRBAC();
   const canWrite = !permissionsLoading && hasScope("mcp:write", gatewayId);
   const canCreate = !permissionsLoading && hasScope("mcp:write", projectId);
-  const canWriteProject =
-    !permissionsLoading && hasScope("project:write", projectId);
   // Match the Catalog page's browse permission; installation checks stay there.
   const canBrowseCatalog =
     !permissionsLoading && (hasScope("project:read") || hasScope("mcp:write"));
   const candidates = useMemo(
-    () => buildAddCandidates(servers, toolsets, memberServerIds, ""),
-    [servers, toolsets, memberServerIds],
+    () => buildAddCandidates(servers, memberServerIds, ""),
+    [servers, memberServerIds],
   );
-  const options: ServerPickerOption[] = candidates.map((candidate) => {
-    const key = candidateKey(candidate, wrappers);
-    if (candidate.kind === "toolset") {
-      return {
-        value: key,
-        label: candidateName(candidate),
-        icon: (
-          <SourceMcpIcon
-            mcpServerId={undefined}
-            className="size-6 shrink-0 object-contain"
-          />
-        ),
-        slug: candidate.toolset.slug,
-        kindLabel: CLASSIFICATION_LABEL.hosted,
-        badge: candidate.toolset.mcpEnabled ? undefined : "MCP off",
-        description: `${candidate.toolset.slug} · Hosted${candidate.toolset.mcpEnabled ? "" : " · MCP off: excluded until enabled"}${canCreate ? "" : " · Requires project-level MCP write permission"}`,
-        disabled: !canWrite || !canCreate,
-      };
-    }
-    const server = candidate.server;
+  const options: ServerPickerOption[] = candidates.map((server) => {
+    const key = candidateKey(server);
     const classification = classifyMemberServer(server);
     const restriction = server.builtinBackend
       ? "Built-in servers cannot be added to a gateway."
@@ -736,7 +637,7 @@ export function AddServersSheet({
             : STATUS_BY_CLASSIFICATION[classification].why;
     return {
       value: key,
-      label: candidateName(candidate) || "MCP server",
+      label: candidateName(server) || "MCP server",
       icon: (
         <SourceMcpIcon
           mcpServerId={server.id}
@@ -745,10 +646,7 @@ export function AddServersSheet({
       ),
       slug: server.slug,
       kindLabel: CLASSIFICATION_LABEL[classification],
-      badge:
-        classification === "hosted" || classification === "proxied"
-          ? undefined
-          : "Excluded",
+      badge: classification === "proxied" ? undefined : "Excluded",
       description: `${server.slug || "No slug"} · ${restriction}`,
       disabled:
         !canWrite ||
@@ -760,7 +658,7 @@ export function AddServersSheet({
   const submit = (values: string[]) =>
     onAdd(
       candidates.filter((candidate) =>
-        values.includes(candidateKey(candidate, wrappers)),
+        values.includes(candidateKey(candidate)),
       ),
     );
   const creationOptions = [
@@ -769,7 +667,6 @@ export function AddServersSheet({
       description:
         "Pick a reviewed third-party server — Salesforce, Datadog, Linear, Slack, Okta and more.",
       Icon: Blocks,
-      group: "Recommended",
       href: routes.mcp.catalog.href() + "?attachToGateway=" + gatewayId,
       allowed: canBrowseCatalog,
     },
@@ -778,7 +675,6 @@ export function AddServersSheet({
       description:
         "Add a server that already runs elsewhere by its URL, proxied through Speakeasy.",
       Icon: Cloud,
-      group: "Recommended",
       href:
         routes.mcp.add.remote.href() +
         "?attachToGateway=" +
@@ -790,46 +686,11 @@ export function AddServersSheet({
       description:
         "Connect a server running inside your own network through a tunnel.",
       Icon: Cable,
-      group: "Recommended",
       href:
         routes.mcp.add.tunneled.href() +
         "?attachToGateway=" +
         encodeURIComponent(gatewayId),
       allowed: canCreate,
-    },
-    {
-      label: "From your API",
-      description: "Upload an OpenAPI document to generate tools.",
-      Icon: FileCode,
-      group: "Advanced",
-      href:
-        routes.mcp.add.openapi.href() +
-        "?attachToGateway=" +
-        encodeURIComponent(gatewayId),
-      allowed: canWriteProject && canCreate,
-    },
-    {
-      label: "From an existing source",
-      description:
-        "Build a server from an OpenAPI document or function this project already has.",
-      Icon: Boxes,
-      group: "Advanced",
-      href:
-        routes.mcp.add.fromSource.href() +
-        "?attachToGateway=" +
-        encodeURIComponent(gatewayId),
-      allowed: canCreate,
-    },
-    {
-      label: "Write custom code",
-      description: "Create tools with TypeScript functions.",
-      Icon: Code,
-      group: "Advanced",
-      href:
-        routes.mcp.add.function.href() +
-        "?attachToGateway=" +
-        encodeURIComponent(gatewayId),
-      allowed: canWriteProject && canCreate,
     },
   ];
   const creationAllowed = creationOptions.some((option) => option.allowed);
@@ -843,35 +704,10 @@ export function AddServersSheet({
       isLoading={isLoading}
       loadFailed={loadFailed}
       onRetryLoad={onRetryLoad}
-      partiallyLoading={toolsetsLoading}
-      hideEmptyState={
-        (toolsetsLoading || toolsetsFailed) &&
-        (servers.length > 0 || toolsets.length > 0)
-      }
       emptyMessage={
-        servers.length === 0 && toolsets.length === 0
-          ? "No existing servers yet. Create a new server to get started."
-          : "All existing servers have already been added."
-      }
-      notices={
-        <>
-          {toolsetsLoading && <Text muted>Loading hosted servers…</Text>}
-          {toolsetsFailed && (
-            <div role="alert" className="space-y-2">
-              <Text muted>
-                Couldn't load hosted servers. Existing servers are still
-                available.
-              </Text>
-              <Button
-                variant="secondary"
-                onClick={onRetryLoad}
-                disabled={adding}
-              >
-                <Button.Text>Retry loading hosted servers</Button.Text>
-              </Button>
-            </div>
-          )}
-        </>
+        servers.some((server) => !server.toolsetId)
+          ? "All existing servers have already been added."
+          : "No servers a gateway can use yet. Create a new server to get started."
       }
       canWrite={canWrite}
       permissionMessage="You need MCP write permission on this gateway to add servers."
@@ -907,37 +743,25 @@ export function AddServersSheet({
               align="start"
               className="w-80 max-w-[calc(100vw-2rem)]"
             >
-              {["Recommended", "Advanced"].map((group, index) => (
-                <Fragment key={group}>
-                  {index > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuGroup aria-label={group}>
-                    <DropdownMenuLabel className="text-muted-foreground text-xs">
-                      {group}
-                    </DropdownMenuLabel>
-                    {creationOptions
-                      .filter((option) => option.group === group)
-                      .map((option) => (
-                        <DropdownMenuItem
-                          key={option.href}
-                          className="items-start"
-                          textValue={option.label}
-                          disabled={busy || !canWrite || !option.allowed}
-                          onSelect={() => {
-                            if (!busy && canWrite && option.allowed)
-                              void navigate(option.href);
-                          }}
-                        >
-                          <option.Icon className="mt-0.5" />
-                          <span className="min-w-0">
-                            <span className="block">{option.label}</span>
-                            <span className="text-muted-foreground mt-0.5 block text-xs leading-relaxed">
-                              {option.description}
-                            </span>
-                          </span>
-                        </DropdownMenuItem>
-                      ))}
-                  </DropdownMenuGroup>
-                </Fragment>
+              {creationOptions.map((option) => (
+                <DropdownMenuItem
+                  key={option.href}
+                  className="items-start"
+                  textValue={option.label}
+                  disabled={busy || !canWrite || !option.allowed}
+                  onSelect={() => {
+                    if (!busy && canWrite && option.allowed)
+                      void navigate(option.href);
+                  }}
+                >
+                  <option.Icon className="mt-0.5" />
+                  <span className="min-w-0">
+                    <span className="block">{option.label}</span>
+                    <span className="text-muted-foreground mt-0.5 block text-xs leading-relaxed">
+                      {option.description}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>

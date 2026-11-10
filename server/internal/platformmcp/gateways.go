@@ -72,7 +72,7 @@ func (e *GatewayError) Unwrap() error { return e.Cause }
 type GatewayMemberRefusal struct {
 	MCPID string `json:"mcp_id"`
 	// Reason is one of not_in_project, no_address, unproxied, built_in,
-	// hosted_toolset_server, duplicate_backend, shadow_review_required, or
+	// hosted_server, duplicate_backend, shadow_review_required, or
 	// approval_check_unavailable.
 	Reason  string `json:"reason"`
 	Message string `json:"message"`
@@ -121,11 +121,16 @@ type Gateway struct {
 }
 
 // GatewayMember is one server behind a gateway. Its tools are served as
-// <slug>--<tool name>.
+// <slug>--<tool name> unless ExcludedReason is set.
 type GatewayMember struct {
 	MCPID string `json:"mcp_id"`
 	Name  string `json:"name,omitempty"`
 	Slug  string `json:"slug,omitempty"`
+
+	// ExcludedReason is set when the gateway serves none of the member's
+	// tools: hosted_server for a server hosted by Speakeasy, which people
+	// connect to at its own MCP URL instead.
+	ExcludedReason string `json:"excluded_reason,omitempty"`
 }
 
 // GatewayService creates gateways and sets their members through the same
@@ -490,10 +495,15 @@ func (s *GatewayService) readGateway(ctx context.Context, principal Principal, p
 		}
 	}
 	for _, member := range members {
+		excluded := ""
+		if member.McpServerHosted {
+			excluded = gatewayMemberReasonHostedServer
+		}
 		gateway.Members = append(gateway.Members, GatewayMember{
-			MCPID: member.McpServerID.String(),
-			Name:  conv.PtrValOr(conv.FromPGText[string](member.McpServerName), ""),
-			Slug:  conv.PtrValOr(conv.FromPGText[string](member.McpServerSlug), ""),
+			MCPID:          member.McpServerID.String(),
+			Name:           conv.PtrValOr(conv.FromPGText[string](member.McpServerName), ""),
+			Slug:           conv.PtrValOr(conv.FromPGText[string](member.McpServerSlug), ""),
+			ExcludedReason: excluded,
 		})
 	}
 	return gateway, nil
@@ -519,6 +529,10 @@ func (s *GatewayService) sanitize(ctx context.Context, err error) error {
 	return refusal
 }
 
+// gatewayMemberReasonHostedServer is the reason for a server hosted by
+// Speakeasy, which a gateway never serves.
+const gatewayMemberReasonHostedServer = "hosted_server"
+
 // gatewayMemberReasons maps each membership refusal the shared core returns
 // to the reason a caller sees.
 var gatewayMemberReasons = []struct {
@@ -530,7 +544,7 @@ var gatewayMemberReasons = []struct {
 	{metamcp.ErrMemberServerHasNoSlug, "no_address", "This server has no address yet. Saving its settings once in the dashboard gives it one."},
 	{metamcp.ErrMemberServerUnproxied, "unproxied", "This server is reached directly rather than through Speakeasy, so a gateway cannot serve its tools."},
 	{metamcp.ErrMemberServerBuiltin, "built_in", "This is a server Speakeasy runs itself, such as the approvals server, so a gateway cannot serve its tools."},
-	{metamcp.ErrMemberServerIsHostedToolset, "hosted_toolset_server", "This is a hosted tool list's own server, which cannot sit behind a gateway. Create a separate server for that tool list and add that instead."},
+	{metamcp.ErrMemberServerIsHosted, gatewayMemberReasonHostedServer, "This server is hosted by Speakeasy, and hosted servers can't be used through a gateway. People connect to it directly at its own MCP URL instead."},
 	{metamcp.ErrMemberSharesBackend, "duplicate_backend", "Another server in this request or already on the gateway fronts the same backend."},
 	{metamcp.ErrMemberAlreadyPresent, "duplicate_backend", "This server is already on the gateway."},
 	{metamcp.ErrMemberNeedsShadowApproval, "shadow_review_required", "The gateway is shared with people this server has not been approved for in Shadow MCP. Review the server first."},

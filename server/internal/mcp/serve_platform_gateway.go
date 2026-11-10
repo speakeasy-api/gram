@@ -134,6 +134,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
 		deniedMembers:       nil,
+		hostedMemberSlugs:   nil,
 		execute:             false,
 		discoveryMode:       metamcp.DiscoveryModeProgressive,
 		authenticated:       true,

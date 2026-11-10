@@ -2,7 +2,6 @@
 import { describe, expect, it } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpMember } from "@gram/client/models/components/metamcpmember.js";
-import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import {
   buildAddCandidates,
   buildMemberRows,
@@ -202,81 +201,43 @@ describe("memberBackendKind", () => {
 });
 
 describe("buildAddCandidates", () => {
-  const toolset = (overrides: Partial<ToolsetEntry> = {}): ToolsetEntry =>
-    ({
-      id: "ts-1",
-      name: "Linear",
-      slug: "linear",
-      mcpEnabled: true,
-      ...overrides,
-    }) as ToolsetEntry;
-
-  it("offers toolsets that have no mcp_servers wrapper yet", () => {
+  it("never offers a hosted server, wrapper or not", () => {
     const candidates = buildAddCandidates(
-      [server({ id: "s-1", name: "Linear David", slug: "linear-david" })],
-      [toolset()],
-      new Set(),
-      "linear",
-    );
-    expect(candidates.map((c) => c.kind)).toEqual(["toolset", "server"]);
-  });
-
-  it("hides toolsets already represented by a wrapper row", () => {
-    const candidates = buildAddCandidates(
-      [server({ id: "s-1", name: "Linear", toolsetId: "ts-1" })],
-      [toolset()],
+      [
+        server({ id: "ts-1", name: "Own hosted", toolsetId: "ts-1" }),
+        server({ id: "s-1", name: "Wrapper", toolsetId: "ts-1" }),
+        server({ id: "s-2", name: "Remote", remoteMcpServerId: "r-1" }),
+      ],
       new Set(),
       "",
     );
-    expect(candidates).toEqual([
-      { kind: "server", server: expect.objectContaining({ id: "s-1" }) },
-    ]);
-  });
-
-  it("offers the toolset instead of its own hosted server", () => {
-    const candidates = buildAddCandidates(
-      [server({ id: "ts-1", name: "Linear", toolsetId: "ts-1" })],
-      [toolset()],
-      new Set(),
-      "",
-    );
-    expect(candidates).toEqual([
-      { kind: "toolset", toolset: expect.objectContaining({ id: "ts-1" }) },
-    ]);
+    expect(candidates.map((c) => c.id)).toEqual(["s-2"]);
   });
 
   it("drops servers that are already members and trims the search", () => {
     const candidates = buildAddCandidates(
-      [server({ id: "s-1", name: "Linear" })],
-      [toolset(), toolset({ id: "ts-2", name: "Other", slug: "other" })],
+      [
+        server({ id: "s-1", name: "Linear" }),
+        server({ id: "s-2", name: "Linear Two", slug: "linear-two" }),
+        server({ id: "s-3", name: "Other", slug: "other" }),
+      ],
       new Set(["s-1"]),
       "  LINEAR ",
     );
-    expect(candidates).toEqual([
-      { kind: "toolset", toolset: expect.objectContaining({ id: "ts-1" }) },
-    ]);
+    expect(candidates.map((c) => c.id)).toEqual(["s-2"]);
   });
 
-  it("interleaves kinds by display name, treating a nameless server as empty", () => {
+  it("sorts by display name, treating a nameless server as empty", () => {
     const candidates = buildAddCandidates(
       [
         server({ id: "s-1", name: "Zulu" }),
         server({ id: "s-2", name: undefined, slug: "nameless" }),
-      ],
-      [
-        toolset({ id: "ts-1", name: "Alpha" }),
-        toolset({ id: "ts-2", name: "Mike" }),
+        server({ id: "s-3", name: "Alpha" }),
       ],
       new Set(),
       "",
     );
-    expect(
-      candidates.map((c) =>
-        c.kind === "server"
-          ? `server:${c.server.id}`
-          : `toolset:${c.toolset.id}`,
-      ),
-    ).toEqual(["server:s-2", "toolset:ts-1", "toolset:ts-2", "server:s-1"]);
+    expect(candidates.map((c) => c.id)).toEqual(["s-2", "s-3", "s-1"]);
   });
 });
 import {
@@ -286,28 +247,22 @@ import {
 } from "./memberRows";
 
 describe("addCandidateBatch", () => {
-  it("attaches distinct existing wrappers sharing a toolset", async () => {
-    const candidates = ["first", "second"].map((id) => ({
-      kind: "server" as const,
-      server: server({ id, toolsetId: "tools" }),
-    }));
+  it("attaches each candidate in order", async () => {
+    const candidates = ["first", "second"].map((id) => server({ id }));
     const state = {
-      wrappers: new Map([["toolset-tools", "batch-wrapper"]]),
       orders: new Map<string, number>(),
       completed: new Set<string>(),
     };
     const calls: [string, number][] = [];
     const results = await addCandidateBatch(candidates, 0, state, {
-      createWrapper: async () => {
-        throw new Error("Unexpected creation");
-      },
       attach: async (id, order) => {
         calls.push([id, order]);
       },
     });
-    expect(
-      candidates.map((candidate) => candidateKey(candidate, state.wrappers)),
-    ).toEqual(["server-first", "server-second"]);
+    expect(candidates.map((candidate) => candidateKey(candidate))).toEqual([
+      "server-first",
+      "server-second",
+    ]);
     expect(calls).toEqual([
       ["first", 0],
       ["second", 1],
@@ -318,35 +273,23 @@ describe("addCandidateBatch", () => {
     ]);
   });
 
-  it("continues after failures and retries without reminting wrappers or readding successes", async () => {
-    const hosted = {
-      kind: "toolset" as const,
-      toolset: { id: "tools", name: "Hosted" } as ToolsetEntry,
-    };
-    const remote = {
-      kind: "server" as const,
-      server: server({ id: "remote", name: "Remote" }),
-    };
+  it("continues after failures and retries without readding successes", async () => {
+    const flaky = server({ id: "flaky", name: "Flaky" });
+    const remote = server({ id: "remote", name: "Remote" });
     const state = {
-      wrappers: new Map<string, string>(),
       orders: new Map<string, number>(),
       completed: new Set<string>(),
     };
-    let creates = 0;
     let fail = true;
     const calls: [string, number][] = [];
     const dependencies = {
-      createWrapper: async () => {
-        creates++;
-        return "wrapper";
-      },
       attach: async (id: string, order: number) => {
         calls.push([id, order]);
-        if (id === "wrapper" && fail) throw new Error("Try again");
+        if (id === "flaky" && fail) throw new Error("Try again");
       },
     };
     const first = await addCandidateBatch(
-      [hosted, remote],
+      [flaky, remote],
       4,
       state,
       dependencies,
@@ -354,97 +297,47 @@ describe("addCandidateBatch", () => {
     expect(first.map((r) => r.error)).toEqual(["Try again", undefined]);
     reconcileCompletedMembers(state, new Set(["remote"]));
     fail = false;
-    const refreshed = {
-      kind: "server" as const,
-      server: server({ id: "wrapper", toolsetId: "tools" }),
-    };
-    await addCandidateBatch([refreshed, remote], 6, state, dependencies);
-    expect(creates).toBe(1);
+    await addCandidateBatch([flaky, remote], 6, state, dependencies);
     expect(calls).toEqual([
-      ["wrapper", 4],
+      ["flaky", 4],
       ["remote", 5],
-      ["wrapper", 4],
+      ["flaky", 4],
     ]);
-    expect(state.completed.has(candidateKey(hosted))).toBe(true);
-    expect(candidateKey(refreshed, state.wrappers)).toBe(candidateKey(hosted));
-  });
-
-  it("retries wrapper creation only when creation failed", async () => {
-    const candidate = {
-      kind: "toolset" as const,
-      toolset: { id: "tools", name: "Hosted" } as ToolsetEntry,
-    };
-    const state = {
-      wrappers: new Map<string, string>(),
-      orders: new Map<string, number>(),
-      completed: new Set<string>(),
-    };
-    let creates = 0;
-    const dependencies = {
-      createWrapper: async () => {
-        if (++creates === 1) throw new Error("Creation failed");
-        return "wrapper";
-      },
-      attach: async () => {},
-    };
-    expect(
-      (await addCandidateBatch([candidate], 0, state, dependencies))[0]?.error,
-    ).toBe("Creation failed");
-    expect(
-      (await addCandidateBatch([candidate], 0, state, dependencies))[0]?.error,
-    ).toBeUndefined();
-    expect(creates).toBe(2);
+    expect(state.completed.has(candidateKey(flaky))).toBe(true);
   });
 });
 
 describe("completed membership reconciliation", () => {
-  it.each([false, true])(
-    "reattaches an externally removed member (hosted: %s)",
-    async (hosted) => {
-      const candidate = hosted
-        ? {
-            kind: "toolset" as const,
-            toolset: { id: "tools", name: "Hosted" } as ToolsetEntry,
-          }
-        : { kind: "server" as const, server: server({ id: "remote" }) };
-      const state = {
-        wrappers: new Map<string, string>(),
-        orders: new Map<string, number>(),
-        completed: new Set<string>(),
-      };
-      let creates = 0;
-      const calls: [string, number][] = [];
-      const dependencies = {
-        createWrapper: async () => {
-          creates++;
-          return "wrapper";
-        },
-        attach: async (id: string, order: number) => {
-          calls.push([id, order]);
-        },
-      };
-      const id = hosted ? "wrapper" : "remote";
-      await addCandidateBatch([candidate], 0, state, dependencies);
-      // No fresh membership yet: the old response must not undo protection.
-      await addCandidateBatch([candidate], 0, state, dependencies);
-      reconcileCompletedMembers(state, new Set([id]));
-      await addCandidateBatch([candidate], 0, state, dependencies);
-      expect(calls).toEqual([[id, 0]]);
-      // Another tab removes it; the next successful response is authoritative.
-      reconcileCompletedMembers(state, new Set());
-      const refreshed = { kind: "server" as const, server: server({ id }) };
-      const results = await addCandidateBatch(
-        [refreshed],
-        7,
-        state,
-        dependencies,
-      );
-      expect(results[0]?.error).toBeUndefined();
-      expect(calls).toEqual([
-        [id, 0],
-        [id, 7],
-      ]);
-      expect(creates).toBe(hosted ? 1 : 0);
-    },
-  );
+  it("reattaches an externally removed member", async () => {
+    const candidate = server({ id: "remote" });
+    const state = {
+      orders: new Map<string, number>(),
+      completed: new Set<string>(),
+    };
+    const calls: [string, number][] = [];
+    const dependencies = {
+      attach: async (id: string, order: number) => {
+        calls.push([id, order]);
+      },
+    };
+    await addCandidateBatch([candidate], 0, state, dependencies);
+    // No fresh membership yet: the old response must not undo protection.
+    await addCandidateBatch([candidate], 0, state, dependencies);
+    reconcileCompletedMembers(state, new Set(["remote"]));
+    await addCandidateBatch([candidate], 0, state, dependencies);
+    expect(calls).toEqual([["remote", 0]]);
+    // Another tab removes it; the next successful response is authoritative.
+    reconcileCompletedMembers(state, new Set());
+    const results = await addCandidateBatch(
+      [candidate],
+      7,
+      state,
+      dependencies,
+    );
+    expect(results[0]?.error).toBeUndefined();
+    expect(calls).toEqual([
+      ["remote", 0],
+      ["remote", 7],
+    ]);
+  });
 });

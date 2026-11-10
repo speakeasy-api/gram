@@ -47,7 +47,7 @@ func registerGatewayTools(reg *Registrar, service *GatewayService) {
 		Name:  createGatewayToolName,
 		Title: "Create a Gateway",
 		Description: "Create a gateway in an explicit project: one MCP endpoint that serves the tools of several MCP servers already in that project, each tool named <server slug>--<tool name>. " +
-			"Supply a name and the exact MCP server IDs from find_mcp in that same project, in the order the gateway should list them. Before calling, tell the user the project, the name, and the servers it will front. " +
+			"Supply a name and the exact MCP server IDs from find_mcp in that same project, in the order the gateway should list them. Only remote and tunneled servers can be members; servers hosted by Speakeasy cannot. Before calling, tell the user the project, the name, and the servers it will front. " +
 			"The gateway, its default address, and every member are created together, or nothing is: when any server cannot sit behind a gateway, the refusal lists each one with its reason, and the call can be repeated without them. " +
 			"The gateway is private, requires sign-in, and is reachable on the public network only; each person signs in to each member's provider through it. It reaches nobody until it is put into a plugin with distribute_mcp_to_plugin. " +
 			"Browser connections approved through the Tool access picker keep their approved member servers, even with All tools (live); added or previously unavailable servers need new consent. Older connections, management-issued sessions and agents follow current membership and their access grants. " +

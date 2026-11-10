@@ -26,10 +26,9 @@ export function GatewayOverviewTab({
   const { rows, isLoading } = useGatewayMemberRows(metaMcpServer.id);
 
   // Only members the gateway can actually dispatch to count as served;
-  // unproxied and slugless ones sit in the list permanently excluded.
+  // hosted, unproxied and slugless ones sit in the list permanently excluded.
   const servable = rows.filter(
-    (row) =>
-      row.classification === "hosted" || row.classification === "proxied",
+    (row) => row.classification === "proxied",
   ).length;
 
   return (

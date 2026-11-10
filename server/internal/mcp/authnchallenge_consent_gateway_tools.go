@@ -165,6 +165,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
 		deniedMembers:       nil,
+		hostedMemberSlugs:   nil,
 		execute:             false,
 		discoveryMode:       "",
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
@@ -209,9 +210,6 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	picks := chooseConsentUpstreamClientPicks(endpoint, members, view.cards, preferred)
 	for i := range members {
 		member := &members[i]
-		if member.backend != metaMemberBackendProxied {
-			continue
-		}
 		if memberAuth != nil {
 			res, resolveErr := s.resolveMemberAuthChoice(ctx, endpoint, *member, memberAuth[member.serverID], subject)
 			s.applyMemberAuthClient(ctx, member, res, resolveErr)
@@ -304,14 +302,11 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 			continue
 		}
 
-		var authBinding *connectionCatalogAuth
-		if member.backend == metaMemberBackendProxied {
-			clientID := uuid.Nil
-			if member.authClient != nil {
-				clientID = member.authClient.clientID
-			}
-			authBinding = &connectionCatalogAuth{ClientID: clientID, RegistrationID: member.chosenClientID}
+		clientID := uuid.Nil
+		if member.authClient != nil {
+			clientID = member.authClient.clientID
 		}
+		authBinding := &connectionCatalogAuth{ClientID: clientID, RegistrationID: member.chosenClientID}
 		toolMembers[member.slug] = connectionCatalogMember{ServerID: member.serverID, ProjectID: member.projectID, BackendHash: backendHashes[member.serverID].hash, TypedBackendHash: backendHashes[member.serverID].typedHash, Auth: authBinding}
 	}
 	for _, tool := range inventory {

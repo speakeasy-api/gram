@@ -68,7 +68,7 @@ func TestDescribeMetaMemberWithRetryKeepsTheFailureWhenASlotFreesTooLate(t *test
 
 	synctest.Test(t, func(t *testing.T) {
 		rateLimited := memberDiscoveryError{metaMemberError: &metaMemberError{message: "rate limited"}, status: http.StatusTooManyRequests, retryable: true, retryAfter: 100 * time.Millisecond}
-		member := metaMember{slug: "linear", serverID: uuid.New(), projectID: uuid.New(), backend: metaMemberBackendProxied, upstreamUnavailable: rateLimited}
+		member := metaMember{slug: "linear", serverID: uuid.New(), projectID: uuid.New(), upstreamUnavailable: rateLimited}
 		catalog := &connectionCatalog{Members: map[string]connectionCatalogMember{member.slug: {ServerID: member.serverID, ProjectID: member.projectID}}}
 		gate := &metaGateContext{catalog: catalog, execute: true}
 		service := &Service{metaRuntime: MetaRuntimeConfig{MemberCallTimeout: time.Second}}

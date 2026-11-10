@@ -42,7 +42,7 @@ func (r *authClientResolution) servedCredential() contextvalues.UpstreamCredenti
 // it, otherwise what an agent's member authorization recorded for the
 // registration the routed token belongs to. The zero value names none.
 func memberServedCredential(gate metaGateContext, member metaMember, routed remotesessions.UpstreamToken) contextvalues.UpstreamCredential {
-	if gate.memberChoices != nil && member.backend == metaMemberBackendProxied && gate.memberChoices.serves(member) {
+	if gate.memberChoices != nil && gate.memberChoices.serves(member) {
 		return member.authClient.servedCredential()
 	}
 	// A header member sends no token; its credential is recorded under no

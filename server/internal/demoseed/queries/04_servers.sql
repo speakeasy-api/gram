@@ -294,17 +294,14 @@ INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
    @user_session_issuer_id::uuid);
 
 -- sort_order is the order agents see members in list_servers.
+-- The demo gateways hold remote servers. Gateways never serve hosted ones.
 -- name: ServersInsertMetaMCPServerMembers :exec
 INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order) VALUES
-  (@support_member_id::uuid, @project_id::uuid,
-   @meta_id::uuid, @support_server_id::uuid, 0),
-  (@ops_member_id::uuid, @project_id::uuid,
-   @meta_id::uuid, @ops_server_id::uuid, 1),
   (@linear_member_id::uuid, @project_id::uuid,
-   @meta_id::uuid, @linear_server_id::uuid, 2),
+   @meta_id::uuid, @linear_server_id::uuid, 0),
   (@slack_member_id::uuid, @project_id::uuid,
-   @meta_id::uuid, @slack_server_id::uuid, 3);
+   @meta_id::uuid, @slack_server_id::uuid, 1);
 
 -- Stored as Progressive (the column default) because the shared demo org has
 -- no code runtime; local fixtures switch it to code_mode (RunLocalFixtures).
@@ -317,10 +314,10 @@ INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
 -- name: ServersInsertCodeGatewayMembers :exec
 INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order) VALUES
-  (@support_member_id::uuid, @project_id::uuid,
-   @meta_id::uuid, @support_server_id::uuid, 0),
-  (@ops_member_id::uuid, @project_id::uuid,
-   @meta_id::uuid, @ops_server_id::uuid, 1);
+  (@linear_member_id::uuid, @project_id::uuid,
+   @meta_id::uuid, @linear_server_id::uuid, 0),
+  (@slack_member_id::uuid, @project_id::uuid,
+   @meta_id::uuid, @slack_server_id::uuid, 1);
 
 -- name: ServersInsertCodeGatewayEndpoint :exec
 INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
@@ -333,7 +330,7 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
 INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order, deleted_at) VALUES
   (@id::uuid, @project_id::uuid,
-   @meta_id::uuid, @github_server_id::uuid, 4,
+   @meta_id::uuid, @github_server_id::uuid, 2,
    now() - interval '3 days');
 
 -- Endpoint slugs on the platform domain are globally unique and org-slug

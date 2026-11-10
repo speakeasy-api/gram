@@ -616,10 +616,9 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 	return tokens, nil
 }
 
-// memberChoices applies one credential's choices to a gateway's proxied
-// members and resolves each member's credential from its chosen client, once
-// per member per request. Hosted members keep the issuer-derived path. Once
-// the organization enforces, each member is served by the typed auth client
+// memberChoices applies one credential's choices to a gateway's members and
+// resolves each member's credential from its chosen client, once per member
+// per request. Once the organization enforces, each member is served by the typed auth client
 // resolver and the mandatory check, as a direct endpoint is.
 type memberChoices struct {
 	selector *upstreamSelector
@@ -784,34 +783,29 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, attribution rem
 	return pinAttachedSession(tokens, pinned, false)
 }
 
-// apply rewrites each proxied member's routing identity from the credential's
-// choice: the chosen client's issuer, none for no-auth, or the reason the
-// member cannot be reached. A missing or unusable choice degrades that member
-// alone. Choices are read in batches; a read failure degrades proxied members
-// while hosted members keep serving.
+// apply rewrites each member's routing identity from the credential's choice:
+// the chosen client's issuer, none for no-auth, or the reason the member
+// cannot be reached. A missing or unusable choice degrades that member alone.
+// Choices are read in batches; a read failure degrades every member.
 func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members []metaMember, typed bool) {
 	ids := make([]uuid.UUID, 0, len(members))
 	projects := make(map[uuid.UUID]uuid.UUID, len(members))
 	for _, member := range members {
-		if member.backend == metaMemberBackendProxied {
-			ids = append(ids, member.serverID)
-			projects[member.serverID] = member.projectID
-		}
+		ids = append(ids, member.serverID)
+		projects[member.serverID] = member.projectID
 	}
 	if len(ids) == 0 {
 		return
 	}
 	if c.selector == nil {
 		// A principal credential that binds no execution-selection profile
-		// reaches no proxied member once the organization enforces.
+		// reaches no member once the organization enforces.
 		for i := range members {
-			if members[i].backend == metaMemberBackendProxied {
-				members[i].upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", members[i].slug)}
-			}
+			members[i].upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", members[i].slug)}
 		}
 		return
 	}
-	// Under enforcement every proxied member is served through the typed
+	// Under enforcement every member is served through the typed
 	// resolver, and a profile has no upstream client choice to fall back to.
 	typed = typed || c.enforced || c.profile
 	var resolved map[uuid.UUID]authClientResolution
@@ -892,9 +886,6 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	headers, headerErr := c.selector.service.loadAuthClientHeaders(ctx, c.selector.organizationID, headerIDs)
 	for i := range members {
 		member := &members[i]
-		if member.backend != metaMemberBackendProxied {
-			continue
-		}
 		if c.onlyChosen {
 			// A failed read degrades every member rather than letting one the
 			// key has a choice for fall back to the issuer's credentials.
@@ -1272,16 +1263,14 @@ func (s *Service) serverAssociatedClients(ctx context.Context, organizationID st
 	return associated, nil
 }
 
-// attachAssociatedClients records each proxied member's associated clients,
-// so consent and gateway eligibility match a client to the members it is
+// attachAssociatedClients records each member's associated clients, so
+// consent and gateway eligibility match a client to the members it is
 // configured for rather than to every member sharing its authorization
-// server. Hosted members keep the issuer match.
+// server.
 func (s *Service) attachAssociatedClients(ctx context.Context, organizationID string, members []metaMember) error {
 	ids := make([]uuid.UUID, 0, len(members))
 	for _, member := range members {
-		if member.backend == metaMemberBackendProxied {
-			ids = append(ids, member.serverID)
-		}
+		ids = append(ids, member.serverID)
 	}
 	associated, err := s.serverAssociatedClients(ctx, organizationID, ids)
 	if err != nil || associated == nil {
@@ -1296,9 +1285,9 @@ func (s *Service) attachAssociatedClients(ctx context.Context, organizationID st
 }
 
 // memberUsesClient reports whether a client authenticates for a member: one
-// of a proxied member's associated clients, otherwise, for a hosted member, a
-// client of the member's authorization server in the member's own project
-// when a project owns it.
+// of its associated clients once they were read (a member with none matches
+// no client), otherwise a client of the member's authorization server in the
+// member's own project when a project owns it.
 func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, clientProjectID uuid.NullUUID) bool {
 	if member.associatedClients != nil {
 		return member.associatedClients[clientID]
@@ -1310,8 +1299,8 @@ func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, cli
 }
 
 // memberNeedsSignIn reports whether a member authenticates upstream through
-// a client: a proxied member with associated clients, or a member with a
-// derived authorization server. A member with no associated client that
+// a client: a member with associated clients, or a member with a derived
+// authorization server. A member with no associated client that
 // still derives an authorization server signs in through a client nobody has
 // configured for it, so it needs setup rather than reading as needing none.
 // A member whose clients are its typed registrations signs in only through

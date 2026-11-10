@@ -10,7 +10,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { MemoryRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -74,7 +73,6 @@ function setup(
           open
           onOpenChange={() => {}}
           servers={servers}
-          toolsets={[]}
           isLoading={false}
           loadFailed={false}
           onRetryLoad={() => {}}
@@ -95,7 +93,7 @@ const checked = (name: string) =>
   screen.getByRole("checkbox", { name }).getAttribute("aria-checked");
 
 describe("Add servers sheet", () => {
-  it("offers one creation trigger with accessible grouped choices", () => {
+  it("offers one creation trigger with the server kinds a gateway can use", () => {
     setup();
     const triggers = screen.getAllByRole("button", { name: "Add new" });
     expect(triggers).toHaveLength(1);
@@ -106,46 +104,29 @@ describe("Add servers sheet", () => {
       pointerType: "mouse",
     });
     const menu = screen.getByRole("menu");
-    const groups = within(menu).getAllByRole("group");
-    expect(groups.map((group) => group.getAttribute("aria-label"))).toEqual([
-      "Recommended",
-      "Advanced",
-    ]);
     const expected = [
       [
-        [
-          "From the catalog",
-          "Pick a reviewed third-party server — Salesforce, Datadog, Linear, Slack, Okta and more.",
-        ],
-        [
-          "Hosted remotely",
-          "Add a server that already runs elsewhere by its URL, proxied through Speakeasy.",
-        ],
-        [
-          "Reachable through a tunnel",
-          "Connect a server running inside your own network through a tunnel.",
-        ],
+        "From the catalog",
+        "Pick a reviewed third-party server — Salesforce, Datadog, Linear, Slack, Okta and more.",
       ],
       [
-        ["From your API", "Upload an OpenAPI document to generate tools."],
-        [
-          "From an existing source",
-          "Build a server from an OpenAPI document or function this project already has.",
-        ],
-        ["Write custom code", "Create tools with TypeScript functions."],
+        "Hosted remotely",
+        "Add a server that already runs elsewhere by its URL, proxied through Speakeasy.",
+      ],
+      [
+        "Reachable through a tunnel",
+        "Connect a server running inside your own network through a tunnel.",
       ],
     ] as const;
-    groups.forEach((group, index) => {
-      const items = within(group).getAllByRole("menuitem");
-      expect(items).toHaveLength(expected[index]!.length);
-      for (const [label, description] of expected[index]!) {
-        expect(
-          within(group).getByRole("menuitem", {
-            name: `${label} ${description}`,
-          }),
-        ).toBeTruthy();
-      }
-    });
+    // Gateways never hold a hosted server, so nothing here creates one.
+    expect(within(menu).getAllByRole("menuitem")).toHaveLength(expected.length);
+    for (const [label, description] of expected) {
+      expect(
+        within(menu).getByRole("menuitem", {
+          name: `${label} ${description}`,
+        }),
+      ).toBeTruthy();
+    }
   });
 
   it("dismisses only the dropdown on the first outside click, then the sheet", async () => {
@@ -246,14 +227,6 @@ describe("Add servers sheet", () => {
   it("shows slugs, classifications and exclusion badges", () => {
     setup({
       servers: [servers[0]!, { ...servers[1]!, visibility: "disabled" }],
-      toolsets: [
-        {
-          id: "tools",
-          name: "Local tools",
-          slug: "local-tools",
-          mcpEnabled: false,
-        },
-      ] as ToolsetEntry[],
     });
     const alpha = within(
       screen.getByRole("checkbox", { name: "Alpha" }).closest("li")!,
@@ -266,12 +239,6 @@ describe("Add servers sheet", () => {
     );
     expect(beta.getByText("Disabled")).toBeTruthy();
     expect(beta.getByText("Excluded")).toBeTruthy();
-    const tools = within(
-      screen.getByRole("checkbox", { name: "Local tools" }).closest("li")!,
-    );
-    expect(tools.getByText("local-tools")).toBeTruthy();
-    expect(tools.getByText("Hosted")).toBeTruthy();
-    expect(tools.getByText("MCP off")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
   });
 
@@ -358,107 +325,35 @@ describe("Add servers sheet", () => {
     expect([checked("Alpha"), checked("Beta")]).toEqual(["true", "false"]);
   });
 
-  it.each([
-    { isLoading: true },
-    { loadFailed: true },
-    { toolsetsLoading: true },
-  ])("hides Select all while %o", (props) => {
-    setup(props);
-    expect(screen.queryByRole("button", { name: "Select all" })).toBeNull();
-  });
+  it.each([{ isLoading: true }, { loadFailed: true }])(
+    "hides Select all while %o",
+    (props) => {
+      setup(props);
+      expect(screen.queryByRole("button", { name: "Select all" })).toBeNull();
+    },
+  );
 
-  it("selects existing wrappers sharing a toolset independently", async () => {
-    const { onAdd } = setup({
-      servers: servers.map((server) => ({ ...server, toolsetId: "shared" })),
+  it("never offers a hosted server", () => {
+    setup({
+      servers: [
+        ...servers,
+        {
+          id: "hosted",
+          name: "Hosted",
+          slug: "hosted",
+          toolsetId: "tools",
+        } as McpServer,
+      ],
     });
-    fireEvent.click(screen.getByText("Beta"));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers" }),
-    );
-    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
-    expect(onAdd.mock.calls[0]?.[0]).toEqual([
-      expect.objectContaining({ server: expect.objectContaining({ id: "b" }) }),
-    ]);
-  });
-
-  it("retains a failed toolset selection only for its batch-created wrapper", async () => {
-    const wrappers = new Map<string, string>();
-    const hosted = {
-      id: "tools",
-      name: "Hosted",
-      slug: "hosted",
-    } as ToolsetEntry;
-    const onAdd = vi.fn(async () => {
-      wrappers.set("toolset-tools", "created");
-      return [{ key: "toolset-tools", name: "Hosted", error: "Try again" }];
-    });
-    const props = {
-      open: true,
-      onOpenChange: () => {},
-      toolsets: [hosted],
-      isLoading: false,
-      loadFailed: false,
-      onRetryLoad: () => {},
-      memberServerIds: new Set<string>(),
-      onAdd,
-      adding: false,
-      projectId: "project",
-      gatewayId: "gateway",
-      wrappers,
-    };
-    const view = render(
-      <TooltipProvider>
-        <MemoryRouter>
-          <AddServersSheet {...props} servers={[]} />
-        </MemoryRouter>
-      </TooltipProvider>,
-    );
-    fireEvent.click(screen.getByRole("checkbox", { name: "Hosted" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers" }),
-    );
-    await screen.findByText("Hosted: Try again");
-    view.rerender(
-      <TooltipProvider>
-        <MemoryRouter>
-          <AddServersSheet
-            {...props}
-            servers={
-              [
-                {
-                  id: "other",
-                  name: "Other",
-                  slug: "other",
-                  toolsetId: "tools",
-                },
-                {
-                  id: "created",
-                  name: "Hosted",
-                  slug: "hosted",
-                  toolsetId: "tools",
-                },
-              ] as McpServer[]
-            }
-          />
-        </MemoryRouter>
-      </TooltipProvider>,
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers" }),
-    );
-    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(2));
-    expect(onAdd).toHaveBeenLastCalledWith([
-      expect.objectContaining({
-        server: expect.objectContaining({ id: "created" }),
-      }),
-    ]);
+    expect(screen.getByRole("checkbox", { name: "Alpha" })).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: "Hosted" })).toBeNull();
   });
 
   it.each([
     [{ isLoading: true }, "Loading servers…"],
     [
       { servers: [] },
-      "No existing servers yet. Create a new server to get started.",
+      "No servers a gateway can use yet. Create a new server to get started.",
     ],
     [
       { memberServerIds: new Set(["a", "b"]) },
@@ -496,7 +391,7 @@ describe("Add servers sheet", () => {
       ),
     ).toBeTruthy();
   });
-  it("blocks direct-connect and slugless servers and explains hosted permission requirements", () => {
+  it("blocks direct-connect and slugless servers and explains why", () => {
     setup({
       servers: [
         ...servers,
@@ -541,26 +436,6 @@ describe("Add servers sheet", () => {
     expect(checkbox.getAttribute("aria-checked")).toBe("true");
   });
 
-  it("gates hosted wrapper creation separately from gateway membership", () => {
-    permissions.scopes.delete("mcp:write:project");
-    setup({
-      toolsets: [
-        { id: "tools", name: "Hosted", slug: "hosted", mcpEnabled: false },
-      ] as ToolsetEntry[],
-    });
-    expect(
-      screen.getByRole("checkbox", { name: "Hosted" }).hasAttribute("disabled"),
-    ).toBe(true);
-    expect(
-      screen.getByRole("checkbox", { name: "Alpha" }).hasAttribute("disabled"),
-    ).not.toBe(true);
-    expect(
-      screen.getByText(
-        /MCP off: excluded until enabled.*Requires project-level/,
-      ),
-    ).toBeTruthy();
-  });
-
   it.each(["mcp:write", "project:write"])(
     "gates creation choices by the exact project scope: %s",
     (scope) => {
@@ -571,23 +446,12 @@ describe("Add servers sheet", () => {
         ctrlKey: false,
         pointerType: "mouse",
       });
-      for (const label of [
-        "Hosted remotely",
-        "Reachable through a tunnel",
-        "From an existing source",
-      ]) {
+      for (const label of ["Hosted remotely", "Reachable through a tunnel"]) {
         expect(
           screen
             .getByRole("menuitem", { name: new RegExp(`^${label}`) })
             .getAttribute("aria-disabled") === "true",
         ).toBe(scope === "mcp:write");
-      }
-      for (const label of ["From your API", "Write custom code"]) {
-        expect(
-          screen
-            .getByRole("menuitem", { name: new RegExp(`^${label}`) })
-            .getAttribute("aria-disabled") === "true",
-        ).toBe(true);
       }
     },
   );
@@ -626,18 +490,6 @@ describe("Add servers sheet", () => {
       "Reachable through a tunnel",
       "/org/projects/project/mcp/add/tunneled?attachToGateway=gateway",
     ],
-    [
-      "From your API",
-      "/org/projects/project/mcp/add/openapi?attachToGateway=gateway",
-    ],
-    [
-      "From an existing source",
-      "/org/projects/project/mcp/add/from-existing-source?attachToGateway=gateway",
-    ],
-    [
-      "Write custom code",
-      "/org/projects/project/mcp/add/function?attachToGateway=gateway",
-    ],
   ])("opens %s with gateway context", (label, href) => {
     setup();
     fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
@@ -651,22 +503,6 @@ describe("Add servers sheet", () => {
     });
     fireEvent.click(item);
     expect(permissions.navigate).toHaveBeenCalledWith(href);
-  });
-
-  it("offers tunnel and function creation together", () => {
-    setup();
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
-      button: 0,
-      ctrlKey: false,
-      pointerType: "mouse",
-    });
-    expect(
-      screen.getByRole("menuitem", { name: /^Reachable through a tunnel/ }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("menuitem", { name: /^Write custom code/ }),
-    ).toBeTruthy();
-    expect(screen.getAllByRole("menuitem")).toHaveLength(6);
   });
 
   it("guards rapid duplicate submits while a batch is pending", async () => {
@@ -771,18 +607,10 @@ describe("Add servers sheet", () => {
       expect(onAdd.mock.calls).toHaveLength(2);
       expect(onAdd).toHaveBeenLastCalledWith(
         mode === "partial"
-          ? [
-              expect.objectContaining({
-                server: expect.objectContaining({ id: "b" }),
-              }),
-            ]
+          ? [expect.objectContaining({ id: "b" })]
           : [
-              expect.objectContaining({
-                server: expect.objectContaining({ id: "a" }),
-              }),
-              expect.objectContaining({
-                server: expect.objectContaining({ id: "b" }),
-              }),
+              expect.objectContaining({ id: "a" }),
+              expect.objectContaining({ id: "b" }),
             ],
       );
       expect(toast.success).toHaveBeenCalledExactlyOnceWith(
@@ -793,30 +621,6 @@ describe("Add servers sheet", () => {
     },
   );
 });
-
-it.each([{ toolsetsFailed: true }, { toolsetsLoading: true }])(
-  "allows available servers while hosted inventory is unavailable: %j",
-  async (props) => {
-    const onRetryLoad = vi.fn<() => void>();
-    const { onAdd } = setup({ ...props, onRetryLoad });
-    expect(
-      screen.queryByText(
-        "No existing servers yet. Create a new server to get started.",
-      ),
-    ).toBeNull();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Alpha" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers" }),
-    );
-    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
-    if (props.toolsetsFailed) {
-      fireEvent.click(
-        screen.getByRole("button", { name: "Retry loading hosted servers" }),
-      );
-      expect(onRetryLoad).toHaveBeenCalledTimes(1);
-    }
-  },
-);
 
 it.each([["project:read:project", "mcp:write:gateway"], ["mcp:write:gateway"]])(
   "allows catalog browsing with gateway write and grants %j",
@@ -838,34 +642,6 @@ it.each([["project:read:project", "mcp:write:gateway"], ["mcp:write:gateway"]])(
     expect(permissions.navigate).toHaveBeenCalledWith(
       "/org/projects/project/mcp/catalog?attachToGateway=gateway",
     );
-  },
-);
-
-it.each([
-  [true, { toolsetsLoading: true }],
-  [true, { toolsetsFailed: true }],
-  [false, { toolsetsLoading: true }],
-  [false, { toolsetsFailed: true }],
-] as const)(
-  "keeps creation guidance for an empty project (%s) during hosted inventory issues (%j)",
-  (empty, props) => {
-    setup({
-      ...props,
-      servers: empty ? [] : servers,
-      memberServerIds: new Set(["a", "b"]),
-    });
-    expect(
-      screen.queryByText(
-        "No existing servers yet. Create a new server to get started.",
-      ) !== null,
-    ).toBe(empty);
-    expect(
-      screen.queryByText("All existing servers have already been added."),
-    ).toBeNull();
-    expect(screen.getByRole("button", { name: "Add new" })).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Add selected servers" }),
-    ).toBeNull();
   },
 );
 

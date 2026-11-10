@@ -109,21 +109,3 @@ func TestShadowPrivateAndUnknownProxyAdmission(t *testing.T) {
 		})
 	}
 }
-
-func TestShadowMemberToolsetKeepsPrivateBoundary(t *testing.T) {
-	t.Parallel()
-	h := newShadowHarness(t, true)
-	ctx := t.Context()
-	shadow := h.service.newMandatoryShadow(ctx, shadowOrg)
-	toolset := &toolsetsrepo.Toolset{ID: uuid.New(), ProjectID: uuid.New()}
-	allowed, err := h.service.memberToolsetConnectAllowed(ctx, shadow, mandatorySurfaceConsent, false, toolset, true)
-	require.NoError(t, err)
-	require.True(t, allowed)
-	allowed, err = h.service.memberToolsetConnectAllowed(ctx, shadow, mandatorySurfaceConsent, false, toolset, false)
-	require.NoError(t, err)
-	require.False(t, allowed, "public member admission never bypasses a private underlying toolset")
-	require.Equal(t, map[attribute.Set]int64{
-		shadowKey(mandatorySurfaceConsent, mandatoryCallerAnonymous, "anonymous", true, "allow", "visibility", "none"):      1,
-		shadowKey(mandatorySurfaceConsent, mandatoryCallerAnonymous, "anonymous", false, "deny", "none", "unauthenticated"): 1,
-	}, h.points(t))
-}

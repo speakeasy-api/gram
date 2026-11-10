@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -173,31 +172,6 @@ func TestCodeModeRequiresOrganizationEntitlement(t *testing.T) { //nolint:parall
 	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/list", map[string]any{}))
 	require.NoError(t, err)
 	require.Contains(t, w.Body.String(), `"name":"execute"`, "granting the entitlement takes effect without a deploy")
-}
-
-// An organization gateway's Code Mode catalog omits a hosted member whose
-// private toolset the caller cannot connect to: derived membership drops it
-// (derivedMemberAuth), so no prefix is advertised whose every call would be
-// refused at dispatch.
-func TestCodeModeOrganizationGatewayHidesUnconnectableToolsets(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestMCPService(t)
-	fx := seedOrganizationGateway(t, ctx, ti)
-	auth, _ := contextvalues.GetAuthContext(ctx)
-	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
-	open := seedHostedMetaMember(t, ctx, ti, decoy.ID, "open hosted", 0, mcpservers.VisibilityPublic, "open_tool")
-	closed := seedHostedMetaMember(t, ctx, ti, decoy.ID, "closed hosted", 1, mcpservers.VisibilityPublic, "closed_tool")
-	setToolsetMcpPrivate(t, ctx, ti, closed.toolsetID, *auth.ProjectID)
-	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil})
-	enableCodeMode(t, ctx, ti)
-	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
-
-	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/list", map[string]any{}))
-
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	require.Contains(t, w.Body.String(), open.slug+"--")
-	require.NotContains(t, w.Body.String(), closed.slug+"--")
 }
 
 // TestCodeModeNeverServesAnonymousCallers pins the serving backstop for a

@@ -594,6 +594,7 @@ func (s *Service) metaValidationTarget(
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
 		deniedMembers:       nil,
+		hostedMemberSlugs:   nil,
 		execute:             false,
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
 		sessionID:           sessionID,

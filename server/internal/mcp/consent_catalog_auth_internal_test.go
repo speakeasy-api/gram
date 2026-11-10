@@ -119,7 +119,7 @@ func TestConsentSkipsARefusedConnectionInAnOutage(t *testing.T) {
 			require.Empty(t, chooseConsentUpstreamClientPicks(endpoint, nil, []remoteSessionCard{refused}, map[uuid.UUID]uuid.UUID{serverID: refusedID}), "a preference can't revive it")
 
 			healthyID := uuid.New()
-			member := metaMember{slug: "db", serverID: serverID, backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{refusedID: true, healthyID: true}}
+			member := metaMember{slug: "db", serverID: serverID, associatedClients: map[uuid.UUID]bool{refusedID: true, healthyID: true}}
 			cards := []remoteSessionCard{refused, {ClientID: healthyID.String(), Connected: true}}
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 			choices, err := (&Service{}).gatewayConsentServiceChoices(t.Context(), request, endpoint, urn.NewUserSubject("user_1"), []metaMember{member}, cards)
@@ -140,7 +140,7 @@ func TestConsentKeepsAHealthyConnectionInAnOutage(t *testing.T) {
 	endpoint := &ResolvedMcpEndpoint{McpServerID: validUUID(serverID), OrganizationID: "org_1"}
 	require.Equal(t, map[uuid.UUID]uuid.UUID{serverID: outageID}, chooseConsentUpstreamClientPicks(endpoint, nil, []remoteSessionCard{outage}, nil))
 
-	member := metaMember{slug: "db", serverID: serverID, backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{outageID: true, healthyID: true}}
+	member := metaMember{slug: "db", serverID: serverID, associatedClients: map[uuid.UUID]bool{outageID: true, healthyID: true}}
 	cards := []remoteSessionCard{outage, {ClientID: healthyID.String(), Connected: true}}
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	choices, err := (&Service{db: pool}).gatewayConsentServiceChoices(t.Context(), request, endpoint, urn.NewUserSubject("user_1"), []metaMember{member}, cards)

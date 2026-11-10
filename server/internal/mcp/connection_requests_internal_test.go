@@ -21,6 +21,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -28,17 +29,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
@@ -557,24 +558,26 @@ func TestMemberCredentialLoadFailureCarriesCause(t *testing.T) {
 	}
 }
 
-// A hosted gateway member whose credentials could not be loaded writes one row for that member.
-func TestHostedMemberCredentialLoadFailureRecordsOutcome(t *testing.T) {
+// A gateway member whose credentials could not be loaded writes one row for that member.
+func TestMemberCredentialLoadFailureRecordsOutcome(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	conn, err := TestInfra.CloneTestDatabase(t, "mcp_hosted_member_credential_load")
+	conn, err := TestInfra.CloneTestDatabase(t, "mcp_member_credential_load")
 	require.NoError(t, err)
 	orgID := "org-" + uuid.NewString()[:8]
-	require.NoError(t, orgsrepo.New(conn).CreateOrganizationMetadata(ctx, orgsrepo.CreateOrganizationMetadataParams{ID: orgID, Name: "Hosted", Slug: orgID}))
-	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Hosted", Slug: "hosted", OrganizationID: orgID})
-	require.NoError(t, err)
-	toolset, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{Name: "Hosted", Slug: "hosted", OrganizationID: orgID, ProjectID: project.ID})
-	require.NoError(t, err)
-	_, err = testrepo.New(conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: toolset.ID, ProjectID: project.ID, ToolsetID: validUUID(toolset.ID), Visibility: "public"})
+	require.NoError(t, orgsrepo.New(conn).CreateOrganizationMetadata(ctx, orgsrepo.CreateOrganizationMetadataParams{ID: orgID, Name: "Remote", Slug: orgID}))
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Remote", Slug: "remote", OrganizationID: orgID})
 	require.NoError(t, err)
 
 	rec := mcpconnectionattemptstest.New(t)
 	s := &Service{db: conn, logger: testenv.NewLogger(t), connections: rec.Recorder}
-	member := metaMember{serverID: toolset.ID, projectID: project.ID, slug: "member", backend: metaMemberBackendHosted, toolsetID: validUUID(toolset.ID)}
+	remote := remotemcptest.SeedServer(t, ctx, conn, remotemcp_repo.CreateServerParams{ProjectID: project.ID, TransportType: "streamable-http", Url: "https://remote.example.com/mcp"})
+	server, err := mcpservers_repo.New(conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{ID: uuid.New(), ProjectID: project.ID, Slug: conv.ToPGText("member"), RemoteMcpServerID: validUUID(remote.ID), Visibility: "public"})
+	require.NoError(t, err)
+	member := metaMember{serverID: server.ID, projectID: project.ID, slug: "member", remoteServerID: validUUID(remote.ID)}
+	// A caller's auth context is already present, so member attribution
+	// needs no organization lookup.
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: orgID, ProjectID: &project.ID})
 	gate := &metaGateContext{organizationID: orgID, projectID: project.ID, metaServerID: uuid.New(), request: httptest.NewRequest(http.MethodPost, "/mcp", nil), projectTokens: &projectTokenCache{
 		resolve: func(context.Context, uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			return nil, errors.New("scan remote session")

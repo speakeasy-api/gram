@@ -87,7 +87,7 @@ func TestRouteMetaMemberNamesTheChosenAuthClient(t *testing.T) {
 			f := newAuthClientFixture(t, pool)
 			resource := "https://mcp.example.com/" + f.remoteID.String()[:8]
 			clientID := uuid.New()
-			member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied, remoteServerID: validUUID(f.remoteID), chosenClientID: validUUID(f.registration),
+			member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "member", remoteServerID: validUUID(f.remoteID), chosenClientID: validUUID(f.registration),
 				authClient: &authClientResolution{outcome: authClientResolved, clientID: clientID, clientType: tc.clientType, connectionOwner: "user_owner"}}
 			choices := &memberChoices{byServer: map[uuid.UUID]*memberTokens{}, resolve: func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 				return map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): {Token: "chosen", Resource: resource}}, nil
@@ -112,7 +112,7 @@ func TestAgentMemberLegacyClientRecordsASharedCredential(t *testing.T) {
 	f.service.upstreamTokens = &fakeUpstreamTokens{issuerID: uuid.New(), bound: uuid.New()}
 	agentID := uuid.New()
 	gate := &metaGateContext{agentID: agentID, organizationID: f.orgID, servedCredentials: map[uuid.UUID]contextvalues.UpstreamCredential{}}
-	member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}
+	member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "member"}
 
 	_, err = f.service.agentMemberClientTokens(admittedAgentContext(t, f.orgID, agentID), gate, member, f.issuerID, f.registration, authClientTypeServiceAccount)
 	require.NoError(t, err)

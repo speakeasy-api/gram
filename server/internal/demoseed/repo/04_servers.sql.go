@@ -359,22 +359,22 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
 `
 
 type ServersInsertCodeGatewayMembersParams struct {
-	SupportMemberID uuid.UUID
-	ProjectID       uuid.UUID
-	MetaID          uuid.UUID
-	SupportServerID uuid.UUID
-	OpsMemberID     uuid.UUID
-	OpsServerID     uuid.UUID
+	LinearMemberID uuid.UUID
+	ProjectID      uuid.UUID
+	MetaID         uuid.UUID
+	LinearServerID uuid.UUID
+	SlackMemberID  uuid.UUID
+	SlackServerID  uuid.UUID
 }
 
 func (q *Queries) ServersInsertCodeGatewayMembers(ctx context.Context, arg ServersInsertCodeGatewayMembersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertCodeGatewayMembers,
-		arg.SupportMemberID,
+		arg.LinearMemberID,
 		arg.ProjectID,
 		arg.MetaID,
-		arg.SupportServerID,
-		arg.OpsMemberID,
-		arg.OpsServerID,
+		arg.LinearServerID,
+		arg.SlackMemberID,
+		arg.SlackServerID,
 	)
 	return err
 }
@@ -1468,36 +1468,25 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
   ($1::uuid, $2::uuid,
    $3::uuid, $4::uuid, 0),
   ($5::uuid, $2::uuid,
-   $3::uuid, $6::uuid, 1),
-  ($7::uuid, $2::uuid,
-   $3::uuid, $8::uuid, 2),
-  ($9::uuid, $2::uuid,
-   $3::uuid, $10::uuid, 3)
+   $3::uuid, $6::uuid, 1)
 `
 
 type ServersInsertMetaMCPServerMembersParams struct {
-	SupportMemberID uuid.UUID
-	ProjectID       uuid.UUID
-	MetaID          uuid.UUID
-	SupportServerID uuid.UUID
-	OpsMemberID     uuid.UUID
-	OpsServerID     uuid.UUID
-	LinearMemberID  uuid.UUID
-	LinearServerID  uuid.UUID
-	SlackMemberID   uuid.UUID
-	SlackServerID   uuid.UUID
+	LinearMemberID uuid.UUID
+	ProjectID      uuid.UUID
+	MetaID         uuid.UUID
+	LinearServerID uuid.UUID
+	SlackMemberID  uuid.UUID
+	SlackServerID  uuid.UUID
 }
 
 // sort_order is the order agents see members in list_servers.
+// The demo gateways hold remote servers. Gateways never serve hosted ones.
 func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg ServersInsertMetaMCPServerMembersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertMetaMCPServerMembers,
-		arg.SupportMemberID,
+		arg.LinearMemberID,
 		arg.ProjectID,
 		arg.MetaID,
-		arg.SupportServerID,
-		arg.OpsMemberID,
-		arg.OpsServerID,
-		arg.LinearMemberID,
 		arg.LinearServerID,
 		arg.SlackMemberID,
 		arg.SlackServerID,
@@ -1722,7 +1711,7 @@ const serversInsertRemovedGitHubMember = `-- name: ServersInsertRemovedGitHubMem
 INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order, deleted_at) VALUES
   ($1::uuid, $2::uuid,
-   $3::uuid, $4::uuid, 4,
+   $3::uuid, $4::uuid, 2,
    now() - interval '3 days')
 `
 
