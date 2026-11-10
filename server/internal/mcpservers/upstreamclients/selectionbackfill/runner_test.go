@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -717,6 +718,52 @@ func TestRecordUpstreamClientSelectionsFromTypedStateAlone(t *testing.T) {
 		named := f.namedAuthClient(credential, server)
 		require.True(t, named.NoAuth)
 		require.False(t, named.AuthClientID.Valid)
+	})
+
+	t.Run("an enforcing no-auth choice survives rollback and reenforcement", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		inherited := f.client(issuer)
+		server := f.server(issuer, inherited)
+		// Retiring the typed offer deliberately leaves this server unauthenticated,
+		// while its old OAuth association remains for rollback.
+		f.authClient("remote_session", inherited, server)
+		require.NoError(t, authclientbackfill.New(f.pool).SoftDeleteServerAuthClientLinksFixture(t.Context(), server))
+		credential := f.session(issuer)
+		require.Equal(t, int64(1), f.recordTypedOnly(issuer, credential, nil))
+
+		resolve := func(typedOnly bool) upstreamclientsrepo.GetAuthClientSelectionRow {
+			t.Helper()
+			rows, err := upstreamclientsrepo.New(f.pool).GetAuthClientSelection(t.Context(), upstreamclientsrepo.GetAuthClientSelectionParams{
+				TypedOnly:      typedOnly,
+				CredentialKind: upstreamclients.CredentialKindUserSession,
+				CredentialID:   credential,
+				McpServerIds:   []uuid.UUID{server},
+				OrganizationID: f.orgID,
+			})
+			require.NoError(t, err)
+			require.Len(t, rows, 1)
+			return rows[0]
+		}
+
+		enforced := resolve(true)
+		require.True(t, enforced.NoAuth)
+		require.False(t, enforced.AuthClientID.Valid)
+		require.False(t, enforced.RequiresUpstreamAuth)
+		require.False(t, enforced.UpstreamAuthPending)
+		require.False(t, enforced.ServerHasOauthClients, "enforcement ignores the leftover association")
+
+		rolledBack := resolve(false)
+		require.True(t, rolledBack.NoAuth)
+		require.False(t, rolledBack.AuthClientID.Valid)
+		require.True(t, rolledBack.ServerHasOauthClients, "rollback sees the leftover association again")
+		legacy := f.selection(issuer, credential, server)
+		require.True(t, legacy.NoAuth)
+		require.False(t, legacy.Usable, "the old path also refuses the choice instead of using the associated client")
+
+		require.Equal(t, enforced, resolve(true), "reenforcement serves the same choice without reissuance or backfill")
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: uuid.Nil}, f.selections(credential))
 	})
 
 	t.Run("an offered auth client is chosen without an association or an issuer binding", func(t *testing.T) {

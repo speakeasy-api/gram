@@ -2491,6 +2491,9 @@ ORDER BY tb.original_trigger_id;
 -- server's clients are the registrations of the live, enabled remote_session
 -- and service_account auth clients it offers, whichever issuer binds them,
 -- and no-auth is chosen when it offers no enabled OAuth-backed auth client.
+-- Automatic choices ignore issuer bindings too: one candidate is recorded
+-- even if unbound, while several candidates require a pick or reconnection
+-- even if the issuer binds only one.
 -- An offered ema client is OAuth-backed but is only ever recorded from a
 -- pick, so a server offering it alone gets no row. A client choice is
 -- recorded only with the auth client it names: when several offered clients

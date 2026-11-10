@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -154,6 +155,8 @@ type mintSessionParams struct {
 	AuthClientPicks map[uuid.UUID]uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
+	// TypedChoices is resolved before starting the issuance transaction.
+	TypedChoices bool
 }
 
 type mintedSession struct {
@@ -687,6 +690,11 @@ func (s *Service) handleTokenJWTBearerGrant(
 		return oops.E(oops.CodeUnexpected, err, "decide upstream credentials").LogError(ctx, logger)
 	}
 
+	typedChoices, err := authenforcement.ReadEnforced(authorizationCtx, s.db, endpoint.OrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "load upstream auth enforcement").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin ID-JAG session transaction").LogError(ctx, logger)
@@ -710,6 +718,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		UpstreamClientPicks:    upstreamPicks,
 		AuthClientPicks:        authClientPicks,
 		Catalog:                nil,
+		TypedChoices:           typedChoices,
 	}, logger)
 	if err != nil {
 		return err
@@ -884,6 +893,14 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return rejectGrant(mcpconnectionattempts.CodeInternalError, "agent authorization handoff is missing", mcpconnectionattempts.Detail("agent_handoff_missing"))
 	}
+	// Resolve enforcement before acquiring admission locks or consuming the code.
+	// A store outage must leave the authorization code available for retry.
+	typedChoices, err := authenforcement.ReadEnforced(ctx, s.db, endpoint.OrganizationID)
+	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return oops.E(oops.CodeUnavailable, err, "load upstream auth enforcement").LogError(ctx, logger)
+	}
+
 	subject := grant.Subject
 	var admissionTx pgx.Tx
 	admissionQueries := usersessions_repo.New(s.db)
@@ -1062,6 +1079,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		UpstreamClientPicks:    grant.UpstreamClientPicks,
 		AuthClientPicks:        grant.AuthClientPicks,
 		Catalog:                catalog,
+		TypedChoices:           typedChoices,
 	}, logger)
 	if err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
@@ -2170,14 +2188,6 @@ func (s *Service) mintSession(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
-	// A rotated session records no choices, so it reads nothing here.
-	typedChoices := false
-	if !params.CredentialID.Valid {
-		typedChoices, err = s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, logger)
-		}
-	}
 	return s.issueSession(ctx, clientRow, queries, sessionIssuance{
 		UserSessionIssuerID:    endpoint.UserSessionIssuerID,
 		ProjectID:              endpoint.ProjectID,
@@ -2200,7 +2210,7 @@ func (s *Service) mintSession(
 		UpstreamClientPicks:    params.UpstreamClientPicks,
 		AuthClientPicks:        params.AuthClientPicks,
 		Catalog:                params.Catalog,
-		TypedChoices:           typedChoices,
+		TypedChoices:           params.TypedChoices,
 	}, logger)
 }
 
