@@ -4230,6 +4230,11 @@ type GetToolUsageSummaryParams struct {
 	ShadowServerNames  []string
 	MetaMCPServerIDs   []string
 	UserFilters        []ToolUsageUserFilter
+	// CanonicalIdentityOrg, when set, folds the email user filters through the
+	// identity_map for that organization when they are pushed into the
+	// trace_summaries scan (see toolUsageScanIdentityFilter). Empty disables
+	// the fold and skips the pushdown for email filters.
+	CanonicalIdentityOrg string
 	// AuthorizerUserIDs are the user ids behind the email user filters. An agent
 	// call made on one of these people's behalf matches the user filter too.
 	AuthorizerUserIDs []string
@@ -5081,32 +5086,33 @@ func (q *Queries) GetMcpServerActivity(ctx context.Context, arg GetMcpServerActi
 	// Only MCP server targets matter for the listing. Restricting target_type
 	// here also lets normalized_events prune local_tool/skill/shadow rows early.
 	filterArg := GetToolUsageSummaryParams{
-		GramProjectID:      arg.GramProjectID,
-		TimeStart:          arg.TimeStart,
-		TimeEnd:            arg.TimeEnd,
-		BucketSizeNs:       0,
-		HostedMCPMatchers:  arg.HostedMCPMatchers,
-		MCPServerMatchers:  arg.MCPServerMatchers,
-		MetaMCPMatchers:    nil,
-		TargetTypes:        []string{ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP},
-		HostedToolsetSlugs: nil,
-		MCPServerIDs:       nil,
-		ShadowServerNames:  nil,
-		MetaMCPServerIDs:   nil,
-		UserFilters:        nil,
-		AuthorizerUserIDs:  nil,
-		AgentIDs:           nil,
-		ClientKeys:         nil,
-		HookSources:        nil,
-		AccountType:        "",
-		TargetLimit:        0,
-		UserLimit:          0,
-		UsersByTargetLimit: 0,
-		TargetToolRowLimit: 0,
-		TimeSeriesRowLimit: 0,
-		UserSeriesRowLimit: 0,
-		ClientLimit:        0,
-		ClientToolRowLimit: 0,
+		GramProjectID:        arg.GramProjectID,
+		TimeStart:            arg.TimeStart,
+		TimeEnd:              arg.TimeEnd,
+		BucketSizeNs:         0,
+		HostedMCPMatchers:    arg.HostedMCPMatchers,
+		MCPServerMatchers:    arg.MCPServerMatchers,
+		MetaMCPMatchers:      nil,
+		TargetTypes:          []string{ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP},
+		HostedToolsetSlugs:   nil,
+		MCPServerIDs:         nil,
+		ShadowServerNames:    nil,
+		MetaMCPServerIDs:     nil,
+		UserFilters:          nil,
+		CanonicalIdentityOrg: "",
+		AuthorizerUserIDs:    nil,
+		AgentIDs:             nil,
+		ClientKeys:           nil,
+		HookSources:          nil,
+		AccountType:          "",
+		TargetLimit:          0,
+		UserLimit:            0,
+		UsersByTargetLimit:   0,
+		TargetToolRowLimit:   0,
+		TimeSeriesRowLimit:   0,
+		UserSeriesRowLimit:   0,
+		ClientLimit:          0,
+		ClientToolRowLimit:   0,
 		// The server listing is an inventory: a server that only ever failed,
 		// or that matches nobody's search, still has to appear with its counts.
 		Statuses: nil,
@@ -6810,6 +6816,65 @@ FROM normalized_traces`, success, failure, blocked, pending)
 	return traceSQL + ",\nnormalized_events AS (" + projection + ")", traceArgs, nil
 }
 
+// toolUsageScanIdentityFilter narrows the trace_summaries scan itself to the
+// traces an identity filter can match, so the GROUP BY and the target
+// classification run over one identity's traces instead of every trace in the
+// project's window. The grouped read's outer filter (toolUsageFilteredSelect)
+// still applies, so this only has to be a superset, never exact: a trace's
+// actor columns are constant across its rows (the materialized view stamps
+// them per trace), so a group whose user_kind/user_key matches a filter has
+// every one of its rows matching the same column here. A single-kind filter —
+// an agent id, as an agent identity page sends — becomes a single-column WHERE,
+// which the bloom_filter skip index on trace_summaries.agent_id prunes at
+// granule level; a multi-kind filter still drops non-matching rows before the
+// aggregation reads the wider columns.
+func toolUsageScanIdentityFilter(arg GetToolUsageSummaryParams) squirrel.Sqlizer {
+	userPreds := squirrel.Or{}
+	var emails []string
+	for _, filter := range arg.UserFilters {
+		switch filter.Kind {
+		case ToolUsageUserKindAgentID:
+			userPreds = append(userPreds, squirrel.Eq{"agent_id": filter.Key})
+		case toolUsageUserKindEmail:
+			// Email matching goes through the canonical identity fold, never a
+			// raw comparison: raw matching splits one employee across their
+			// linked emails. Without an org to fold against the pushdown is
+			// skipped entirely rather than fall back to raw matching.
+			emails = append(emails, filter.Key)
+		case toolUsageUserKindExternalUserID:
+			userPreds = append(userPreds, squirrel.Eq{"external_user_id": filter.Key})
+		case toolUsageUserKindUserID:
+			userPreds = append(userPreds, squirrel.Eq{"user_id": filter.Key})
+		}
+	}
+	if len(emails) > 0 {
+		orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+		if orgLit == "" {
+			return nil
+		}
+		userPreds = append(userPreds, canonicalEmailPredicate(orgLit, "user_email", emails))
+	}
+	if len(arg.AuthorizerUserIDs) > 0 {
+		userPreds = append(userPreds, squirrel.Eq{"authorizer_user_id": arg.AuthorizerUserIDs})
+	}
+	if len(userPreds) == 0 && len(arg.AgentIDs) == 0 {
+		return nil
+	}
+	and := squirrel.And{}
+	if len(userPreds) > 0 {
+		and = append(and, userPreds)
+	}
+	// The agent filter is ANDed with the user filter on the grouped rows, so it
+	// narrows the scan the same way.
+	if len(arg.AgentIDs) > 0 {
+		and = append(and, squirrel.Eq{"agent_id": arg.AgentIDs})
+	}
+	if len(and) == 1 {
+		return and[0]
+	}
+	return and
+}
+
 func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {
 	// A free-text query or an attribute chip cannot be answered from the
 	// pre-aggregated view, which carries neither. Those fall through to the raw
@@ -6850,6 +6915,8 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	clientKey := chMultiIf("g_mcp_client_name != ''", "lower(g_mcp_client_name)", "'"+MCPClientUnattributed+"'")
 	clientLabel := chMultiIf("g_mcp_client_name != ''", "g_mcp_client_name", "'"+MCPClientUnattributed+"'")
 
+	identityFilter := toolUsageScanIdentityFilter(arg)
+
 	directGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
 		"max(toolset_slug) AS g_toolset_slug",
@@ -6878,6 +6945,9 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("any(event_source) != 'hook'").
 		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (" + toolUsageSummaryMCPSkillLoad + "))")
 	directGroupedSB = withTraceWindowScanBounds(directGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	if identityFilter != nil {
+		directGroupedSB = directGroupedSB.Where(identityFilter)
+	}
 
 	hookGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
@@ -6909,6 +6979,9 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("any(event_source) = 'hook'").
 		Having("(" + hookToolNamePredicate("g_tool_name") + " OR g_skill_name != '')")
 	hookGroupedSB = withTraceWindowScanBounds(hookGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	if identityFilter != nil {
+		hookGroupedSB = hookGroupedSB.Where(identityFilter)
+	}
 
 	agentScope := toolUsageAgentScope(arg.UserFilters, arg.AuthorizerUserIDs, arg.AgentIDs)
 	directGroupedSB, err := withToolUsageAgentTraces(directGroupedSB, arg.GramProjectID, arg.TimeStart, arg.TimeEnd, agentScope)
@@ -8094,27 +8167,28 @@ func projectOverviewServerFilter(arg GetTopServersParams) GetToolUsageSummaryPar
 			ToolUsageTargetTypeShadowMCP,
 			ToolUsageTargetTypeMetaMCP,
 		},
-		HostedToolsetSlugs: nil,
-		MCPServerIDs:       nil,
-		ShadowServerNames:  nil,
-		MetaMCPServerIDs:   nil,
-		UserFilters:        nil,
-		AuthorizerUserIDs:  nil,
-		AgentIDs:           nil,
-		ClientKeys:         nil,
-		HookSources:        nil,
-		AccountType:        "",
-		TargetLimit:        0,
-		UserLimit:          0,
-		UsersByTargetLimit: 0,
-		TargetToolRowLimit: 0,
-		TimeSeriesRowLimit: 0,
-		UserSeriesRowLimit: 0,
-		ClientLimit:        0,
-		ClientToolRowLimit: 0,
-		Statuses:           nil,
-		Query:              "",
-		Filters:            nil,
+		HostedToolsetSlugs:   nil,
+		MCPServerIDs:         nil,
+		ShadowServerNames:    nil,
+		MetaMCPServerIDs:     nil,
+		UserFilters:          nil,
+		CanonicalIdentityOrg: "",
+		AuthorizerUserIDs:    nil,
+		AgentIDs:             nil,
+		ClientKeys:           nil,
+		HookSources:          nil,
+		AccountType:          "",
+		TargetLimit:          0,
+		UserLimit:            0,
+		UsersByTargetLimit:   0,
+		TargetToolRowLimit:   0,
+		TimeSeriesRowLimit:   0,
+		UserSeriesRowLimit:   0,
+		ClientLimit:          0,
+		ClientToolRowLimit:   0,
+		Statuses:             nil,
+		Query:                "",
+		Filters:              nil,
 	}
 }
 

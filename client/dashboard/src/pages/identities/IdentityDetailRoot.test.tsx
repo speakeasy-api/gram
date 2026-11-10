@@ -72,8 +72,14 @@ vi.mock("./AgentIdentityProfile", () => ({
       {String(agent.permissions.transfer)}
     </div>
   ),
-  AgentHeaderActions: () => <button>Agent header actions</button>,
-  AgentRenameAction: () => <button>Rename agent</button>,
+}));
+vi.mock("@/pages/agents/agent-admin", () => ({
+  AgentName: ({ agent }: { agent: { name: string } }) => (
+    <div>
+      <h1>{agent.name}</h1>
+      <button>Rename agent</button>
+    </div>
+  ),
 }));
 
 function setup(urn: string) {
@@ -145,7 +151,11 @@ const cachedAgent = {
   displayName: "Private agent name",
   emails: [],
   directory: { groups: [] },
-  agent: { id: "agent_example", permissions: { write: true, transfer: true } },
+  agent: {
+    id: "agent_example",
+    name: "Private agent name",
+    permissions: { write: true, transfer: true },
+  },
 };
 
 it.each([403, 404])(
@@ -160,7 +170,6 @@ it.each([403, 404])(
     expect(screen.getByText("Agent unavailable")).toBeTruthy();
     expect(screen.queryByText(cachedAgent.displayName)).toBeNull();
     expect(screen.queryByText(/Agent profile:/)).toBeNull();
-    expect(screen.queryByText("Agent header actions")).toBeNull();
     expect(screen.queryByText("Rename agent")).toBeNull();
     expect(screen.queryByText("Identity navigation")).toBeNull();
   },

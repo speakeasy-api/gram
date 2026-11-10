@@ -6,7 +6,7 @@ import type { AccessMember } from "@gram/client/models/components/accessmember.j
 import type { Role } from "@gram/client/models/components/role.js";
 import { Button } from "@/components/ui/Button";
 import { ArrowRight } from "lucide-react";
-import { PropsWithChildren } from "react";
+import type { PropsWithChildren } from "react";
 
 export interface DeleteRoleDialogProps extends PropsWithChildren {
   isOpen: boolean;

@@ -870,7 +870,25 @@ WHERE registration.mcp_server_id = @mcp_server_id
   AND registration.project_id = @project_id
   AND registration.status = 'registered'
   AND registration.deleted IS FALSE
-  AND server.remote_session_issuer_id IS NULL
+  AND cardinality(ARRAY(
+      -- The distinct live providers the server's live client associations name.
+      SELECT DISTINCT c.remote_session_issuer_id
+      FROM mcp_server_remote_session_clients AS a
+      JOIN remote_session_clients AS c
+        ON c.id = a.remote_session_client_id
+       AND c.deleted IS FALSE
+       AND (c.project_id = a.project_id
+            OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+      JOIN remote_session_issuers AS provider
+        ON provider.id = c.remote_session_issuer_id
+       AND provider.deleted IS FALSE
+       AND (provider.project_id = a.project_id
+            OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+      WHERE a.mcp_server_id = server.id
+        AND a.project_id = registration.project_id
+        AND a.organization_id = registration.organization_id
+        AND a.deleted IS FALSE
+  )::uuid[]) = 0
 ORDER BY registration.id
 LIMIT 1;
 
@@ -921,6 +939,8 @@ JOIN projects AS project
  AND project.organization_id = @organization_id
  AND project.deleted IS FALSE
 WHERE m.deleted IS FALSE
+  -- Same retired approvals server rule as ListPlatformMCPInventory.
+  AND m.builtin_backend IS NULL
   AND (sqlc.narg(project_id)::uuid IS NULL OR m.project_id = sqlc.narg(project_id)::uuid)
   AND (sqlc.narg(after_mcp_id)::uuid IS NULL OR m.id > sqlc.narg(after_mcp_id)::uuid)
   AND (
@@ -975,7 +995,6 @@ SELECT
     m.tunneled_mcp_server_id,
     m.toolset_id,
     m.unproxied_mcp_server_id,
-    m.builtin_backend,
     m.user_session_issuer_id,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
@@ -1029,6 +1048,8 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) AS readiness ON TRUE
 WHERE m.deleted IS FALSE
+  -- A retired approvals server serves nothing until a cleanup migration deletes it.
+  AND m.builtin_backend IS NULL
   AND (@skip_authorization_filter::boolean OR m.id = ANY(@allowed_mcp_ids::uuid[]))
   AND (sqlc.narg(project_id)::uuid IS NULL OR m.project_id = sqlc.narg(project_id)::uuid)
   AND (sqlc.narg(after_mcp_id)::uuid IS NULL OR m.id > sqlc.narg(after_mcp_id)::uuid)
@@ -1090,7 +1111,6 @@ FROM (
         m.tunneled_mcp_server_id,
         m.toolset_id,
         m.unproxied_mcp_server_id,
-        m.builtin_backend,
         COALESCE(remote.url, '') AS upstream_url,
         COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
         COALESCE(registration.source_kind, '') AS source_kind,
@@ -1145,6 +1165,7 @@ FROM (
     WHERE m.id = @mcp_server_id
       AND m.project_id = @project_id
       AND m.deleted IS FALSE
+      AND m.builtin_backend IS NULL
 ) AS inventory;
 
 -- plugin_servers is the attachment authority, so plugin membership is read from

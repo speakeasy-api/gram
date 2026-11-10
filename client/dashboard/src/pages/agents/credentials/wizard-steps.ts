@@ -13,8 +13,6 @@ export const WIZARD_STEPS = [
   { id: "verify", label: "Verify", short: "Verify" },
 ] as const;
 
-export type WizardStepId = (typeof WIZARD_STEPS)[number]["id"];
-
 export const WIZARD_STEP_IDS: readonly string[] = WIZARD_STEPS.map(
   (step) => step.id,
 );

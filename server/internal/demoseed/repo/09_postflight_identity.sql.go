@@ -895,9 +895,8 @@ WHERE project_id = $1::uuid AND deleted IS FALSE
 // credential kind, plus the pre-column row. A rerun that dropped or
 // duplicated any of them would leave the badges telling a different story
 // than the one they were seeded to tell.
-// Two upstream MCP issuers, two independent gateway issuers, one
-// Connections issuer, and the approvals server's issuer; GitHub uses the
-// organization workforce issuer.
+// Two upstream MCP issuers, two independent gateway issuers, and one
+// Connections issuer; GitHub uses the organization workforce issuer.
 func (q *Queries) PostflightIDProjectUserSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectUserSessionIssuers, projectID)
 	var count int64
@@ -1412,7 +1411,7 @@ WITH live AS (
     AND credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 26
+WHERE (SELECT count(*) FROM live) = 32
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY($1::uuid[])
@@ -1472,7 +1471,7 @@ type PostflightIDUpstreamClientChoicesParams struct {
 }
 
 // Check both the total and the expected credential/server/client tuples so
-// twenty-six misassigned choices cannot satisfy postflight.
+// thirty-two misassigned choices cannot satisfy postflight.
 func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg PostflightIDUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDUpstreamClientChoices,
 		arg.LinearSessionIds,

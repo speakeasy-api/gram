@@ -22,7 +22,8 @@ export function visibleNavEntries(
  *
  * Groups the user can open nothing in are dropped. A lone remaining group has
  * nothing to be told apart from, so its header and collapse toggle only cost a
- * click: its items are returned flat instead. The divider separating the
+ * click: its items are returned flat instead — unless some are in Preview or
+ * Beta, which only a group can set apart in its stage section. The divider separating the
  * top-level items from the groups is drawn only with something on both sides.
  */
 export function sidebarNavLayout<G extends { items: ScopeGatedNavEntry[] }>(
@@ -38,9 +39,14 @@ export function sidebarNavLayout<G extends { items: ScopeGatedNavEntry[] }>(
     (group) => visibleNavEntries(group.items, hasAnyScope).length > 0,
   );
   const lone = visible.length === 1 ? visible[0] : undefined;
+  const loneEntries = lone ? visibleNavEntries(lone.items, hasAnyScope) : [];
+  // A group with Preview or Beta items stays a group: flat top-level rows
+  // have no track to hang its stage section on.
+  const flatten =
+    loneEntries.length > 0 && loneEntries.every((e) => !e.item.stage);
   return {
     groups: visible,
-    flatEntries: lone ? visibleNavEntries(lone.items, hasAnyScope) : undefined,
+    flatEntries: flatten ? loneEntries : undefined,
     showDivider: hasTopItems && visible.length > 0,
   };
 }

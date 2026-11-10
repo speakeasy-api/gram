@@ -333,7 +333,6 @@ const (
 	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
 	MCPApprovalRequestIDKey     = attribute.Key("gram.mcp_approval.request_id")
 	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
-	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
 	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
 	URLKey                      = attribute.Key("url")
 	CacheKeyKey                 = attribute.Key("gram.cache.key")
@@ -971,6 +970,13 @@ const (
 	// marketplace, download, agent_install, hooks_install and dogfood; the
 	// value is free-form. Installs that predate it don't report one.
 	HookDeviceInstallRouteKey = attribute.Key("gram.hook.device.install_route")
+	// The client state snapshot rides the binary's first hook event of each
+	// day. FailOpen is the effective fail-open posture ("true" or "false"),
+	// DebugLog whether a debug log is enabled, and SpoolDepth how many events
+	// wait in the spool to be resent.
+	HookDeviceFailOpenKey   = attribute.Key("gram.hook.device.fail_open")
+	HookDeviceDebugLogKey   = attribute.Key("gram.hook.device.debug_log")
+	HookDeviceSpoolDepthKey = attribute.Key("gram.hook.device.spool_depth")
 	// HookEndpointGenerationKey records which generation of hook endpoint
 	// and sender produced a row (see the HookEndpointGeneration* values), so
 	// traffic on retired endpoints can be found and moved to a supported one.
@@ -3860,9 +3866,6 @@ func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCP
 
 func ExternalMCPID(v string) attribute.KeyValue { return ExternalMCPIDKey.String(v) }
 func SlogExternalMCPID(v string) slog.Attr      { return slog.String(string(ExternalMCPIDKey), v) }
-
-func ExternalMCPSlug(v string) attribute.KeyValue { return ExternalMCPSlugKey.String(v) }
-func SlogExternalMCPSlug(v string) slog.Attr      { return slog.String(string(ExternalMCPSlugKey), v) }
 
 func ExternalMCPName(v string) attribute.KeyValue { return ExternalMCPNameKey.String(v) }
 func SlogExternalMCPName(v string) slog.Attr      { return slog.String(string(ExternalMCPNameKey), v) }

@@ -1,7 +1,9 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { FC, useMemo } from "react";
+import type { FC } from "react";
+import { useMemo } from "react";
+import type { TooltipContentProps } from "recharts";
 import {
   AreaChart as RechartsAreaChart,
   Area,
@@ -11,7 +13,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  TooltipContentProps,
 } from "recharts";
 
 const CustomTooltip = ({ active, payload }: TooltipContentProps) => {

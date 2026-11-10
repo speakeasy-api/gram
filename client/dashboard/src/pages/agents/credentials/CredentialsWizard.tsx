@@ -1,5 +1,7 @@
 import { toast } from "sonner";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
@@ -50,7 +52,10 @@ import {
   type AllServersRefusal,
   type ServerSelection,
 } from "./StepServers";
-import { keyCredentialChoices } from "./keyCredentialChoices";
+import {
+  keyCredentialChoices,
+  keyCredentialPlan,
+} from "./keyCredentialChoices";
 import { StepVerify, type VerifyState } from "./StepVerify";
 import { CredentialPicker } from "./CredentialPicker";
 import { SignInPath } from "./SignInPath";
@@ -304,11 +309,22 @@ function GrantedScopes({
   );
 }
 
+/** The server picker and the sign-in step, by their index in `STEPS`. */
+const SERVERS_STEP = 1;
+const SIGN_IN_STEP = 2;
+/**
+ * The Agent sign-in step. An existing agent edits only from here on: its name
+ * is renamed in the agent page's header, and its servers changed on the MCP
+ * sign-in tab (`section`).
+ */
+export const AGENT_SIGN_IN_STEP = 3;
+
 export function CredentialsWizard({
   agent,
   initialPlatformKey,
-  editing = false,
+  editing: editingProp = false,
   signInOnly = false,
+  section = false,
   grants,
   onDone,
   onBusy,
@@ -321,9 +337,8 @@ export function CredentialsWizard({
    */
   initialPlatformKey?: string;
   /**
-   * Change what an agent already is — its name, its reach — rather than
-   * provision it again. The credential steps are not part of that: a key is
-   * issued from the agent's own page, and a platform from this flow.
+   * Change what an agent already is rather than provision it again. Opened
+   * from its credentials tab to change how it signs in to Speakeasy.
    */
   editing?: boolean;
   /**
@@ -334,6 +349,15 @@ export function CredentialsWizard({
    * `editing` and `grants`.
    */
   signInOnly?: boolean;
+  /**
+   * The agent page's MCP sign-in tab: which servers an existing agent reaches
+   * and how Speakeasy signs in to each. Implies `editing`. Only the server
+   * picker and the sign-in step are shown, with no stepper or summary: the
+   * agent is already set up, and the tab is not a walk through setting it up
+   * again. There is no save button: each change saves as it is made, on
+   * Continue from the picker, on removing a server, and on a new connection.
+   */
+  section?: boolean;
   /** The servers the agent already reaches, for the editing flow. */
   grants?: AgentPolicyGrant[];
   /**
@@ -351,6 +375,7 @@ export function CredentialsWizard({
    */
   verifyPollMs?: number;
 }): JSX.Element {
+  const editing = editingProp || section;
   const sdk = useSdkClient();
   const organization = useOrganization();
   const project = useProject();
@@ -439,11 +464,20 @@ export function CredentialsWizard({
   const [params, setParams] = useSearchParams();
   // Issuing another key starts at Agent sign-in: the steps before it describe
   // the agent itself, which already exists.
-  const firstStep = signInOnly ? 3 : 0;
-  const defaultStep = signInOnly ? 3 : initialPlatformKey === undefined ? 0 : 1;
+  const firstStep = signInOnly ? AGENT_SIGN_IN_STEP : 0;
+  const defaultStep = signInOnly
+    ? AGENT_SIGN_IN_STEP
+    : initialPlatformKey === undefined
+      ? 0
+      : 1;
+  // Editing is a tab on the agent's page, not a flow with an address per
+  // step: it has two views, and which one is open is only this page's.
+  // It opens on the sign-in view; the picker opens only from its button.
+  const [editStep, setEditStep] = useState(SIGN_IN_STEP);
   // `?step=` names the step (`?step=servers`); an index from an older link
   // still opens the step it meant.
-  const step = wizardStepIndex(params.get("step"), defaultStep);
+  const urlStep = wizardStepIndex(params.get("step"), defaultStep);
+  const step = section ? editStep : urlStep;
   const [name, setName] = useState(agent?.name ?? "");
   // Names are unique in the organization, case aside. Asking once typing
   // pauses catches a taken name here instead of on Create agent, which still
@@ -564,6 +598,11 @@ export function CredentialsWizard({
   // agent's gateway never lists the servers just added. Kept across a retry,
   // because the grants a failed save already wrote are not in the next diff.
   const keysMissing = useRef<ExtendAgentKeyGrantForm[]>([]);
+  // Servers just added on the MCP sign-in tab whose keys wait for the reader
+  // to choose, on the server's row, how they sign in there.
+  const [choicePending, setChoicePending] = useState<Set<string>>(
+    () => new Set(),
+  );
   useEffect(() => {
     if (reconciled || grants === undefined) return;
     if (inventory.isLoading || inventory.isError) return;
@@ -1187,7 +1226,9 @@ export function CredentialsWizard({
     setSaving(true);
     setError(null);
     try {
-      if (name.trim() !== agent.name) {
+      // The tab never edits the name, and the page renames the agent in
+      // place while the tab is open: a mounted name would undo that.
+      if (!section && name.trim() !== agent.name) {
         await renameAgent.mutateAsync({
           request: { renameAgentForm: { id: agent.id, name: name.trim() } },
         });
@@ -1302,29 +1343,41 @@ export function CredentialsWizard({
         try {
           // The credential picked on MCP sign-in for each added server, as a
           // key issued now would carry it.
-          const choices = await keyCredentialChoices(
-            sdk,
-            selected
-              .filter((entry) =>
-                keysMissing.current.some(
-                  (form) =>
-                    form.selector.resourceId === entry.server.resourceId,
-                ),
-              )
-              .map((entry) => ({
-                ...entry.server,
-                authClientId: entry.authClientId,
-              })),
+          const picks = selected
+            .filter((entry) =>
+              keysMissing.current.some(
+                (form) => form.selector.resourceId === entry.server.resourceId,
+              ),
+            )
+            .map((entry) => ({
+              ...entry.server,
+              authClientId: entry.authClientId,
+            }));
+          // The tab asks on each server's row how the keys sign in there, so
+          // a server with a real choice waits for it rather than failing the
+          // save or defaulting to the connected account unasked.
+          const plan = section
+            ? await keyCredentialPlan(sdk, picks, { askWhenAccounts: true })
+            : {
+                choices: await keyCredentialChoices(sdk, picks),
+                undecided: [],
+              };
+          const waiting = new Set(
+            plan.undecided.map((pick) => pick.resourceId),
           );
+          const ready = keysMissing.current.filter(
+            (form) => !waiting.has(form.selector.resourceId),
+          );
+          const choices = plan.choices;
+          // Known from the plan, so a failed extension below still leaves
+          // these rows asking.
+          setChoicePending(new Set(plan.undecided.map((pick) => pick.id)));
           for (
             let start = 0;
-            start < keysMissing.current.length;
+            start < ready.length;
             start += EXTEND_KEYS_BATCH
           ) {
-            const batch = keysMissing.current.slice(
-              start,
-              start + EXTEND_KEYS_BATCH,
-            );
+            const batch = ready.slice(start, start + EXTEND_KEYS_BATCH);
             await sdk.keys.extendAgentKeys({
               extendAgentKeysForm: {
                 agentId: agent.id,
@@ -1337,7 +1390,9 @@ export function CredentialsWizard({
               },
             });
           }
-          keysMissing.current = [];
+          keysMissing.current = keysMissing.current.filter((form) =>
+            waiting.has(form.selector.resourceId),
+          );
           void invalidateAllListAPIKeys(queryClient);
         } catch (failure) {
           toast.warning(
@@ -1412,9 +1467,9 @@ export function CredentialsWizard({
       await queryClient.invalidateQueries({
         queryKey: ["owner-connections"],
       });
-      // Saving is the end of editing: what follows are the platform's own
-      // settings, which this flow only describes. It returns to the agent's
-      // own page, where the change shows.
+      // Saving is the end of editing. The full flow returns to the agent's
+      // own page, where the change shows; the MCP sign-in tab stays put and
+      // re-reads the saved grants into itself.
       onDone(agent.id);
     } catch (failure) {
       setError(
@@ -1425,6 +1480,44 @@ export function CredentialsWizard({
     } finally {
       setSaving(false);
     }
+  };
+
+  // The MCP sign-in tab saves each change as it is made. A change only asks
+  // for a save: it runs after the render that holds the change, since save
+  // reads the selection from state, and waits out a save already running and
+  // the checks a save waits for.
+  const [savePending, setSavePending] = useState(false);
+  const requestSave = () => setSavePending(true);
+  useEffect(() => {
+    if (!savePending || saving || !reconciled) return;
+    if (authPending || enforcementPending) return;
+    setSavePending(false);
+    void save();
+    // save is rebuilt every render; these are what decide when it may run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savePending, saving, reconciled, authPending, enforcementPending]);
+
+  // The picker changes a draft until Continue saves it. Back puts the saved
+  // selection back, so a change abandoned there is not saved by the next one.
+  const pickerStart = useRef<{
+    selected: ServerSelection[];
+    allServers: boolean;
+  } | null>(null);
+  const openPicker = () => {
+    pickerStart.current = { selected, allServers };
+    setStep(SERVERS_STEP);
+  };
+  const cancelPicker = () => {
+    const start = pickerStart.current;
+    if (start) {
+      setSelected(start.selected);
+      setAllServers(start.allServers);
+    }
+    setStep(SIGN_IN_STEP);
+  };
+  const confirmPicker = () => {
+    setStep(SIGN_IN_STEP);
+    requestSave();
   };
 
   // What the reader last decided, marked on the rail. The rail is a growing
@@ -1555,6 +1648,10 @@ export function CredentialsWizard({
   // depend on it.
   const setStep = useCallback(
     (next: number) => {
+      if (section) {
+        setEditStep(next);
+        return;
+      }
       setParams(
         (current) => {
           const updated = new URLSearchParams(current);
@@ -1564,7 +1661,7 @@ export function CredentialsWizard({
         { replace: true },
       );
     },
-    [setParams, platformSteps],
+    [section, setParams, platformSteps],
   );
   // How many steps there are is only known here, once the platform's own have
   // been counted, so an out-of-range link is corrected rather than refused:
@@ -1925,7 +2022,7 @@ export function CredentialsWizard({
     />
   );
 
-  const body = () => {
+  const body = (at: number = step) => {
     // Past the credential step, a federated agent is following its platform's
     // own setup, one of its steps per wizard step.
     if (workloadStep !== undefined) {
@@ -1938,7 +2035,7 @@ export function CredentialsWizard({
         />
       );
     }
-    switch (step) {
+    switch (at) {
       case 0:
         return (
           <div className="space-y-6">
@@ -2019,6 +2116,8 @@ export function CredentialsWizard({
       case 2:
         return (
           <StepAuthentication
+            // On the agent's MCP sign-in tab the tab's own title says this.
+            showHeader={!section}
             servers={
               allServers ? listedServers : selected.map((entry) => entry.server)
             }
@@ -2034,7 +2133,53 @@ export function CredentialsWizard({
                 );
               } else
                 setSelected(selected.filter((entry) => entry.server.id !== id));
+              if (section) requestSave();
             }}
+            // A new connection is assigned to the agent by a save.
+            onConnected={section ? requestSave : undefined}
+            // On the tab only servers whose keys wait for the answer ask it:
+            // a key's credential is fixed when the server is added to it.
+            credentialChoice={
+              allServers
+                ? undefined
+                : {
+                    show: (serverId) => !section || choicePending.has(serverId),
+                    value: (serverId) =>
+                      selected.find((entry) => entry.server.id === serverId)
+                        ?.authClientId,
+                    onChange: (serverId, authClientId) => {
+                      const current = selected.find(
+                        (entry) => entry.server.id === serverId,
+                      )?.authClientId;
+                      if ((current ?? "") === authClientId) return;
+                      setSelected((entries) =>
+                        entries.map((entry) =>
+                          entry.server.id === serverId
+                            ? { ...entry, authClientId }
+                            : entry,
+                        ),
+                      );
+                      if (section && authClientId) requestSave();
+                    },
+                  }
+            }
+            listAction={
+              section ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  // Until the stored grants are in the selection the picker
+                  // would open on none, and Back would restore none.
+                  disabled={saving || !reconciled}
+                  onClick={openPicker}
+                >
+                  <Button.LeftIcon>
+                    <Plus className="size-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Add servers</Button.Text>
+                </Button>
+              ) : undefined
+            }
           />
         );
       case 3:
@@ -2144,7 +2289,9 @@ export function CredentialsWizard({
   const footer = () => {
     // Editing writes after authentication. Past it the flow is the ordinary
     // one for an agent that exists: adding a credential it does not have.
-    if (editing && step < 3) {
+    // The app opens editing only from the Agent sign-in step now, so these
+    // views are reached by the tests of the save they share with the tab.
+    if (editing && step < AGENT_SIGN_IN_STEP) {
       return (
         <WizardFooter
           note={
@@ -2398,6 +2545,61 @@ export function CredentialsWizard({
     }
   };
 
+  const errorAlert = error && (
+    <p
+      role="alert"
+      className="border-destructive text-destructive border p-3 text-sm"
+    >
+      {error}
+    </p>
+  );
+
+  // A tab on the agent's page: no steps to count and no summary of a draft,
+  // because nothing here is a draft. The agent page already names it. The
+  // servers' sign-in is the tab; the picker opens over it.
+  if (section) {
+    return (
+      <div className="space-y-6">
+        {errorAlert}
+        <div>{body(SIGN_IN_STEP)}</div>
+        <Dialog
+          open={step === SERVERS_STEP}
+          onOpenChange={(open) => {
+            if (!open) cancelPicker();
+          }}
+        >
+          {/* Only the picker scrolls: Cancel and Continue stay in view at any
+              window height. */}
+          <Dialog.Content className="flex max-h-[85vh] max-w-3xl flex-col overflow-hidden">
+            <Dialog.Title className="sr-only">Add MCP servers</Dialog.Title>
+            <Dialog.Description className="sr-only">
+              Pick the MCP servers this agent calls. Continue saves them.
+            </Dialog.Description>
+            <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+              {body(SERVERS_STEP)}
+            </div>
+            <Dialog.Footer className="shrink-0 items-center gap-3 sm:justify-between">
+              <Text small muted>
+                {blocked ??
+                  (allServers
+                    ? "All servers selected."
+                    : `${selected.length} of ${listedServers.length} servers selected.`)}
+              </Text>
+              <div className="flex gap-2">
+                <Button variant="tertiary" onClick={cancelPicker}>
+                  Cancel
+                </Button>
+                <Button disabled={!!blocked || saving} onClick={confirmPicker}>
+                  Continue
+                </Button>
+              </div>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <WizardStepper
@@ -2412,7 +2614,7 @@ export function CredentialsWizard({
         // Editing has settled everything a credential step would ask.
         // Issuing another key is the credential steps themselves, so none of
         // them is settled.
-        settledFrom={editing && !signInOnly ? 3 : undefined}
+        settledFrom={editing && !signInOnly ? AGENT_SIGN_IN_STEP : undefined}
         forward={existing && !secret}
         // Verify watches a key being used, so it has nothing to watch until
         // one is issued. Without this an existing agent could jump straight
@@ -2424,14 +2626,7 @@ export function CredentialsWizard({
           );
         }}
       />
-      {error && (
-        <p
-          role="alert"
-          className="border-destructive text-destructive border p-3 text-sm"
-        >
-          {error}
-        </p>
-      )}
+      {errorAlert}
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-16">
         <div>{body()}</div>
         {/* The cell stretches to the row's height on purpose: a sticky child

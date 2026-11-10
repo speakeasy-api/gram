@@ -114,7 +114,6 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		// record some real client wrote for the same toolset and session,
 		// which would attribute an agent-workflow call to that client.
 		clientInfoScope:          internalClientInfoScope,
-		skipProxyTools:           false,
 		toolsetID:                uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		toolsetIsPublic:          nil,
 		tags:                     nil,

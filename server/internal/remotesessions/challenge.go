@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -356,6 +357,11 @@ type ChallengeManager struct {
 	// clientCredentialBuilder builds clientCredentials once the manager is
 	// constructed; nil leaves self clients unsupported.
 	clientCredentialBuilder func(*ChallengeManager) ClientCredentialSource
+
+	// features decides per organization whether a client's MCP servers are
+	// the ones it is associated with when its resource is derived; nil keeps
+	// its issuer bindings.
+	features feature.Provider
 }
 
 // RemoteGrant is a grant the remote login callback committed, keyed to the
@@ -491,6 +497,12 @@ func WithProtectedResourceProber(prober *protectedresource.Prober) ChallengeMana
 	return func(m *ChallengeManager) { m.protectedResources = prober }
 }
 
+// WithFeatureFlags evaluates the per-organization rollout flags that decide
+// which MCP servers a client is attached to when its resource is derived.
+func WithFeatureFlags(flags feature.Provider) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.features = flags }
+}
+
 func NewChallengeManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -538,6 +550,7 @@ func NewChallengeManager(
 		assertions:                  unavailableTokenEndpointAssertionSigner{},
 		clientCredentials:           unconfiguredClientCredentialSource{},
 		clientCredentialBuilder:     nil,
+		features:                    nil,
 	}
 	for _, option := range options {
 		option(manager)
@@ -547,7 +560,7 @@ func NewChallengeManager(
 		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, manager.issuerMetadata)
 	}
 	// The manager's own refreshes restate identity with the same verifier.
-	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions), WithRefreshConnectionRecorder(manager.connections))
+	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions), WithRefreshConnectionRecorder(manager.connections), WithRefreshFeatureFlags(manager.features))
 	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
 	manager.rotator.origins = manager.origins
 	if manager.clientCredentialBuilder != nil {
@@ -933,10 +946,19 @@ func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent Paren
 		skipped.Outcome = protectedresource.ProbeOutcomeDBError
 		return none, skipped, ""
 	}
+	// The consent handler validated the exact typed offer before building
+	// this login. Its selected server may offer multiple alternative
+	// registrations, so legacy sibling ownership must not discard its scopes.
+	typedTarget := parent.TypedAuthorization != nil &&
+		parent.TypedAuthorization.ServerID == serverID.UUID &&
+		parent.TypedAuthorization.RemoteSessionClientID == client.ID &&
+		parent.TypedAuthorization.ProjectID == parent.ProjectID &&
+		parent.TypedAuthorization.OrganizationID == parent.OrganizationID &&
+		sameUpstream(resourceURL, parent.Resource)
 	// The gateway qualified the client to its member before the login, so
 	// only the member's URL must still be the resource the grant names.
-	applies := viaMember && sameUpstream(resourceURL, parent.Resource)
-	if !viaMember {
+	applies := typedTarget || (viaMember && sameUpstream(resourceURL, parent.Resource))
+	if !viaMember && !typedTarget {
 		siblingIDs, err := q.ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
 			UserSessionIssuerID: parent.UserSessionIssuerID,
 			ProjectID:           parent.ProjectID,
@@ -1323,8 +1345,8 @@ func (m *ChallengeManager) DrainRefreshes(ctx context.Context) error {
 
 // FallbackResourceForClient derives one client's RFC 8707 resource from its
 // attached MCP servers; ambiguous or absent upstreams derive "".
-func (m *ChallengeManager) FallbackResourceForClient(ctx context.Context, clientID uuid.UUID) (string, error) {
-	return m.refresher.FallbackResourceForClient(ctx, clientID)
+func (m *ChallengeManager) FallbackResourceForClient(ctx context.Context, organizationID string, clientID uuid.UUID) (string, error) {
+	return m.refresher.FallbackResourceForClient(ctx, organizationID, clientID)
 }
 
 // ResourceForClientAtUpstream derives one client's RFC 8707 resource for a

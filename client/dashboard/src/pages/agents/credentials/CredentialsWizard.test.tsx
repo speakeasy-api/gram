@@ -52,6 +52,8 @@ const mocks = vi.hoisted(() => ({
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
   extendAgentKeys: vi.fn(),
+  // The shared credentials each server offers a key, for every server.
+  choices: [] as { id: string; name: string; clientType: string }[],
   agentList: vi.fn(),
   nameCheckFails: false,
   sessions: vi.fn(),
@@ -69,7 +71,7 @@ vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
   useMcpServerAuthClientChoices: () => ({
     isError: false,
     isSuccess: true,
-    data: { choices: [] },
+    data: { choices: mocks.choices },
   }),
 }));
 
@@ -160,7 +162,7 @@ vi.mock("@/contexts/Sdk", () => ({
     // Each project sees its own rows among every issuer listed.
     workloadIdentities: { list: mocks.workloadList },
     authClients: {
-      listMcpServerChoices: async () => ({ choices: [] }),
+      listMcpServerChoices: async () => ({ choices: mocks.choices }),
       // How each server signs in upstream, read from its own auth clients.
       getMcpServerAuthentication: mocks.serverAuth,
     },
@@ -473,6 +475,7 @@ beforeEach(() => {
   mocks.createGrant.mockResolvedValue({});
   mocks.deleteGrant.mockResolvedValue({});
   mocks.extendAgentKeys.mockResolvedValue({ keys: [] });
+  mocks.choices = [];
   mocks.registerIssuer.mockResolvedValue({});
   mocks.admitSubject.mockResolvedValue({});
   mocks.withdrawSubject.mockResolvedValue({});
@@ -3713,6 +3716,187 @@ describe("Editing an agent that already exists", () => {
         request: { id: "admission_custom" },
       });
     });
+  });
+});
+
+// The agent page's MCP sign-in tab: the servers and their sign-in, changed in
+// place rather than by walking the setup wizard again.
+describe("The MCP sign-in tab", () => {
+  const agent = {
+    id: "agent_one",
+    name: "Release Bot",
+    lifecycle: "active",
+    projectId: "project_one",
+    permissions: { write: true, authorize: true },
+  } as never;
+
+  const grants = [
+    {
+      id: "grant_one",
+      effect: "allow",
+      scope: "mcp:connect",
+      selector: {
+        resourceKind: "mcp",
+        resourceId: "toolset_one",
+        projectId: "project_one",
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: "grant_auth",
+      effect: "allow",
+      scope: "mcp:auth",
+      selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ] as never;
+
+  function tab() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const onDone = vi.fn();
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <CredentialsWizard
+            agent={agent}
+            section
+            grants={grants}
+            onDone={(id) => {
+              onDone(id);
+            }}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    return { onDone };
+  }
+
+  // Enabled once the stored servers are read into the selection.
+  async function openPicker() {
+    const change = await screen.findByRole("button", {
+      name: "Add servers",
+    });
+    await waitFor(() =>
+      expect((change as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(change);
+  }
+
+  it("opens on the servers' sign-in, with no setup steps around it", async () => {
+    tab();
+    expect(
+      await screen.findByRole("button", { name: "Add servers" }),
+    ).toBeTruthy();
+    // Each change saves as it is made, so there is nothing to press.
+    expect(screen.queryByRole("button", { name: /Save/ })).toBeNull();
+    // Nothing of setting the agent up: no name, no stepper, no summary.
+    expect(screen.queryByLabelText("Name")).toBeNull();
+    expect(screen.queryByText(/Step \d of/i)).toBeNull();
+    // The tab already says what it is, so the step's own heading is gone,
+    // and the diagram marks the tab rather than a step.
+    expect(screen.queryByRole("heading", { name: "MCP sign-in" })).toBeNull();
+    expect(screen.getAllByText("This tab").length).toBeGreaterThan(0);
+    expect(screen.queryByText("This step")).toBeNull();
+  });
+
+  it("opens on the sign-in view, with the picker closed", async () => {
+    tab();
+    await screen.findByRole("button", { name: "Add servers" });
+    expect(screen.queryByRole("heading", { name: "MCP Selection" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("saves the servers on Continue, back on their sign-in", async () => {
+    const { onDone } = tab();
+    await openPicker();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm
+        ?.grantId,
+    ).toBe("grant_one");
+    expect(mocks.renameAgent).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Add servers" })).toBeTruthy();
+  });
+
+  it("drops a change abandoned with Cancel", async () => {
+    const { onDone } = tab();
+    await openPicker();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await screen.findByRole("button", { name: "Add servers" });
+
+    await openPicker();
+    expect(
+      (
+        (await screen.findByRole("checkbox", {
+          name: "GitHub",
+        })) as HTMLInputElement
+      ).getAttribute("aria-checked") ?? "",
+    ).not.toBe("false");
+    expect(onDone).not.toHaveBeenCalled();
+    expect(mocks.deleteGrant).not.toHaveBeenCalled();
+  });
+
+  it("saves as soon as a server is removed from the list", async () => {
+    const { onDone } = tab();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Remove GitHub" }),
+    );
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm
+        ?.grantId,
+    ).toBe("grant_one");
+  });
+  // A key's credential on a server is fixed when the server is added to it,
+  // so the tab asks on the server's row before the keys are extended.
+  it("asks how the keys sign in to an added server on its row, then extends them", async () => {
+    const remote = {
+      id: "server_remote",
+      name: "Tracker",
+      slug: "tracker",
+      platformEndpointSlug: "tracker",
+      projectId: "project_one",
+      remoteMcpServerId: "remote_tracker",
+      visibility: "private",
+      networkAccessMode: "dual",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mocks.mcpServers.mockResolvedValue({ mcpServers: [remote] });
+    mocks.choices = [
+      { id: "token_a", name: "Team token", clientType: "static_credential" },
+      { id: "token_b", name: "Ops token", clientType: "static_credential" },
+    ];
+    const { onDone } = tab();
+    await openPicker();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Tracker" }));
+    expect(
+      screen.queryByRole("combobox", { name: /Credential the key uses/ }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(mocks.extendAgentKeys).not.toHaveBeenCalled();
+    fireEvent.click(
+      await screen.findByRole("combobox", {
+        name: "Credential the key uses on Tracker",
+      }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Ops token/ }));
+
+    await waitFor(() => expect(mocks.extendAgentKeys).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.extendAgentKeys.mock.calls[0]?.[0]?.extendAgentKeysForm
+        ?.authClientChoices,
+    ).toEqual([{ mcpServerId: "server_remote", authClientId: "token_b" }]);
   });
 });
 

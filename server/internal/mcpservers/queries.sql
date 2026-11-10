@@ -133,11 +133,14 @@ FROM mcp_servers
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: ListMCPServersByProjectID :many
--- A toolset-backed row whose toolset is deleted serves nothing, so it is not listed.
+-- A toolset-backed row whose toolset is deleted serves nothing, so it is not
+-- listed. Neither is a retired approvals server (builtin_backend), which the
+-- gateway answers as not found until a cleanup migration deletes it.
 SELECT ms.*
 FROM mcp_servers ms
 WHERE ms.project_id = @project_id
   AND ms.deleted IS FALSE
+  AND ms.builtin_backend IS NULL
   AND (
     ms.toolset_id IS NULL
     OR EXISTS (
@@ -161,7 +164,9 @@ JOIN projects AS p ON p.id = m.project_id
 WHERE p.organization_id = @organization_id
   AND m.deleted IS FALSE
   AND p.deleted IS FALSE
-  -- Same live-toolset rule as ListMCPServersByProjectID.
+  -- Same retired approvals server and live-toolset rules as
+  -- ListMCPServersByProjectID.
+  AND m.builtin_backend IS NULL
   AND (
     m.toolset_id IS NULL
     OR EXISTS (
@@ -541,22 +546,6 @@ source_annotations AS (
   JOIN active_deployment ad ON ad.id = f.deployment_id
   WHERE f.project_id = @project_id
     AND f.deleted IS FALSE
-  UNION ALL
-  SELECT
-    e.tool_urn,
-    e.name AS tool_name,
-    e.read_only_hint,
-    e.destructive_hint,
-    e.idempotent_hint,
-    e.open_world_hint
-  FROM latest_toolset_version tv
-  JOIN external_mcp_tool_definitions e ON e.tool_urn = ANY(tv.tool_urns)
-  JOIN external_mcp_attachments a ON a.id = e.external_mcp_attachment_id
-  JOIN active_deployment ad ON ad.id = a.deployment_id
-  WHERE e.deleted IS FALSE
-    AND a.deleted IS FALSE
-    AND e.type <> 'proxy'
-    AND e.name IS NOT NULL
 ),
 varied_annotations AS (
   SELECT
@@ -900,16 +889,6 @@ SELECT
           AND pt.deleted IS FALSE
           AND pt.tool_urn = ANY(lv.tool_urns)
       )
-      + (
-        SELECT COUNT(*)
-        FROM external_mcp_tool_definitions x
-        JOIN external_mcp_attachments e ON e.id = x.external_mcp_attachment_id
-        WHERE e.deployment_id = ad.id
-          AND e.deleted IS FALSE
-          AND x.deleted IS FALSE
-          AND x.tool_urn = ANY(lv.tool_urns)
-          AND x.tool_urn NOT LIKE 'tools:externalmcp:%:proxy'
-      )
     )::bigint AS tool_count
   , ARRAY(
       SELECT DISTINCT u.urn
@@ -1002,8 +981,14 @@ ORDER BY ms.toolset_id, (ms.id = ms.toolset_id) DESC, ms.created_at, ms.id;
 -- provider, or null with several or none. jsonb stores its keys sorted, so
 -- adding the issuer to the rest renders the same text as building every key
 -- at once.
+--
+-- The typed hashes are what an approval is compared on where typed auth
+-- clients choose upstream authentication: they leave out a proxied server's
+-- upstream issuer, which decides nothing there, so resynchronizing it changes
+-- nothing an approval covers. A hosted server is still routed by that issuer,
+-- so its typed hashes cover it.
 WITH servers AS (
-    SELECT m.id, m.project_id, m.remote_session_issuer_id,
+    SELECT m.id, m.project_id, m.toolset_id, m.remote_session_issuer_id,
            jsonb_build_object(
                'remote', m.remote_mcp_server_id, 'url', r.url,
                'transport', r.transport_type,
@@ -1050,7 +1035,14 @@ SELECT id, project_id,
            (base || jsonb_build_object('issuer', remote_session_issuer_id))::text, 'UTF8')), 'hex')::text AS configuration_hash,
        encode(sha256(convert_to(
            (base || jsonb_build_object('issuer',
-               CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END))::text, 'UTF8')), 'hex')::text AS association_configuration_hash
+               CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END))::text, 'UTF8')), 'hex')::text AS association_configuration_hash,
+       encode(sha256(convert_to(
+           (CASE WHEN toolset_id IS NULL THEN base
+                 ELSE base || jsonb_build_object('issuer', remote_session_issuer_id) END)::text, 'UTF8')), 'hex')::text AS typed_configuration_hash,
+       encode(sha256(convert_to(
+           (CASE WHEN toolset_id IS NULL THEN base
+                 ELSE base || jsonb_build_object('issuer',
+                     CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END) END)::text, 'UTF8')), 'hex')::text AS typed_association_configuration_hash
 FROM servers;
 
 -- name: ListMCPServerAssociationProviders :one

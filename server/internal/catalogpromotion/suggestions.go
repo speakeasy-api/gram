@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/setupguides"
 )
 
@@ -21,7 +22,7 @@ func suggestedMetadata(source repo.GetSourceRow) *PublicMetadata {
 	title = conv.TruncateString(title, maxPublicDisplayCharacters)
 	title = strings.TrimSpace(title)
 	result := &PublicMetadata{Name: "", Title: title, Description: "", URL: "", DocumentationURL: "", DocsSlug: "", AuthMode: ""}
-	if source.RemoteSessionIssuerID.Valid {
+	if remotesessions.AssociationIssuerFromProviders(source.AssociationProviderIds).Providers > 0 {
 		result.AuthMode = "oauth"
 	} else if !source.RequiresUpstreamAuth && !source.UpstreamAuthPending {
 		result.AuthMode = "none"
