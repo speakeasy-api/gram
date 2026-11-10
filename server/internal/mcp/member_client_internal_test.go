@@ -19,10 +19,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 // A buffered tools/call failure must leave session cleanup to the SDK, which
@@ -448,7 +450,7 @@ func TestMemberClientFailureRetriesOnlyTransportFailuresARetryCanChange(t *testi
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			attempt := newMemberAttempt(nil)
-			attempt.recordFailure(true, tc.err)
+			attempt.recordFailure(true, false, tc.err)
 			got := memberClientFailure(t.Context(), testenv.NewLogger(t), attempt, memberDial{}, metaMember{slug: "fixture"}, tc.err)
 			require.EqualError(t, got, `server "fixture" did not answer: upstream unreachable or timed out`)
 			failure, ok := errors.AsType[memberDiscoveryError](got)
@@ -513,6 +515,61 @@ func TestMemberClientFailurePreservesClientCredentialRenewalRemedy(t *testing.T)
 			require.Equal(t, tc.retryable, failure.retryable)
 			_, outage := errors.AsType[memberUnavailableError](got)
 			require.Equal(t, tc.discovery, outage, "the connection status reads this as an outage")
+		})
+	}
+}
+
+// A tunneled call that hits its deadline is the provider's only once the tunnel forwarded an answer.
+func TestMemberClientTunneledDeadlineNeedsAForward(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		forward bool
+		want    mcpconnectionattempts.Code
+	}{
+		"gateway holds the call":           {forward: false, want: mcpconnectionattempts.CodeInternalError},
+		"server behind the tunnel is slow": {forward: true, want: mcpconnectionattempts.CodeProviderUnreachable},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var req struct {
+					ID     json.RawMessage `json:"id"`
+					Method string          `json:"method"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				switch req.Method {
+				case "server/discover":
+					_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"fixture","version":"1"}}}}`, req.ID)
+				case "tools/call":
+					if tc.forward {
+						w.Header().Set(wire.HeaderTunnelAgentSession, "agent-session")
+						w.Header().Set("Content-Type", "text/event-stream")
+						w.WriteHeader(http.StatusOK)
+						http.NewResponseController(w).Flush() //nolint:errcheck // a test server flush
+					}
+					<-r.Context().Done()
+				}
+			}))
+			t.Cleanup(upstream.Close)
+			service, build := memberClientFixture(t, upstream.URL)
+			session, _, err := service.connectMetaMember(t.Context(), testenv.NewLogger(t), build, time.Second)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = session.Close() })
+
+			attempt := newMemberAttempt(build)
+			ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), memberAttemptKey{}, attempt), 300*time.Millisecond)
+			defer cancel()
+			_, err = callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+			require.Error(t, err)
+			require.Equal(t, tc.forward, attempt.forwarded())
+
+			failure, ok := errors.AsType[memberConnectionError](memberClientFailure(ctx, testenv.NewLogger(t), attempt, memberDial{tunneled: true}, metaMember{slug: "fixture"}, err))
+			require.True(t, ok)
+			require.Equal(t, tc.want, failure.code)
 		})
 	}
 }
