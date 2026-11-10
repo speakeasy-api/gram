@@ -1,5 +1,4 @@
 import { EnvironmentVariableDialog } from "@/components/environments/EnvironmentVariableDialog";
-import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -989,13 +988,8 @@ function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
   const isOAuthConnected = !!toolset?.externalOauthServer;
   const availableOAuthAuthCode =
     toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
-  const externalMcpOAuthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
-  const externalMcpRequiresOAuth =
-    externalMcpOAuthStatus === "required-unconfigured";
   const isOAuthEligible =
-    toolset.mcpEnabled &&
-    ((toolset.mcpIsPublic ? availableOAuthAuthCode : true) ||
-      externalMcpRequiresOAuth);
+    toolset.mcpEnabled && (toolset.mcpIsPublic ? availableOAuthAuthCode : true);
 
   const oauthParadigm = getOAuthParadigm(toolset);
 
@@ -1006,9 +1000,7 @@ function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
 
   const disabledTooltipText = !toolset.mcpEnabled
     ? "Enable the MCP server to configure OAuth"
-    : externalMcpOAuthStatus === "unknown"
-      ? "The upstream authentication requirements are unknown; check the provider’s documentation"
-      : "This MCP server does not require the OAuth authorization code flow";
+    : "This MCP server does not require the OAuth authorization code flow";
 
   // The dispatcher sends wired issuers to the manage surface. Keep this
   // defensive check aligned in case the External OAuth section is reused directly.
@@ -1066,8 +1058,6 @@ function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
       <OAuthStatusDisplay
         isOAuthConnected={isOAuthConnected}
         isOAuthEligible={!!isOAuthEligible}
-        externalMcpRequiresOAuth={externalMcpRequiresOAuth}
-        externalMcpAuthUnknown={externalMcpOAuthStatus === "unknown"}
         loginSecured={loginSecured}
         showConfigureAction={!hideConfigureButton}
         oauthParadigm={oauthParadigm}
@@ -1103,8 +1093,6 @@ const PARADIGM_LABELS: Record<OAuthParadigm, string> = {
 function OAuthStatusDisplay({
   isOAuthConnected,
   isOAuthEligible,
-  externalMcpRequiresOAuth,
-  externalMcpAuthUnknown,
   loginSecured,
   showConfigureAction,
   oauthParadigm,
@@ -1113,8 +1101,6 @@ function OAuthStatusDisplay({
 }: {
   isOAuthConnected: boolean;
   isOAuthEligible: boolean;
-  externalMcpRequiresOAuth: boolean;
-  externalMcpAuthUnknown: boolean;
   loginSecured: boolean;
   showConfigureAction: boolean;
   oauthParadigm: OAuthParadigm | null;
@@ -1147,41 +1133,6 @@ function OAuthStatusDisplay({
           Users will authenticate with your external OAuth server before
           accessing this MCP server.
         </p>
-      </div>
-    );
-  }
-
-  if (externalMcpAuthUnknown) {
-    return (
-      <div className="border border-dashed p-4 text-center">
-        <p>Upstream authentication requirements are unknown</p>
-        <p className="text-muted-foreground text-sm">
-          Check the upstream provider’s documentation before configuring access.
-        </p>
-        {isOAuthEligible && showConfigureAction && (
-          <Button variant="secondary" onClick={onConfigureClick}>
-            <Button.Text>Configure OAuth</Button.Text>
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  if (externalMcpRequiresOAuth) {
-    return (
-      <div className="border-warning-foreground/80 bg-warning dark:bg-warning/10 dark:border-warning-foreground/30 border border-dashed px-6 py-8 text-center">
-        <AlertTriangle className="text-warning mx-auto mb-1 h-5 w-5" />
-        <p className="text-warning-foreground mb-1 font-bold">
-          OAuth setup required
-        </p>
-        <p className="text-warning-foreground/80 mb-3 text-sm">
-          This MCP server requires OAuth configuration before it can be used.
-        </p>
-        {showConfigureAction && (
-          <Button variant="secondary" onClick={onConfigureClick}>
-            <Button.Text>Configure OAuth</Button.Text>
-          </Button>
-        )}
       </div>
     );
   }

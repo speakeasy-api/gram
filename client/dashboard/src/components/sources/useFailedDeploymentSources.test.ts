@@ -79,11 +79,9 @@ function makeDeployment(
   return {
     openapiv3Assets: [],
     functionsAssets: [],
-    externalMcps: [],
     clonedFrom: undefined,
     createdAt: new Date(),
     externalId: undefined,
-    externalMcpToolCount: 0,
     externalUrl: undefined,
     functionsToolCount: 0,
     githubPr: undefined,
@@ -337,21 +335,11 @@ describe("computeFailedSources", () => {
           runtime: "node",
         },
       ],
-      externalMcps: [
-        {
-          id: "mcp1",
-          name: "GitHub",
-          slug: "github",
-          registryId: "r1",
-          registryServerSpecifier: "s1",
-        },
-      ],
     });
 
     const toolUrns = [
       "tools:http:pet-store:listPets",
       "tools:function:my-func:run",
-      "tools:externalmcp:github:proxy",
     ];
 
     const result = computeFailedSources({
@@ -369,25 +357,17 @@ describe("computeFailedSources", () => {
           event: "build.error",
           attachmentId: "fn1",
         }),
-        makeEvent({
-          id: "e3",
-          event: "source.error",
-          attachmentId: "mcp1",
-        }),
       ],
     });
 
-    expect(result.failedSources).toHaveLength(3);
+    expect(result.failedSources).toHaveLength(2);
     const types = result.failedSources.map((s) => s.type).sort();
-    expect(types).toEqual(["externalmcp", "function", "openapi"]);
+    expect(types).toEqual(["function", "openapi"]);
     expect(
       result.failedSources.find((s) => s.type === "openapi")!.toolCount,
     ).toBe(1);
     expect(
       result.failedSources.find((s) => s.type === "function")!.toolCount,
-    ).toBe(1);
-    expect(
-      result.failedSources.find((s) => s.type === "externalmcp")!.toolCount,
     ).toBe(1);
   });
 
@@ -472,7 +452,6 @@ describe("useFailedDeploymentSources", () => {
       status: "completed",
       openapiv3Assets: [],
       functionsAssets: [],
-      externalMcps: [],
     });
     setLogs([
       { id: "1", event: "source.info", message: "all good", attachmentId: "" },
@@ -492,7 +471,6 @@ describe("useFailedDeploymentSources", () => {
         { id: "asset-1", name: "Pet Store", slug: "pet-store" },
       ],
       functionsAssets: [],
-      externalMcps: [],
     });
     setLogs([
       {
@@ -524,7 +502,6 @@ describe("useFailedDeploymentSources", () => {
       status: "failed",
       openapiv3Assets: [],
       functionsAssets: [],
-      externalMcps: [],
     });
     setLogs([
       {
@@ -549,7 +526,6 @@ describe("useFailedDeploymentSources", () => {
         { id: "asset-1", name: "Pet Store", slug: "pet-store" },
       ],
       functionsAssets: [],
-      externalMcps: [],
     });
     setLogs([
       {
@@ -573,35 +549,12 @@ describe("useFailedDeploymentSources", () => {
     expect(result.failedSources[0]!.toolCount).toBe(2);
   });
 
-  it("handles externalMcps source type", () => {
-    setLatestDeployment({
-      id: "dep-1",
-      status: "failed",
-      openapiv3Assets: [],
-      functionsAssets: [],
-      externalMcps: [{ id: "mcp-1", name: "My MCP", slug: "my-mcp" }],
-    });
-    setLogs([
-      {
-        id: "e1",
-        event: "source.error",
-        message: "timeout",
-        attachmentId: "mcp-1",
-      },
-    ]);
-    setToolsets([]);
-
-    const result = renderHook(() => useFailedDeploymentSources());
-    expect(result.failedSources[0]!.type).toBe("externalmcp");
-  });
-
   it("handles functionsAssets source type", () => {
     setLatestDeployment({
       id: "dep-1",
       status: "failed",
       openapiv3Assets: [],
       functionsAssets: [{ id: "fn-1", name: "My Func", slug: "my-func" }],
-      externalMcps: [],
     });
     setLogs([
       {
@@ -624,7 +577,6 @@ describe("useFailedDeploymentSources", () => {
       status: "failed",
       openapiv3Assets: [],
       functionsAssets: [],
-      externalMcps: [],
     });
     setLogs([
       {
@@ -646,7 +598,6 @@ describe("useFailedDeploymentSources", () => {
       status: "failed",
       openapiv3Assets: [],
       functionsAssets: [],
-      externalMcps: [],
     });
     setLogs([
       {

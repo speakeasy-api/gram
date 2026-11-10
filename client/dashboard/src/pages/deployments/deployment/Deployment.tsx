@@ -281,12 +281,9 @@ const StatsSection = ({
   if (deployment.functionsAssets) {
     assetCount += deployment.functionsAssets.length;
   }
-  assetCount += deployment.externalMcps?.length ?? 0;
 
   const toolCount =
-    deployment.openapiv3ToolCount +
-    deployment.functionsToolCount +
-    deployment.externalMcpToolCount;
+    deployment.openapiv3ToolCount + deployment.functionsToolCount;
 
   const statusTone =
     deployment.status === "completed"

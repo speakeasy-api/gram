@@ -17,14 +17,6 @@ export type McpServerToolsetSummary = {
    */
   description?: string | undefined;
   /**
-   * Whether every configured tool is an external MCP proxy tool, so the real tool count is unknown until a user signs in
-   */
-  externalMcpProxyOnly: boolean;
-  /**
-   * The distinct slugs of the external MCP sources the toolset's configured tools come from, sorted
-   */
-  externalMcpSlugs: Array<string>;
-  /**
    * The ID of the external OAuth server attached to the toolset, if any
    */
   externalOauthServerId?: string | undefined;
@@ -49,7 +41,7 @@ export type McpServerToolsetSummary = {
    */
   slug: string;
   /**
-   * Number of tools the toolset serves: deployment-backed tools (HTTP, function, external MCP) that resolve in the project's latest completed deployment, plus its prompt templates and registered platform tools. External MCP proxy tools are excluded.
+   * Number of tools the toolset serves: deployment-backed tools (HTTP and function) that resolve in the project's latest completed deployment, plus its prompt templates and registered platform tools.
    */
   toolCount: number;
   /**
@@ -65,8 +57,6 @@ export const McpServerToolsetSummary$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     description: z.optional(z.string()),
-    external_mcp_proxy_only: z.boolean(),
-    external_mcp_slugs: z.array(z.string()),
     external_oauth_server_id: z.optional(z.string()),
     hosting_mcp_server_id: z.optional(z.string()),
     id: z.string(),
@@ -78,8 +68,6 @@ export const McpServerToolsetSummary$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      "external_mcp_proxy_only": "externalMcpProxyOnly",
-      "external_mcp_slugs": "externalMcpSlugs",
       "external_oauth_server_id": "externalOauthServerId",
       "hosting_mcp_server_id": "hostingMcpServerId",
       "registry_specifier": "registrySpecifier",

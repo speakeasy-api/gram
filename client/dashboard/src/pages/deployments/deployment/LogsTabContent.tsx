@@ -235,11 +235,6 @@ export const LogsTabContent = ({
     for (const asset of deployment.functionsAssets ?? []) {
       map.set(asset.id, asset.name);
     }
-    for (const mcp of deployment.externalMcps ?? []) {
-      if ("id" in mcp && "name" in mcp) {
-        map.set(String(mcp.id), String(mcp.name));
-      }
-    }
     return map;
   }, [deployment]);
 

@@ -628,6 +628,3 @@ describe("plugin detail permission boundary", () => {
 vi.mock("@/components/sources/SourceCard", () => ({
   SourceMcpIcon: () => null,
 }));
-vi.mock("@/components/mcp/MCPToolsetIcon", () => ({
-  MCPToolsetIcon: () => null,
-}));

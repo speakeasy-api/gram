@@ -5,10 +5,9 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Badge } from "@/components/ui/Badge";
-import { AlertTriangleIcon, ArrowRight, Package } from "lucide-react";
+import { ArrowRight, Package } from "lucide-react";
 import { Link } from "react-router";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
-import { useHostedMcpOAuthConfigStatus } from "../sources/sources-hooks";
 import {
   hostedToolCountLabel,
   MCP_SERVER_KIND_LABEL,
@@ -39,11 +38,6 @@ export function MCPServerCard({
   const { canvasRef, start, stop } = useIconDither();
   const hosted = kind === "hosted";
   const toolset = hosted ? server.toolset : undefined;
-  const oauthStatus = useHostedMcpOAuthConfigStatus({
-    toolset,
-    userSessionIssuerId: server.userSessionIssuerId,
-  });
-  const needsOAuth = oauthStatus === "required-unconfigured";
   const name = mcpServerDisplayName(server);
   const installSourceTooltip = toolset?.registrySpecifier
     ? `Installed from ${toolset.registrySpecifier}`
@@ -51,7 +45,7 @@ export function MCPServerCard({
 
   return (
     <Link
-      to={mcpServerHref(routes, server, oauthStatus)}
+      to={mcpServerHref(routes, server)}
       onMouseEnter={start}
       onMouseLeave={stop}
       className="focus-visible:ring-ring block h-full no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
@@ -66,16 +60,6 @@ export function MCPServerCard({
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 -z-10 size-full"
             />
-            {needsOAuth && (
-              <div className="absolute bottom-3.5 left-1/2 z-10 -translate-x-1/2">
-                <Badge variant="warning">
-                  <Badge.LeftIcon>
-                    <AlertTriangleIcon />
-                  </Badge.LeftIcon>
-                  <Badge.Text>OAuth Required</Badge.Text>
-                </Badge>
-              </div>
-            )}
           </>
         }
         icon={
@@ -150,17 +134,10 @@ export function MCPServerCard({
               </Badge>
             )}
           </div>
-          {needsOAuth ? (
-            <div className="text-warning flex items-center gap-1 text-sm">
-              <span>Set up</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </div>
-          ) : (
-            <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-              <span>Open</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </div>
-          )}
+          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+            <span>Open</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </div>
         </div>
       </Card.Entity>
     </Link>

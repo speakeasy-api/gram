@@ -601,7 +601,6 @@ export type AdminProjectRedeployPreview = {
   openapi_assets: number;
   function_assets: number;
   packages: number;
-  external_mcps: number;
 };
 
 export function getProjectRedeployPreview(

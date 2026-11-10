@@ -10,10 +10,6 @@ import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  ExternalMCPHeaderDefinition,
-  ExternalMCPHeaderDefinition$inboundSchema,
-} from "./externalmcpheaderdefinition.js";
-import {
   ExternalOAuthServer,
   ExternalOAuthServer$inboundSchema,
 } from "./externaloauthserver.js";
@@ -77,10 +73,6 @@ export type Toolset = {
    * Description of the toolset
    */
   description?: string | undefined;
-  /**
-   * The external MCP header definitions that are relevant to the toolset
-   */
-  externalMcpHeaderDefinitions?: Array<ExternalMCPHeaderDefinition> | undefined;
   externalOauthServer?: ExternalOAuthServer | undefined;
   /**
    * The function environment variables that are relevant to the toolset
@@ -195,9 +187,6 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
     custom_domain_id: z.optional(z.string()),
     default_environment_slug: z.optional(z.string()),
     description: z.optional(z.string()),
-    external_mcp_header_definitions: z.optional(
-      z.array(ExternalMCPHeaderDefinition$inboundSchema),
-    ),
     external_oauth_server: z.optional(ExternalOAuthServer$inboundSchema),
     function_environment_variables: z.optional(
       z.array(FunctionEnvironmentVariable$inboundSchema),
@@ -236,7 +225,6 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       "created_at": "createdAt",
       "custom_domain_id": "customDomainId",
       "default_environment_slug": "defaultEnvironmentSlug",
-      "external_mcp_header_definitions": "externalMcpHeaderDefinitions",
       "external_oauth_server": "externalOauthServer",
       "function_environment_variables": "functionEnvironmentVariables",
       "mcp_enabled": "mcpEnabled",

@@ -614,13 +614,6 @@ function getToolInfo(tool: Toolset["rawTools"][number]) {
       name: tool.httpToolDefinition.name,
     };
   }
-  if (tool.externalMcpToolDefinition) {
-    return {
-      description: tool.externalMcpToolDefinition.description,
-      inputSchema: safeJsonParse(tool.externalMcpToolDefinition.schema),
-      name: tool.externalMcpToolDefinition.name,
-    };
-  }
   if (tool.promptTemplate) {
     return {
       description: tool.promptTemplate.description,

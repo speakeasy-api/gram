@@ -137,30 +137,6 @@ export function useEnvironmentVariables(
       });
     });
 
-    // Get env   vars from external MCP header definitions (these are required for external MCP servers)
-    toolset?.externalMcpHeaderDefinitions?.forEach((headerDef) => {
-      requiredVarNames.add(headerDef.name);
-      const environmentValues = getEnvironmentValues(headerDef.name);
-      const id = `ext-${headerDef.name}`;
-      // Check if this variable has an environment entry
-      const entry = findEnvEntry(headerDef.name);
-      const state: EnvVarState =
-        entry?.providedBy === "user"
-          ? "user-provided"
-          : entry?.providedBy === "none"
-            ? "omitted"
-            : "system";
-      existingVars.push({
-        id,
-        key: headerDef.name,
-        environmentValues,
-        state,
-        isRequired: true,
-        description: headerDef.description || "External MCP header",
-        createdAt: new Date(),
-      });
-    });
-
     // Load custom variables from environments (variables not in the required list)
     const customVarMap = new Map<
       string,
@@ -231,7 +207,6 @@ export function useEnvironmentVariables(
     toolset?.securityVariables,
     toolset?.serverVariables,
     toolset?.functionEnvironmentVariables,
-    toolset?.externalMcpHeaderDefinitions,
     environments,
     mcpMetadata,
   ]);

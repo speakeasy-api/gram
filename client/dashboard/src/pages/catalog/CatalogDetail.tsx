@@ -6,8 +6,6 @@ import { Text } from "@/components/ui/Text";
 import { SetupGuideCallout } from "@/components/setup-guide/SetupGuideCallout";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
 import { CatalogInstallButton } from "@/pages/catalog/ServerCard";
-import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
-import { externalMcpSlugFromToolUrn } from "@/pages/catalog/catalogInstall";
 import { filterToHttpRemotes } from "@/pages/catalog/remotes";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import {
@@ -17,17 +15,12 @@ import {
 } from "@/pages/catalog/hooks";
 import { parseServerMetadata } from "@/pages/catalog/hooks/serverMetadata";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
-import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Stack } from "@/components/ui/Stack";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Minus, Server as ServerIcon } from "lucide-react";
+import { Server as ServerIcon } from "lucide-react";
 import { ReactNode, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
-import { Spinner } from "@/components/ui/Spinner";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import type { ListedMcpServer } from "@/components/mcp/mcp-server-kind";
 
@@ -59,7 +52,6 @@ function primaryRemoteUrl(server: CatalogServer): string | undefined {
 export default function CatalogDetail(): JSX.Element {
   const { serverSpecifier } = useParams<{ serverSpecifier: string }>();
   const routes = useRoutes();
-  const client = useSdkClient();
   const decodedSpecifier = serverSpecifier
     ? decodeURIComponent(serverSpecifier)
     : "";
@@ -69,16 +61,7 @@ export default function CatalogDetail(): JSX.Element {
   const { data, isLoading } = useListMCPCatalog();
   const [showAddDialog, setShowAddDialog] = useState(false);
 
-  const queryClient = useQueryClient();
-  const gramProject = useProjectSlugForRequests();
-  const { data: deploymentResult, refetch: refetchDeployment } =
-    useLatestDeployment(gramProject ? { gramProject } : undefined, undefined, {
-      enabled: !!gramProject,
-      throwOnError: false,
-    });
-  const deployment = deploymentResult?.deployment;
-  const { installState, liveExternalMcp, instances } =
-    useCatalogInstallations();
+  const { installState, instances } = useCatalogInstallations();
 
   const server = useMemo(() => {
     if (!data?.servers || !decodedSpecifier) return null;
@@ -88,40 +71,6 @@ export default function CatalogDetail(): JSX.Element {
     );
   }, [data, decodedSpecifier]);
 
-  const removeServerMutation = useMutation({
-    mutationFn: async (slug: string) => {
-      // Any tool on this external MCP, not only the proxy tool.
-      const toolsets = await client.toolsets.list();
-      const matchingToolsets =
-        toolsets.toolsets?.filter((ts) =>
-          ts.toolUrns?.some((urn) => externalMcpSlugFromToolUrn(urn) === slug),
-        ) ?? [];
-
-      // Delete matching toolsets
-      await Promise.all(
-        matchingToolsets.map((ts) =>
-          client.toolsets.deleteBySlug({ slug: ts.slug }),
-        ),
-      );
-
-      // Remove the external MCP from the deployment
-      await client.deployments.evolveDeployment({
-        evolveForm: {
-          deploymentId: deployment?.id,
-          nonBlocking: true,
-          excludeExternalMcps: [slug],
-        },
-      });
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        refetchDeployment(),
-        invalidateAllListToolsets(queryClient),
-        invalidateAllMcpServers(queryClient),
-      ]);
-    },
-  });
-
   const versionMeta = server ? parseServerMetadata(server) : undefined;
   const serverUrl = server ? primaryRemoteUrl(server) : undefined;
   const displayName =
@@ -129,11 +78,7 @@ export default function CatalogDetail(): JSX.Element {
     server?.registrySpecifier?.split("/").pop() ??
     decodedSpecifier.split("/").pop();
 
-  // A deployment attachment only counts when an MCP server still selects it.
-  // Deleting the server leaves the attachment behind otherwise.
   const install = server ? installState(server) : "unknown";
-  const existingExternalMcp =
-    server && install === "added" ? liveExternalMcp(server) : undefined;
   const existingServers = server ? instances(server) : undefined;
 
   if (isLoading) {
@@ -240,46 +185,11 @@ export default function CatalogDetail(): JSX.Element {
                     </Text>
                   )}
                   <div className="mt-4">
-                    {install === "added" ? (
-                      <Stack direction="horizontal" gap={2} align="center">
-                        {existingExternalMcp && (
-                          <Button
-                            variant="secondary"
-                            size="md"
-                            onClick={() =>
-                              removeServerMutation.mutate(
-                                existingExternalMcp.slug,
-                              )
-                            }
-                            disabled={removeServerMutation.isPending}
-                          >
-                            <Button.LeftIcon>
-                              {removeServerMutation.isPending ? (
-                                <Spinner className="mr-0" />
-                              ) : (
-                                <Minus className="h-4 w-4" />
-                              )}
-                            </Button.LeftIcon>
-                            <Button.Text>
-                              {removeServerMutation.isPending
-                                ? "Removing..."
-                                : "Remove"}
-                            </Button.Text>
-                          </Button>
-                        )}
-                        <CatalogInstallButton
-                          state="added"
-                          size="md"
-                          onAdd={() => setShowAddDialog(true)}
-                        />
-                      </Stack>
-                    ) : (
-                      <CatalogInstallButton
-                        state={install}
-                        size="md"
-                        onAdd={() => setShowAddDialog(true)}
-                      />
-                    )}
+                    <CatalogInstallButton
+                      state={install}
+                      size="md"
+                      onAdd={() => setShowAddDialog(true)}
+                    />
                   </div>
                 </div>
               </div>
@@ -381,9 +291,6 @@ export default function CatalogDetail(): JSX.Element {
           servers={[server]}
           open={showAddDialog}
           onOpenChange={setShowAddDialog}
-          onServersAdded={() => {
-            void refetchDeployment();
-          }}
         />
       </Page.Body>
     </Page>

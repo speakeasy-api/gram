@@ -9,7 +9,6 @@ import type { Toolset } from "@/lib/toolTypes";
 import { useToolsets } from "@/pages/toolsets/useToolsets";
 import { useRoutes } from "@/routes";
 import { invalidateAllGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,9 +27,6 @@ export function DeleteHostedServerButton({
   const routes = useRoutes();
   const client = useSdkClient();
   const toolsets = useToolsets();
-  const { data: deploymentResult, refetch: refetchDeployment } =
-    useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingMcpServer, setIsDeletingMcpServer] = useState(false);
   // A toolset's canonical hosted server shares the toolset's id.
@@ -46,25 +42,6 @@ export function DeleteHostedServerButton({
     setIsDeletingMcpServer(true);
 
     try {
-      const externalMcpUrn = toolset.toolUrns?.find((urn) =>
-        urn.includes(":externalmcp:"),
-      );
-
-      if (externalMcpUrn && deployment) {
-        const parts = externalMcpUrn.split(":");
-        const externalMcpSlug = parts[2];
-
-        if (externalMcpSlug) {
-          await client.deployments.evolveDeployment({
-            evolveForm: {
-              deploymentId: deployment.id,
-              nonBlocking: true,
-              excludeExternalMcps: [externalMcpSlug],
-            },
-          });
-        }
-      }
-
       await client.toolsets.deleteBySlug({ slug: toolset.slug });
 
       telemetry.capture("mcp_event", {
@@ -74,7 +51,6 @@ export function DeleteHostedServerButton({
 
       void invalidateAllToolset(queryClient, { refetchType: "none" });
       void invalidateAllGetPeriodUsage(queryClient);
-      void refetchDeployment();
       // Refresh both lists before navigating so the listing never shows the deleted server.
       await Promise.all([
         toolsets.refetch(),

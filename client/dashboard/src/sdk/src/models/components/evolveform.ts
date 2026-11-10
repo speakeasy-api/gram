@@ -26,10 +26,6 @@ export type EvolveForm = {
    */
   deploymentId?: string | undefined;
   /**
-   * Has no effect: new deployments never include external MCP servers. Accepted so existing callers keep working.
-   */
-  excludeExternalMcps?: Array<string> | undefined;
-  /**
    * The functions, identified by slug, to exclude from the new deployment when cloning a previous deployment.
    */
   excludeFunctions?: Array<string> | undefined;
@@ -62,7 +58,6 @@ export type EvolveForm = {
 /** @internal */
 export type EvolveForm$Outbound = {
   deployment_id?: string | undefined;
-  exclude_external_mcps?: Array<string> | undefined;
   exclude_functions?: Array<string> | undefined;
   exclude_openapiv3_assets?: Array<string> | undefined;
   exclude_packages?: Array<string> | undefined;
@@ -81,7 +76,6 @@ export const EvolveForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     deploymentId: z.optional(z.string()),
-    excludeExternalMcps: z.optional(z.array(z.string())),
     excludeFunctions: z.optional(z.array(z.string())),
     excludeOpenapiv3Assets: z.optional(z.array(z.string())),
     excludePackages: z.optional(z.array(z.string())),
@@ -95,7 +89,6 @@ export const EvolveForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       deploymentId: "deployment_id",
-      excludeExternalMcps: "exclude_external_mcps",
       excludeFunctions: "exclude_functions",
       excludeOpenapiv3Assets: "exclude_openapiv3_assets",
       excludePackages: "exclude_packages",

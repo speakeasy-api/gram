@@ -47,21 +47,18 @@ export function toolsetAuthSurface({
 
 /**
  * External OAuth is supported for enabled, public toolset servers whose tools
- * advertise OAuth or whose attached external MCP source requires it. Keep this
+ * advertise OAuth. Keep this
  * aligned with the External OAuth section so the user-sessions surface does not
  * expose a configuration the serve path cannot use.
  */
-export function canConfigureExternalOAuth(
-  toolset: Toolset,
-  externalMcpRequiresOAuth: boolean,
-): boolean {
+export function canConfigureExternalOAuth(toolset: Toolset): boolean {
   const hasOAuthAuthorizationCodeFlow =
     (toolset.oauthEnablementMetadata?.oauth2SecurityCount ?? 0) > 0;
 
   return Boolean(
     toolset.mcpEnabled &&
     toolset.mcpIsPublic &&
-    (hasOAuthAuthorizationCodeFlow || externalMcpRequiresOAuth),
+    hasOAuthAuthorizationCodeFlow,
   );
 }
 
