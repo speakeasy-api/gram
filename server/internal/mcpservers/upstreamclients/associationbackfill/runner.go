@@ -94,9 +94,9 @@ const (
 
 	// GatewayOutcomeConfigured is a server already associated with the
 	// decided client, or one whose evidence names several clients but whose
-	// explicit configuration settles it: exactly one of the issuer's clients
-	// is associated with it, and every other client with grants for its
-	// upstream was explicitly detached from it.
+	// explicit configuration settles it: at least one outbound client is
+	// associated with it, and every candidate with grants for its upstream
+	// is already associated or was explicitly detached from it.
 	GatewayOutcomeConfigured GatewayOutcome = "configured"
 
 	// GatewayOutcomeDetached is a server whose decided client was explicitly
@@ -575,15 +575,13 @@ func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 }
 
 // settledByConfiguration marks an ambiguous or conflicting pair configured
-// when an administrator's explicit associations already settle it: exactly one
-// of the issuer's clients is associated with the server, and no client the
-// server was never associated with holds grants for its upstream. Clients on
-// one authorization server all share its derived issuer, so a derived match
-// does not distinguish them and never outweighs an association. A grant for a
-// client detached from the server stays detached, as it does when evidence
-// decides. Several associations, or a grant for a client never associated
-// with the server, still need explicit configuration. It decides nothing new
-// and writes nothing.
+// when at least one outbound client is already associated with the server and
+// every grant-bearing candidate is associated or explicitly detached. Multiple
+// outbound registrations can share an authorization server, so a derived match
+// does not distinguish them or outweigh existing associations. Inbound issuer
+// bindings alone do not justify adding outbound clients. A detached client stays
+// detached; a grant for a client never associated still needs configuration.
+// This decides nothing new and writes nothing.
 func settledByConfiguration(result GatewayResult, rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 	live := 0
 	for _, row := range rows {
@@ -594,7 +592,7 @@ func settledByConfiguration(result GatewayResult, rows []ListGatewayAssociationC
 			return result
 		}
 	}
-	if live == 1 {
+	if live > 0 {
 		result.Outcome = GatewayOutcomeConfigured
 	}
 	return result
