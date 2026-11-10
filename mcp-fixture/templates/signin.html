@@ -6,7 +6,7 @@
 <title>Sign in to the MCP fixture</title>
 <style>
   :root { --bg: #f6f7f9; --card: #fff; --fg: #1b1f27; --muted: #5d6573; --line: #dde1e8; --accent: #3a5bd9; color-scheme: light dark; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #12151b; --card: #1a1e26; --fg: #e6e9ef; --muted: #9aa3b2; --line: #2c323d; --accent: #8ea6ff; } }
+  @media (prefers-color-scheme: dark) { :root { --bg: #12151b; --card: #1a1e26; --fg: #e6e9ef; --muted: #9aa3b2; --line: #2c323d; --accent: #4968d8; } }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; display: grid; place-items: center; min-height: 100vh; padding: 16px; box-sizing: border-box; }
   main { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 24px; width: 100%; max-width: 420px; display: grid; gap: 14px; }
   h1 { font-size: 1.2rem; margin: 0; }
@@ -42,7 +42,7 @@
     {{end}}
     {{if .Suggested}}
     <div class="pick">
-      {{range .Suggested}}<button type="submit" name="email" value="{{.}}">Continue as {{.}}</button>{{end}}
+      {{range .Suggested}}<button type="submit" name="email" value="{{.}}" formnovalidate>Continue as {{.}}</button>{{end}}
     </div>
     {{end}}
     <div style="display:grid;gap:6px;margin-top:12px">

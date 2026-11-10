@@ -164,15 +164,16 @@ Both accounts have invalid ciphertext, no refresh token and auto-refresh disable
 Both sessions use Linear's one OAuth client: Speakeasy allows one client per
 user session issuer and remote provider, so the legacy callback client stays
 unbound and only appears on the provider's pages. The
-`mcp_servers.remote_session_issuer_id` stamp stays derivable. It is
-display-only, not a live OAuth integration.
+`mcp_servers.remote_session_issuer_id` stamp stays derivable. In the demo org
+it is display-only, not a live OAuth integration.
 
-**Linear is display-only.** Its OAuth client ("Example Workspace sign-in") sits under the fictional **Example Workspace Identity** provider,
+**Linear is display-only in the demo org.** Its OAuth client ("Example Workspace sign-in") sits under the fictional **Example Workspace Identity** provider,
 whose authorize, token and JWKS endpoints are on the reserved
 `identity.example.com` host, and its seeded sessions hold unusable ciphertext.
-Connecting or reconnecting Linear always fails, in the demo org and locally.
-Use it to review identity, scope and sign-in screens, and use Notion or
-DeepWiki for a server that can actually connect. All IDs reuse `Spec.NameSeed` and
+In the demo org, connecting or reconnecting Linear always fails, by design:
+use it to review identity, scope and sign-in screens. Locally, `mise run seed`
+retargets Linear to the MCP fixture as the Per-User OAuth Server, where
+signing in (pick an email) and tool calls work; see `README.md`. All IDs reuse `Spec.NameSeed` and
 retarget with the tenant.
 Reseeding deletes bindings before sessions, issuers, agents and projects.
 The wizard separates **MCP selection** from **MCP authentication**. The latter

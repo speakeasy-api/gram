@@ -226,9 +226,11 @@ VALUES (@id::uuid, @organization_id::text, @project_id::uuid, 'MCP fixture', 'mc
 ON CONFLICT (project_id, slug) WHERE deleted IS FALSE
 DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, updated_at = clock_timestamp();
 
--- name: LocalFixtureUpsertEnvironmentEntry :exec
+-- name: LocalFixtureUpsertEnvironmentEntry :execrows
 INSERT INTO environment_entries (environment_id, name, value, is_secret)
-VALUES (@environment_id::uuid, @name::text, @value::text, FALSE)
+SELECT e.id, @name::text, @value::text, FALSE
+FROM environments e
+WHERE e.id = @environment_id::uuid AND e.project_id = @project_id::uuid AND e.deleted IS FALSE
 ON CONFLICT (environment_id, name)
 DO UPDATE SET value = EXCLUDED.value, is_secret = FALSE, updated_at = clock_timestamp();
 
@@ -303,6 +305,8 @@ WHERE id = @id::uuid AND organization_id = @organization_id::text;
 -- name: LocalFixtureListLiveSessions :many
 SELECT rs.id, COALESCE(u.email, rs.upstream_email, '')::text AS email
 FROM remote_sessions rs
+JOIN remote_session_clients c
+  ON c.id = rs.remote_session_client_id AND c.project_id = @project_id::uuid
 LEFT JOIN users u ON rs.subject_urn = 'user:' || u.id
 WHERE rs.remote_session_client_id = ANY(@client_ids::uuid[])
   AND rs.deleted IS FALSE
@@ -318,5 +322,10 @@ SET access_token_encrypted = @access_token_encrypted::text,
     scopes = @scopes::text[],
     auto_refresh = TRUE,
     upstream_email = @email::text,
+    resource = @resource::text,
     updated_at = clock_timestamp()
-WHERE id = @id::uuid AND remote_session_client_id = ANY(@client_ids::uuid[]) AND deleted IS FALSE;
+WHERE id = @id::uuid AND remote_session_client_id = ANY(@client_ids::uuid[]) AND deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients c
+    WHERE c.id = remote_sessions.remote_session_client_id AND c.project_id = @project_id::uuid
+  );

@@ -677,8 +677,9 @@ open their effective assignments; the dropdown always offers compact member sear
 
 35. **Seeded MCP servers** (picker check in both orgs; live checks local only)
     - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
-      server appears once: one Acme Support Tools and one Acme Ops (each
-      toolset's canonical wrapper), and one row for Linear (Per-User OAuth
+      server appears once: one each of Acme Support Tools, Acme Ops, Acme
+      Partner Gateway and Acme OAuth Discovery (each toolset's canonical
+      wrapper), and one row for Linear (Per-User OAuth
       Server locally). Expanding Linear shows one OAuth client, not two.
     - Locally, with the `mcp-fixture` daemon up (`pitchfork status
       mcp-fixture`), connect any MCP client to

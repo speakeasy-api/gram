@@ -2671,12 +2671,13 @@ SELECT name, url FROM remote_mcp_servers WHERE id = @id AND deleted IS FALSE;
 SELECT id, access_token_encrypted, refresh_token_encrypted::text AS refresh_token_encrypted, auto_refresh
 FROM remote_sessions
 WHERE remote_session_client_id = @remote_session_client_id
-  AND deleted IS FALSE AND access_expires_at > clock_timestamp()
+  AND deleted IS FALSE
+  AND (access_expires_at IS NULL OR access_expires_at > clock_timestamp())
 ORDER BY id;
 
 -- name: GetAuthClientHeaderFixture :one
 -- Reads an auth client header's stored value and secrecy.
-SELECT value, is_secret FROM mcp_auth_client_headers WHERE id = @id;
+SELECT value, is_secret FROM mcp_auth_client_headers WHERE id = @id AND deleted IS FALSE;
 
 -- name: GetEnvironmentEntryFixture :one
 -- Reads one environment entry by environment and name.

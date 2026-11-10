@@ -2264,7 +2264,7 @@ func (q *Queries) GetAttachmentSourceIDFixture(ctx context.Context, arg GetAttac
 }
 
 const getAuthClientHeaderFixture = `-- name: GetAuthClientHeaderFixture :one
-SELECT value, is_secret FROM mcp_auth_client_headers WHERE id = $1
+SELECT value, is_secret FROM mcp_auth_client_headers WHERE id = $1 AND deleted IS FALSE
 `
 
 type GetAuthClientHeaderFixtureRow struct {
@@ -4632,7 +4632,8 @@ const listRemoteSessionTokensFixture = `-- name: ListRemoteSessionTokensFixture 
 SELECT id, access_token_encrypted, refresh_token_encrypted::text AS refresh_token_encrypted, auto_refresh
 FROM remote_sessions
 WHERE remote_session_client_id = $1
-  AND deleted IS FALSE AND access_expires_at > clock_timestamp()
+  AND deleted IS FALSE
+  AND (access_expires_at IS NULL OR access_expires_at > clock_timestamp())
 ORDER BY id
 `
 

@@ -67,6 +67,12 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 		logger.InfoContext(ctx, "GRAM_MCP_FIXTURE_URL is not set; seeded servers stay display-only")
 		return nil
 	}
+	// Speakeasy discovers OAuth servers over HTTPS only, and the seeded
+	// sessions carry bearer tokens: never wire a plain-HTTP fixture.
+	if !strings.HasPrefix(opts.BaseURL, "https://") {
+		logger.WarnContext(ctx, "GRAM_MCP_FIXTURE_URL is not HTTPS (enable local TLS); seeded servers stay display-only", attr.SlogURLOriginal(opts.BaseURL))
+		return nil
+	}
 	if opts.ServerURL == nil {
 		return errors.New("wire local mcp fixture: the server URL is required")
 	}
@@ -101,10 +107,11 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 	if err := q.LocalFixtureUpsertEnvironment(ctx, repo.LocalFixtureUpsertEnvironmentParams{ID: envID, OrganizationID: org, ProjectID: proj}); err != nil {
 		return fmt.Errorf("wire local mcp fixture: environment: %w", err)
 	}
-	if err := q.LocalFixtureUpsertEnvironmentEntry(ctx, repo.LocalFixtureUpsertEnvironmentEntryParams{EnvironmentID: envID, Name: fixtureAPIEnvVar, Value: base + fixtureauth.PathAPI}); err != nil {
-		return fmt.Errorf("wire local mcp fixture: environment entry: %w", err)
+	n, err := q.LocalFixtureUpsertEnvironmentEntry(ctx, repo.LocalFixtureUpsertEnvironmentEntryParams{EnvironmentID: envID, ProjectID: proj, Name: fixtureAPIEnvVar, Value: base + fixtureauth.PathAPI})
+	if err := expect("environment entry", n, err); err != nil {
+		return err
 	}
-	n, err := q.LocalFixtureLinkToolsetEnvironments(ctx, repo.LocalFixtureLinkToolsetEnvironmentsParams{
+	n, err = q.LocalFixtureLinkToolsetEnvironments(ctx, repo.LocalFixtureLinkToolsetEnvironmentsParams{
 		EnvironmentID: envID, ProjectID: proj,
 		ToolsetIds: []uuid.UUID{s.toolset1(), s.toolset2(), s.toolset3(), s.toolset4()},
 	})
@@ -152,7 +159,7 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 	// expired, so Needs refresh still shows; reconnecting them signs in
 	// against the fixture.
 	clients := []uuid.UUID{mainClient}
-	sessions, err := q.LocalFixtureListLiveSessions(ctx, clients)
+	sessions, err := q.LocalFixtureListLiveSessions(ctx, repo.LocalFixtureListLiveSessionsParams{ClientIds: clients, ProjectID: proj})
 	if err != nil {
 		return fmt.Errorf("wire local mcp fixture: list sessions: %w", err)
 	}
@@ -181,8 +188,10 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 			RefreshExpiresAt:      pgtype.Timestamptz{Time: pair.RefreshExpires, InfinityModifier: pgtype.Finite, Valid: true},
 			Scopes:                fixtureauth.DefaultScopes,
 			Email:                 email,
+			Resource:              resource,
 			ID:                    sess.ID,
 			ClientIds:             clients,
+			ProjectID:             proj,
 		})
 		if err := expect("store session tokens", n, err); err != nil {
 			return err

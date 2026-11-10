@@ -176,12 +176,19 @@ func (q *Queries) LocalFixtureLinkToolsetEnvironments(ctx context.Context, arg L
 const localFixtureListLiveSessions = `-- name: LocalFixtureListLiveSessions :many
 SELECT rs.id, COALESCE(u.email, rs.upstream_email, '')::text AS email
 FROM remote_sessions rs
+JOIN remote_session_clients c
+  ON c.id = rs.remote_session_client_id AND c.project_id = $1::uuid
 LEFT JOIN users u ON rs.subject_urn = 'user:' || u.id
-WHERE rs.remote_session_client_id = ANY($1::uuid[])
+WHERE rs.remote_session_client_id = ANY($2::uuid[])
   AND rs.deleted IS FALSE
   AND rs.access_expires_at > clock_timestamp()
 ORDER BY rs.id
 `
+
+type LocalFixtureListLiveSessionsParams struct {
+	ProjectID uuid.UUID
+	ClientIds []uuid.UUID
+}
 
 type LocalFixtureListLiveSessionsRow struct {
 	ID    uuid.UUID
@@ -189,8 +196,8 @@ type LocalFixtureListLiveSessionsRow struct {
 }
 
 // The live seeded sign-ins on the given clients, with the email each signed in as.
-func (q *Queries) LocalFixtureListLiveSessions(ctx context.Context, clientIds []uuid.UUID) ([]LocalFixtureListLiveSessionsRow, error) {
-	rows, err := q.db.Query(ctx, localFixtureListLiveSessions, clientIds)
+func (q *Queries) LocalFixtureListLiveSessions(ctx context.Context, arg LocalFixtureListLiveSessionsParams) ([]LocalFixtureListLiveSessionsRow, error) {
+	rows, err := q.db.Query(ctx, localFixtureListLiveSessions, arg.ProjectID, arg.ClientIds)
 	if err != nil {
 		return nil, err
 	}
@@ -412,8 +419,13 @@ SET access_token_encrypted = $1::text,
     scopes = $5::text[],
     auto_refresh = TRUE,
     upstream_email = $6::text,
+    resource = $7::text,
     updated_at = clock_timestamp()
-WHERE id = $7::uuid AND remote_session_client_id = ANY($8::uuid[]) AND deleted IS FALSE
+WHERE id = $8::uuid AND remote_session_client_id = ANY($9::uuid[]) AND deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients c
+    WHERE c.id = remote_sessions.remote_session_client_id AND c.project_id = $10::uuid
+  )
 `
 
 type LocalFixtureSetSessionTokensParams struct {
@@ -423,8 +435,10 @@ type LocalFixtureSetSessionTokensParams struct {
 	RefreshExpiresAt      pgtype.Timestamptz
 	Scopes                []string
 	Email                 string
+	Resource              string
 	ID                    uuid.UUID
 	ClientIds             []uuid.UUID
+	ProjectID             uuid.UUID
 }
 
 func (q *Queries) LocalFixtureSetSessionTokens(ctx context.Context, arg LocalFixtureSetSessionTokensParams) (int64, error) {
@@ -435,8 +449,10 @@ func (q *Queries) LocalFixtureSetSessionTokens(ctx context.Context, arg LocalFix
 		arg.RefreshExpiresAt,
 		arg.Scopes,
 		arg.Email,
+		arg.Resource,
 		arg.ID,
 		arg.ClientIds,
+		arg.ProjectID,
 	)
 	if err != nil {
 		return 0, err
@@ -467,22 +483,33 @@ func (q *Queries) LocalFixtureUpsertEnvironment(ctx context.Context, arg LocalFi
 	return err
 }
 
-const localFixtureUpsertEnvironmentEntry = `-- name: LocalFixtureUpsertEnvironmentEntry :exec
+const localFixtureUpsertEnvironmentEntry = `-- name: LocalFixtureUpsertEnvironmentEntry :execrows
 INSERT INTO environment_entries (environment_id, name, value, is_secret)
-VALUES ($1::uuid, $2::text, $3::text, FALSE)
+SELECT e.id, $1::text, $2::text, FALSE
+FROM environments e
+WHERE e.id = $3::uuid AND e.project_id = $4::uuid AND e.deleted IS FALSE
 ON CONFLICT (environment_id, name)
 DO UPDATE SET value = EXCLUDED.value, is_secret = FALSE, updated_at = clock_timestamp()
 `
 
 type LocalFixtureUpsertEnvironmentEntryParams struct {
-	EnvironmentID uuid.UUID
 	Name          string
 	Value         string
+	EnvironmentID uuid.UUID
+	ProjectID     uuid.UUID
 }
 
-func (q *Queries) LocalFixtureUpsertEnvironmentEntry(ctx context.Context, arg LocalFixtureUpsertEnvironmentEntryParams) error {
-	_, err := q.db.Exec(ctx, localFixtureUpsertEnvironmentEntry, arg.EnvironmentID, arg.Name, arg.Value)
-	return err
+func (q *Queries) LocalFixtureUpsertEnvironmentEntry(ctx context.Context, arg LocalFixtureUpsertEnvironmentEntryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixtureUpsertEnvironmentEntry,
+		arg.Name,
+		arg.Value,
+		arg.EnvironmentID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const localGrantAPIKeyPolicy = `-- name: LocalGrantAPIKeyPolicy :exec

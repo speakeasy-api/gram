@@ -79,6 +79,11 @@ func New(cfg Config) *Server {
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = &http.Client{Timeout: 10 * time.Second}
 	}
+	// A client metadata document is served at its client_id URL; never follow
+	// a redirect somewhere else.
+	noRedirect := *cfg.HTTPClient
+	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	cfg.HTTPClient = &noRedirect
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
@@ -198,8 +203,8 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, u := range req.RedirectURIs {
-		if _, err := url.ParseRequestURI(u); err != nil {
-			oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", "redirect_uri "+u+" is not a URL")
+		if err := checkRedirectURI(u); err != nil {
+			oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", err.Error())
 			return
 		}
 	}
@@ -241,12 +246,18 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 // resolveClient accepts a dynamically registered client id or the URL of a
 // client ID metadata document.
 func (s *Server) resolveClient(ctx context.Context, clientID string) (client, error) {
-	if strings.HasPrefix(clientID, "https://") || strings.HasPrefix(clientID, "http://localhost") || strings.HasPrefix(clientID, "http://127.0.0.1") {
+	if strings.HasPrefix(clientID, "https://") || strings.HasPrefix(clientID, "http://") {
+		if err := checkMetadataDocumentURL(clientID); err != nil {
+			return client{}, err
+		}
 		return s.fetchClientMetadataDocument(ctx, clientID)
 	}
 	c, err := fixtureauth.Parse(clientID, fixtureauth.KindClient)
 	if err != nil {
 		return client{}, fmt.Errorf("unknown client: %w", err)
+	}
+	if c.Issuer != s.issuer {
+		return client{}, errors.New("client was registered with another fixture")
 	}
 	return client{ID: clientID, Name: c.ClientName, RedirectURIs: c.RedirectURIs}, nil
 }
@@ -275,6 +286,11 @@ func (s *Server) fetchClientMetadataDocument(ctx context.Context, docURL string)
 	}
 	if doc.ClientID != docURL {
 		return client{}, errors.New("client metadata document client_id does not match its URL")
+	}
+	for _, u := range doc.RedirectURIs {
+		if err := checkRedirectURI(u); err != nil {
+			return client{}, fmt.Errorf("client metadata document: %w", err)
+		}
 	}
 	return client{ID: docURL, Name: doc.ClientName, RedirectURIs: doc.RedirectURIs}, nil
 }
@@ -456,7 +472,7 @@ func (s *Server) token(w http.ResponseWriter, r *http.Request) {
 func (s *Server) exchangeCode(w http.ResponseWriter, r *http.Request) {
 	f := r.PostForm
 	code, err := fixtureauth.Parse(f.Get("code"), fixtureauth.KindCode)
-	if err != nil {
+	if err != nil || code.Issuer != s.issuer {
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "code is invalid or expired")
 		return
 	}
@@ -486,7 +502,7 @@ func (s *Server) exchangeCode(w http.ResponseWriter, r *http.Request) {
 func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 	f := r.PostForm
 	rt, err := fixtureauth.Parse(f.Get("refresh_token"), fixtureauth.KindRefresh)
-	if err != nil {
+	if err != nil || rt.Issuer != s.issuer {
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid or expired")
 		return
 	}
@@ -494,11 +510,8 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "refresh token was issued to another client")
 		return
 	}
-	// Rotation: every refresh token works once.
-	if !s.useOnce(rt.ID, rt.ExpiresAt.Time) {
-		oauthError(w, http.StatusBadRequest, "invalid_grant", "refresh token was already used or revoked")
-		return
-	}
+	// Check the requested scopes before spending the token, so a bad request
+	// can be retried.
 	scopes := rt.Scopes()
 	if requested := strings.Fields(f.Get("scope")); len(requested) > 0 {
 		for _, sc := range requested {
@@ -508,6 +521,11 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		scopes = requested
+	}
+	// Rotation: every refresh token works once.
+	if !s.useOnce(rt.ID, rt.ExpiresAt.Time) {
+		oauthError(w, http.StatusBadRequest, "invalid_grant", "refresh token was already used or revoked")
+		return
 	}
 	s.issue(w, rt.Email(), rt.ClientID, scopes)
 }
@@ -760,6 +778,34 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// checkRedirectURI accepts an absolute URL without a fragment.
+func checkRedirectURI(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || !u.IsAbs() || u.Host == "" {
+		return fmt.Errorf("redirect_uri %q must be an absolute URL", raw)
+	}
+	if u.Fragment != "" {
+		return fmt.Errorf("redirect_uri %q must not have a fragment", raw)
+	}
+	return nil
+}
+
+// checkMetadataDocumentURL accepts https anywhere, and plain http only for an
+// exact loopback host.
+func checkMetadataDocumentURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("client_id %q is not a URL", raw)
+	}
+	if u.Scheme == "https" {
+		return nil
+	}
+	if u.Scheme == "http" && slices.Contains([]string{"localhost", "127.0.0.1", "::1"}, u.Hostname()) {
+		return nil
+	}
+	return fmt.Errorf("client_id %q must be an https URL", raw)
 }
 
 func decodeSegment(seg string) ([]byte, error) {

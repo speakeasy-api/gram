@@ -245,7 +245,7 @@ GRAM_TLS_PROVIDER = { default = "mkcert" }
 ## GRAM_MCP_FIXTURE_PORT is auto-remapped by `mise work:init` for parallel worktrees.
 GRAM_MCP_FIXTURE_PORT = "47321"
 GRAM_MCP_FIXTURE_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_MCP_FIXTURE_PORT}}"
-GRAM_MCP_FIXTURE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_MCP_FIXTURE_PORT}}"
+GRAM_MCP_FIXTURE_URL = "{{env.GRAM_HTTP_SCHEME}}://{{env.GRAM_HOST}}:{{env.GRAM_MCP_FIXTURE_PORT}}"
 ## Short access tokens make expiry and refresh visible; refresh tokens last 30 days.
 GRAM_MCP_FIXTURE_ACCESS_TOKEN_TTL = "1h"
 ## GitHub App for plugin publishing (leave unset to disable)

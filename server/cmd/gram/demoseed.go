@@ -96,11 +96,18 @@ func newDemoSeedCommand() *cli.Command {
 		}, append(clickHouseFlags(), redisFlags()...)...),
 		Action: func(c *cli.Context) error {
 			var siteURL *url.URL
+			var fixture demoseed.LocalMCPFixtureOptions
 			if c.Bool("local") {
 				var err error
 				siteURL, err = parseSiteURL(c.String("site-url"))
 				if err != nil {
 					return fmt.Errorf("local seed site-url: %w", err)
+				}
+				// Validate before the seed writes anything, so a bad setting
+				// cannot leave the org reseeded without its local fixtures.
+				fixture, err = localMCPFixtureOptions(c)
+				if err != nil {
+					return err
 				}
 			}
 			ctx := c.Context
@@ -184,11 +191,6 @@ func newDemoSeedCommand() *cli.Command {
 				slack.Slack = slackapi.NewClient("", guardian.NewDefaultPolicy(otel.GetTracerProvider()).Client())
 			}
 
-			fixture, err := localMCPFixtureOptions(c)
-			if err != nil {
-				return err
-			}
-
 			if err := demoseed.RunLocalFixtures(ctx, logger, db, blob, redisClient, demoseed.LocalFixturesOptions{
 				DeveloperEmail: c.String("local-user-email"),
 				SiteURL:        siteURL,
@@ -217,9 +219,12 @@ func localMCPFixtureOptions(c *cli.Context) (demoseed.LocalMCPFixtureOptions, er
 	if base == "" || base == "unset" {
 		return opts, nil
 	}
-	serverURL, err := url.Parse(c.String("server-url"))
-	if err != nil || serverURL.Host == "" {
-		return opts, fmt.Errorf("the local MCP fixture needs GRAM_SERVER_URL: %q is not a URL", c.String("server-url"))
+	if _, err := parseOrigin(base); err != nil {
+		return opts, fmt.Errorf("GRAM_MCP_FIXTURE_URL: %w", err)
+	}
+	serverURL, err := parseOrigin(c.String("server-url"))
+	if err != nil {
+		return opts, fmt.Errorf("the local MCP fixture needs GRAM_SERVER_URL: %w", err)
 	}
 	encryptionClient, err := encryption.New(c.String("encryption-key"))
 	if err != nil {
@@ -229,4 +234,20 @@ func localMCPFixtureOptions(c *cli.Context) (demoseed.LocalMCPFixtureOptions, er
 	opts.ServerURL = serverURL
 	opts.Encryption = encryptionClient
 	return opts, nil
+}
+
+// parseOrigin accepts an absolute http(s) origin: a scheme and host, with no
+// path, query or fragment.
+func parseOrigin(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse %q: %w", raw, err)
+	}
+	if (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return nil, fmt.Errorf("%q is not an absolute http(s) URL", raw)
+	}
+	if u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return nil, fmt.Errorf("%q must be an origin, without a path, query or fragment", raw)
+	}
+	return u, nil
 }

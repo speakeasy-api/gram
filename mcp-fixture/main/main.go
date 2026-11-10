@@ -6,8 +6,11 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -28,12 +31,17 @@ func main() {
 	suggested := flag.String("suggested-emails", envOr("GRAM_MCP_FIXTURE_SUGGESTED_EMAILS", "alex@fixture.test,sam@fixture.test"), "comma-separated emails offered on the sign-in page")
 	flag.Parse()
 
+	useTLS, err := tlsMode(*certFile, *keyFile)
+	if err != nil {
+		logger.Error("invalid TLS configuration", "error", err)
+		os.Exit(1)
+	}
 	if *baseURL == "" {
-		scheme := "https"
-		if *certFile == "" {
-			scheme = "http"
-		}
-		*baseURL = scheme + "://" + *address
+		*baseURL = defaultBaseURL(*address, useTLS)
+	}
+	if err := checkBaseURL(*baseURL, useTLS); err != nil {
+		logger.Error("invalid base URL", "error", err)
+		os.Exit(1)
 	}
 
 	fixture := mcpfixture.New(mcpfixture.Config{
@@ -59,8 +67,7 @@ func main() {
 	}()
 
 	logger.Info("mcp fixture listening", "address", *address, "base_url", *baseURL)
-	var err error
-	if *certFile != "" && *keyFile != "" {
+	if useTLS {
 		err = srv.ListenAndServeTLS(*certFile, *keyFile)
 	} else {
 		err = srv.ListenAndServe()
@@ -98,4 +105,50 @@ func splitList(s string) []string {
 		}
 	}
 	return out
+}
+
+// tlsMode reports whether to serve TLS. Both files or neither: one alone is a
+// misconfiguration, not a reason to fall back to plain HTTP.
+func tlsMode(certFile, keyFile string) (bool, error) {
+	if (certFile == "") != (keyFile == "") {
+		return false, errors.New("set both --ssl-cert-file and --ssl-key-file, or neither")
+	}
+	return certFile != "", nil
+}
+
+// defaultBaseURL builds a client-facing URL for a listen address, mapping
+// wildcard and port-only addresses to localhost.
+func defaultBaseURL(address string, useTLS bool) string {
+	scheme := "http"
+	if useTLS {
+		scheme = "https"
+	}
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return scheme + "://" + address
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "localhost"
+	}
+	return scheme + "://" + net.JoinHostPort(host, port)
+}
+
+// checkBaseURL rejects an issuer whose scheme does not match the listener, so
+// the OAuth endpoints the fixture advertises are the ones it serves.
+func checkBaseURL(raw string, useTLS bool) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("%q is not an absolute URL", raw)
+	}
+	want := "http"
+	if useTLS {
+		want = "https"
+	}
+	if u.Scheme != want {
+		return fmt.Errorf("base URL %q uses %s, but the listener serves %s", raw, u.Scheme, want)
+	}
+	if u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return fmt.Errorf("base URL %q must be an origin, without a path, query or fragment", raw)
+	}
+	return nil
 }
