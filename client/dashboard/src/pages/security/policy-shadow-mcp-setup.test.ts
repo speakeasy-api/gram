@@ -12,6 +12,7 @@ import {
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
+  shadowMCPReviewSummary,
 } from "./policy-shadow-mcp-setup";
 
 const blockingShadowMCPPolicy = {
@@ -368,5 +369,60 @@ describe("shadowMCPDecisionConflicts", () => {
         disposition: "block_all",
       }),
     ).toEqual([]);
+  });
+});
+
+describe("shadowMCPReviewSummary", () => {
+  const servers = [
+    {
+      canonicalServerUrl: "https://github.example.com/mcp",
+      serverName: "GitHub",
+      urlHost: "github.example.com",
+    },
+    {
+      canonicalServerUrl: "https://notes.example.com/mcp",
+      serverName: "",
+      urlHost: "notes.example.com",
+    },
+  ];
+
+  it("lists the blocked servers of an allow_all policy by name", () => {
+    expect(
+      shadowMCPReviewSummary({
+        disposition: "allow_all",
+        selectedURLs: new Set([
+          "https://notes.example.com/mcp",
+          "https://github.example.com/mcp",
+        ]),
+        servers,
+      }),
+    ).toEqual({
+      behavior: "Allow all servers",
+      listLabel: "Blocked servers",
+      servers: ["GitHub", "notes.example.com"],
+      emptyText: "None. Every server stays available.",
+    });
+  });
+
+  it("lists the allowed servers of a block_all policy", () => {
+    const summary = shadowMCPReviewSummary({
+      disposition: "block_all",
+      selectedURLs: new Set(["https://unknown.example.com/mcp"]),
+      servers,
+    });
+    expect(summary.behavior).toBe("Block all servers");
+    expect(summary.listLabel).toBe("Allowed servers");
+    // A URL missing from the inventory still shows, by its URL.
+    expect(summary.servers).toEqual(["https://unknown.example.com/mcp"]);
+  });
+
+  it("says what an empty block_all list means", () => {
+    const summary = shadowMCPReviewSummary({
+      disposition: "block_all",
+      selectedURLs: new Set(),
+      servers,
+    });
+    expect(summary.servers).toEqual([]);
+    expect(summary.emptyText).toBe("None. Every server is blocked.");
   });
 });

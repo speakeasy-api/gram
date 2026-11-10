@@ -1,7 +1,10 @@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import type { ShadowMCPDisposition } from "@/pages/security/policy-shadow-mcp-setup";
+import {
+  SHADOW_MCP_DISPOSITION_TITLE,
+  type ShadowMCPDisposition,
+} from "@/pages/security/policy-shadow-mcp-setup";
 
 const DISPOSITION_OPTIONS: {
   value: ShadowMCPDisposition;
@@ -10,13 +13,13 @@ const DISPOSITION_OPTIONS: {
 }[] = [
   {
     value: "block_all",
-    title: "Block all servers",
+    title: SHADOW_MCP_DISPOSITION_TITLE.block_all,
     description:
       "Every Shadow MCP server is blocked unless you allow it. Best for locked-down environments.",
   },
   {
     value: "allow_all",
-    title: "Allow all servers",
+    title: SHADOW_MCP_DISPOSITION_TITLE.allow_all,
     description:
       "Every Shadow MCP server stays available unless you block it. Best for rolling out enforcement gradually.",
   },

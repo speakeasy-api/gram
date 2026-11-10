@@ -107,7 +107,9 @@ import {
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
+  shadowMCPReviewSummary,
   type ShadowMCPDecisionConflict,
+  type ShadowMCPReviewSummary,
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
 import { ApprovalPolicyEditor } from "./ApprovalPolicyEditor";
@@ -3962,6 +3964,15 @@ export function StandardPolicyEditor({
             mode={mode}
             audienceType={audienceType}
             audiencePrincipalCount={audiencePrincipalUrns.size}
+            shadowMCP={
+              targetIsShadowMCPBlock
+                ? shadowMCPReviewSummary({
+                    disposition: shadowMCPDisposition,
+                    selectedURLs: selectedShadowMCPURLs,
+                    servers: inventoryQuery.data ?? [],
+                  })
+                : undefined
+            }
           />
         )}
 
@@ -4003,6 +4014,7 @@ function StandardReview({
   mode,
   audienceType,
   audiencePrincipalCount,
+  shadowMCP,
 }: {
   name: string;
   categories: Set<RuleCategory>;
@@ -4016,6 +4028,8 @@ function StandardReview({
   mode: DetectorMode;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
+  /** Set for a blocking Shadow MCP policy. */
+  shadowMCP?: ShadowMCPReviewSummary;
 }): JSX.Element {
   const detectorLabels = [...categories]
     .filter((c) => c !== "custom")
@@ -4070,6 +4084,28 @@ function StandardReview({
             {POLICY_ACTION_LABEL[action]}
           </Badge>
         </SummaryRow>
+        {shadowMCP ? (
+          <>
+            <SummaryRow label="Default behavior">
+              <Text small>{shadowMCP.behavior}</Text>
+            </SummaryRow>
+            <SummaryRow label={shadowMCP.listLabel}>
+              {shadowMCP.servers.length > 0 ? (
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  {shadowMCP.servers.map((server, i) => (
+                    <Badge key={`${server}-${i}`} variant="neutral">
+                      {server}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <Text small muted>
+                  {shadowMCP.emptyText}
+                </Text>
+              )}
+            </SummaryRow>
+          </>
+        ) : null}
         <SummaryRow label="Severity">
           <SeverityBadge score={score} />
         </SummaryRow>

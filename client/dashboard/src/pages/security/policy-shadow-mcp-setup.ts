@@ -9,6 +9,61 @@ type OriginalPolicy = Pick<RiskPolicy, "action" | "enabled" | "sources">;
  * create. */
 export type ShadowMCPDisposition = "block_all" | "allow_all";
 
+export const SHADOW_MCP_DISPOSITION_TITLE: Record<
+  ShadowMCPDisposition,
+  string
+> = {
+  block_all: "Block all servers",
+  allow_all: "Allow all servers",
+};
+
+/** What the Review step shows for a blocking Shadow MCP policy: its default
+ *  behavior and the servers that are exceptions to it. */
+export interface ShadowMCPReviewSummary {
+  behavior: string;
+  listLabel: string;
+  servers: string[];
+  emptyText: string;
+}
+
+export function shadowMCPReviewSummary({
+  disposition,
+  selectedURLs,
+  servers,
+}: {
+  disposition: ShadowMCPDisposition;
+  selectedURLs: ReadonlySet<string>;
+  servers: readonly Pick<
+    ShadowMCPInventoryServer,
+    "canonicalServerUrl" | "serverName" | "urlHost"
+  >[];
+}): ShadowMCPReviewSummary {
+  const byURL = new Map(
+    servers.map((server) => [server.canonicalServerUrl, server]),
+  );
+  const names = [...selectedURLs]
+    .map((url) => {
+      const server = byURL.get(url);
+      return server?.serverName || server?.urlHost || url;
+    })
+    .sort((a, b) => a.localeCompare(b));
+
+  if (disposition === "allow_all") {
+    return {
+      behavior: SHADOW_MCP_DISPOSITION_TITLE.allow_all,
+      listLabel: "Blocked servers",
+      servers: names,
+      emptyText: "None. Every server stays available.",
+    };
+  }
+  return {
+    behavior: SHADOW_MCP_DISPOSITION_TITLE.block_all,
+    listLabel: "Allowed servers",
+    servers: names,
+    emptyText: "None. Every server is blocked.",
+  };
+}
+
 export function isShadowMCPBlockConfiguration(
   sources: readonly string[],
   action: string,

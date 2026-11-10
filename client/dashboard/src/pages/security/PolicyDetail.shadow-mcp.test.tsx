@@ -8,6 +8,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { Children, isValidElement, type ReactNode } from "react";
 import { MemoryRouter } from "react-router";
@@ -366,6 +367,50 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
       ]);
       expect(mocks.modeRenders.at(-1)).toBe("block");
     });
+  });
+});
+
+describe("StandardPolicyEditor Shadow MCP review", () => {
+  afterEach(cleanup);
+
+  beforeEach(() => {
+    mocks.step = "review";
+    mocks.kind = null;
+    mocks.category = null;
+    vi.clearAllMocks();
+    vi.mocked(useSdkClient).mockReturnValue({
+      access: { listShadowMCPInventory: vi.fn() },
+    } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  it("shows the default behavior and the allowed servers", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(shadowMCPPolicyInventoryQueryKey("project-1"), [
+      inventoryServer(),
+    ]);
+
+    const view = render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <StandardPolicyEditor
+              policy={{
+                ...blockingPolicyWithDirtyDraftName(),
+                shadowMcpDisposition: "block_all",
+              }}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    const page = within(view.container);
+    expect(page.getByText("Default behavior")).toBeTruthy();
+    expect(page.getByText("Block all servers")).toBeTruthy();
+    expect(page.getByText("Allowed servers")).toBeTruthy();
+    await waitFor(() => expect(page.getByText("GitHub")).toBeTruthy());
   });
 });
 
