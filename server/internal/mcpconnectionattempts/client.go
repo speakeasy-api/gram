@@ -219,13 +219,13 @@ func ReportedClient(read func() (name, version string)) Option {
 func (r *Recorder) stampClient(row *Row) {
 	client := row.client
 	row.client = requestClient{present: false, userAgent: "", forwardedFor: "", appFamily: "", reported: nil}
-	// reportedVersion is the version of a session that reported a name no family knows.
-	reportedVersion := ""
+	// reportedUnknown is a session that reported a name no family knows, with reportedVersion.
+	reportedUnknown, reportedVersion := false, ""
 	if client.reported != nil {
 		name, version := client.reported()
 		row.ClientFamily, row.ClientVersion = classifyReported(name, version)
 		if name != "" && row.ClientFamily == "" {
-			reportedVersion = version
+			reportedUnknown, reportedVersion = true, version
 		}
 	}
 	if genericFamily(row.ClientFamily) && client.present {
@@ -235,12 +235,17 @@ func (r *Recorder) stampClient(row *Row) {
 			row.ClientFamily, row.ClientVersion = family, version
 		}
 	}
-	// An admitted catalog client_id beats a runtime User-Agent, whose version isn't the app's. A session that reported an unknown name keeps its reported version.
+	// An admitted catalog client_id beats a runtime User-Agent, whose version isn't the app's.
 	if client.appFamily != "" && (row.ClientFamily == "" || row.ClientFamily == FamilyOther ||
 		row.ClientFamily == FamilyScript && vendorHostedRedirect[client.appFamily]) {
-		row.ClientFamily, row.ClientVersion = client.appFamily, ""
-		if validClientVersion(reportedVersion) {
-			row.ClientVersion = reportedVersion
+		switch {
+		case reportedUnknown && !vendorHostedRedirect[client.appFamily]:
+			// Any local program can present this client_id, and this one named itself something else.
+			row.ClientFamily, row.ClientVersion = FamilyOther, ""
+		case validClientVersion(reportedVersion):
+			row.ClientFamily, row.ClientVersion = client.appFamily, reportedVersion
+		default:
+			row.ClientFamily, row.ClientVersion = client.appFamily, ""
 		}
 	}
 	if !client.present {
