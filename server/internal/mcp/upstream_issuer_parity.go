@@ -506,21 +506,40 @@ func soleToken(tokens map[uuid.UUID]remotesessions.UpstreamToken) remotesessions
 	return none
 }
 
-// otherConsentInventoryHash is the inventory's reuse fingerprint with its
-// backend hash taken from the upstream issuer source the organization's flag
-// does not make authoritative. A reuse only gets this far with a complete
-// inventory, so inventory is not nil.
-func (s *Service) otherConsentInventoryHash(ctx context.Context, endpoint *ResolvedMcpEndpoint, inventory *consentToolInventory) (string, error) {
+// reuseInventoryFingerprints are an inventory's reuse fingerprints with its
+// backend hash in the forms a reuse compares besides the decided one.
+type reuseInventoryFingerprints struct {
+	// otherMode takes the backend hash from the other enforcement mode, which
+	// an approval saved before the mode changed still holds.
+	otherMode string
+
+	// otherSource takes it from the upstream issuer source the organization's
+	// flag does not make authoritative, for the re-consent forecast.
+	otherSource string
+
+	// otherSourceErr is why otherSource could not be computed.
+	otherSourceErr error
+}
+
+// reuseInventoryFingerprints recomputes the endpoint's backend fingerprint for
+// a reuse. A reuse only gets this far with a complete inventory, so inventory
+// is not nil. A failed read leaves both forms empty, which only the decided
+// fingerprint can then match.
+func (s *Service) reuseInventoryFingerprints(ctx context.Context, endpoint *ResolvedMcpEndpoint, inventory *consentToolInventory) reuseInventoryFingerprints {
 	hashes, err := s.consentBackendFingerprint(ctx, endpoint)
 	if err != nil {
-		return "", err
+		return reuseInventoryFingerprints{otherMode: "", otherSource: "", otherSourceErr: err}
 	}
-	if hashes.otherErr != nil {
-		return "", hashes.otherErr
+	fingerprint := func(backendHash string) string {
+		form := *inventory
+		form.BackendHash = backendHash
+		return consentInventoryFingerprint(&form)
 	}
-	other := *inventory
-	other.BackendHash = hashes.other
-	return consentInventoryFingerprint(&other), nil
+	result := reuseInventoryFingerprints{otherMode: fingerprint(hashes.otherMode), otherSource: "", otherSourceErr: hashes.otherErr}
+	if hashes.otherErr == nil {
+		result.otherSource = fingerprint(hashes.other)
+	}
+	return result
 }
 
 // reconsentConsenter is whose consent a check is about: the consenting
