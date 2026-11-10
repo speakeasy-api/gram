@@ -695,6 +695,10 @@ WHERE issuer.id = @user_session_issuer_id
   AND session.deleted IS FALSE;
 
 -- name: ListUserSessionIssuerClientIDConflicts :many
+-- A client_id on both issuers blocks migration unless both rows were resolved
+-- from the same Client ID Metadata Document: those describe one client and
+-- merge onto the target's row. A source CIMD row that an issuance selection
+-- profile pins to the source issuer cannot be merged and still blocks.
 SELECT source.client_id
 FROM user_session_clients AS source
 JOIN user_session_clients AS target
@@ -703,6 +707,17 @@ JOIN user_session_clients AS target
  AND target.deleted IS FALSE
 WHERE source.user_session_issuer_id = @source_issuer_id
   AND source.deleted IS FALSE
+  AND NOT (
+    source.client_id_metadata_uri IS NOT NULL
+    AND target.client_id_metadata_uri IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM issuance_selection_profiles AS profile
+      WHERE profile.user_session_issuer_id = source.user_session_issuer_id
+        AND profile.user_session_client_id = source.id
+        AND profile.deleted IS FALSE
+    )
+  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer
@@ -715,6 +730,242 @@ WHERE source.user_session_issuer_id = @source_issuer_id
       )
   )
 ORDER BY source.client_id;
+
+-- The queries below merge each source CIMD client into the target issuer's
+-- row for the same metadata document URL, in this order, before the remaining
+-- source clients move: consent resources, duplicate consents, remaining
+-- consents, sessions, then the source client rows. Each recomputes the pairs
+-- from live source rows, so the client rows must be retired last.
+
+-- name: MoveMergedCimdClientConsentResources :execrows
+-- Approval evidence on a source consent that duplicates a live target consent
+-- (same subject and upstream set) moves to the target consent, except for
+-- resources the target consent already covers.
+WITH pairs AS (
+    SELECT source.id AS source_client_id, target.id AS target_client_id,
+           target.project_id AS target_project_id, target.organization_id AS target_organization_id
+    FROM user_session_clients AS source
+    JOIN user_session_clients AS target
+      ON target.user_session_issuer_id = @target_issuer_id
+     AND target.client_id = source.client_id
+     AND target.client_id_metadata_uri IS NOT NULL
+     AND target.deleted IS FALSE
+    WHERE source.user_session_issuer_id = @source_issuer_id
+      AND source.client_id_metadata_uri IS NOT NULL
+      AND source.deleted IS FALSE
+      AND NOT EXISTS (
+        SELECT 1
+        FROM issuance_selection_profiles AS profile
+        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
+          AND profile.user_session_client_id = source.id
+          AND profile.deleted IS FALSE
+      )
+      AND 2 = (
+        SELECT COUNT(*)
+        FROM user_session_issuers AS issuer
+        LEFT JOIN projects AS project ON project.id = issuer.project_id
+        WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+          AND issuer.deleted IS FALSE
+          AND (
+            (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+            OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+          )
+      )
+), duplicate_consents AS (
+    SELECT source_consent.id AS source_consent_id, target_consent.id AS target_consent_id
+    FROM pairs
+    JOIN user_session_consents AS source_consent
+      ON source_consent.user_session_client_id = pairs.source_client_id
+     AND source_consent.deleted IS FALSE
+    JOIN user_session_consents AS target_consent
+      ON target_consent.user_session_client_id = pairs.target_client_id
+     AND target_consent.subject_urn = source_consent.subject_urn
+     AND target_consent.remote_set_hash = source_consent.remote_set_hash
+     AND target_consent.deleted IS FALSE
+)
+UPDATE user_session_consent_resources AS resource
+SET user_session_consent_id = duplicate_consents.target_consent_id,
+    updated_at = clock_timestamp()
+FROM duplicate_consents
+WHERE resource.user_session_consent_id = duplicate_consents.source_consent_id
+  AND resource.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM user_session_consent_resources AS existing
+    WHERE existing.user_session_consent_id = duplicate_consents.target_consent_id
+      AND existing.resource = resource.resource
+      AND existing.deleted IS FALSE
+  );
+
+-- name: RetireMergedCimdClientDuplicateConsents :execrows
+-- The target consent is authoritative for a subject and upstream set it
+-- already covers, so the source duplicate is retired.
+WITH pairs AS (
+    SELECT source.id AS source_client_id, target.id AS target_client_id,
+           target.project_id AS target_project_id, target.organization_id AS target_organization_id
+    FROM user_session_clients AS source
+    JOIN user_session_clients AS target
+      ON target.user_session_issuer_id = @target_issuer_id
+     AND target.client_id = source.client_id
+     AND target.client_id_metadata_uri IS NOT NULL
+     AND target.deleted IS FALSE
+    WHERE source.user_session_issuer_id = @source_issuer_id
+      AND source.client_id_metadata_uri IS NOT NULL
+      AND source.deleted IS FALSE
+      AND NOT EXISTS (
+        SELECT 1
+        FROM issuance_selection_profiles AS profile
+        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
+          AND profile.user_session_client_id = source.id
+          AND profile.deleted IS FALSE
+      )
+      AND 2 = (
+        SELECT COUNT(*)
+        FROM user_session_issuers AS issuer
+        LEFT JOIN projects AS project ON project.id = issuer.project_id
+        WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+          AND issuer.deleted IS FALSE
+          AND (
+            (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+            OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+          )
+      )
+)
+UPDATE user_session_consents AS source_consent
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM pairs
+WHERE source_consent.user_session_client_id = pairs.source_client_id
+  AND source_consent.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_consents AS target_consent
+    WHERE target_consent.user_session_client_id = pairs.target_client_id
+      AND target_consent.subject_urn = source_consent.subject_urn
+      AND target_consent.remote_set_hash = source_consent.remote_set_hash
+      AND target_consent.deleted IS FALSE
+  );
+
+-- name: RepointMergedCimdClientConsents :execrows
+-- Consents the target client lacks move to it with the target's tenancy.
+WITH pairs AS (
+    SELECT source.id AS source_client_id, target.id AS target_client_id,
+           target.project_id AS target_project_id, target.organization_id AS target_organization_id
+    FROM user_session_clients AS source
+    JOIN user_session_clients AS target
+      ON target.user_session_issuer_id = @target_issuer_id
+     AND target.client_id = source.client_id
+     AND target.client_id_metadata_uri IS NOT NULL
+     AND target.deleted IS FALSE
+    WHERE source.user_session_issuer_id = @source_issuer_id
+      AND source.client_id_metadata_uri IS NOT NULL
+      AND source.deleted IS FALSE
+      AND NOT EXISTS (
+        SELECT 1
+        FROM issuance_selection_profiles AS profile
+        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
+          AND profile.user_session_client_id = source.id
+          AND profile.deleted IS FALSE
+      )
+      AND 2 = (
+        SELECT COUNT(*)
+        FROM user_session_issuers AS issuer
+        LEFT JOIN projects AS project ON project.id = issuer.project_id
+        WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+          AND issuer.deleted IS FALSE
+          AND (
+            (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+            OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+          )
+      )
+)
+UPDATE user_session_consents AS consent
+SET user_session_client_id = pairs.target_client_id,
+    project_id = pairs.target_project_id,
+    organization_id = pairs.target_organization_id,
+    updated_at = clock_timestamp()
+FROM pairs
+WHERE consent.user_session_client_id = pairs.source_client_id
+  AND consent.deleted IS FALSE;
+
+-- name: RepointMergedCimdClientSessions :execrows
+-- Sessions keep their refresh tokens; only the client they belong to changes.
+-- Their issuer and tenancy move with the rest of the source sessions.
+WITH pairs AS (
+    SELECT source.id AS source_client_id, target.id AS target_client_id,
+           target.project_id AS target_project_id, target.organization_id AS target_organization_id
+    FROM user_session_clients AS source
+    JOIN user_session_clients AS target
+      ON target.user_session_issuer_id = @target_issuer_id
+     AND target.client_id = source.client_id
+     AND target.client_id_metadata_uri IS NOT NULL
+     AND target.deleted IS FALSE
+    WHERE source.user_session_issuer_id = @source_issuer_id
+      AND source.client_id_metadata_uri IS NOT NULL
+      AND source.deleted IS FALSE
+      AND NOT EXISTS (
+        SELECT 1
+        FROM issuance_selection_profiles AS profile
+        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
+          AND profile.user_session_client_id = source.id
+          AND profile.deleted IS FALSE
+      )
+      AND 2 = (
+        SELECT COUNT(*)
+        FROM user_session_issuers AS issuer
+        LEFT JOIN projects AS project ON project.id = issuer.project_id
+        WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+          AND issuer.deleted IS FALSE
+          AND (
+            (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+            OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+          )
+      )
+)
+UPDATE user_sessions AS session
+SET user_session_client_id = pairs.target_client_id,
+    updated_at = clock_timestamp()
+FROM pairs
+WHERE session.user_session_client_id = pairs.source_client_id
+  AND session.deleted IS FALSE;
+
+-- name: RetireMergedCimdClients :execrows
+WITH pairs AS (
+    SELECT source.id AS source_client_id, target.id AS target_client_id,
+           target.project_id AS target_project_id, target.organization_id AS target_organization_id
+    FROM user_session_clients AS source
+    JOIN user_session_clients AS target
+      ON target.user_session_issuer_id = @target_issuer_id
+     AND target.client_id = source.client_id
+     AND target.client_id_metadata_uri IS NOT NULL
+     AND target.deleted IS FALSE
+    WHERE source.user_session_issuer_id = @source_issuer_id
+      AND source.client_id_metadata_uri IS NOT NULL
+      AND source.deleted IS FALSE
+      AND NOT EXISTS (
+        SELECT 1
+        FROM issuance_selection_profiles AS profile
+        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
+          AND profile.user_session_client_id = source.id
+          AND profile.deleted IS FALSE
+      )
+      AND 2 = (
+        SELECT COUNT(*)
+        FROM user_session_issuers AS issuer
+        LEFT JOIN projects AS project ON project.id = issuer.project_id
+        WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+          AND issuer.deleted IS FALSE
+          AND (
+            (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+            OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+          )
+      )
+)
+UPDATE user_session_clients AS client
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM pairs
+WHERE client.id = pairs.source_client_id;
 
 -- name: CountUserSessionIssuerPrincipalBindingConflicts :one
 SELECT COUNT(*)::int
