@@ -376,6 +376,19 @@ func (s *DataExportRouteToggleService) readRoute(ctx context.Context, principal 
 		if row.ID != routeID {
 			continue
 		}
+		minSeverity := ""
+		if row.DataSource == dataexports.DataSourceMCPConnectionLogs {
+			level, levelErr := dataexportsrepo.New(s.db).GetMCPConnectionLogRouteMinSeverity(ctx, dataexportsrepo.GetMCPConnectionLogRouteMinSeverityParams{
+				DefaultMinSeverity: dataexports.DefaultMCPConnectionLogMinSeverity,
+				OrganizationID:     principal.OrganizationID,
+				ProjectID:          project.ID,
+				DataExportRouteID:  row.ID,
+			})
+			if levelErr != nil {
+				return nil
+			}
+			minSeverity = level
+		}
 		return &DataExportRoute{
 			ID:            row.ID.String(),
 			ProjectID:     project.ID.String(),
@@ -384,6 +397,7 @@ func (s *DataExportRouteToggleService) readRoute(ctx context.Context, principal 
 			DataSource:    row.DataSource,
 			Enabled:       row.Enabled,
 			DestinationID: uuidString(row.OtelDestinationID),
+			MinSeverity:   minSeverity,
 		}
 	}
 	return nil
