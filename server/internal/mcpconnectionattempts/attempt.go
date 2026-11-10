@@ -37,54 +37,72 @@ const maxProviderHostBytes = 261
 
 // App identifies the app behind an attempt. app_key is a rollup sort key that a
 // caller can reach before sign-in, so it holds a known app's host or a kind and nothing else.
-type App struct{ key string }
+// family is the client family a catalog client_id names, for rows whose User-Agent names no client.
+// For a localhost-redirect app any local program can present that client_id, so it is telemetry, not proof.
+type App struct{ key, family string }
 
 var (
 	// AppDCR is any dynamically registered app.
-	AppDCR = App{"dcr"}
+	AppDCR = App{"dcr", ""}
 
 	// AppFirstParty is the Speakeasy dashboard.
-	AppFirstParty = App{"first_party"}
+	AppFirstParty = App{"first_party", ""}
 
 	// AppUnverified is a client that has not been validated yet.
-	AppUnverified = App{"unverified_client"}
+	AppUnverified = App{"unverified_client", ""}
 
 	// AppWorkload is a sign-in started for a workload's connection.
-	AppWorkload = App{"workload"}
+	AppWorkload = App{"workload", ""}
 
 	// AppCodeMode is a sign-in started from a code mode connection link.
-	AppCodeMode = App{"code_mode"}
+	AppCodeMode = App{"code_mode", ""}
 
 	// AppRecoveryLink is a sign-in started from a link an assistant was given.
-	AppRecoveryLink = App{"recovery_link"}
+	AppRecoveryLink = App{"recovery_link", ""}
 
 	// AppBackground is work Speakeasy started with no app involved, such as a scheduled refresh.
-	AppBackground = App{"background"}
+	AppBackground = App{"background", ""}
 	// AppOtherMetadataURL is an app with a client metadata URL that Speakeasy's catalog doesn't list.
-	AppOtherMetadataURL = App{"other_metadata_url"}
+	AppOtherMetadataURL = App{"other_metadata_url", ""}
 )
 
-// AppOf returns the App of a validated client_id: the host of a catalog app's client
+// ClientIDCheck says whether Speakeasy resolved and admitted a client_id.
+type ClientIDCheck bool
+
+const (
+	// ClientIDAdmitted is a client_id Speakeasy resolved and admitted.
+	ClientIDAdmitted ClientIDCheck = true
+
+	// ClientIDNotAdmitted is a client_id that a refused or failed request only presented.
+	ClientIDNotAdmitted ClientIDCheck = false
+)
+
+// AppOf returns the App of a client_id: the host of a catalog app's client
 // metadata URL (or AppUnverified if that host matches a reserved app kind),
 // AppOtherMetadataURL for any other URL, or AppDCR. An empty client_id is
-// the dashboard. Anyone can serve a metadata document, so only catalog hosts are kept.
-func AppOf(clientID string) App {
+// the dashboard. Anyone can serve a metadata document, so only catalog hosts are kept,
+// and only an admitted catalog client_id names a family: anyone can present one.
+func AppOf(clientID string, check ClientIDCheck) App {
 	if clientID == "" {
 		return AppFirstParty
 	}
 	if !cimd.IsClientIDURL(clientID) {
 		return AppDCR
 	}
-	if _, known := admission.CatalogMatch(clientID); !known {
+	preset, known := admission.CatalogPreset(clientID)
+	if !known {
 		return AppOtherMetadataURL
 	}
 	host := NormalizeProviderHost(clientID)
-	switch (App{host}) {
-	case App{""}, AppDCR, AppFirstParty, AppUnverified, AppWorkload, AppCodeMode, AppRecoveryLink, AppBackground, AppOtherMetadataURL:
+	switch host {
+	case "", AppDCR.key, AppFirstParty.key, AppUnverified.key, AppWorkload.key, AppCodeMode.key, AppRecoveryLink.key, AppBackground.key, AppOtherMetadataURL.key:
 		// A host spelled like a kind must not count as that kind.
 		return AppUnverified
 	}
-	return App{host}
+	if check != ClientIDAdmitted {
+		return App{host, ""}
+	}
+	return App{host, documentFamilies[preset.URL]}
 }
 
 // String is the stored app_key.
@@ -98,6 +116,7 @@ type Scope struct {
 	serverKind     string
 	serverID       uuid.UUID
 	appKey         string
+	appFamily      string
 }
 
 // ServerScope is an attempt on a project's MCP server.
@@ -113,7 +132,7 @@ func GatewayScope(organizationID string, projectID, gatewayID uuid.UUID, app App
 // OrganizationGatewayScope is an attempt on an organization gateway, which
 // belongs to no project.
 func OrganizationGatewayScope(organizationID string, gatewayID uuid.UUID, app App) Scope {
-	return Scope{organizationID, uuid.Nil, serverKindMeta, gatewayID, app.key}
+	return Scope{organizationID, uuid.Nil, serverKindMeta, gatewayID, app.key, app.family}
 }
 
 // ToolsetScope is an attempt on a toolset endpoint with no server row.
@@ -124,21 +143,21 @@ func ToolsetScope(organizationID string, projectID, toolsetID uuid.UUID, app App
 // ProviderSessionScope is an attempt that reaches a provider and no server,
 // such as a scheduled refresh. Its rows store an empty server_id.
 func ProviderSessionScope(organizationID string, projectID uuid.UUID, app App) Scope {
-	return Scope{organizationID, projectID, serverKindProviderSession, uuid.Nil, app.key}
+	return Scope{organizationID, projectID, serverKindProviderSession, uuid.Nil, app.key, app.family}
 }
 
 // IdentityProviderScope is an attempt that reaches an organization's identity
 // provider and no server or project, such as renewing a company sign-in.
 func IdentityProviderScope(organizationID string, app App) Scope {
-	return Scope{organizationID, uuid.Nil, serverKindIdentityProvider, uuid.Nil, app.key}
+	return Scope{organizationID, uuid.Nil, serverKindIdentityProvider, uuid.Nil, app.key, app.family}
 }
 
 // projectScope refuses a nil project, so a row can't lose its project by mistake.
 func projectScope(organizationID string, projectID uuid.UUID, kind string, serverID uuid.UUID, app App) Scope {
 	if projectID == uuid.Nil {
-		return Scope{organizationID: "", projectID: uuid.Nil, serverKind: "", serverID: uuid.Nil, appKey: ""}
+		return Scope{organizationID: "", projectID: uuid.Nil, serverKind: "", serverID: uuid.Nil, appKey: "", appFamily: ""}
 	}
-	return Scope{organizationID, projectID, kind, serverID, app.key}
+	return Scope{organizationID, projectID, kind, serverID, app.key, app.family}
 }
 
 func (s Scope) valid() bool {
@@ -172,6 +191,9 @@ func (a Attempt) ID() uuid.UUID { return a.id }
 // StartedAt is when the attempt started.
 func (a Attempt) StartedAt() time.Time { return a.startedAt }
 
+// Scope is what every step of the attempt shares.
+func (a Attempt) Scope() Scope { return a.scope }
+
 // IsZero reports an attempt that was never begun. Recording on it does nothing.
 func (a Attempt) IsZero() bool { return a.id == uuid.Nil }
 
@@ -184,6 +206,7 @@ type attemptJSON struct {
 	ServerKind     string    `json:"server_kind"`
 	ServerID       uuid.UUID `json:"server_id"`
 	AppKey         string    `json:"app_key"`
+	AppFamily      string    `json:"app_family,omitempty"`
 }
 
 // MarshalJSON implements json.Marshaler.
@@ -197,6 +220,7 @@ func (a Attempt) MarshalJSON() ([]byte, error) {
 		ServerKind:     a.scope.serverKind,
 		ServerID:       a.scope.serverID,
 		AppKey:         a.scope.appKey,
+		AppFamily:      a.scope.appFamily,
 	})
 }
 
@@ -208,7 +232,7 @@ func (a *Attempt) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	*a = Attempt{
-		scope:     Scope{stored.OrganizationID, stored.ProjectID, stored.ServerKind, stored.ServerID, stored.AppKey},
+		scope:     Scope{stored.OrganizationID, stored.ProjectID, stored.ServerKind, stored.ServerID, stored.AppKey, stored.AppFamily},
 		id:        stored.ID,
 		startedAt: stored.StartedAt,
 	}
@@ -230,7 +254,7 @@ func (a *Attempt) UnmarshalBinary(data []byte) error {
 
 // NoAttempt is the zero Attempt, for a login that is not a connection attempt.
 var NoAttempt = Attempt{
-	scope:     Scope{organizationID: "", projectID: uuid.Nil, serverKind: "", serverID: uuid.Nil, appKey: ""},
+	scope:     Scope{organizationID: "", projectID: uuid.Nil, serverKind: "", serverID: uuid.Nil, appKey: "", appFamily: ""},
 	id:        uuid.Nil,
 	startedAt: time.Time{},
 }

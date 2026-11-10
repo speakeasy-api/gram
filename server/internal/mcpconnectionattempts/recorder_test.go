@@ -1147,3 +1147,143 @@ func TestRecorderOnceReportsAdmission(t *testing.T) {
 	rec.stopped = true
 	require.False(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
 }
+
+// A stalled drain is cut off before the caller's deadline, the writer is joined, and every
+// lost row is counted on the metric and in the log instead of left unfinished.
+func TestShutdownAndWait_JoinsBeforeItsDeadlineAndCountsWhatItLost(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer close(release)
+	conn := &scriptedConn{Conn: nil, block: release, err: errors.New("stalled"), prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.maxBatch = 1
+	cfg.insertTimeout = time.Minute
+	var logged bytes.Buffer
+	reader := sdkmetric.NewManualReader()
+	recorder := testRecorder{
+		Recorder: newRecorder(slog.New(slog.NewTextHandler(&logged, nil)), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), conn, logsOn, cfg),
+		reader:   reader,
+	}
+	attempt := Begin(testScope())
+
+	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+	for range 3 {
+		recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	}
+
+	deadline := writerJoinMargin + 200*time.Millisecond
+	ctx, cancel := context.WithTimeout(t.Context(), deadline)
+	defer cancel()
+	started := time.Now()
+	require.ErrorIs(t, recorder.ShutdownAndWait(ctx), context.DeadlineExceeded)
+
+	require.Less(t, time.Since(started), deadline, "returns before the deadline its caller closes ClickHouse after")
+	select {
+	case <-recorder.done:
+	default:
+		t.Fatal("writer still running after ShutdownAndWait")
+	}
+	require.Equal(t, int64(1), conn.prepares.Load(), "nothing is written once cancelled")
+	require.Zero(t, recorder.unfinished.Load())
+	require.Equal(t, int64(1), recorder.dropped(t, dropInsertFailed), "the cancelled insert")
+	require.Equal(t, int64(3), recorder.dropped(t, dropShutdown), "the backlog")
+	require.Equal(t, int64(4), recorder.droppedTotal(t), "each lost row counted once")
+	require.Contains(t, logged.String(), `gram.connection.drop_counts="insert_failed=1 shutdown=3"`)
+}
+
+// A drain that finishes in time loses nothing and keeps its deadline.
+func TestShutdownAndWait_CleanDrainWritesEverything(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}, mu: sync.Mutex{}, traces: nil}
+	recorder := newTestRecorder(t, conn, testConfig())
+	for range 5 {
+		recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	require.NoError(t, recorder.ShutdownAndWait(ctx))
+	require.Equal(t, int64(5), conn.rows.Load())
+	require.Zero(t, recorder.droppedTotal(t))
+}
+
+// slowAbortConn honours cancellation, but takes a moment to return once cancelled.
+type slowAbortConn struct {
+	driver.Conn
+
+	prepares atomic.Int64
+}
+
+func (c *slowAbortConn) PrepareBatch(ctx context.Context, _ string, _ ...driver.PrepareBatchOption) (driver.Batch, error) {
+	c.prepares.Add(1)
+	<-ctx.Done()
+	<-time.After(200 * time.Millisecond)
+	return nil, fmt.Errorf("prepare batch: %w", ctx.Err())
+}
+
+// With ctx already over, ShutdownAndWait still returns only once the writer has exited.
+func TestShutdownAndWait_JoinsTheWriterAfterItsDeadline(t *testing.T) {
+	t.Parallel()
+
+	conn := &slowAbortConn{Conn: nil, prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.maxBatch = 1
+	recorder := newTestRecorder(t, conn, cfg)
+	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, recorder.ShutdownAndWait(ctx), context.Canceled)
+
+	select {
+	case <-recorder.done:
+	default:
+		t.Fatal("ShutdownAndWait returned before the writer exited")
+	}
+	require.Equal(t, int64(1), recorder.dropped(t, dropInsertFailed))
+}
+
+// wedgedConn ignores cancellation until released.
+type wedgedConn struct {
+	driver.Conn
+
+	release  chan struct{}
+	prepares atomic.Int64
+}
+
+func (c *wedgedConn) PrepareBatch(context.Context, string, ...driver.PrepareBatchOption) (driver.Batch, error) {
+	c.prepares.Add(1)
+	<-c.release
+	return nil, errors.New("wedged")
+}
+
+// A writer that outlives its grace, and a log handler that never returns, still let ShutdownAndWait return.
+func TestShutdownAndWait_AWedgedWriterAndABlockedLogStillReturn(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer close(release)
+	conn := &wedgedConn{Conn: nil, release: release, prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.maxBatch = 1
+	cfg.insertTimeout = 50 * time.Millisecond
+	handler := &blockingLogHandler{entered: make(chan struct{}, 1), release: release}
+	recorder := newRecorder(slog.New(handler), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
+	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	finished := make(chan error, 1)
+	go func() { finished <- recorder.ShutdownAndWait(ctx) }()
+	select {
+	case err := <-finished:
+		require.ErrorIs(t, err, errWriterStillRunning)
+	case <-time.After(10 * time.Second):
+		t.Fatal("ShutdownAndWait waited on a blocked log call")
+	}
+}

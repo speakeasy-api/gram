@@ -51,8 +51,16 @@ const (
 	// defaultInsertTimeout bounds one insert on a live connection. Dialing during a stall takes the client's dial timeout.
 	defaultInsertTimeout = 3 * time.Second
 
-	// drainLogWait bounds the wait for Shutdown's one log line.
+	// drainLogWait bounds the wait for each shutdown log line.
 	drainLogWait = time.Second
+
+	// writerJoinMargin is the part of ShutdownAndWait's deadline kept for cancelling the
+	// writer and joining it. Cancelled I/O returns at once; the rest is headroom.
+	writerJoinMargin = 2 * time.Second
+
+	// writerJoinGrace is added to the insert timeout for the wait on a cancelled writer. A
+	// cancelled insert returns at once; this bounds a driver that ignores cancellation.
+	writerJoinGrace = time.Second
 
 	// defaultRepeatsInterval is how long a burst that stopped waits before its count is written.
 	defaultRepeatsInterval = time.Minute
@@ -219,6 +227,8 @@ type Row struct {
 
 var errInvalidEvent = errors.New("invalid connection event")
 
+var errWriterStillRunning = errors.New("connection events writer still running")
+
 // RowAt builds a row without recording it, for seed data. Flows use Step, End
 // and Once. Outcome is only ever set on a final row.
 func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, opts ...Option) (Row, error) {
@@ -288,7 +298,7 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		ClientVersion:         "",
 		Repeats:               0,
 		DeviceKey:             "",
-		client:                requestClient{present: false, userAgent: "", forwardedFor: "", reported: nil},
+		client:                requestClient{present: false, userAgent: "", forwardedFor: "", appFamily: attempt.scope.appFamily, reported: nil},
 		failedElsewhere:       false,
 	}
 	for _, opt := range opts {
@@ -544,6 +554,10 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		r.drop(ctx, dropInvalidEvent, 1, err)
 		return false
 	}
+	// Before the limits, so a held-back row written later keeps its request's trace.
+	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
+		row.TraceID = spanCtx.TraceID().String()
+	}
 	switch {
 	case r.limiter == nil:
 	case held == limitStart:
@@ -567,12 +581,9 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		}
 		row.Repeats = decision.repeats
 	}
-	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
-		row.TraceID = spanCtx.TraceID().String()
-	}
 	r.countStep(ctx, row)
 	if r.capture != nil {
-		if reason, _ := r.organizationAllowed(row.OrganizationID); reason == "" {
+		if reason, _ := r.organizationAllowed(r.writerCtx, row.OrganizationID); reason == "" {
 			r.stampClient(&row)
 			r.capture(row)
 			return true
@@ -640,13 +651,56 @@ func (r *Recorder) queueReserved() bool {
 }
 
 // Shutdown writes what is queued, each batch once, and stops the goroutine. It logs
-// what the drain lost, because metrics may not be exported by then.
+// what the drain lost, because metrics may not be exported by then. A drain cut off by
+// ctx leaves the writer running; use ShutdownAndWait where its datastore closes next.
 func (r *Recorder) Shutdown(ctx context.Context) error {
 	if r == nil || r.stop == nil {
 		return nil
 	}
-	first := false
-	var before map[dropReason]int64
+	first, before, err := r.stopAndDrain(ctx)
+	if first {
+		logBounded(func() { r.logDrainLosses(context.WithoutCancel(ctx), before) })
+	}
+	return err
+}
+
+// ShutdownAndWait drains until shortly before ctx ends, then cancels in-flight I/O,
+// counts the backlog as dropped for shutdown, and joins the writer so its datastore can
+// close. The join outlasts ctx, bounded by the insert timeout plus writerJoinGrace. The
+// logs callback and datastore driver must honor their operation contexts. A connection
+// log export still publishing is not joined; it never touches the datastore.
+func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
+	if r == nil || r.stop == nil {
+		return nil
+	}
+	drainCtx := ctx
+	if deadline, ok := ctx.Deadline(); ok {
+		var cancel context.CancelFunc
+		drainCtx, cancel = context.WithDeadline(ctx, deadline.Add(-writerJoinMargin))
+		defer cancel()
+	}
+	first, before, err := r.stopAndDrain(drainCtx)
+	r.cancelWriter()
+	// The caller closes ClickHouse next, so wait for the writer even past ctx.
+	grace := r.cfg.insertTimeout + writerJoinGrace
+	select {
+	case <-r.done:
+	case <-time.After(grace):
+		err = errors.Join(err, errWriterStillRunning)
+		stillRunning := err
+		logBounded(func() {
+			r.logger.ErrorContext(context.WithoutCancel(ctx), "connection events writer still running after shutdown", attr.SlogError(stillRunning))
+		})
+	}
+	if first {
+		logBounded(func() { r.logDrainLosses(context.WithoutCancel(ctx), before) })
+	}
+	return err
+}
+
+// stopAndDrain stops admission once and waits for the writer to drain until ctx ends.
+// first is true for the call that stopped it, with the drop totals from that moment.
+func (r *Recorder) stopAndDrain(ctx context.Context) (first bool, before map[dropReason]int64, err error) {
 	r.stopOnce.Do(func() {
 		first = true
 		r.stopMu.Lock()
@@ -656,38 +710,25 @@ func (r *Recorder) Shutdown(ctx context.Context) error {
 		close(r.stop)
 	})
 
-	var err error
 	select {
 	case <-r.done:
 	case <-ctx.Done():
 		err = fmt.Errorf("drain connection events: %w", ctx.Err())
 	}
-	if first {
-		// A stuck log handler must not hold Shutdown past its deadline.
-		logged := make(chan struct{})
-		go func() {
-			defer close(logged)
-			r.logDrainLosses(context.WithoutCancel(ctx), before)
-		}()
-		select {
-		case <-logged:
-		case <-time.After(drainLogWait):
-		}
-	}
-	return err
+	return first, before, err
 }
 
-// ShutdownAndWait drains until ctx ends, then cancels in-flight I/O and drops
-// the backlog. It joins the writer before returning so its datastore can close.
-// The logs callback and datastore driver must honor their operation contexts.
-// A connection log export still publishing is not joined; it never touches the datastore.
-func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
-	err := r.Shutdown(ctx)
-	if r != nil && r.cancelWriter != nil {
-		r.cancelWriter()
-		<-r.done
+// logBounded runs a shutdown log without letting a stuck log handler hold shutdown past drainLogWait.
+func logBounded(log func()) {
+	logged := make(chan struct{})
+	go func() {
+		defer close(logged)
+		log()
+	}()
+	select {
+	case <-logged:
+	case <-time.After(drainLogWait):
 	}
-	return err
 }
 
 func (r *Recorder) dropSnapshot() map[dropReason]int64 {
@@ -767,7 +808,7 @@ func (r *Recorder) run() {
 			reason, checked := organizations[row.OrganizationID]
 			if !checked {
 				var err error
-				reason, err = r.organizationAllowed(row.OrganizationID)
+				reason, err = r.organizationAllowed(r.writerCtx, row.OrganizationID)
 				organizations[row.OrganizationID] = reason
 				if err != nil {
 					r.drop(context.Background(), reason, events(row), err)
@@ -828,13 +869,23 @@ func (r *Recorder) surviving(n int, fn func()) {
 	fn()
 }
 
+// Stores reports whether rows on scope may be stored, so a caller can skip costly detail
+// for a row that would be dropped. A failed check reports true; the writer decides then.
+func (r *Recorder) Stores(ctx context.Context, scope Scope) bool {
+	if r == nil {
+		return false
+	}
+	reason, _ := r.organizationAllowed(ctx, scope.organizationID)
+	return reason != dropLogsOff
+}
+
 // organizationAllowed is the one place that decides whether an organization's attempts
 // are stored. It returns why not, or "" to store them. A check that fails means do not store.
-func (r *Recorder) organizationAllowed(organizationID string) (dropReason, error) {
+func (r *Recorder) organizationAllowed(ctx context.Context, organizationID string) (dropReason, error) {
 	if r.logsEnabled == nil {
 		return dropLogsOff, nil
 	}
-	ctx, cancel := context.WithTimeout(r.writerCtx, r.cfg.logsCheckTimeout)
+	ctx, cancel := context.WithTimeout(ctx, r.cfg.logsCheckTimeout)
 	defer cancel()
 
 	enabled, err := r.logsEnabled(ctx, organizationID)

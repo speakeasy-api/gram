@@ -358,7 +358,7 @@ func (s *Service) buildRemoteConnectURL(
 	focusServer string,
 ) (string, bool, error) {
 	ctx := r.Context()
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepProviderSignIn,
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepProviderSignIn,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	defer t.Finish(ctx)

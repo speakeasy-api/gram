@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/url"
 	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -51,6 +52,10 @@ import (
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
+
+// connectionRecorderDrainTimeout bounds the connection outcome writer's drain, so a
+// stalled ClickHouse leaves the cleanups that run after it their share of the budget.
+const connectionRecorderDrainTimeout = 30 * time.Second
 
 type privateIngressRuntime struct {
 	DB         *pgxpool.Pool
@@ -298,7 +303,11 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	protectedResources := protectedresource.NewProber(db, guardianPolicy)
 	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")), newConnectionLogExport(publishers.OTELLogs))
-	r.cleanup = append(r.cleanup, connectionRecorder.Shutdown)
+	r.cleanup = append(r.cleanup, func(ctx context.Context) error {
+		drainCtx, cancel := context.WithTimeout(ctx, connectionRecorderDrainTimeout)
+		defer cancel()
+		return connectionRecorder.ShutdownAndWait(drainCtx)
+	})
 	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 	if err != nil {
 		return nil, err

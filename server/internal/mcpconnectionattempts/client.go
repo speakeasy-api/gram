@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // The client families client_family can hold. New ones can be appended.
@@ -46,7 +48,7 @@ var clientFamilies = []struct {
 	{FamilyClaudeCode, []string{"claude-code", "claude-cli"}},
 	{FamilyClaudeAI, []string{"claude-user", "claude-ai"}},
 	{FamilyCodexCLI, []string{"codex-cli-rs", "codex-cli", "codex-mcp-client", "codex"}},
-	{FamilyOpenAIConnector, []string{"openai-mcp", "chatgpt-user", "chatgpt"}},
+	{FamilyOpenAIConnector, []string{"openai-mcp", "openai-connectors", "chatgpt-user", "chatgpt"}},
 	{FamilyCursor, []string{"cursor"}},
 	{FamilyCopilot, []string{"copilot"}},
 	{FamilyZed, []string{"zed"}},
@@ -58,6 +60,39 @@ var clientFamilies = []struct {
 	{FamilyScript, []string{"python-httpx", "python-requests", "aiohttp", "node-fetch", "undici", "axios", "node", "libcurl", "curl", "wget", "go-http-client", "okhttp", "java"}},
 	{FamilyBrowser, []string{"mozilla"}},
 }
+
+// productFamilies maps an aivendors product to its family. It is keyed per product, not per
+// vendor, because one vendor host (claude.ai, chatgpt.com) serves several products.
+var productFamilies = map[string]string{
+	"claude-code":        FamilyClaudeCode,
+	"claude":             FamilyClaudeAI,
+	"chatgpt":            FamilyOpenAIConnector,
+	"codex":              FamilyCodexCLI,
+	"vscode":             FamilyVSCode,
+	"zed":                FamilyZed,
+	"notion":             FamilyNotion,
+	"github-copilot-cli": FamilyCopilot,
+}
+
+// vendorHostedRedirect lists families whose documents redirect only to the vendor's own host,
+// so a script-like User-Agent there is the vendor's backend. A localhost redirect could be any program.
+var vendorHostedRedirect = map[string]bool{FamilyClaudeAI: true, FamilyOpenAIConnector: true}
+
+// genericFamily is a family that names no client app.
+func genericFamily(family string) bool {
+	return family == "" || family == FamilyOther || family == FamilyScript
+}
+
+// documentFamilies is keyed by catalog entry URL, literal or pattern, as admission.CatalogPreset returns it.
+var documentFamilies = func() map[string]string {
+	families := make(map[string]string)
+	for _, entry := range aivendors.CIMDDocuments() {
+		if family, ok := productFamilies[entry.Product.ID]; ok {
+			families[entry.Document.URL] = family
+		}
+	}
+	return families
+}()
 
 // clientVersionShape is what a version may look like, so caller text never reaches the column.
 var clientVersionShape = regexp.MustCompile(`^[0-9]+(\.[0-9]+){0,3}(-[a-zA-Z0-9.]{1,16})?$`)
@@ -148,6 +183,9 @@ type requestClient struct {
 	userAgent    string
 	forwardedFor string
 
+	// appFamily is the family the row's admitted catalog client_id names.
+	appFamily string
+
 	// reported reads what the MCP session said about itself. It runs on the writer.
 	reported func() (name, version string)
 }
@@ -176,18 +214,37 @@ func ReportedClient(read func() (name, version string)) Option {
 	return Option{apply: func(row *Row) { row.client.reported = read }}
 }
 
-// stampClient reads a row's request on the writer: its family, version and device key.
+// stampClient reads a row's request on the writer: its family, version and device key. A reported
+// name comes first, then a User-Agent that names a client, then the catalog client_id.
 func (r *Recorder) stampClient(row *Row) {
 	client := row.client
-	row.client = requestClient{present: false, userAgent: "", forwardedFor: "", reported: nil}
+	row.client = requestClient{present: false, userAgent: "", forwardedFor: "", appFamily: "", reported: nil}
+	// reportedVersion is the version of a session that reported a name no family knows.
+	reportedVersion := ""
 	if client.reported != nil {
-		row.ClientFamily, row.ClientVersion = classifyReported(client.reported())
+		name, version := client.reported()
+		row.ClientFamily, row.ClientVersion = classifyReported(name, version)
+		if name != "" && row.ClientFamily == "" {
+			reportedVersion = version
+		}
+	}
+	if genericFamily(row.ClientFamily) && client.present {
+		// A browser User-Agent is generic too, so it can't replace a name the session reported.
+		family, version := classifyUserAgent(client.userAgent)
+		if row.ClientFamily == "" || !genericFamily(family) && family != FamilyBrowser {
+			row.ClientFamily, row.ClientVersion = family, version
+		}
+	}
+	// An admitted catalog client_id beats a runtime User-Agent, whose version isn't the app's. A session that reported an unknown name keeps its reported version.
+	if client.appFamily != "" && (row.ClientFamily == "" || row.ClientFamily == FamilyOther ||
+		row.ClientFamily == FamilyScript && vendorHostedRedirect[client.appFamily]) {
+		row.ClientFamily, row.ClientVersion = client.appFamily, ""
+		if validClientVersion(reportedVersion) {
+			row.ClientVersion = reportedVersion
+		}
 	}
 	if !client.present {
 		return
-	}
-	if row.ClientFamily == "" {
-		row.ClientFamily, row.ClientVersion = classifyUserAgent(client.userAgent)
 	}
 	row.DeviceKey = r.deviceKeyFor(row.OrganizationID, connectionIP(client.forwardedFor))
 }
