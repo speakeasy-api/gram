@@ -239,6 +239,10 @@ func TestUpstreamFailureHappened(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code)
 	code, _ = UpstreamFailureHappened(0, attached, true, "", fmt.Errorf("forward: %w", proxy.ErrUpstreamTimedOut))
 	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code, "a slow server behind a tunnel is not ours")
+	code, _ = UpstreamFailureHappened(0, attached, true, "", fmt.Errorf("forward: %w", context.DeadlineExceeded))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, code, "a tunnel gateway that hangs is ours")
+	code, _ = UpstreamFailureHappened(0, attached, false, "", fmt.Errorf("forward: %w", context.DeadlineExceeded))
+	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code)
 
 	_, ok = UpstreamFailureHappened(http.StatusNotFound, attached, false, "")
 	require.False(t, ok)

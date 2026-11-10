@@ -77,7 +77,7 @@ func (f agentIdentityFixture) service(t *testing.T, checks AgentAuthorizationChe
 	t.Helper()
 
 	engine := authz.NewEngine(testenv.NewLogger(t), f.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	return NewAgentIdentityReadService(testenv.NewLogger(t), f.conn, engine, checks, allowBudget())
+	return NewAgentIdentityReadService(testenv.NewLogger(t), f.conn, testenv.NewEncryptionClient(t), engine, checks, allowBudget())
 }
 
 func (f agentIdentityFixture) grant(t *testing.T, scope authz.Scope, selector authz.Selector) {

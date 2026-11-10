@@ -304,4 +304,5 @@ var (
 	CodeRefreshTokenUsedByOtherApp = define("refresh_token_used_by_other_app", OutcomeFailed, WhoPerson, "This connection ended because another app used its sign-in.", "Connect to the server again. If it keeps happening, report it to the app's makers.")
 	CodeStoredSessionInvalid       = define("stored_session_invalid", OutcomeFailed, WhoPerson, "Your saved connection is damaged on our side.", "Connect to the server again. If it keeps happening, contact Speakeasy support.")
 	CodeSignInRevokedByAdmin       = define("sign_in_revoked_by_admin", OutcomeBlocked, WhoAdmin, "Your admin ended this sign-in.", "Ask your admin if you still need access.")
+	CodeStoredSignInUnreadable     = define("stored_sign_in_unreadable", OutcomeFailed, WhoPerson, "Your saved sign-in for this server can't be used anymore.", "Reconnect to fix it.")
 )

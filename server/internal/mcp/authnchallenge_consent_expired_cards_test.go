@@ -429,11 +429,10 @@ func TestServeConsentAction_VerifyUnfixableByRetryKeepsNextSteps(t *testing.T) {
 		ctx, fx := seedMetaValidationFixture(t, "verify-unreadable-"+uuid.NewString()[:8])
 		storeVerifyGrant(t, ctx, fx, conv.ToPGText("not-ciphertext"), pgtype.Timestamptz{}, pgtype.Timestamptz{})
 
-		// Token resolution reports a grant to replace: the notice names the card's own controls.
-		requireVerifyNotice(t, fx, fx.clientID, verifyReconnectNotice)
-		page := renderConsent(t, fx)
-		require.Contains(t, page, `value="disconnect"`)
-		require.NotContains(t, page, `data-connect-link`, "a connected card has no Reconnect button to point at")
+		// Nothing stored can be read, so the card is not connected and offers Reconnect, which rewrites the row.
+		requireVerifyNotice(t, fx, fx.clientID, verifyExpiredCard)
+		page := normalizeSpaces(renderConsent(t, fx))
+		require.Regexp(t, `data-connect-link > Reconnect`, page)
 	})
 }
 
@@ -563,4 +562,94 @@ func TestServeConsentAction_TypedRegistrationCardActionsWithoutASignInLink(t *te
 			require.NoError(t, err, "another client's grant is untouched")
 		})
 	}
+}
+
+// postRefresh posts the card's Refresh and returns where it sends the browser.
+func postRefresh(t *testing.T, fx validationFixture, clientID uuid.UUID) string {
+	t.Helper()
+	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"refresh"}, "client_id": {clientID.String()}}
+	if fx.server != "" {
+		form.Set("server", fx.server)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	require.NoError(t, fx.ti.service.ServeConsentAction(w, req, fx.endpoint))
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	return w.Header().Get("Location")
+}
+
+// Refresh on a sign-in whose refresh token can't be read points to the card's own control, not a dead end.
+func TestServeConsentAction_RefreshUnreadableSignInPointsToTheCard(t *testing.T) {
+	t.Parallel()
+
+	t.Run("expired card offers Reconnect", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx := seedMetaValidationFixture(t, "refresh-unreadable-"+uuid.NewString()[:8])
+		storeVerifyGrant(t, ctx, fx, conv.ToPGText("not-ciphertext"), pgtype.Timestamptz{}, pgtype.Timestamptz{})
+
+		location := postRefresh(t, fx, fx.clientID)
+		require.Contains(t, location, "refresh_reconnect="+fx.clientID.String())
+		page := strings.ReplaceAll(renderConsentAt(t, fx, location), "&#39;", "'")
+		require.Contains(t, page, "Your saved sign-in can't be used anymore. Reconnect this service to fix it.")
+		require.NotContains(t, page, "re-link")
+	})
+	t.Run("connected card offers Disconnect", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx := seedMetaValidationFixture(t, "refresh-unreadable-live-"+uuid.NewString()[:8])
+		access, err := fx.ti.enc.Encrypt([]byte("live-token"))
+		require.NoError(t, err)
+		_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+			SubjectUrn: fx.subject, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID, RemoteSessionClientID: fx.clientID,
+			AccessTokenEncrypted: access, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+			RefreshTokenEncrypted: conv.ToPGText("not-ciphertext"), Scopes: []string{}, Resource: conv.ToPGText(fx.member.url),
+		})
+		require.NoError(t, err)
+
+		location := postRefresh(t, fx, fx.clientID)
+		require.Contains(t, location, "refresh_reconnect="+fx.clientID.String())
+		require.Contains(t, strings.ReplaceAll(renderConsentAt(t, fx, location), "&#39;", "'"), "Your saved sign-in can't be renewed. Disconnect this service, then connect it again.")
+	})
+}
+
+// Verify answers a renewal the configuration refused the same way whether or not the access token can be read.
+func TestServeConsentAction_VerifyMisconfiguredRenewalMatchesReadableGrant(t *testing.T) {
+	t.Parallel()
+
+	refused := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"unauthorized_client"}`))
+	}))
+	t.Cleanup(refused.Close)
+	verify := func(name string, access string, accessExpiresIn time.Duration) url.Values {
+		ctx, fx := seedMetaValidationFixture(t, name+"-"+uuid.NewString()[:8])
+		pointVerifyAtTokenEndpoint(t, ctx, fx, refused.URL)
+		if access != "not-ciphertext" {
+			sealed, err := fx.ti.enc.Encrypt([]byte(access))
+			require.NoError(t, err)
+			access = sealed
+		}
+		refresh, err := fx.ti.enc.Encrypt([]byte("refresh-token"))
+		require.NoError(t, err)
+		_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+			SubjectUrn: fx.subject, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID, RemoteSessionClientID: fx.clientID,
+			AccessTokenEncrypted: access, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(accessExpiresIn)),
+			RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: conv.ToPGText(fx.member.url),
+		})
+		require.NoError(t, err)
+		w, err := postValidate(t, fx, fx.clientID)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusSeeOther, w.Code)
+		location, err := url.Parse(w.Header().Get("Location"))
+		require.NoError(t, err)
+		query := location.Query()
+		require.Empty(t, query.Get("validate_unfinished"), "retrying can't fix a refused renewal")
+		require.Equal(t, fx.clientID.String(), query.Get("validate_failed"))
+		return query
+	}
+
+	readable := verify("verify-misconfigured-readable", "stale-token", -time.Minute)
+	unreadable := verify("verify-misconfigured-unreadable", "not-ciphertext", time.Hour)
+	require.Equal(t, readable.Get("validate_notice"), unreadable.Get("validate_notice"))
 }

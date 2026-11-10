@@ -597,8 +597,10 @@ VALUES
 -- The client sits under Linear's own remote identity provider: every client
 -- bound to one user session issuer must share a remote issuer, or the
 -- mcp_servers.remote_session_issuer_id derivation above would come out NULL.
--- Reserved example endpoints, an invalid ciphertext and no refresh token
--- prevent this display fixture from becoming a usable upstream credential.
+-- Reserved example endpoints and no refresh token keep this display fixture
+-- from becoming a usable upstream credential while its dummy access token,
+-- encrypted at seed time, reads as connected. A held re-check lease keeps the
+-- idle re-check from presenting it anywhere.
 -- name: ServersInsertAttachmentClient :exec
 INSERT INTO remote_session_clients
   (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -613,33 +615,35 @@ VALUES (@id::uuid, @project_id::uuid, @org_id::text,
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
    access_token_encrypted, access_expires_at, auto_refresh, scopes,
-   upstream_display_name, created_at, last_used_at)
+   upstream_display_name, created_at, last_used_at, last_refresh_attempt_at)
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + @expires_in::interval, false,
+        @access_token_encrypted::text, now() + @expires_in::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
-        now() - interval '3 days', now() - interval '40 minutes');
+        now() - interval '3 days', now() - interval '40 minutes', now() + interval '10 years');
 
 -- Upstream sessions on Linear's CIMD client, one per last-validation outcome
 -- plus one never validated, so the admin server health page shows every
--- validation state. Inert like the session above: an invalid ciphertext and
--- no refresh token. grant_generation above 1 records re-authorizations.
+-- validation state. Inert like the session above: no refresh token, and a held
+-- re-check lease, renewed by each reseed, keeps the idle re-check from
+-- presenting the dummy token to Linear and overwriting the seeded verdicts. grant_generation above 1 records re-authorizations.
 -- An empty status is the never-validated session (NULL status and
 -- last_validated_at).
 -- name: ServersInsertValidatedSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
    access_token_encrypted, access_expires_at, auto_refresh, scopes,
-   grant_generation, last_validated_at, validation_status, created_at, last_used_at)
+   grant_generation, last_validated_at, validation_status, created_at, last_used_at,
+   last_refresh_attempt_at)
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        @access_token_encrypted::text, now() + interval '7 days', false,
         ARRAY['read'], @grant_generation::bigint,
         CASE WHEN @status::text <> '' THEN now() - make_interval(hours => @hours_ago::int) END,
         NULLIF(@status::text, ''), now() - make_interval(days => @days_ago::int),
-        now() - make_interval(hours => @hours_ago::int));
+        now() - make_interval(hours => @hours_ago::int), now() + interval '10 years');
 
 -- Many principals can reference one exact human-owned session. Reconnecting
 -- must never silently replace these references with a different session.

@@ -55,7 +55,7 @@ var knownProviderHosts = map[string]struct{}{
 
 // IsAppKind reports whether an app_key names a kind of app rather than an app.
 func IsAppKind(appKey string) bool {
-	return slices.Contains(appKinds, App{appKey})
+	return slices.Contains(appKinds, appKey)
 }
 
 // catalogAppHosts are the hosts of every client metadata document in the client catalog,

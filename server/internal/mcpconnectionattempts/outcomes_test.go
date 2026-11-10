@@ -262,10 +262,10 @@ func TestLabelsSendUnknownValuesToOther(t *testing.T) {
 		require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.ProviderLabel(tenant), tenant)
 	}
 
-	catalogApp := mcpconnectionattempts.AppOf("https://claude.ai/oauth/claude-code-client-metadata").String()
+	catalogApp := mcpconnectionattempts.AppOf("https://claude.ai/oauth/claude-code-client-metadata", mcpconnectionattempts.ClientIDAdmitted).String()
 	require.Equal(t, "claude.ai", mcpconnectionattempts.AppLabel(catalogApp))
 	require.Equal(t, "dcr", mcpconnectionattempts.AppLabel(mcpconnectionattempts.AppDCR.String()))
-	customerApp := mcpconnectionattempts.AppOf("https://agents.acme.example/oauth/client.json").String()
+	customerApp := mcpconnectionattempts.AppOf("https://agents.acme.example/oauth/client.json", mcpconnectionattempts.ClientIDAdmitted).String()
 	require.Equal(t, mcpconnectionattempts.AppOtherMetadataURL.String(), mcpconnectionattempts.AppLabel(customerApp), "a customer-run metadata URL keeps no host")
 	require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.AppLabel("agents.acme.example"), "a host that is not in the catalog")
 

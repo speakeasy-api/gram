@@ -168,11 +168,11 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	token := chi.URLParam(r, "token")
 	if token == "" {
-		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
+		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage, contextvalues.ConnectionReferenceLine(r.Context()))
 	}
 	recovery, err := s.connectionRecoveryCache.Get(ctx, "connectionRecovery:"+token)
 	if err != nil || recovery.expired() || recovery.ID != token {
-		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
+		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage, contextvalues.ConnectionReferenceLine(r.Context()))
 	}
 	t := s.connections.Track(recoveryScope(recovery), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.FromRequest(r))
 	defer t.Finish(ctx)
@@ -192,7 +192,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		} else {
 			t.Continue()
 		}
-		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
+		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage, contextvalues.ConnectionReferenceLine(r.Context()))
 	}
 
 	clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, recovery.ProjectID, recovery.OrganizationID, []uuid.UUID{recovery.RegistrationID})
@@ -202,7 +202,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	}
 	if len(clients) != 1 || clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {
 		t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
-		return renderConnectionRecoveryPage(w, http.StatusConflict, connectionRecoveryUnavailablePage)
+		return renderConnectionRecoveryPage(w, http.StatusConflict, connectionRecoveryUnavailablePage, contextvalues.ConnectionReferenceLine(r.Context()))
 	}
 	login := recovery
 	login.ID = uuid.NewString()
@@ -232,7 +232,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	if errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
 		t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(err))
 		s.logger.InfoContext(ctx, "connection link refused: typed login not authorized", attr.SlogAuthClientID(recovery.AuthClientID.String()), attr.SlogError(err))
-		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryNoAccessPage)
+		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryNoAccessPage, contextvalues.ConnectionReferenceLine(ctx))
 	}
 	if err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
@@ -544,22 +544,22 @@ func (s *Service) answerConnectionRecoveryRefusal(w http.ResponseWriter, r *http
 		http.Redirect(w, r, login.String(), http.StatusFound)
 		return nil
 	case errors.Is(err, errRecoveryOtherUser):
-		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryOtherUserPage)
+		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryOtherUserPage, "")
 	case errors.Is(err, errRecoveryNoAccess):
 		s.logger.InfoContext(r.Context(), "connection link refused: no access", attr.SlogAuthClientID(recovery.AuthClientID.String()))
-		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryNoAccessPage)
+		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryNoAccessPage, contextvalues.ConnectionReferenceLine(r.Context()))
 	case errors.Is(err, errRecoveryUnavailable):
 		s.logger.InfoContext(r.Context(), "connection link refused: client unavailable", attr.SlogAuthClientID(recovery.AuthClientID.String()))
-		return renderConnectionRecoveryPage(w, http.StatusConflict, connectionRecoveryUnavailablePage)
+		return renderConnectionRecoveryPage(w, http.StatusConflict, connectionRecoveryUnavailablePage, contextvalues.ConnectionReferenceLine(r.Context()))
 	default:
 		return oops.E(oops.CodeUnexpected, err, "check connection link").LogError(r.Context(), s.logger)
 	}
 }
 
 // HandleConnectionRecoveryDone is where a connection link's login returns.
-func (s *Service) HandleConnectionRecoveryDone(w http.ResponseWriter, _ *http.Request) error {
+func (s *Service) HandleConnectionRecoveryDone(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Cache-Control", "no-store")
-	return renderConnectionRecoveryPage(w, http.StatusOK, connectionRecoveryDonePage)
+	return renderConnectionRecoveryPage(w, http.StatusOK, connectionRecoveryDonePage, contextvalues.ConnectionReferenceLine(r.Context()))
 }
 
 type connectionRecoveryPage struct {
@@ -604,13 +604,17 @@ p{margin:0;line-height:1.5;color:#444}
 @media (prefers-color-scheme:dark){body{background:#0a0a0a;color:#eee}main{background:#141414;border-color:#2a2a2a}p{color:#bbb}}
 </style>
 </head>
-<body><main><h1>{{.Title}}</h1><p>{{.Message}}</p></main></body>
+<body><main><h1>{{.Title}}</h1><p>{{.Message}}</p>{{if .ReferenceLine}}<p style="margin-top:12px;font-size:12px;word-break:break-all">{{.ReferenceLine}}</p>{{end}}</main></body>
 </html>`))
 
-func renderConnectionRecoveryPage(w http.ResponseWriter, status int, page connectionRecoveryPage) error {
+func renderConnectionRecoveryPage(w http.ResponseWriter, status int, page connectionRecoveryPage, referenceLine string) error {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := connectionRecoveryTemplate.Execute(w, page); err != nil {
+	view := struct {
+		connectionRecoveryPage
+		ReferenceLine string
+	}{page, referenceLine}
+	if err := connectionRecoveryTemplate.Execute(w, view); err != nil {
 		return fmt.Errorf("render connection page: %w", err)
 	}
 	return nil

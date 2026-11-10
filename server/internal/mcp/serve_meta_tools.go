@@ -263,7 +263,12 @@ func (s *Service) handleMetaExecuteToolCall(
 // stamped with this gateway.
 func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta) (json.RawMessage, error) {
 	attempt := newMetaToolCallAttempt(time.Now())
-	body, err := s.dispatchMetaMemberTool(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt), logger, gate, members, req, qualified, arguments, meta, attempt)
+	// A row from earlier in the request is about something else, not this call.
+	callCtx := contextvalues.WithConnectionReferenceSlot(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt))
+	body, err := s.dispatchMetaMemberTool(callCtx, logger, gate, members, req, qualified, arguments, meta, attempt)
+	if err != nil {
+		contextvalues.ReplaceConnectionReference(ctx, contextvalues.ConnectionReference(callCtx))
+	}
 	if attempt.logged || attempt.proxied || (err == nil && attempt.status == 0) {
 		return body, err
 	}
@@ -735,6 +740,7 @@ func marshalMetaMemberFailure(ctx context.Context, logger *slog.Logger, id mcpjs
 // marshalMetaToolError emits a member-scoped failure as an isError tool
 // result rather than a protocol error.
 func marshalMetaToolError(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, message string) (json.RawMessage, error) {
+	message = contextvalues.AppendConnectionReference(ctx, message)
 	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
 		invocation.message = message
 		return nil, invocation.failure()

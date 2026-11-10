@@ -159,7 +159,7 @@ func (m *ChallengeManager) AuthClientRemoteSessionStatuses(ctx context.Context, 
 	for _, row := range rows {
 		states = append(states, remotesessions_repo.ListRemoteSessionStatusesForSubjectRow(row))
 	}
-	return remoteSessionStates(states), nil
+	return m.remoteSessionStates(states), nil
 }
 
 // DisconnectAuthClientRemoteSession is DisconnectRemoteSession for a
