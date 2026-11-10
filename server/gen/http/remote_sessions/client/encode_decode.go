@@ -1731,6 +1731,9 @@ func EncodeGetServerIdentityImpactRequest(encoder func(*http.Request) goahttp.En
 		if p.ClientID != nil {
 			values.Add("client_id", *p.ClientID)
 		}
+		if p.DedicatedIssuer != nil {
+			values.Add("dedicated_issuer", fmt.Sprintf("%v", *p.DedicatedIssuer))
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -3653,6 +3656,43 @@ func unmarshalServerIdentityImpactServerResponseBodyToRemotesessionsServerIdenti
 		ProjectID:   *v.ProjectID,
 		ProjectName: *v.ProjectName,
 		Impact:      *v.Impact,
+	}
+
+	return res
+}
+
+// unmarshalServerIdentityDedicatedIssuerImpactResponseBodyToRemotesessionsServerIdentityDedicatedIssuerImpact
+// builds a value of type *remotesessions.ServerIdentityDedicatedIssuerImpact
+// from a value of type *ServerIdentityDedicatedIssuerImpactResponseBody.
+func unmarshalServerIdentityDedicatedIssuerImpactResponseBodyToRemotesessionsServerIdentityDedicatedIssuerImpact(v *ServerIdentityDedicatedIssuerImpactResponseBody) *remotesessions.ServerIdentityDedicatedIssuerImpact {
+	if v == nil {
+		return nil
+	}
+	res := &remotesessions.ServerIdentityDedicatedIssuerImpact{
+		HiddenGatewayCount:  *v.HiddenGatewayCount,
+		OrganizationGateway: *v.OrganizationGateway,
+	}
+	res.Gateways = make([]*remotesessions.ServerIdentityImpactGateway, len(v.Gateways))
+	for i, val := range v.Gateways {
+		if val == nil {
+			res.Gateways[i] = nil
+			continue
+		}
+		res.Gateways[i] = unmarshalServerIdentityImpactGatewayResponseBodyToRemotesessionsServerIdentityImpactGateway(val)
+	}
+
+	return res
+}
+
+// unmarshalServerIdentityImpactGatewayResponseBodyToRemotesessionsServerIdentityImpactGateway
+// builds a value of type *remotesessions.ServerIdentityImpactGateway from a
+// value of type *ServerIdentityImpactGatewayResponseBody.
+func unmarshalServerIdentityImpactGatewayResponseBodyToRemotesessionsServerIdentityImpactGateway(v *ServerIdentityImpactGatewayResponseBody) *remotesessions.ServerIdentityImpactGateway {
+	res := &remotesessions.ServerIdentityImpactGateway{
+		ID:          *v.ID,
+		Name:        v.Name,
+		ProjectID:   *v.ProjectID,
+		ProjectName: *v.ProjectName,
 	}
 
 	return res

@@ -9,7 +9,7 @@
 //	commit.Register(ctx)      // link, manual, Client ID Metadata Document or DCR
 //	tx := commit.Begin(ctx)   // the caller may take its own locks on tx.DB()
 //	commit.Lock(ctx, tx)      // user session issuer, then the stored provider
-//	commit.Bind(ctx, tx, reg) // provider, replaced or reused clients, client, binding
+//	commit.Bind(ctx, tx, reg) // dedicated issuer if needed, provider, replaced or reused clients, client, binding
 //	commit.Commit(ctx, tx)    // commit, then restamp the MCP servers on the issuer
 //
 // The refusals run twice from the same plan: in Preflight, before any
@@ -41,6 +41,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -49,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 )
 
 var (
@@ -80,6 +83,11 @@ var (
 	// ErrIdentityStepOrder marks a commit step run out of order, which is a
 	// caller bug.
 	ErrIdentityStepOrder = errors.New("identity commit: step run out of order")
+
+	// errClientServesOtherServer is the cause of the conflict a dedicated user
+	// session issuer resolves: the commit would unbind a client another MCP
+	// server signs in through.
+	errClientServesOtherServer = errors.New("identity: bound client serves another MCP server")
 )
 
 // OrgWideBindingMessage is the caller-facing message for
@@ -91,6 +99,7 @@ const (
 	identityChainingBindingsMessage      = "active identity-chaining bindings reference this configuration; explicitly unlink them before changing or deleting it"
 	ambiguousCurrentProviderMessage      = "this MCP server's user session issuer is bound to more than one Remote Identity Provider; remove the extra clients from the Remote Identity Provider settings before changing it"
 	clientTakenMessage                   = "a remote session client is already bound to this user session issuer for the same remote session issuer"
+	trustedIssuerNotDedicatedMessage     = "This server's User Identity issuer signs people in through a trusted identity provider, which a dedicated issuer created here cannot do. Assign this server a User Identity issuer in server settings, then configure its Remote Identity Provider."
 	clientServesOtherServerMessage       = "Another MCP server signs in through the client bound to this server's User Identity issuer, and one issuer cannot serve two servers through different clients. If the Remote Identity Provider is the same, reuse the existing bound client. To use a different client, assign this server a dedicated User Identity issuer in server settings, then configure its Remote Identity Provider."
 )
 
@@ -214,7 +223,34 @@ type IdentityPlan struct {
 	// ResourceDisplay, when set, stores RFC 9728 display members on the bound
 	// client.
 	ResourceDisplay *ResourceDisplay
+
+	// DedicatedIssuer is whether a ReplaceBound commit may move the plan's MCP
+	// server to a new user session issuer of its own. The zero value never
+	// moves it.
+	DedicatedIssuer DedicatedIssuerPolicy
 }
+
+// DedicatedIssuerPolicy is when a commit moves its MCP server off a user
+// session issuer that cannot take the plan, onto a new one it creates for that
+// server alone. Moving is the administrator's choice, never the commit's own:
+// everyone connected to the server connects again, and gateways that sign
+// people in through the issuer it leaves stop serving it. No policy moves a
+// server under upstream auth enforcement, where the bindings decide nothing.
+type DedicatedIssuerPolicy int
+
+const (
+	// KeepIssuer never moves the server; a plan its issuer cannot take is
+	// refused.
+	KeepIssuer DedicatedIssuerPolicy = iota
+
+	// DedicateOnClientConflict moves the server when the plan would unbind a
+	// client another MCP server signs in through.
+	DedicateOnClientConflict
+
+	// DedicateWhenShared also moves the server when its issuer serves any
+	// other MCP server, for a caller that must not touch shared bindings.
+	DedicateWhenShared
+)
 
 // ProviderChoice is the Remote Identity Provider a plan configures.
 type ProviderChoice struct {
@@ -415,6 +451,10 @@ type IdentityResult struct {
 
 	// Reused reports that ReuseBound kept an already-bound client.
 	Reused bool
+
+	// DedicatedIssuerID is the user session issuer the commit created and
+	// moved the plan's MCP server to, or uuid.Nil when it moved nothing.
+	DedicatedIssuerID uuid.UUID
 }
 
 // IdentityCommit is one prepared plan. Build one per request with
@@ -437,7 +477,10 @@ type IdentityCommit struct {
 	// serverOnly reports that Bind left the user session issuer's bindings
 	// alone and offered the client on the plan's MCP server only.
 	serverOnly bool
-	result     IdentityResult
+	// leftIssuerID is the user session issuer Bind moved the plan's MCP server
+	// off, onto the dedicated one it created; uuid.Nil when it moved nothing.
+	leftIssuerID uuid.UUID
+	result       IdentityResult
 	// createCapabilities pins registration to the submitted form, before create-time discovery fills it in.
 	createCapabilities providerCapabilities
 }
@@ -493,6 +536,22 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 		return err
 	}
 
+	// Planned before the linked client is checked, because a commit that moves
+	// the server binds that client to a new project-owned issuer, which no
+	// other project shares. Its refusal still comes after the linked client's.
+	var replaced []repo.RemoteSessionClient
+	var replacementErr error
+	if c.plan.Bound == ReplaceBound {
+		var dedicate bool
+		replaced, _, dedicate, replacementErr = c.planReplacement(ctx, c.committer.db)
+		if dedicate {
+			if issuer.TrustedRemoteSessionIssuerID.Valid {
+				return identityRefusal(ErrIdentityConflict, nil, trustedIssuerNotDedicatedMessage)
+			}
+			c.userIssuerOrgLevel = false
+		}
+	}
+
 	if c.plan.Client.kind == clientLink {
 		if err := c.preflightLinkedClient(ctx, q); err != nil {
 			return err
@@ -501,9 +560,8 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 
 	switch c.plan.Bound {
 	case ReplaceBound:
-		replaced, _, err := c.planReplacement(ctx, c.committer.db)
-		if err != nil {
-			return err
+		if replacementErr != nil {
+			return replacementErr
 		}
 		for _, client := range replaced {
 			if err := c.refuseOrgWideBinding(client); err != nil {
@@ -911,11 +969,16 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 	reused := false
 	switch c.plan.Bound {
 	case ReplaceBound:
-		replaced, serverOnly, err := c.planReplacement(ctx, tx.tx)
+		replaced, serverOnly, dedicate, err := c.planReplacement(ctx, tx.tx)
 		if err != nil {
 			return err
 		}
 		c.serverOnly = serverOnly
+		if dedicate {
+			if err := c.moveToDedicatedIssuer(ctx, tx); err != nil {
+				return err
+			}
+		}
 		for _, current := range replaced {
 			if err := c.detachClient(ctx, tx, current); err != nil {
 				return err
@@ -987,14 +1050,28 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 			return fmt.Errorf("sync mcp server auth clients: %w", err)
 		}
 	}
+	dedicatedIssuerID := uuid.Nil
+	if c.leftIssuerID != uuid.Nil {
+		dedicatedIssuerID = c.plan.UserSessionIssuerID
+		// The moved server still carries its associations with the clients of
+		// the issuer it left, which no longer serve it, and that issuer may now
+		// have a single consumer whose clients are provably its own.
+		if err := upstreamclients.ReconcileInLockedTransaction(ctx, tx.tx, c.plan.Scope.OrganizationID, c.plan.Scope.ProjectID, []uuid.UUID{c.leftIssuerID, c.plan.UserSessionIssuerID}); err != nil {
+			return fmt.Errorf("reconcile upstream clients after moving mcp server: %w", err)
+		}
+		if err := authclientbackfill.SyncEMAServers(ctx, tx.tx, c.plan.Scope.OrganizationID, []uuid.UUID{c.plan.MCPServerID}); err != nil {
+			return fmt.Errorf("sync identity-chaining reach after moving mcp server: %w", err)
+		}
+	}
 	c.result = IdentityResult{
-		Provider:        c.provider,
-		Client:          client,
-		Bindings:        bindings,
-		Method:          reg.Method,
-		ProviderCreated: c.plan.Provider.create != nil,
-		ClientCreated:   !reused && reg.Method != RegistrationLinked,
-		Reused:          reused,
+		Provider:          c.provider,
+		Client:            client,
+		Bindings:          bindings,
+		Method:            reg.Method,
+		ProviderCreated:   c.plan.Provider.create != nil,
+		ClientCreated:     !reused && reg.Method != RegistrationLinked,
+		Reused:            reused,
+		DedicatedIssuerID: dedicatedIssuerID,
 	}
 	return nil
 }
@@ -1017,20 +1094,126 @@ func (c *IdentityCommit) Commit(ctx context.Context, tx *IdentityTx) (IdentityRe
 	// A commit that offered its client on the server only changed no binding,
 	// so nothing derived from the bindings moved.
 	if !c.serverOnly {
-		BestEffortResyncMCPServerRemoteSessionIssuers(ctx, c.committer.logger, c.committer.db, c.plan.Scope.OrganizationID, c.plan.Scope.ProjectID, []uuid.UUID{c.plan.UserSessionIssuerID})
+		issuers := []uuid.UUID{c.plan.UserSessionIssuerID}
+		if c.leftIssuerID != uuid.Nil {
+			issuers = append(issuers, c.leftIssuerID)
+		}
+		BestEffortResyncMCPServerRemoteSessionIssuers(ctx, c.committer.logger, c.committer.db, c.plan.Scope.OrganizationID, c.plan.Scope.ProjectID, issuers)
 	}
 	return c.result, nil
 }
 
 // planReplacement decides what a ReplaceBound commit does with the clients
 // bound to the user session issuer, from those bindings as db sees them.
-func (c *IdentityCommit) planReplacement(ctx context.Context, db repo.DBTX) ([]repo.RemoteSessionClient, bool, error) {
+// dedicate reports that the plan's DedicatedIssuer policy applies: the commit
+// leaves the issuer and its bindings as they are and moves the plan's MCP
+// server to a new issuer, where nothing is bound to replace.
+func (c *IdentityCommit) planReplacement(ctx context.Context, db repo.DBTX) (replaced []repo.RemoteSessionClient, serverOnly, dedicate bool, err error) {
+	mayDedicate := c.plan.DedicatedIssuer != KeepIssuer && c.plan.MCPServerID != uuid.Nil
+	if mayDedicate && c.plan.DedicatedIssuer == DedicateWhenShared {
+		shared, err := issuerSharedWithoutEnforcement(ctx, db, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID, c.plan.MCPServerID)
+		if err != nil {
+			return nil, false, false, err
+		}
+		if shared {
+			return nil, false, true, nil
+		}
+	}
 	bound, err := listUserSessionIssuerClients(ctx, repo.New(db), c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 	// A new provider has no id yet, so every bound client belongs to another.
-	return decideReplacement(ctx, db, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID, c.plan.MCPServerID, bound, c.provider.ID, c.plan.Client.keep())
+	replaced, serverOnly, err = decideReplacement(ctx, db, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID, c.plan.MCPServerID, bound, c.provider.ID, c.plan.Client.keep())
+	if mayDedicate && errors.Is(err, errClientServesOtherServer) {
+		return nil, false, true, nil
+	}
+	return replaced, serverOnly, false, err
+}
+
+// issuerSharedWithoutEnforcement reports whether the user session issuer serves
+// an MCP server other than mcpServerID while the bindings are what serves them.
+// Under upstream auth enforcement each server is served from its own auth
+// clients, so sharing the issuer constrains nothing.
+func issuerSharedWithoutEnforcement(ctx context.Context, db repo.DBTX, organizationID string, userIssuerID, mcpServerID uuid.UUID) (bool, error) {
+	enforced, err := authenforcement.ReadEnforced(ctx, db, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
+	if enforced {
+		return false, nil
+	}
+	servers, err := repo.New(db).ListOrganizationMCPServersForUserSessionIssuer(ctx, repo.ListOrganizationMCPServersForUserSessionIssuerParams{OrganizationID: organizationID, UserSessionIssuerID: uuid.NullUUID{UUID: userIssuerID, Valid: true}})
+	if err != nil {
+		return false, fmt.Errorf("list MCP servers on the user session issuer: %w", err)
+	}
+	return len(servers) != 1 || servers[0].ID != mcpServerID, nil
+}
+
+// moveToDedicatedIssuer creates a user session issuer for the plan's MCP
+// server alone, with the sign-in settings of the one it leaves, and points the
+// server at it. The rest of Bind then runs against the new issuer, where no
+// client is bound. The caller locked the server row before Lock; the new
+// issuer is invisible to every other transaction until commit.
+func (c *IdentityCommit) moveToDedicatedIssuer(ctx context.Context, tx *IdentityTx) error {
+	left, err := tx.q.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
+		ID:             c.plan.UserSessionIssuerID,
+		ProjectID:      c.plan.Scope.ProjectID,
+		OrganizationID: c.plan.Scope.OrganizationID,
+	})
+	if err != nil {
+		return fmt.Errorf("get user session issuer to leave: %w", err)
+	}
+	if left.TrustedRemoteSessionIssuerID.Valid {
+		return identityRefusal(ErrIdentityConflict, nil, trustedIssuerNotDedicatedMessage)
+	}
+
+	servers := mcpserversrepo.New(tx.tx)
+	before, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: c.plan.MCPServerID, ProjectID: c.plan.Scope.ProjectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return identityRefusal(ErrIdentityNotFound, err, "MCP server not found")
+	}
+	if err != nil {
+		return fmt.Errorf("get MCP server to move: %w", err)
+	}
+	if !before.UserSessionIssuerID.Valid || before.UserSessionIssuerID.UUID != c.plan.UserSessionIssuerID {
+		return identityRefusal(ErrIdentityConflict, nil, "MCP server identity configuration changed while preparing the request")
+	}
+
+	issuer, err := serverissuer.MintDedicated(ctx, tx.tx, c.plan.Scope.OrganizationID, c.plan.Scope.ProjectID, conv.FromPGTextOrEmpty[string](before.Slug), c.plan.UserSessionIssuerID)
+	if err != nil {
+		return fmt.Errorf("mint dedicated user session issuer: %w", err)
+	}
+	after, err := servers.SetMCPServerUserSessionIssuer(ctx, mcpserversrepo.SetMCPServerUserSessionIssuerParams{
+		UserSessionIssuerID: issuer.ID,
+		ID:                  c.plan.MCPServerID,
+		ProjectID:           c.plan.Scope.ProjectID,
+	})
+	if err != nil {
+		return fmt.Errorf("move MCP server to dedicated user session issuer: %w", err)
+	}
+	if err := c.committer.audit.LogMcpServerUpdate(ctx, tx.tx, audit.LogMcpServerUpdateEvent{
+		OrganizationID:          c.plan.Scope.OrganizationID,
+		ProjectID:               c.plan.Scope.ProjectID,
+		Actor:                   c.plan.Scope.Actor,
+		ActorDisplayName:        c.plan.Scope.ActorDisplayName,
+		ActorSlug:               nil,
+		McpServerURN:            urn.NewMcpServer(after.ID),
+		McpServerName:           conv.FromPGTextOrEmpty[string](after.Name),
+		McpServerSlug:           conv.FromPGTextOrEmpty[string](after.Slug),
+		McpServerSnapshotBefore: mv.BuildMcpServerView(before),
+		McpServerSnapshotAfter:  mv.BuildMcpServerView(after),
+	}); err != nil {
+		return fmt.Errorf("audit MCP server move to dedicated user session issuer: %w", err)
+	}
+
+	if err := lockUserSessionIssuers(ctx, tx.tx, tx.q, c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, []uuid.UUID{issuer.ID}); err != nil {
+		return fmt.Errorf("lock dedicated user session issuer: %w", err)
+	}
+	c.leftIssuerID = c.plan.UserSessionIssuerID
+	c.plan.UserSessionIssuerID = issuer.ID
+	c.userIssuerOrgLevel = false
+	return nil
 }
 
 // decideReplacement decides what replacing the clients bound to a user session
@@ -1086,7 +1269,7 @@ func decideReplacement(ctx context.Context, db repo.DBTX, organizationID string,
 	case canOfferOnServer && (use.ServesOtherMcpServers || !use.AllAssociatedWithMcpServer):
 		return nil, true, nil
 	case use.ServesOtherMcpServers:
-		return nil, false, identityRefusal(ErrIdentityConflict, nil, clientServesOtherServerMessage)
+		return nil, false, identityRefusal(ErrIdentityConflict, errClientServesOtherServer, clientServesOtherServerMessage)
 	}
 	return replaced, false, nil
 }

@@ -86,3 +86,58 @@ export function RepointedServersNotice({
     </Alert>
   );
 }
+
+/**
+ * What moving this server to a user session issuer of its own costs, shown
+ * before the operator agrees to it.
+ */
+export function DedicatedIssuerNotice({
+  impact,
+  projectId,
+}: {
+  impact: NonNullable<SharedIssuerImpactState["dedicatedIssuer"]>;
+  /** The target's project; gateways elsewhere are labelled with theirs. */
+  projectId: string;
+}): JSX.Element {
+  return (
+    <Alert variant="warning" dismissible={false}>
+      <ul className="list-disc pl-5">
+        <li>
+          <Text small>
+            Everyone connected to this server will have to connect again.
+          </Text>
+        </li>
+        {impact.gateways.map((gateway) => (
+          <li key={gateway.id}>
+            <Text small>
+              The gateway {gateway.name ?? "Untitled"}
+              {gateway.projectId !== projectId
+                ? ` (${gateway.projectName})`
+                : ""}{" "}
+              will stop offering this server.
+            </Text>
+          </li>
+        ))}
+        {impact.hiddenGatewayCount > 0 && (
+          <li>
+            <Text small>
+              {impact.hiddenGatewayCount === 1
+                ? "1 gateway you don't have access to will stop offering this server."
+                : `${impact.hiddenGatewayCount} gateways you don't have access to will stop offering this server.`}
+            </Text>
+          </li>
+        )}
+        {impact.organizationGateway && (
+          <li>
+            <Text small>
+              The organization gateway will stop offering this server.
+            </Text>
+          </li>
+        )}
+        <li>
+          <Text small>Other servers keep their current sign-in.</Text>
+        </li>
+      </ul>
+    </Alert>
+  );
+}

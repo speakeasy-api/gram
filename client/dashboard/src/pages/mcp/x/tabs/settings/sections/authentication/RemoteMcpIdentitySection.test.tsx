@@ -107,6 +107,7 @@ vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
+  invalidateAllMcpServers: () => Promise.resolve(),
   useMcpServers: () => mocks.siblings(),
 }));
 
@@ -538,6 +539,7 @@ const target: AuthTarget = {
   slug: "remote-server",
   projectId: "project-1",
   permissionResourceId: "mcp-server-1",
+  mcpServerId: "mcp-server-1",
   attachImpactTarget: { mcpServerId: "mcp-server-1" },
   supportsOrganizationIssuers: true,
   userSessionIssuerId: "user-session-issuer-1",
@@ -2092,7 +2094,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByRole("dialog")).toBeDefined();
     expect(mocks.detach).not.toHaveBeenCalled();
-    expect(mocks.impact).toHaveBeenLastCalledWith(
+    expect(mocks.impact).toHaveBeenCalledWith(
       expect.objectContaining({
         userSessionIssuerId: "user-session-issuer-1",
         change: "detach",
@@ -2299,7 +2301,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.getByText("Other server")).toBeDefined();
     expect(screen.getByText(/have to sign in again:/)).toBeDefined();
     expect(mocks.commit).not.toHaveBeenCalled();
-    expect(mocks.impact).toHaveBeenLastCalledWith(
+    expect(mocks.impact).toHaveBeenCalledWith(
       expect.objectContaining({
         userSessionIssuerId: "user-session-issuer-1",
         change: "replace",
@@ -2363,6 +2365,86 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect((confirm as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(confirm);
     expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("offers a dedicated issuer for a refusal the server can repair", async () => {
+    mocks.impact.mockImplementation((request: { dedicatedIssuer?: boolean }) =>
+      request.dedicatedIssuer
+        ? {
+            data: {
+              servers: [],
+              hiddenServerCount: 0,
+              dedicatedIssuer: {
+                gateways: [
+                  {
+                    id: "gateway-1",
+                    name: "Team gateway",
+                    projectId: "project-2",
+                    projectName: "Other project",
+                  },
+                ],
+                hiddenGatewayCount: 2,
+                organizationGateway: true,
+              },
+            },
+            isLoading: false,
+            isError: false,
+          }
+        : {
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: Object.assign(
+              new Error("Another MCP server signs in through the client."),
+              { statusCode: 409 },
+            ),
+          },
+    );
+    swapClientWithImpact(null);
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Move this server to its own issuer?",
+    });
+    expect(
+      within(dialog).queryByText(
+        "Another MCP server signs in through the client.",
+      ),
+    ).toBeNull();
+    expect(
+      within(dialog).getByText(
+        "Everyone connected to this server will have to connect again.",
+      ),
+    ).toBeDefined();
+    expect(
+      within(dialog).getByText(
+        /The gateway Team gateway \(Other project\)\s+will stop offering this server\./,
+      ),
+    ).toBeDefined();
+    expect(
+      within(dialog).getByText(
+        "2 gateways you don't have access to will stop offering this server.",
+      ),
+    ).toBeDefined();
+    expect(
+      within(dialog).getByText(
+        "The organization gateway will stop offering this server.",
+      ),
+    ).toBeDefined();
+    expect(mocks.impact).toHaveBeenCalledWith(
+      expect.objectContaining({ change: "replace", dedicatedIssuer: true }),
+      expect.objectContaining({ enabled: true }),
+    );
+    expect(mocks.commit).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Create issuer and save" }),
+    );
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith({
+      commitServerIdentityConfigurationForm: expect.objectContaining({
+        dedicatedIssuer: true,
+      }),
+    });
   });
 
   it("holds the confirm while a cached preview is refetched", async () => {

@@ -72,9 +72,11 @@ type Service interface {
 	// gateway is listed when a client it can see is unbound (client_removed). The
 	// target server is excluded. A change the commit would refuse, such as one
 	// that touches an organization-level client on an organization-level issuer,
-	// is refused here too. Requires mcp:write on mcp_server_id when given,
-	// otherwise project:write. Servers the caller cannot read are counted in
-	// hidden_server_count and never named.
+	// is refused here too. With dedicated_issuer, a replace the issuer cannot take
+	// because another MCP server signs in through its client is previewed as
+	// moving mcp_server_id to a new issuer of its own. Requires mcp:write on
+	// mcp_server_id when given, otherwise project:write. Servers the caller cannot
+	// read are counted in hidden_server_count and never named.
 	GetServerIdentityImpact(context.Context, *GetServerIdentityImpactPayload) (res *ServerIdentityImpactResult, err error)
 	// List the upstream OAuth clients an MCP server is associated with. An
 	// association is a per-server configuration fact: one client can serve several
@@ -183,6 +185,15 @@ type CommitServerIdentityConfigurationPayload struct {
 	TargetServerOnly *bool
 	// A new project-scoped Remote Identity Provider to create.
 	CreateProvider *CreateRemoteSessionIssuerForm
+	// Let the save move the MCP server to a new user session issuer of its own
+	// when its current issuer cannot take the change: another MCP server signs in
+	// through the client bound to it, or, with target_server_only, it serves
+	// another MCP server at all. The new issuer keeps the current issuer's
+	// challenge mode, session duration and CIMD admission. People and MCP clients
+	// connected to the MCP server must connect again, and gateways that sign
+	// people in through the old issuer stop serving it. Has no effect when the
+	// save fits the current issuer. Requires project:write.
+	DedicatedIssuer *bool
 	// How to provide the OAuth client.
 	ClientMode string
 	// An existing visible remote-session client to link. Required only for
@@ -223,6 +234,9 @@ type CommitServerIdentityConfigurationResult struct {
 	// Completed DCR failure. Mutually exclusive with status and
 	// manual_setup_required=true.
 	Failure *ServerIdentityRegistrationFailure
+	// The new user session issuer the save moved the MCP server to. Present only
+	// when dedicated_issuer applied.
+	DedicatedIssuerID *string
 }
 
 // CompleteBindingRefreshPayload is the payload type of the remoteSessions
@@ -393,6 +407,10 @@ type GetServerIdentityImpactPayload struct {
 	ProviderID *string
 	// An existing client being bound. Omit for a new client.
 	ClientID *string
+	// Preview a replace made with dedicated_issuer. When the issuer cannot take
+	// the change, the result describes moving mcp_server_id to a new issuer of its
+	// own instead of refusing.
+	DedicatedIssuer *bool
 }
 
 // ListBindingsPayload is the payload type of the remoteSessions service
@@ -535,6 +553,33 @@ type ServerIdentityClientConfiguration struct {
 	Audience *string
 }
 
+// What moving the MCP server to a new user session issuer of its own does. No
+// other MCP server's sign-in changes. Everyone connected to the moved MCP
+// server connects again.
+type ServerIdentityDedicatedIssuerImpact struct {
+	// Gateways the caller can read that have the MCP server as a member and sign
+	// people in through the issuer it leaves. They stop serving it.
+	Gateways []*ServerIdentityImpactGateway
+	// Such gateways the caller cannot read; they are not named.
+	HiddenGatewayCount int
+	// The issuer the MCP server leaves is the organization gateway's, which stops
+	// serving it.
+	OrganizationGateway bool
+}
+
+// A gateway that stops serving an MCP server moved to a dedicated user session
+// issuer.
+type ServerIdentityImpactGateway struct {
+	// The gateway id.
+	ID string
+	// The gateway name.
+	Name *string
+	// The owning project.
+	ProjectID string
+	// The name of the owning project.
+	ProjectName string
+}
+
 // ServerIdentityImpactResult is the result type of the remoteSessions service
 // getServerIdentityImpact method.
 type ServerIdentityImpactResult struct {
@@ -544,6 +589,10 @@ type ServerIdentityImpactResult struct {
 	// the change touches an organization-level client this counts every such
 	// server on the issuer, affected or not.
 	HiddenServerCount int
+	// Present only for a preview with dedicated_issuer that the issuer cannot
+	// take: the save would move the MCP server to a new issuer of its own, and
+	// servers is empty.
+	DedicatedIssuer *ServerIdentityDedicatedIssuerImpact
 }
 
 // An MCP server or gateway a proposed binding change affects.

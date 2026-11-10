@@ -68,6 +68,15 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	TargetServerOnly *bool `form:"target_server_only,omitempty" json:"target_server_only,omitempty" xml:"target_server_only,omitempty"`
 	// A new project-scoped Remote Identity Provider to create.
 	CreateProvider *CreateRemoteSessionIssuerFormRequestBody `form:"create_provider,omitempty" json:"create_provider,omitempty" xml:"create_provider,omitempty"`
+	// Let the save move the MCP server to a new user session issuer of its own
+	// when its current issuer cannot take the change: another MCP server signs in
+	// through the client bound to it, or, with target_server_only, it serves
+	// another MCP server at all. The new issuer keeps the current issuer's
+	// challenge mode, session duration and CIMD admission. People and MCP clients
+	// connected to the MCP server must connect again, and gateways that sign
+	// people in through the old issuer stop serving it. Has no effect when the
+	// save fits the current issuer. Requires project:write.
+	DedicatedIssuer *bool `form:"dedicated_issuer,omitempty" json:"dedicated_issuer,omitempty" xml:"dedicated_issuer,omitempty"`
 	// How to provide the OAuth client.
 	ClientMode string `form:"client_mode" json:"client_mode" xml:"client_mode"`
 	// An existing visible remote-session client to link. Required only for
@@ -167,6 +176,9 @@ type CommitServerIdentityConfigurationResponseBody struct {
 	// Completed DCR failure. Mutually exclusive with status and
 	// manual_setup_required=true.
 	Failure *ServerIdentityRegistrationFailureResponseBody `form:"failure,omitempty" json:"failure,omitempty" xml:"failure,omitempty"`
+	// The new user session issuer the save moved the MCP server to. Present only
+	// when dedicated_issuer applied.
+	DedicatedIssuerID *string `form:"dedicated_issuer_id,omitempty" json:"dedicated_issuer_id,omitempty" xml:"dedicated_issuer_id,omitempty"`
 }
 
 // GetServerIdentityImpactResponseBody is the type of the "remoteSessions"
@@ -178,6 +190,10 @@ type GetServerIdentityImpactResponseBody struct {
 	// the change touches an organization-level client this counts every such
 	// server on the issuer, affected or not.
 	HiddenServerCount *int `form:"hidden_server_count,omitempty" json:"hidden_server_count,omitempty" xml:"hidden_server_count,omitempty"`
+	// Present only for a preview with dedicated_issuer that the issuer cannot
+	// take: the save would move the MCP server to a new issuer of its own, and
+	// servers is empty.
+	DedicatedIssuer *ServerIdentityDedicatedIssuerImpactResponseBody `form:"dedicated_issuer,omitempty" json:"dedicated_issuer,omitempty" xml:"dedicated_issuer,omitempty"`
 }
 
 // ListServerClientAssociationsResponseBody is the type of the "remoteSessions"
@@ -3107,6 +3123,32 @@ type ServerIdentityImpactServerResponseBody struct {
 	Impact *string `form:"impact,omitempty" json:"impact,omitempty" xml:"impact,omitempty"`
 }
 
+// ServerIdentityDedicatedIssuerImpactResponseBody is used to define fields on
+// response body types.
+type ServerIdentityDedicatedIssuerImpactResponseBody struct {
+	// Gateways the caller can read that have the MCP server as a member and sign
+	// people in through the issuer it leaves. They stop serving it.
+	Gateways []*ServerIdentityImpactGatewayResponseBody `form:"gateways,omitempty" json:"gateways,omitempty" xml:"gateways,omitempty"`
+	// Such gateways the caller cannot read; they are not named.
+	HiddenGatewayCount *int `form:"hidden_gateway_count,omitempty" json:"hidden_gateway_count,omitempty" xml:"hidden_gateway_count,omitempty"`
+	// The issuer the MCP server leaves is the organization gateway's, which stops
+	// serving it.
+	OrganizationGateway *bool `form:"organization_gateway,omitempty" json:"organization_gateway,omitempty" xml:"organization_gateway,omitempty"`
+}
+
+// ServerIdentityImpactGatewayResponseBody is used to define fields on response
+// body types.
+type ServerIdentityImpactGatewayResponseBody struct {
+	// The gateway id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The gateway name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The owning project.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The name of the owning project.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+}
+
 // ServerClientAssociationResponseBody is used to define fields on response
 // body types.
 type ServerClientAssociationResponseBody struct {
@@ -3196,6 +3238,7 @@ func NewCommitServerIdentityConfigurationRequestBody(p *remotesessions.CommitSer
 		McpServerID:        p.McpServerID,
 		ProviderID:         p.ProviderID,
 		TargetServerOnly:   p.TargetServerOnly,
+		DedicatedIssuer:    p.DedicatedIssuer,
 		ClientMode:         p.ClientMode,
 		ExistingClientID:   p.ExistingClientID,
 		RegistrationMethod: p.RegistrationMethod,
@@ -4202,6 +4245,7 @@ func NewCommitServerIdentityConfigurationResultOK(body *CommitServerIdentityConf
 		ClientTier:          body.ClientTier,
 		ProviderPath:        body.ProviderPath,
 		ClientPath:          body.ClientPath,
+		DedicatedIssuerID:   body.DedicatedIssuerID,
 	}
 	if body.Provider != nil {
 		v.Provider = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(body.Provider)
@@ -4381,6 +4425,9 @@ func NewGetServerIdentityImpactServerIdentityImpactResultOK(body *GetServerIdent
 			continue
 		}
 		v.Servers[i] = unmarshalServerIdentityImpactServerResponseBodyToRemotesessionsServerIdentityImpactServer(val)
+	}
+	if body.DedicatedIssuer != nil {
+		v.DedicatedIssuer = unmarshalServerIdentityDedicatedIssuerImpactResponseBodyToRemotesessionsServerIdentityDedicatedIssuerImpact(body.DedicatedIssuer)
 	}
 
 	return v
@@ -5479,6 +5526,9 @@ func ValidateCommitServerIdentityConfigurationResponseBody(body *CommitServerIde
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.DedicatedIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dedicated_issuer_id", *body.DedicatedIssuerID, goa.FormatUUID))
+	}
 	return
 }
 
@@ -5496,6 +5546,11 @@ func ValidateGetServerIdentityImpactResponseBody(body *GetServerIdentityImpactRe
 			if err2 := ValidateServerIdentityImpactServerResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.DedicatedIssuer != nil {
+		if err2 := ValidateServerIdentityDedicatedIssuerImpactResponseBody(body.DedicatedIssuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -9079,6 +9134,49 @@ func ValidateServerIdentityImpactServerResponseBody(body *ServerIdentityImpactSe
 		if !(*body.Impact == "repoint" || *body.Impact == "clear" || *body.Impact == "resignin" || *body.Impact == "client_removed") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.impact", *body.Impact, []any{"repoint", "clear", "resignin", "client_removed"}))
 		}
+	}
+	return
+}
+
+// ValidateServerIdentityDedicatedIssuerImpactResponseBody runs the validations
+// defined on ServerIdentityDedicatedIssuerImpactResponseBody
+func ValidateServerIdentityDedicatedIssuerImpactResponseBody(body *ServerIdentityDedicatedIssuerImpactResponseBody) (err error) {
+	if body.Gateways == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gateways", "body"))
+	}
+	if body.HiddenGatewayCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hidden_gateway_count", "body"))
+	}
+	if body.OrganizationGateway == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_gateway", "body"))
+	}
+	for _, e := range body.Gateways {
+		if e != nil {
+			if err2 := ValidateServerIdentityImpactGatewayResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateServerIdentityImpactGatewayResponseBody runs the validations defined
+// on ServerIdentityImpactGatewayResponseBody
+func ValidateServerIdentityImpactGatewayResponseBody(body *ServerIdentityImpactGatewayResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	return
 }

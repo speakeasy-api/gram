@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -191,6 +192,18 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 		return nil, oops.E(oops.CodeUnexpected, err, "check organization admin access").LogError(ctx, logger)
 	}
 	if err := s.planIdentityChange(ctx, q, projectID, orgID, userIssuerID, targetID.UUID, !userIssuer.ProjectID.Valid, orgAdmin, payload.Change, providerID, clientID, &change); err != nil {
+		// The commit made with dedicated_issuer moves the server instead of
+		// refusing this, and changes no binding on the issuer it leaves.
+		if conv.PtrValOr(payload.DedicatedIssuer, false) && targetID.Valid && errors.Is(err, errClientServesOtherServer) {
+			if userIssuer.TrustedRemoteSessionIssuerID.Valid {
+				return nil, identityOopsError(identityRefusal(ErrIdentityConflict, nil, trustedIssuerNotDedicatedMessage), "preview identity change").LogError(ctx, logger)
+			}
+			dedicated, err := s.dedicatedIssuerImpact(ctx, q, orgID, userIssuerID, targetID.UUID, change, clientID)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "preview dedicated user session issuer").LogError(ctx, logger)
+			}
+			return &gen.ServerIdentityImpactResult{Servers: []*gen.ServerIdentityImpactServer{}, HiddenServerCount: 0, DedicatedIssuer: dedicated}, nil
+		}
 		return nil, identityOopsError(err, "preview identity change").LogError(ctx, logger)
 	}
 
@@ -254,7 +267,7 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
 	}
-	result := &gen.ServerIdentityImpactResult{Servers: []*gen.ServerIdentityImpactServer{}, HiddenServerCount: 0}
+	result := &gen.ServerIdentityImpactResult{Servers: []*gen.ServerIdentityImpactServer{}, HiddenServerCount: 0, DedicatedIssuer: nil}
 	for i, candidate := range candidates {
 		switch {
 		case !readable[i]:
@@ -264,6 +277,54 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 		}
 	}
 	return result, nil
+}
+
+// dedicatedIssuerImpact is what moving the target MCP server off userIssuerID
+// onto a new issuer of its own does to the gateways that reach it through
+// userIssuerID. A gateway signs people in to a member through a client bound
+// to the gateway's own issuer, and the moved server's client is bound to the
+// new issuer only. Linking a client that userIssuerID already binds leaves the
+// gateways a client for the server, so they keep serving it.
+func (s *Service) dedicatedIssuerImpact(ctx context.Context, q *repo.Queries, orgID string, userIssuerID, targetID uuid.UUID, change identityChange, clientID uuid.NullUUID) (*gen.ServerIdentityDedicatedIssuerImpact, error) {
+	impact := &gen.ServerIdentityDedicatedIssuerImpact{Gateways: []*gen.ServerIdentityImpactGateway{}, HiddenGatewayCount: 0, OrganizationGateway: false}
+	if clientID.Valid && slices.ContainsFunc(change.bound, func(client impactClient) bool { return client.id == clientID.UUID }) {
+		return impact, nil
+	}
+
+	gateways, err := q.ListGatewaysServingMCPServerThroughUserSessionIssuer(ctx, repo.ListGatewaysServingMCPServerThroughUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuerID, Valid: true},
+		OrganizationID:      orgID,
+		McpServerID:         targetID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list gateways serving the MCP server: %w", err)
+	}
+	checks := make([]authz.Check, 0, len(gateways))
+	for _, row := range gateways {
+		checks = append(checks, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: row.ProjectID.String(), Dimensions: nil})
+	}
+	readable, err := s.authz.FindMatched(ctx, checks)
+	if err != nil {
+		return nil, fmt.Errorf("check gateway read access: %w", err)
+	}
+	for i, row := range gateways {
+		if !readable[i] {
+			impact.HiddenGatewayCount++
+			continue
+		}
+		impact.Gateways = append(impact.Gateways, &gen.ServerIdentityImpactGateway{
+			ID:          row.ID.String(),
+			Name:        conv.PtrEmpty(row.Name),
+			ProjectID:   row.ProjectID.String(),
+			ProjectName: row.ProjectName,
+		})
+	}
+
+	impact.OrganizationGateway, err = q.UserSessionIssuerServesOrganizationGateway(ctx, repo.UserSessionIssuerServesOrganizationGatewayParams{ID: userIssuerID, OrganizationID: orgID})
+	if err != nil {
+		return nil, fmt.Errorf("check organization gateway issuer: %w", err)
+	}
+	return impact, nil
 }
 
 // authorizeServerIdentityImpact requires what making the change requires: write

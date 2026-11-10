@@ -2357,6 +2357,52 @@ func (q *Queries) SetMCPServerToolMetadata(ctx context.Context, arg SetMCPServer
 	return items, nil
 }
 
+const setMCPServerUserSessionIssuer = `-- name: SetMCPServerUserSessionIssuer :one
+UPDATE mcp_servers
+SET
+    user_session_issuer_id = $1::uuid,
+    updated_at = clock_timestamp()
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
+`
+
+type SetMCPServerUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.UUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+// Moves an MCP server to another user session issuer and changes nothing
+// else. The derived remote issuer is restamped by the resync that follows
+// every client binding change.
+func (q *Queries) SetMCPServerUserSessionIssuer(ctx context.Context, arg SetMCPServerUserSessionIssuerParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, setMCPServerUserSessionIssuer, arg.UserSessionIssuerID, arg.ID, arg.ProjectID)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.ToolsetID,
+		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
+		&i.ToolVariationsGroupID,
+		&i.Visibility,
+		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const summarizeMCPServerUsage = `-- name: SummarizeMCPServerUsage :one
 SELECT count(*)::bigint AS connection_count,
        count(DISTINCT s.subject_urn)::bigint AS subject_count,

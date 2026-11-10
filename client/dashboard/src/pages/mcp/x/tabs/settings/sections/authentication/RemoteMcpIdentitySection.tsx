@@ -56,7 +56,10 @@ import { useAgentCredentialDraft } from "@/lib/remote-identity";
 import { RequestedScopesSummary } from "./RequestedScopesSummary";
 import { ResourceScopePinField } from "./ResourceScopePinField";
 import { useResourceScopePin } from "./resourceScopePin";
-import { RepointedServersNotice } from "./RepointedServersNotice";
+import {
+  DedicatedIssuerNotice,
+  RepointedServersNotice,
+} from "./RepointedServersNotice";
 import type { AuthTarget } from "./authTarget";
 import {
   deriveIdentityMode,
@@ -404,6 +407,7 @@ export function RemoteMcpIdentitySectionBody({
   }
   const sharedIssuerImpact = useSharedIssuerImpact(impactRequest);
   const repointLookupPending = sharedIssuerImpact.pending;
+  const dedicatedIssuerOffer = sharedIssuerImpact.dedicatedIssuer;
   const needsConfirm =
     destructive || needsSharedIssuerConfirm(sharedIssuerImpact);
 
@@ -498,7 +502,7 @@ export function RemoteMcpIdentitySectionBody({
   const oauthSwitchBlocked =
     leavingUser && !!oauthFormat && !clientDraft.canSave(oauthFormat);
 
-  const performSave = async () => {
+  const performSave = async (options?: { dedicatedIssuer?: boolean }) => {
     if (
       !canWrite ||
       rbacLoading ||
@@ -536,7 +540,7 @@ export function RemoteMcpIdentitySectionBody({
         // Bind the client before dropping the credential, so a failed commit
         // never leaves the server with no identity; the client outranks the
         // header while both exist.
-        if (!(await userDraft.save())) return;
+        if (!(await userDraft.save(options))) return;
         await removeAgentCredential();
       } else {
         if (leavingAgent) await removeAgentCredential();
@@ -558,7 +562,7 @@ export function RemoteMcpIdentitySectionBody({
           (actualMode !== "user" || userDraft.canSave)
         ) {
           // A pin or header edit alone must not recommit the connected client.
-          await userDraft.save();
+          await userDraft.save(options);
         }
       }
       // A signing key client made for the Service Account choice and left
@@ -1003,19 +1007,28 @@ export function RemoteMcpIdentitySectionBody({
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
             <Dialog.Title>
-              {sharedIssuerImpact.refusal !== undefined
-                ? "Cannot save this identity change"
-                : confirmTitle({
-                    removingSelf,
-                    replacingSelf,
-                    leavingUser,
-                    replacingClient,
-                    replacingCredential,
-                    destructive,
-                    upstreamName,
-                  })}
+              {dedicatedIssuerOffer !== undefined
+                ? "Move this server to its own issuer?"
+                : sharedIssuerImpact.refusal !== undefined
+                  ? "Cannot save this identity change"
+                  : confirmTitle({
+                      removingSelf,
+                      replacingSelf,
+                      leavingUser,
+                      replacingClient,
+                      replacingCredential,
+                      destructive,
+                      upstreamName,
+                    })}
             </Dialog.Title>
-            {sharedIssuerImpact.refusal !== undefined ? (
+            {dedicatedIssuerOffer !== undefined ? (
+              <Dialog.Description>
+                Another server signs in through the client on this server&apos;s
+                user session issuer, and one issuer serves one client. Speakeasy
+                can create a new issuer for this server and save your change
+                there.
+              </Dialog.Description>
+            ) : sharedIssuerImpact.refusal !== undefined ? (
               <Dialog.Description>
                 {sharedIssuerImpact.refusal}
               </Dialog.Description>
@@ -1036,11 +1049,18 @@ export function RemoteMcpIdentitySectionBody({
               </Dialog.Description>
             )}
           </Dialog.Header>
-          {sharedIssuerImpact.refusal === undefined && (
-            <RepointedServersNotice
-              impact={sharedIssuerImpact}
+          {dedicatedIssuerOffer !== undefined ? (
+            <DedicatedIssuerNotice
+              impact={dedicatedIssuerOffer}
               projectId={target.projectId}
             />
+          ) : (
+            sharedIssuerImpact.refusal === undefined && (
+              <RepointedServersNotice
+                impact={sharedIssuerImpact}
+                projectId={target.projectId}
+              />
+            )
           )}
           <Dialog.Footer>
             <Button
@@ -1059,7 +1079,11 @@ export function RemoteMcpIdentitySectionBody({
                 repointLookupPending ||
                 sharedIssuerChangeBlocked(sharedIssuerImpact)
               }
-              onClick={() => void performSave()}
+              onClick={() =>
+                void performSave({
+                  dedicatedIssuer: dedicatedIssuerOffer !== undefined,
+                })
+              }
             >
               {savePending ? (
                 <Button.LeftIcon>
@@ -1067,7 +1091,11 @@ export function RemoteMcpIdentitySectionBody({
                 </Button.LeftIcon>
               ) : null}
               <Button.Text>
-                {savePending ? "Saving" : "Save changes"}
+                {savePending
+                  ? "Saving"
+                  : dedicatedIssuerOffer !== undefined
+                    ? "Create issuer and save"
+                    : "Save changes"}
               </Button.Text>
             </Button>
           </Dialog.Footer>

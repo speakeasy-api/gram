@@ -1923,6 +1923,8 @@ trackedFiles:
   src/models/components/serverclientassociation.ts: {}
   src/models/components/serverconnectiontestresult.ts: {}
   src/models/components/serveridentityclientconfiguration.ts: {}
+  src/models/components/serveridentitydedicatedissuerimpact.ts: {}
+  src/models/components/serveridentityimpactgateway.ts: {}
   src/models/components/serveridentityimpactresult.ts: {}
   src/models/components/serveridentityimpactserver.ts: {}
   src/models/components/serveridentityregistrationfailure.ts: {}

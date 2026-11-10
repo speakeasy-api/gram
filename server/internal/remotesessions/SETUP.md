@@ -40,6 +40,25 @@ again under the issuer lock. Explicitly assign a dedicated issuer through the
 existing User Identity/server settings APIs before retrying. Omitting the flag
 preserves the existing settings workflow and its shared-binding authorization.
 
+Passing `dedicated_issuer: true` as well is the administrator's consent to the
+repair: when the issuer is shared, the save creates a project-owned
+user-session issuer for the MCP server, moves the server to it and binds the
+client there, in the same transaction, and returns the new issuer in
+`dedicated_issuer_id`. Without `target_server_only` the same flag applies only
+when the save would unbind a client another MCP server signs in through. The
+flag requires `project:write`, never moves a server under upstream auth
+enforcement, and has no effect when the current issuer can take the save. The
+new issuer copies the challenge mode, session duration, CIMD admission mode and
+allowed CIMD document URLs of the issuer it leaves. It is its own authorization
+server on the MCP host, and it trusts no external identity provider: only an
+organization-level issuer can, so a server on a trusting issuer is refused the
+repair. Sessions, registered MCP clients and consents belong to the issuer, so
+everyone connected to the moved server connects again. Gateways that sign
+people in through the old issuer stop serving it, the organization gateway
+included, unless the client the save links is bound to that issuer too.
+`remoteSessions.getServerIdentityImpact` with `dedicated_issuer: true` previews
+this and names those gateways.
+
 Inspect configured credentials through `listServerClientAssociations`, followed
 by `remoteSessionClients.get` for the linked client. The client view exposes the
 Client ID, scopes and callback URL, never the stored secret. The linked client
@@ -80,7 +99,11 @@ their own reviewed identity contracts. Neither is a substitute for verifying one
 dashboard user's direct saved grant. This endpoint intentionally requires a
 validated browser session and refuses agent and API-key credentials, so neither
 external Platform MCP callers nor managed assistants may invoke it. No new tool
-is added and the existing tools retain their contracts. Session/API-key refusal,
+is added and the existing tools retain their contracts. The dedicated-issuer
+repair needs no Platform MCP tool either: `attach_platform_mcp_identity_provider`
+keeps a client already bound for the provider and binds beside the others, so it
+never replaces another server's client and never meets the refusal the repair
+answers. Session/API-key refusal,
 exact-server permissions, and upstream initialize/list-only behavior are covered
 by `serverconnection_test.go`. No demo seed
 change is needed because this adds a live diagnostic, with no new stored data.

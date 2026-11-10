@@ -93,6 +93,10 @@ export type CommitServerIdentityConfigurationResult = {
    */
   clientTier?: ClientTier | undefined;
   /**
+   * The new user session issuer the save moved the MCP server to. Present only when dedicated_issuer applied.
+   */
+  dedicatedIssuerId?: string | undefined;
+  /**
    * A completed automatic registration failure using the bounded OAuth registration taxonomy.
    */
   failure?: ServerIdentityRegistrationFailure | undefined;
@@ -153,6 +157,7 @@ export const CommitServerIdentityConfigurationResult$inboundSchema:
       client: z.optional(RemoteSessionClient$inboundSchema),
       client_path: z.optional(z.string()),
       client_tier: z.optional(ClientTier$inboundSchema),
+      dedicated_issuer_id: z.optional(z.string()),
       failure: z.optional(ServerIdentityRegistrationFailure$inboundSchema),
       manual_setup_required: z.boolean(),
       provider: z.optional(RemoteSessionIssuer$inboundSchema),
@@ -169,6 +174,7 @@ export const CommitServerIdentityConfigurationResult$inboundSchema:
       return remap$(v, {
         "client_path": "clientPath",
         "client_tier": "clientTier",
+        "dedicated_issuer_id": "dedicatedIssuerId",
         "manual_setup_required": "manualSetupRequired",
         "provider_path": "providerPath",
         "provider_tier": "providerTier",

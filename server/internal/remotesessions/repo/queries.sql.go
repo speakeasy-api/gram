@@ -7197,7 +7197,7 @@ func (q *Queries) GetTunneledMcpServerBinding(ctx context.Context, arg GetTunnel
 }
 
 const getUserSessionIssuerForProject = `-- name: GetUserSessionIssuerForProject :one
-SELECT id, project_id
+SELECT id, project_id, trusted_remote_session_issuer_id
 FROM user_session_issuers
 WHERE id = $1
   AND (project_id = $2::uuid OR (project_id IS NULL AND organization_id = $3::text))
@@ -7211,14 +7211,15 @@ type GetUserSessionIssuerForProjectParams struct {
 }
 
 type GetUserSessionIssuerForProjectRow struct {
-	ID        uuid.UUID
-	ProjectID uuid.NullUUID
+	ID                           uuid.UUID
+	ProjectID                    uuid.NullUUID
+	TrustedRemoteSessionIssuerID uuid.NullUUID
 }
 
 func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUserSessionIssuerForProjectParams) (GetUserSessionIssuerForProjectRow, error) {
 	row := q.db.QueryRow(ctx, getUserSessionIssuerForProject, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i GetUserSessionIssuerForProjectRow
-	err := row.Scan(&i.ID, &i.ProjectID)
+	err := row.Scan(&i.ID, &i.ProjectID, &i.TrustedRemoteSessionIssuerID)
 	return i, err
 }
 
@@ -8306,6 +8307,65 @@ func (q *Queries) ListEligiblePrincipalRemoteSessionBindings(ctx context.Context
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGatewaysServingMCPServerThroughUserSessionIssuer = `-- name: ListGatewaysServingMCPServerThroughUserSessionIssuer :many
+SELECT g.id, g.project_id, g.name, p.name AS project_name
+FROM meta_mcp_servers AS g
+JOIN projects AS p ON p.id = g.project_id
+JOIN meta_mcp_server_members AS member
+  ON member.meta_mcp_server_id = g.id
+ AND member.project_id = g.project_id
+ AND member.deleted IS FALSE
+WHERE g.user_session_issuer_id = $1
+  AND g.organization_id = $2
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+  AND g.deleted IS FALSE
+  AND member.mcp_server_id = $3::uuid
+ORDER BY p.name, g.id
+`
+
+type ListGatewaysServingMCPServerThroughUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	OrganizationID      string
+	McpServerID         uuid.UUID
+}
+
+type ListGatewaysServingMCPServerThroughUserSessionIssuerRow struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	Name        string
+	ProjectName string
+}
+
+// Live gateways on one user session issuer that have the MCP server as a
+// member, in every project of the organization. They sign people in to the
+// member through the issuer's clients, so they stop serving a member whose
+// client is bound elsewhere.
+func (q *Queries) ListGatewaysServingMCPServerThroughUserSessionIssuer(ctx context.Context, arg ListGatewaysServingMCPServerThroughUserSessionIssuerParams) ([]ListGatewaysServingMCPServerThroughUserSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, listGatewaysServingMCPServerThroughUserSessionIssuer, arg.UserSessionIssuerID, arg.OrganizationID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGatewaysServingMCPServerThroughUserSessionIssuerRow
+	for rows.Next() {
+		var i ListGatewaysServingMCPServerThroughUserSessionIssuerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.ProjectName,
 		); err != nil {
 			return nil, err
 		}
@@ -17984,4 +18044,36 @@ func (q *Queries) UpsertTrustedDelegationCredential(ctx context.Context, arg Ups
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const userSessionIssuerServesOrganizationGateway = `-- name: UserSessionIssuerServesOrganizationGateway :one
+SELECT EXISTS (
+  SELECT 1
+  FROM user_session_issuers AS issuer
+  WHERE issuer.id = $1
+    AND issuer.project_id IS NULL
+    AND issuer.organization_id = $2::text
+    AND issuer.deleted IS FALSE
+    AND (
+      SELECT count(*)
+      FROM user_session_issuers AS sibling
+      WHERE sibling.organization_id = issuer.organization_id
+        AND sibling.project_id IS NULL
+        AND sibling.deleted IS FALSE
+    ) = 1
+)::boolean AS serves_organization_gateway
+`
+
+type UserSessionIssuerServesOrganizationGatewayParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// The organization gateway is served on the only organization-level user
+// session issuer its organization owns.
+func (q *Queries) UserSessionIssuerServesOrganizationGateway(ctx context.Context, arg UserSessionIssuerServesOrganizationGatewayParams) (bool, error) {
+	row := q.db.QueryRow(ctx, userSessionIssuerServesOrganizationGateway, arg.ID, arg.OrganizationID)
+	var serves_organization_gateway bool
+	err := row.Scan(&serves_organization_gateway)
+	return serves_organization_gateway, err
 }

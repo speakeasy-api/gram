@@ -1148,7 +1148,7 @@ WHERE c.id = @id
   AND c.deleted IS FALSE;
 
 -- name: GetUserSessionIssuerForProject :one
-SELECT id, project_id
+SELECT id, project_id, trusted_remote_session_issuer_id
 FROM user_session_issuers
 WHERE id = @id
   AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
@@ -6131,6 +6131,45 @@ WHERE g.user_session_issuer_id = @user_session_issuer_id
   AND p.deleted IS FALSE
   AND g.deleted IS FALSE
 ORDER BY p.name, g.id;
+
+-- name: ListGatewaysServingMCPServerThroughUserSessionIssuer :many
+-- Live gateways on one user session issuer that have the MCP server as a
+-- member, in every project of the organization. They sign people in to the
+-- member through the issuer's clients, so they stop serving a member whose
+-- client is bound elsewhere.
+SELECT g.id, g.project_id, g.name, p.name AS project_name
+FROM meta_mcp_servers AS g
+JOIN projects AS p ON p.id = g.project_id
+JOIN meta_mcp_server_members AS member
+  ON member.meta_mcp_server_id = g.id
+ AND member.project_id = g.project_id
+ AND member.deleted IS FALSE
+WHERE g.user_session_issuer_id = @user_session_issuer_id
+  AND g.organization_id = @organization_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND g.deleted IS FALSE
+  AND member.mcp_server_id = @mcp_server_id::uuid
+ORDER BY p.name, g.id;
+
+-- name: UserSessionIssuerServesOrganizationGateway :one
+-- The organization gateway is served on the only organization-level user
+-- session issuer its organization owns.
+SELECT EXISTS (
+  SELECT 1
+  FROM user_session_issuers AS issuer
+  WHERE issuer.id = @id
+    AND issuer.project_id IS NULL
+    AND issuer.organization_id = @organization_id::text
+    AND issuer.deleted IS FALSE
+    AND (
+      SELECT count(*)
+      FROM user_session_issuers AS sibling
+      WHERE sibling.organization_id = issuer.organization_id
+        AND sibling.project_id IS NULL
+        AND sibling.deleted IS FALSE
+    ) = 1
+)::boolean AS serves_organization_gateway;
 
 -- name: ListEMAProviders :many
 -- The organization's EMA provider order for one vendor issuer. A row whose

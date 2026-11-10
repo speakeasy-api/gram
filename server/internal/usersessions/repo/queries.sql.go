@@ -71,6 +71,37 @@ func (q *Queries) ClearUserSessionClientAuthMethod(ctx context.Context, id uuid.
 	return i, err
 }
 
+const copyUserSessionIssuerCimdClients = `-- name: CopyUserSessionIssuerCimdClients :execrows
+INSERT INTO user_session_issuer_cimd_clients (project_id, organization_id, user_session_issuer_id, client_id_metadata_uri)
+SELECT target.project_id, target.organization_id, target.id, cimd.client_id_metadata_uri
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS target
+  ON target.id = $1
+ AND target.project_id = $2::uuid
+ AND target.deleted IS FALSE
+WHERE cimd.user_session_issuer_id = $3
+  AND cimd.deleted IS FALSE
+ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
+DO NOTHING
+`
+
+type CopyUserSessionIssuerCimdClientsParams struct {
+	UserSessionIssuerID       uuid.UUID
+	ProjectID                 uuid.UUID
+	SourceUserSessionIssuerID uuid.UUID
+}
+
+// Carries a source issuer's allowed CIMD document URLs onto a dedicated issuer
+// created from it, so the MCP clients the source admits can register with the
+// new issuer too.
+func (q *Queries) CopyUserSessionIssuerCimdClients(ctx context.Context, arg CopyUserSessionIssuerCimdClientsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, copyUserSessionIssuerCimdClients, arg.UserSessionIssuerID, arg.ProjectID, arg.SourceUserSessionIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countActiveUserSessionsByClientIDs = `-- name: CountActiveUserSessionsByClientIDs :many
 SELECT s.user_session_client_id AS user_session_client_id, COUNT(*)::int AS active_count
 FROM user_sessions AS s
@@ -546,6 +577,74 @@ func (q *Queries) CountUserSessionIssuerSessionsForMigration(ctx context.Context
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const createDedicatedUserSessionIssuer = `-- name: CreateDedicatedUserSessionIssuer :one
+INSERT INTO user_session_issuers (
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration,
+    client_id_metadata_admission_mode
+)
+SELECT
+    $1::uuid,
+    $2::text,
+    $3,
+    source.authn_challenge_mode,
+    source.session_duration,
+    source.client_id_metadata_admission_mode
+FROM user_session_issuers AS source
+WHERE source.id = $4
+  AND (source.project_id = $1::uuid OR (source.project_id IS NULL AND source.organization_id = $2::text))
+  AND source.deleted IS FALSE
+RETURNING id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, use_authentication_host, authorization_server_mode, pinned_issuer_url, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateDedicatedUserSessionIssuerParams struct {
+	ProjectID                 uuid.UUID
+	OrganizationID            string
+	Slug                      string
+	SourceUserSessionIssuerID uuid.UUID
+}
+
+// Creates a project-owned issuer for one MCP server leaving the issuer it
+// shares, so the people who sign in to that server keep the same sign-in
+// behaviour: the challenge mode, session duration and CIMD admission mode are
+// the source issuer's. The new issuer serves one MCP server, so it is its own
+// authorization server on the MCP host. A trusted external issuer is not
+// carried over: only an organization-level issuer can hold one, and the
+// caller refuses a source that has it.
+func (q *Queries) CreateDedicatedUserSessionIssuer(ctx context.Context, arg CreateDedicatedUserSessionIssuerParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, createDedicatedUserSessionIssuer,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.SourceUserSessionIssuerID,
+	)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.UseAuthenticationHost,
+		&i.AuthorizationServerMode,
+		&i.PinnedIssuerUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const createOrganizationUserSessionIssuer = `-- name: CreateOrganizationUserSessionIssuer :one

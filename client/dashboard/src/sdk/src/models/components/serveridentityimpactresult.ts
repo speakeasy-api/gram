@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ServerIdentityDedicatedIssuerImpact,
+  ServerIdentityDedicatedIssuerImpact$inboundSchema,
+} from "./serveridentitydedicatedissuerimpact.js";
+import {
   ServerIdentityImpactServer,
   ServerIdentityImpactServer$inboundSchema,
 } from "./serveridentityimpactserver.js";
@@ -16,6 +20,10 @@ import {
  * The MCP servers and gateways, other than the target, that a proposed binding change affects.
  */
 export type ServerIdentityImpactResult = {
+  /**
+   * What moving the MCP server to a new user session issuer of its own does. No other MCP server's sign-in changes. Everyone connected to the moved MCP server connects again.
+   */
+  dedicatedIssuer?: ServerIdentityDedicatedIssuerImpact | undefined;
   /**
    * MCP servers and gateways the caller cannot read; they are not named. When the change touches an organization-level client this counts every such server on the issuer, affected or not.
    */
@@ -32,11 +40,15 @@ export const ServerIdentityImpactResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    dedicated_issuer: z.optional(
+      ServerIdentityDedicatedIssuerImpact$inboundSchema,
+    ),
     hidden_server_count: z.int(),
     servers: z.array(ServerIdentityImpactServer$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "dedicated_issuer": "dedicatedIssuer",
       "hidden_server_count": "hiddenServerCount",
     });
   }),

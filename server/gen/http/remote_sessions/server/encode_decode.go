@@ -1627,6 +1627,7 @@ func DecodeGetServerIdentityImpactRequest(mux goahttp.Muxer, decoder func(*http.
 			change              string
 			providerID          *string
 			clientID            *string
+			dedicatedIssuer     *bool
 			sessionToken        *string
 			apikeyToken         *string
 			projectSlugInput    *string
@@ -1666,6 +1667,16 @@ func DecodeGetServerIdentityImpactRequest(mux goahttp.Muxer, decoder func(*http.
 		if clientID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("client_id", *clientID, goa.FormatUUID))
 		}
+		{
+			dedicatedIssuerRaw := qp.Get("dedicated_issuer")
+			if dedicatedIssuerRaw != "" {
+				v, err2 := strconv.ParseBool(dedicatedIssuerRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("dedicated_issuer", dedicatedIssuerRaw, "boolean"))
+				}
+				dedicatedIssuer = &v
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1681,7 +1692,7 @@ func DecodeGetServerIdentityImpactRequest(mux goahttp.Muxer, decoder func(*http.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetServerIdentityImpactPayload(userSessionIssuerID, mcpServerID, change, providerID, clientID, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewGetServerIdentityImpactPayload(userSessionIssuerID, mcpServerID, change, providerID, clientID, dedicatedIssuer, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3451,6 +3462,47 @@ func marshalRemotesessionsServerIdentityImpactServerToServerIdentityImpactServer
 		ProjectID:   v.ProjectID,
 		ProjectName: v.ProjectName,
 		Impact:      v.Impact,
+	}
+
+	return res
+}
+
+// marshalRemotesessionsServerIdentityDedicatedIssuerImpactToServerIdentityDedicatedIssuerImpactResponseBody
+// builds a value of type *ServerIdentityDedicatedIssuerImpactResponseBody from
+// a value of type *remotesessions.ServerIdentityDedicatedIssuerImpact.
+func marshalRemotesessionsServerIdentityDedicatedIssuerImpactToServerIdentityDedicatedIssuerImpactResponseBody(v *remotesessions.ServerIdentityDedicatedIssuerImpact) *ServerIdentityDedicatedIssuerImpactResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ServerIdentityDedicatedIssuerImpactResponseBody{
+		HiddenGatewayCount:  v.HiddenGatewayCount,
+		OrganizationGateway: v.OrganizationGateway,
+	}
+	if v.Gateways != nil {
+		res.Gateways = make([]*ServerIdentityImpactGatewayResponseBody, len(v.Gateways))
+		for i, val := range v.Gateways {
+			if val == nil {
+				res.Gateways[i] = nil
+				continue
+			}
+			res.Gateways[i] = marshalRemotesessionsServerIdentityImpactGatewayToServerIdentityImpactGatewayResponseBody(val)
+		}
+	} else {
+		res.Gateways = []*ServerIdentityImpactGatewayResponseBody{}
+	}
+
+	return res
+}
+
+// marshalRemotesessionsServerIdentityImpactGatewayToServerIdentityImpactGatewayResponseBody
+// builds a value of type *ServerIdentityImpactGatewayResponseBody from a value
+// of type *remotesessions.ServerIdentityImpactGateway.
+func marshalRemotesessionsServerIdentityImpactGatewayToServerIdentityImpactGatewayResponseBody(v *remotesessions.ServerIdentityImpactGateway) *ServerIdentityImpactGatewayResponseBody {
+	res := &ServerIdentityImpactGatewayResponseBody{
+		ID:          v.ID,
+		Name:        v.Name,
+		ProjectID:   v.ProjectID,
+		ProjectName: v.ProjectName,
 	}
 
 	return res

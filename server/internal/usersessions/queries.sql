@@ -26,6 +26,51 @@ VALUES (
 )
 RETURNING *;
 
+-- name: CreateDedicatedUserSessionIssuer :one
+-- Creates a project-owned issuer for one MCP server leaving the issuer it
+-- shares, so the people who sign in to that server keep the same sign-in
+-- behaviour: the challenge mode, session duration and CIMD admission mode are
+-- the source issuer's. The new issuer serves one MCP server, so it is its own
+-- authorization server on the MCP host. A trusted external issuer is not
+-- carried over: only an organization-level issuer can hold one, and the
+-- caller refuses a source that has it.
+INSERT INTO user_session_issuers (
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration,
+    client_id_metadata_admission_mode
+)
+SELECT
+    @project_id::uuid,
+    @organization_id::text,
+    @slug,
+    source.authn_challenge_mode,
+    source.session_duration,
+    source.client_id_metadata_admission_mode
+FROM user_session_issuers AS source
+WHERE source.id = @source_user_session_issuer_id
+  AND (source.project_id = @project_id::uuid OR (source.project_id IS NULL AND source.organization_id = @organization_id::text))
+  AND source.deleted IS FALSE
+RETURNING *;
+
+-- name: CopyUserSessionIssuerCimdClients :execrows
+-- Carries a source issuer's allowed CIMD document URLs onto a dedicated issuer
+-- created from it, so the MCP clients the source admits can register with the
+-- new issuer too.
+INSERT INTO user_session_issuer_cimd_clients (project_id, organization_id, user_session_issuer_id, client_id_metadata_uri)
+SELECT target.project_id, target.organization_id, target.id, cimd.client_id_metadata_uri
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS target
+  ON target.id = @user_session_issuer_id
+ AND target.project_id = @project_id::uuid
+ AND target.deleted IS FALSE
+WHERE cimd.user_session_issuer_id = @source_user_session_issuer_id
+  AND cimd.deleted IS FALSE
+ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
+DO NOTHING;
+
 -- name: CreateOrganizationUserSessionIssuer :one
 INSERT INTO user_session_issuers (
     project_id,

@@ -66575,7 +66575,7 @@ paths:
                 name: DetachServerClientAssociation
     /rpc/remoteSessions.getServerIdentityImpact:
         get:
-            description: Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
+            description: Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. With dedicated_issuer, a replace the issuer cannot take because another MCP server signs in through its client is previewed as moving mcp_server_id to a new issuer of its own. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
             operationId: getServerIdentityImpact
             parameters:
                 - allowEmptyValue: true
@@ -66623,6 +66623,13 @@ paths:
                     description: An existing client being bound. Omit for a new client.
                     format: uuid
                     type: string
+                - allowEmptyValue: true
+                  description: Preview a replace made with dedicated_issuer. When the issuer cannot take the change, the result describes moving mcp_server_id to a new issuer of its own instead of refusing.
+                  in: query
+                  name: dedicated_issuer
+                  schema:
+                    description: Preview a replace made with dedicated_issuer. When the issuer cannot take the change, the result describes moving mcp_server_id to a new issuer of its own instead of refusing.
+                    type: boolean
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -103571,6 +103578,9 @@ components:
                         - manual
                 create_provider:
                     $ref: '#/components/schemas/CreateRemoteSessionIssuerForm'
+                dedicated_issuer:
+                    type: boolean
+                    description: 'Let the save move the MCP server to a new user session issuer of its own when its current issuer cannot take the change: another MCP server signs in through the client bound to it, or, with target_server_only, it serves another MCP server at all. The new issuer keeps the current issuer''s challenge mode, session duration and CIMD admission. People and MCP clients connected to the MCP server must connect again, and gateways that sign people in through the old issuer stop serving it. Has no effect when the save fits the current issuer. Requires project:write.'
                 existing_client_id:
                     type: string
                     description: An existing visible remote-session client to link. Required only for existing mode.
@@ -103610,6 +103620,10 @@ components:
                     enum:
                         - project-specific
                         - organization-level
+                dedicated_issuer_id:
+                    type: string
+                    description: The new user session issuer the save moved the MCP server to. Present only when dedicated_issuer applied.
+                    format: uuid
                 failure:
                     $ref: '#/components/schemas/ServerIdentityRegistrationFailure'
                 manual_setup_required:
@@ -126688,6 +126702,26 @@ components:
                         - client_secret_post
                         - none
             description: Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
+        ServerIdentityDedicatedIssuerImpact:
+            type: object
+            properties:
+                gateways:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ServerIdentityImpactGateway'
+                    description: Gateways the caller can read that have the MCP server as a member and sign people in through the issuer it leaves. They stop serving it.
+                hidden_gateway_count:
+                    type: integer
+                    description: Such gateways the caller cannot read; they are not named.
+                    format: int64
+                organization_gateway:
+                    type: boolean
+                    description: The issuer the MCP server leaves is the organization gateway's, which stops serving it.
+            description: What moving the MCP server to a new user session issuer of its own does. No other MCP server's sign-in changes. Everyone connected to the moved MCP server connects again.
+            required:
+                - gateways
+                - hidden_gateway_count
+                - organization_gateway
         ServerIdentityImpactForm:
             type: object
             properties:
@@ -126702,6 +126736,9 @@ components:
                     type: string
                     description: An existing client being bound. Omit for a new client.
                     format: uuid
+                dedicated_issuer:
+                    type: boolean
+                    description: Preview a replace made with dedicated_issuer. When the issuer cannot take the change, the result describes moving mcp_server_id to a new issuer of its own instead of refusing.
                 mcp_server_id:
                     type: string
                     description: The MCP server the change is made from. Excluded from the result.
@@ -126718,9 +126755,33 @@ components:
             required:
                 - user_session_issuer_id
                 - change
+        ServerIdentityImpactGateway:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The gateway id.
+                    format: uuid
+                name:
+                    type: string
+                    description: The gateway name.
+                project_id:
+                    type: string
+                    description: The owning project.
+                    format: uuid
+                project_name:
+                    type: string
+                    description: The name of the owning project.
+            description: A gateway that stops serving an MCP server moved to a dedicated user session issuer.
+            required:
+                - id
+                - project_id
+                - project_name
         ServerIdentityImpactResult:
             type: object
             properties:
+                dedicated_issuer:
+                    $ref: '#/components/schemas/ServerIdentityDedicatedIssuerImpact'
                 hidden_server_count:
                     type: integer
                     description: MCP servers and gateways the caller cannot read; they are not named. When the change touches an organization-level client this counts every such server on the issuer, affected or not.

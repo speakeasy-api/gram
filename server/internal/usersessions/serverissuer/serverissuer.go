@@ -85,3 +85,41 @@ func Mint(
 	}
 	return uuid.NullUUID{UUID: issuer.ID, Valid: true}, nil
 }
+
+// MintDedicated creates the user_session_issuer an MCP server moves to when it
+// leaves an issuer it shares with other servers, inside the caller's
+// transaction. The new issuer keeps the source issuer's sign-in settings and
+// the CIMD document URLs it admits, so moving the server changes which issuer
+// signs people in and nothing about how.
+func MintDedicated(
+	ctx context.Context,
+	dbtx pgx.Tx,
+	organizationID string,
+	projectID uuid.UUID,
+	serverSlug string,
+	sourceIssuerID uuid.UUID,
+) (usersessionsrepo.UserSessionIssuer, error) {
+	issuerSlug, err := buildUserSessionResourceSlug(serverSlug)
+	if err != nil {
+		return usersessionsrepo.UserSessionIssuer{}, err
+	}
+
+	q := usersessionsrepo.New(dbtx)
+	issuer, err := q.CreateDedicatedUserSessionIssuer(ctx, usersessionsrepo.CreateDedicatedUserSessionIssuerParams{
+		ProjectID:                 projectID,
+		OrganizationID:            organizationID,
+		Slug:                      issuerSlug,
+		SourceUserSessionIssuerID: sourceIssuerID,
+	})
+	if err != nil {
+		return usersessionsrepo.UserSessionIssuer{}, fmt.Errorf("create dedicated user session issuer: %w", err)
+	}
+	if _, err := q.CopyUserSessionIssuerCimdClients(ctx, usersessionsrepo.CopyUserSessionIssuerCimdClientsParams{
+		UserSessionIssuerID:       issuer.ID,
+		ProjectID:                 projectID,
+		SourceUserSessionIssuerID: sourceIssuerID,
+	}); err != nil {
+		return usersessionsrepo.UserSessionIssuer{}, fmt.Errorf("copy user session issuer cimd clients: %w", err)
+	}
+	return issuer, nil
+}

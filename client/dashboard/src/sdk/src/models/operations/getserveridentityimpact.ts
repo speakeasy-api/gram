@@ -56,6 +56,10 @@ export type GetServerIdentityImpactRequest = {
    */
   clientId?: string | undefined;
   /**
+   * Preview a replace made with dedicated_issuer. When the issuer cannot take the change, the result describes moving mcp_server_id to a new issuer of its own instead of refusing.
+   */
+  dedicatedIssuer?: boolean | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -188,6 +192,7 @@ export type GetServerIdentityImpactRequest$Outbound = {
   change: string;
   provider_id?: string | undefined;
   client_id?: string | undefined;
+  dedicated_issuer?: boolean | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -204,6 +209,7 @@ export const GetServerIdentityImpactRequest$outboundSchema: z.ZodMiniType<
     change: Change$outboundSchema,
     providerId: z.optional(z.string()),
     clientId: z.optional(z.string()),
+    dedicatedIssuer: z.optional(z.boolean()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
@@ -214,6 +220,7 @@ export const GetServerIdentityImpactRequest$outboundSchema: z.ZodMiniType<
       mcpServerId: "mcp_server_id",
       providerId: "provider_id",
       clientId: "client_id",
+      dedicatedIssuer: "dedicated_issuer",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

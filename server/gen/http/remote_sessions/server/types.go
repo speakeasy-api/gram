@@ -67,6 +67,15 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	TargetServerOnly *bool `form:"target_server_only,omitempty" json:"target_server_only,omitempty" xml:"target_server_only,omitempty"`
 	// A new project-scoped Remote Identity Provider to create.
 	CreateProvider *CreateRemoteSessionIssuerFormRequestBody `form:"create_provider,omitempty" json:"create_provider,omitempty" xml:"create_provider,omitempty"`
+	// Let the save move the MCP server to a new user session issuer of its own
+	// when its current issuer cannot take the change: another MCP server signs in
+	// through the client bound to it, or, with target_server_only, it serves
+	// another MCP server at all. The new issuer keeps the current issuer's
+	// challenge mode, session duration and CIMD admission. People and MCP clients
+	// connected to the MCP server must connect again, and gateways that sign
+	// people in through the old issuer stop serving it. Has no effect when the
+	// save fits the current issuer. Requires project:write.
+	DedicatedIssuer *bool `form:"dedicated_issuer,omitempty" json:"dedicated_issuer,omitempty" xml:"dedicated_issuer,omitempty"`
 	// How to provide the OAuth client.
 	ClientMode *string `form:"client_mode,omitempty" json:"client_mode,omitempty" xml:"client_mode,omitempty"`
 	// An existing visible remote-session client to link. Required only for
@@ -166,6 +175,9 @@ type CommitServerIdentityConfigurationResponseBody struct {
 	// Completed DCR failure. Mutually exclusive with status and
 	// manual_setup_required=true.
 	Failure *ServerIdentityRegistrationFailureResponseBody `form:"failure,omitempty" json:"failure,omitempty" xml:"failure,omitempty"`
+	// The new user session issuer the save moved the MCP server to. Present only
+	// when dedicated_issuer applied.
+	DedicatedIssuerID *string `form:"dedicated_issuer_id,omitempty" json:"dedicated_issuer_id,omitempty" xml:"dedicated_issuer_id,omitempty"`
 }
 
 // GetServerIdentityImpactResponseBody is the type of the "remoteSessions"
@@ -177,6 +189,10 @@ type GetServerIdentityImpactResponseBody struct {
 	// the change touches an organization-level client this counts every such
 	// server on the issuer, affected or not.
 	HiddenServerCount int `form:"hidden_server_count" json:"hidden_server_count" xml:"hidden_server_count"`
+	// Present only for a preview with dedicated_issuer that the issuer cannot
+	// take: the save would move the MCP server to a new issuer of its own, and
+	// servers is empty.
+	DedicatedIssuer *ServerIdentityDedicatedIssuerImpactResponseBody `form:"dedicated_issuer,omitempty" json:"dedicated_issuer,omitempty" xml:"dedicated_issuer,omitempty"`
 }
 
 // ListServerClientAssociationsResponseBody is the type of the "remoteSessions"
@@ -2986,6 +3002,32 @@ type ServerIdentityImpactServerResponseBody struct {
 	Impact string `form:"impact" json:"impact" xml:"impact"`
 }
 
+// ServerIdentityDedicatedIssuerImpactResponseBody is used to define fields on
+// response body types.
+type ServerIdentityDedicatedIssuerImpactResponseBody struct {
+	// Gateways the caller can read that have the MCP server as a member and sign
+	// people in through the issuer it leaves. They stop serving it.
+	Gateways []*ServerIdentityImpactGatewayResponseBody `form:"gateways" json:"gateways" xml:"gateways"`
+	// Such gateways the caller cannot read; they are not named.
+	HiddenGatewayCount int `form:"hidden_gateway_count" json:"hidden_gateway_count" xml:"hidden_gateway_count"`
+	// The issuer the MCP server leaves is the organization gateway's, which stops
+	// serving it.
+	OrganizationGateway bool `form:"organization_gateway" json:"organization_gateway" xml:"organization_gateway"`
+}
+
+// ServerIdentityImpactGatewayResponseBody is used to define fields on response
+// body types.
+type ServerIdentityImpactGatewayResponseBody struct {
+	// The gateway id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The gateway name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The owning project.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The name of the owning project.
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+}
+
 // ServerClientAssociationResponseBody is used to define fields on response
 // body types.
 type ServerClientAssociationResponseBody struct {
@@ -3213,6 +3255,7 @@ func NewCommitServerIdentityConfigurationResponseBody(res *remotesessions.Commit
 		ClientTier:          res.ClientTier,
 		ProviderPath:        res.ProviderPath,
 		ClientPath:          res.ClientPath,
+		DedicatedIssuerID:   res.DedicatedIssuerID,
 	}
 	if res.Provider != nil {
 		body.Provider = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(res.Provider)
@@ -3244,6 +3287,9 @@ func NewGetServerIdentityImpactResponseBody(res *remotesessions.ServerIdentityIm
 		}
 	} else {
 		body.Servers = []*ServerIdentityImpactServerResponseBody{}
+	}
+	if res.DedicatedIssuer != nil {
+		body.DedicatedIssuer = marshalRemotesessionsServerIdentityDedicatedIssuerImpactToServerIdentityDedicatedIssuerImpactResponseBody(res.DedicatedIssuer)
 	}
 	return body
 }
@@ -5311,6 +5357,7 @@ func NewCommitServerIdentityConfigurationPayload(body *CommitServerIdentityConfi
 		McpServerID:        *body.McpServerID,
 		ProviderID:         body.ProviderID,
 		TargetServerOnly:   body.TargetServerOnly,
+		DedicatedIssuer:    body.DedicatedIssuer,
 		ClientMode:         *body.ClientMode,
 		ExistingClientID:   body.ExistingClientID,
 		RegistrationMethod: body.RegistrationMethod,
@@ -5330,13 +5377,14 @@ func NewCommitServerIdentityConfigurationPayload(body *CommitServerIdentityConfi
 
 // NewGetServerIdentityImpactPayload builds a remoteSessions service
 // getServerIdentityImpact endpoint payload.
-func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *string, change string, providerID *string, clientID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.GetServerIdentityImpactPayload {
+func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *string, change string, providerID *string, clientID *string, dedicatedIssuer *bool, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.GetServerIdentityImpactPayload {
 	v := &remotesessions.GetServerIdentityImpactPayload{}
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.McpServerID = mcpServerID
 	v.Change = change
 	v.ProviderID = providerID
 	v.ClientID = clientID
+	v.DedicatedIssuer = dedicatedIssuer
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

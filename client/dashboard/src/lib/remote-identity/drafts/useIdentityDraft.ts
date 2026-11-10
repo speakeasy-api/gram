@@ -10,6 +10,8 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
+import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { queryKeyRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import {
   useRemoteSessionIssuers,
@@ -336,8 +338,12 @@ export type UserIdentityDraft = {
   canSave: boolean;
   /** The operator changed the selection, whether or not it can be saved yet. */
   pendingChange: boolean;
-  /** Resolves true when the commit landed; failures are already on screen. */
-  save: () => Promise<boolean>;
+  /**
+   * Resolves true when the commit landed; failures are already on screen.
+   * dedicatedIssuer lets the server move to a new user session issuer of its
+   * own when its current one cannot take the change.
+   */
+  save: (options?: { dedicatedIssuer?: boolean }) => Promise<boolean>;
   saving: boolean;
 };
 
@@ -826,7 +832,13 @@ export function useUserIdentityDraft({
   };
 
   const commit = useMutation({
-    mutationFn: async (revision: number) => {
+    mutationFn: async ({
+      revision,
+      dedicatedIssuer,
+    }: {
+      revision: number;
+      dedicatedIssuer: boolean;
+    }) => {
       if (!selected) throw new Error("choose an identity provider");
       if (!choice) throw new Error("Choose a registration method.");
       const assertCurrentSelection = () => {
@@ -949,6 +961,7 @@ export function useUserIdentityDraft({
             clientMode: choice,
             existingClientId: existingClient?.id,
             clientConfiguration,
+            dedicatedIssuer: dedicatedIssuer || undefined,
             // Only sent when it changes something: CIMD is the server default.
             registrationMethod:
               choice === "auto" && methodChoiceAvailable
@@ -985,6 +998,14 @@ export function useUserIdentityDraft({
       setCleared(false);
       resetChoice();
       setLocalStatus({ kind: "done" });
+      if (result.dedicatedIssuerId) {
+        // The server now carries another user session issuer.
+        await Promise.all([
+          invalidateAllGetMcpServer(queryClient),
+          invalidateAllMcpServers(queryClient),
+        ]);
+        toast.success("This server now has its own user session issuer.");
+      }
       await invalidateIdentityConfiguration(queryClient);
     },
     onError: (error: unknown) => {
@@ -1159,12 +1180,15 @@ export function useUserIdentityDraft({
     status,
     canSave,
     pendingChange,
-    save: async (): Promise<boolean> => {
+    save: async (options): Promise<boolean> => {
       // Awaitable so callers can sequence work after it. onError has already
       // put the failure on screen, so the rejection is swallowed here rather
       // than surfacing twice or escaping as an unhandled rejection.
       try {
-        await runCommit(selectionRevision.current);
+        await runCommit({
+          revision: selectionRevision.current,
+          dedicatedIssuer: options?.dedicatedIssuer ?? false,
+        });
         return true;
       } catch {
         /* reported by onError */

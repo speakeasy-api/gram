@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -62,6 +61,11 @@ type serverIdentityRequest struct {
 	// registrationMethod is "dcr" when auto mode must skip CIMD; otherwise it
 	// is empty or "cimd", both of which prefer CIMD.
 	registrationMethod string
+	// dedicatedIssuer is the caller's consent to moving the MCP server to a
+	// new user session issuer when its current one cannot take the change.
+	dedicatedIssuer bool
+	// targetServerOnly refuses to change bindings other MCP servers share.
+	targetServerOnly bool
 }
 
 func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload *gen.CommitServerIdentityConfigurationPayload) (*gen.CommitServerIdentityConfigurationResult, error) {
@@ -79,7 +83,9 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	if err != nil {
 		return nil, err
 	}
-	if payload.TargetServerOnly != nil && *payload.TargetServerOnly {
+	// With dedicated_issuer the commit moves the server off a shared issuer
+	// instead of refusing, so it applies the same test itself.
+	if req.targetServerOnly && !req.dedicatedIssuer {
 		if err := requireSingleServerIssuer(ctx, s.db, authCtx.ActiveOrganizationID, target); err != nil {
 			return nil, err
 		}
@@ -124,7 +130,7 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	if err := commit.Lock(ctx, tx); err != nil {
 		return nil, identityOopsError(err, "lock identity configuration").LogError(ctx, logger)
 	}
-	if payload.TargetServerOnly != nil && *payload.TargetServerOnly {
+	if req.targetServerOnly && !req.dedicatedIssuer {
 		if err := requireSingleServerIssuer(ctx, tx.DB(), authCtx.ActiveOrganizationID, target); err != nil {
 			return nil, err
 		}
@@ -159,7 +165,9 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 	}
 
 	checks := []authz.Check{authz.MCPCheck(authz.ScopeMCPWrite, target.ID.String(), target.ProjectID.String())}
-	if req.createProvider != nil || req.clientMode != serverIdentityClientModeExisting {
+	// A dedicated issuer is a new project resource, as one created through the
+	// User Identity issuer API is.
+	if req.createProvider != nil || req.clientMode != serverIdentityClientModeExisting || req.dedicatedIssuer {
 		checks = append(checks, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
 	}
 	// A user session issuer is not unique to one MCP server. The client binding
@@ -308,6 +316,18 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, orgAdmin
 		Client:              client,
 		Bound:               ReplaceBound,
 		ResourceDisplay:     nil,
+		DedicatedIssuer:     r.dedicatedIssuerPolicy(),
+	}
+}
+
+func (r serverIdentityRequest) dedicatedIssuerPolicy() DedicatedIssuerPolicy {
+	switch {
+	case !r.dedicatedIssuer:
+		return KeepIssuer
+	case r.targetServerOnly:
+		return DedicateWhenShared
+	default:
+		return DedicateOnClientConflict
 	}
 }
 
@@ -383,6 +403,10 @@ func (s *Service) serverIdentityResultView(res IdentityResult, clientMode string
 	method := string(res.Method)
 	providerPath := serverIdentityProviderPath(res.Provider.ID)
 	clientPath := serverIdentityClientPath(res.Provider.ID, res.Client.ID)
+	var dedicatedIssuerID *string
+	if res.DedicatedIssuerID != uuid.Nil {
+		dedicatedIssuerID = new(res.DedicatedIssuerID.String())
+	}
 	return &gen.CommitServerIdentityConfigurationResult{
 		Status:              &status,
 		RegistrationMethod:  &method,
@@ -394,6 +418,7 @@ func (s *Service) serverIdentityResultView(res IdentityResult, clientMode string
 		ProviderPath:        &providerPath,
 		ClientPath:          &clientPath,
 		Failure:             nil,
+		DedicatedIssuerID:   dedicatedIssuerID,
 	}, nil
 }
 
@@ -407,6 +432,8 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 		clientMode:          payload.ClientMode,
 		clientConfiguration: payload.ClientConfiguration,
 		registrationMethod:  conv.PtrValOr(payload.RegistrationMethod, ""),
+		dedicatedIssuer:     conv.PtrValOr(payload.DedicatedIssuer, false),
+		targetServerOnly:    conv.PtrValOr(payload.TargetServerOnly, false),
 	}
 	var err error
 	req.mcpServerID, err = uuid.Parse(payload.McpServerID)
@@ -580,6 +607,7 @@ func serverIdentityFailureResult(provider repo.RemoteSessionIssuer, method strin
 			ProviderMessage: failure.ProviderMessage,
 			HTTPStatus:      failure.HTTPStatus,
 		},
+		DedicatedIssuerID: nil,
 	}
 }
 
@@ -606,6 +634,7 @@ func serverIdentityManualSetupResult(provider repo.RemoteSessionIssuer) *gen.Com
 		ProviderPath:        providerPath,
 		ClientPath:          nil,
 		Failure:             nil,
+		DedicatedIssuerID:   nil,
 	}
 }
 
@@ -625,18 +654,11 @@ func requireSingleServerIssuer(ctx context.Context, db repo.DBTX, organizationID
 	if !target.UserSessionIssuerID.Valid {
 		return nil
 	}
-	enforced, err := authenforcement.ReadEnforced(ctx, db, organizationID)
+	shared, err := issuerSharedWithoutEnforcement(ctx, db, organizationID, target.UserSessionIssuerID.UUID, target.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "Could not check shared sign-in configuration.")
 	}
-	if enforced {
-		return nil
-	}
-	servers, err := repo.New(db).ListOrganizationMCPServersForUserSessionIssuer(ctx, repo.ListOrganizationMCPServersForUserSessionIssuerParams{OrganizationID: organizationID, UserSessionIssuerID: target.UserSessionIssuerID})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "Could not check shared sign-in configuration.")
-	}
-	if len(servers) != 1 || servers[0].ID != target.ID {
+	if shared {
 		return oops.E(oops.CodeConflict, nil, "This server shares its sign-in configuration. Assign a dedicated User Identity issuer in server settings before saving setup credentials.")
 	}
 	return nil

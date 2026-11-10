@@ -66,7 +66,7 @@ var _ = Service("remoteSessions", func() {
 	})
 
 	Method("getServerIdentityImpact", func() {
-		Description("Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.")
+		Description("Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. With dedicated_issuer, a replace the issuer cannot take because another MCP server signs in through its client is previewed as moving mcp_server_id to a new issuer of its own. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.")
 
 		Payload(func() {
 			Extend(ServerIdentityImpactForm)
@@ -84,6 +84,7 @@ var _ = Service("remoteSessions", func() {
 			Param("change")
 			Param("provider_id")
 			Param("client_id")
+			Param("dedicated_issuer")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -262,6 +263,7 @@ var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurat
 	})
 	Attribute("target_server_only", Boolean, "Refuse a save if the user session issuer also serves another MCP server. Setup screens must set this to avoid changing shared sign-in bindings. Explicitly assign a dedicated issuer before retrying.")
 	Attribute("create_provider", remotesessionissuers.CreateRemoteSessionIssuerForm, "A new project-scoped Remote Identity Provider to create.")
+	Attribute("dedicated_issuer", Boolean, "Let the save move the MCP server to a new user session issuer of its own when its current issuer cannot take the change: another MCP server signs in through the client bound to it, or, with target_server_only, it serves another MCP server at all. The new issuer keeps the current issuer's challenge mode, session duration and CIMD admission. People and MCP clients connected to the MCP server must connect again, and gateways that sign people in through the old issuer stop serving it. Has no effect when the save fits the current issuer. Requires project:write.")
 	Attribute("client_mode", String, "How to provide the OAuth client.", func() {
 		Enum("auto", "existing", "manual")
 	})
@@ -294,6 +296,7 @@ var ServerIdentityImpactForm = Type("ServerIdentityImpactForm", func() {
 	Attribute("client_id", String, "An existing client being bound. Omit for a new client.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("dedicated_issuer", Boolean, "Preview a replace made with dedicated_issuer. When the issuer cannot take the change, the result describes moving mcp_server_id to a new issuer of its own instead of refusing.")
 
 	Required("user_session_issuer_id", "change")
 })
@@ -316,11 +319,33 @@ var ServerIdentityImpactServer = Type("ServerIdentityImpactServer", func() {
 	Required("id", "kind", "project_id", "project_name", "impact")
 })
 
+var ServerIdentityImpactGateway = Type("ServerIdentityImpactGateway", func() {
+	Description("A gateway that stops serving an MCP server moved to a dedicated user session issuer.")
+
+	Attribute("id", String, "The gateway id.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The gateway name.")
+	Attribute("project_id", String, "The owning project.", func() { Format(FormatUUID) })
+	Attribute("project_name", String, "The name of the owning project.")
+
+	Required("id", "project_id", "project_name")
+})
+
+var ServerIdentityDedicatedIssuerImpact = Type("ServerIdentityDedicatedIssuerImpact", func() {
+	Description("What moving the MCP server to a new user session issuer of its own does. No other MCP server's sign-in changes. Everyone connected to the moved MCP server connects again.")
+
+	Attribute("gateways", ArrayOf(ServerIdentityImpactGateway), "Gateways the caller can read that have the MCP server as a member and sign people in through the issuer it leaves. They stop serving it.")
+	Attribute("hidden_gateway_count", Int, "Such gateways the caller cannot read; they are not named.")
+	Attribute("organization_gateway", Boolean, "The issuer the MCP server leaves is the organization gateway's, which stops serving it.")
+
+	Required("gateways", "hidden_gateway_count", "organization_gateway")
+})
+
 var ServerIdentityImpactResult = Type("ServerIdentityImpactResult", func() {
 	Description("The MCP servers and gateways, other than the target, that a proposed binding change affects.")
 
 	Attribute("servers", ArrayOf(ServerIdentityImpactServer), "Affected MCP servers the caller can read.")
 	Attribute("hidden_server_count", Int, "MCP servers and gateways the caller cannot read; they are not named. When the change touches an organization-level client this counts every such server on the issuer, affected or not.")
+	Attribute("dedicated_issuer", ServerIdentityDedicatedIssuerImpact, "Present only for a preview with dedicated_issuer that the issuer cannot take: the save would move the MCP server to a new issuer of its own, and servers is empty.")
 
 	Required("servers", "hidden_server_count")
 })
@@ -376,6 +401,9 @@ var CommitServerIdentityConfigurationResult = Type("CommitServerIdentityConfigur
 	Attribute("provider_path", String, "Organization-relative dashboard path to the Remote Identity Provider detail surface.")
 	Attribute("client_path", String, "Organization-relative dashboard path to the client detail surface.")
 	Attribute("failure", ServerIdentityRegistrationFailure, "Completed DCR failure. Mutually exclusive with status and manual_setup_required=true.")
+	Attribute("dedicated_issuer_id", String, "The new user session issuer the save moved the MCP server to. Present only when dedicated_issuer applied.", func() {
+		Format(FormatUUID)
+	})
 
 	Required("manual_setup_required")
 })

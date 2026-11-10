@@ -244,6 +244,17 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: SetMCPServerUserSessionIssuer :one
+-- Moves an MCP server to another user session issuer and changes nothing
+-- else. The derived remote issuer is restamped by the resync that follows
+-- every client binding change.
+UPDATE mcp_servers
+SET
+    user_session_issuer_id = @user_session_issuer_id::uuid,
+    updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
 -- name: SyncHostedMCPServer :one
 -- Projects a toolset's hosting columns onto its canonical wrapper (id = toolset id).
 -- Unsetting the issuer clears the derived remote issuer, which no resync can reach.
