@@ -183,6 +183,8 @@ func resolveFailureHappened(err error) mcpconnectionattempts.Code {
 		return remotesessions.ConnectionOutageHappened(err)
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
 		return mcpconnectionattempts.CodeCredentialMisconfigured
+	case errors.Is(err, remotesessions.ErrStoredSignInUnreadable):
+		return mcpconnectionattempts.CodeStoredSignInUnreadable
 	case errors.Is(err, remotesessions.ErrNoValidToken):
 		return mcpconnectionattempts.CodeInvalidRemoteSession
 	}

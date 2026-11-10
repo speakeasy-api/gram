@@ -112,6 +112,7 @@ func TestRefreshHappened_InternalErrorFollowsTheRemedy(t *testing.T) {
 	}{
 		{name: "administrator", err: newTokenRefreshError("no token endpoint", nil, refreshRemedyAdministrator), want: mcpconnectionattempts.CodeCredentialMisconfigured},
 		{name: "reconnect", err: newTokenRefreshError("unreadable token", nil, refreshRemedyReconnect), want: mcpconnectionattempts.CodeUpstreamReconnectRequired},
+		{name: "stored refresh token unreadable", err: newTokenRefreshError("unreadable token", fmt.Errorf("%w: %w", errStoredTokenUnreadable, errors.New("decrypt")), refreshRemedyReconnect), want: mcpconnectionattempts.CodeStoredSignInUnreadable},
 		{name: "retry", err: newTokenRefreshError("lost the race", nil, refreshRemedyRetry), want: mcpconnectionattempts.CodeInternalError},
 		{name: "plain", err: errors.New("database"), want: mcpconnectionattempts.CodeInternalError},
 	} {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 )
 
 // seeder holds what every seed phase needs: the tenant, the transaction's
@@ -18,7 +19,9 @@ import (
 // shared demo org, the local development org, and the safety test's
 // adversarial tenant.
 type seeder struct {
-	spec   Spec
+	spec Spec
+	// enc is the environment's key, which seals the inert sessions' dummy token.
+	enc    *encryption.Client
 	q      *repo.Queries
 	logger *slog.Logger
 	// now is the Postgres transaction's now(), read once at the start of the

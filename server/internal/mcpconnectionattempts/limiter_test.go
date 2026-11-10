@@ -454,8 +454,8 @@ func TestRepeats_QueueReservedRowsCountOnTheKey(t *testing.T) {
 
 	limiter := newOnceLimiter()
 	row := limiterRow("org", "server", "invalid_request", "")
-	require.Zero(t, limiter.holdBack(row))
-	require.Zero(t, limiter.holdBack(row))
+	require.Zero(t, limiter.holdBack(row).lost)
+	require.Zero(t, limiter.holdBack(row).lost)
 
 	rows := limiter.pendingRows(time.Now(), false)
 	require.Len(t, rows, 1)
@@ -471,7 +471,7 @@ func TestRepeats_PeriodicPassStaysWithinTheCeiling(t *testing.T) {
 	for i := range onceOrgBurst {
 		require.True(t, limiterAllows(limiter, limiterRow("org", strconv.Itoa(i), "invalid_request", ""), now))
 	}
-	require.Zero(t, limiter.holdBack(limiterRow("org", "quiet", "invalid_request", "")))
+	require.Zero(t, limiter.holdBack(limiterRow("org", "quiet", "invalid_request", "")).lost)
 
 	require.Empty(t, limiter.pendingRows(now, false))
 	require.Len(t, limiter.pendingRows(now, true), 1)
@@ -483,7 +483,7 @@ func TestRepeats_EvictionCountsWhatItLoses(t *testing.T) {
 	limiter := newOnceLimiter()
 	first := limiterRow("org-first", "server", "invalid_request", "")
 	for range 3 {
-		require.Zero(t, limiter.holdBack(first))
+		require.Zero(t, limiter.holdBack(first).lost)
 	}
 
 	lost := 0

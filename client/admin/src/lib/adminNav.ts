@@ -20,6 +20,7 @@ import {
   ListChecksIcon,
   ChartColumnStackedIcon,
   ActivityIcon,
+  GlobeIcon,
   MessageSquareIcon,
 } from "lucide-react";
 
@@ -102,6 +103,12 @@ export const ADMIN_NAV_GROUPS = [
         label: "Upstream OAuth migration",
         keywords: "oauth clients associations credentials backfill migrate",
         icon: KeyRoundIcon,
+      },
+      {
+        to: "/custom-domains",
+        label: "Custom domains",
+        keywords: "dns cname routing target hostname domain vanity",
+        icon: GlobeIcon,
       },
       {
         to: "/fleet-health",

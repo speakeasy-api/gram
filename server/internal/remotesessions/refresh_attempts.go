@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -26,6 +27,10 @@ func (s *RefreshService) recordRefresh(
 	outcome remotesessionmetrics.RefreshOutcome,
 	err error,
 ) (standalone, step bool) {
+	// Nobody can act on an unreadable sign-in while its access token still serves or no person is present.
+	if errors.Is(err, errStoredTokenUnreadable) && (trigger == remotesessionmetrics.RefreshTriggerScheduled || readStoredTokens(s.enc, sess, time.Now()).usable) {
+		return false, false
+	}
 	what, ok := refreshHappened(outcome, client, err)
 	if !ok {
 		return false, false
@@ -121,6 +126,9 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 	case remotesessionmetrics.RefreshOutcomeUnreachable:
 		return mcpconnectionattempts.CodeProviderUnreachable, true
 	case remotesessionmetrics.RefreshOutcomeInternalError:
+		if errors.Is(err, errStoredTokenUnreadable) {
+			return mcpconnectionattempts.CodeStoredSignInUnreadable, true
+		}
 		if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok {
 			switch tokenErr.remedy {
 			case refreshRemedyAdministrator:

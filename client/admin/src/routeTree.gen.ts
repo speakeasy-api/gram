@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CustomDomainsRouteImport } from './routes/custom-domains'
 import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
 import { Route as FleetHealthRouteImport } from './routes/fleet-health'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
@@ -39,6 +40,7 @@ import { Route as OrganizationsIdOrSlugIndexRouteImport } from './routes/organiz
 import { Route as OrganizationsIdOrSlugActivityRouteImport } from './routes/organizations.$idOrSlug.activity'
 import { Route as OrganizationsIdOrSlugBillingRouteImport } from './routes/organizations.$idOrSlug.billing'
 import { Route as OrganizationsIdOrSlugCoverageRouteImport } from './routes/organizations.$idOrSlug.coverage'
+import { Route as OrganizationsIdOrSlugCustomDomainRouteImport } from './routes/organizations.$idOrSlug.custom-domain'
 import { Route as OrganizationsIdOrSlugFeaturesRouteImport } from './routes/organizations.$idOrSlug.features'
 import { Route as OrganizationsIdOrSlugHooksRouteImport } from './routes/organizations.$idOrSlug.hooks'
 import { Route as OrganizationsIdOrSlugMcpServersRouteImport } from './routes/organizations.$idOrSlug.mcp-servers'
@@ -55,6 +57,11 @@ import { Route as OrganizationsIdOrSlugProjectsProjectIdOrSlugRouteImport } from
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomDomainsRoute = CustomDomainsRouteImport.update({
+  id: '/custom-domains',
+  path: '/custom-domains',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CustomerUsageRoute = CustomerUsageRouteImport.update({
@@ -208,6 +215,12 @@ const OrganizationsIdOrSlugCoverageRoute =
     path: '/coverage',
     getParentRoute: () => OrganizationsIdOrSlugRoute,
   } as any)
+const OrganizationsIdOrSlugCustomDomainRoute =
+  OrganizationsIdOrSlugCustomDomainRouteImport.update({
+    id: '/custom-domain',
+    path: '/custom-domain',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
 const OrganizationsIdOrSlugFeaturesRoute =
   OrganizationsIdOrSlugFeaturesRouteImport.update({
     id: '/features',
@@ -283,6 +296,7 @@ const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
@@ -311,6 +325,7 @@ export interface FileRoutesByFullPath {
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
+  '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
@@ -327,6 +342,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
@@ -348,6 +364,7 @@ export interface FileRoutesByTo {
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
+  '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
@@ -364,6 +381,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
@@ -392,6 +410,7 @@ export interface FileRoutesById {
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
+  '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
@@ -410,6 +429,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/custom-domains'
     | '/customer-usage'
     | '/fleet-health'
     | '/integration-coverage'
@@ -438,6 +458,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
+    | '/organizations/$idOrSlug/custom-domain'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/mcp-servers'
@@ -454,6 +475,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/custom-domains'
     | '/customer-usage'
     | '/fleet-health'
     | '/integration-coverage'
@@ -475,6 +497,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
+    | '/organizations/$idOrSlug/custom-domain'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/members'
@@ -490,6 +513,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/custom-domains'
     | '/customer-usage'
     | '/fleet-health'
     | '/integration-coverage'
@@ -518,6 +542,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
+    | '/organizations/$idOrSlug/custom-domain'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/mcp-servers'
@@ -535,6 +560,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CustomDomainsRoute: typeof CustomDomainsRoute
   CustomerUsageRoute: typeof CustomerUsageRoute
   FleetHealthRoute: typeof FleetHealthRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
@@ -559,6 +585,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/custom-domains': {
+      id: '/custom-domains'
+      path: '/custom-domains'
+      fullPath: '/custom-domains'
+      preLoaderRoute: typeof CustomDomainsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/customer-usage': {
@@ -764,6 +797,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizationsIdOrSlugCoverageRouteImport
       parentRoute: typeof OrganizationsIdOrSlugRoute
     }
+    '/organizations/$idOrSlug/custom-domain': {
+      id: '/organizations/$idOrSlug/custom-domain'
+      path: '/custom-domain'
+      fullPath: '/organizations/$idOrSlug/custom-domain'
+      preLoaderRoute: typeof OrganizationsIdOrSlugCustomDomainRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
     '/organizations/$idOrSlug/features': {
       id: '/organizations/$idOrSlug/features'
       path: '/features'
@@ -873,6 +913,7 @@ interface OrganizationsIdOrSlugRouteChildren {
   OrganizationsIdOrSlugActivityRoute: typeof OrganizationsIdOrSlugActivityRoute
   OrganizationsIdOrSlugBillingRoute: typeof OrganizationsIdOrSlugBillingRoute
   OrganizationsIdOrSlugCoverageRoute: typeof OrganizationsIdOrSlugCoverageRoute
+  OrganizationsIdOrSlugCustomDomainRoute: typeof OrganizationsIdOrSlugCustomDomainRoute
   OrganizationsIdOrSlugFeaturesRoute: typeof OrganizationsIdOrSlugFeaturesRoute
   OrganizationsIdOrSlugHooksRoute: typeof OrganizationsIdOrSlugHooksRoute
   OrganizationsIdOrSlugMcpServersRoute: typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
@@ -887,6 +928,8 @@ const OrganizationsIdOrSlugRouteChildren: OrganizationsIdOrSlugRouteChildren = {
   OrganizationsIdOrSlugActivityRoute: OrganizationsIdOrSlugActivityRoute,
   OrganizationsIdOrSlugBillingRoute: OrganizationsIdOrSlugBillingRoute,
   OrganizationsIdOrSlugCoverageRoute: OrganizationsIdOrSlugCoverageRoute,
+  OrganizationsIdOrSlugCustomDomainRoute:
+    OrganizationsIdOrSlugCustomDomainRoute,
   OrganizationsIdOrSlugFeaturesRoute: OrganizationsIdOrSlugFeaturesRoute,
   OrganizationsIdOrSlugHooksRoute: OrganizationsIdOrSlugHooksRoute,
   OrganizationsIdOrSlugMcpServersRoute:
@@ -996,6 +1039,7 @@ const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CustomDomainsRoute: CustomDomainsRoute,
   CustomerUsageRoute: CustomerUsageRoute,
   FleetHealthRoute: FleetHealthRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,

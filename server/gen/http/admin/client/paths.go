@@ -546,3 +546,8 @@ func GetProjectRedeployPreviewAdminPath() string {
 func RedeployProjectAdminPath() string {
 	return "/admin/project.redeploy"
 }
+
+// ListCustomDomainsAdminPath returns the URL path to the admin service listCustomDomains HTTP endpoint.
+func ListCustomDomainsAdminPath() string {
+	return "/admin/customDomains.list"
+}
