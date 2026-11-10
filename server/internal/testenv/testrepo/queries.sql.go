@@ -2226,6 +2226,23 @@ func (q *Queries) GetAttachmentSourceIDFixture(ctx context.Context, arg GetAttac
 	return id, err
 }
 
+const getAuthClientHeaderFixture = `-- name: GetAuthClientHeaderFixture :one
+SELECT value, is_secret FROM mcp_auth_client_headers WHERE id = $1
+`
+
+type GetAuthClientHeaderFixtureRow struct {
+	Value    pgtype.Text
+	IsSecret bool
+}
+
+// Reads an auth client header's stored value and secrecy.
+func (q *Queries) GetAuthClientHeaderFixture(ctx context.Context, id uuid.UUID) (GetAuthClientHeaderFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getAuthClientHeaderFixture, id)
+	var i GetAuthClientHeaderFixtureRow
+	err := row.Scan(&i.Value, &i.IsSecret)
+	return i, err
+}
+
 const getChatSessionLinkByParentFixture = `-- name: GetChatSessionLinkByParentFixture :one
 SELECT kind, child_chat_id, parent_session_id, target_harness, organization_id, project_id
 FROM chat_session_links
@@ -2465,6 +2482,28 @@ func (q *Queries) GetDirectoryReviewItemStateFixture(ctx context.Context, id uui
 	var state string
 	err := row.Scan(&state)
 	return state, err
+}
+
+const getEnvironmentEntryFixture = `-- name: GetEnvironmentEntryFixture :one
+SELECT value, is_secret FROM environment_entries WHERE environment_id = $1 AND name = $2
+`
+
+type GetEnvironmentEntryFixtureParams struct {
+	EnvironmentID uuid.UUID
+	Name          string
+}
+
+type GetEnvironmentEntryFixtureRow struct {
+	Value    string
+	IsSecret bool
+}
+
+// Reads one environment entry by environment and name.
+func (q *Queries) GetEnvironmentEntryFixture(ctx context.Context, arg GetEnvironmentEntryFixtureParams) (GetEnvironmentEntryFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getEnvironmentEntryFixture, arg.EnvironmentID, arg.Name)
+	var i GetEnvironmentEntryFixtureRow
+	err := row.Scan(&i.Value, &i.IsSecret)
+	return i, err
 }
 
 const getLatestTrialArmAuditIDFixture = `-- name: GetLatestTrialArmAuditIDFixture :one
@@ -2812,6 +2851,23 @@ func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublish
 		&i.LeaseToken,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const getRemoteMCPServerURLFixture = `-- name: GetRemoteMCPServerURLFixture :one
+SELECT name, url FROM remote_mcp_servers WHERE id = $1 AND deleted IS FALSE
+`
+
+type GetRemoteMCPServerURLFixtureRow struct {
+	Name pgtype.Text
+	Url  string
+}
+
+// Reads a remote MCP server's name and upstream URL.
+func (q *Queries) GetRemoteMCPServerURLFixture(ctx context.Context, id uuid.UUID) (GetRemoteMCPServerURLFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteMCPServerURLFixture, id)
+	var i GetRemoteMCPServerURLFixtureRow
+	err := row.Scan(&i.Name, &i.Url)
 	return i, err
 }
 
@@ -4505,6 +4561,47 @@ func (q *Queries) ListPublishOutboxRows(ctx context.Context) ([]ListPublishOutbo
 			&i.LockedUntil,
 			&i.LeaseToken,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSessionTokensFixture = `-- name: ListRemoteSessionTokensFixture :many
+SELECT id, access_token_encrypted, refresh_token_encrypted::text AS refresh_token_encrypted, auto_refresh
+FROM remote_sessions
+WHERE remote_session_client_id = $1
+  AND deleted IS FALSE AND access_expires_at > clock_timestamp()
+ORDER BY id
+`
+
+type ListRemoteSessionTokensFixtureRow struct {
+	ID                    uuid.UUID
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted string
+	AutoRefresh           bool
+}
+
+// Reads the stored, encrypted tokens of a client's live remote sessions.
+func (q *Queries) ListRemoteSessionTokensFixture(ctx context.Context, remoteSessionClientID uuid.UUID) ([]ListRemoteSessionTokensFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionTokensFixture, remoteSessionClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionTokensFixtureRow
+	for rows.Next() {
+		var i ListRemoteSessionTokensFixtureRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccessTokenEncrypted,
+			&i.RefreshTokenEncrypted,
+			&i.AutoRefresh,
 		); err != nil {
 			return nil, err
 		}
