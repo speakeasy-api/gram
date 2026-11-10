@@ -3,6 +3,7 @@ import { ResolveChallengeFormResolutionType } from "@gram/client/models/componen
 import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
 import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
+import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { type Column } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
@@ -88,16 +89,24 @@ export function useGrantFlow(): {
       width: "100px",
       render: (row: ChallengeBucket) =>
         row.outcome === "deny" && !row.resolvedAt ? (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setGrantChallenge(row);
-              setIsDrawerOpen(true);
-            }}
+          // Anyone with org:read can list challenges, but resolving one
+          // assigns a role, which the server allows only for org:admin.
+          <RequireScope
+            scope="org:admin"
+            level="component"
+            reason="Only organization admins can grant access."
           >
-            <Button.Text>Grant</Button.Text>
-          </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setGrantChallenge(row);
+                setIsDrawerOpen(true);
+              }}
+            >
+              <Button.Text>Grant</Button.Text>
+            </Button>
+          </RequireScope>
         ) : null,
     }),
     [],
