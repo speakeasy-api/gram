@@ -8,6 +8,7 @@ import {
   ChevronsUpDown,
   PlusIcon,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { InputDialog } from "./input-dialog";
@@ -116,6 +117,7 @@ function OrgSwitcher({ className }: { className?: string }): JSX.Element {
   const organization = useOrganization();
   const session = useSession();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const isMultiOrg = session.organizations.length > 1;
   const projects = organization.projects;
@@ -173,7 +175,12 @@ function OrgSwitcher({ className }: { className?: string }): JSX.Element {
         {projects.length > 0 ? (
           <ProjectCommandList
             projects={projects}
-            onSelect={(slug) => goTo(`/${organization.slug}/projects/${slug}`)}
+            onSelect={(slug) => {
+              // Same as ProjectProvider's switchProject: drop cached queries
+              // so data from the previous project scope can't leak in.
+              queryClient.clear();
+              goTo(`/${organization.slug}/projects/${slug}`);
+            }}
           />
         ) : (
           <p className="text-muted-foreground px-3 py-3 text-sm">

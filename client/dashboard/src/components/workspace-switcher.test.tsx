@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const switchProject = vi.fn();
 const navigate = vi.fn();
+const clearQueries = vi.fn();
 
 type Project = { id: string; slug: string; name: string };
 let projects: Project[] = [];
@@ -24,6 +25,9 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme", projectSlug }),
   useSdkClient: () => ({ projects: { create: vi.fn() } }),
 }));
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ clear: clearQueries }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasAnyScope: () => true }),
 }));
@@ -43,6 +47,7 @@ beforeEach(() => {
   projectSlug = "proj";
   navigate.mockReset();
   switchProject.mockReset();
+  clearQueries.mockReset();
 });
 afterEach(cleanup);
 
@@ -71,6 +76,7 @@ describe("WorkspaceSwitcher", () => {
       expect(screen.getByRole("option", { name: /Proj/ })).toBeTruthy();
 
       await user.click(screen.getByRole("option", { name: /Alpha/ }));
+      expect(clearQueries).toHaveBeenCalledOnce();
       expect(navigate).toHaveBeenCalledWith("/acme/projects/alpha");
     });
 
