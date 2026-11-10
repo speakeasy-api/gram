@@ -1049,6 +1049,8 @@ function InspectMatrix({
       selectedCategories.has(category.key as RuleCategory),
     );
   }, [categoriesQuery.data?.categories, selectedCategories]);
+  // Detectors switched to Customize that still match their recommendation.
+  const [unlocked, setUnlocked] = useState<ReadonlySet<string>>(new Set());
 
   if (categoriesQuery.isLoading) {
     return (
@@ -1078,7 +1080,8 @@ function InspectMatrix({
 
   const customizedCount = rows.filter(
     (category) =>
-      category.recommendedScopeApplicable && scopeOverrides.has(category.key),
+      category.recommendedScopeApplicable &&
+      (scopeOverrides.has(category.key) || unlocked.has(category.key)),
   ).length;
   return (
     <div className="space-y-3">
@@ -1090,15 +1093,16 @@ function InspectMatrix({
           </p>
           {mcpScoped ? (
             <p className="text-muted-foreground text-xs">
-              Tool responses are stored now. Response inspection applies once
-              MCP response scanning ships.
+              What people type and agent replies aren't part of an MCP call.
+              Tool results are stored now and checked once MCP response scanning
+              ships.
             </p>
           ) : null}
         </div>
         {customizedCount > 0 ? (
           <div className="flex shrink-0 items-center gap-2 text-xs">
             <span className="text-muted-foreground">
-              {customizedCount} changed from recommended
+              {customizedCount} customized
             </span>
             <Button
               type="button"
@@ -1108,6 +1112,7 @@ function InspectMatrix({
                 const next = new Map(scopeOverrides);
                 for (const category of rows) next.delete(category.key);
                 setScopeOverrides(next);
+                setUnlocked(new Set());
               }}
             >
               Reset all
@@ -1115,21 +1120,51 @@ function InspectMatrix({
           </div>
         ) : null}
       </div>
-      <div className="border-border divide-border divide-y border">
-        {rows.map((category) => (
-          <InspectRow
-            key={category.key}
-            category={category}
-            override={scopeOverrides.get(category.key)}
-            onOverrideChange={(override) => {
-              const next = new Map(scopeOverrides);
-              if (override === null) next.delete(category.key);
-              else next.set(category.key, override);
-              setScopeOverrides(next);
-            }}
-            mcpScoped={mcpScoped}
-          />
-        ))}
+      <div className="border-border overflow-x-auto border">
+        <div className="divide-border min-w-[760px] divide-y">
+          <div
+            className={cn(
+              INSPECT_GRID,
+              "bg-muted/35 text-muted-foreground text-xs",
+            )}
+          >
+            <div className="px-4 py-2 font-medium">Detector</div>
+            <div className="flex items-center justify-center border-l px-2 py-2 text-center font-medium">
+              Customize
+            </div>
+            {SCOPE_SURFACES.map(({ kind, label, help }) => (
+              <div
+                key={kind}
+                className="flex items-center justify-center border-l px-2 py-2 text-center"
+              >
+                <SimpleTooltip tooltip={help}>
+                  <span className="text-foreground font-medium">{label}</span>
+                </SimpleTooltip>
+              </div>
+            ))}
+          </div>
+          {rows.map((category) => (
+            <InspectRow
+              key={category.key}
+              category={category}
+              override={scopeOverrides.get(category.key)}
+              onOverrideChange={(override) => {
+                const next = new Map(scopeOverrides);
+                if (override === null) next.delete(category.key);
+                else next.set(category.key, override);
+                setScopeOverrides(next);
+              }}
+              unlocked={unlocked.has(category.key)}
+              onUnlockedChange={(on) => {
+                const next = new Set(unlocked);
+                if (on) next.add(category.key);
+                else next.delete(category.key);
+                setUnlocked(next);
+              }}
+              mcpScoped={mcpScoped}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -1140,25 +1175,21 @@ const SCOPE_SURFACES = [
   {
     kind: "user_message",
     label: "What people type",
-    phrase: "what people type",
     help: "Messages people send to the agent.",
   },
   {
     kind: "tool_request",
     label: "Tool calls",
-    phrase: "tool calls",
     help: "What the agent sends to a tool.",
   },
   {
     kind: "tool_response",
     label: "Tool results",
-    phrase: "tool results",
     help: "What a tool sends back to the agent.",
   },
   {
     kind: "assistant_message",
     label: "Agent replies",
-    phrase: "agent replies",
     help: "What the agent says back.",
   },
 ] as const;
@@ -1367,57 +1398,40 @@ function sameScope(a: ScopeOverride, b: ScopeOverride): boolean {
   );
 }
 
-// One plain sentence for a collapsed row, e.g. "Checks what people type and
-// tool results."
-function inspectSummary(
-  states: Record<ScopeSurfaceKind, SurfaceState>,
-  kinds: readonly ScopeSurfaceKind[],
-): string {
-  const surfaces = SCOPE_SURFACES.filter(
-    (surface) => kinds.includes(surface.kind) && states[surface.kind] !== "out",
-  );
-  const phrases = surfaces.map((surface) =>
-    states[surface.kind] === "conditional"
-      ? `some ${surface.phrase}`
-      : surface.phrase,
-  );
-  const last = phrases.pop();
-  const joined =
-    phrases.length > 0 ? `${phrases.join(", ")} and ${last}` : (last ?? "");
-  const everything =
-    surfaces.length === ALL_SURFACE_KINDS.length &&
-    surfaces.every((surface) => states[surface.kind] === "in");
-  return everything ? `Checks everything: ${joined}.` : `Checks ${joined}.`;
-}
+const INSPECT_GRID =
+  "grid grid-cols-[minmax(14rem,1.6fr)_6rem_repeat(4,minmax(6.5rem,1fr))]";
 
 function InspectRow({
   category,
   override,
   onOverrideChange,
+  unlocked,
+  onUnlockedChange,
   mcpScoped,
 }: {
   category: RiskCategoryDefinition;
   override: ScopeOverride | undefined;
   onOverrideChange: (override: ScopeOverride | null) => void;
+  unlocked: boolean;
+  onUnlockedChange: (unlocked: boolean) => void;
   mcpScoped: boolean;
 }): JSX.Element {
-  const [open, setOpen] = useState(false);
   const [celOpen, setCelOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const engineState = useCelEngine();
   const engine = engineState.status === "ready" ? engineState.engine : null;
   if (!category.recommendedScopeApplicable) {
     return (
-      <div className="space-y-0.5 px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className={INSPECT_GRID}>
+        <div className="flex min-w-0 items-center gap-2 px-4 py-3">
           <Text small className="truncate font-medium">
             {category.label}
           </Text>
           <ScopeRationaleHint rationale={category.recommendedScopeRationale} />
         </div>
-        <Text small muted>
+        <div className="text-muted-foreground col-span-5 flex items-center border-l px-4 py-3 text-xs">
           Checks the whole session, not individual messages.
-        </Text>
+        </div>
       </div>
     );
   }
@@ -1432,27 +1446,27 @@ function InspectRow({
     activeScope.scopeExempt,
   );
   const states = scopeSurfaceStates(activeScope, engine);
-  const recommendedStates = scopeSurfaceStates(recommendedScope, engine);
   const editableKinds = mcpScoped
     ? (["tool_request", "tool_response"] as ScopeSurfaceKind[])
     : ALL_SURFACE_KINDS;
-  const activeCount = editableKinds.filter(
-    (kind) => states[kind] !== "out",
-  ).length;
+  const countActive = (s: Record<ScopeSurfaceKind, SurfaceState>) =>
+    editableKinds.filter((kind) => s[kind] !== "out").length;
+  const activeCount = countActive(states);
   const invalid = activeCount === 0;
-  const expanded = open || invalid;
-  const custom = override !== undefined;
+  // In MCP mode a recommendation can cover no MCP traffic; the row then has
+  // to be customised before the policy can be saved.
+  const recommendationUnusable =
+    countActive(scopeSurfaceStates(recommendedScope, engine)) === 0;
+  const customized =
+    override !== undefined || unlocked || recommendationUnusable;
 
-  // A scope that matches the recommendation is stored as no override, so the
-  // row reads Recommended again after toggling a surface off and back on.
+  // A scope that matches the recommendation is stored as no override.
   const setOverride = (next: ScopeOverride) =>
     onOverrideChange(sameScope(next, recommendedScope) ? null : next);
 
   const toggleSurface = (kind: ScopeSurfaceKind) => {
     const nextOn = states[kind] !== "in";
     if (!nextOn && activeCount <= 1) return;
-    // An invalid row is open only while invalid; keep it open once fixed.
-    setOpen(true);
     if (activeSurfaces) {
       const next = new Set(activeSurfaces);
       if (nextOn) next.add(kind);
@@ -1463,18 +1477,35 @@ function InspectRow({
     setOverride(scopeWithSurface(activeScope, kind, nextOn));
   };
 
+  const setCustomized = (on: boolean) => {
+    onUnlockedChange(on);
+    if (!on) {
+      setCelOpen(false);
+      setEditing(false);
+      onOverrideChange(null);
+    }
+  };
+
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
-        <div className="min-w-48 flex-1 space-y-0.5">
+      <div className={INSPECT_GRID}>
+        <div className="min-w-0 space-y-0.5 px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
-            <Text small className="font-medium">
+            <Text small className="truncate font-medium">
               {category.label}
             </Text>
             <ScopeRationaleHint
               rationale={category.recommendedScopeRationale}
             />
-            {custom ? <Badge variant="information">Custom</Badge> : null}
+            {customized && !mcpScoped ? (
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground ml-auto shrink-0 text-xs underline"
+                onClick={() => setCelOpen((value) => !value)}
+              >
+                {celOpen ? "Hide CEL" : "Edit as CEL"}
+              </button>
+            ) : null}
           </div>
           {invalid ? (
             <Text small className="text-destructive">
@@ -1482,180 +1513,112 @@ function InspectRow({
                 ? "Select tool calls, tool results or both."
                 : "Select at least one kind of traffic."}
             </Text>
-          ) : (
-            <Text small muted>
-              {inspectSummary(states, editableKinds)}
-            </Text>
-          )}
+          ) : null}
         </div>
-        {invalid ? null : (
-          <Button
-            type="button"
-            variant="secondary"
-            size="xs"
-            className="ml-auto w-16 shrink-0 text-center"
-            aria-expanded={expanded}
-            onClick={() => setOpen((value) => !value)}
-          >
-            {expanded ? "Done" : "Change"}
-          </Button>
-        )}
+        <div className="flex items-center justify-center border-l px-2 py-3">
+          <Switch
+            aria-label={`Customize ${category.label}`}
+            checked={customized}
+            disabled={recommendationUnusable}
+            onCheckedChange={setCustomized}
+          />
+        </div>
+        {SCOPE_SURFACES.map(({ kind, label }) => {
+          const unavailable = !editableKinds.includes(kind);
+          const state = states[kind];
+          const checkbox = (
+            <Checkbox
+              aria-label={`${category.label}: ${label}`}
+              disabled={unavailable || !customized}
+              checked={
+                unavailable
+                  ? false
+                  : state === "conditional"
+                    ? "indeterminate"
+                    : state === "in"
+              }
+              onCheckedChange={() => toggleSurface(kind)}
+            />
+          );
+          const tooltip = unavailable
+            ? "Not part of an MCP call."
+            : state === "conditional"
+              ? "Only some of this traffic is checked."
+              : null;
+          return (
+            <div
+              key={kind}
+              className="flex items-center justify-center border-l px-2 py-3"
+            >
+              {tooltip ? (
+                <SimpleTooltip tooltip={tooltip}>
+                  <span className="inline-flex">{checkbox}</span>
+                </SimpleTooltip>
+              ) : (
+                checkbox
+              )}
+            </div>
+          );
+        })}
       </div>
-      {expanded ? (
-        <div className="bg-muted/20 space-y-4 border-t px-4 py-4">
-          <fieldset
-            className="space-y-3"
-            aria-labelledby={`inspect-${category.key}-legend`}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <span
-                id={`inspect-${category.key}-legend`}
-                className="text-eyebrow"
-              >
-                Check this detector against
-              </span>
-              {custom ? (
-                <button
-                  type="button"
-                  className="text-foreground text-xs underline"
-                  onClick={() => {
-                    setCelOpen(false);
-                    setEditing(false);
-                    onOverrideChange(null);
-                  }}
-                >
-                  Reset to recommended
-                </button>
-              ) : null}
+      {celOpen && customized && !mcpScoped ? (
+        <div className="bg-muted/20 border-t px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 space-y-2">
+              <Text small className="font-medium">
+                CEL scope
+              </Text>
+              {activeScope.scopeInclude.trim() === "" &&
+              activeScope.scopeExempt.trim() === "" ? (
+                <code className="text-xs">All message surfaces</code>
+              ) : (
+                <RecommendedScopeCode
+                  include={activeScope.scopeInclude}
+                  exempt={activeScope.scopeExempt}
+                />
+              )}
+              <Text small muted>
+                Checkbox changes update this expression. Editing it replaces the
+                checkboxes.
+              </Text>
             </div>
-            <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-              {SCOPE_SURFACES.map(({ kind, label, help }) => {
-                const unavailable = !editableKinds.includes(kind);
-                const state = states[kind];
-                const id = `inspect-${category.key}-${kind}`;
-                return (
-                  <div key={kind} className="flex items-start gap-3">
-                    <Checkbox
-                      id={id}
-                      className="mt-0.5"
-                      aria-label={`${category.label}: ${label}`}
-                      disabled={unavailable}
-                      checked={
-                        unavailable
-                          ? false
-                          : state === "conditional"
-                            ? "indeterminate"
-                            : state === "in"
-                      }
-                      onCheckedChange={() => toggleSurface(kind)}
-                    />
-                    <label
-                      htmlFor={id}
-                      className={cn(
-                        "min-w-0 space-y-0.5 text-sm",
-                        unavailable && "text-muted-foreground",
-                      )}
-                    >
-                      <span className="block font-medium">
-                        {label}
-                        {!unavailable && recommendedStates[kind] !== "out" ? (
-                          <span className="text-muted-foreground font-normal">
-                            {" "}
-                            · recommended
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="text-muted-foreground block text-xs">
-                        {unavailable
-                          ? "Not part of an MCP call."
-                          : state === "conditional"
-                            ? "Only some of this traffic is checked."
-                            : help}
-                      </span>
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-          </fieldset>
-          {!mcpScoped ? (
-            <div className="text-muted-foreground text-xs">
-              Need to match specific tools or message content?{" "}
+            <div className="flex shrink-0 items-center gap-3">
+              <CelReferenceSheet />
               <button
                 type="button"
-                className="text-foreground underline"
-                onClick={() => setCelOpen((value) => !value)}
+                className="text-foreground text-xs underline"
+                onClick={() => setEditing((value) => !value)}
               >
-                {celOpen ? "Hide CEL scope" : "Edit as CEL"}
+                {editing ? "Close editor" : "Edit expression"}
               </button>
             </div>
-          ) : null}
-          {celOpen && !mcpScoped ? (
-            <div className="border-t pt-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 space-y-2">
-                  <Text small className="font-medium">
-                    CEL scope
-                  </Text>
-                  {activeScope.scopeInclude.trim() === "" &&
-                  activeScope.scopeExempt.trim() === "" ? (
-                    <code className="text-xs">All message surfaces</code>
-                  ) : (
-                    <RecommendedScopeCode
-                      include={activeScope.scopeInclude}
-                      exempt={activeScope.scopeExempt}
-                    />
-                  )}
-                  <Text small muted>
-                    Checkbox changes update this expression. Editing it replaces
-                    the checkboxes.
-                  </Text>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <CelReferenceSheet />
-                  <button
-                    type="button"
-                    className="text-foreground text-xs underline"
-                    onClick={() => setEditing((value) => !value)}
-                  >
-                    {editing ? "Close editor" : "Edit expression"}
-                  </button>
-                </div>
+          </div>
+          {editing ? (
+            <div className="mt-4 space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">
+                  Detect on messages matching
+                </Label>
+                <CelExpressionField
+                  value={activeScope.scopeInclude}
+                  onChange={(value) =>
+                    setOverride({ ...activeScope, scopeInclude: value })
+                  }
+                  examples={SCOPE_INCLUDE_CEL_EXAMPLES}
+                />
               </div>
-              {editing ? (
-                <div className="mt-4 space-y-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">
-                      Detect on messages matching
-                    </Label>
-                    <CelExpressionField
-                      value={activeScope.scopeInclude}
-                      onChange={(value) =>
-                        setOverride({
-                          ...activeScope,
-                          scopeInclude: value,
-                        })
-                      }
-                      examples={SCOPE_INCLUDE_CEL_EXAMPLES}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">
-                      Exempt messages matching
-                    </Label>
-                    <CelExpressionField
-                      value={activeScope.scopeExempt}
-                      onChange={(value) =>
-                        setOverride({
-                          ...activeScope,
-                          scopeExempt: value,
-                        })
-                      }
-                      examples={SCOPE_EXEMPT_CEL_EXAMPLES}
-                    />
-                  </div>
-                </div>
-              ) : null}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">
+                  Exempt messages matching
+                </Label>
+                <CelExpressionField
+                  value={activeScope.scopeExempt}
+                  onChange={(value) =>
+                    setOverride({ ...activeScope, scopeExempt: value })
+                  }
+                  examples={SCOPE_EXEMPT_CEL_EXAMPLES}
+                />
+              </div>
             </div>
           ) : null}
         </div>

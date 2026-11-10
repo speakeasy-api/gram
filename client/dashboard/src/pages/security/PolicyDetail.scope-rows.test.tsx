@@ -435,9 +435,16 @@ function ScopePickerHarness({
 
 // Inspect rows start collapsed; open every one to reach its checkboxes.
 function openInspectRows(): void {
-  for (const button of screen.queryAllByRole("button", { name: "Change" })) {
-    fireEvent.click(button);
+  for (const toggle of screen.queryAllByRole("switch", {
+    name: /^Customize /,
+  })) {
+    if (toggle.getAttribute("aria-checked") === "false")
+      fireEvent.click(toggle);
   }
+}
+
+function checkbox(name: string): HTMLElement {
+  return screen.getByRole("checkbox", { name });
 }
 
 describe("StandardPolicyEditor scope rows", () => {
@@ -544,57 +551,82 @@ describe("StandardPolicyEditor scope rows", () => {
     );
   });
 
-  it("renders one collapsed, plain-language row for every enabled detector", () => {
+  it("shows every detector's recommended traffic, locked until customized", () => {
     renderEditor(policy());
 
     expect(screen.getByText("Secrets")).toBeTruthy();
     expect(screen.getByText("Shadow AI")).toBeTruthy();
     expect(screen.getByText("Custom rules")).toBeTruthy();
-    expect(screen.getByText("Checks tool results.")).toBeTruthy();
+    expect(checkbox("Secrets: Tool results").getAttribute("aria-checked")).toBe(
+      "true",
+    );
     expect(
-      screen.getAllByText(
-        "Checks everything: what people type, tool calls, tool results and agent replies.",
-      ),
-    ).toHaveLength(2);
-    expect(screen.queryByText("Custom")).toBeNull();
-    expect(screen.queryByRole("checkbox", { name: /^Secrets:/ })).toBeNull();
+      checkbox("Secrets: What people type").getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(checkbox("Secrets: Tool results").hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(
+      screen
+        .getByRole("switch", { name: "Customize Secrets" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(screen.queryByText(/customized/)).toBeNull();
   });
 
-  it("marks a changed detector as custom and resets it", () => {
+  it("unlocks a detector when customized and resets it when switched off", () => {
+    renderEditor(policy());
+
+    const toggle = screen.getByRole("switch", { name: "Customize Secrets" });
+    fireEvent.click(toggle);
+    expect(checkbox("Secrets: Tool results").hasAttribute("disabled")).toBe(
+      false,
+    );
+    expect(screen.getByText("1 customized")).toBeTruthy();
+
+    fireEvent.click(checkbox("Secrets: What people type"));
+    expect(
+      checkbox("Secrets: What people type").getAttribute("aria-checked"),
+    ).toBe("true");
+
+    fireEvent.click(toggle);
+    expect(
+      checkbox("Secrets: What people type").getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(checkbox("Secrets: What people type").hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(screen.queryByText(/customized/)).toBeNull();
+  });
+
+  it("stays customized after a surface is toggled off and back on", () => {
     renderEditor(policy());
 
     openInspectRows();
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: "Secrets: What people type" }),
-    );
+    fireEvent.click(checkbox("Secrets: What people type"));
+    fireEvent.click(checkbox("Secrets: What people type"));
 
-    expect(screen.getByText("Custom")).toBeTruthy();
-    expect(screen.getByText("1 changed from recommended")).toBeTruthy();
     expect(
-      screen.getByText("Checks what people type and tool results."),
-    ).toBeTruthy();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Reset to recommended" }),
+      screen
+        .getByRole("switch", { name: "Customize Secrets" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(checkbox("Secrets: Tool results").getAttribute("aria-checked")).toBe(
+      "true",
     );
-    expect(screen.queryByText("Custom")).toBeNull();
-    expect(screen.getByText("Checks tool results.")).toBeTruthy();
   });
 
-  it("reads as recommended again after a surface is toggled off and back on", () => {
+  it("resets every detector with Reset all", () => {
     renderEditor(policy());
 
     openInspectRows();
-    const typed = screen.getByRole("checkbox", {
-      name: "Secrets: What people type",
-    });
-    fireEvent.click(typed);
-    expect(screen.getByText("Custom")).toBeTruthy();
-    fireEvent.click(typed);
+    fireEvent.click(checkbox("Secrets: What people type"));
+    fireEvent.click(screen.getByRole("button", { name: "Reset all" }));
 
-    expect(screen.queryByText("Custom")).toBeNull();
-    expect(screen.queryByText(/changed from recommended/)).toBeNull();
-    expect(screen.getByText("Checks tool results.")).toBeTruthy();
+    expect(screen.queryByText(/customized/)).toBeNull();
+    expect(
+      checkbox("Secrets: What people type").getAttribute("aria-checked"),
+    ).toBe("false");
   });
 
   it("treats an empty kind list as no traffic, not the unrestricted recommendation", () => {
@@ -613,10 +645,14 @@ describe("StandardPolicyEditor scope rows", () => {
     expect(
       screen.getByText("Select at least one kind of traffic."),
     ).toBeTruthy();
-    expect(screen.getByText("Custom")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("switch", { name: "Customize Shadow AI" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
-  it("keeps an invalid row open after its first surface is selected", () => {
+  it("lets an invalid row be fixed from its checkboxes", () => {
     renderEditor(
       policy({
         detectionScopes: [
@@ -678,11 +714,7 @@ describe("StandardPolicyEditor scope rows", () => {
         .getByRole("checkbox", { name: "Secrets: Tool results" })
         .hasAttribute("disabled"),
     ).toBe(false);
-    expect(
-      screen.getByText(
-        "Tool responses are stored now. Response inspection applies once MCP response scanning ships.",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText(/aren't part of an MCP call/)).toBeTruthy();
   });
 
   it("renders inapplicable detectors without editable inspection surfaces", () => {
@@ -696,7 +728,9 @@ describe("StandardPolicyEditor scope rows", () => {
     expect(
       screen.getByText("Checks the whole session, not individual messages."),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
+    expect(
+      screen.queryByRole("switch", { name: "Customize Account identity" }),
+    ).toBeNull();
     expect(
       screen.queryByRole("checkbox", { name: /^Account identity:/ }),
     ).toBeNull();
