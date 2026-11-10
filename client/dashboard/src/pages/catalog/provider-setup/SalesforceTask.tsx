@@ -309,7 +309,7 @@ export function SalesforceTask(): JSX.Element {
           <ExternalAction
             title="Install Speakeasy’s Salesforce app"
             label="Open Salesforce installation"
-            href={salesforceAppInstallationUrl}
+            href={salesforceAppInstallationUrl(s.values.environment)}
           />
           <InProvider
             actions={[

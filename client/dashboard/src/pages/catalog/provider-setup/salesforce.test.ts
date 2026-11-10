@@ -4,6 +4,7 @@ import {
   salesforceConnection,
   salesforceSelectionForUrl,
   salesforceInstance,
+  salesforceAppInstallationUrl,
 } from "./salesforce";
 import {
   setupProviderForUrl,
@@ -12,6 +13,17 @@ import {
 } from "@/pages/mcp/x/setup/provider-setup";
 
 describe("documented Salesforce connection contract", () => {
+  it.each([
+    ["production", "login.salesforce.com"],
+    ["sandbox", "test.salesforce.com"],
+  ])(
+    "opens the %s package installer for the selected org type",
+    (environment, host) => {
+      expect(salesforceAppInstallationUrl(environment)).toBe(
+        `https://${host}/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2`,
+      );
+    },
+  );
   it.each([
     [
       "sobject-reads",

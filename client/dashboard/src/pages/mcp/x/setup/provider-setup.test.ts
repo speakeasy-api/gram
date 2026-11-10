@@ -73,11 +73,11 @@ describe("Salesforce source-bound progress", () => {
       ).values.salesforceServer,
     ).toBe("sobject-reads");
   });
-  it("retains a documented environment/server draft after a source write and failed credential replacement", () => {
+  it("retains pending configuration against the advanced source baseline", () => {
     const state = initialState("salesforce");
     const partial = {
       ...source,
-      url: "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-reads",
+      url: "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-all",
     };
     const partialBaseline = salesforceSourceFingerprint("upstream", partial);
     Object.assign(state.values, {
@@ -90,7 +90,11 @@ describe("Salesforce source-bound progress", () => {
     const restored = loadProviderProgress(
       "salesforce",
       "sf-partial",
-      { ...initialState("salesforce").values, environment: "sandbox" },
+      {
+        ...initialState("salesforce").values,
+        environment: "sandbox",
+        salesforceServer: "sobject-all",
+      },
       partialBaseline,
     );
     expect(restored.values.environment).toBe("sandbox");

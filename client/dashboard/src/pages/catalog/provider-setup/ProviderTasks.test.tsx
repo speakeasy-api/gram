@@ -380,6 +380,7 @@ it.each([
 it("renders the published installation link and support handoff details", async () => {
   const user = userEvent.setup();
   render(<SalesforceFixture step="choices" />);
+  await user.click(screen.getByText("Sandbox", { exact: true }));
   await user.click(screen.getByText("Use Speakeasy’s app", { exact: true }));
   await user.click(screen.getByRole("button", { name: "Continue" }));
   expect(
@@ -387,7 +388,7 @@ it("renders the published installation link and support handoff details", async 
       .getByRole("link", { name: "Open Salesforce installation" })
       .getAttribute("href"),
   ).toBe(
-    "https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2",
+    "https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2",
   );
   expect(
     screen.getByText(/Installation alone does not complete OAuth/),
@@ -402,7 +403,7 @@ it("renders the published installation link and support handoff details", async 
   );
   expect(screen.getByLabelText("Selected MCP endpoint")).toHaveProperty(
     "value",
-    "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+    "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-reads",
   );
   expect(
     screen.getByText(/Your next step is with Speakeasy support/),

@@ -1,8 +1,13 @@
 import type { CatalogServer } from "../hooks";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader";
 
-export const salesforceAppInstallationUrl =
-  "https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2";
+export function salesforceAppInstallationUrl(environment: string): string {
+  const origin =
+    environment === "sandbox"
+      ? "https://test.salesforce.com"
+      : "https://login.salesforce.com";
+  return `${origin}/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2`;
+}
 
 export const salesforceInstanceHeader = "MCP-Instance-URL";
 const isSalesforceInstanceHeader = (name: string): boolean =>
