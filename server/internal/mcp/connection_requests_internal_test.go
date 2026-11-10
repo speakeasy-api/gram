@@ -171,6 +171,7 @@ type stubMemberOutcome struct {
 	rejected  int
 	code      int
 	tunnelErr string
+	answered  bool
 }
 
 func (o stubMemberOutcome) failure() error { return o.err }
@@ -180,6 +181,8 @@ func (o stubMemberOutcome) rejection() (int, bool) { return o.rejected, o.reject
 func (o stubMemberOutcome) status() int { return o.code }
 
 func (o stubMemberOutcome) tunnelError() string { return o.tunnelErr }
+
+func (o stubMemberOutcome) forwarded() bool { return o.answered }
 
 func (o stubMemberOutcome) retryAfter(time.Time) time.Duration { return 0 }
 
@@ -268,6 +271,52 @@ func TestMemberClientFailure_CanceledCallerHasNoCode(t *testing.T) {
 	err := memberClientFailure(ctx, testenv.NewLogger(t), stubMemberOutcome{}, memberDial{}, metaMember{slug: "fixture"}, context.Canceled)
 	_, ok := errors.AsType[memberConnectionError](err)
 	require.False(t, ok)
+}
+
+// A tunneled member whose tunnel client answered and then ran out of call time is slow, not broken on our side.
+func TestMemberClientFailure_TunneledDeadlineAfterAForwardIsProviderUnreachable(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	err := memberClientFailure(ctx, testenv.NewLogger(t), stubMemberOutcome{answered: true}, memberDial{tunneled: true}, metaMember{slug: "fixture"}, errors.New("call failed"))
+	failure, ok := errors.AsType[memberConnectionError](err)
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, failure.code)
+}
+
+// A tunnel gateway that holds the call until the deadline without forwarding an answer is ours.
+func TestMemberClientFailure_TunneledDeadlineWithNoForwardIsInternal(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	err := memberClientFailure(ctx, testenv.NewLogger(t), stubMemberOutcome{}, memberDial{tunneled: true}, metaMember{slug: "fixture"}, errors.New("call failed"))
+	failure, ok := errors.AsType[memberConnectionError](err)
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
+}
+
+// A tunnel gateway that reported its own failure before the deadline keeps the blame.
+func TestMemberClientFailure_TunneledDeadlineAfterAGatewayFailureIsNotTheProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	err := memberClientFailure(ctx, testenv.NewLogger(t), stubMemberOutcome{tunnelErr: wire.TunnelErrorRouteLookupFailed}, memberDial{tunneled: true}, metaMember{slug: "fixture"}, errors.New("call failed"))
+	failure, ok := errors.AsType[memberConnectionError](err)
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
+}
+
+// A tunneled transport timeout while the member call still has time is the gateway's, not the provider's.
+func TestMemberClientFailure_TunneledTransportTimeoutIsNotTheProvider(t *testing.T) {
+	t.Parallel()
+
+	err := memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{}, memberDial{tunneled: true}, metaMember{slug: "fixture"}, fmt.Errorf("dial gateway: %w", context.DeadlineExceeded))
+	failure, ok := errors.AsType[memberConnectionError](err)
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
 }
 
 func TestRecordMemberFailure(t *testing.T) {
