@@ -39,6 +39,8 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   (@slack_id::uuid, @project_id::uuid, @org_id::text, 'service-account',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
+  (@pass_through_id::uuid, @project_id::uuid, @org_id::text, 'pass-through-token',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   (@gateway_id::uuid, @project_id::uuid, @org_id::text, 'acme-agent-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   (@code_gateway_id::uuid, @project_id::uuid, @org_id::text, 'python-code-gateway',
@@ -56,7 +58,7 @@ INSERT INTO mcp_servers (id, project_id, name, slug,
    @issuer_slack_id::uuid, 'private'),
   (@github_id::uuid, @project_id::uuid, 'Pass-Through Token Server', 'pass-through-token',
    @remote_github_id::uuid,
-   @issuer_workforce_id::uuid, 'private');
+   @issuer_github_id::uuid, 'private');
 
 -- name: ServersInsertRegistryPromotionCandidate :exec
 -- Synthetic evidence stays ineligible and queues no public publication or messages.
@@ -183,17 +185,14 @@ WHERE project_id = @project_id::uuid AND slug = 'pass-through-token';
 -- project-scoped CIMD client, Slack carries one inert shared Service Account
 -- credential, and the Shared or Own Token Server intentionally has no upstream identity. The demo
 -- values are display fixtures only and cannot authenticate to any service.
--- Two more vendor remotes for the agent MCP sign-in tab, both real and
--- connectable: Notion signs each caller in to their own account once an
--- admin sets up its sign-in from the server's page (Speakeasy registers a
--- client with Notion then; the seed holds no credential), and DeepWiki is a
--- public server that needs no sign-in at all.
+-- The Auto-Configured OAuth Server: each caller signs in to their own
+-- account once an admin sets up its sign-in from the server's page (Speakeasy
+-- discovers the authorization server and registers a client then; the seed
+-- holds no credential).
 -- name: ServersInsertSignInExampleRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   (@notion_id::uuid, @project_id::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
-   'streamable-http', 'https://mcp-fixture.example.com/mcp/auto'),
-  (@deepwiki_id::uuid, @project_id::uuid, 'No-Auth Server', 'no-auth',
-   'streamable-http', 'https://mcp.deepwiki.com/mcp');
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/auto');
 
 -- name: ServersInsertNotionUserSessionIssuer :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
@@ -202,25 +201,19 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
   (@id::uuid, @project_id::uuid, @org_id::text, 'auto-configured-oauth',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
 
--- DeepWiki takes no credential, so it sits under the shared workforce issuer
--- like the Shared or Own Token Server, with no upstream client to sign in through.
 -- name: ServersInsertSignInExampleMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
   (@notion_id::uuid, @project_id::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
-   NULL, @remote_notion_id::uuid, @issuer_notion_id::uuid, 'private'),
-  (@deepwiki_id::uuid, @project_id::uuid, 'No-Auth Server', 'no-auth',
-   NULL, @remote_deepwiki_id::uuid, @issuer_workforce_id::uuid, 'private');
+   NULL, @remote_notion_id::uuid, @issuer_notion_id::uuid, 'private');
 
--- Each gets an endpoint of its own, as a server added in the dashboard does:
+-- It gets an endpoint of its own, as a server added in the dashboard does:
 -- the endpoint is where its sign-in page lives.
 -- name: ServersInsertSignInExampleEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
   (@notion_endpoint_id::uuid, @project_id::uuid, NULL,
-   @notion_server_id::uuid, @notion_slug::text),
-  (@deepwiki_endpoint_id::uuid, @project_id::uuid, NULL,
-   @deepwiki_server_id::uuid, @deepwiki_slug::text);
+   @notion_server_id::uuid, @notion_slug::text);
 
 -- name: ServersInsertLinearRemoteSessionIssuer :exec
 INSERT INTO remote_session_issuers

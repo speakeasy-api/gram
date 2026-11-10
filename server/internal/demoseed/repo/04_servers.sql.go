@@ -1388,16 +1388,16 @@ INSERT INTO mcp_servers (id, project_id, name, slug,
 `
 
 type ServersInsertMCPServersParams struct {
-	LinearID          uuid.UUID
-	ProjectID         uuid.UUID
-	RemoteLinearID    uuid.UUID
-	IssuerLinearID    uuid.UUID
-	SlackID           uuid.UUID
-	RemoteSlackID     uuid.UUID
-	IssuerSlackID     uuid.UUID
-	GithubID          uuid.UUID
-	RemoteGithubID    uuid.UUID
-	IssuerWorkforceID uuid.UUID
+	LinearID       uuid.UUID
+	ProjectID      uuid.UUID
+	RemoteLinearID uuid.UUID
+	IssuerLinearID uuid.UUID
+	SlackID        uuid.UUID
+	RemoteSlackID  uuid.UUID
+	IssuerSlackID  uuid.UUID
+	GithubID       uuid.UUID
+	RemoteGithubID uuid.UUID
+	IssuerGithubID uuid.UUID
 }
 
 func (q *Queries) ServersInsertMCPServers(ctx context.Context, arg ServersInsertMCPServersParams) error {
@@ -1411,7 +1411,7 @@ func (q *Queries) ServersInsertMCPServers(ctx context.Context, arg ServersInsert
 		arg.IssuerSlackID,
 		arg.GithubID,
 		arg.RemoteGithubID,
-		arg.IssuerWorkforceID,
+		arg.IssuerGithubID,
 	)
 	return err
 }
@@ -1858,22 +1858,17 @@ func (q *Queries) ServersInsertServerClientAssociation(ctx context.Context, arg 
 const serversInsertSignInExampleEndpoints = `-- name: ServersInsertSignInExampleEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
   ($1::uuid, $2::uuid, NULL,
-   $3::uuid, $4::text),
-  ($5::uuid, $2::uuid, NULL,
-   $6::uuid, $7::text)
+   $3::uuid, $4::text)
 `
 
 type ServersInsertSignInExampleEndpointsParams struct {
-	NotionEndpointID   uuid.UUID
-	ProjectID          uuid.UUID
-	NotionServerID     uuid.UUID
-	NotionSlug         string
-	DeepwikiEndpointID uuid.UUID
-	DeepwikiServerID   uuid.UUID
-	DeepwikiSlug       string
+	NotionEndpointID uuid.UUID
+	ProjectID        uuid.UUID
+	NotionServerID   uuid.UUID
+	NotionSlug       string
 }
 
-// Each gets an endpoint of its own, as a server added in the dashboard does:
+// It gets an endpoint of its own, as a server added in the dashboard does:
 // the endpoint is where its sign-in page lives.
 func (q *Queries) ServersInsertSignInExampleEndpoints(ctx context.Context, arg ServersInsertSignInExampleEndpointsParams) error {
 	_, err := q.db.Exec(ctx, serversInsertSignInExampleEndpoints,
@@ -1881,9 +1876,6 @@ func (q *Queries) ServersInsertSignInExampleEndpoints(ctx context.Context, arg S
 		arg.ProjectID,
 		arg.NotionServerID,
 		arg.NotionSlug,
-		arg.DeepwikiEndpointID,
-		arg.DeepwikiServerID,
-		arg.DeepwikiSlug,
 	)
 	return err
 }
@@ -1893,32 +1885,22 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
   ($1::uuid, $2::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
-   NULL, $3::uuid, $4::uuid, 'private'),
-  ($5::uuid, $2::uuid, 'No-Auth Server', 'no-auth',
-   NULL, $6::uuid, $7::uuid, 'private')
+   NULL, $3::uuid, $4::uuid, 'private')
 `
 
 type ServersInsertSignInExampleMCPServersParams struct {
-	NotionID          uuid.UUID
-	ProjectID         uuid.UUID
-	RemoteNotionID    uuid.UUID
-	IssuerNotionID    uuid.UUID
-	DeepwikiID        uuid.UUID
-	RemoteDeepwikiID  uuid.UUID
-	IssuerWorkforceID uuid.UUID
+	NotionID       uuid.UUID
+	ProjectID      uuid.UUID
+	RemoteNotionID uuid.UUID
+	IssuerNotionID uuid.UUID
 }
 
-// DeepWiki takes no credential, so it sits under the shared workforce issuer
-// like the Shared or Own Token Server, with no upstream client to sign in through.
 func (q *Queries) ServersInsertSignInExampleMCPServers(ctx context.Context, arg ServersInsertSignInExampleMCPServersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertSignInExampleMCPServers,
 		arg.NotionID,
 		arg.ProjectID,
 		arg.RemoteNotionID,
 		arg.IssuerNotionID,
-		arg.DeepwikiID,
-		arg.RemoteDeepwikiID,
-		arg.IssuerWorkforceID,
 	)
 	return err
 }
@@ -1926,15 +1908,12 @@ func (q *Queries) ServersInsertSignInExampleMCPServers(ctx context.Context, arg 
 const serversInsertSignInExampleRemoteMCPServers = `-- name: ServersInsertSignInExampleRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   ($1::uuid, $2::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
-   'streamable-http', 'https://mcp-fixture.example.com/mcp/auto'),
-  ($3::uuid, $2::uuid, 'No-Auth Server', 'no-auth',
-   'streamable-http', 'https://mcp.deepwiki.com/mcp')
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/auto')
 `
 
 type ServersInsertSignInExampleRemoteMCPServersParams struct {
-	NotionID   uuid.UUID
-	ProjectID  uuid.UUID
-	DeepwikiID uuid.UUID
+	NotionID  uuid.UUID
+	ProjectID uuid.UUID
 }
 
 // Leave instructions NULL so Settings starts with the editable built-in
@@ -1943,13 +1922,12 @@ type ServersInsertSignInExampleRemoteMCPServersParams struct {
 // project-scoped CIMD client, Slack carries one inert shared Service Account
 // credential, and the Shared or Own Token Server intentionally has no upstream identity. The demo
 // values are display fixtures only and cannot authenticate to any service.
-// Two more vendor remotes for the agent MCP sign-in tab, both real and
-// connectable: Notion signs each caller in to their own account once an
-// admin sets up its sign-in from the server's page (Speakeasy registers a
-// client with Notion then; the seed holds no credential), and DeepWiki is a
-// public server that needs no sign-in at all.
+// The Auto-Configured OAuth Server: each caller signs in to their own
+// account once an admin sets up its sign-in from the server's page (Speakeasy
+// discovers the authorization server and registers a client then; the seed
+// holds no credential).
 func (q *Queries) ServersInsertSignInExampleRemoteMCPServers(ctx context.Context, arg ServersInsertSignInExampleRemoteMCPServersParams) error {
-	_, err := q.db.Exec(ctx, serversInsertSignInExampleRemoteMCPServers, arg.NotionID, arg.ProjectID, arg.DeepwikiID)
+	_, err := q.db.Exec(ctx, serversInsertSignInExampleRemoteMCPServers, arg.NotionID, arg.ProjectID)
 	return err
 }
 
@@ -2154,9 +2132,11 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   ($5::uuid, $4::uuid, $2::text, 'service-account',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
-  ($6::uuid, $4::uuid, $2::text, 'acme-agent-gateway',
+  ($6::uuid, $4::uuid, $2::text, 'pass-through-token',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
-  ($7::uuid, $4::uuid, $2::text, 'python-code-gateway',
+  ($7::uuid, $4::uuid, $2::text, 'acme-agent-gateway',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
+  ($8::uuid, $4::uuid, $2::text, 'python-code-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
 `
 
@@ -2166,6 +2146,7 @@ type ServersInsertUserSessionIssuersParams struct {
 	LinearID      uuid.UUID
 	ProjectID     uuid.UUID
 	SlackID       uuid.UUID
+	PassThroughID uuid.UUID
 	GatewayID     uuid.UUID
 	CodeGatewayID uuid.UUID
 }
@@ -2186,6 +2167,7 @@ func (q *Queries) ServersInsertUserSessionIssuers(ctx context.Context, arg Serve
 		arg.LinearID,
 		arg.ProjectID,
 		arg.SlackID,
+		arg.PassThroughID,
 		arg.GatewayID,
 		arg.CodeGatewayID,
 	)

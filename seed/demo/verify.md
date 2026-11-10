@@ -101,7 +101,7 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
    Compare with Watchdog using the same detection-time window and severity.
    Optional finding breakdowns are not the dashboard's display sections.
 
-10. **MCP connections** — on the **Acme Partner Gateway** server's _Clients and
+10. **MCP connections** — on the **Server-Specific Sign-In** server's _Clients and
     Sessions_ tab, five registered agents and five connections. Grouped by
     **Agent**: `Partner Reconciliation Agent` carries a green
     **Key-authenticated** badge, `Vendor Sync (misconfigured)` a red **Cannot
@@ -124,8 +124,8 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     the workload reconnecting, and says the rest are not yet available in the
     dashboard.
 
-12. **External OAuth settings** — open **MCP → Acme OAuth Discovery →
-    Authentication** (`/mcp/acme-oauth-discovery/authentication`). The page
+12. **External OAuth settings** — open **MCP → External OAuth Server →
+    Authentication** (`/mcp/<org>-external-oauth/authentication`). The page
     shows the existing Speakeasy-hosted metadata configuration, recommends
     provider-hosted metadata, and offers **Review update**. Opening the review
     starts with the fictional `https://auth.example.com` issuer; live discovery
@@ -166,7 +166,7 @@ open their effective assignments; the dropdown always offers compact member sear
     selected servers and all current/future MCP servers. Amara's panel holds two
     simultaneously effective rows whose record overlap panels identify each
     other. Open Jonas's changed row and confirm history narrows **Acme Support
-    Tools / Acme Ops / Per-User OAuth Server** to **Acme Support Tools** without losing the
+    Tools / Read-Only Tool Subset / Per-User OAuth Server** to **OpenAPI Server (API Key)** without losing the
     removed-server diff. Open the lifted and expired rows and confirm their
     complete history and terminal status. On the active selected row, the
     external message renders the newline, `<script>alert("demo")</script>`, and
@@ -199,8 +199,8 @@ open their effective assignments; the dropdown always offers compact member sear
     Gateway tool usage chart with all four tools populated, the three discovery tools
     decreasing (list_servers > describe_server > describe_tools) and
     execute_tool counting the member calls, and a Calls-by-member
-    table listing Acme Support Tools, Acme Ops, the Per-User OAuth Server, and Slack with Acme Ops
-    carrying most of the errors — and no Shared or Own Token Server row, even though that server's
+    table listing OpenAPI Server (API Key), Read-Only Tool Subset, the Per-User OAuth Server, and the Service Account Server with Read-Only Tool Subset
+    carrying most of the errors — and no Pass-Through Token Server row, even though that server's
     dispatches from before it left the gateway still count in the totals.
     The "Dispatched calls over time" title opens Tool Logs and the "Gateway
     tool usage" title opens MCP & Tools, both with the Acme Agent Gateway
@@ -354,9 +354,11 @@ open their effective assignments; the dropdown always offers compact member sear
 19. **Remote MCP identity settings** — open the settings page for each seeded
     Remote MCP server. The Per-User OAuth Server shows the **User** identity pill, the MCP
     Fixture OAuth provider, and the Session length / Client access controls
-    in Sessions. Slack shows **Service Account** with the inert demo
-    Authorization credential managed under Identity. The Shared or Own Token Server shows **None** with
-    no provider or static Authorization header. All three use the Display,
+    in Sessions. The Service Account Server shows **Shared credential** with its static
+    Authorization header (locally the MCP fixture's shared token). The Pass-Through Token
+    Server shows **Manual**; locally its Custom Headers list a required, secret
+    Authorization header forwarded from the caller's `X-Upstream-Token`, and no
+    auth-challenge warning appears. All three use the Display,
     Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with
     Custom Headers directly after the Identity controls. In Postgres, only the
     Per-User OAuth Server row in `mcp_servers` has `remote_session_issuer_id` set, to the
@@ -547,19 +549,19 @@ open their effective assignments; the dropdown always offers compact member sear
     `skill`: the values picker offers those three names with counts and
     never an empty value. Then flip the Explore row in `PAGES.md` from
     `[~]` to `[x]`.
-27. **Check access** — open MCP → **Shared or Own Token Server** → Team Access and pick Mateo
+27. **Check access** — open MCP → **Pass-Through Token Server** → Team Access and pick Mateo
     Alvarez in Check access. Connect is **Blocked**: the Contractors block
     wins, Engineer's grants show as blocked, and his own grant covering
-    every server is blocked because it does not name the Shared or Own Token Server. Contractors
+    every server is blocked because it does not name the Pass-Through Token Server. Contractors
     reads "Mapped from employee_type = contractor" for an organization
     admin. View and Manage stay allowed, since the block covers Connect
     only. Pick Priya Raman: Connect is **Allowed** because her grant naming
-    The Shared or Own Token Server overrides the Contractors block, which shows as overridden.
+    The Pass-Through Token Server overrides the Contractors block, which shows as overridden.
 28. **Role editor: MCP access** — open Team → Roles & Permissions and edit
     **Support Desk**. MCP access opens on Specific servers with the Default
-    project expanded: Acme Support Tools is ticked with no badge, and Slack
+    project expanded: OpenAPI Server (API Key) is ticked with no badge, and the Service Account Server
     is ticked with a **Read-Only Tools** badge that opens its tool access
-    sheet on By annotation. Edit **Contractors**: The Shared or Own Token Server sits in the
+    sheet on By annotation. Edit **Contractors**: The Pass-Through Token Server sits in the
     Forbidden section with Remove. Edit **Engineer**: every server row is
     ticked and locked, and the lock's card links to Platform access, where
     `mcp:read` and `mcp:write` carry the note that they also connect. Edit
@@ -588,19 +590,18 @@ open their effective assignments; the dropdown always offers compact member sear
 
 30. **Enterprise Managed Authorization**
     - Open **Team → IDP and SSO → Identity providers**. The Services table
-      lists Acme Tracker (default order, "Each server's own identity
-      provider", Not accepted yet) and Acme Wiki (saved order: Acme
-      Identity, Not accepted yet), one server each.
-    - Open Acme Wiki's page. It shows Acme Identity's issuer URL
-      `https://login.acme-identity.example` to copy, and the saved order with
-      **Use default**.
+      lists one server, the Enterprise Sign-In (ID-JAG) Server (default
+      order, Not accepted yet in the demo org).
+    - The Enterprise Sign-In (ID-JAG) Server has its own organization
+      sign-in (`enterprise-sign-in`) that federates through Acme Identity, a
+      ready binding to its authorization server ("Enterprise Sign-In
+      Authorization Server") and that server's one client. In the demo org
+      the hosts are reserved placeholders, so a sign-in there fails by
+      design; locally the dev-idp plays Acme Identity (check 35).
     - `acme-workforce` trusts Acme Identity for inbound EMA (ID-JAGs) only.
       Its sign-in client is unset on purpose, so interactive sign-in through
-      it (Shared or Own Token Server, the organization gateway) keeps working, and the trust
-      changes nothing outbound: **MCP → Acme Tracker → Settings** still has no
-      Enterprise Managed Authorization section, and Acme Identity is not
-      offered as a provider a service can accept on the strength of this
-      trust.
+      it (the organization gateway) stays on the
+      organization's own login.
     - Call the Platform MCP `get_inbound_ema_trust` tool. It must report:
       - `acme-workforce` trusting Acme Identity: `issuer_url`
         `https://login.acme-identity.example`, and a `key_set_url` that is a
@@ -614,8 +615,9 @@ open their effective assignments; the dropdown always offers compact member sear
         step 31).
       - `directory.resolvable_directory_users` greater than zero and
         `directory.synced` true.
-    - Both servers are seeded disabled. Connect through the organization
-      gateway: its consent page must not list Acme Tracker or Acme Wiki.
+    - Locally, after the check 35 sign-in, the server's binding reads as
+      accepted and `remote_session_ema_credentials` holds one row for the
+      developer.
 
 31. **Gateway discovery modes**
     - Open a gateway with tools.
@@ -661,7 +663,7 @@ open their effective assignments; the dropdown always offers compact member sear
 
 34. **Skills served over MCP** (needs the `skills-over-mcp` flag on for the
     organization)
-    - Open **MCP → Acme Support Tools → Skills**. It lists Support Refunds and
+    - Open **MCP → OpenAPI Server (API Key) → Skills**. It lists Support Refunds and
       Triage Incident, each with a Latest badge and a "Last loaded over MCP"
       value. As a writer, **Add skill** opens a picker without those two and
       each row has a remove button.
@@ -670,28 +672,55 @@ open their effective assignments; the dropdown always offers compact member sear
     - Open **Skills → Runbook → Usage**. "Served over MCP" lists Acme Agent
       Gateway (opens the gateway's Skills tab) and Organization gateway, and
       there is no **Add to organization gateway** button. Support Refunds
-      lists only Acme Support Tools and offers the button to project writers.
+      lists only OpenAPI Server (API Key) and offers the button to project writers.
     - In the read-only demo org no add or remove control shows. With the flag
       off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
       returns to the server or gateway overview, and the skill page has no
       "Served over MCP" section.
 
-35. **Seeded MCP servers** (picker check in both orgs; live checks local only)
+35. **Seeded MCP servers** (names in both orgs; live checks local only)
     - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
-      server appears once: one each of Acme Support Tools, Acme Ops, Acme
-      Partner Gateway and Acme OAuth Discovery (each toolset's canonical
-      wrapper), and one row for the Per-User OAuth Server. Expanding the Per-User OAuth Server shows one OAuth client, not two.
+      server appears once, named for what it tests: OpenAPI Server (API Key),
+      Read-Only Tool Subset, Server-Specific Sign-In, External OAuth Server
+      (each toolset's canonical wrapper), Per-User OAuth Server, Service
+      Account Server, Pass-Through Token Server, Auto-Configured OAuth Server,
+      Tunnelled Private Server and Enterprise Sign-In (ID-JAG) Server: ten in
+      all. No server is named for a vendor it does not reach.
     - Locally, with the `mcp-fixture` daemon up (`pitchfork status
-      mcp-fixture`), connect any MCP client to
-      `GRAM_SERVER_URL/mcp/<org>-per-user-oauth`. The consent page lists one service,
-      **MCP Fixture OAuth**. **Connect** opens the fixture's sign-in page; pick
-      an email, then **Give access**. `whoami` returns that email with
-      `auth: oauth`.
-    - Connect a client to `GRAM_SERVER_URL/mcp/<org>-partner` and call
-      `get_customer`: it returns the fixture's demo customer, not an error
-      about `api.internal.acme.example`.
-    - The demo org keeps display-only upstreams: The Per-User OAuth Server's **Connect account**
-      goes to `mcp-fixture.example.com` and fails, by design.
+      mcp-fixture`), connect an MCP client to each `GRAM_SERVER_URL/mcp/<org>-<slug>`
+      endpoint and call a tool:
+      - `openapi-api-key` (`get_customer`) and `read-only-subset`
+        (`check_health`) with the seeded `GRAM_API_KEY` as a bearer token:
+        the fixture's API stub answers.
+      - `server-specific-sign-in` (`get_customer`) after its own Speakeasy
+        sign-in.
+      - `external-oauth` (`search_logs`): the client signs in at the
+        fixture's authorization server (pick an email), not at Speakeasy.
+      - `per-user-oauth` (`whoami`): the consent page lists one service,
+        **MCP Fixture OAuth**; **Connect** opens the fixture's sign-in page;
+        pick an email, then **Give access**. `whoami` returns that email with
+        `auth: oauth`.
+      - `service-account` (`whoami`): returns `shared-service-account` with
+        `auth: shared-token`.
+      - `pass-through-token` (`whoami`): create a token at
+        `GRAM_MCP_FIXTURE_URL/tokens`, send it as `X-Upstream-Token`;
+        `whoami` returns that email with `auth: own-token`.
+      - `auto-configured-oauth`: first, as an admin, open its **Settings →
+        Identity → User Identity → Auto-Configure → Save**; the provider then
+        reads **Connected**. A client's sign-in then connects through the
+        fixture and `whoami` returns the picked email.
+      - `tunnelled-private` (`whoami`, with `GRAM_API_KEY`): the call reaches
+        the fixture through the tunnel; `pitchfork logs mcp-fixture` shows
+        `tunnel agent connected`.
+      - `enterprise-sign-in` (`whoami`): Speakeasy's sign-in goes to the
+        dev-idp (the company identity provider); the consent page shows the
+        service as handled by enterprise sign-in, with nothing to connect.
+        After **Give access**, `whoami` returns the developer's email with
+        `auth: ema`: Speakeasy got the upstream token through the ID-JAG
+        exchange.
+    - The demo org keeps display-only upstreams: the Per-User OAuth Server's
+      **Connect account** goes to `mcp-fixture.example.com` and fails, by
+      design.
 
 ## On failure
 
@@ -745,4 +774,4 @@ In shared Explore Demo, verify the mapping dialog shows its read-only notice and
 
 ## Tunnel observability
 
-Open MCP Servers → Private inventory → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, and the current agent count is zero. The marketplace callout appears above the tunnel status, which reads "No connected tunnel agents" with a View tunnel agent setup action. The sidebar Readiness card does not call the server ready: its Tunnel agent item says no tunnel agent is connected and links to tunnel agent setup. Check 1 hour / 24 hours / 7 days, the Requests by client list, and the data table under About these numbers. The synthetic source must not initiate any network connection.
+Open MCP Servers → Tunnelled Private Server → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, and the current agent count is zero. The marketplace callout appears above the tunnel status, which reads "No connected tunnel agents" with a View tunnel agent setup action. The sidebar Readiness card does not call the server ready: its Tunnel agent item says no tunnel agent is connected and links to tunnel agent setup. Check 1 hour / 24 hours / 7 days, the Requests by client list, and the data table under About these numbers. The synthetic source must not initiate any network connection.

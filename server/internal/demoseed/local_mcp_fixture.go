@@ -265,13 +265,7 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 		return err
 	}
 
-	// 6. The No-Auth Server: the fixture's open endpoint, so it works offline.
-	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: base + fixtureauth.PathOpenMCP, ID: s.det("remotemcp-deepwiki"), ProjectID: proj})
-	if err := expect("point the no-auth server", n, err); err != nil {
-		return err
-	}
-
-	// 7. The Tunnelled Private Server: the fixture daemon's tunnel agent
+	// 6. The Tunnelled Private Server: the fixture daemon's tunnel agent
 	// connects with the checked-in key, so its hash goes on the seeded tunnel.
 	n, err = q.LocalFixtureSetTunnelKey(ctx, repo.LocalFixtureSetTunnelKeyParams{
 		KeyHash: wire.HashKey(fixtureauth.TunnelKey), KeyPrefix: fixtureauth.TunnelKey[:len(wire.KeyPrefix)+6],

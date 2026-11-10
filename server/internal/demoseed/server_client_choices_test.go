@@ -35,8 +35,9 @@ func testServerClientChoices(t *testing.T, spec Spec) {
 		report, err := selectionbackfill.Run(ctx, db, selectionbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0})
 		require.NoError(t, err)
 		require.Positive(t, report.Credentials, "the seed must leave live credentials to check")
-		// Two live organization gateway sign-ins also reach Notion and DeepWiki.
-		require.Equal(t, 22, report.Pairs[selectionbackfill.OutcomeSelected], "every active seeded sign-in's reachable servers")
+		// Two live organization gateway sign-ins also reach the Auto-Configured
+		// OAuth Server.
+		require.Equal(t, 20, report.Pairs[selectionbackfill.OutcomeSelected], "every active seeded sign-in's reachable servers")
 		require.Empty(t, report.Gaps, "no seeded credential may be asked to reconnect")
 		require.Len(t, report.Pairs, 1, "the seed must record every choice: %v", report.Pairs)
 		require.Positive(t, report.Credentials, "the seed must leave live credentials to check")

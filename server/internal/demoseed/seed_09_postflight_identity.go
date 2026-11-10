@@ -148,9 +148,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// duplicated any of them would leave the badges telling a different
 		// story than the one they were seeded to tell.
 		// Two upstream MCP issuers, two independent gateway issuers, one
-		// Connections issuer, and Notion's issuer; the Shared or Own Token Server and DeepWiki use the
-		// organization workforce issuer.
-		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 6, "demo seed postflight: expected 6 project user session issuers, found %d"},
+		// Connections issuer, the Auto-Configured OAuth Server's issuer and the
+		// Pass-Through Token Server's issuer.
+		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 7, "demo seed postflight: expected 7 project user session issuers, found %d"},
 		{byProj(s.q.PostflightIDGatewayIssuers), 2, "demo seed postflight: expected 2 distinct gateway issuers, found %d"},
 		// The workforce issuer, and the Enterprise Sign-In (ID-JAG) Server's
 		// own federated sign-in.
@@ -214,12 +214,13 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// The Per-User OAuth Server's one OAuth client, and the Enterprise
 		// Sign-In (ID-JAG) Server's own client.
 		{byProj(s.q.PostflightIDServerClientAssociations), 2, "demo seed postflight: expected 2 MCP server upstream client associations, found %d"},
-		// One per server each seeded sign-in reaches: the Per-User OAuth Server and Slack
-		// sign-ins on their own server, the gateway sign-ins on both members.
+		// One per server each seeded sign-in reaches: the Per-User OAuth Server
+		// and Service Account Server sign-ins on their own server, the gateway
+		// sign-ins on both members.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion"), s.det("mcpserver-deepwiki")},
+				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion")},
 				GithubServerID:     s.det("mcpserver-github"),
 				GithubAuthClientID: s.det("auth-client-github-forwarded"),
 				ProjectID:          proj,
@@ -229,11 +230,11 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				SlackServerID:      s.det("mcpserver-slack"),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 			})
-		}, 29, "demo seed postflight: expected exactly 29 matching upstream client choices, found %d"},
+		}, 26, "demo seed postflight: expected exactly 26 matching upstream client choices, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion"), s.det("mcpserver-deepwiki")},
+				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion")},
 				GithubServerID:     s.det("mcpserver-github"),
 				GithubAuthClientID: s.det("auth-client-github-forwarded"),
 				ProjectID:          proj,
@@ -241,7 +242,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				LinearClientID:     s.det("remote-identity-client-linear"),
 				SlackServerID:      s.det("mcpserver-slack"),
 			})
-		}, 0, "demo seed postflight: %d upstream client choices are not the intended Per-User OAuth Server client or Slack no-auth choice"},
+		}, 0, "demo seed postflight: %d upstream client choices are not the intended Per-User OAuth Server client or Service Account Server no-auth choice"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDIssuanceProfileChoices(ctx, repo.PostflightIDIssuanceProfileChoicesParams{
 				ProjectID:      proj,
