@@ -131,7 +131,7 @@ func NewWithConfig(t *testing.T, conn *pgxpool.Pool, cfg orgencryption.Provision
 func CreatePlatformCredential(t *testing.T, conn *pgxpool.Pool) uuid.UUID {
 	t.Helper()
 
-	return createGcpIamCredential(t, conn, pgtype.Text{String: "", Valid: false}, PlatformServiceAccount())
+	return createGcpIamCredential(t, conn, pgtype.Text{String: "", Valid: false}, PlatformServiceAccount(), true)
 }
 
 // CreateCustomerKey writes a customer-managed KEK for the organization, with a
@@ -139,8 +139,10 @@ func CreatePlatformCredential(t *testing.T, conn *pgxpool.Pool) uuid.UUID {
 func CreateCustomerKey(t *testing.T, conn *pgxpool.Pool, organizationID string, keyID string) uuid.UUID {
 	t.Helper()
 
-	_, domain, _ := strings.Cut(gcpauth.StubResolverPrincipal, "@")
-	credentialID := createGcpIamCredential(t, conn, conv.ToPGText(organizationID), "customer-kek@"+domain)
+	// A customer's own service account, outside Speakeasy's project, so the
+	// credential goes through ordinary screening rather than the own-project
+	// exemption only the platform credential carries.
+	credentialID := createGcpIamCredential(t, conn, conv.ToPGText(organizationID), "customer-kek@customer-stub.iam.gserviceaccount.com", false)
 
 	q := repo.New(conn)
 	key, err := q.CreateEncryptionExternalKey(t.Context(), repo.CreateEncryptionExternalKeyParams{
@@ -166,7 +168,9 @@ func CustomerKeyName(keyID string) string {
 	return CustomerKeyRing + "/cryptoKeys/" + keyID
 }
 
-func createGcpIamCredential(t *testing.T, conn *pgxpool.Pool, organizationID pgtype.Text, serviceAccount string) uuid.UUID {
+// createGcpIamCredential stores a GCP IAM credential. exempt sets the
+// own-project exemption, which only the platform credential may carry.
+func createGcpIamCredential(t *testing.T, conn *pgxpool.Pool, organizationID pgtype.Text, serviceAccount string, exempt bool) uuid.UUID {
 	t.Helper()
 
 	q := extcredrepo.New(conn)
@@ -183,7 +187,7 @@ func createGcpIamCredential(t *testing.T, conn *pgxpool.Pool, organizationID pgt
 		WifPoolID:                 pgtype.Text{String: "", Valid: false},
 		WifProviderID:             pgtype.Text{String: "", Valid: false},
 		WifProjectNumber:          pgtype.Text{String: "", Valid: false},
-		SkipProjectVerification:   true,
+		SkipProjectVerification:   exempt,
 	})
 	require.NoError(t, err)
 

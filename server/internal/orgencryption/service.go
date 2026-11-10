@@ -278,8 +278,8 @@ func (s *Service) unwrapDataKey(ctx context.Context, organizationID string, data
 	case err != nil:
 		return cachedDataKey{}, fmt.Errorf("load organization encryption config: %w", err)
 	}
-	if ConfigState(config.State) == ConfigStateSuspended {
-		return cachedDataKey{}, ErrSuspended
+	if err := requireUsableState(config.State); err != nil {
+		return cachedDataKey{}, err
 	}
 
 	candidates := []uuid.UUID{config.KekExternalKeyID}

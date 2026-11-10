@@ -68,6 +68,12 @@ func (p *Provisioner) Check(ctx context.Context, organizationID string) error {
 func (p *Provisioner) checkConfig(ctx context.Context, logger *slog.Logger, config repo.OrganizationEncryptionConfig) error {
 	organizationID := config.OrganizationID
 
+	// Suspended is a known state the probe may resume from; anything else that
+	// is not usable is reported rather than treated as healthy.
+	if err := requireUsableState(config.State); err != nil && !errors.Is(err, ErrSuspended) {
+		return err
+	}
+
 	_, currentErr := p.probeKey(ctx, logger, organizationID, config.KekExternalKeyID)
 	if currentErr != nil {
 		if rolledBack, err := p.rollBackBrokenSwitch(ctx, logger, config, currentErr); rolledBack || err != nil {
@@ -153,7 +159,7 @@ func (p *Provisioner) probeKey(ctx context.Context, logger *slog.Logger, organiz
 			return rewrapped, fmt.Errorf("%w: data encryption key %s has no wrap under key %s", ErrKeyUnavailable, dek.ID, keyID)
 		}
 
-		dataKey, err := key.unwrap(ctx, organizationID, dek.ID, dek.UseCase, row.WrappedKey)
+		dataKey, err := unwrapDataKey(ctx, key, organizationID, dek, row.WrappedKey)
 		if err != nil {
 			return rewrapped, err
 		}

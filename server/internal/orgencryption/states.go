@@ -2,6 +2,7 @@ package orgencryption
 
 import (
 	"errors"
+	"fmt"
 )
 
 // Mode says who controls an organization's KEK. Stored in
@@ -94,3 +95,17 @@ var (
 	// KEKs depend on is missing or misconfigured.
 	ErrPlatformCredentialUnusable = errors.New("orgencryption: platform encryption credential unusable")
 )
+
+// requireUsableState fails closed unless a configuration in state may encrypt
+// and decrypt: active and switching may, suspended may not, and any other
+// value is refused rather than trusted.
+func requireUsableState(state string) error {
+	switch ConfigState(state) {
+	case ConfigStateActive, ConfigStateSwitching:
+		return nil
+	case ConfigStateSuspended:
+		return ErrSuspended
+	default:
+		return fmt.Errorf("%w: unknown configuration state %q", ErrInvalidState, state)
+	}
+}

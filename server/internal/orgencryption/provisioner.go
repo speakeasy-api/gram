@@ -295,8 +295,8 @@ func (p *Provisioner) recordManagedConfig(ctx context.Context, organizationID st
 // configuration reads with. With rotate set it retires the current active DEK
 // in the same transaction; otherwise it is a no-op when one already exists.
 func (p *Provisioner) createDataKey(ctx context.Context, logger *slog.Logger, config repo.OrganizationEncryptionConfig, useCase UseCase, actor Actor, rotate bool) error {
-	if ConfigState(config.State) == ConfigStateSuspended {
-		return ErrSuspended
+	if err := requireUsableState(config.State); err != nil {
+		return err
 	}
 
 	dataKeyID, err := uuid.NewV7()
@@ -572,10 +572,26 @@ func (p *Provisioner) SwitchKey(ctx context.Context, organizationID string, keyI
 	return switched, nil
 }
 
-// CompleteSwitch drops the previous KEK's wraps once every readable DEK is
-// wrapped by the current KEK. A managed previous KEK is then disabled by the
-// sweep.
+// CompleteSwitch drops the previous KEK's wraps once the current KEK is proven
+// to unwrap every readable DEK. A managed previous KEK is then disabled by the
+// sweep after the managed key retention.
 func (p *Provisioner) CompleteSwitch(ctx context.Context, organizationID string, actor Actor) (repo.OrganizationEncryptionConfig, error) {
+	logger := p.logger.With(attr.SlogOrganizationID(organizationID))
+
+	// The previous KEK's wraps may be the only usable ones, so the current KEK
+	// must actually unwrap every DEK before they are dropped; a wrap row alone
+	// does not prove the key still works.
+	pending, err := getConfig(ctx, repo.New(p.db), organizationID)
+	if err != nil {
+		return repo.OrganizationEncryptionConfig{}, err
+	}
+	if ConfigState(pending.State) != ConfigStateSwitching || !pending.PreviousKekExternalKeyID.Valid {
+		return repo.OrganizationEncryptionConfig{}, fmt.Errorf("%w: no switch is in flight", ErrInvalidState)
+	}
+	if err := p.requireUnwrapsAll(ctx, logger, organizationID, pending.KekExternalKeyID); err != nil {
+		return repo.OrganizationEncryptionConfig{}, fmt.Errorf("current key cannot take over: %w", err)
+	}
+
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
 		return repo.OrganizationEncryptionConfig{}, fmt.Errorf("begin organization encryption transaction: %w", err)
@@ -591,8 +607,8 @@ func (p *Provisioner) CompleteSwitch(ctx context.Context, organizationID string,
 	if err != nil {
 		return repo.OrganizationEncryptionConfig{}, err
 	}
-	if ConfigState(config.State) != ConfigStateSwitching || !config.PreviousKekExternalKeyID.Valid {
-		return repo.OrganizationEncryptionConfig{}, fmt.Errorf("%w: no switch is in flight", ErrInvalidState)
+	if err := requireConfigUnchanged(ctx, q, pending); err != nil {
+		return repo.OrganizationEncryptionConfig{}, err
 	}
 
 	if err := requireAllWrapped(ctx, q, organizationID, config.KekExternalKeyID); err != nil {
@@ -625,6 +641,22 @@ func (p *Provisioner) CompleteSwitch(ctx context.Context, organizationID string,
 // RollbackSwitch returns the organization to the previous KEK and drops the
 // wraps made under the KEK it was switching to.
 func (p *Provisioner) RollbackSwitch(ctx context.Context, organizationID string, actor Actor) (repo.OrganizationEncryptionConfig, error) {
+	logger := p.logger.With(attr.SlogOrganizationID(organizationID))
+
+	// The current KEK's wraps may be the only usable ones, for example when the
+	// customer revoked the previous key mid-switch, so the previous KEK must
+	// actually unwrap every DEK before they are dropped.
+	pending, err := getConfig(ctx, repo.New(p.db), organizationID)
+	if err != nil {
+		return repo.OrganizationEncryptionConfig{}, err
+	}
+	if ConfigState(pending.State) != ConfigStateSwitching || !pending.PreviousKekExternalKeyID.Valid {
+		return repo.OrganizationEncryptionConfig{}, fmt.Errorf("%w: no switch is in flight", ErrInvalidState)
+	}
+	if err := p.requireUnwrapsAll(ctx, logger, organizationID, pending.PreviousKekExternalKeyID.UUID); err != nil {
+		return repo.OrganizationEncryptionConfig{}, fmt.Errorf("previous key cannot take back over: %w", err)
+	}
+
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
 		return repo.OrganizationEncryptionConfig{}, fmt.Errorf("begin organization encryption transaction: %w", err)
@@ -642,6 +674,9 @@ func (p *Provisioner) RollbackSwitch(ctx context.Context, organizationID string,
 	}
 	if ConfigState(config.State) != ConfigStateSwitching || !config.PreviousKekExternalKeyID.Valid {
 		return repo.OrganizationEncryptionConfig{}, fmt.Errorf("%w: no switch is in flight", ErrInvalidState)
+	}
+	if err := requireConfigUnchanged(ctx, q, pending); err != nil {
+		return repo.OrganizationEncryptionConfig{}, err
 	}
 
 	previous, err := q.GetEncryptionKeyForUse(ctx, repo.GetEncryptionKeyForUseParams{ID: config.PreviousKekExternalKeyID.UUID, OrganizationID: organizationID})
@@ -863,6 +898,48 @@ func requireConfigUnchanged(ctx context.Context, q *repo.Queries, want repo.Orga
 	}
 
 	return nil
+}
+
+// requireUnwrapsAll proves keyID can unwrap every readable DEK of the
+// organization through KMS, without changing any wrap. Callers run it before
+// dropping another KEK's wraps.
+func (p *Provisioner) requireUnwrapsAll(ctx context.Context, logger *slog.Logger, organizationID string, keyID uuid.UUID) error {
+	q := repo.New(p.db)
+
+	key, err := p.keys.open(ctx, logger, q, organizationID, keyID)
+	if err != nil {
+		return err
+	}
+	defer o11y.LogDefer(ctx, logger, "close kms encryption client", key.Close)
+
+	rows, err := q.ListDataEncryptionKeyWrapsForKey(ctx, repo.ListDataEncryptionKeyWrapsForKeyParams{ExternalKeyID: keyID, OrganizationID: organizationID})
+	if err != nil {
+		return fmt.Errorf("list data encryption key wraps: %w", err)
+	}
+	for _, row := range rows {
+		if !row.WrapID.Valid {
+			return fmt.Errorf("%w: data encryption key %s has no wrap under key %s", ErrKeyUnavailable, row.DataEncryptionKey.ID, keyID)
+		}
+		if _, err := unwrapDataKey(ctx, key, organizationID, row.DataEncryptionKey, row.WrappedKey); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// unwrapDataKey unwraps one DEK under an open KEK and checks its size, so a
+// corrupted wrap never counts as healthy.
+func unwrapDataKey(ctx context.Context, key *openKey, organizationID string, dek repo.DataEncryptionKey, wrapped []byte) ([]byte, error) {
+	dataKey, err := key.unwrap(ctx, organizationID, dek.ID, dek.UseCase, wrapped)
+	if err != nil {
+		return nil, err
+	}
+	if len(dataKey) != encryption.DataKeyBytes {
+		return nil, fmt.Errorf("%w: unwrapped data encryption key %s is %d bytes", ErrKeyUnavailable, dek.ID, len(dataKey))
+	}
+
+	return dataKey, nil
 }
 
 // requireAllWrapped refuses to continue unless every readable DEK has a live

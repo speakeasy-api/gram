@@ -104,6 +104,12 @@ func (r *keyResolver) open(ctx context.Context, logger *slog.Logger, q *repo.Que
 		return nil, fmt.Errorf("screen key encryption key credential: %w", err)
 	}
 	if problem != "" {
+		// A managed key is reached only through the pinned platform credential
+		// (checkKey), so a screening problem there is Speakeasy's configuration
+		// drift: it must not suspend the organization.
+		if row.Managed {
+			return nil, fmt.Errorf("%w: %s", ErrPlatformCredentialUnusable, detail)
+		}
 		return nil, fmt.Errorf("%w: %s", ErrInvalidKey, detail)
 	}
 

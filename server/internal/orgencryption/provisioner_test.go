@@ -384,3 +384,43 @@ func TestCheck_SuspendsAMidSwitchOrganizationWhenBothKeysFail(t *testing.T) {
 	require.Equal(t, string(orgencryption.ConfigStateSuspended), config.State, "with no usable key there is nothing to roll back to")
 	require.Equal(t, customer, config.KekExternalKeyID)
 }
+
+func TestCompleteSwitch_RefusesWhenTheNewKeyNoLongerWorks(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	ti.provision(t)
+	managed := ti.config(t).KekExternalKeyID
+
+	customer := orgencryptiontest.CreateCustomerKey(t, ti.conn, ti.orgID, "customer-kek")
+	_, err := ti.fixture.Provisioner.SwitchKey(t.Context(), ti.orgID, customer, orgencryption.SystemActor())
+	require.NoError(t, err)
+
+	require.NoError(t, ti.fixture.KMS.DisableEncryptionKey(t.Context(), orgencryptiontest.CustomerKeyName("customer-kek")))
+	_, err = ti.fixture.Provisioner.CompleteSwitch(t.Context(), ti.orgID, orgencryption.SystemActor())
+	require.Error(t, err, "a wrap row alone does not prove the new key can take over")
+
+	require.Equal(t, string(orgencryption.ConfigStateSwitching), ti.config(t).State)
+	require.Equal(t, 1, ti.wrapsUnder(t, managed), "the previous key's wraps are kept")
+}
+
+func TestRollbackSwitch_RefusesWhenThePreviousKeyNoLongerWorks(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	ti.provision(t)
+	managed := ti.config(t).KekExternalKeyID
+
+	customer := orgencryptiontest.CreateCustomerKey(t, ti.conn, ti.orgID, "customer-kek")
+	_, err := ti.fixture.Provisioner.SwitchKey(t.Context(), ti.orgID, customer, orgencryption.SystemActor())
+	require.NoError(t, err)
+
+	require.NoError(t, ti.fixture.KMS.DisableEncryptionKey(t.Context(), ti.keyResource(t, managed)))
+	_, err = ti.fixture.Provisioner.RollbackSwitch(t.Context(), ti.orgID, orgencryption.SystemActor())
+	require.Error(t, err, "a wrap row alone does not prove the previous key can take back over")
+
+	config := ti.config(t)
+	require.Equal(t, string(orgencryption.ConfigStateSwitching), config.State)
+	require.Equal(t, customer, config.KekExternalKeyID)
+	require.Equal(t, 1, ti.wrapsUnder(t, customer), "the new key's wraps are kept")
+}
