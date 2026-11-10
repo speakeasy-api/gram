@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -755,6 +756,35 @@ func TestRecordUpstreamClientSelectionsFromTypedStateAlone(t *testing.T) {
 		f.recordTypedOnly(issuer, credential, map[uuid.UUID]uuid.UUID{server: second})
 		require.Equal(t, map[uuid.UUID]uuid.UUID{server: second}, f.selections(credential))
 		require.Equal(t, uuid.NullUUID{UUID: picked, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+	})
+
+	t.Run("offered auth clients sharing a registration are left to a pick of one", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client()
+		server := f.server(issuer)
+		f.authClient("remote_session", registration, server)
+		f.authClient("service_account", registration, server)
+
+		credential := f.session(issuer)
+		f.recordTypedOnly(issuer, credential, nil)
+		require.Empty(t, f.selections(credential), "a client choice is not recorded without the auth client it names")
+	})
+
+	t.Run("a backfill run records an enforcing organization's choices the same way", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		inherited := f.client(issuer)
+		server := f.server(issuer, inherited)
+		credential := f.session(issuer)
+		require.NoError(t, authclientbackfill.New(f.pool).SeedOrganizationFeatureFixture(t.Context(), authclientbackfill.SeedOrganizationFeatureFixtureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)}))
+
+		_, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+		require.NoError(t, err)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: uuid.Nil}, f.selections(credential), "the association the server offers no auth client for is not recorded")
+		require.True(t, f.namedAuthClient(credential, server).NoAuth)
 	})
 
 	t.Run("a server whose only OAuth client is disabled needs none", func(t *testing.T) {

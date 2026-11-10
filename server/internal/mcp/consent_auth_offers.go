@@ -80,7 +80,9 @@ type gatewayOfferMetadata struct {
 	selections    map[[2]uuid.UUID]upstreamclientsrepo.GetAuthClientSelectionRow
 }
 
-func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID string, members []metaMember, offers map[uuid.UUID]configuredAuthOffer) (gatewayOfferMetadata, error) {
+// typedOnly is the caller's enforcement decision, the one offers were loaded
+// under.
+func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID string, members []metaMember, offers map[uuid.UUID]configuredAuthOffer, typedOnly bool) (gatewayOfferMetadata, error) {
 	metadata := gatewayOfferMetadata{
 		headers:       nil,
 		source:        make(map[uuid.UUID][]proxy.ConfiguredHeader),
@@ -121,10 +123,6 @@ func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID s
 		if !proxy.IsCredentialHeader(row.Name, row.IsSecret, row.ValueFromRequestHeader.String != "") {
 			metadata.nonCredential[row.RemoteMcpServerID] = append(metadata.nonCredential[row.RemoteMcpServerID], header)
 		}
-	}
-	typedOnly, err := s.consentAuthChoicesEnforced(ctx, organizationID)
-	if err != nil {
-		return metadata, err
 	}
 	selections, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{Proposed: true, ProposedNoAuth: false, ProposeAllClients: true, CredentialID: uuid.Nil, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, CredentialKind: upstreamclients.CredentialKindUserSession, McpServerIds: serverIDs, OrganizationID: organizationID, TypedOnly: typedOnly})
 	if err != nil {

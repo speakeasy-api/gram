@@ -2170,6 +2170,14 @@ func (s *Service) mintSession(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
+	// A rotated session records no choices, so it reads nothing here.
+	typedChoices := false
+	if !params.CredentialID.Valid {
+		typedChoices, err = s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, logger)
+		}
+	}
 	return s.issueSession(ctx, clientRow, queries, sessionIssuance{
 		UserSessionIssuerID:    endpoint.UserSessionIssuerID,
 		ProjectID:              endpoint.ProjectID,
@@ -2192,6 +2200,7 @@ func (s *Service) mintSession(
 		UpstreamClientPicks:    params.UpstreamClientPicks,
 		AuthClientPicks:        params.AuthClientPicks,
 		Catalog:                params.Catalog,
+		TypedChoices:           typedChoices,
 	}, logger)
 }
 
@@ -2199,6 +2208,11 @@ func (s *Service) mintSession(
 // the caller has validated the request and settled the session's audience and
 // refresh behavior.
 type sessionIssuance struct {
+	// TypedChoices records the session's upstream choices from typed auth
+	// clients alone, as an organization that enforces them does. The caller
+	// reads it before any lock issuance runs under.
+	TypedChoices bool
+
 	// UserSessionIssuerID is the issuer the session row belongs to.
 	UserSessionIssuerID uuid.UUID
 
@@ -2387,10 +2401,7 @@ func (s *Service) issueSession(
 	}
 	// A rotated session keeps the choices its credential already has.
 	if !issuance.CredentialID.Valid {
-		typedOnly, err := s.consentAuthChoicesEnforced(ctx, issuance.OrganizationID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, logger)
-		}
+		typedOnly := issuance.TypedChoices
 		picks := usersessions_repo.RecordUpstreamClientSelectionsParams{
 			UserSessionIssuerID: issuance.UserSessionIssuerID,
 			CredentialKind:      upstreamclients.CredentialKindUserSession,

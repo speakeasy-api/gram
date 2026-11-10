@@ -2491,6 +2491,10 @@ ORDER BY tb.original_trigger_id;
 -- server's clients are the registrations of the live, enabled remote_session
 -- and service_account auth clients it offers, whichever issuer binds them,
 -- and no-auth is chosen when it offers no enabled OAuth-backed auth client.
+-- An offered ema client is OAuth-backed but is only ever recorded from a
+-- pick, so a server offering it alone gets no row. A client choice is
+-- recorded only with the auth client it names: when several offered clients
+-- share its registration, the choice is left to a reconnection.
 WITH session_issuer AS (
     SELECT usi.id,
            usi.project_id,
@@ -2788,6 +2792,9 @@ LEFT JOIN mcp_auth_clients AS named
 WHERE (chosen.id IS NOT NULL
        OR (d.remote_session_client_id IS NULL AND (auth_client.id IS NOT NULL OR d.no_auth)))
   AND (pick.auth_client_id IS NULL OR auth_client.id IS NOT NULL)
+  AND (NOT @typed_only::boolean
+       OR d.remote_session_client_id IS NULL
+       OR COALESCE(auth_client.id, named.id) IS NOT NULL)
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO UPDATE
 SET remote_session_client_id = EXCLUDED.remote_session_client_id,
     client_attachment_scope = EXCLUDED.client_attachment_scope,

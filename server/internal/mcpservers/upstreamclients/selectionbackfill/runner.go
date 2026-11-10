@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -153,6 +154,9 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 	}
 	q := New(db)
 	sessions := usersessionsrepo.New(db)
+	// Read once per organization, so a run records all of its credentials the
+	// way a new sign-in there would.
+	enforcedByOrganization := make(map[string]bool)
 	cursor := uuid.Nil
 	for {
 		credentials, err := q.ListLiveUserSessionCredentials(ctx, ListLiveUserSessionCredentialsParams{
@@ -186,6 +190,14 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 				}
 			}
 			if opts.Apply {
+				typedOnly, read := enforcedByOrganization[credential.OrganizationID]
+				if !read {
+					typedOnly, err = authenforcement.ReadEnforced(ctx, db, credential.OrganizationID)
+					if err != nil {
+						return report, fmt.Errorf("read upstream auth enforcement for credential %s: %w", credential.CredentialID, err)
+					}
+					enforcedByOrganization[credential.OrganizationID] = typedOnly
+				}
 				written, err := sessions.RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{
 					UserSessionIssuerID: credential.UserSessionIssuerID,
 					CredentialKind:      upstreamclients.CredentialKindUserSession,
@@ -195,7 +207,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 					PickedClientIds:     []uuid.UUID{},
 					PickedAuthClientIds: nil,
 					ScopeMcpServerIds:   nil,
-					TypedOnly:           false,
+					TypedOnly:           typedOnly,
 				})
 				if err != nil {
 					return report, fmt.Errorf("record selections for credential %s: %w", credential.CredentialID, err)

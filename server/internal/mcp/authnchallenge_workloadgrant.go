@@ -579,6 +579,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		UpstreamClientPicks:    nil,
 		AuthClientPicks:        nil,
 		Catalog:                nil,
+		TypedChoices:           false,
 	}
 }
 
@@ -717,6 +718,11 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		}
 		grant.session.UpstreamClientPicks = upstreamPicks
 		grant.session.AuthClientPicks = authClientPicks
+	}
+
+	grant.session.TypedChoices, err = s.consentAuthChoicesEnforced(authorizationCtx, organizationID)
+	if err != nil {
+		return nil, workloadGrantStageUnavailable("upstream_choice_unavailable", err)
 	}
 
 	// A database that cannot start or commit the transaction is an outage,

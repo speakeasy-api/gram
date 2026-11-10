@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -154,7 +155,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 	}
 	frozen.ApprovalChallengeID = state.ID
 	b := state.CodeReconnect
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	enforced, err := authenforcement.ReadEnforced(ctx, tx, endpoint.OrganizationID)
 	if err != nil {
 		return fail(err)
 	}

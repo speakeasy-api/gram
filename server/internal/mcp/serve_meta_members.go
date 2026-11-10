@@ -408,7 +408,8 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		}
 	}
 	if offers != nil {
-		offerMetadata, err = s.loadGatewayOfferMetadata(ctx, organizationID, members, offers)
+		// Offers are loaded only under enforcement.
+		offerMetadata, err = s.loadGatewayOfferMetadata(ctx, organizationID, members, offers, true)
 		if err != nil {
 			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway auth metadata").LogError(ctx, logger)
 		}

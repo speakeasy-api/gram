@@ -15,6 +15,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -182,10 +183,6 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	if err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "link sign-in").LogError(ctx, s.logger)
 	}
-	enforced, err := s.authEnforcement.Enforced(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, s.logger)
-	}
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -228,6 +225,10 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, s.logger)
+	}
+	enforced, err := authenforcement.ReadEnforced(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, s.logger)
 	}
 	if _, err := txRepo.RecordUpstreamClientSelections(ctx, repo.RecordUpstreamClientSelectionsParams{
 		UserSessionIssuerID: target.issuerID,

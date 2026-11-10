@@ -132,7 +132,7 @@ func TestGatewayOfferCapabilityDropsDeletedRegistration(t *testing.T) {
 		offers, err := f.service.configuredAuthOffers(t.Context(), f.orgID, []uuid.UUID{f.serverID})
 		require.NoError(t, err)
 		require.Len(t, offers[f.serverID].clients, 1)
-		metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, []metaMember{member}, offers)
+		metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, []metaMember{member}, offers, true)
 		require.NoError(t, err)
 		return gatewayOfferCapability(member, offers[f.serverID], metadata)
 	}
@@ -151,7 +151,7 @@ func TestGatewayOfferCapabilityTunneledHeaderClient(t *testing.T) {
 	offers, err := f.service.configuredAuthOffers(t.Context(), f.orgID, []uuid.UUID{f.serverID})
 	require.NoError(t, err)
 	member := metaMember{serverID: f.serverID, tunneledServerID: validUUID(uuid.New())}
-	metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, []metaMember{member}, offers)
+	metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, []metaMember{member}, offers, true)
 	require.NoError(t, err)
 	require.Contains(t, metadata.selections, [2]uuid.UUID{f.serverID, id})
 	require.False(t, gatewayOfferCapability(member, offers[f.serverID], metadata), "a tunnel cannot send the headers required for upstream authentication")
@@ -193,7 +193,7 @@ func TestConfiguredAuthOffersDoNotDecryptOrVetoAdminHeaders(t *testing.T) {
 	require.Equal(t, "configured", headers[id][0].StaticValue)
 	require.True(t, headers[id][0].IsSecret)
 	member := metaMember{serverID: f.serverID, remoteServerID: validUUID(f.remoteID)}
-	metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, []metaMember{member}, offers)
+	metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, []metaMember{member}, offers, true)
 	require.NoError(t, err)
 	supported := gatewayOfferCapability(member, offers[f.serverID], metadata)
 	require.True(t, supported, "administrator client replaces the source credential headers")
@@ -214,7 +214,7 @@ func TestConfiguredAuthOffersBackfillUsesLegacyHeaderSource(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, headers)
 	member := metaMember{serverID: f.serverID, remoteServerID: validUUID(f.remoteID)}
-	metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, []metaMember{member}, offers)
+	metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, []metaMember{member}, offers, true)
 	require.NoError(t, err)
 	supported := gatewayOfferCapability(member, offers[f.serverID], metadata)
 	require.False(t, supported, "stale backfill falls back to the source's required caller header")
@@ -247,7 +247,7 @@ func TestGatewayOfferMetadataBatchesMembersAndClients(t *testing.T) {
 	defer countedPool.Close()
 	f.service.db = countedPool
 	f.service.enc = nil
-	metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, members, offers)
+	metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, members, offers, true)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, tracer.queries.Load(), "header and selection reads are constant, not per member or client")
 	require.Len(t, metadata.selections, 6)
@@ -256,13 +256,14 @@ func TestGatewayOfferMetadataBatchesMembersAndClients(t *testing.T) {
 		for _, client := range offers[member.serverID].clients {
 			single, err := upstreamclientsrepo.New(pool).GetAuthClientSelection(t.Context(), upstreamclientsrepo.GetAuthClientSelectionParams{
 				Proposed: true, ProposedAuthClientID: client.AuthClientID, McpServerIds: []uuid.UUID{member.serverID}, OrganizationID: f.orgID,
+				TypedOnly: true,
 			})
 			require.NoError(t, err)
 			require.Len(t, single, 1)
 			require.Equal(t, single[0], metadata.selections[[2]uuid.UUID{member.serverID, client.AuthClientID.UUID}], "batch must preserve the serving resolver's decision inputs")
 		}
 	}
-	other, err := f.service.loadGatewayOfferMetadata(t.Context(), "org_other", members, offers)
+	other, err := f.service.loadGatewayOfferMetadata(t.Context(), "org_other", members, offers, true)
 	require.NoError(t, err)
 	require.Empty(t, other.source)
 	require.Empty(t, other.headers)
@@ -296,7 +297,7 @@ func TestGatewayOfferMetadataDetachedClientRetainsSourceRequirements(t *testing.
 	require.False(t, offers[f.serverID].pending, "a historical link suppresses pending despite remaining source headers")
 	f.service.enc = nil
 	member := metaMember{serverID: f.serverID, remoteServerID: validUUID(f.remoteID)}
-	metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, []metaMember{member}, offers)
+	metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, []metaMember{member}, offers, true)
 	require.NoError(t, err)
 	require.Len(t, metadata.source[f.remoteID], 2)
 	supported, _ := remoteMemberAuth(metadata.source[f.remoteID], false)

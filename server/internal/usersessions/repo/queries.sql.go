@@ -5116,7 +5116,7 @@ WITH session_issuer AS (
            COALESCE(usi.organization_id, p.organization_id) AS organization_id
     FROM user_session_issuers AS usi
     LEFT JOIN projects AS p ON p.id = usi.project_id
-    WHERE usi.id = $4
+    WHERE usi.id = $5
       AND usi.deleted IS FALSE
 ),
 reachable AS (
@@ -5128,8 +5128,8 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
-      AND ($5::uuid[] IS NULL
-           OR s.id = ANY($5::uuid[]))
+      AND ($6::uuid[] IS NULL
+           OR s.id = ANY($6::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -5148,9 +5148,9 @@ reachable AS (
 ),
 picked AS (
     -- The consent page's pick for each server, as parallel arrays.
-    SELECT unnest($6::uuid[]) AS mcp_server_id,
-           unnest($7::uuid[]) AS remote_session_client_id,
-           NULLIF(unnest($8::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
+    SELECT unnest($7::uuid[]) AS mcp_server_id,
+           unnest($8::uuid[]) AS remote_session_client_id,
+           NULLIF(unnest($9::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
 ),
 eligible AS (
     SELECT a.mcp_server_id,
@@ -5163,9 +5163,9 @@ eligible AS (
      AND c.deleted IS FALSE
     JOIN remote_session_client_user_session_issuers AS link
       ON link.remote_session_client_id = a.remote_session_client_id
-     AND link.user_session_issuer_id = $4
+     AND link.user_session_issuer_id = $5
     WHERE a.deleted IS FALSE
-      AND NOT $9::boolean
+      AND NOT $4::boolean
     UNION ALL
     SELECT DISTINCT l.mcp_server_id,
            ac.remote_session_client_id
@@ -5184,7 +5184,7 @@ eligible AS (
      AND c.deleted IS FALSE
     WHERE l.deleted IS FALSE
       AND l.organization_id = (SELECT organization_id FROM session_issuer)
-      AND $9::boolean
+      AND $4::boolean
 ),
 decided AS (
     SELECT r.id AS mcp_server_id,
@@ -5224,7 +5224,7 @@ decided AS (
                LIMIT 1
              )
            ) END AS remote_session_client_id,
-           CASE WHEN $9::boolean THEN NOT EXISTS (
+           CASE WHEN $4::boolean THEN NOT EXISTS (
              SELECT 1
              FROM mcp_server_auth_clients AS l
              JOIN mcp_auth_clients AS ac
@@ -5393,6 +5393,9 @@ LEFT JOIN mcp_auth_clients AS named
 WHERE (chosen.id IS NOT NULL
        OR (d.remote_session_client_id IS NULL AND (auth_client.id IS NOT NULL OR d.no_auth)))
   AND (pick.auth_client_id IS NULL OR auth_client.id IS NOT NULL)
+  AND (NOT $4::boolean
+       OR d.remote_session_client_id IS NULL
+       OR COALESCE(auth_client.id, named.id) IS NOT NULL)
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO UPDATE
 SET remote_session_client_id = EXCLUDED.remote_session_client_id,
     client_attachment_scope = EXCLUDED.client_attachment_scope,
@@ -5411,12 +5414,12 @@ type RecordUpstreamClientSelectionsParams struct {
 	CredentialKind      string
 	CredentialID        uuid.UUID
 	Source              string
+	TypedOnly           bool
 	UserSessionIssuerID uuid.UUID
 	ScopeMcpServerIds   []uuid.UUID
 	PickedMcpServerIds  []uuid.UUID
 	PickedClientIds     []uuid.UUID
 	PickedAuthClientIds []uuid.UUID
-	TypedOnly           bool
 }
 
 // Records, for one inbound credential, the upstream OAuth client it uses for
@@ -5468,6 +5471,10 @@ type RecordUpstreamClientSelectionsParams struct {
 // server's clients are the registrations of the live, enabled remote_session
 // and service_account auth clients it offers, whichever issuer binds them,
 // and no-auth is chosen when it offers no enabled OAuth-backed auth client.
+// An offered ema client is OAuth-backed but is only ever recorded from a
+// pick, so a server offering it alone gets no row. A client choice is
+// recorded only with the auth client it names: when several offered clients
+// share its registration, the choice is left to a reconnection.
 // The typed auth client each decided choice names, by the rule the auth
 // client backfill maps recorded choices with, so a choice recorded now is the
 // choice the backfill would map: a client choice names the live, enabled
@@ -5487,12 +5494,12 @@ func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg Record
 		arg.CredentialKind,
 		arg.CredentialID,
 		arg.Source,
+		arg.TypedOnly,
 		arg.UserSessionIssuerID,
 		arg.ScopeMcpServerIds,
 		arg.PickedMcpServerIds,
 		arg.PickedClientIds,
 		arg.PickedAuthClientIds,
-		arg.TypedOnly,
 	)
 	if err != nil {
 		return 0, err

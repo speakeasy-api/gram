@@ -34,7 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -60,9 +59,6 @@ type Service struct {
 	authz             *authz.Engine
 	chatSessions      TokenRevoker
 	audit             *audit.Logger
-	// authEnforcement says which organizations have upstream auth enforcement
-	// enabled, whose choices are recorded from typed auth clients alone.
-	authEnforcement *authenforcement.Gate
 	// signer mints the user-session JWT returned by mintUserSession. Same
 	// signer the /mcp/{slug}/token handler uses, so the resulting JWTs
 	// validate through the runtime gateway by the existing user-session
@@ -139,7 +135,6 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		authz:             authzEngine,
 		chatSessions:      chatSessionsManager,
 		audit:             auditLogger,
-		authEnforcement:   authenforcement.NewGate(db),
 		signer:            signer,
 		serverURL:         serverURL,
 		sharedHosts:       sharedHosts,
