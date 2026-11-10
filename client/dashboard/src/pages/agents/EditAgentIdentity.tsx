@@ -40,12 +40,11 @@ export default function EditAgentIdentity(): JSX.Element {
   const [params] = useSearchParams();
   const step = Number(params.get("step") ?? "");
   if (!Number.isInteger(step) || step < AGENT_SIGN_IN_STEP) {
-    const view = step === 1 ? "?view=servers" : "";
     return (
       <Navigate
-        to={`${routes.identities.detail.mcpSignIn.href(
+        to={routes.identities.detail.mcpSignIn.href(
           encodeIdentityUrn(`agent:${agentId}`),
-        )}${view}`}
+        )}
         replace
       />
     );

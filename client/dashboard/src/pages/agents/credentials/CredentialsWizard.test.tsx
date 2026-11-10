@@ -3750,7 +3750,7 @@ describe("The MCP sign-in tab", () => {
     },
   ] as never;
 
-  function tab(initialEditView?: "servers" | "sign-in") {
+  function tab() {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -3761,7 +3761,6 @@ describe("The MCP sign-in tab", () => {
           <CredentialsWizard
             agent={agent}
             section
-            initialEditView={initialEditView}
             grants={grants}
             onDone={(id) => {
               onDone(id);
@@ -3801,11 +3800,11 @@ describe("The MCP sign-in tab", () => {
     expect(screen.queryByText("This step")).toBeNull();
   });
 
-  it("opens the server picker for links that came to change the servers", async () => {
-    tab("servers");
-    expect(
-      await screen.findByRole("heading", { name: "MCP Selection" }),
-    ).toBeTruthy();
+  it("opens on the sign-in view, with the picker closed", async () => {
+    tab();
+    await screen.findByRole("button", { name: "Change servers" });
+    expect(screen.queryByRole("heading", { name: "MCP Selection" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("saves the servers on Continue, back on their sign-in", async () => {

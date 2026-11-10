@@ -326,7 +326,6 @@ export function CredentialsWizard({
   editing: editingProp = false,
   signInOnly = false,
   section = false,
-  initialEditView = "sign-in",
   grants,
   onDone,
   onBusy,
@@ -360,8 +359,6 @@ export function CredentialsWizard({
    * Continue from the picker, on removing a server, and on a new connection.
    */
   section?: boolean;
-  /** Which of the tab's two views opens first. */
-  initialEditView?: "servers" | "sign-in";
   /** The servers the agent already reaches, for the editing flow. */
   grants?: AgentPolicyGrant[];
   /**
@@ -481,9 +478,8 @@ export function CredentialsWizard({
     linked === null || linked.trim() === "" ? Number.NaN : Number(linked);
   // Editing is a tab on the agent's page, not a flow with an address per
   // step: it has two views, and which one is open is only this page's.
-  const [editStep, setEditStep] = useState(
-    initialEditView === "servers" ? SERVERS_STEP : SIGN_IN_STEP,
-  );
+  // It opens on the sign-in view; the picker opens only from its button.
+  const [editStep, setEditStep] = useState(SIGN_IN_STEP);
   const urlStep =
     Number.isInteger(fromUrl) && fromUrl >= 0 ? fromUrl : defaultStep;
   const step = section ? editStep : urlStep;

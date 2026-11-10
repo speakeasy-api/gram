@@ -1,4 +1,3 @@
-import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 
 import { InlineEmptyState } from "@/components/inline-empty-state";
@@ -17,8 +16,8 @@ import { useQueryClient } from "@tanstack/react-query";
  * signs in to each. The same views the setup wizard shows for these two
  * questions, without walking the rest of setup again.
  *
- * `?view=servers` opens the server picker, for links that came to change
- * which servers there are rather than how they sign in.
+ * It always opens on the servers and their sign-in. The picker opens only
+ * from its own button: links land on the tab, never on a dialog.
  */
 export function AgentMcpSignIn({
   agent,
@@ -29,7 +28,6 @@ export function AgentMcpSignIn({
   refresh: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const [params] = useSearchParams();
   const grants = useAgentsListPolicyGrants({ agentId: agent.id }, undefined, {
     throwOnError: false,
     enabled: agent.permissions.write,
@@ -67,9 +65,6 @@ export function AgentMcpSignIn({
       <CredentialsWizard
         agent={agent}
         section
-        initialEditView={
-          params.get("view") === "servers" ? "servers" : "sign-in"
-        }
         grants={grants.data}
         // Each change saves as it is made. The views keep what they saved as
         // their baseline, so the next save diffs against it; the agent and

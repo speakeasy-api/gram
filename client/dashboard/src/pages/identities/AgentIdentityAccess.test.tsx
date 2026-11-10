@@ -278,9 +278,7 @@ describe("Agent profile permissions", () => {
     expect(titles).toEqual(["MCP servers", "Other permissions"]);
     expect(
       screen.getByRole("link", { name: "Change servers" }).getAttribute("href"),
-    ).toMatch(
-      /\/identities\/agent%3Aagent_example\/mcp-sign-in\?view=servers$/,
-    );
+    ).toMatch(/\/identities\/agent%3Aagent_example\/mcp-sign-in$/);
     expect(screen.getAllByText("mcp:connect")).toHaveLength(1);
     expect(screen.getByText("project:read")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Edit permissions" }));
