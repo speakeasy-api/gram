@@ -152,15 +152,16 @@ func (c *requestConnections) upstreamFailureHappened(status int, sent, response 
 }
 
 // CredentialRejected reports whether a provider's answer rejected the credential: a 401, or a 403
-// whose challenge says error="invalid_token" (RFC 6750 §3.1). A 403 for insufficient_scope, or with
-// no such challenge, is a permission answer from a working credential.
+// whose Bearer or DPoP challenge says error="invalid_token" (RFC 6750 §3.1, RFC 9449 §7.1). A 403
+// for insufficient_scope, or with no such challenge, is a permission answer from a working credential.
 func CredentialRejected(status int, wwwAuthenticate []string) bool {
 	switch status {
 	case http.StatusUnauthorized:
 		return true
 	case http.StatusForbidden:
 		return slices.ContainsFunc(authParams(wwwAuthenticate), func(p authParam) bool {
-			return strings.EqualFold(p.name, "error") && strings.EqualFold(p.value, "invalid_token")
+			return (strings.EqualFold(p.scheme, "Bearer") || strings.EqualFold(p.scheme, "DPoP")) &&
+				strings.EqualFold(p.name, "error") && strings.EqualFold(p.value, "invalid_token")
 		})
 	}
 	return false

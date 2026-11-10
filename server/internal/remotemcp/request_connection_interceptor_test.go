@@ -839,6 +839,7 @@ func TestCredentialRejected(t *testing.T) {
 		{name: "403 invalid token in a later challenge", status: http.StatusForbidden, challenge: []string{`Basic realm="api", DPoP error="invalid_token", algs="ES256"`}, want: true},
 		{name: "403 invalid token in a second header", status: http.StatusForbidden, challenge: []string{`Basic realm="api"`, `Bearer error="invalid_token"`}, want: true},
 		{name: "403 invalid token only inside a quoted value", status: http.StatusForbidden, challenge: []string{`Bearer error_description="not error=invalid_token", error="insufficient_scope"`}, want: false},
+		{name: "403 invalid token on another scheme", status: http.StatusForbidden, challenge: []string{`ApiKey error="invalid_token"`}, want: false},
 		{name: "404", status: http.StatusNotFound, challenge: []string{`Bearer error="invalid_token"`}, want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
