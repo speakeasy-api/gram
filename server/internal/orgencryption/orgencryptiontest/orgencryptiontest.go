@@ -95,8 +95,9 @@ func New(t *testing.T, conn *pgxpool.Pool) *Fixture {
 	t.Helper()
 
 	return NewWithConfig(t, conn, orgencryption.ProvisionerConfig{
-		Keys:              orgencryption.KeyConfig{KeyRing: "", PlatformCredentialID: uuid.Nil, PlatformServiceAccount: ""},
-		SwitchGracePeriod: 0,
+		Keys:                orgencryption.KeyConfig{KeyRing: "", PlatformCredentialID: uuid.Nil, PlatformServiceAccount: ""},
+		SwitchGracePeriod:   0,
+		ManagedKeyRetention: 0,
 	})
 }
 

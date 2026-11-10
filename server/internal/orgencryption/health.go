@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -69,6 +70,9 @@ func (p *Provisioner) checkConfig(ctx context.Context, logger *slog.Logger, conf
 
 	_, currentErr := p.probeKey(ctx, logger, organizationID, config.KekExternalKeyID)
 	if currentErr != nil {
+		if rolledBack, err := p.rollBackBrokenSwitch(ctx, logger, config, currentErr); rolledBack || err != nil {
+			return err
+		}
 		if permanentKeyFailure(currentErr) && ConfigState(config.State) != ConfigStateSuspended {
 			logger.WarnContext(ctx, "suspending organization encryption: key encryption key is unusable", attr.SlogError(currentErr))
 			if err := p.Suspend(ctx, organizationID, currentErr.Error(), SystemActor()); err != nil {
@@ -100,6 +104,28 @@ func (p *Provisioner) checkConfig(ctx context.Context, logger *slog.Logger, conf
 	}
 
 	return previousErr
+}
+
+// rollBackBrokenSwitch handles a switch whose new KEK failed permanently. While
+// the previous KEK still unwraps every DEK, the organization goes back to it
+// instead of being suspended: reads already fall back to the previous KEK, and
+// suspending would block them for a fault the rollback avoids. The customer can
+// switch again once the new key's access is fixed. It reports whether it
+// rolled back; with false and no error, the caller handles currentErr.
+func (p *Provisioner) rollBackBrokenSwitch(ctx context.Context, logger *slog.Logger, config repo.OrganizationEncryptionConfig, currentErr error) (bool, error) {
+	if ConfigState(config.State) != ConfigStateSwitching || !config.PreviousKekExternalKeyID.Valid || !permanentKeyFailure(currentErr) {
+		return false, nil
+	}
+	if _, err := p.probeKey(ctx, logger, config.OrganizationID, config.PreviousKekExternalKeyID.UUID); err != nil {
+		return false, nil
+	}
+
+	logger.WarnContext(ctx, "rolling back organization encryption key switch: new key encryption key is unusable", attr.SlogError(currentErr))
+	if _, err := p.RollbackSwitch(ctx, config.OrganizationID, SystemActor()); err != nil {
+		return false, errors.Join(currentErr, fmt.Errorf("roll back switch to unusable key: %w", err))
+	}
+
+	return true, fmt.Errorf("rolled back the key switch because the new key is unusable: %w", currentErr)
 }
 
 // probeKey unwraps every DEK wrapped by keyID and re-wraps any whose wrap was
@@ -205,12 +231,14 @@ func (p *Provisioner) CheckDue(ctx context.Context, interval time.Duration, page
 	return checked, nil
 }
 
-// SweepManagedKeys disables managed KEKs nothing depends on any more and
-// removes the platform grant on them. It returns how many it disabled.
+// SweepManagedKeys disables managed KEKs nothing has depended on for the
+// managed key retention and removes the platform grant on them. It returns
+// how many it disabled.
 func (p *Provisioner) SweepManagedKeys(ctx context.Context, pageSize int32) (int, error) {
 	q := repo.New(p.db)
+	retiredBefore := conv.ToPGTimestamptz(p.now().Add(-p.cfg.ManagedKeyRetention))
 
-	rows, err := q.ListManagedEncryptionKeysPendingDisable(ctx, pageSize)
+	rows, err := q.ListManagedEncryptionKeysPendingDisable(ctx, repo.ListManagedEncryptionKeysPendingDisableParams{RetiredBefore: retiredBefore, PageSize: pageSize})
 	if err != nil {
 		return 0, fmt.Errorf("list managed encryption keys pending disable: %w", err)
 	}
@@ -227,7 +255,7 @@ func (p *Provisioner) SweepManagedKeys(ctx context.Context, pageSize int32) (int
 	disabled := 0
 	var errs []error
 	for _, row := range rows {
-		done, err := p.disableManagedKey(ctx, client, row)
+		done, err := p.disableManagedKey(ctx, client, row, retiredBefore)
 		if err != nil {
 			p.logger.WarnContext(ctx, "disable unused managed encryption key", attr.SlogOrganizationID(row.OrganizationID), attr.SlogError(err))
 			errs = append(errs, err)
@@ -248,7 +276,7 @@ func (p *Provisioner) SweepManagedKeys(ctx context.Context, pageSize int32) (int
 // The KMS calls run inside the transaction: holding one organization's lock
 // for two management calls is cheap next to disabling a key in use.
 // It reports whether it disabled the key.
-func (p *Provisioner) disableManagedKey(ctx context.Context, client gcpkms.EncryptionProvisioningClient, row repo.ListManagedEncryptionKeysPendingDisableRow) (bool, error) {
+func (p *Provisioner) disableManagedKey(ctx context.Context, client gcpkms.EncryptionProvisioningClient, row repo.ListManagedEncryptionKeysPendingDisableRow, retiredBefore pgtype.Timestamptz) (bool, error) {
 	if err := p.keys.checkManagedResource(row.ResourceName); err != nil {
 		return false, err
 	}
@@ -263,7 +291,7 @@ func (p *Provisioner) disableManagedKey(ctx context.Context, client gcpkms.Encry
 	if err := lockOrganization(ctx, q, row.OrganizationID); err != nil {
 		return false, err
 	}
-	unused, err := q.ManagedEncryptionKeyIsUnused(ctx, repo.ManagedEncryptionKeyIsUnusedParams{ExternalKeyID: row.ExternalKeyID, OrganizationID: row.OrganizationID})
+	unused, err := q.ManagedEncryptionKeyIsUnused(ctx, repo.ManagedEncryptionKeyIsUnusedParams{ExternalKeyID: row.ExternalKeyID, OrganizationID: row.OrganizationID, RetiredBefore: retiredBefore})
 	if err != nil {
 		return false, fmt.Errorf("re-check managed encryption key use: %w", err)
 	}

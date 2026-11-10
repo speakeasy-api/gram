@@ -274,8 +274,11 @@ WHERE c.deleted IS FALSE
 ORDER BY c.last_kek_check_at NULLS FIRST, c.organization_id
 LIMIT @page_size;
 
--- Managed KEKs nothing depends on any more: no live configuration names them
--- and no live wrap uses them. Their KMS key is disabled by the sweep.
+-- Managed KEKs nothing depends on any more: no live configuration names them,
+-- no live wrap uses them, and no wrap under them was dropped after
+-- @retired_before. The retention keeps a key that just stopped protecting data
+-- enabled for a while, so a completed switch can still be undone by restoring
+-- the wraps. Their KMS key is disabled by the sweep.
 -- name: ListManagedEncryptionKeysPendingDisable :many
 SELECT mek.external_key_id, mek.organization_id, gcp.resource_name
 FROM managed_encryption_keys AS mek
@@ -291,14 +294,14 @@ WHERE mek.kms_disabled_at IS NULL
     SELECT 1 FROM data_encryption_key_wraps AS w
     WHERE w.organization_id = mek.organization_id
       AND w.external_key_id = mek.external_key_id
-      AND w.deleted IS FALSE
+      AND (w.deleted IS FALSE OR w.deleted_at > @retired_before::timestamptz)
   )
 ORDER BY mek.external_key_id
 LIMIT @page_size;
 
--- Re-checks, under the organization lock, that a managed KEK is still unused
--- and not yet disabled, so the sweep never disables a key a concurrent switch
--- just started using.
+-- Re-checks, under the organization lock, that a managed KEK is still unused,
+-- past its retention, and not yet disabled, so the sweep never disables a key
+-- a concurrent switch just started using.
 -- name: ManagedEncryptionKeyIsUnused :one
 SELECT EXISTS (
   SELECT 1
@@ -316,7 +319,7 @@ SELECT EXISTS (
       SELECT 1 FROM data_encryption_key_wraps AS w
       WHERE w.organization_id = mek.organization_id
         AND w.external_key_id = mek.external_key_id
-        AND w.deleted IS FALSE
+        AND (w.deleted IS FALSE OR w.deleted_at > @retired_before::timestamptz)
     )
 ) AS unused;
 

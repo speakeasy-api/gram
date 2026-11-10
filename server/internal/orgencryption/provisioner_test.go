@@ -139,7 +139,7 @@ func TestRotateDataKey_KeepsOldValuesReadable(t *testing.T) {
 func TestSwitchKey_MovesToACustomerKeyWithoutRewritingValues(t *testing.T) {
 	t.Parallel()
 
-	ti := newTestInstance(t)
+	ti := newTestInstanceWithoutRetention(t)
 	ti.provision(t)
 	managed := ti.config(t).KekExternalKeyID
 
@@ -244,8 +244,9 @@ func TestCheck_SuspendsWhenTheKeyIsDisabledAndCompletesAfterGrace(t *testing.T) 
 	t.Parallel()
 
 	ti := newTestInstanceWithConfig(t, orgencryption.ProvisionerConfig{
-		Keys:              orgencryption.KeyConfig{KeyRing: "", PlatformCredentialID: uuid.Nil, PlatformServiceAccount: ""},
-		SwitchGracePeriod: time.Nanosecond,
+		Keys:                orgencryption.KeyConfig{KeyRing: "", PlatformCredentialID: uuid.Nil, PlatformServiceAccount: ""},
+		SwitchGracePeriod:   time.Nanosecond,
+		ManagedKeyRetention: 0,
 	})
 	ti.provision(t)
 
@@ -287,7 +288,7 @@ func TestCheckDue_ChecksEachOrganizationOnce(t *testing.T) {
 func TestSwitchKey_RefusesASweptManagedKey(t *testing.T) {
 	t.Parallel()
 
-	ti := newTestInstance(t)
+	ti := newTestInstanceWithoutRetention(t)
 	ti.provision(t)
 	managed := ti.config(t).KekExternalKeyID
 
@@ -307,4 +308,79 @@ func TestSwitchKey_RefusesASweptManagedKey(t *testing.T) {
 	disabled, err = ti.fixture.Provisioner.SweepManagedKeys(t.Context(), 10)
 	require.NoError(t, err)
 	require.Zero(t, disabled, "a disabled key is not swept twice")
+}
+
+func TestSweepManagedKeys_KeepsARecentlyRetiredKeyEnabled(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	ti.provision(t)
+	managed := ti.config(t).KekExternalKeyID
+
+	customer := orgencryptiontest.CreateCustomerKey(t, ti.conn, ti.orgID, "customer-kek")
+	_, err := ti.fixture.Provisioner.SwitchKey(t.Context(), ti.orgID, customer, orgencryption.SystemActor())
+	require.NoError(t, err)
+	_, err = ti.fixture.Provisioner.CompleteSwitch(t.Context(), ti.orgID, orgencryption.SystemActor())
+	require.NoError(t, err)
+	require.Zero(t, ti.wrapsUnder(t, managed))
+
+	disabled, err := ti.fixture.Provisioner.SweepManagedKeys(t.Context(), 10)
+	require.NoError(t, err)
+	require.Zero(t, disabled, "a managed KEK whose wraps were just dropped stays enabled for the retention")
+
+	_, err = ti.fixture.Provisioner.SwitchKey(t.Context(), ti.orgID, managed, orgencryption.SystemActor())
+	require.NoError(t, err, "the retained managed KEK can still be switched back to")
+}
+
+func TestCheck_RollsBackASwitchToAKeyThatStoppedWorking(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	ti.provision(t)
+	managed := ti.config(t).KekExternalKeyID
+
+	ciphertext, err := ti.encryptor(t).Encrypt(t.Context(), column, []byte("secret"))
+	require.NoError(t, err)
+
+	customer := orgencryptiontest.CreateCustomerKey(t, ti.conn, ti.orgID, "customer-kek")
+	_, err = ti.fixture.Provisioner.SwitchKey(t.Context(), ti.orgID, customer, orgencryption.SystemActor())
+	require.NoError(t, err)
+
+	require.NoError(t, ti.fixture.KMS.DisableEncryptionKey(t.Context(), orgencryptiontest.CustomerKeyName("customer-kek")))
+	require.Error(t, ti.fixture.Provisioner.Check(t.Context(), ti.orgID), "the rollback is recorded as the check's error")
+
+	config := ti.config(t)
+	require.Equal(t, string(orgencryption.ConfigStateActive), config.State, "the organization is not suspended")
+	require.Equal(t, managed, config.KekExternalKeyID)
+	require.Equal(t, string(orgencryption.ModeSpeakeasyManaged), config.Mode)
+	require.False(t, config.PreviousKekExternalKeyID.Valid)
+	require.True(t, config.LastKekCheckError.Valid)
+	require.Zero(t, ti.wrapsUnder(t, customer))
+
+	plaintext, err := ti.freshDecrypt(t, ciphertext)
+	require.NoError(t, err)
+	require.Equal(t, "secret", string(plaintext))
+
+	require.NoError(t, ti.fixture.Provisioner.Check(t.Context(), ti.orgID), "the next probe is clean")
+	require.False(t, ti.config(t).LastKekCheckError.Valid)
+}
+
+func TestCheck_SuspendsAMidSwitchOrganizationWhenBothKeysFail(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	ti.provision(t)
+	managed := ti.config(t).KekExternalKeyID
+
+	customer := orgencryptiontest.CreateCustomerKey(t, ti.conn, ti.orgID, "customer-kek")
+	_, err := ti.fixture.Provisioner.SwitchKey(t.Context(), ti.orgID, customer, orgencryption.SystemActor())
+	require.NoError(t, err)
+
+	require.NoError(t, ti.fixture.KMS.DisableEncryptionKey(t.Context(), orgencryptiontest.CustomerKeyName("customer-kek")))
+	require.NoError(t, ti.fixture.KMS.DisableEncryptionKey(t.Context(), ti.keyResource(t, managed)))
+	require.Error(t, ti.fixture.Provisioner.Check(t.Context(), ti.orgID))
+
+	config := ti.config(t)
+	require.Equal(t, string(orgencryption.ConfigStateSuspended), config.State, "with no usable key there is nothing to roll back to")
+	require.Equal(t, customer, config.KekExternalKeyID)
 }

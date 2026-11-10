@@ -11,6 +11,7 @@ const (
 	orgEncryptionCredentialIDFlag       = "org-encryption-credential-id"
 	orgEncryptionServiceAccountFlag     = "org-encryption-service-account"
 	orgEncryptionSwitchGracePeriodFlag  = "org-encryption-switch-grace-period"
+	orgEncryptionManagedKeyRetention    = "org-encryption-managed-key-retention"
 	orgEncryptionKMSKeyRingLocalDefault = "projects/gram-local/locations/global/keyRings/org-encryption"
 )
 
@@ -36,6 +37,12 @@ func orgEncryptionFlags() []cli.Flag {
 			Usage:   "How long a switch to another organization encryption key keeps the previous key readable before it completes.",
 			EnvVars: []string{"GRAM_ORG_ENCRYPTION_SWITCH_GRACE_PERIOD"},
 			Value:   orgencryption.DefaultSwitchGracePeriod,
+		},
+		&cli.DurationFlag{
+			Name:    orgEncryptionManagedKeyRetention,
+			Usage:   "How long a Speakeasy-managed organization encryption key stays enabled after it stops protecting data, before it is disabled.",
+			EnvVars: []string{"GRAM_ORG_ENCRYPTION_MANAGED_KEY_RETENTION"},
+			Value:   orgencryption.DefaultManagedKeyRetention,
 		},
 	}
 }

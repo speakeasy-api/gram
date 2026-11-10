@@ -29,10 +29,18 @@ import (
 
 const (
 	// DefaultSwitchGracePeriod is how long a KEK switch keeps the previous
-	// KEK's wraps before the health probe completes it. A day leaves time for
-	// every process to unwrap under the new KEK, and for a customer to notice a
-	// misconfigured grant and roll back, before the old wraps are dropped.
-	DefaultSwitchGracePeriod = 24 * time.Hour
+	// KEK's wraps before the health probe completes it. A week spans a weekend
+	// or a holiday, so a customer who breaks the new key's grant after the
+	// switch can still roll back before the old wraps are dropped. Keeping the
+	// previous KEK readable that long costs little: completing a switch does
+	// not remove exposure to the previous KEK, since its wraps are only
+	// soft-deleted and the DEKs are unchanged.
+	DefaultSwitchGracePeriod = 7 * 24 * time.Hour
+
+	// DefaultManagedKeyRetention is how long a managed KEK stays enabled after
+	// its last wrap was dropped, before the sweep disables it. It keeps a
+	// completed switch recoverable by restoring the soft-deleted wraps.
+	DefaultManagedKeyRetention = 7 * 24 * time.Hour
 
 	// managedKeyName is the external_keys.name of a managed KEK.
 	managedKeyName = "Speakeasy-managed organization encryption key"
@@ -72,6 +80,10 @@ type ProvisionerConfig struct {
 	// SwitchGracePeriod is how long a switch keeps the previous KEK's wraps.
 	// Zero means DefaultSwitchGracePeriod.
 	SwitchGracePeriod time.Duration
+
+	// ManagedKeyRetention is how long an unused managed KEK stays enabled.
+	// Zero means DefaultManagedKeyRetention.
+	ManagedKeyRetention time.Duration
 }
 
 // Provisioner creates and manages organization KEKs and DEKs. Its operations
@@ -96,6 +108,9 @@ func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, identity *gcpauth.Ide
 	}
 	if cfg.SwitchGracePeriod <= 0 {
 		cfg.SwitchGracePeriod = DefaultSwitchGracePeriod
+	}
+	if cfg.ManagedKeyRetention <= 0 {
+		cfg.ManagedKeyRetention = DefaultManagedKeyRetention
 	}
 
 	return &Provisioner{

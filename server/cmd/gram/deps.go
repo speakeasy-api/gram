@@ -1921,8 +1921,9 @@ func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, 
 	}
 
 	provisioner, err := orgencryption.NewProvisioner(logger, db, gcpIdentity, clients, provisioning, auditLogger, service, orgencryption.ProvisionerConfig{
-		Keys:              keys,
-		SwitchGracePeriod: c.Duration(orgEncryptionSwitchGracePeriodFlag),
+		Keys:                keys,
+		SwitchGracePeriod:   c.Duration(orgEncryptionSwitchGracePeriodFlag),
+		ManagedKeyRetention: c.Duration(orgEncryptionManagedKeyRetention),
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("build organization encryption provisioner: %w", err)

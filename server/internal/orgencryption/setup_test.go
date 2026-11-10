@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -54,8 +55,21 @@ func newTestInstance(t *testing.T) *testInstance {
 	t.Helper()
 
 	return newTestInstanceWithConfig(t, orgencryption.ProvisionerConfig{
-		Keys:              orgencryption.KeyConfig{KeyRing: "", PlatformCredentialID: uuid.Nil, PlatformServiceAccount: ""},
-		SwitchGracePeriod: 0,
+		Keys:                orgencryption.KeyConfig{KeyRing: "", PlatformCredentialID: uuid.Nil, PlatformServiceAccount: ""},
+		SwitchGracePeriod:   0,
+		ManagedKeyRetention: 0,
+	})
+}
+
+// newTestInstanceWithoutRetention disables an unused managed KEK on the first
+// sweep instead of after the retention.
+func newTestInstanceWithoutRetention(t *testing.T) *testInstance {
+	t.Helper()
+
+	return newTestInstanceWithConfig(t, orgencryption.ProvisionerConfig{
+		Keys:                orgencryption.KeyConfig{KeyRing: "", PlatformCredentialID: uuid.Nil, PlatformServiceAccount: ""},
+		SwitchGracePeriod:   0,
+		ManagedKeyRetention: time.Nanosecond,
 	})
 }
 

@@ -668,11 +668,16 @@ WHERE mek.kms_disabled_at IS NULL
     SELECT 1 FROM data_encryption_key_wraps AS w
     WHERE w.organization_id = mek.organization_id
       AND w.external_key_id = mek.external_key_id
-      AND w.deleted IS FALSE
+      AND (w.deleted IS FALSE OR w.deleted_at > $1::timestamptz)
   )
 ORDER BY mek.external_key_id
-LIMIT $1
+LIMIT $2
 `
+
+type ListManagedEncryptionKeysPendingDisableParams struct {
+	RetiredBefore pgtype.Timestamptz
+	PageSize      int32
+}
 
 type ListManagedEncryptionKeysPendingDisableRow struct {
 	ExternalKeyID  uuid.UUID
@@ -680,10 +685,13 @@ type ListManagedEncryptionKeysPendingDisableRow struct {
 	ResourceName   string
 }
 
-// Managed KEKs nothing depends on any more: no live configuration names them
-// and no live wrap uses them. Their KMS key is disabled by the sweep.
-func (q *Queries) ListManagedEncryptionKeysPendingDisable(ctx context.Context, pageSize int32) ([]ListManagedEncryptionKeysPendingDisableRow, error) {
-	rows, err := q.db.Query(ctx, listManagedEncryptionKeysPendingDisable, pageSize)
+// Managed KEKs nothing depends on any more: no live configuration names them,
+// no live wrap uses them, and no wrap under them was dropped after
+// @retired_before. The retention keeps a key that just stopped protecting data
+// enabled for a while, so a completed switch can still be undone by restoring
+// the wraps. Their KMS key is disabled by the sweep.
+func (q *Queries) ListManagedEncryptionKeysPendingDisable(ctx context.Context, arg ListManagedEncryptionKeysPendingDisableParams) ([]ListManagedEncryptionKeysPendingDisableRow, error) {
+	rows, err := q.db.Query(ctx, listManagedEncryptionKeysPendingDisable, arg.RetiredBefore, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -813,7 +821,7 @@ SELECT EXISTS (
       SELECT 1 FROM data_encryption_key_wraps AS w
       WHERE w.organization_id = mek.organization_id
         AND w.external_key_id = mek.external_key_id
-        AND w.deleted IS FALSE
+        AND (w.deleted IS FALSE OR w.deleted_at > $3::timestamptz)
     )
 ) AS unused
 `
@@ -821,13 +829,14 @@ SELECT EXISTS (
 type ManagedEncryptionKeyIsUnusedParams struct {
 	ExternalKeyID  uuid.UUID
 	OrganizationID string
+	RetiredBefore  pgtype.Timestamptz
 }
 
-// Re-checks, under the organization lock, that a managed KEK is still unused
-// and not yet disabled, so the sweep never disables a key a concurrent switch
-// just started using.
+// Re-checks, under the organization lock, that a managed KEK is still unused,
+// past its retention, and not yet disabled, so the sweep never disables a key
+// a concurrent switch just started using.
 func (q *Queries) ManagedEncryptionKeyIsUnused(ctx context.Context, arg ManagedEncryptionKeyIsUnusedParams) (bool, error) {
-	row := q.db.QueryRow(ctx, managedEncryptionKeyIsUnused, arg.ExternalKeyID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, managedEncryptionKeyIsUnused, arg.ExternalKeyID, arg.OrganizationID, arg.RetiredBefore)
 	var unused bool
 	err := row.Scan(&unused)
 	return unused, err
