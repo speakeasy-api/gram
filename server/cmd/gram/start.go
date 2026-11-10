@@ -2255,6 +2255,7 @@ func newStartCommand() *cli.Command {
 						K8sClient:                      k8sClient,
 						ExpectedTargetCNAME:            customDomainCNAMEFromCLI(c),
 						ExpectedARecords:               customDomainARecords,
+						CustomDomainTargetSuffix:       customDomainTargetSuffix,
 						GitHubEvidenceToken:            c.String("github-evidence-token"),
 						SiteURL:                        siteURL,
 						ServerURL:                      serverURL,
