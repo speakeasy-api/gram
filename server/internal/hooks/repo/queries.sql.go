@@ -345,6 +345,7 @@ INSERT INTO risk_results (
   , rule_id
   , description
   , match
+  , match_encrypted
   , confidence
 )
 VALUES (
@@ -360,6 +361,7 @@ VALUES (
   , $7
   , $8
   , $9
+  , $10
 )
 `
 
@@ -372,6 +374,7 @@ type InsertShadowMCPBlockResultParams struct {
 	ChatMessageID     uuid.NullUUID
 	Description       pgtype.Text
 	Match             pgtype.Text
+	MatchEncrypted    pgtype.Text
 	Confidence        pgtype.Float8
 }
 
@@ -385,6 +388,7 @@ func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShad
 		arg.ChatMessageID,
 		arg.Description,
 		arg.Match,
+		arg.MatchEncrypted,
 		arg.Confidence,
 	)
 	return err

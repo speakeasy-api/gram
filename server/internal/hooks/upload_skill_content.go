@@ -189,6 +189,7 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 		RuleID:         pgtype.Text{String: "", Valid: false},
 		Description:    pgtype.Text{String: "", Valid: false},
 		Match:          pgtype.Text{String: "", Valid: false},
+		MatchEncrypted: pgtype.Text{String: "", Valid: false},
 		Confidence:     pgtype.Float8{Float64: 0, Valid: false},
 	}
 	if len(result.Findings) > 0 {
@@ -197,8 +198,14 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 		params.Found = true
 		params.RuleID = pgtype.Text{String: f.RuleID, Valid: true}
 		params.Description = pgtype.Text{String: f.Description, Valid: true}
-		params.Match = pgtype.Text{String: f.Match, Valid: true}
 		params.Confidence = pgtype.Float8{Float64: f.Confidence, Valid: true}
+
+		evidence, err := s.riskEvidence.Seal(ctx, authCtx.ActiveOrganizationID, pgtype.Text{String: f.Match, Valid: true}, nil)
+		if err != nil {
+			s.logger.WarnContext(ctx, "seal skill prompt injection match; recording the finding without it", attr.SlogError(err))
+		}
+		params.Match = evidence.Match
+		params.MatchEncrypted = evidence.MatchEncrypted
 	}
 
 	if err := repo.RecordSkillPromptInjectionScan(ctx, params); err != nil {

@@ -80,8 +80,10 @@ type Service struct {
 	riskScanner        risk.RiskScanner
 	// piScanner flags captured skill manifests that read as prompt injections.
 	// Optional: when nil, skill capture stores content and scans nothing.
-	piScanner       *promptinjection.Scanner
-	riskRecorder    *metering.RiskRecorder
+	piScanner    *promptinjection.Scanner
+	riskRecorder *metering.RiskRecorder
+	// riskEvidence seals the match of the risk_results rows hooks write.
+	riskEvidence    *risk.ResultEvidenceCipher
 	policyBypass    *risk.PolicyBypassEvaluator
 	spendGate       *spendrules.Gate
 	shadowMCPClient *shadowmcp.Client
@@ -299,6 +301,7 @@ func NewService(
 	orgHosts *orghost.Resolver,
 	jwtSecret string,
 	riskRecorder *metering.RiskRecorder,
+	riskEvidence *risk.ResultEvidenceCipher,
 	deviceAgentTokens *deviceagenttoken.Issuer,
 ) *Service {
 	return &Service{
@@ -321,6 +324,7 @@ func NewService(
 		riskScanner:        riskScanner,
 		piScanner:          piScanner,
 		riskRecorder:       riskRecorder,
+		riskEvidence:       riskEvidence,
 		policyBypass:       policyBypass,
 		spendGate:          spendGate,
 		shadowMCPClient:    shadowMCPClient,

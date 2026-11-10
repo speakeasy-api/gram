@@ -1182,10 +1182,11 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			_, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+			orgEncryptionService, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
 			if err != nil {
 				return err
 			}
+			riskEvidence := risk.NewResultEvidenceCipher(orgEncryptionService)
 			issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, identityProviderProvisioner != nil)
 			issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 			issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
@@ -1595,6 +1596,7 @@ func newStartCommand() *cli.Command {
 				orgHosts,
 				c.String("jwt-signing-key"),
 				metering.NewRiskRecorder(publishers.MeterReadings),
+				riskEvidence,
 				deviceAgentTokens,
 			)
 			hooks.Attach(mux, hooksService)
@@ -2292,6 +2294,7 @@ func newStartCommand() *cli.Command {
 						TrialEmailsService:             trialEmailsService,
 						TrialFixtureHandler:            newTrialFixtureHandler(c.String("environment"), db, productFeatures),
 						RiskFingerprinter:              riskFingerprinter,
+						RiskEvidence:                   riskEvidence,
 						DisableRiskRetroReconcile:      c.Bool("disable-clickhouse-risk-retro-reconcile"),
 						LLMAnalyzerEnabled:             llmAnalyzerConfigFromCLI(c).Enabled(),
 					})

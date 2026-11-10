@@ -249,6 +249,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		"test-jwt-secret",
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		nil,
 		deviceagenttoken.New(sharedDeviceAgentIssuer(t), conn),
 	)
 

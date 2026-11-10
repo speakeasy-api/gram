@@ -175,6 +175,11 @@ type WorkerOptions struct {
 	// reconcile phase degrades with a loud log.
 	RiskFingerprinter risk.Fingerprinter
 
+	// RiskEvidence opens risk_results matches sealed under an organization's
+	// key, so the retroactive exclusion reconcile can evaluate exact and regex
+	// exclusions against them. Nil leaves sealed matches unevaluated.
+	RiskEvidence *risk.ResultEvidenceCipher
+
 	// DisableRiskRetroReconcile is the kill switch for propagating
 	// retroactive exclusion changes into ClickHouse: the reconcile activity
 	// gets no ClickHouse repo and degrades to its Postgres phases.
@@ -283,6 +288,7 @@ func ForDeploymentProcessing(
 		TrialEmailsService:        nil,
 		TrialFixtureHandler:       nil,
 		RiskFingerprinter:         risk.Fingerprinter{},
+		RiskEvidence:              nil,
 		DisableRiskRetroReconcile: false,
 		LLMAnalyzerEnabled:        false,
 	}
@@ -369,6 +375,7 @@ func NewTemporalWorker(
 		TrialEmailsService:             nil,
 		TrialFixtureHandler:            nil,
 		RiskFingerprinter:              risk.Fingerprinter{},
+		RiskEvidence:                   nil,
 		DisableRiskRetroReconcile:      false,
 		LLMAnalyzerEnabled:             false,
 	}
@@ -436,6 +443,7 @@ func NewTemporalWorker(
 				return opts.TrialFixtureHandler
 			}(),
 			RiskFingerprinter:         defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
+			RiskEvidence:              conv.Default(o.RiskEvidence, opts.RiskEvidence),
 			DisableRiskRetroReconcile: conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
 			LLMAnalyzerEnabled:        conv.Default(o.LLMAnalyzerEnabled, opts.LLMAnalyzerEnabled),
 		}
@@ -539,6 +547,7 @@ func NewTemporalWorker(
 		opts.TrialFixtureHandler,
 		opts.GitHubEvidenceToken,
 		opts.RiskFingerprinter,
+		opts.RiskEvidence,
 		opts.DisableRiskRetroReconcile,
 		opts.LLMAnalyzerEnabled,
 		idTokenVerifier,
