@@ -18,9 +18,6 @@ import (
 // built from spec through the helpers below, so one body of Go serves the
 // shared demo org, the local development org, and the safety test's
 // adversarial tenant.
-// demoInertAccessToken is the dummy upstream access token the inert demo sessions hold.
-const demoInertAccessToken = "demo-inert-access-token" //nolint:gosec // G101: a fixture placeholder, not a credential
-
 type seeder struct {
 	spec Spec
 	// enc is the environment's key, which seals the inert sessions' dummy token.

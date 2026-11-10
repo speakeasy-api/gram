@@ -46,6 +46,9 @@ type serversKillswitchOperation struct {
 }
 
 // seedServers: MCP servers, gateway endpoints, plugins, meta servers, remote sessions, killswitch.
+// demoInertAccessToken is the dummy upstream access token the inert demo sessions hold.
+const demoInertAccessToken = "demo-inert-access-token" //nolint:gosec // G101: a fixture placeholder, not a credential
+
 func (s *seeder) seedServers(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
