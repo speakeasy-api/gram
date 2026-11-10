@@ -13,11 +13,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,6 +44,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -417,8 +420,8 @@ func TestGatewayMemberOutageRows(t *testing.T) {
 
 			text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 			require.True(t, isError)
-			require.Equal(t, `server "member" `+tc.text, text)
 			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			require.Equal(t, `server "member" `+tc.text+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
 			require.NotEmpty(t, row.MemberID)
 			require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
 		})
@@ -699,8 +702,8 @@ func TestGatewayHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
 			rpc := executeMetaTool(t, ti, slug, "", member.slug+"--"+tool)
 			text, isError := metaToolResultText(t, rpc)
 			require.True(t, isError)
-			require.Equal(t, fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug), text)
 			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, want)
+			require.Equal(t, fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug)+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
 			require.Equal(t, string(who), row.WhoFixes)
 			require.Len(t, rec.Rows(), 1)
 		})
@@ -1036,8 +1039,8 @@ func TestGatewayMemberSecurityOutcomeIgnoresDirectRules(t *testing.T) {
 			ti.service.SetConnectionRecorder(rec.Recorder)
 			text, isError := metaToolResultText(t, executeMetaTool(t, ti, slug, "", member.slug+"--"+tool))
 			require.True(t, isError)
-			require.Equal(t, fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug), text)
-			rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			require.Equal(t, fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug)+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
 			require.Len(t, rec.Rows(), 1)
 		})
 	}
@@ -1076,4 +1079,306 @@ func TestFreshInvalidGrantWritesOnlyTheRefreshRow(t *testing.T) {
 	rows := rec.Rows()[1:]
 	require.Len(t, rows, 1)
 	require.Equal(t, mcpconnectionattempts.StepProviderRefresh.String(), rows[0].Step)
+}
+
+// upsertUnreadableRemoteSession stores a live connection whose access token can't be decrypted.
+func upsertUnreadableRemoteSession(t *testing.T, ctx context.Context, ti *testInstance, userSessionIssuerID, remoteSessionClientID uuid.UUID, subject urn.SessionSubject, resource string) {
+	t.Helper()
+
+	_, err := remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   userSessionIssuerID,
+		RemoteSessionClientID: remoteSessionClientID,
+		AccessTokenEncrypted:  "not-ciphertext",
+		AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		RefreshTokenEncrypted: pgtype.Text{String: "", Valid: false},
+		RefreshExpiresAt:      pgtype.Timestamptz{Valid: false},
+		Scopes:                []string{},
+		Resource:              pgtype.Text{String: resource, Valid: resource != ""},
+	})
+	require.NoError(t, err)
+}
+
+// With nothing stored readable, a direct server asks the person to reconnect and records why.
+func TestUnreadableUpstreamTokenDirectServerAsksToReconnect(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "gate-unreadable")
+
+	subject := urn.NewUserSubject("gate-unreadable-user-" + uuid.NewString())
+	upsertUnreadableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, subject, "")
+	bearer := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject)
+
+	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, nil)
+	require.Equal(t, reconnectDescription, requireOopsCode(t, err, oops.CodeUnauthorized))
+	require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStoredSignInUnreadable)
+	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+	require.Equal(t, subject.String(), row.SubjectURN)
+	stored, err := remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: fixture.RemoteSessionClient.ID})
+	require.NoError(t, err)
+	require.Equal(t, stored.ID.String(), row.RemoteSessionID)
+}
+
+// With nothing stored readable, a gateway never calls the member without credentials and asks for a reconnect.
+func TestUnreadableUpstreamTokenGatewayMemberAsksToReconnect(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		resource bool
+	}{
+		{name: "grant names the member", resource: true},
+		{name: "grant names no resource", resource: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMCPService(t)
+			authCtx := requireProjectAuthContext(t, ctx)
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+			projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+			var memberCalls atomic.Int32
+			// Answers anyone, so an anonymous call would succeed.
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodPost {
+					memberCalls.Add(1)
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			t.Cleanup(upstream.Close)
+
+			issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+			metaSlug := "meta-unreadable-" + uuid.NewString()[:8]
+			meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreadable", "", []uuid.UUID{issuerID})
+			createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+			subject := createTestUser(t, ctx, ti, "meta-unreadable-user-"+uuid.NewString())
+			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+			resource := ""
+			if tc.resource {
+				resource = upstream.URL
+			}
+			upsertUnreadableRemoteSession(t, ctx, ti, issuerID, clientID, subject, resource)
+
+			text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+			require.True(t, isError)
+			require.Contains(t, text, `server "member" can't use its saved sign-in anymore. Ask the user to open `)
+			require.Contains(t, text, "to reconnect it, then retry")
+			require.NotContains(t, strings.ToLower(text), "retry shortly")
+			require.Zero(t, memberCalls.Load(), "never an anonymous call")
+
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStoredSignInUnreadable)
+			require.Equal(t, meta.ID.String(), row.ServerID)
+			require.NotEmpty(t, row.MemberID)
+			require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+			stored, err := remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+			require.NoError(t, err)
+			require.Equal(t, stored.ID.String(), row.RemoteSessionID)
+
+			body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": metamcp.ToolConnectionStatus, "arguments": map[string]any{}})
+			resp, err := servePublicHTTP(t, ctx, ti, metaSlug, body, bearer, nil)
+			require.NoError(t, err)
+			var status struct {
+				StructuredContent metamcp.ConnectionStatusResult `json:"structuredContent"`
+			}
+			require.NoError(t, json.Unmarshal(decodeRPCResponse(t, resp)["result"], &status))
+			require.Len(t, status.StructuredContent.Servers, 1)
+			require.Equal(t, metamcp.SignInNotConnected, status.StructuredContent.Servers[0].Status)
+			require.Nil(t, status.StructuredContent.Servers[0].Outage, "not an outage to wait out")
+			require.Zero(t, memberCalls.Load())
+		})
+	}
+}
+
+// overwriteMemberTokens replaces the fixture's stored pair; an empty plaintext stores ciphertext the key can't read.
+func overwriteMemberTokens(t *testing.T, ctx context.Context, f memberRefreshOutageFixture, access, refresh string, accessExpiresIn time.Duration) {
+	t.Helper()
+	encrypt := func(plain string) string {
+		if plain == "" {
+			return "not-ciphertext"
+		}
+		ciphertext, err := f.ti.enc.Encrypt([]byte(plain))
+		require.NoError(t, err)
+		return ciphertext
+	}
+	current, err := remotesessions_repo.New(f.ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: f.subject, RemoteSessionClientID: f.clientID})
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(f.ti.conn).UpdateRemoteSessionTokensIfUnchanged(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedParams{
+		SubjectUrn: f.subject, RemoteSessionClientID: f.clientID, ExpectedUpdatedAt: current.UpdatedAt,
+		AccessTokenEncrypted: encrypt(access), AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(accessExpiresIn)),
+		RefreshTokenEncrypted: conv.ToPGText(encrypt(refresh)), Scopes: current.Scopes,
+	})
+	require.NoError(t, err)
+}
+
+// A gateway member whose access token can't be read is renewed during the call and dialed with the new token.
+func TestUnreadableUpstreamTokenGatewayMemberHeals(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
+	overwriteMemberTokens(t, ctx, f, "", "live-refresh", time.Hour)
+
+	_, _ = metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
+	require.EqualValues(t, 1, f.refreshes.Load())
+	require.Positive(t, f.memberCalls.Load())
+	require.Equal(t, "Bearer refreshed-token", f.upstream.Load())
+
+	stored, err := remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: f.subject, RemoteSessionClientID: f.clientID})
+	require.NoError(t, err)
+	access, err := ti.enc.Decrypt(stored.AccessTokenEncrypted)
+	require.NoError(t, err, "the renewed access token is stored under the current key")
+	require.Equal(t, "refreshed-token", access)
+	refresh, err := ti.enc.Decrypt(stored.RefreshTokenEncrypted.String)
+	require.NoError(t, err)
+	require.Equal(t, "rotated-refresh", refresh)
+}
+
+// An expired access token with an unreadable refresh token never reaches the member without credentials.
+func TestUnreadableUpstreamRefreshTokenGatewayMemberAsksToReconnect(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
+	overwriteMemberTokens(t, ctx, f, "stale-access", "", -time.Hour)
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, `server "member" can't use its saved sign-in anymore`)
+	require.Zero(t, f.memberCalls.Load(), "never an anonymous call")
+	require.Zero(t, f.refreshes.Load(), "an unreadable refresh token is never sent")
+}
+
+// A gateway member whose unreadable access token can't be renewed for a configuration fault names the administrator and is never dialed.
+func TestUnreadableUpstreamTokenGatewayMemberMisconfiguredNamesAdministrator(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	var refreshes atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		refreshes.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"error":"unauthorized_client"}`)
+	}))
+	t.Cleanup(provider.Close)
+	var memberCalls atomic.Int32
+	// Answers anyone, so an anonymous call would succeed.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			memberCalls.Add(1)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-unreadable-admin-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreadable-admin", provider.URL, []uuid.UUID{issuerID})
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	subject := createTestUser(t, ctx, ti, "meta-unreadable-admin-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	refresh, err := ti.enc.Encrypt([]byte("live-refresh"))
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn: subject, UserSessionIssuerID: issuerID, RemoteSessionClientID: clientID,
+		AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		RefreshTokenEncrypted: conv.ToPGText(refresh), RefreshExpiresAt: pgtype.Timestamptz{Valid: false},
+		Scopes: []string{}, Resource: pgtype.Text{String: upstream.URL, Valid: true},
+	})
+	require.NoError(t, err)
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, `server "member" has an upstream credential that is misconfigured or was rejected.`)
+	require.Contains(t, text, "Ask an admin of the server's project")
+	require.Zero(t, memberCalls.Load(), "never an anonymous call")
+	require.Positive(t, refreshes.Load())
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCredentialMisconfigured)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+	require.NotEmpty(t, row.MemberID)
+}
+
+// A held grant on the member's own issuer answers for the member after its upstream URL moved, never an anonymous call.
+func TestHeldGrantForMovedMemberURLIsNeverAnonymous(t *testing.T) {
+	t.Parallel()
+
+	const oldURL = "https://old.example.com/mcp"
+	t.Run("outage", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPService(t)
+		f := newMemberRefreshOutageFixture(t, ctx, ti, func(string) string { return oldURL })
+		f.down.Store(true)
+
+		text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
+		require.True(t, isError)
+		require.Contains(t, text, "Retry")
+		require.Zero(t, f.memberCalls.Load(), "an outage never turns into an anonymous call")
+	})
+	t.Run("unreadable", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPService(t)
+		f := newMemberRefreshOutageFixture(t, ctx, ti, func(string) string { return oldURL })
+		overwriteMemberTokens(t, ctx, f, "", "", time.Hour)
+
+		text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
+		require.True(t, isError)
+		require.Contains(t, text, `server "member" can't use its saved sign-in anymore`)
+		require.Zero(t, f.memberCalls.Load())
+	})
+}
+
+// Two members on one issuer share its one grant: an unreadable grant asks each to reconnect, and neither is called without it.
+func TestUnreadableSharedIssuerGrantNeverDialsEitherMember(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	var calls atomic.Int32
+	newUpstream := func() *httptest.Server {
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				calls.Add(1)
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(upstream.Close)
+		return upstream
+	}
+	upstreamA, upstreamB := newUpstream(), newUpstream()
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-shared-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-shared", "", []uuid.UUID{issuerID})
+	remoteIssuer := conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID))
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "alpha", upstreamA.URL, remoteIssuer, 0)
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "beta", upstreamB.URL, remoteIssuer, 1)
+	subject := createTestUser(t, ctx, ti, "meta-shared-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	upsertUnreadableRemoteSession(t, ctx, ti, issuerID, clientID, subject, upstreamA.URL)
+
+	for _, member := range []string{"alpha", "beta"} {
+		text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, member+"--ping"))
+		require.True(t, isError, member)
+		require.Contains(t, text, `server "`+member+`" can't use its saved sign-in anymore`)
+	}
+	require.Zero(t, calls.Load(), "neither member is called without credentials")
 }

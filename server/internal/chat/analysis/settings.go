@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis/repo"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
 // DefaultJudgeDailyCap is the cap the settings surfaces suggest when switching
@@ -22,7 +23,7 @@ const DefaultJudgeDailyCap int32 = 100
 // hundreds of internal projects would otherwise spend judge budget on noise.
 var projectOnlyOrgs = map[string]uuid.UUID{
 	// speakeasy-team → its "default" project.
-	"5a25158b-24dc-4d49-b03d-e85acfbea59c": uuid.MustParse("0196cbd1-9328-74e7-b7bb-6e5357565573"),
+	constants.SpeakeasyTeamOrganizationID: uuid.MustParse("0196cbd1-9328-74e7-b7bb-6e5357565573"),
 }
 
 // Settings are the effective per-organization budgets: the daily cap for each

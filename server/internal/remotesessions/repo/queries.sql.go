@@ -11235,6 +11235,8 @@ SELECT
   s.last_validated_at,
   s.validation_status,
   s.validation_reason,
+  s.access_token_encrypted,
+  s.refresh_token_encrypted,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -11293,6 +11295,8 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 	LastValidatedAt        pgtype.Timestamptz
 	ValidationStatus       pgtype.Text
 	ValidationReason       pgtype.Text
+	AccessTokenEncrypted   string
+	RefreshTokenEncrypted  pgtype.Text
 	CanRefresh             bool
 	Status                 string
 }
@@ -11367,6 +11371,8 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 			&i.LastValidatedAt,
 			&i.ValidationStatus,
 			&i.ValidationReason,
+			&i.AccessTokenEncrypted,
+			&i.RefreshTokenEncrypted,
 			&i.CanRefresh,
 			&i.Status,
 		); err != nil {
@@ -11399,6 +11405,8 @@ SELECT
   s.last_validated_at,
   s.validation_status,
   s.validation_reason,
+  s.access_token_encrypted,
+  s.refresh_token_encrypted,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -11449,6 +11457,8 @@ type ListRemoteSessionStatusesInTenantRow struct {
 	LastValidatedAt        pgtype.Timestamptz
 	ValidationStatus       pgtype.Text
 	ValidationReason       pgtype.Text
+	AccessTokenEncrypted   string
+	RefreshTokenEncrypted  pgtype.Text
 	CanRefresh             bool
 	Status                 string
 }
@@ -11491,6 +11501,8 @@ func (q *Queries) ListRemoteSessionStatusesInTenant(ctx context.Context, arg Lis
 			&i.LastValidatedAt,
 			&i.ValidationStatus,
 			&i.ValidationReason,
+			&i.AccessTokenEncrypted,
+			&i.RefreshTokenEncrypted,
 			&i.CanRefresh,
 			&i.Status,
 		); err != nil {

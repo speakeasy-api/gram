@@ -26,6 +26,7 @@ import (
 
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
@@ -44,7 +45,7 @@ const (
 	// benchOrgID/benchProjectID label the judge calls. The judge needs an
 	// org/project for the request shape; these are inert identifiers (the
 	// dev-key provisioner ignores the org, projectID must parse as a UUID).
-	benchOrgID     = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
+	benchOrgID     = constants.SpeakeasyTeamOrganizationID
 	benchProjectID = "00000000-0000-0000-0000-000000000001"
 
 	// viewCommand names the command that shows the cached runs.

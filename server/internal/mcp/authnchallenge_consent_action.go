@@ -272,6 +272,10 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				logger.WarnContext(ctx, "manual refresh did not finish", attr.SlogError(refreshErr))
 				http.Redirect(w, r, backURL+"&refresh_unavailable="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 				return nil
+			case remotesessions.StoredTokenUnreadable(refreshErr):
+				logger.WarnContext(ctx, "manual refresh found an unreadable stored sign-in", attr.SlogError(refreshErr))
+				http.Redirect(w, r, backURL+"&refresh_reconnect="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+				return nil
 			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionNotRefreshable):
 				return oops.E(oops.CodeBadRequest, refreshErr, "Reconnect this service before refreshing it.").LogWarn(ctx, logger)
 			default:
@@ -380,7 +384,7 @@ func (s *Service) buildRemoteConnectURL(
 	focusServer string,
 ) (string, bool, error) {
 	ctx := r.Context()
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepProviderSignIn,
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepProviderSignIn,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	defer t.Finish(ctx)

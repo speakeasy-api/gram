@@ -20,7 +20,7 @@ import (
 func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rpcCtx := &contextvalues.RPCContext{ID: mcpjsonrpc.NullID(), ProtocolVersion: ""}
-		r = r.WithContext(contextvalues.SetRPCContext(r.Context(), rpcCtx))
+		r = r.WithContext(contextvalues.WithConnectionReferenceSlot(contextvalues.SetRPCContext(r.Context(), rpcCtx)))
 
 		err := handler(w, r)
 		if err == nil {
@@ -73,6 +73,7 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 			logger.ErrorContext(r.Context(), "unexpected error", attr.SlogError(err), attr.SlogErrorStack(stack))
 		}
 
+		payload.Message = contextvalues.AppendConnectionReference(r.Context(), payload.Message)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
 		bs, err := payload.MarshalJSONFor(rpcCtx.ProtocolVersion)

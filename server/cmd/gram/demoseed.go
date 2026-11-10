@@ -60,7 +60,7 @@ func newDemoSeedCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:    "encryption-key",
-				Usage:   "Key for App level AES encryption, used to store the local Slack test app token",
+				Usage:   "Key for App level AES encryption, which seals the demo sessions' dummy token and the local Slack test app token",
 				EnvVars: []string{"GRAM_ENCRYPTION_KEY"},
 			},
 			&cli.StringFlag{
@@ -115,8 +115,13 @@ func newDemoSeedCommand() *cli.Command {
 			}
 			defer o11y.NoLogDefer(func() error { return blobShutdown(ctx) })
 
+			enc, err := encryption.New(c.String("encryption-key"))
+			if err != nil {
+				return fmt.Errorf("create encryption client (set GRAM_ENCRYPTION_KEY): %w", err)
+			}
+
 			if !c.Bool("local") {
-				if err := demoseed.Run(ctx, logger, db, ch, blob, demoseed.DefaultSpec()); err != nil {
+				if err := demoseed.Run(ctx, logger, db, ch, blob, enc, demoseed.DefaultSpec()); err != nil {
 					return fmt.Errorf("apply seed: %w", err)
 				}
 				return nil
@@ -132,7 +137,7 @@ func newDemoSeedCommand() *cli.Command {
 			// one that lifts the BookDemo gate, so a demo-org failure
 			// (ClickHouse is the flaky half locally) leaves a usable
 			// environment behind.
-			if err := demoseed.Run(ctx, logger, db, ch, blob, demoseed.LocalSpec()); err != nil {
+			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, demoseed.LocalSpec()); err != nil {
 				return fmt.Errorf("apply seed: %w", err)
 			}
 
@@ -161,12 +166,8 @@ func newDemoSeedCommand() *cli.Command {
 
 			slack := demoseed.LocalSlackOptions{BotToken: "", SlackEmail: c.String("local-slack-email"), Encryption: nil, Slack: nil}
 			if token := c.String("local-slack-bot-token"); token != "" && token != "unset" {
-				encryptionClient, err := encryption.New(c.String("encryption-key"))
-				if err != nil {
-					return fmt.Errorf("create encryption client for the local Slack app: %w", err)
-				}
 				slack.BotToken = token
-				slack.Encryption = encryptionClient
+				slack.Encryption = enc
 				slack.Slack = slackapi.NewClient("", guardian.NewDefaultPolicy(otel.GetTracerProvider()).Client())
 			}
 
@@ -180,13 +181,14 @@ func newDemoSeedCommand() *cli.Command {
 				return fmt.Errorf("apply local fixtures: %w", err)
 			}
 
-			if err := demoseed.Run(ctx, logger, db, ch, blob, demoseed.DefaultSpec()); err != nil {
+			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, demoseed.DefaultSpec()); err != nil {
 				return fmt.Errorf("apply demo org seed: %w", err)
 			}
 
 			// The long-term outcomes table has no tenant, so only the local seed
 			// fills it, by running the daily job over the seeded days. Production
 			// never writes the demo organization's made-up attempts into it.
+			// Only the dev organization counts locally, so every provider, app and client name folds to other.
 			outcomes := dailyoutcomes.NewBuilder(logger, otel.GetMeterProvider(), db, ch)
 			now := time.Now()
 			for daysAgo := 1; daysAgo <= demoseed.ConnectionAttemptDays; daysAgo++ {

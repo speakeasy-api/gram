@@ -3,12 +3,14 @@ package background
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
@@ -55,6 +57,13 @@ func TestMCPConnectionOutcomesSweepBuildsEveryPlannedDay(t *testing.T) {
 		require.Positive(t, built[day], "every planned day is built, even after another fails: %s", day.Format(time.DateOnly))
 	}
 	require.Equal(t, mcpConnectionOutcomesBuildMaxAttempts, built[failing], "a failed build is retried")
+}
+
+func TestMCPConnectionOutcomesSweepSkipsADayStillBuilding(t *testing.T) {
+	t.Parallel()
+	require.True(t, dayStillBuilding(fmt.Errorf("start child: %w", &temporal.ChildWorkflowExecutionAlreadyStartedError{})))
+	require.False(t, dayStillBuilding(errors.New("clickhouse unavailable")))
+	require.False(t, dayStillBuilding(nil))
 }
 
 func TestMCPConnectionOutcomesDayWorkflowIDIsOnePerDay(t *testing.T) {

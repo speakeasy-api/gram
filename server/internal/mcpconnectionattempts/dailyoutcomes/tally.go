@@ -1,12 +1,19 @@
 package dailyoutcomes
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
-// minOrgsPerLabel is how many organizations must use a provider or app on a day for
-// its name to be kept, so a vendor only one customer uses cannot point to that customer.
+// minOrgsPerLabel is how many organizations must share a row's provider, app and
+// client family for those names to be kept, so no stored row points to one customer.
 const minOrgsPerLabel = 3
+
+// uncountedOrganizations are Speakeasy's own. Their attempts are kept but do not count
+// toward minOrgsPerLabel, so they cannot make one customer's vendor look shared.
+var uncountedOrganizations = map[string]struct{}{
+	constants.SpeakeasyTeamOrganizationID: {},
+}
 
 // DayRow is one row of mcp_connection_outcomes_daily, without its day.
 type DayRow struct {
@@ -47,7 +54,7 @@ type rowKey struct {
 }
 
 // tally adds up attempts per row and organization. Every label passes its allowlist
-// here, and rows folds rare providers and apps, so no value that could name a
+// here, and rows folds rare names, so no value that could name a
 // customer reaches the long-term table.
 type tally struct {
 	attempts map[rowKey]map[string]uint64
@@ -84,30 +91,44 @@ func (t *tally) add(a mcpconnectionattempts.AttemptSummary, e mcpconnectionattem
 	t.attempts[key][a.OrganizationID] += max(a.Weight, 1)
 }
 
-// rows folds providers and apps used by fewer than minOrgsPerLabel organizations into
-// other, then sums. App kinds are kept: they name no vendor.
+// rows folds names until every row's named provider, app and client family together
+// come from at least minOrgsPerLabel counted organizations, then sums. A rare row
+// loses its app first, then its provider, then its client family. App kinds and
+// other name nothing, so they are never folded.
 func (t *tally) rows() []DayRow {
-	providerOrgs, appOrgs := map[string]map[string]struct{}{}, map[string]map[string]struct{}{}
-	for key, byOrg := range t.attempts {
-		for org := range byOrg {
-			addOrg(providerOrgs, key.provider, org)
-			addOrg(appOrgs, key.app, org)
+	byKey := t.attempts
+	for {
+		orgs := map[rowKey]map[string]struct{}{}
+		for key, byOrg := range byKey {
+			for org := range byOrg {
+				if _, skip := uncountedOrganizations[org]; !skip {
+					addOrg(orgs, named(key), org)
+				}
+			}
+		}
+		next, changed := map[rowKey]map[string]uint64{}, false
+		for key, byOrg := range byKey {
+			if n := named(key); n.hasName() && len(orgs[n]) < minOrgsPerLabel {
+				key, changed = foldOne(key), true
+			}
+			if next[key] == nil {
+				next[key] = map[string]uint64{}
+			}
+			for org, attempts := range byOrg {
+				next[key][org] += attempts
+			}
+		}
+		byKey = next
+		if !changed {
+			break
 		}
 	}
-	folded := map[rowKey]uint64{}
-	for key, byOrg := range t.attempts {
-		if rare(providerOrgs, key.provider) {
-			key.provider = mcpconnectionattempts.LabelOther
+	rows := make([]DayRow, 0, len(byKey))
+	for key, byOrg := range byKey {
+		var attempts uint64
+		for _, n := range byOrg {
+			attempts += n
 		}
-		if !mcpconnectionattempts.IsAppKind(key.app) && rare(appOrgs, key.app) {
-			key.app = mcpconnectionattempts.LabelOther
-		}
-		for _, attempts := range byOrg {
-			folded[key] += attempts
-		}
-	}
-	rows := make([]DayRow, 0, len(folded))
-	for key, attempts := range folded {
 		rows = append(rows, DayRow{
 			Provider:     key.provider,
 			App:          key.app,
@@ -122,17 +143,44 @@ func (t *tally) rows() []DayRow {
 	return rows
 }
 
-func addOrg(orgs map[string]map[string]struct{}, label, org string) {
-	if orgs[label] == nil {
-		orgs[label] = map[string]struct{}{}
+// named keeps only the provider, app and client family names that could point to a customer.
+func named(key rowKey) rowKey {
+	app := key.app
+	if mcpconnectionattempts.IsAppKind(app) {
+		app = ""
 	}
-	orgs[label][org] = struct{}{}
+	return rowKey{provider: nameOf(key.provider), app: nameOf(app), clientFamily: nameOf(key.clientFamily), step: "", outcome: "", reason: "", fixedBy: ""}
 }
 
-// rare reports whether a named label has too few organizations to keep.
-func rare(orgs map[string]map[string]struct{}, label string) bool {
-	if label == "" || label == mcpconnectionattempts.LabelOther {
-		return false
+func (k rowKey) hasName() bool {
+	return k.provider != "" || k.app != "" || k.clientFamily != ""
+}
+
+// foldOne replaces the most specific name in a rare row with other.
+func foldOne(key rowKey) rowKey {
+	n := named(key)
+	switch {
+	case n.app != "":
+		key.app = mcpconnectionattempts.LabelOther
+	case n.provider != "":
+		key.provider = mcpconnectionattempts.LabelOther
+	default:
+		key.clientFamily = mcpconnectionattempts.LabelOther
 	}
-	return len(orgs[label]) < minOrgsPerLabel
+	return key
+}
+
+// nameOf drops other, which names nothing.
+func nameOf(label string) string {
+	if label == mcpconnectionattempts.LabelOther {
+		return ""
+	}
+	return label
+}
+
+func addOrg(orgs map[rowKey]map[string]struct{}, key rowKey, org string) {
+	if orgs[key] == nil {
+		orgs[key] = map[string]struct{}{}
+	}
+	orgs[key][org] = struct{}{}
 }

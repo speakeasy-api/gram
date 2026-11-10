@@ -10,6 +10,7 @@ import (
 	goa "goa.design/goa/v3/pkg"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 )
 
@@ -37,6 +38,7 @@ func BrowserErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *ht
 
 func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error, browser, outages bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(contextvalues.WithConnectionReferenceSlot(r.Context()))
 		recorded := &oauthResponseWriter{ResponseWriter: w, committed: false}
 		writer := w
 		if browser {
@@ -111,6 +113,7 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 			}
 			return
 		}
+		payload.Message = contextvalues.AppendConnectionReference(r.Context(), payload.Message)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
 		err = json.NewEncoder(w).Encode(payload)

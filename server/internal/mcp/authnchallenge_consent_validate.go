@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -125,6 +126,9 @@ func checkFailureCode(ctx context.Context, err error) mcpconnectionattempts.Code
 
 // checkFailureBrowserError explains a failed check on the error page the way its row records it.
 func checkFailureBrowserError(ctx context.Context, err error) error {
+	if refreshProvenance(err) {
+		contextvalues.ClaimRefreshConnectionReference(ctx)
+	}
 	if failure, ok := classifyCheckFailure(ctx, err); ok && failure.page != oauthui.ReasonDefault {
 		return fmt.Errorf("check connection: %w", oops.WithBrowserReason(err, failure.page))
 	}
@@ -161,6 +165,15 @@ const validationLimitedNotice = "Try again in a moment"
 
 // refreshUnavailableNotice follows a Refresh that didn't finish; it says nothing about now.
 const refreshUnavailableNotice = "Your last refresh didn't finish. Try again shortly."
+
+// refreshReconnectNotice names the card's own control for a saved sign-in that can't be renewed.
+func refreshReconnectNotice(connected bool) string {
+	if connected {
+		// A connected card offers Disconnect, not Reconnect.
+		return "Your saved sign-in can't be renewed. Disconnect this service, then connect it again."
+	}
+	return "Your saved sign-in can't be used anymore. Reconnect this service to fix it."
+}
 
 // newValidationLimiter builds the per-challenge verify limiter; nil without Redis.
 func newValidationLimiter(redisClient *redis.Client, meterProvider metric.MeterProvider) *ratelimit.Limiter {
@@ -232,7 +245,7 @@ func (s *Service) probeRemoteSession(
 	attribution = attribution.NotingSkips(skipped)
 	defer func() {
 		if failure, ok := classifyCheckFailure(ctx, retErr); ok {
-			s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, failure.code)
+			s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, failure.code, mcpconnectionattempts.FailedElsewhere())
 		}
 	}()
 
@@ -282,7 +295,12 @@ func (s *Service) probeRemoteSession(
 			return oops.E(oops.CodeUnexpected, rerr, "resolve upstream tokens for validation").LogError(ctx, logger)
 		}
 		if candidate, ok := resolved[client.RemoteSessionIssuerID]; ok && candidate.RemoteSessionClientID == client.ID {
-			if candidate.SessionUnavailable() {
+			if candidate.HeldWithoutToken() {
+				// Only an outage can clear on a retry. An unreadable or refused
+				// grant gets the remedy a readable grant refused the same way gets.
+				if !candidate.SessionUnavailable() {
+					continue
+				}
 				if remotesessions.RefreshBusy(candidate.ClientCredentialErr) {
 					return errValidationRateLimited
 				}
@@ -362,14 +380,14 @@ func (s *Service) probeRemoteSession(
 		}
 	}()
 	probedAt := time.Now()
-	verdict, reason := s.probeUpstream(probeCtx, logger, target.build, target.name)
+	verdict, reason, failure := s.probeUpstream(probeCtx, logger, target.build, target.name)
 	<-enriched
 	ownResource := s.newResourceDisplayOwner(endpoint, challengeState).ownsOrFallsBack(ctx, logger, client)
 	issuerDisplay, _ := issuerCardBranding(client, ownResource, s.serverURL)
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
 	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)), attr.SlogOAuthValidationTrigger(string(trigger)))
 	s.validationMetrics.Record(ctx, client.IssuerURL, trigger, string(verdict))
-	s.recordRemoteSessionVerdict(ctx, fromRequest, endpoint, challengeState, client, target, entry.RemoteSessionID, verdict, trigger)
+	s.recordRemoteSessionVerdict(ctx, fromRequest, endpoint, challengeState, client, target, entry.RemoteSessionID, verdict, failure, trigger)
 
 	written, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{
 		Status: verdict,

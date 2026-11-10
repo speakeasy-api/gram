@@ -2661,3 +2661,9 @@ VALUES (@id, @project_id, 'Speakeasy Approvals', @slug, 'approvals', 'private');
 SELECT count(*)
 FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = @remote_session_client_id;
+
+-- name: SetCustomDomainHealthWithoutDNSObservation :exec
+-- Models a worker that does not write the independent DNS observation columns.
+UPDATE custom_domains
+SET health_status = 'unhealthy', health_issue = 'check_failed', health_checked_at = @checked_at
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;

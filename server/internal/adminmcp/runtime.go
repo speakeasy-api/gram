@@ -134,6 +134,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	serverHealthReader, _ := reader.(MCPServerHealthReader)
 	providerHealthReader, _ := reader.(ProviderHealthReader)
 	hookFleetReader, _ := reader.(HookFleetReader)
+	customDomainReader, _ := reader.(CustomDomainReader)
 	var promotions *catalogpromotion.Service
 	if provider, ok := reader.(interface {
 		CatalogPromotionService() *catalogpromotion.Service
@@ -141,7 +142,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 		promotions = provider.CatalogPromotionService()
 	}
 	runtime := &Runtime{catalogPromotions: promotions, authenticator: authenticator, server: server, resourceURL: resourceURL}
-	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, reader != nil && filteredActivityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, projectReader != nil && serverHealthReader != nil, providerHealthReader != nil, hookFleetReader != nil, runtime)
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, reader != nil && filteredActivityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, projectReader != nil && serverHealthReader != nil, providerHealthReader != nil, hookFleetReader != nil, customDomainReader != nil, runtime)
 	registerOrganizationTools(server, reader)
 	registerUserTools(server, userReader)
 	registerProjectTools(server, reader, projectReader)
@@ -169,6 +170,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	registerServerHealthTools(server, reader, projectReader, serverHealthReader)
 	registerProviderHealthTools(server, providerHealthReader)
 	registerHookFleetTools(server, reader, hookFleetReader)
+	registerCustomDomainTools(server, reader, customDomainReader)
 	return runtime
 }
 
