@@ -49,6 +49,12 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 	require.NoError(t, json.Unmarshal(files[".agents/plugins/marketplace.json"], &codex))
 	require.Equal(t, PublicMarketplaceName, codex.Name)
 	require.Len(t, codex.Plugins, 1)
+	require.Equal(t, "Speakeasy Platform", codex.Interface.DisplayName)
+
+	var cursor cursorPluginMeta
+	require.NoError(t, json.Unmarshal(files["cursor-plugins/speakeasy-cursor/.cursor-plugin/plugin.json"], &cursor))
+	require.Equal(t, "Speakeasy Platform", cursor.DisplayName)
+	require.True(t, strings.HasPrefix(string(files["README.md"]), "# Speakeasy Platform\n"))
 
 	claudeSkill := files["speakeasy/skills/manage-mcp-access/SKILL.md"]
 	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/skills/manage-mcp-access/SKILL.md"])
