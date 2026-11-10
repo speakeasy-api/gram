@@ -90,7 +90,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(AdminGetOrganizationHookFleetRequest$outboundSchema, value),
+    (value) =>
+      z.parse(AdminGetOrganizationHookFleetRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {

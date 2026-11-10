@@ -82,9 +82,8 @@ export type AdminHookFleetInstall = {
 };
 
 /** @internal */
-export const VersionStatus$inboundSchema: z.ZodMiniEnum<
-  typeof VersionStatus
-> = z.enum(VersionStatus);
+export const VersionStatus$inboundSchema: z.ZodMiniEnum<typeof VersionStatus> =
+  z.enum(VersionStatus);
 
 /** @internal */
 export const AdminHookFleetInstall$inboundSchema: z.ZodMiniType<

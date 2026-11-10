@@ -72,5 +72,10 @@ export function buildAdminGetOrganizationHookFleetQuery(
 export function queryKeyAdminGetOrganizationHookFleet(
   parameters: { organizationId: string; windowDays?: number | undefined },
 ): QueryKey {
-  return ["@gram/admin-client", "admin", "getOrganizationHookFleet", parameters];
+  return [
+    "@gram/admin-client",
+    "admin",
+    "getOrganizationHookFleet",
+    parameters,
+  ];
 }
