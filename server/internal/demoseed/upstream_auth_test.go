@@ -71,7 +71,7 @@ func expectedSeedAuthGrants() []string {
 		out = append(out, principal+" | mcp:auth | * | type=remote_session | owner=$represented_user | upstream= | personal_default")
 	}
 	attachment := func(principal, owner string) {
-		out = append(out, fmt.Sprintf("%s | mcp:auth | * | type=remote_session | owner=%s | upstream=attachment-client | attachment", principal, owner))
+		out = append(out, fmt.Sprintf("%s | mcp:auth | * | type=remote_session | owner=%s | upstream=linear-client | attachment", principal, owner))
 	}
 
 	for _, role := range []string{"analyst", "collaborator", "environment-manager", "read-only-tools", "temporary-escalation"} {
@@ -114,8 +114,8 @@ func authGrantLabel(s *seeder, g testrepo.ListDemoSeedAuthGrantsFixtureRow) stri
 		principal = "user " + strings.TrimPrefix(principal, "user:"+s.spec.UserPrefix)
 	}
 	upstream := g.UpstreamClient
-	if upstream == s.det("attachment-client").String() {
-		upstream = "attachment-client"
+	if upstream == s.det("remote-identity-client-linear").String() {
+		upstream = "linear-client"
 	}
 	return fmt.Sprintf("%s | %s | %s | type=%s | owner=%s | upstream=%s | %s",
 		principal, g.Scope, g.AuthClient, g.ClientType, strings.TrimPrefix(g.ConnectionOwner, s.spec.UserPrefix), upstream, g.ProvisionKind)

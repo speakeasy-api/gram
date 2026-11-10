@@ -406,23 +406,10 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo attachment client: %w", err)
 	}
-	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-		RemoteSessionClientID: s.det("attachment-client"),
-		UserSessionIssuerID:   s.det("issuer-linear"),
-	}); err != nil {
-		return fmt.Errorf("bind demo attachment client: %w", err)
-	}
-	// The Linear server is its issuer's only consumer, so every client bound
-	// to the issuer is associated with it, as the app's reconcile would do.
-	if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
-		ID:                    s.det("server-client-association-attachment"),
-		ProjectID:             proj,
-		OrgID:                 org,
-		McpServerID:           s.det("mcpserver-linear"),
-		RemoteSessionClientID: s.det("attachment-client"),
-	}); err != nil {
-		return fmt.Errorf("associate demo linear server with the attachment client: %w", err)
-	}
+	// The legacy callback client above stays unbound: Speakeasy allows one
+	// client per (user session issuer, remote issuer) pair, and Linear's main
+	// client already holds that pair. Exact-session attachments use the main
+	// client, so Linear offers one OAuth client.
 	// Each seeded sign-in carries the choice its consent page would have
 	// recorded for every server it reaches: Linear through its main client,
 	// Slack with no upstream authentication.
@@ -493,19 +480,20 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	} {
 		if err := s.q.ServersInsertAttachmentSession(ctx, repo.ServersInsertAttachmentSessionParams{
 			ID: s.det(account.key), UserID: user(account.person), UserSessionIssuerID: s.det("issuer-linear"),
-			RemoteSessionClientID: s.det("attachment-client"), ExpiresIn: pgtype.Interval{Microseconds: account.expires.Microseconds(), Days: 0, Months: 0, Valid: true},
+			RemoteSessionClientID: s.det("remote-identity-client-linear"), ExpiresIn: pgtype.Interval{Microseconds: account.expires.Microseconds(), Days: 0, Months: 0, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("insert demo attachment session: %w", err)
 		}
 	}
 
+	// Members 1 and 2 hold the attached sessions above, never validated; a
+	// person holds one session per client, so the validation spread goes to
+	// members 3 to 6.
 	validated := []serversValidatedSession{
-		{n: 1, status: "valid", grantGeneration: 1},
-		{n: 2, status: "valid", grantGeneration: 3},
-		{n: 3, status: "rejected_by_member", grantGeneration: 2},
-		{n: 4, status: "inactive", grantGeneration: 1},
-		{n: 5, status: "unknown", grantGeneration: 1},
-		{n: 6, status: "", grantGeneration: 1},
+		{n: 3, status: "valid", grantGeneration: 3},
+		{n: 4, status: "rejected_by_member", grantGeneration: 2},
+		{n: 5, status: "inactive", grantGeneration: 1},
+		{n: 6, status: "unknown", grantGeneration: 1},
 	}
 	for _, v := range validated {
 		if err := s.q.ServersInsertValidatedSession(ctx, repo.ServersInsertValidatedSessionParams{
@@ -535,7 +523,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			OrgID:                 org,
 			PrincipalID:           s.det("managed-agent-" + num),
 			UserSessionIssuerID:   s.det("issuer-linear"),
-			RemoteSessionClientID: s.det("attachment-client"),
+			RemoteSessionClientID: s.det("remote-identity-client-linear"),
 			AttachedByUserID:      user(person),
 			RemoteSessionID:       s.det(session),
 		}); err != nil {
@@ -632,10 +620,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	return s.seedAuthClients(ctx)
 }
 
-// seedAuthClients records Linear's two OAuth clients as the upstream OAuth
-// migration derives them. Both sit under the fictional Example Workspace
-// Identity provider, not Linear's own sign-in, so they carry its name; left
-// to the migration, both would get the issuer's name and look identical.
+// seedAuthClients records Linear's OAuth client as the upstream OAuth
+// migration derives it. It sits under the fictional Example Workspace
+// Identity provider, not Linear's own sign-in, so it carries that name.
 // It also records two clients an administrator created: a token
 // shared by two servers and a pass-through of the caller's own GitHub token,
 // with who may use the shared token, and the token chosen for an app that
@@ -646,7 +633,6 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 
 	clients := []repo.ServersInsertAuthClientParams{
 		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Example Workspace sign-in", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
-		{ID: s.det("auth-client-linear-attachment"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Example Workspace attached sessions", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("attachment-client"), Valid: true}},
 		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Engineering automation token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		{ID: s.det("auth-client-github-forwarded"), OrgID: org, ProjectID: proj, ClientType: "pass_through", Source: "admin", Name: "Your own GitHub token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 	}
@@ -670,7 +656,6 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 
 	associations := []struct{ key, server, client string }{
 		{"auth-client-assoc-linear", "mcpserver-linear", "auth-client-linear"},
-		{"auth-client-assoc-linear-attachment", "mcpserver-linear", "auth-client-linear-attachment"},
 		{"auth-client-assoc-github", "mcpserver-github", "auth-client-github-token"},
 		{"auth-client-assoc-linear-token", "mcpserver-linear", "auth-client-github-token"},
 		{"auth-client-assoc-github-forwarded", "mcpserver-github", "auth-client-github-forwarded"},

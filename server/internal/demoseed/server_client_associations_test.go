@@ -36,7 +36,7 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 	github := det("mcpserver-github")
 	deepwiki := det("mcpserver-deepwiki")
 	want := map[uuid.UUID][]uuid.UUID{
-		det("mcpserver-linear"):      {det("remote-identity-client-linear"), det("attachment-client")},
+		det("mcpserver-linear"):      {det("remote-identity-client-linear")},
 		det("mcpserver-ema-tracker"): {det("ema-client-tracker")},
 		det("mcpserver-ema-wiki"):    {det("ema-client-wiki")},
 	}
