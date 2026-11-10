@@ -597,6 +597,25 @@ describe("StandardPolicyEditor scope rows", () => {
     expect(screen.getByText("Checks tool results.")).toBeTruthy();
   });
 
+  it("treats an empty kind list as no traffic, not the unrestricted recommendation", () => {
+    renderEditor(
+      policy({
+        detectionScopes: [
+          {
+            category: "shadow_mcp",
+            scopeInclude: "kind in []",
+            scopeExempt: "",
+          },
+        ],
+      }),
+    );
+
+    expect(
+      screen.getByText("Select at least one kind of traffic."),
+    ).toBeTruthy();
+    expect(screen.getByText("Custom")).toBeTruthy();
+  });
+
   it("keeps an invalid row open after its first surface is selected", () => {
     renderEditor(
       policy({

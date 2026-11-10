@@ -1185,7 +1185,7 @@ function kindsFromExpr(expr: string): Set<ScopeSurfaceKind> | null {
 }
 
 // The surfaces a scope admits, or null when it is not a pure surface
-// expression. An empty include means every surface.
+// expression. A blank include means every surface; `kind in []` means none.
 function surfacesFromScope(
   include: string,
   exempt: string,
@@ -1194,7 +1194,7 @@ function surfacesFromScope(
   const exempted = kindsFromExpr(exempt);
   if (included === null || exempted === null) return null;
   const base =
-    included.size === 0
+    include.trim() === ""
       ? new Set<ScopeSurfaceKind>(ALL_SURFACE_KINDS)
       : included;
   return new Set([...base].filter((kind) => !exempted.has(kind)));
