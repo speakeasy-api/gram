@@ -2,7 +2,7 @@
 // Skills extension (SEP-2640) behind the skills_over_mcp product feature: the handshake
 // advertises the extension, the listing is exactly the embedded set with
 // verifying digests, reads return the embedded bytes without recording an
-// activation, and with the flag off the surface is unchanged.
+// activation, and with the feature off the surface is unchanged.
 package mcp_test
 
 import (
@@ -31,7 +31,7 @@ import (
 )
 
 // platformSkillsFixture is a project whose managed assistant can reach the
-// managed-assistant platform toolset, with the Skills extension flag on for
+// managed-assistant platform toolset, with the Skills extension feature on for
 // the owning organization.
 type platformSkillsFixture struct {
 	authCtx *contextvalues.AuthContext
@@ -94,7 +94,7 @@ func embeddedPlatformSkills(t *testing.T) map[string][]byte {
 	return sources
 }
 
-func TestServePlatformToolset_Skills_InitializeAdvertisesExtensionWhenFlagOn(t *testing.T) {
+func TestServePlatformToolset_Skills_InitializeAdvertisesExtensionWhenFeatureOn(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -106,7 +106,7 @@ func TestServePlatformToolset_Skills_InitializeAdvertisesExtensionWhenFlagOn(t *
 	requireSkillsCapability(t, result["capabilities"])
 }
 
-func TestServePlatformToolset_Skills_InitializeOmitsExtensionWhenFlagOff(t *testing.T) {
+func TestServePlatformToolset_Skills_InitializeOmitsExtensionWhenFeatureOff(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -276,7 +276,7 @@ func TestServePlatformToolset_Skills_ResourcesListIsEmpty(t *testing.T) {
 	require.JSONEq(t, `[]`, string(result["resources"]), "skills are listed through skills/list, never as resources")
 }
 
-func TestServePlatformToolset_Skills_FlagOffLeavesSurfaceUnchanged(t *testing.T) {
+func TestServePlatformToolset_Skills_FeatureOffLeavesSurfaceUnchanged(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)

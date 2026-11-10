@@ -148,6 +148,20 @@ func (q *Queries) LocalEnablePlatformMCPFeature(ctx context.Context, organizatio
 	return err
 }
 
+const localEnableSkillsOverMCPFeature = `-- name: LocalEnableSkillsOverMCPFeature :exec
+INSERT INTO organization_features (organization_id, feature_name)
+VALUES ($1::text, 'skills_over_mcp')
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+`
+
+// Skills over MCP is a staff-managed entitlement, off by default everywhere
+// else; enabled locally so the seeded skills are served over MCP without a
+// trip to the admin app after every seed. The shared demo org never gets it.
+func (q *Queries) LocalEnableSkillsOverMCPFeature(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, localEnableSkillsOverMCPFeature, organizationID)
+	return err
+}
+
 const localGrantAPIKeyPolicy = `-- name: LocalGrantAPIKeyPolicy :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1::text, 'api_key:' || $2::text, 'mcp:connect',

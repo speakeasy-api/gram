@@ -29,7 +29,7 @@ import (
 )
 
 // skillsFixture is one public hosted toolset in the test user's project,
-// wrapped by one enabled MCP server, with the Skills extension flag on for the
+// wrapped by one enabled MCP server, with the Skills extension feature on for the
 // owning organization, plus the ids a test needs to link skills to it.
 type skillsFixture struct {
 	authCtx        *contextvalues.AuthContext
@@ -209,7 +209,7 @@ func requireWireSkill(t *testing.T, f *skillsFixture, skill wireSkill, name, con
 	require.Equal(t, len(content), skill.Resources[0].Size)
 }
 
-func TestServePublic_Skills_InitializeAdvertisesExtensionWhenFlagOn(t *testing.T) {
+func TestServePublic_Skills_InitializeAdvertisesExtensionWhenFeatureOn(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -221,7 +221,7 @@ func TestServePublic_Skills_InitializeAdvertisesExtensionWhenFlagOn(t *testing.T
 	requireSkillsCapability(t, result["capabilities"])
 }
 
-func TestServePublic_Skills_InitializeOmitsExtensionWhenFlagOff(t *testing.T) {
+func TestServePublic_Skills_InitializeOmitsExtensionWhenFeatureOff(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -588,7 +588,7 @@ func TestServePublic_Skills_NonDashboardChatSessionIsServedNothing(t *testing.T)
 	}
 }
 
-func TestServePublic_Skills_FlagOffAnswersMethodNotFound(t *testing.T) {
+func TestServePublic_Skills_FeatureOffAnswersMethodNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)

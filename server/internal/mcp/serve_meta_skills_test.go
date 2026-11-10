@@ -60,7 +60,7 @@ func listedSkillURIs(t *testing.T, result map[string]json.RawMessage) []string {
 	return uris
 }
 
-func TestServePublic_GatewaySkills_InitializeAdvertisesExtensionWhenFlagOn(t *testing.T) {
+func TestServePublic_GatewaySkills_InitializeAdvertisesExtensionWhenFeatureOn(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -154,7 +154,7 @@ func TestServePublic_GatewaySkills_APIKeyCallerIsServedNothing(t *testing.T) {
 	require.JSONEq(t, `[]`, string(requireRPCResult(t, w)["skills"]), "an API key is not served its creator's skills")
 }
 
-func TestServePublic_GatewaySkills_FlagOffAnswersMethodNotFound(t *testing.T) {
+func TestServePublic_GatewaySkills_FeatureOffAnswersMethodNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
