@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestListMcpServers_Empty(t *testing.T) {
@@ -75,8 +78,11 @@ func TestListMcpServers_HidesRetiredApprovalsServer(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	_, err := ti.conn.Exec(ctx, `INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
-VALUES (gen_random_uuid(), $1, 'Speakeasy Approvals', 'speakeasy-approvals', 'approvals', 'private')`, *authCtx.ProjectID)
+	err := testrepo.New(ti.conn).InsertRetiredApprovalsServerFixture(ctx, testrepo.InsertRetiredApprovalsServerFixtureParams{
+		ID:        uuid.New(),
+		ProjectID: *authCtx.ProjectID,
+		Slug:      conv.ToPGText("speakeasy-approvals"),
+	})
 	require.NoError(t, err)
 
 	result, err := ti.service.ListMcpServers(ctx, &gen.ListMcpServersPayload{

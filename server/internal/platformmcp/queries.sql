@@ -939,6 +939,8 @@ JOIN projects AS project
  AND project.organization_id = @organization_id
  AND project.deleted IS FALSE
 WHERE m.deleted IS FALSE
+  -- Same retired approvals server rule as ListPlatformMCPInventory.
+  AND m.builtin_backend IS NULL
   AND (sqlc.narg(project_id)::uuid IS NULL OR m.project_id = sqlc.narg(project_id)::uuid)
   AND (sqlc.narg(after_mcp_id)::uuid IS NULL OR m.id > sqlc.narg(after_mcp_id)::uuid)
   AND (

@@ -560,8 +560,11 @@ func TestAddMetaMcpMember_RejectsRetiredApprovalsServer(t *testing.T) {
 
 	serverID, err := uuid.NewV7()
 	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, `INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
-VALUES ($1, $2, 'Speakeasy Approvals', $3, 'approvals', 'private')`, serverID, *authCtx.ProjectID, "speakeasy-approvals-"+uuid.NewString()[:8])
+	err = testrepo.New(ti.conn).InsertRetiredApprovalsServerFixture(ctx, testrepo.InsertRetiredApprovalsServerFixtureParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+		Slug:      conv.ToPGText("speakeasy-approvals-" + uuid.NewString()[:8]),
+	})
 	require.NoError(t, err)
 
 	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
