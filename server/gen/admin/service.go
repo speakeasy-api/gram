@@ -287,6 +287,19 @@ type Service interface {
 	SaveRegistryEntry(context.Context, *SaveRegistryEntryPayload) (res *AdminRegistryEntry, err error)
 	// Staff-only registry administration.
 	SetRegistryEntryPublished(context.Context, *SetRegistryEntryPublishedPayload) (res *AdminRegistryEntry, err error)
+	// Staff-only MCP debugger: trace a remote MCP server URL step by step from
+	// Speakeasy's network. Reaches the server, reads its authentication challenge,
+	// discovers OAuth protected resource and authorization server metadata,
+	// detects how a client would register, and, when no sign-in is required,
+	// initializes a session and lists its tools, prompts and resources. Sends no
+	// credentials and stores nothing.
+	DebugMcpURL(context.Context, *DebugMcpURLPayload) (res *AdminMcpDebugReport, err error)
+	// Staff-only: the customer dashboard link for verifying a remote MCP server in
+	// Speakeasy's own project. When that project already has a server for the URL,
+	// the link opens its Playground; otherwise it opens the add-server page with
+	// the URL filled in. Reads only; nothing is created until staff confirm in the
+	// dashboard.
+	GetMcpVerificationLink(context.Context, *GetMcpVerificationLinkPayload) (res *AdminMcpVerificationLink, err error)
 	// Read the onboarding steps the code defines, mirrored into the database, with
 	// their groups, methods and prerequisites.
 	ListOnboardingSteps(context.Context, *ListOnboardingStepsPayload) (res *AdminOnboardingStepList, err error)
@@ -417,7 +430,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [108]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "getRegistryPromotionReview", "startRegistryPromotionReview", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject"}
+var MethodNames = [110]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "getRegistryPromotionReview", "startRegistryPromotionReview", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "debugMcpUrl", "getMcpVerificationLink", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject"}
 
 type AdminAuditLog struct {
 	// Internal staff-only audit activity; persisted but never published to the
@@ -747,6 +760,105 @@ type AdminListUsersResult struct {
 	Limit int
 }
 
+type AdminMcpDebugAuthMethod string
+
+type AdminMcpDebugOutcome string
+
+// A prompt advertised by the debugged server.
+type AdminMcpDebugPrompt struct {
+	// Prompt name.
+	Name string
+	// Display title, when advertised.
+	Title *string
+	// Prompt description.
+	Description *string
+	// Prompt arguments as advertised.
+	Arguments any
+}
+
+// AdminMcpDebugReport is the result type of the admin service debugMcpUrl
+// method.
+type AdminMcpDebugReport struct {
+	// The URL that was debugged, without credentials, query or fragment.
+	URL string
+	// Overall outcome.
+	Outcome AdminMcpDebugOutcome
+	// Total wall-clock time of the trace.
+	DurationMs int64
+	// Trace steps in execution order.
+	Steps []*AdminMcpDebugStep
+	// How a client would obtain credentials.
+	AuthMethod AdminMcpDebugAuthMethod
+	// MCP protocol version negotiated at initialize.
+	ProtocolVersion *string
+	// Server name from initialize.
+	ServerName *string
+	// Server version from initialize.
+	ServerVersion *string
+	// Server instructions from initialize.
+	Instructions *string
+	// Tools advertised by the server. Present only when the server was listed
+	// without sign-in.
+	Tools []*AdminMcpDebugTool
+	// Prompts advertised by the server. Present only when listed.
+	Prompts []*AdminMcpDebugPrompt
+	// Resources advertised by the server. Present only when listed.
+	Resources []*AdminMcpDebugResource
+}
+
+// A resource advertised by the debugged server.
+type AdminMcpDebugResource struct {
+	// Resource URI.
+	URI string
+	// Resource name.
+	Name string
+	// Display title, when advertised.
+	Title *string
+	// Resource description.
+	Description *string
+	// Resource MIME type.
+	MimeType *string
+}
+
+// One step of an MCP debug trace.
+type AdminMcpDebugStep struct {
+	// Stable step identifier.
+	ID AdminMcpDebugStepID
+	// Human-readable step title.
+	Title string
+	// Step outcome.
+	Status AdminMcpDebugStepStatus
+	// One-line explanation of what the step found.
+	Summary string
+	// Wall-clock time the step took. Absent for steps that did no network work.
+	DurationMs *int64
+	// The URL the step requested, without credentials, query or fragment.
+	RequestURL *string
+	// HTTP status the step received, when it made an HTTP request.
+	HTTPStatus *int
+	// Structured data the step observed, such as parsed challenge parameters or
+	// metadata documents.
+	Details map[string]any
+}
+
+type AdminMcpDebugStepID string
+
+type AdminMcpDebugStepStatus string
+
+// A tool advertised by the debugged server.
+type AdminMcpDebugTool struct {
+	// Tool name.
+	Name string
+	// Display title, when advertised.
+	Title *string
+	// Tool description.
+	Description *string
+	// JSON Schema for the tool's arguments.
+	InputSchema any
+	// Tool annotation hints as advertised.
+	Annotations any
+}
+
 // MCP server surfaced to admin operators. Covers both server models:
 // mcp_servers rows and mcp_enabled toolsets that no mcp_servers row points at.
 type AdminMcpServer struct {
@@ -1053,6 +1165,18 @@ type AdminMcpServerToolCalls struct {
 	BucketSeconds *int64
 	// Tool calls per bucket, oldest first.
 	Daily []*AdminMcpServerToolCallBucket
+}
+
+// AdminMcpVerificationLink is the result type of the admin service
+// getMcpVerificationLink method.
+type AdminMcpVerificationLink struct {
+	// Customer dashboard link to open in a new tab.
+	URL string
+	// True when Speakeasy's project already has a server for this URL and the link
+	// opens its Playground.
+	Existing bool
+	// Name of the Speakeasy project the server is verified in.
+	ProjectName string
 }
 
 type AdminMdmVendorOption struct {
@@ -2294,6 +2418,14 @@ type CurateRegistryPromotionCandidatePayload struct {
 	RetryKey          string
 }
 
+// DebugMcpURLPayload is the payload type of the admin service debugMcpUrl
+// method.
+type DebugMcpURLPayload struct {
+	AdminSessionToken *string
+	// The remote MCP server URL to debug.
+	URL string
+}
+
 // DeleteGlobalIssuerPayload is the payload type of the admin service
 // deleteGlobalIssuer method.
 type DeleteGlobalIssuerPayload struct {
@@ -2455,6 +2587,16 @@ type GetMcpServerToolCallsPayload struct {
 	McpServerID string
 	// Window in days. 90 days is bucketed weekly, shorter windows daily.
 	WindowDays int
+}
+
+// GetMcpVerificationLinkPayload is the payload type of the admin service
+// getMcpVerificationLink method.
+type GetMcpVerificationLinkPayload struct {
+	AdminSessionToken *string
+	// The remote MCP server URL to verify.
+	URL string
+	// Optional display name to fill in when the server is added.
+	Name *string
 }
 
 // GetMeterUsagePayload is the payload type of the admin service getMeterUsage

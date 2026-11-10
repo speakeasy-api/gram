@@ -76,13 +76,10 @@ func ProbeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL stri
 	return probeRemoteMcpURL(ctx, policy, rawURL).result
 }
 
-// probeRemoteMcpURL probes a URL that has already passed management-time
-// validation. Redirect targets are independently validated before following.
-//
-// The SDK client opens with a 2026-07-28 server/discover request and falls
-// back to the initialize handshake when the upstream does not answer it, so
-// upstreams that implement either one verify.
-func probeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL string) probeObservation {
+// newProbeHTTPClient returns the guardian-backed client the probe and the
+// debugger share: bounded per request, with redirect targets revalidated and
+// cross-origin body replays refused exactly as the hosted proxy does.
+func newProbeHTTPClient(policy *guardian.Policy) *guardian.HTTPClient {
 	client := policy.Client(guardian.WithInternalCatalog())
 	client.Timeout = probeURLTimeout
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -104,6 +101,17 @@ func probeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL stri
 		}
 		return nil
 	}
+	return client
+}
+
+// probeRemoteMcpURL probes a URL that has already passed management-time
+// validation. Redirect targets are independently validated before following.
+//
+// The SDK client opens with a 2026-07-28 server/discover request and falls
+// back to the initialize handshake when the upstream does not answer it, so
+// upstreams that implement either one verify.
+func probeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL string) probeObservation {
+	client := newProbeHTTPClient(policy)
 	recorder := &probeRoundTripper{base: client.Transport, mu: sync.Mutex{}, last: nil}
 	client.Transport = recorder
 

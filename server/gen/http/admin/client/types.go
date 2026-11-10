@@ -528,6 +528,22 @@ type SetRegistryEntryPublishedRequestBody struct {
 	Published bool   `form:"published" json:"published" xml:"published"`
 }
 
+// DebugMcpURLRequestBody is the type of the "admin" service "debugMcpUrl"
+// endpoint HTTP request body.
+type DebugMcpURLRequestBody struct {
+	// The remote MCP server URL to debug.
+	URL string `form:"url" json:"url" xml:"url"`
+}
+
+// GetMcpVerificationLinkRequestBody is the type of the "admin" service
+// "getMcpVerificationLink" endpoint HTTP request body.
+type GetMcpVerificationLinkRequestBody struct {
+	// The remote MCP server URL to verify.
+	URL string `form:"url" json:"url" xml:"url"`
+	// Optional display name to fill in when the server is added.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // SetOrganizationOnboardingStackRequestBody is the type of the "admin" service
 // "setOrganizationOnboardingStack" endpoint HTTP request body.
 type SetOrganizationOnboardingStackRequestBody struct {
@@ -2617,6 +2633,48 @@ type SetRegistryEntryPublishedResponseBody struct {
 	// Opaque write precondition; echo unchanged
 	UpdatedAt *string                           `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	Issues    []*AdminRegistryIssueResponseBody `form:"issues,omitempty" json:"issues,omitempty" xml:"issues,omitempty"`
+}
+
+// DebugMcpURLResponseBody is the type of the "admin" service "debugMcpUrl"
+// endpoint HTTP response body.
+type DebugMcpURLResponseBody struct {
+	// The URL that was debugged, without credentials, query or fragment.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Overall outcome.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	// Total wall-clock time of the trace.
+	DurationMs *int64 `form:"duration_ms,omitempty" json:"duration_ms,omitempty" xml:"duration_ms,omitempty"`
+	// Trace steps in execution order.
+	Steps []*AdminMcpDebugStepResponseBody `form:"steps,omitempty" json:"steps,omitempty" xml:"steps,omitempty"`
+	// How a client would obtain credentials.
+	AuthMethod *string `form:"auth_method,omitempty" json:"auth_method,omitempty" xml:"auth_method,omitempty"`
+	// MCP protocol version negotiated at initialize.
+	ProtocolVersion *string `form:"protocol_version,omitempty" json:"protocol_version,omitempty" xml:"protocol_version,omitempty"`
+	// Server name from initialize.
+	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	// Server version from initialize.
+	ServerVersion *string `form:"server_version,omitempty" json:"server_version,omitempty" xml:"server_version,omitempty"`
+	// Server instructions from initialize.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Tools advertised by the server. Present only when the server was listed
+	// without sign-in.
+	Tools []*AdminMcpDebugToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Prompts advertised by the server. Present only when listed.
+	Prompts []*AdminMcpDebugPromptResponseBody `form:"prompts,omitempty" json:"prompts,omitempty" xml:"prompts,omitempty"`
+	// Resources advertised by the server. Present only when listed.
+	Resources []*AdminMcpDebugResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
+}
+
+// GetMcpVerificationLinkResponseBody is the type of the "admin" service
+// "getMcpVerificationLink" endpoint HTTP response body.
+type GetMcpVerificationLinkResponseBody struct {
+	// Customer dashboard link to open in a new tab.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// True when Speakeasy's project already has a server for this URL and the link
+	// opens its Playground.
+	Existing *bool `form:"existing,omitempty" json:"existing,omitempty" xml:"existing,omitempty"`
+	// Name of the Speakeasy project the server is verified in.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
 }
 
 // ListOnboardingStepsResponseBody is the type of the "admin" service
@@ -18007,6 +18065,376 @@ type SetRegistryEntryPublishedGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DebugMcpURLUnauthorizedResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "unauthorized" error.
+type DebugMcpURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DebugMcpURLForbiddenResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "forbidden" error.
+type DebugMcpURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DebugMcpURLBadRequestResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "bad_request" error.
+type DebugMcpURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DebugMcpURLNotFoundResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "not_found" error.
+type DebugMcpURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DebugMcpURLConflictResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "conflict" error.
+type DebugMcpURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DebugMcpURLUnsupportedMediaResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "unsupported_media" error.
+type DebugMcpURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DebugMcpURLInvalidResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "invalid" error.
+type DebugMcpURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DebugMcpURLInvariantViolationResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "invariant_violation"
+// error.
+type DebugMcpURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DebugMcpURLUnexpectedResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "unexpected" error.
+type DebugMcpURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DebugMcpURLGatewayErrorResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "gateway_error" error.
+type DebugMcpURLGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpVerificationLinkUnauthorizedResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetMcpVerificationLinkUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpVerificationLinkForbiddenResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMcpVerificationLinkForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpVerificationLinkBadRequestResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "bad_request" error.
+type GetMcpVerificationLinkBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpVerificationLinkNotFoundResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "not_found" error.
+type GetMcpVerificationLinkNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpVerificationLinkConflictResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "conflict" error.
+type GetMcpVerificationLinkConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpVerificationLinkUnsupportedMediaResponseBody is the type of the
+// "admin" service "getMcpVerificationLink" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetMcpVerificationLinkUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpVerificationLinkInvalidResponseBody is the type of the "admin" service
+// "getMcpVerificationLink" endpoint HTTP response body for the "invalid" error.
+type GetMcpVerificationLinkInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpVerificationLinkInvariantViolationResponseBody is the type of the
+// "admin" service "getMcpVerificationLink" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetMcpVerificationLinkInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpVerificationLinkUnexpectedResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "unexpected" error.
+type GetMcpVerificationLinkUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpVerificationLinkGatewayErrorResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetMcpVerificationLinkGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListOnboardingStepsUnauthorizedResponseBody is the type of the "admin"
 // service "listOnboardingSteps" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -24830,6 +25258,71 @@ type AdminRegistryIssueResponseBody struct {
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
 }
 
+// AdminMcpDebugStepResponseBody is used to define fields on response body
+// types.
+type AdminMcpDebugStepResponseBody struct {
+	// Stable step identifier.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Human-readable step title.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Step outcome.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// One-line explanation of what the step found.
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// Wall-clock time the step took. Absent for steps that did no network work.
+	DurationMs *int64 `form:"duration_ms,omitempty" json:"duration_ms,omitempty" xml:"duration_ms,omitempty"`
+	// The URL the step requested, without credentials, query or fragment.
+	RequestURL *string `form:"request_url,omitempty" json:"request_url,omitempty" xml:"request_url,omitempty"`
+	// HTTP status the step received, when it made an HTTP request.
+	HTTPStatus *int `form:"http_status,omitempty" json:"http_status,omitempty" xml:"http_status,omitempty"`
+	// Structured data the step observed, such as parsed challenge parameters or
+	// metadata documents.
+	Details map[string]any `form:"details,omitempty" json:"details,omitempty" xml:"details,omitempty"`
+}
+
+// AdminMcpDebugToolResponseBody is used to define fields on response body
+// types.
+type AdminMcpDebugToolResponseBody struct {
+	// Tool name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Display title, when advertised.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Tool description.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// JSON Schema for the tool's arguments.
+	InputSchema any `form:"input_schema,omitempty" json:"input_schema,omitempty" xml:"input_schema,omitempty"`
+	// Tool annotation hints as advertised.
+	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+}
+
+// AdminMcpDebugPromptResponseBody is used to define fields on response body
+// types.
+type AdminMcpDebugPromptResponseBody struct {
+	// Prompt name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Display title, when advertised.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Prompt description.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Prompt arguments as advertised.
+	Arguments any `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
+}
+
+// AdminMcpDebugResourceResponseBody is used to define fields on response body
+// types.
+type AdminMcpDebugResourceResponseBody struct {
+	// Resource URI.
+	URI *string `form:"uri,omitempty" json:"uri,omitempty" xml:"uri,omitempty"`
+	// Resource name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Display title, when advertised.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Resource description.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Resource MIME type.
+	MimeType *string `form:"mime_type,omitempty" json:"mime_type,omitempty" xml:"mime_type,omitempty"`
+}
+
 // AdminOnboardingStepResponseBody is used to define fields on response body
 // types.
 type AdminOnboardingStepResponseBody struct {
@@ -25839,6 +26332,25 @@ func NewSetRegistryEntryPublishedRequestBody(p *admin.SetRegistryEntryPublishedP
 		ID:        p.ID,
 		UpdatedAt: p.UpdatedAt,
 		Published: p.Published,
+	}
+	return body
+}
+
+// NewDebugMcpURLRequestBody builds the HTTP request body from the payload of
+// the "debugMcpUrl" endpoint of the "admin" service.
+func NewDebugMcpURLRequestBody(p *admin.DebugMcpURLPayload) *DebugMcpURLRequestBody {
+	body := &DebugMcpURLRequestBody{
+		URL: p.URL,
+	}
+	return body
+}
+
+// NewGetMcpVerificationLinkRequestBody builds the HTTP request body from the
+// payload of the "getMcpVerificationLink" endpoint of the "admin" service.
+func NewGetMcpVerificationLinkRequestBody(p *admin.GetMcpVerificationLinkPayload) *GetMcpVerificationLinkRequestBody {
+	body := &GetMcpVerificationLinkRequestBody{
+		URL:  p.URL,
+		Name: p.Name,
 	}
 	return body
 }
@@ -40094,6 +40606,373 @@ func NewSetRegistryEntryPublishedGatewayError(body *SetRegistryEntryPublishedGat
 	return v
 }
 
+// NewDebugMcpURLAdminMcpDebugReportOK builds a "admin" service "debugMcpUrl"
+// endpoint result from a HTTP "OK" response.
+func NewDebugMcpURLAdminMcpDebugReportOK(body *DebugMcpURLResponseBody) *admin.AdminMcpDebugReport {
+	v := &admin.AdminMcpDebugReport{
+		URL:             *body.URL,
+		Outcome:         admin.AdminMcpDebugOutcome(*body.Outcome),
+		DurationMs:      *body.DurationMs,
+		AuthMethod:      admin.AdminMcpDebugAuthMethod(*body.AuthMethod),
+		ProtocolVersion: body.ProtocolVersion,
+		ServerName:      body.ServerName,
+		ServerVersion:   body.ServerVersion,
+		Instructions:    body.Instructions,
+	}
+	v.Steps = make([]*admin.AdminMcpDebugStep, len(body.Steps))
+	for i, val := range body.Steps {
+		if val == nil {
+			v.Steps[i] = nil
+			continue
+		}
+		v.Steps[i] = unmarshalAdminMcpDebugStepResponseBodyToAdminAdminMcpDebugStep(val)
+	}
+	if body.Tools != nil {
+		v.Tools = make([]*admin.AdminMcpDebugTool, len(body.Tools))
+		for i, val := range body.Tools {
+			if val == nil {
+				v.Tools[i] = nil
+				continue
+			}
+			v.Tools[i] = unmarshalAdminMcpDebugToolResponseBodyToAdminAdminMcpDebugTool(val)
+		}
+	}
+	if body.Prompts != nil {
+		v.Prompts = make([]*admin.AdminMcpDebugPrompt, len(body.Prompts))
+		for i, val := range body.Prompts {
+			if val == nil {
+				v.Prompts[i] = nil
+				continue
+			}
+			v.Prompts[i] = unmarshalAdminMcpDebugPromptResponseBodyToAdminAdminMcpDebugPrompt(val)
+		}
+	}
+	if body.Resources != nil {
+		v.Resources = make([]*admin.AdminMcpDebugResource, len(body.Resources))
+		for i, val := range body.Resources {
+			if val == nil {
+				v.Resources[i] = nil
+				continue
+			}
+			v.Resources[i] = unmarshalAdminMcpDebugResourceResponseBodyToAdminAdminMcpDebugResource(val)
+		}
+	}
+
+	return v
+}
+
+// NewDebugMcpURLUnauthorized builds a admin service debugMcpUrl endpoint
+// unauthorized error.
+func NewDebugMcpURLUnauthorized(body *DebugMcpURLUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDebugMcpURLForbidden builds a admin service debugMcpUrl endpoint
+// forbidden error.
+func NewDebugMcpURLForbidden(body *DebugMcpURLForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDebugMcpURLBadRequest builds a admin service debugMcpUrl endpoint
+// bad_request error.
+func NewDebugMcpURLBadRequest(body *DebugMcpURLBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDebugMcpURLNotFound builds a admin service debugMcpUrl endpoint not_found
+// error.
+func NewDebugMcpURLNotFound(body *DebugMcpURLNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDebugMcpURLConflict builds a admin service debugMcpUrl endpoint conflict
+// error.
+func NewDebugMcpURLConflict(body *DebugMcpURLConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDebugMcpURLUnsupportedMedia builds a admin service debugMcpUrl endpoint
+// unsupported_media error.
+func NewDebugMcpURLUnsupportedMedia(body *DebugMcpURLUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDebugMcpURLInvalid builds a admin service debugMcpUrl endpoint invalid
+// error.
+func NewDebugMcpURLInvalid(body *DebugMcpURLInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDebugMcpURLInvariantViolation builds a admin service debugMcpUrl endpoint
+// invariant_violation error.
+func NewDebugMcpURLInvariantViolation(body *DebugMcpURLInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDebugMcpURLUnexpected builds a admin service debugMcpUrl endpoint
+// unexpected error.
+func NewDebugMcpURLUnexpected(body *DebugMcpURLUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDebugMcpURLGatewayError builds a admin service debugMcpUrl endpoint
+// gateway_error error.
+func NewDebugMcpURLGatewayError(body *DebugMcpURLGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpVerificationLinkAdminMcpVerificationLinkOK builds a "admin" service
+// "getMcpVerificationLink" endpoint result from a HTTP "OK" response.
+func NewGetMcpVerificationLinkAdminMcpVerificationLinkOK(body *GetMcpVerificationLinkResponseBody) *admin.AdminMcpVerificationLink {
+	v := &admin.AdminMcpVerificationLink{
+		URL:         *body.URL,
+		Existing:    *body.Existing,
+		ProjectName: *body.ProjectName,
+	}
+
+	return v
+}
+
+// NewGetMcpVerificationLinkUnauthorized builds a admin service
+// getMcpVerificationLink endpoint unauthorized error.
+func NewGetMcpVerificationLinkUnauthorized(body *GetMcpVerificationLinkUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpVerificationLinkForbidden builds a admin service
+// getMcpVerificationLink endpoint forbidden error.
+func NewGetMcpVerificationLinkForbidden(body *GetMcpVerificationLinkForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpVerificationLinkBadRequest builds a admin service
+// getMcpVerificationLink endpoint bad_request error.
+func NewGetMcpVerificationLinkBadRequest(body *GetMcpVerificationLinkBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpVerificationLinkNotFound builds a admin service
+// getMcpVerificationLink endpoint not_found error.
+func NewGetMcpVerificationLinkNotFound(body *GetMcpVerificationLinkNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpVerificationLinkConflict builds a admin service
+// getMcpVerificationLink endpoint conflict error.
+func NewGetMcpVerificationLinkConflict(body *GetMcpVerificationLinkConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpVerificationLinkUnsupportedMedia builds a admin service
+// getMcpVerificationLink endpoint unsupported_media error.
+func NewGetMcpVerificationLinkUnsupportedMedia(body *GetMcpVerificationLinkUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpVerificationLinkInvalid builds a admin service
+// getMcpVerificationLink endpoint invalid error.
+func NewGetMcpVerificationLinkInvalid(body *GetMcpVerificationLinkInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpVerificationLinkInvariantViolation builds a admin service
+// getMcpVerificationLink endpoint invariant_violation error.
+func NewGetMcpVerificationLinkInvariantViolation(body *GetMcpVerificationLinkInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpVerificationLinkUnexpected builds a admin service
+// getMcpVerificationLink endpoint unexpected error.
+func NewGetMcpVerificationLinkUnexpected(body *GetMcpVerificationLinkUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpVerificationLinkGatewayError builds a admin service
+// getMcpVerificationLink endpoint gateway_error error.
+func NewGetMcpVerificationLinkGatewayError(body *GetMcpVerificationLinkGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListOnboardingStepsAdminOnboardingStepListOK builds a "admin" service
 // "listOnboardingSteps" endpoint result from a HTTP "OK" response.
 func NewListOnboardingStepsAdminOnboardingStepListOK(body *ListOnboardingStepsResponseBody) *admin.AdminOnboardingStepList {
@@ -47866,6 +48745,80 @@ func ValidateSetRegistryEntryPublishedResponseBody(body *SetRegistryEntryPublish
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateDebugMcpURLResponseBody runs the validations defined on
+// DebugMcpUrlResponseBody
+func ValidateDebugMcpURLResponseBody(body *DebugMcpURLResponseBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.DurationMs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("duration_ms", "body"))
+	}
+	if body.Steps == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("steps", "body"))
+	}
+	if body.AuthMethod == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auth_method", "body"))
+	}
+	if body.Outcome != nil {
+		if !(*body.Outcome == "mcp_available" || *body.Outcome == "authentication_required" || *body.Outcome == "invalid_mcp_response" || *body.Outcome == "unreachable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"mcp_available", "authentication_required", "invalid_mcp_response", "unreachable"}))
+		}
+	}
+	for _, e := range body.Steps {
+		if e != nil {
+			if err2 := ValidateAdminMcpDebugStepResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.AuthMethod != nil {
+		if !(*body.AuthMethod == "none" || *body.AuthMethod == "client_id_metadata_document" || *body.AuthMethod == "dynamic_client_registration" || *body.AuthMethod == "pre_registered" || *body.AuthMethod == "non_oauth" || *body.AuthMethod == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.auth_method", *body.AuthMethod, []any{"none", "client_id_metadata_document", "dynamic_client_registration", "pre_registered", "non_oauth", "unknown"}))
+		}
+	}
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateAdminMcpDebugToolResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Prompts {
+		if e != nil {
+			if err2 := ValidateAdminMcpDebugPromptResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Resources {
+		if e != nil {
+			if err2 := ValidateAdminMcpDebugResourceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetMcpVerificationLinkResponseBody runs the validations defined on
+// GetMcpVerificationLinkResponseBody
+func ValidateGetMcpVerificationLinkResponseBody(body *GetMcpVerificationLinkResponseBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.Existing == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("existing", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
 	}
 	return
 }
@@ -68036,6 +68989,487 @@ func ValidateSetRegistryEntryPublishedGatewayErrorResponseBody(body *SetRegistry
 	return
 }
 
+// ValidateDebugMcpURLUnauthorizedResponseBody runs the validations defined on
+// debugMcpUrl_unauthorized_response_body
+func ValidateDebugMcpURLUnauthorizedResponseBody(body *DebugMcpURLUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDebugMcpURLForbiddenResponseBody runs the validations defined on
+// debugMcpUrl_forbidden_response_body
+func ValidateDebugMcpURLForbiddenResponseBody(body *DebugMcpURLForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDebugMcpURLBadRequestResponseBody runs the validations defined on
+// debugMcpUrl_bad_request_response_body
+func ValidateDebugMcpURLBadRequestResponseBody(body *DebugMcpURLBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDebugMcpURLNotFoundResponseBody runs the validations defined on
+// debugMcpUrl_not_found_response_body
+func ValidateDebugMcpURLNotFoundResponseBody(body *DebugMcpURLNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDebugMcpURLConflictResponseBody runs the validations defined on
+// debugMcpUrl_conflict_response_body
+func ValidateDebugMcpURLConflictResponseBody(body *DebugMcpURLConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDebugMcpURLUnsupportedMediaResponseBody runs the validations defined
+// on debugMcpUrl_unsupported_media_response_body
+func ValidateDebugMcpURLUnsupportedMediaResponseBody(body *DebugMcpURLUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDebugMcpURLInvalidResponseBody runs the validations defined on
+// debugMcpUrl_invalid_response_body
+func ValidateDebugMcpURLInvalidResponseBody(body *DebugMcpURLInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDebugMcpURLInvariantViolationResponseBody runs the validations
+// defined on debugMcpUrl_invariant_violation_response_body
+func ValidateDebugMcpURLInvariantViolationResponseBody(body *DebugMcpURLInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDebugMcpURLUnexpectedResponseBody runs the validations defined on
+// debugMcpUrl_unexpected_response_body
+func ValidateDebugMcpURLUnexpectedResponseBody(body *DebugMcpURLUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDebugMcpURLGatewayErrorResponseBody runs the validations defined on
+// debugMcpUrl_gateway_error_response_body
+func ValidateDebugMcpURLGatewayErrorResponseBody(body *DebugMcpURLGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpVerificationLinkUnauthorizedResponseBody runs the validations
+// defined on getMcpVerificationLink_unauthorized_response_body
+func ValidateGetMcpVerificationLinkUnauthorizedResponseBody(body *GetMcpVerificationLinkUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpVerificationLinkForbiddenResponseBody runs the validations
+// defined on getMcpVerificationLink_forbidden_response_body
+func ValidateGetMcpVerificationLinkForbiddenResponseBody(body *GetMcpVerificationLinkForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpVerificationLinkBadRequestResponseBody runs the validations
+// defined on getMcpVerificationLink_bad_request_response_body
+func ValidateGetMcpVerificationLinkBadRequestResponseBody(body *GetMcpVerificationLinkBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpVerificationLinkNotFoundResponseBody runs the validations
+// defined on getMcpVerificationLink_not_found_response_body
+func ValidateGetMcpVerificationLinkNotFoundResponseBody(body *GetMcpVerificationLinkNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpVerificationLinkConflictResponseBody runs the validations
+// defined on getMcpVerificationLink_conflict_response_body
+func ValidateGetMcpVerificationLinkConflictResponseBody(body *GetMcpVerificationLinkConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpVerificationLinkUnsupportedMediaResponseBody runs the
+// validations defined on getMcpVerificationLink_unsupported_media_response_body
+func ValidateGetMcpVerificationLinkUnsupportedMediaResponseBody(body *GetMcpVerificationLinkUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpVerificationLinkInvalidResponseBody runs the validations
+// defined on getMcpVerificationLink_invalid_response_body
+func ValidateGetMcpVerificationLinkInvalidResponseBody(body *GetMcpVerificationLinkInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpVerificationLinkInvariantViolationResponseBody runs the
+// validations defined on
+// getMcpVerificationLink_invariant_violation_response_body
+func ValidateGetMcpVerificationLinkInvariantViolationResponseBody(body *GetMcpVerificationLinkInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpVerificationLinkUnexpectedResponseBody runs the validations
+// defined on getMcpVerificationLink_unexpected_response_body
+func ValidateGetMcpVerificationLinkUnexpectedResponseBody(body *GetMcpVerificationLinkUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpVerificationLinkGatewayErrorResponseBody runs the validations
+// defined on getMcpVerificationLink_gateway_error_response_body
+func ValidateGetMcpVerificationLinkGatewayErrorResponseBody(body *GetMcpVerificationLinkGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListOnboardingStepsUnauthorizedResponseBody runs the validations
 // defined on listOnboardingSteps_unauthorized_response_body
 func ValidateListOnboardingStepsUnauthorizedResponseBody(body *ListOnboardingStepsUnauthorizedResponseBody) (err error) {
@@ -77279,6 +78713,64 @@ func ValidateAdminRegistryIssueResponseBody(body *AdminRegistryIssueResponseBody
 	}
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	return
+}
+
+// ValidateAdminMcpDebugStepResponseBody runs the validations defined on
+// AdminMcpDebugStepResponseBody
+func ValidateAdminMcpDebugStepResponseBody(body *AdminMcpDebugStepResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Summary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
+	}
+	if body.ID != nil {
+		if !(*body.ID == "reach_server" || *body.ID == "parse_auth_challenge" || *body.ID == "fetch_protected_resource_metadata" || *body.ID == "fetch_authorization_server_metadata" || *body.ID == "detect_auth_method" || *body.ID == "initialize" || *body.ID == "list_capabilities") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.id", *body.ID, []any{"reach_server", "parse_auth_challenge", "fetch_protected_resource_metadata", "fetch_authorization_server_metadata", "detect_auth_method", "initialize", "list_capabilities"}))
+		}
+	}
+	if body.Status != nil {
+		if !(*body.Status == "passed" || *body.Status == "warning" || *body.Status == "failed" || *body.Status == "skipped") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"passed", "warning", "failed", "skipped"}))
+		}
+	}
+	return
+}
+
+// ValidateAdminMcpDebugToolResponseBody runs the validations defined on
+// AdminMcpDebugToolResponseBody
+func ValidateAdminMcpDebugToolResponseBody(body *AdminMcpDebugToolResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateAdminMcpDebugPromptResponseBody runs the validations defined on
+// AdminMcpDebugPromptResponseBody
+func ValidateAdminMcpDebugPromptResponseBody(body *AdminMcpDebugPromptResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateAdminMcpDebugResourceResponseBody runs the validations defined on
+// AdminMcpDebugResourceResponseBody
+func ValidateAdminMcpDebugResourceResponseBody(body *AdminMcpDebugResourceResponseBody) (err error) {
+	if body.URI == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uri", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }

@@ -206,7 +206,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|list-registry-promotion-candidates|get-registry-promotion-candidate|get-registry-promotion-review|start-registry-promotion-review|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|list-registry-promotion-candidates|get-registry-promotion-candidate|get-registry-promotion-review|start-registry-promotion-review|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|debug-mcp-url|get-mcp-verification-link|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -4827,6 +4827,14 @@ func ParseEndpoint(
 		adminSetRegistryEntryPublishedBodyFlag              = adminSetRegistryEntryPublishedFlags.String("body", "REQUIRED", "")
 		adminSetRegistryEntryPublishedAdminSessionTokenFlag = adminSetRegistryEntryPublishedFlags.String("admin-session-token", "", "")
 
+		adminDebugMcpURLFlags                 = flag.NewFlagSet("debug-mcp-url", flag.ExitOnError)
+		adminDebugMcpURLBodyFlag              = adminDebugMcpURLFlags.String("body", "REQUIRED", "")
+		adminDebugMcpURLAdminSessionTokenFlag = adminDebugMcpURLFlags.String("admin-session-token", "", "")
+
+		adminGetMcpVerificationLinkFlags                 = flag.NewFlagSet("get-mcp-verification-link", flag.ExitOnError)
+		adminGetMcpVerificationLinkBodyFlag              = adminGetMcpVerificationLinkFlags.String("body", "REQUIRED", "")
+		adminGetMcpVerificationLinkAdminSessionTokenFlag = adminGetMcpVerificationLinkFlags.String("admin-session-token", "", "")
+
 		adminListOnboardingStepsFlags                 = flag.NewFlagSet("list-onboarding-steps", flag.ExitOnError)
 		adminListOnboardingStepsAdminSessionTokenFlag = adminListOnboardingStepsFlags.String("admin-session-token", "", "")
 
@@ -6565,6 +6573,8 @@ func ParseEndpoint(
 	adminCreateRegistryEntryFlags.Usage = adminCreateRegistryEntryUsage
 	adminSaveRegistryEntryFlags.Usage = adminSaveRegistryEntryUsage
 	adminSetRegistryEntryPublishedFlags.Usage = adminSetRegistryEntryPublishedUsage
+	adminDebugMcpURLFlags.Usage = adminDebugMcpURLUsage
+	adminGetMcpVerificationLinkFlags.Usage = adminGetMcpVerificationLinkUsage
 	adminListOnboardingStepsFlags.Usage = adminListOnboardingStepsUsage
 	adminGetOnboardingStackOptionsFlags.Usage = adminGetOnboardingStackOptionsUsage
 	adminGetOrganizationOnboardingStackFlags.Usage = adminGetOrganizationOnboardingStackUsage
@@ -9811,6 +9821,12 @@ func ParseEndpoint(
 
 			case "set-registry-entry-published":
 				epf = adminSetRegistryEntryPublishedFlags
+
+			case "debug-mcp-url":
+				epf = adminDebugMcpURLFlags
+
+			case "get-mcp-verification-link":
+				epf = adminGetMcpVerificationLinkFlags
 
 			case "list-onboarding-steps":
 				epf = adminListOnboardingStepsFlags
@@ -13184,6 +13200,12 @@ func ParseEndpoint(
 			case "set-registry-entry-published":
 				endpoint = c.SetRegistryEntryPublished()
 				data, err = adminc.BuildSetRegistryEntryPublishedPayload(*adminSetRegistryEntryPublishedBodyFlag, *adminSetRegistryEntryPublishedAdminSessionTokenFlag)
+			case "debug-mcp-url":
+				endpoint = c.DebugMcpURL()
+				data, err = adminc.BuildDebugMcpURLPayload(*adminDebugMcpURLBodyFlag, *adminDebugMcpURLAdminSessionTokenFlag)
+			case "get-mcp-verification-link":
+				endpoint = c.GetMcpVerificationLink()
+				data, err = adminc.BuildGetMcpVerificationLinkPayload(*adminGetMcpVerificationLinkBodyFlag, *adminGetMcpVerificationLinkAdminSessionTokenFlag)
 			case "list-onboarding-steps":
 				endpoint = c.ListOnboardingSteps()
 				data, err = adminc.BuildListOnboardingStepsPayload(*adminListOnboardingStepsAdminSessionTokenFlag)
@@ -32614,6 +32636,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    create-registry-entry: Staff-only registry administration.`)
 	fmt.Fprintln(os.Stderr, `    save-registry-entry: Staff-only registry administration.`)
 	fmt.Fprintln(os.Stderr, `    set-registry-entry-published: Staff-only registry administration.`)
+	fmt.Fprintln(os.Stderr, `    debug-mcp-url: Staff-only MCP debugger: trace a remote MCP server URL step by step from Speakeasy's network. Reaches the server, reads its authentication challenge, discovers OAuth protected resource and authorization server metadata, detects how a client would register, and, when no sign-in is required, initializes a session and lists its tools, prompts and resources. Sends no credentials and stores nothing.`)
+	fmt.Fprintln(os.Stderr, `    get-mcp-verification-link: Staff-only: the customer dashboard link for verifying a remote MCP server in Speakeasy's own project. When that project already has a server for the URL, the link opens its Playground; otherwise it opens the add-server page with the URL filled in. Reads only; nothing is created until staff confirm in the dashboard.`)
 	fmt.Fprintln(os.Stderr, `    list-onboarding-steps: Read the onboarding steps the code defines, mirrored into the database, with their groups, methods and prerequisites.`)
 	fmt.Fprintln(os.Stderr, `    get-onboarding-stack-options: Read the vendors, plans and platforms the stack form offers, from the support matrix catalog.`)
 	fmt.Fprintln(os.Stderr, `    get-organization-onboarding-stack: Read the stack staff recorded for an organization: its vendors with plans and its device management.`)
@@ -34292,6 +34316,46 @@ func adminSetRegistryEntryPublishedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-registry-entry-published --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"published\": false,\n      \"updated_at\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminDebugMcpURLUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin debug-mcp-url", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Staff-only MCP debugger: trace a remote MCP server URL step by step from Speakeasy's network. Reaches the server, reads its authentication challenge, discovers OAuth protected resource and authorization server metadata, detects how a client would register, and, when no sign-in is required, initializes a session and lists its tools, prompts and resources. Sends no credentials and stores nothing.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin debug-mcp-url --body '{\n      \"url\": \"https://example.com/foo\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetMcpVerificationLinkUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-mcp-verification-link", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Staff-only: the customer dashboard link for verifying a remote MCP server in Speakeasy's own project. When that project already has a server for the URL, the link opens its Playground; otherwise it opens the add-server page with the URL filled in. Reads only; nothing is created until staff confirm in the dashboard.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-mcp-verification-link --body '{\n      \"name\": \"aaa\",\n      \"url\": \"https://example.com/foo\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminListOnboardingStepsUsage() {

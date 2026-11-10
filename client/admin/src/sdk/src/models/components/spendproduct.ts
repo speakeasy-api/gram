@@ -10,12 +10,12 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { SpendBucket, SpendBucket$inboundSchema } from "./spendbucket.js";
 
-export const Id = {
+export const SpendProductId = {
   AgentSessionStorage: "agent_session_storage",
   RiskContentScans: "risk_content_scans",
   McpEgress: "mcp_egress",
 } as const;
-export type Id = ClosedEnum<typeof Id>;
+export type SpendProductId = ClosedEnum<typeof SpendProductId>;
 
 export const Unit = {
   Stokens: "stokens",
@@ -32,7 +32,7 @@ export type SpendProduct = {
    * Exact estimated product cost at current PAYG list prices
    */
   costUsd: string;
-  id: Id;
+  id: SpendProductId;
   label: string;
   /**
    * Exact integer ordinary usage quantity as a decimal string
@@ -50,7 +50,9 @@ export type SpendProduct = {
 };
 
 /** @internal */
-export const Id$inboundSchema: z.ZodMiniEnum<typeof Id> = z.enum(Id);
+export const SpendProductId$inboundSchema: z.ZodMiniEnum<
+  typeof SpendProductId
+> = z.enum(SpendProductId);
 
 /** @internal */
 export const Unit$inboundSchema: z.ZodMiniEnum<typeof Unit> = z.enum(Unit);
@@ -61,7 +63,7 @@ export const SpendProduct$inboundSchema: z.ZodMiniType<SpendProduct, unknown> =
     z.object({
       buckets: z.array(SpendBucket$inboundSchema),
       cost_usd: z.string(),
-      id: Id$inboundSchema,
+      id: SpendProductId$inboundSchema,
       label: z.string(),
       quantity: z.string(),
       rate_quantity: z.string(),

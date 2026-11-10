@@ -95,6 +95,8 @@ type Client struct {
 	CreateRegistryEntryEndpoint                     goa.Endpoint
 	SaveRegistryEntryEndpoint                       goa.Endpoint
 	SetRegistryEntryPublishedEndpoint               goa.Endpoint
+	DebugMcpURLEndpoint                             goa.Endpoint
+	GetMcpVerificationLinkEndpoint                  goa.Endpoint
 	ListOnboardingStepsEndpoint                     goa.Endpoint
 	GetOnboardingStackOptionsEndpoint               goa.Endpoint
 	GetOrganizationOnboardingStackEndpoint          goa.Endpoint
@@ -128,7 +130,7 @@ type Client struct {
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationProviderSetup, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, repairInferenceKey, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, setAdoptionDashboardURL, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, setMcpServerScopePin, getMcpServerToolCalls, getHookClients, listRegistryPromotionCandidates, getRegistryPromotionCandidate, getRegistryPromotionReview, startRegistryPromotionReview, promoteRegistryCandidate, curateRegistryPromotionCandidate, retryRegistryPromotionDocs, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, listSignupOffers, createSignupOffer, updateSignupOffer, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage, listUpstreamOAuthMigrationOrganizations, getUpstreamOAuthMigrationStatus, runUpstreamOAuthMigration, enableUpstreamAuthEnforcement, disableUpstreamAuthEnforcement, backfillMcpAuthGrants, backfillMcpConnectGrants, getProjectRedeployPreview, redeployProject goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationProviderSetup, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, repairInferenceKey, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, setAdoptionDashboardURL, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, setMcpServerScopePin, getMcpServerToolCalls, getHookClients, listRegistryPromotionCandidates, getRegistryPromotionCandidate, getRegistryPromotionReview, startRegistryPromotionReview, promoteRegistryCandidate, curateRegistryPromotionCandidate, retryRegistryPromotionDocs, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, debugMcpURL, getMcpVerificationLink, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, listSignupOffers, createSignupOffer, updateSignupOffer, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage, listUpstreamOAuthMigrationOrganizations, getUpstreamOAuthMigrationStatus, runUpstreamOAuthMigration, enableUpstreamAuthEnforcement, disableUpstreamAuthEnforcement, backfillMcpAuthGrants, backfillMcpConnectGrants, getProjectRedeployPreview, redeployProject goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                                   login,
 		CallbackEndpoint:                                callback,
@@ -208,6 +210,8 @@ func NewClient(login, callback, logout, getSession, getOrganizationFeatures, set
 		CreateRegistryEntryEndpoint:                     createRegistryEntry,
 		SaveRegistryEntryEndpoint:                       saveRegistryEntry,
 		SetRegistryEntryPublishedEndpoint:               setRegistryEntryPublished,
+		DebugMcpURLEndpoint:                             debugMcpURL,
+		GetMcpVerificationLinkEndpoint:                  getMcpVerificationLink,
 		ListOnboardingStepsEndpoint:                     listOnboardingSteps,
 		GetOnboardingStackOptionsEndpoint:               getOnboardingStackOptions,
 		GetOrganizationOnboardingStackEndpoint:          getOrganizationOnboardingStack,
@@ -2033,6 +2037,51 @@ func (c *Client) SetRegistryEntryPublished(ctx context.Context, p *SetRegistryEn
 		return
 	}
 	return ires.(*AdminRegistryEntry), nil
+}
+
+// DebugMcpURL calls the "debugMcpUrl" endpoint of the "admin" service.
+// DebugMcpURL may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DebugMcpURL(ctx context.Context, p *DebugMcpURLPayload) (res *AdminMcpDebugReport, err error) {
+	var ires any
+	ires, err = c.DebugMcpURLEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminMcpDebugReport), nil
+}
+
+// GetMcpVerificationLink calls the "getMcpVerificationLink" endpoint of the
+// "admin" service.
+// GetMcpVerificationLink may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetMcpVerificationLink(ctx context.Context, p *GetMcpVerificationLinkPayload) (res *AdminMcpVerificationLink, err error) {
+	var ires any
+	ires, err = c.GetMcpVerificationLinkEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminMcpVerificationLink), nil
 }
 
 // ListOnboardingSteps calls the "listOnboardingSteps" endpoint of the "admin"

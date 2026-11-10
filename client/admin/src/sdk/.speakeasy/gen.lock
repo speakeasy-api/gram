@@ -46,6 +46,7 @@ trackedFiles:
   src/funcs/adminCreateRegistryEntry.ts: {}
   src/funcs/adminCreateSignupOffer.ts: {}
   src/funcs/adminCurateRegistryPromotionCandidate.ts: {}
+  src/funcs/adminDebugMcpUrl.ts: {}
   src/funcs/adminDeleteGlobalIssuer.ts: {}
   src/funcs/adminDeleteOnboardingPlaybook.ts: {}
   src/funcs/adminDeleteOnboardingUseCase.ts: {}
@@ -63,6 +64,7 @@ trackedFiles:
   src/funcs/adminGetInferenceKeys.ts: {}
   src/funcs/adminGetInferenceSpendHistory.ts: {}
   src/funcs/adminGetMcpServerToolCalls.ts: {}
+  src/funcs/adminGetMcpVerificationLink.ts: {}
   src/funcs/adminGetMeterUsage.ts: {}
   src/funcs/adminGetOnboardingStackOptions.ts: {}
   src/funcs/adminGetOrganization.ts: {}
@@ -163,7 +165,9 @@ trackedFiles:
   src/models/components/admincustomerusage.ts: {}
   src/models/components/admincustomerusageproductcost.ts: {}
   src/models/components/admincustomerusageresponse.ts: {}
+  src/models/components/admindebugmcpurlrequestbody.ts: {}
   src/models/components/admindeviceagentcell.ts: {}
+  src/models/components/admingetmcpverificationlinkrequestbody.ts: {}
   src/models/components/adminhookclientorganization.ts: {}
   src/models/components/adminhookclientsessioncell.ts: {}
   src/models/components/adminhookclientsresult.ts: {}
@@ -181,6 +185,11 @@ trackedFiles:
   src/models/components/adminlistprojectmcpserversresult.ts: {}
   src/models/components/adminlistuserorganizationsresult.ts: {}
   src/models/components/adminlistusersresult.ts: {}
+  src/models/components/adminmcpdebugprompt.ts: {}
+  src/models/components/adminmcpdebugreport.ts: {}
+  src/models/components/adminmcpdebugresource.ts: {}
+  src/models/components/adminmcpdebugstep.ts: {}
+  src/models/components/adminmcpdebugtool.ts: {}
   src/models/components/adminmcpserver.ts: {}
   src/models/components/adminmcpserverhealth.ts: {}
   src/models/components/adminmcpserverhealthauthclient.ts: {}
@@ -199,6 +208,7 @@ trackedFiles:
   src/models/components/adminmcpservertoolcallbucket.ts: {}
   src/models/components/adminmcpservertoolcalloutcomes.ts: {}
   src/models/components/adminmcpservertoolcalls.ts: {}
+  src/models/components/adminmcpverificationlink.ts: {}
   src/models/components/adminmdmvendoroption.ts: {}
   src/models/components/adminmeterusagebucket.ts: {}
   src/models/components/adminmeterusageresponse.ts: {}
@@ -405,6 +415,7 @@ trackedFiles:
   src/react-query/adminCreateRegistryEntry.ts: {}
   src/react-query/adminCreateSignupOffer.ts: {}
   src/react-query/adminCurateRegistryPromotionCandidate.ts: {}
+  src/react-query/adminDebugMcpUrl.ts: {}
   src/react-query/adminDeleteGlobalIssuer.ts: {}
   src/react-query/adminDescribeMcpServerHealth.core.ts: {}
   src/react-query/adminDescribeMcpServerHealth.ts: {}
@@ -428,6 +439,7 @@ trackedFiles:
   src/react-query/adminGetInferenceSpendHistory.ts: {}
   src/react-query/adminGetMcpServerToolCalls.core.ts: {}
   src/react-query/adminGetMcpServerToolCalls.ts: {}
+  src/react-query/adminGetMcpVerificationLink.ts: {}
   src/react-query/adminGetMeterUsage.core.ts: {}
   src/react-query/adminGetMeterUsage.ts: {}
   src/react-query/adminGetOrganization.core.ts: {}
@@ -744,6 +756,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminDebugMcpUrl:
+    speakeasy-default-admin-debug-mcp-url:
+      requestBody:
+        application/json: {"url": "https://short-term-cutlet.biz/"}
+      responses:
+        "200":
+          application/json: {"auth_method": "dynamic_client_registration", "duration_ms": 651758, "outcome": "mcp_available", "steps": [], "url": "https://new-shoulder.biz/"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminDeleteGlobalIssuer:
     speakeasy-default-admin-delete-global-issuer:
       parameters:
@@ -998,6 +1021,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminGetMcpVerificationLink:
+    speakeasy-default-admin-get-mcp-verification-link:
+      requestBody:
+        application/json: {"url": "https://front-cope.com"}
+      responses:
+        "200":
+          application/json: {"existing": true, "project_name": "<value>", "url": "https://moral-stir-fry.com/"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminGetMeterUsage:
     speakeasy-default-admin-get-meter-usage:
       parameters:

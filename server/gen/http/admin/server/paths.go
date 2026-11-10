@@ -397,6 +397,16 @@ func SetRegistryEntryPublishedAdminPath() string {
 	return "/admin/registry.setPublished"
 }
 
+// DebugMcpURLAdminPath returns the URL path to the admin service debugMcpUrl HTTP endpoint.
+func DebugMcpURLAdminPath() string {
+	return "/admin/mcp.debug"
+}
+
+// GetMcpVerificationLinkAdminPath returns the URL path to the admin service getMcpVerificationLink HTTP endpoint.
+func GetMcpVerificationLinkAdminPath() string {
+	return "/admin/mcp.verificationLink"
+}
+
 // ListOnboardingStepsAdminPath returns the URL path to the admin service listOnboardingSteps HTTP endpoint.
 func ListOnboardingStepsAdminPath() string {
 	return "/admin/onboarding.steps"

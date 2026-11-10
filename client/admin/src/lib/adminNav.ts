@@ -63,7 +63,8 @@ export const ADMIN_NAV_GROUPS = [
       {
         to: "/registry",
         label: "MCP Registry",
-        keywords: "catalog mcp servers",
+        // The MCP debugger lives on the registry page.
+        keywords: "catalog mcp servers debug debugger trace",
         icon: McpIcon,
       },
       {

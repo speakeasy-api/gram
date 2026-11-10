@@ -566,6 +566,8 @@ func newAdminCommand() *cli.Command {
 			}
 			adminService.SetCatalogPromotionService(catalogPromotions)
 			adminService.SetMCPServerURL(mcpServerURL)
+			adminService.SetMCPDebugPolicy(guardianPolicy)
+			adminService.SetMCPVerificationProject(reviewHome.OrganizationID, reviewHome.ProjectID)
 			adminService.SetHookClients(telemetry.NewHookClients(chDB))
 			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(redisClient))
 			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())

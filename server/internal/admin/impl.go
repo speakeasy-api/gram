@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -122,6 +123,14 @@ type Service struct {
 	scopes *remotemcp.StaffScopes
 	// HookClientsCache shares snapshot storage with the nightly worker.
 	*HookClientsCache
+
+	// mcpDebugPolicy bounds the MCP debugger's outbound requests. Nil leaves
+	// the debugger unavailable.
+	mcpDebugPolicy *guardian.Policy
+
+	// mcpVerification is the Speakeasy-owned project MCP verification links
+	// open in. Nil leaves those links unavailable.
+	mcpVerification *mcpVerificationProject
 }
 
 type BillingOperations interface {
@@ -283,6 +292,9 @@ func NewService(
 		supportCoverage:  supportCoverage,
 		mcpServerHealth:  mcpServerHealth,
 		HookClientsCache: NewHookClientsCache(logger, adminCache, nil, nil),
+
+		mcpDebugPolicy:  nil,
+		mcpVerification: nil,
 	}
 }
 

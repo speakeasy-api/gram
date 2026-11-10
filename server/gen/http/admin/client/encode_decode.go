@@ -18811,6 +18811,475 @@ func DecodeSetRegistryEntryPublishedResponse(decoder func(*http.Response) goahtt
 	}
 }
 
+// BuildDebugMcpURLRequest instantiates a HTTP request object with method and
+// path set to call the "admin" service "debugMcpUrl" endpoint
+func (c *Client) BuildDebugMcpURLRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DebugMcpURLAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "debugMcpUrl", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDebugMcpURLRequest returns an encoder for requests sent to the admin
+// debugMcpUrl server.
+func EncodeDebugMcpURLRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.DebugMcpURLPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "debugMcpUrl", "*admin.DebugMcpURLPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewDebugMcpURLRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "debugMcpUrl", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDebugMcpURLResponse returns a decoder for responses returned by the
+// admin debugMcpUrl endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeDebugMcpURLResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDebugMcpURLResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DebugMcpURLResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "debugMcpUrl", err)
+			}
+			err = ValidateDebugMcpURLResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "debugMcpUrl", err)
+			}
+			res := NewDebugMcpURLAdminMcpDebugReportOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DebugMcpURLUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "debugMcpUrl", err)
+			}
+			err = ValidateDebugMcpURLUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "debugMcpUrl", err)
+			}
+			return nil, NewDebugMcpURLUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DebugMcpURLForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "debugMcpUrl", err)
+			}
+			err = ValidateDebugMcpURLForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "debugMcpUrl", err)
+			}
+			return nil, NewDebugMcpURLForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DebugMcpURLBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "debugMcpUrl", err)
+			}
+			err = ValidateDebugMcpURLBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "debugMcpUrl", err)
+			}
+			return nil, NewDebugMcpURLBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DebugMcpURLNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "debugMcpUrl", err)
+			}
+			err = ValidateDebugMcpURLNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "debugMcpUrl", err)
+			}
+			return nil, NewDebugMcpURLNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DebugMcpURLConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "debugMcpUrl", err)
+			}
+			err = ValidateDebugMcpURLConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "debugMcpUrl", err)
+			}
+			return nil, NewDebugMcpURLConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DebugMcpURLUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "debugMcpUrl", err)
+			}
+			err = ValidateDebugMcpURLUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "debugMcpUrl", err)
+			}
+			return nil, NewDebugMcpURLUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DebugMcpURLInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "debugMcpUrl", err)
+			}
+			err = ValidateDebugMcpURLInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "debugMcpUrl", err)
+			}
+			return nil, NewDebugMcpURLInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DebugMcpURLInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "debugMcpUrl", err)
+				}
+				err = ValidateDebugMcpURLInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "debugMcpUrl", err)
+				}
+				return nil, NewDebugMcpURLInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DebugMcpURLUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "debugMcpUrl", err)
+				}
+				err = ValidateDebugMcpURLUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "debugMcpUrl", err)
+				}
+				return nil, NewDebugMcpURLUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "debugMcpUrl", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DebugMcpURLGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "debugMcpUrl", err)
+			}
+			err = ValidateDebugMcpURLGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "debugMcpUrl", err)
+			}
+			return nil, NewDebugMcpURLGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "debugMcpUrl", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetMcpVerificationLinkRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "getMcpVerificationLink"
+// endpoint
+func (c *Client) BuildGetMcpVerificationLinkRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMcpVerificationLinkAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getMcpVerificationLink", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMcpVerificationLinkRequest returns an encoder for requests sent to
+// the admin getMcpVerificationLink server.
+func EncodeGetMcpVerificationLinkRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetMcpVerificationLinkPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getMcpVerificationLink", "*admin.GetMcpVerificationLinkPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewGetMcpVerificationLinkRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "getMcpVerificationLink", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetMcpVerificationLinkResponse returns a decoder for responses
+// returned by the admin getMcpVerificationLink endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetMcpVerificationLinkResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMcpVerificationLinkResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMcpVerificationLinkResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpVerificationLink", err)
+			}
+			err = ValidateGetMcpVerificationLinkResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpVerificationLink", err)
+			}
+			res := NewGetMcpVerificationLinkAdminMcpVerificationLinkOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMcpVerificationLinkUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpVerificationLink", err)
+			}
+			err = ValidateGetMcpVerificationLinkUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpVerificationLink", err)
+			}
+			return nil, NewGetMcpVerificationLinkUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMcpVerificationLinkForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpVerificationLink", err)
+			}
+			err = ValidateGetMcpVerificationLinkForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpVerificationLink", err)
+			}
+			return nil, NewGetMcpVerificationLinkForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMcpVerificationLinkBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpVerificationLink", err)
+			}
+			err = ValidateGetMcpVerificationLinkBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpVerificationLink", err)
+			}
+			return nil, NewGetMcpVerificationLinkBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMcpVerificationLinkNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpVerificationLink", err)
+			}
+			err = ValidateGetMcpVerificationLinkNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpVerificationLink", err)
+			}
+			return nil, NewGetMcpVerificationLinkNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMcpVerificationLinkConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpVerificationLink", err)
+			}
+			err = ValidateGetMcpVerificationLinkConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpVerificationLink", err)
+			}
+			return nil, NewGetMcpVerificationLinkConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMcpVerificationLinkUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpVerificationLink", err)
+			}
+			err = ValidateGetMcpVerificationLinkUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpVerificationLink", err)
+			}
+			return nil, NewGetMcpVerificationLinkUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMcpVerificationLinkInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpVerificationLink", err)
+			}
+			err = ValidateGetMcpVerificationLinkInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpVerificationLink", err)
+			}
+			return nil, NewGetMcpVerificationLinkInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMcpVerificationLinkInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMcpVerificationLink", err)
+				}
+				err = ValidateGetMcpVerificationLinkInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMcpVerificationLink", err)
+				}
+				return nil, NewGetMcpVerificationLinkInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMcpVerificationLinkUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMcpVerificationLink", err)
+				}
+				err = ValidateGetMcpVerificationLinkUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMcpVerificationLink", err)
+				}
+				return nil, NewGetMcpVerificationLinkUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getMcpVerificationLink", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMcpVerificationLinkGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpVerificationLink", err)
+			}
+			err = ValidateGetMcpVerificationLinkGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpVerificationLink", err)
+			}
+			return nil, NewGetMcpVerificationLinkGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getMcpVerificationLink", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListOnboardingStepsRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "listOnboardingSteps"
 // endpoint
@@ -27364,6 +27833,84 @@ func unmarshalAdminRegistryIssueResponseBodyToAdminAdminRegistryIssue(v *AdminRe
 	res := &admin.AdminRegistryIssue{
 		Path:    *v.Path,
 		Message: *v.Message,
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpDebugStepResponseBodyToAdminAdminMcpDebugStep builds a
+// value of type *admin.AdminMcpDebugStep from a value of type
+// *AdminMcpDebugStepResponseBody.
+func unmarshalAdminMcpDebugStepResponseBodyToAdminAdminMcpDebugStep(v *AdminMcpDebugStepResponseBody) *admin.AdminMcpDebugStep {
+	res := &admin.AdminMcpDebugStep{
+		ID:         admin.AdminMcpDebugStepID(*v.ID),
+		Title:      *v.Title,
+		Status:     admin.AdminMcpDebugStepStatus(*v.Status),
+		Summary:    *v.Summary,
+		DurationMs: v.DurationMs,
+		RequestURL: v.RequestURL,
+		HTTPStatus: v.HTTPStatus,
+	}
+	if v.Details != nil {
+		res.Details = make(map[string]any, len(v.Details))
+		for key, val := range v.Details {
+			tk := key
+			tv := val
+			res.Details[tk] = tv
+		}
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpDebugToolResponseBodyToAdminAdminMcpDebugTool builds a
+// value of type *admin.AdminMcpDebugTool from a value of type
+// *AdminMcpDebugToolResponseBody.
+func unmarshalAdminMcpDebugToolResponseBodyToAdminAdminMcpDebugTool(v *AdminMcpDebugToolResponseBody) *admin.AdminMcpDebugTool {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminMcpDebugTool{
+		Name:        *v.Name,
+		Title:       v.Title,
+		Description: v.Description,
+		InputSchema: v.InputSchema,
+		Annotations: v.Annotations,
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpDebugPromptResponseBodyToAdminAdminMcpDebugPrompt builds a
+// value of type *admin.AdminMcpDebugPrompt from a value of type
+// *AdminMcpDebugPromptResponseBody.
+func unmarshalAdminMcpDebugPromptResponseBodyToAdminAdminMcpDebugPrompt(v *AdminMcpDebugPromptResponseBody) *admin.AdminMcpDebugPrompt {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminMcpDebugPrompt{
+		Name:        *v.Name,
+		Title:       v.Title,
+		Description: v.Description,
+		Arguments:   v.Arguments,
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpDebugResourceResponseBodyToAdminAdminMcpDebugResource
+// builds a value of type *admin.AdminMcpDebugResource from a value of type
+// *AdminMcpDebugResourceResponseBody.
+func unmarshalAdminMcpDebugResourceResponseBodyToAdminAdminMcpDebugResource(v *AdminMcpDebugResourceResponseBody) *admin.AdminMcpDebugResource {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminMcpDebugResource{
+		URI:         *v.URI,
+		Name:        *v.Name,
+		Title:       v.Title,
+		Description: v.Description,
+		MimeType:    v.MimeType,
 	}
 
 	return res

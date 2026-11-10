@@ -72,6 +72,10 @@ import {
 } from "@/lib/registryEntryName";
 import { buildAdminSaveRegistryEntryMutation } from "@gram/admin-client/react-query/adminSaveRegistryEntry";
 import { buildAdminSetRegistryEntryPublishedMutation } from "@gram/admin-client/react-query/adminSetRegistryEntryPublished";
+import { buildAdminDebugMcpUrlMutation } from "@gram/admin-client/react-query/adminDebugMcpUrl";
+import type { AdminMcpDebugReport } from "@gram/admin-client/models/components/adminmcpdebugreport";
+import { buildAdminGetMcpVerificationLinkMutation } from "@gram/admin-client/react-query/adminGetMcpVerificationLink";
+import type { AdminMcpVerificationLink } from "@gram/admin-client/models/components/adminmcpverificationlink";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { AdminMeterUsageResponse } from "@gram/admin-client/models/components/adminmeterusageresponse";
 import { buildAdminGetMeterUsageQuery } from "@gram/admin-client/react-query/adminGetMeterUsage.core";
@@ -1046,6 +1050,30 @@ export function useSetRegistryEntryPublishedMutation(): UseMutationResult<
     ...buildAdminSetRegistryEntryPublishedMutation(redirectingClient),
     retry: false,
   });
+}
+
+/** Traces an MCP server URL from Speakeasy's network; see admin.debugMcpUrl. */
+export function adminDebugMcpUrl(url: string): Promise<AdminMcpDebugReport> {
+  return redirecting(
+    buildAdminDebugMcpUrlMutation(redirectingClient).mutationFn({
+      request: { url },
+    }),
+  );
+}
+
+/**
+ * The customer dashboard link for verifying an MCP server in Speakeasy's own
+ * project; see admin.getMcpVerificationLink.
+ */
+export function adminGetMcpVerificationLink(
+  url: string,
+  name?: string,
+): Promise<AdminMcpVerificationLink> {
+  return redirecting(
+    buildAdminGetMcpVerificationLinkMutation(redirectingClient).mutationFn({
+      request: { url, name },
+    }),
+  );
 }
 
 export function registryEntriesQuery(

@@ -18,7 +18,7 @@ import { useIsSpeakeasyStaff, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { AlertCircle, Plug } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
 import { useCreateUnproxiedMcpSource } from "../unproxied-mcp/hooks";
@@ -65,8 +65,11 @@ function CreateRemoteMcpForm() {
   const issuerQuery = useEffectiveUserSessionIssuers();
   const newGuardrail = useNewServerGuardrail();
 
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+  // Links from elsewhere, such as the staff MCP debugger, can fill in the
+  // address and name; nothing is added until the form is submitted.
+  const [searchParams] = useSearchParams();
+  const [name, setName] = useState(() => searchParams.get("name") ?? "");
+  const [url, setUrl] = useState(() => searchParams.get("url") ?? "");
   const [mode, setMode] = useState<ProxyMode>("proxied");
   const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
   const [identityMode, setIdentityMode] =

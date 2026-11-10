@@ -99,6 +99,8 @@ type Server struct {
 	CreateRegistryEntry                     http.Handler
 	SaveRegistryEntry                       http.Handler
 	SetRegistryEntryPublished               http.Handler
+	DebugMcpURL                             http.Handler
+	GetMcpVerificationLink                  http.Handler
 	ListOnboardingSteps                     http.Handler
 	GetOnboardingStackOptions               http.Handler
 	GetOrganizationOnboardingStack          http.Handler
@@ -236,6 +238,8 @@ func New(
 			{"CreateRegistryEntry", "POST", "/admin/registry.create"},
 			{"SaveRegistryEntry", "POST", "/admin/registry.save"},
 			{"SetRegistryEntryPublished", "POST", "/admin/registry.setPublished"},
+			{"DebugMcpURL", "POST", "/admin/mcp.debug"},
+			{"GetMcpVerificationLink", "POST", "/admin/mcp.verificationLink"},
 			{"ListOnboardingSteps", "GET", "/admin/onboarding.steps"},
 			{"GetOnboardingStackOptions", "GET", "/admin/onboarding.stackOptions"},
 			{"GetOrganizationOnboardingStack", "GET", "/admin/organization.onboardingStack"},
@@ -345,6 +349,8 @@ func New(
 		CreateRegistryEntry:                     NewCreateRegistryEntryHandler(e.CreateRegistryEntry, mux, decoder, encoder, errhandler, formatter),
 		SaveRegistryEntry:                       NewSaveRegistryEntryHandler(e.SaveRegistryEntry, mux, decoder, encoder, errhandler, formatter),
 		SetRegistryEntryPublished:               NewSetRegistryEntryPublishedHandler(e.SetRegistryEntryPublished, mux, decoder, encoder, errhandler, formatter),
+		DebugMcpURL:                             NewDebugMcpURLHandler(e.DebugMcpURL, mux, decoder, encoder, errhandler, formatter),
+		GetMcpVerificationLink:                  NewGetMcpVerificationLinkHandler(e.GetMcpVerificationLink, mux, decoder, encoder, errhandler, formatter),
 		ListOnboardingSteps:                     NewListOnboardingStepsHandler(e.ListOnboardingSteps, mux, decoder, encoder, errhandler, formatter),
 		GetOnboardingStackOptions:               NewGetOnboardingStackOptionsHandler(e.GetOnboardingStackOptions, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationOnboardingStack:          NewGetOrganizationOnboardingStackHandler(e.GetOrganizationOnboardingStack, mux, decoder, encoder, errhandler, formatter),
@@ -461,6 +467,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRegistryEntry = m(s.CreateRegistryEntry)
 	s.SaveRegistryEntry = m(s.SaveRegistryEntry)
 	s.SetRegistryEntryPublished = m(s.SetRegistryEntryPublished)
+	s.DebugMcpURL = m(s.DebugMcpURL)
+	s.GetMcpVerificationLink = m(s.GetMcpVerificationLink)
 	s.ListOnboardingSteps = m(s.ListOnboardingSteps)
 	s.GetOnboardingStackOptions = m(s.GetOnboardingStackOptions)
 	s.GetOrganizationOnboardingStack = m(s.GetOrganizationOnboardingStack)
@@ -576,6 +584,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRegistryEntryHandler(mux, h.CreateRegistryEntry)
 	MountSaveRegistryEntryHandler(mux, h.SaveRegistryEntry)
 	MountSetRegistryEntryPublishedHandler(mux, h.SetRegistryEntryPublished)
+	MountDebugMcpURLHandler(mux, h.DebugMcpURL)
+	MountGetMcpVerificationLinkHandler(mux, h.GetMcpVerificationLink)
 	MountListOnboardingStepsHandler(mux, h.ListOnboardingSteps)
 	MountGetOnboardingStackOptionsHandler(mux, h.GetOnboardingStackOptions)
 	MountGetOrganizationOnboardingStackHandler(mux, h.GetOrganizationOnboardingStack)
@@ -4791,6 +4801,112 @@ func NewSetRegistryEntryPublishedHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setRegistryEntryPublished")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDebugMcpURLHandler configures the mux to serve the "admin" service
+// "debugMcpUrl" endpoint.
+func MountDebugMcpURLHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/mcp.debug", f)
+}
+
+// NewDebugMcpURLHandler creates a HTTP handler which loads the HTTP request
+// and calls the "admin" service "debugMcpUrl" endpoint.
+func NewDebugMcpURLHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDebugMcpURLRequest(mux, decoder)
+		encodeResponse = EncodeDebugMcpURLResponse(encoder)
+		encodeError    = EncodeDebugMcpURLError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "debugMcpUrl")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetMcpVerificationLinkHandler configures the mux to serve the "admin"
+// service "getMcpVerificationLink" endpoint.
+func MountGetMcpVerificationLinkHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/mcp.verificationLink", f)
+}
+
+// NewGetMcpVerificationLinkHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getMcpVerificationLink" endpoint.
+func NewGetMcpVerificationLinkHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetMcpVerificationLinkRequest(mux, decoder)
+		encodeResponse = EncodeGetMcpVerificationLinkResponse(encoder)
+		encodeError    = EncodeGetMcpVerificationLinkError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getMcpVerificationLink")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {
