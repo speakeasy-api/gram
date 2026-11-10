@@ -3399,6 +3399,29 @@ WHERE link.remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
   AND m.deleted IS FALSE
 ORDER BY link.remote_session_client_id ASC, m.id DESC;
 
+-- name: ListOrganizationMcpServersAssociatedWithClients :many
+-- ListOrganizationMcpServersForClients from each client's own server
+-- associations instead of the servers on the user session issuers it is bound
+-- to: a client serves the servers it is associated with, whichever issuer
+-- fronts them. Same row shape and remote-only URL rule, held to the caller's
+-- organization. Servers in deleted projects are left out.
+SELECT DISTINCT
+    a.remote_session_client_id AS client_id,
+    m.id,
+    m.project_id,
+    p.slug AS project_slug,
+    m.name,
+    m.slug,
+    COALESCE(rms.url, '')::text AS url
+FROM mcp_server_remote_session_clients AS a
+JOIN mcp_servers AS m ON m.id = a.mcp_server_id AND m.project_id = a.project_id AND m.deleted IS FALSE
+JOIN projects AS p ON p.id = m.project_id AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE a.remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
+  AND a.organization_id = @organization_id::text
+  AND a.deleted IS FALSE
+ORDER BY a.remote_session_client_id ASC, m.id DESC;
+
 -- name: ListOrganizationMcpServerNamesForIssuer :many
 -- Display names (and URL fallbacks) of MCP servers attached to any client of a
 -- given issuer. Used to populate the issuer delete-confirmation dialog and the

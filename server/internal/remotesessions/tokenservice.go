@@ -890,7 +890,7 @@ func (m *ChallengeManager) selfClientResources(ctx context.Context, organization
 		return nil, nil
 	}
 
-	attachments, err := attachmentsForClients(ctx, m.db, organizationID, ids)
+	attachments, err := attachmentsForClients(ctx, m.db, organizationID, ids, m.refresher.attachmentsFromAssociations(ctx, organizationID))
 	if err != nil {
 		return nil, err
 	}

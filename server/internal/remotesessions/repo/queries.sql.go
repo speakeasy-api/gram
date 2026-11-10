@@ -8805,6 +8805,73 @@ func (q *Queries) ListOrganizationMcpServerNamesForIssuer(ctx context.Context, r
 	return items, nil
 }
 
+const listOrganizationMcpServersAssociatedWithClients = `-- name: ListOrganizationMcpServersAssociatedWithClients :many
+SELECT DISTINCT
+    a.remote_session_client_id AS client_id,
+    m.id,
+    m.project_id,
+    p.slug AS project_slug,
+    m.name,
+    m.slug,
+    COALESCE(rms.url, '')::text AS url
+FROM mcp_server_remote_session_clients AS a
+JOIN mcp_servers AS m ON m.id = a.mcp_server_id AND m.project_id = a.project_id AND m.deleted IS FALSE
+JOIN projects AS p ON p.id = m.project_id AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE a.remote_session_client_id = ANY($1::uuid[])
+  AND a.organization_id = $2::text
+  AND a.deleted IS FALSE
+ORDER BY a.remote_session_client_id ASC, m.id DESC
+`
+
+type ListOrganizationMcpServersAssociatedWithClientsParams struct {
+	RemoteSessionClientIds []uuid.UUID
+	OrganizationID         string
+}
+
+type ListOrganizationMcpServersAssociatedWithClientsRow struct {
+	ClientID    uuid.UUID
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	ProjectSlug string
+	Name        pgtype.Text
+	Slug        pgtype.Text
+	Url         string
+}
+
+// ListOrganizationMcpServersForClients from each client's own server
+// associations instead of the servers on the user session issuers it is bound
+// to: a client serves the servers it is associated with, whichever issuer
+// fronts them. Same row shape and remote-only URL rule, held to the caller's
+// organization. Servers in deleted projects are left out.
+func (q *Queries) ListOrganizationMcpServersAssociatedWithClients(ctx context.Context, arg ListOrganizationMcpServersAssociatedWithClientsParams) ([]ListOrganizationMcpServersAssociatedWithClientsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationMcpServersAssociatedWithClients, arg.RemoteSessionClientIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationMcpServersAssociatedWithClientsRow
+	for rows.Next() {
+		var i ListOrganizationMcpServersAssociatedWithClientsRow
+		if err := rows.Scan(
+			&i.ClientID,
+			&i.ID,
+			&i.ProjectID,
+			&i.ProjectSlug,
+			&i.Name,
+			&i.Slug,
+			&i.Url,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationMcpServersForClient = `-- name: ListOrganizationMcpServersForClient :many
 SELECT DISTINCT
     m.id,
