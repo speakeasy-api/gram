@@ -1,17 +1,121 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // What the page sends when a row changes. The rules the surface writes are the
 // whole point, so the tests assert the payload rather than the rendering alone.
-const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
+const {
+  mutate,
+  mutationOptions,
+  invalidate,
+  permission,
+  directory,
+  roleUpdate,
+  roles,
+  toastError,
+  toastSuccess,
+} = vi.hoisted(() => ({
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
+  mutate: vi.fn(),
+  // Rewrites of a role's rule covering every server go through the role.
+  roleUpdate: vi.fn(),
+  // The organization's roles, with the grants Role Manager stores.
+  roles: { list: [] as unknown[], loaded: true },
+  mutationOptions: vi.fn(),
+  invalidate: vi.fn(),
+  permission: { admin: true },
+  // The directory role mappings the list reads, when it reads them.
+  directory: {
+    data: undefined as unknown,
+    enabled: vi.fn(),
+  },
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: toastError, success: toastSuccess },
+}));
+
+vi.mock("@gram/client/react-query/directoryRoleMappings.js", () => ({
+  useDirectoryRoleMappings: (
+    _request: unknown,
+    _security: unknown,
+    options: { enabled?: boolean },
+  ) => {
+    directory.enabled(options.enabled);
+    // Like react-query, a disabled query still returns what it cached.
+    return { data: directory.data };
+  },
+}));
 
 vi.mock("@gram/client/react-query/setResourceAudience.js", () => ({
-  useSetResourceAudienceMutation: () => ({ mutate, isPending: false }),
+  useSetResourceAudienceMutation: (options: unknown) => {
+    mutationOptions(options);
+    return { mutate, isPending: false };
+  },
 }));
 
 vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
   invalidateAllResourceAudience: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/explainResourceAccess.js", () => ({
+  invalidateAllExplainResourceAccess: invalidate,
+}));
+
+vi.mock("@gram/client/react-query/roles.js", () => ({
+  invalidateAllRoles: invalidate,
+  useRoles: () => ({
+    data: roles.loaded ? { roles: roles.list } : undefined,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/updateRole.js", () => ({
+  useUpdateRoleMutation: () => ({ mutate: roleUpdate, isPending: false }),
+}));
+
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "proj-1", name: "Default" }),
+  useOrganization: () => ({
+    projects: [
+      { id: "proj-1", name: "Default" },
+      { id: "proj-2", name: "Other" },
+    ],
+  }),
+}));
+
+// The project's servers: this one and two others.
+vi.mock("@gram/client/react-query/listToolsetsForOrg.js", () => ({
+  useListToolsetsForOrg: () => ({
+    isSuccess: true,
+    data: {
+      toolsets: [
+        { id: "server-1", projectId: "proj-1" },
+        { id: "server-2", projectId: "proj-1" },
+        { id: "server-elsewhere", projectId: "proj-2" },
+      ],
+    },
+  }),
+}));
+vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
+  useListMcpServersForOrg: () => ({
+    isSuccess: true,
+    data: { mcpServers: [{ id: "server-3", projectId: "proj-1" }] },
+  }),
+}));
+vi.mock("@gram/client/react-query/plugin.js", () => ({
+  invalidateAllPlugin: invalidate,
+}));
+vi.mock("@gram/client/react-query/plugins.js", () => ({
+  invalidateAllPlugins: invalidate,
 }));
 
 vi.mock("@gram/client/react-query/members.js", () => ({
@@ -29,25 +133,39 @@ vi.mock("@gram/client/react-query/members.js", () => ({
   }),
 }));
 
-vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({}),
-}));
-
-vi.mock("react-router", () => ({
-  useNavigate: () => vi.fn(),
-  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
-    <a href={to}>{children}</a>
-  ),
-}));
-
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    access: { roles: { href: () => "/org/access/roles" } },
+vi.mock("@gram/client/react-query/audienceOptions.js", () => ({
+  useAudienceOptions: () => ({
+    data: {
+      options: [
+        {
+          principalUrn: "role:global:1",
+          kind: "role",
+          displayName: "Engineering",
+        },
+        {
+          principalUrn: "agent:agent-1",
+          kind: "agent",
+          displayName: "Release Bot",
+          description: "Ships releases",
+        },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
   }),
 }));
 
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: invalidate }),
+}));
+
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
+
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: () => true }),
+  useRBAC: () => ({ hasAnyScope: () => permission.admin }),
 }));
 
 vi.mock("@/components/require-scope", () => ({
@@ -66,7 +184,13 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { ManageAccess } from "./ManageAccess";
 
 afterEach(cleanup);
-beforeEach(() => mutate.mockClear());
+beforeEach(() => {
+  vi.clearAllMocks();
+  permission.admin = true;
+  directory.data = undefined;
+  roles.list = [];
+  roles.loaded = true;
+});
 
 function entry(
   overrides: Partial<ResourceAudienceEntry>,
@@ -85,15 +209,17 @@ function renderList(entries: ResourceAudienceEntry[]) {
   return render(
     // The facepile's avatars carry tooltips, which the app provides at the
     // root.
-    <TooltipProvider>
-      <ManageAccess
-        resourceId="server-1"
-        resourceName="Acme Ops"
-        entries={entries}
-        version="v1"
-        isLoading={false}
-      />
-    </TooltipProvider>,
+    <MemoryRouter>
+      <TooltipProvider>
+        <ManageAccess
+          resourceId="server-1"
+          resourceName="Acme Ops"
+          entries={entries}
+          version="v1"
+          isLoading={false}
+        />
+      </TooltipProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -142,7 +268,7 @@ describe("the access list", () => {
       expect(screen.getByText(label)).toBeTruthy();
     }
     // Connect reaches individual tools; the other two are the server itself.
-    expect(screen.getAllByText("No access")).toHaveLength(2);
+    expect(screen.getAllByText("Not set")).toHaveLength(2);
   });
 
   it("reads a weaker scope as granted by the stronger one that satisfies it", () => {
@@ -225,13 +351,13 @@ describe("the access list", () => {
     expect(screen.queryByText("on every server")).toBeNull();
     // The row summary says it too, so the line is not the only match.
     expect(screen.getAllByText("All tools").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("No access")).toHaveLength(2);
+    expect(screen.getAllByText("Not set")).toHaveLength(2);
   });
 
-  it("says a personal grant a role's block cancels is not in force", () => {
-    // Blocks reach people, not principals: the block on Engineering takes
-    // connect from everyone in it, including Hana's own rule. Showing
-    // "Search" here would promise access the server refuses.
+  it("lets a personal grant outrank a role's block", () => {
+    // Hana's own rule names this server, so it outranks the block reaching
+    // her through Engineering: the line shows what her rule opens, and no
+    // note sends an administrator to the role.
     renderList([
       entry({
         principalUrn: "role:global:1",
@@ -246,19 +372,78 @@ describe("the access list", () => {
 
     fireEvent.click(screen.getAllByRole("button", { expanded: false })[1]!);
 
-    // Two lines say it, and both are right: the person's connect line, and
-    // the role's own connect line, since this block covers every server and
-    // so is not the role row's to lift either. A collapsed row keeps its
-    // panel in the DOM — inert, so the disclosure can animate — so the
-    // role's line is rendered without being expanded. The person's note is
-    // split around a link to the role, hence matching on whole text; the
-    // role's own line just reads "No access", since naming itself says
-    // nothing.
+    // The expanded Connect line itself, not the row summary above it.
+    const connectLines = screen
+      .getAllByText("Call this server's tools")
+      .map((hint) => hint.parentElement!.parentElement!);
+    expect(
+      connectLines.some((line) => line.textContent?.includes("Search")),
+    ).toBe(true);
     const notes = screen
-      .getAllByText(/blocked by/)
+      .queryAllByText(/blocked by/)
       .filter((el) => el.textContent === "blocked by Engineering");
-    expect(notes).toHaveLength(1);
-    expect(screen.queryByText("Search")).toBeNull();
+    expect(notes).toHaveLength(0);
+  });
+
+  it("withholds agents a role's block reaches from the agent picker", () => {
+    renderList([
+      entry({
+        principalUrn: "role:global:1",
+        kind: "role",
+        displayName: "Engineering",
+        appliesTo: "all_resources",
+        level: "blocked",
+        agentIds: ["agent-1"],
+      }),
+    ]);
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: /Grant access/ }),
+      {
+        button: 0,
+        ctrlKey: false,
+        pointerType: "mouse",
+      },
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Agent" }));
+
+    fireEvent.click(screen.getByRole("combobox"));
+
+    expect(
+      screen.getByText("Blocked by Engineering on this server"),
+    ).toBeTruthy();
+  });
+
+  it("grants a picked role Connect through the existing audience endpoint", async () => {
+    renderList([entry({})]);
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: /Grant access/ }),
+      { button: 0, ctrlKey: false, pointerType: "mouse" },
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Role" }));
+    expect(
+      screen.getByRole("heading", { name: "Grant role access" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("combobox"));
+    expect(screen.queryByText("Release Bot")).toBeNull();
+    fireEvent.click(screen.getByRole("option", { name: /Engineering/ }));
+    fireEvent.keyDown(screen.getByRole("option", { name: /Engineering/ }), {
+      key: "Escape",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(savedEntries()).toEqual({
+      resourceKind: "mcp",
+      resourceId: "server-1",
+      expectedVersion: "v1",
+      entries: [
+        { principalUrn: "user:1", level: "use" },
+        { principalUrn: "role:global:1", level: "use" },
+      ],
+    });
+    await mutationOptions.mock.calls.at(-1)![0].onSuccess();
+    expect(invalidate).toHaveBeenCalledTimes(5);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["mcpAssignments"] });
   });
 
   it("says when nobody reaches the server", () => {
@@ -301,9 +486,22 @@ describe("what a row change writes", () => {
     expect(savedEntries().entries).toEqual([]);
   });
 
-  it("subtracts a role an organization-wide rule still reaches", () => {
-    // The rule is the role editor's, so taking the role off this one server
-    // has to be written as a block naming it.
+  it("names a role's servers individually when removing it from one it reaches through every server", () => {
+    // A rule cannot cover every server but one, so taking the role off this
+    // server rewrites the role instead of writing blocks here.
+    roles.list = [
+      {
+        id: "1",
+        principalUrn: "role:global:1",
+        slug: "engineering",
+        grants: [
+          {
+            scope: "mcp:connect",
+            selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+          },
+        ],
+      },
+    ];
     renderList([
       entry({
         principalUrn: "role:global:1",
@@ -316,16 +514,320 @@ describe("what a row change writes", () => {
     fireEvent.click(
       screen.getByLabelText("Remove Engineering from this server"),
     );
-    // A block outranks every grant, so this one is confirmed before it lands.
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(roleUpdate).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Change to specific servers" }),
+    );
 
-    // Blocks are independent, so taking the role off this server names all
-    // three scopes.
+    expect(mutate).not.toHaveBeenCalled();
+    const [variables] = roleUpdate.mock.calls.at(-1) ?? [];
+    expect(variables.request.updateRoleForm).toEqual({
+      id: "1",
+      removeGrants: [
+        {
+          scope: "mcp:connect",
+          selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+        },
+      ],
+      addGrants: [
+        {
+          scope: "mcp:connect",
+          selectors: [
+            { resourceKind: "mcp", resourceId: "server-2" },
+            { resourceKind: "mcp", resourceId: "server-3" },
+            { resourceKind: "mcp", resourceId: "*", projectId: "proj-2" },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("clears one line of a role reaching every server, with its block here", () => {
+    roles.list = [
+      {
+        id: "1",
+        principalUrn: "role:global:1",
+        slug: "engineering",
+        grants: [
+          {
+            scope: "mcp:read",
+            selectors: [
+              { resourceKind: "mcp", resourceId: "*", projectId: "proj-1" },
+            ],
+          },
+          {
+            scope: "mcp:blocked_read",
+            selectors: [{ resourceKind: "mcp", resourceId: "server-1" }],
+          },
+        ],
+      },
+    ];
+    const engineering = {
+      principalUrn: "role:global:1",
+      kind: "role",
+      displayName: "Engineering",
+    } as const;
+    renderList([
+      entry({ ...engineering, level: "view", appliesTo: "all_resources" }),
+      entry({ ...engineering, level: "blocked_view" }),
+    ]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /^Blocked/ }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Clear" }));
+    expect(
+      screen.getByText("Clear Engineering's view setting on Acme Ops?"),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Change to specific servers" }),
+    );
+
+    const [variables] = roleUpdate.mock.calls.at(-1) ?? [];
+    expect(variables.request.updateRoleForm).toEqual({
+      id: "1",
+      removeGrants: [
+        {
+          scope: "mcp:read",
+          selectors: [
+            { resourceKind: "mcp", resourceId: "*", projectId: "proj-1" },
+          ],
+        },
+        {
+          scope: "mcp:blocked_read",
+          selectors: [{ resourceKind: "mcp", resourceId: "server-1" }],
+        },
+      ],
+      addGrants: [
+        {
+          scope: "mcp:read",
+          selectors: [
+            { resourceKind: "mcp", resourceId: "server-2" },
+            { resourceKind: "mcp", resourceId: "server-3" },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("keeps role rows read-only until the roles have loaded", () => {
+    // Until then the Admin row cannot be told apart from the others.
+    roles.loaded = false;
+    renderList([
+      entry({
+        principalUrn: "role:global:9",
+        kind: "role",
+        displayName: "Admin",
+        appliesTo: "all_resources",
+        level: "manage",
+      }),
+    ]);
+
+    expect(
+      screen
+        .getByLabelText("Access cannot be changed here.")
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("reports a rewrite that left a rule covering every server", () => {
+    roles.list = [
+      {
+        id: "1",
+        principalUrn: "role:global:1",
+        slug: "engineering",
+        grants: [
+          {
+            scope: "mcp:connect",
+            selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+          },
+        ],
+      },
+    ];
+    // The saved role comes back with the rule covering every server intact.
+    roleUpdate.mockImplementationOnce(
+      (_vars, options: { onSuccess: (saved: unknown) => void }) =>
+        options.onSuccess(roles.list[0]),
+    );
+    renderList([
+      entry({
+        principalUrn: "role:global:1",
+        kind: "role",
+        displayName: "Engineering",
+        appliesTo: "all_resources",
+      }),
+    ]);
+
+    fireEvent.click(
+      screen.getByLabelText("Remove Engineering from this server"),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Change to specific servers" }),
+    );
+
+    expect(toastError).toHaveBeenCalledWith(
+      "Engineering still has a rule covering every server, so Acme Ops is unchanged. Change it in Role Manager.",
+    );
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("locks the Admin role row and points to Role Manager", () => {
+    roles.list = [
+      { id: "9", principalUrn: "role:global:9", slug: "admin", grants: [] },
+    ];
+    renderList([
+      entry({
+        principalUrn: "role:global:9",
+        kind: "role",
+        displayName: "Admin",
+        appliesTo: "all_resources",
+        level: "manage",
+      }),
+    ]);
+
+    expect(screen.getByText("Managed in Role Manager")).toBeTruthy();
+    expect(screen.queryByLabelText("Remove Admin from this server")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit access" })).toBeNull();
+  });
+});
+
+describe("a blocking role", () => {
+  const engineering = {
+    principalUrn: "role:global:1",
+    kind: "role",
+    displayName: "Engineering",
+  } as const;
+
+  it("reads as blocked rather than as no access", () => {
+    renderList([
+      entry({ ...engineering, level: "blocked" }),
+      entry({ ...engineering, level: "blocked_view" }),
+      entry({ ...engineering, level: "blocked_manage" }),
+    ]);
+
+    // The collapsed row says it, not only the lines inside it.
+    expect(screen.getAllByText("Blocked").length).toBeGreaterThan(0);
+    expandFirstRow();
+    expect(screen.getAllByRole("button", { name: /^Blocked/ })).toHaveLength(3);
+    expect(screen.queryByText("No access")).toBeNull();
+  });
+
+  it("names the choice that writes a block as blocked", () => {
+    renderList([entry({ ...engineering, appliesTo: "all_resources" })]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /All tools/ }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+
+    expect(screen.getByRole("menuitem", { name: "Blocked" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "No access" })).toBeNull();
+  });
+
+  it("offers only clear, with no divider, when only the role's own rule grants", () => {
+    renderList([entry({ ...engineering, level: "view" })]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(
+      screen.getAllByRole("button", { name: /^Allowed/ })[0]!,
+      {
+        button: 0,
+        ctrlKey: false,
+        pointerType: "mouse",
+      },
+    );
+
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent),
+    ).toEqual(["Clear"]);
+    expect(screen.queryByRole("separator")).toBeNull();
+  });
+
+  it("offers clear alone when another rule would open a blocked line anyway", () => {
+    // Lifting the agent's block and clearing it write the same thing, so the
+    // menu names that once.
+    renderList([
+      entry({
+        principalUrn: "agent:a1",
+        kind: "agent",
+        displayName: "Releaser",
+        level: "blocked_view",
+      }),
+      entry({
+        ...engineering,
+        appliesTo: "all_resources",
+        level: "view",
+        agentIds: ["a1"],
+      }),
+    ]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /^Blocked/ }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+
+    expect(screen.queryByRole("menuitem", { name: "Allowed" })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Clear" }));
+    expect(
+      savedEntries().entries.filter(
+        (e: { principalUrn: string }) => e.principalUrn === "agent:a1",
+      ),
+    ).toEqual([]);
+  });
+
+  it("clears a block without writing a grant in its place", () => {
+    renderList([
+      entry({ ...engineering, level: "blocked" }),
+      entry({ ...engineering, level: "blocked_view" }),
+      entry({ ...engineering, level: "blocked_manage" }),
+    ]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(
+      screen.getAllByRole("button", { name: /^Blocked/ })[1]!,
+      {
+        button: 0,
+        ctrlKey: false,
+        pointerType: "mouse",
+      },
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Clear" }));
+
     expect(
       savedEntries()
-        .entries.map((e: { level: string }) => e.level)
+        .entries.map((e: { principalUrn: string; level: string }) => [
+          e.principalUrn,
+          e.level,
+        ])
         .sort(),
-    ).toEqual(["blocked", "blocked_manage", "blocked_view"]);
+    ).toEqual([
+      ["role:global:1", "blocked"],
+      ["role:global:1", "blocked_manage"],
+    ]);
+  });
+
+  it("shows a line no rule decides as not set, with nothing to clear", () => {
+    renderList([entry({ ...engineering, level: "blocked" })]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(
+      screen.getAllByRole("button", { name: /^Not set/ })[0]!,
+      {
+        button: 0,
+        ctrlKey: false,
+        pointerType: "mouse",
+      },
+    );
+
+    expect(screen.getByRole("menuitem", { name: "Allowed" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Clear" })).toBeNull();
   });
 });
 
@@ -356,4 +858,339 @@ it("confirms removing an agent that remains covered by a broader role allow", ()
     ["agent:a1", "blocked_manage"],
     ["agent:a1", "blocked_view"],
   ]);
+});
+
+describe("role plugin distribution", () => {
+  const role = entry({
+    principalUrn: "role:global:1",
+    kind: "role",
+    displayName: "Engineering",
+  });
+  const plugin = {
+    principalUrn: role.principalUrn,
+    pluginId: "plugin-1",
+    name: "Tools",
+    slug: "tools",
+  };
+  const ui = (rolePlugins: (typeof plugin)[], entries = [role]) => (
+    <MemoryRouter>
+      <TooltipProvider>
+        <ManageAccess
+          resourceId="server-1"
+          entries={entries}
+          version="v1"
+          isLoading={false}
+          rolePlugins={rolePlugins}
+        />
+      </TooltipProvider>
+    </MemoryRouter>
+  );
+
+  it("shows an empty distribution without inventing links", () => {
+    render(ui([]));
+    expect(screen.getByText("Distributed via")).toBeDefined();
+    expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
+  });
+
+  it("links one exact role match to its plugin detail", () => {
+    render(
+      ui([
+        plugin,
+        {
+          ...plugin,
+          principalUrn: "role:other:1",
+          pluginId: "wrong",
+          name: "Unrelated",
+        },
+      ]),
+    );
+    expect(
+      screen.getByRole("link", { name: "Tools" }).getAttribute("href"),
+    ).toBe("/org/projects/project/plugins/plugin-1");
+    expect(screen.queryByText("Unrelated")).toBeNull();
+  });
+
+  it("sorts multiple plugins and disambiguates duplicate names with slugs", () => {
+    render(
+      ui([
+        { ...plugin, pluginId: "z", slug: "z" },
+        { ...plugin, pluginId: "a", slug: "a" },
+        { ...plugin, pluginId: "first", name: "Alpha" },
+      ]),
+    );
+    const links = screen
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("href")?.includes("/plugins/"));
+    expect(links.map((link) => link.textContent)).toEqual([
+      "Alpha",
+      "Tools (a)",
+      "Tools (z)",
+    ]);
+    expect(links[0]?.parentElement?.textContent).toBe(
+      "Alpha, Tools (a), Tools (z)",
+    );
+  });
+
+  it("does not show plugins on non-role rows", () => {
+    render(ui([{ ...plugin, principalUrn: "user:1" }], [entry({})]));
+    expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
+  });
+
+  it("keeps plugin links visible while unsupported rules disable all editing", () => {
+    render(
+      ui(
+        [plugin],
+        [
+          role,
+          {
+            ...role,
+            level: "blocked",
+            dispositions: [unrecognized("future_disposition")],
+          },
+        ],
+      ),
+    );
+    expect(screen.getByRole("link", { name: "Tools" })).toBeDefined();
+    expect(screen.getByText("Distributed via")).toBeDefined();
+    expect(
+      screen
+        .getByRole("button", { name: /Grant access/ })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expandFirstRow();
+    for (const control of screen.getAllByRole("button", {
+      name: "Access unknown",
+    })) {
+      expect(control.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(control);
+    }
+    expect(screen.queryByRole("menuitem", { name: "All tools" })).toBeNull();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it("hides cached plugin data immediately after permission downgrade", () => {
+    const { rerender } = render(ui([plugin]));
+    expect(screen.getByRole("link", { name: "Tools" })).toBeDefined();
+    permission.admin = false;
+    rerender(ui([plugin]));
+    expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
+    expect(screen.queryByText("Distributed via")).toBeNull();
+    expect(screen.getByRole("link", { name: "Engineering" })).toBeDefined();
+  });
+});
+
+describe("directory sources on role rows", () => {
+  const role = entry({
+    principalUrn: "role:global:1",
+    kind: "role",
+    displayName: "Engineer",
+  });
+  const mapping = (
+    id: string,
+    overrides: Record<string, unknown>,
+  ): Record<string, unknown> => ({
+    id,
+    roleUrn: role.principalUrn,
+    sourceStatus: "active",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    directory.data = {
+      groups: [{ id: "group-1", name: "Platform", memberCount: 3 }],
+      attributes: [{ key: "department", value: "Sales", memberCount: 2 }],
+      mappings: [
+        mapping("m1", {
+          sourceKind: "group",
+          directoryGroupId: "group-1",
+          directoryGroupName: "Platform",
+        }),
+        mapping("m2", {
+          sourceKind: "attribute",
+          attributeKey: "department",
+          attributeValue: "Sales",
+        }),
+        mapping("m3", {
+          sourceKind: "group",
+          directoryGroupId: "group-gone",
+          directoryGroupName: "Contractors",
+          sourceStatus: "missing",
+        }),
+        mapping("m4", {
+          sourceKind: "group",
+          directoryGroupId: "group-1",
+          roleUrn: "role:global:other",
+        }),
+      ],
+    };
+  });
+
+  it("names the sources giving out the role and links a removed one to review", () => {
+    renderList([role]);
+    expect(
+      screen.getByText(
+        "Via directory: Platform, department = Sales · 1 removed source",
+      ),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("link", { name: "Review" }).getAttribute("href"),
+    ).toBe("/org/identity");
+  });
+
+  it("offers no review link while every source is live", () => {
+    directory.data = {
+      ...(directory.data as object),
+      mappings: (directory.data as { mappings: unknown[] }).mappings.slice(
+        0,
+        2,
+      ),
+    };
+    renderList([role]);
+    expect(
+      screen.getByText("Via directory: Platform, department = Sales"),
+    ).toBeDefined();
+    expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
+  });
+
+  it("does not read or show the mappings for someone who is not an administrator", () => {
+    permission.admin = false;
+    renderList([role]);
+    expect(directory.enabled).toHaveBeenCalledWith(false);
+    expect(screen.queryByText(/Via directory/)).toBeNull();
+  });
+
+  it("hides cached mappings immediately after permission downgrade", () => {
+    const { rerender } = renderList([role]);
+    expect(screen.getByText(/Via directory/)).toBeDefined();
+    permission.admin = false;
+    rerender(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ManageAccess
+            resourceId="server-1"
+            resourceName="Acme Ops"
+            entries={[role]}
+            version="v1"
+            isLoading={false}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText(/Via directory/)).toBeNull();
+  });
+});
+
+it("closes an open mutation dialog when a refreshed rule becomes unsupported", () => {
+  const props = { resourceId: "server-1", version: "v1", isLoading: false };
+  const known = entry({ appliesTo: "all_resources" });
+  const { rerender } = render(
+    <MemoryRouter>
+      <TooltipProvider>
+        <ManageAccess {...props} entries={[known]} />
+      </TooltipProvider>
+    </MemoryRouter>,
+  );
+  fireEvent.click(screen.getByLabelText("Remove Hana Sato from this server"));
+  expect(screen.getByRole("button", { name: "Remove" })).toBeDefined();
+  rerender(
+    <MemoryRouter>
+      <TooltipProvider>
+        <ManageAccess
+          {...props}
+          entries={[known, entry({ level: unrecognized("future_level") })]}
+        />
+      </TooltipProvider>
+    </MemoryRouter>,
+  );
+  expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+  expect(screen.getByText(/Some access rules are not supported/)).toBeDefined();
+  expect(mutate).not.toHaveBeenCalled();
+});
+
+it("disables all editing for an unknown audience applicability", () => {
+  renderList([entry({ appliesTo: unrecognized("future_applicability") })]);
+  expandFirstRow();
+  for (const button of screen.getAllByRole("button", {
+    name: "Access unknown",
+  })) {
+    expect(button.hasAttribute("disabled")).toBe(true);
+  }
+  expect(
+    screen
+      .getByRole("button", { name: "Access cannot be changed here." })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(
+    screen
+      .getByRole("button", { name: /Grant access/ })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(mutate).not.toHaveBeenCalled();
+});
+
+it("explains the required admin permission on disabled remove controls", () => {
+  permission.admin = false;
+  renderList([entry({})]);
+  expect(
+    screen
+      .getByRole("button", {
+        name: "Only organization admins can change access.",
+      })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(
+    screen.queryByRole("button", { name: "Access cannot be changed here." }),
+  ).toBeNull();
+});
+
+it("keeps an unsupported principal visible with all audience edits disabled", () => {
+  renderList([entry({ kind: unrecognized("future_kind") })]);
+  expect(screen.getByText("Hana Sato")).toBeTruthy();
+  expandFirstRow();
+  for (const button of screen.getAllByRole("button", {
+    name: "Access unknown",
+  })) {
+    expect(button.hasAttribute("disabled")).toBe(true);
+  }
+  expect(
+    screen
+      .getByRole("button", { name: "Access cannot be changed here." })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(
+    screen
+      .getByRole("button", { name: /Grant access/ })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(mutate).not.toHaveBeenCalled();
+});
+
+it("forwards remote discovery failures and retry into the actual narrowing dialog", () => {
+  const retry = vi.fn<() => void>();
+  render(
+    <TooltipProvider>
+      <ManageAccess
+        resourceId="server-1"
+        resourceName="Example server"
+        entries={[entry({})]}
+        version="v1"
+        isLoading={false}
+        toolSource={{ status: "error", retry }}
+      />
+    </TooltipProvider>,
+    { wrapper: MemoryRouter },
+  );
+  expandFirstRow();
+  fireEvent.pointerDown(screen.getByRole("button", { name: /All tools/ }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  fireEvent.click(screen.getByRole("menuitem", { name: "Specific tools…" }));
+  const dialog = within(screen.getByRole("dialog"));
+  fireEvent.click(dialog.getByRole("button", { name: "By tool" }));
+  expect(dialog.getByText("Couldn't load this server's tools.")).toBeTruthy();
+  fireEvent.click(dialog.getByRole("button", { name: "Retry" }));
+  expect(retry).toHaveBeenCalledOnce();
 });

@@ -27,6 +27,16 @@ var sensitiveDataExactKeys = map[string]struct{}{
 	"gen_ai.system_instructions": {},
 	"tool.args":                  {},
 	"tool_result":                {},
+
+	// The column enrichers copy a record's words and its person onto the
+	// canonical speakeasy.agent keys, next to the sensitive attributes they
+	// were read from. The copies carry the same values, so a destination
+	// that excludes sensitive data must see them redacted too. The enrich
+	// package pins these spellings to its column keys in a test, since it
+	// imports this package and so cannot be imported here.
+	"speakeasy.agent.text":             {},
+	"speakeasy.agent.user_email":       {},
+	"speakeasy.agent.external_user_id": {},
 }
 
 var sensitiveDataPrefixes = [...]string{

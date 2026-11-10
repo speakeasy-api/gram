@@ -15,7 +15,7 @@ import (
 )
 
 // Minting signs with the credential's identity, so a key backed by a service
-// account in Gram's own project would sign as an internal identity on behalf of
+// account in Speakeasy's own project would sign as an internal identity on behalf of
 // a customer. Creating a set mints its first key, so the screening refuses the
 // set outright.
 func TestCreateSet_RefusesTargetInGramProject(t *testing.T) {

@@ -6,19 +6,29 @@
 
 set -e
 
+# The SDK generator is installed as speakeasy-sdks (see mise.toml). mise only
+# applies rename_exe on install, so an install made before the rename still
+# serves the old speakeasy name. Reinstall it once in that case.
+if mise which speakeasy >/dev/null 2>&1; then
+  mise install --force "github:speakeasy-api/speakeasy" >&2
+fi
+
 # The Speakeasy CLI version is baked into every generated artifact (gen.lock,
 # workflow.lock, the SDK_METADATA userAgent), so generating with anything other
-# than the pinned version produces churn CI rejects. `speakeasy run` re-execs
+# than the pinned version produces churn CI rejects. `speakeasy-sdks run` re-execs
 # into the version named by speakeasyVersion in .speakeasy/workflow.yaml, so a
 # system-wide install (Homebrew, `go install`) ahead of the mise shim on PATH
 # still generates with the pinned version.
 generate() {
-  # CI=true keeps `speakeasy run` non-interactive. It used to also matter
+  # CI=true keeps `speakeasy-sdks run` non-interactive. It used to also matter
   # because the TypeScript target compiled the SDK by invoking pnpm, which
   # prompts to purge node_modules and aborts without a TTY; since the SDK was
   # inlined, gen.yaml sets compileCommand to `true` and no package manager is
   # invoked at all.
-  CI=true speakeasy run "$@" --skip-versioning --skip-upload-spec --minimal
+  # The pinned generator hardcodes Staticcheck 0.8.1, which cannot decode Go
+  # 1.27 export data. Run the Go compile/lint pipeline below with a compatible
+  # Staticcheck. Both inlined TypeScript targets already use compileCommand=true.
+  CI=true speakeasy-sdks run "$@" --skip-versioning --skip-upload-spec --skip-compile --minimal
 }
 
 check_inputs() {
@@ -62,4 +72,11 @@ if [[ "${usage_check:-}" == "true" ]]; then
   check_inputs
 else
   generate
+  (
+    cd hooks/sdk
+    go mod tidy
+    go build ./...
+    go test -run=XXX_SHOULD_NEVER_MATCH_XXX ./...
+    go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -checks=inherit,-SA1019,-SA5008 ./...
+  )
 fi

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 )
 
 // AdminCORS allows the configured set of origins to make credentialed
@@ -64,6 +66,10 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 			}
 
 			origin := r.Header.Get("Origin")
+			if origin == "" && r.Referer() == "" && tokenAuthenticatedRoute(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			if origin == "" {
 				if ref := r.Header.Get("Referer"); ref != "" {
 					if u, err := url.Parse(ref); err == nil && u.Scheme != "" && u.Host != "" {
@@ -82,8 +88,44 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 				return
 			}
 
+			// This cookie-authenticated navigation route retains the same origin
+			// enforcement, but explains the refusal in the browser. Machine routes
+			// and the rest of the admin API retain their own response contracts.
+			if r.URL.Path == "/admin-mcp/connect" {
+				_ = oauthui.WriteAuthorizationError(r.Context(), w, oauthui.AuthorizationError{
+					Recovery:       nil,
+					Setup:          false,
+					Status:         http.StatusForbidden,
+					Reason:         oauthui.ReasonSessionChanged,
+					ErrorID:        "",
+					Code:           http.StatusText(http.StatusForbidden),
+					Description:    "forbidden: origin not allowed",
+					CallbackURL:    "",
+					ClientName:     "",
+					ClientID:       "",
+					ClientIDOrigin: "",
+					ServerName:     "",
+					ProviderName:   "",
+				})
+				return
+			}
 			http.Error(w, "forbidden: origin not allowed", http.StatusForbidden)
 		})
+	}
+}
+
+// tokenAuthenticatedRoute reports whether a request targets an endpoint that
+// authenticates through its own bearer token or OAuth client credentials, not
+// browser cookies, so it needs no CSRF Origin check. Consent is never exempt.
+func tokenAuthenticatedRoute(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodPost:
+		return r.URL.Path == "/admin-mcp" || r.URL.Path == "/admin-mcp/token" || r.URL.Path == "/admin-mcp/register"
+	case http.MethodPut:
+		// The staff image upload, redeemed by a single-use upload token.
+		return r.URL.Path == "/admin/assets.uploadImage"
+	default:
+		return false
 	}
 }
 

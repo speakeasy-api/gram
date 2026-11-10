@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -18,11 +19,12 @@ import {
  */
 export const BlockingReason = {
   IdentityProviderLogin: "identity_provider_login",
+  IdentityChaining: "identity_chaining",
 } as const;
 /**
  * Stable reason deletion is blocked. Present when can_delete is false.
  */
-export type BlockingReason = ClosedEnum<typeof BlockingReason>;
+export type BlockingReason = OpenEnum<typeof BlockingReason>;
 
 /**
  * Authoritative impact summary for deleting a remote_session_client, including identity-provider login references that block deletion.
@@ -36,6 +38,10 @@ export type OrganizationClientDeletePreflight = {
    * Whether the client can be deleted now.
    */
   canDelete: boolean;
+  /**
+   * Active identity-chaining bindings that must be explicitly unlinked before deletion.
+   */
+  emaBindingCount: number;
   /**
    * Display names of MCP servers this client is attached to.
    */
@@ -51,9 +57,10 @@ export type OrganizationClientDeletePreflight = {
 };
 
 /** @internal */
-export const BlockingReason$inboundSchema: z.ZodMiniEnum<
-  typeof BlockingReason
-> = z.enum(BlockingReason);
+export const BlockingReason$inboundSchema: z.ZodMiniType<
+  BlockingReason,
+  unknown
+> = openEnums.inboundSchema(BlockingReason);
 
 /** @internal */
 export const OrganizationClientDeletePreflight$inboundSchema: z.ZodMiniType<
@@ -63,6 +70,7 @@ export const OrganizationClientDeletePreflight$inboundSchema: z.ZodMiniType<
   z.object({
     blocking_reason: z.optional(BlockingReason$inboundSchema),
     can_delete: z.boolean(),
+    ema_binding_count: z.int(),
     mcp_server_names: z.array(z.string()),
     session_count: z.int(),
     trusted_user_session_issuers: z.array(
@@ -73,6 +81,7 @@ export const OrganizationClientDeletePreflight$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "blocking_reason": "blockingReason",
       "can_delete": "canDelete",
+      "ema_binding_count": "emaBindingCount",
       "mcp_server_names": "mcpServerNames",
       "session_count": "sessionCount",
       "trusted_user_session_issuers": "trustedUserSessionIssuers",

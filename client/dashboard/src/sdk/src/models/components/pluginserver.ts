@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const PluginServerPolicy = {
 /**
  * Whether this server is required or optional.
  */
-export type PluginServerPolicy = ClosedEnum<typeof PluginServerPolicy>;
+export type PluginServerPolicy = OpenEnum<typeof PluginServerPolicy>;
 
 export type PluginServer = {
   createdAt: Date;
@@ -32,9 +33,13 @@ export type PluginServer = {
    */
   id: string;
   /**
-   * Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one of toolset_id / mcp_server_id is set).
+   * Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.
    */
   mcpServerId?: string | undefined;
+  /**
+   * MCP gateway ID. When set, no other backend ID is set.
+   */
+  metaMcpServerId?: string | undefined;
   /**
    * Whether this server is required or optional.
    */
@@ -44,15 +49,16 @@ export type PluginServer = {
    */
   sortOrder: number;
   /**
-   * Gram toolset ID. Set when this server is toolset-backed (exactly one of toolset_id / mcp_server_id is set).
+   * Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.
    */
   toolsetId?: string | undefined;
 };
 
 /** @internal */
-export const PluginServerPolicy$inboundSchema: z.ZodMiniEnum<
-  typeof PluginServerPolicy
-> = z.enum(PluginServerPolicy);
+export const PluginServerPolicy$inboundSchema: z.ZodMiniType<
+  PluginServerPolicy,
+  unknown
+> = openEnums.inboundSchema(PluginServerPolicy);
 
 /** @internal */
 export const PluginServer$inboundSchema: z.ZodMiniType<PluginServer, unknown> =
@@ -65,6 +71,7 @@ export const PluginServer$inboundSchema: z.ZodMiniType<PluginServer, unknown> =
       display_name: z.string(),
       id: z.string(),
       mcp_server_id: z.optional(z.string()),
+      meta_mcp_server_id: z.optional(z.string()),
       policy: PluginServerPolicy$inboundSchema,
       sort_order: z.int(),
       toolset_id: z.optional(z.string()),
@@ -74,6 +81,7 @@ export const PluginServer$inboundSchema: z.ZodMiniType<PluginServer, unknown> =
         "created_at": "createdAt",
         "display_name": "displayName",
         "mcp_server_id": "mcpServerId",
+        "meta_mcp_server_id": "metaMcpServerId",
         "sort_order": "sortOrder",
         "toolset_id": "toolsetId",
       });

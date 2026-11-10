@@ -9,11 +9,11 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * How a target detected on a device is recognized again when the same tool calls Gram's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Gram verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.
+ * How a target detected on a device is recognized again when the same tool calls Speakeasy's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Speakeasy verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.
  */
 export type AiScanTargetGatewayClient = {
   /**
-   * Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two targets may claim the same key, or a block on either would silently cover the other.
+   * Vendor keys from Speakeasy's CIMD client catalog. Vendor-grained: no two targets may claim the same key, or a block on either would silently cover the other.
    */
   cimdVendorKeys: Array<string>;
   /**

@@ -16,6 +16,7 @@ import { MCPTeamAccessTab } from "@/pages/mcp/MCPTeamAccessTab";
 import { GatewayInspectTab } from "./GatewayInspectTab";
 import { GatewayOverviewTab } from "./GatewayOverviewTab";
 import { GatewaySettingsTab } from "./GatewaySettingsTab";
+import { GatewaySkillsTab } from "./GatewaySkillsTab";
 
 export default function GatewayDetails(): JSX.Element {
   const { gatewayId } = useParams<{ gatewayId: string }>();
@@ -71,6 +72,8 @@ export default function GatewayDetails(): JSX.Element {
             isLoadingEndpoints={isLoadingEndpoints}
           />
         );
+      case "skills":
+        return <GatewaySkillsTab metaMcpServer={metaMcpServer} />;
       case "team-access":
         return (
           <RequireScope scope="org:read" level="page">
@@ -86,6 +89,7 @@ export default function GatewayDetails(): JSX.Element {
               <MCPTeamAccessTab
                 resourceId={metaMcpServer.id}
                 serverName={metaMcpServer.name}
+                checkAccess={false}
               />
             </RequireScope>
           </RequireScope>
@@ -94,6 +98,7 @@ export default function GatewayDetails(): JSX.Element {
         return (
           <RequireScope scope="project:read" level="page">
             <ClientsAndSessionsTab
+              gateway={{ id: metaMcpServer.id }}
               issuerId={metaMcpServer.userSessionIssuerId}
             />
           </RequireScope>

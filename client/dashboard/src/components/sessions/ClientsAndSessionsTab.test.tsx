@@ -70,19 +70,6 @@ vi.mock("@/components/ui/MoreActions", () => ({
   ),
 }));
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    agents: { href: () => "/org/projects/project/agent-management" },
-    identities: {
-      href: () => "/identities",
-      detail: {
-        overview: { href: (urn: string) => `/identities/${urn}` },
-        access: { href: (urn: string) => `/identities/${urn}/access` },
-      },
-    },
-  }),
-}));
-
 vi.mock("@/hooks/useKillswitchAccess", () => ({
   useKillswitchAccess: () => ({
     canAccess: true,
@@ -135,6 +122,7 @@ vi.mock("./RevokeClientDialog", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { list: listAgents } }),
   useProjectSlugForRequests: () => "project-1",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project-1" }),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -218,7 +206,7 @@ function renderTab(ui: React.ReactElement, initialEntries?: string[]) {
 
 describe("ClientsAndSessionsTab", () => {
   beforeEach(() => {
-    listAgents.mockResolvedValue([]);
+    listAgents.mockResolvedValue([{ result: { items: [] } }]);
     useUserSessionsInfinite.mockReturnValue(queryResult([]));
     useUserSessionClientsInfinite.mockReturnValue(queryResult([]));
     batchBadgesMutate.mockResolvedValue({
@@ -259,7 +247,7 @@ describe("ClientsAndSessionsTab", () => {
 
   it("reads a connection as one chain: client, server, then upstream", () => {
     // The whole point of the surface. A sessions table shows the inbound half
-    // and leaves an admin unable to see what Gram reaches on the subject's
+    // and leaves an admin unable to see what Speakeasy reaches on the subject's
     // behalf.
     useUserSessionsInfinite.mockReturnValue(
       queryResult([
@@ -294,7 +282,7 @@ describe("ClientsAndSessionsTab", () => {
   });
 
   it("says so when a connection reaches no upstream at all", () => {
-    // Distinct from a missing value: reaching only Gram-native tools is a real
+    // Distinct from a missing value: reaching only Speakeasy-native tools is a real
     // state, and a blank would read as data we failed to load.
     useUserSessionsInfinite.mockReturnValue(
       queryResult([session({ upstreams: [] })]),
@@ -378,7 +366,7 @@ describe("ClientsAndSessionsTab", () => {
       (
         await screen.findByRole("link", { name: /Killswitch active/ })
       ).getAttribute("href"),
-    ).toBe("/identities/user%3Au1/access");
+    ).toBe("/org/projects/project-1/identities/user%3Au1/access");
     expect(screen.getByText("View killswitches")).toBeDefined();
     fireEvent.click(screen.getByText("New killswitch…"));
     expect(revokeSessionMutate).not.toHaveBeenCalled();
@@ -388,7 +376,7 @@ describe("ClientsAndSessionsTab", () => {
         .getByRole("link", { name: "New killswitch…" })
         .getAttribute("href"),
     ).toBe(
-      "/identities/user%3Au1/access?create=1&createCapability=mcp_tool_calls&originServer=mcp-server-1",
+      "/org/projects/project-1/identities/user%3Au1/access?create=1&createCapability=mcp_tool_calls&originServer=mcp-server-1",
     );
   });
 
@@ -420,7 +408,7 @@ describe("ClientsAndSessionsTab", () => {
 
   it("resolves readable managed agents without losing row expansion", async () => {
     listAgents.mockResolvedValue([
-      { id: "agent-1", name: "Release assistant" },
+      { result: { items: [{ id: "agent-1", name: "Release assistant" }] } },
     ]);
     useUserSessionsInfinite.mockReturnValue(
       queryResult([
@@ -432,7 +420,7 @@ describe("ClientsAndSessionsTab", () => {
 
     const link = await screen.findByRole("link", { name: "Release assistant" });
     expect(link.getAttribute("href")).toBe(
-      "/org/projects/project/agent-management?id=agent-1",
+      "/org/projects/project-1/identities/agent%3Aagent-1/overview",
     );
     expect(listAgents).toHaveBeenCalledTimes(1);
     fireEvent.click(

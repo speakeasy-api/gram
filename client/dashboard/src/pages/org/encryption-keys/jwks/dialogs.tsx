@@ -2,7 +2,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
-import { ConfirmDialog } from "@/pages/remote-identity-providers/ConfirmDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { JSONWebKey } from "@gram/client/models/components/jsonwebkey.js";
 import type { JSONWebKeySet } from "@gram/client/models/components/jsonwebkeyset.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";

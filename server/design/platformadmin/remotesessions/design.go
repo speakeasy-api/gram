@@ -185,7 +185,7 @@ var _ = Service("adminRemoteSessions", func() {
 	})
 
 	Method("refreshGlobalIssuerMetadata", func() {
-		Description("Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.")
+		Description("Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.")
 
 		Payload(func() {
 			Attribute("id", String, "The remote_session_issuer id.", func() {
@@ -462,8 +462,8 @@ var ListIssuerConvergenceCandidatesResult = Type("ListIssuerConvergenceCandidate
 
 // IssuerMigratePreflight describes the impact of consolidating one
 // organization's issuer onto a global issuer. can_migrate is FALSE when
-// endpoint metadata differs, an MCP-server binding conflicts, or a
-// user-session issuer still trusts the source — the same conditions the
+// endpoint metadata differs, an MCP-server binding conflicts, an EMA binding is
+// active, or a user-session issuer still trusts the source — the same conditions the
 // mutation rejects with 409.
 var IssuerMigratePreflight = Type("IssuerMigratePreflight", func() {
 	Description("Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.")
@@ -474,10 +474,11 @@ var IssuerMigratePreflight = Type("IssuerMigratePreflight", func() {
 	Attribute("conflicting_mcp_server_names", ArrayOf(String), "Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.")
 	Attribute("warnings", ArrayOf(rsissuers.IssuerFieldMismatch), "Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.")
 	Attribute("trusted_user_session_issuer_count", Int, "Number of user_session_issuers that trust the source. Any non-zero value blocks migration.")
-	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.")
+	Attribute("ema_binding_count", Int, "Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.")
+	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.")
 	Attribute("target_tenant_client_count", Int, "Number of tenant-owned remote_session_clients already registered with the target issuer, BEFORE this migration. Any non-zero value blocks deleting the target issuer, and only the owning organizations can clear it, so a successful migration is effectively one-way.")
 
-	Required("client_count", "mcp_server_names", "endpoint_mismatches", "conflicting_mcp_server_names", "warnings", "trusted_user_session_issuer_count", "can_migrate", "target_tenant_client_count")
+	Required("ema_binding_count", "client_count", "mcp_server_names", "endpoint_mismatches", "conflicting_mcp_server_names", "warnings", "trusted_user_session_issuer_count", "can_migrate", "target_tenant_client_count")
 })
 
 // MigrateRemoteSessionIssuerResult reports the outcome of consolidating
@@ -505,6 +506,8 @@ var GlobalRemoteSessionIssuer = Type("GlobalRemoteSessionIssuer", func() {
 	Attribute("tenant_client_count", Int, "Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.")
 	Attribute("trusted_user_session_issuer_count", Int, "Number of active tenant-owned user_session_issuers that trust this issuer. These block deletion and must be unlinked by their owning organizations.")
 
+	Attribute("ema_binding_count", Int, "Number of active identity-chaining bindings that block deletion and must be explicitly unlinked by their owning organizations. Included in the detail response; omitted from listings.")
+
 	Required("issuer", "global_client_count", "tenant_client_count", "trusted_user_session_issuer_count")
 })
 
@@ -526,7 +529,7 @@ var CreateGlobalRemoteSessionClientForm = Type("CreateGlobalRemoteSessionClientF
 		Format(FormatUUID)
 	})
 	Attribute("client_id", String, "client_id supplied by the caller.")
-	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
+	Attribute("client_secret", String, "client_secret supplied by the caller. Speakeasy encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", func() {
 		Enum("client_secret_basic", "client_secret_post", "none")
 	})
@@ -546,14 +549,14 @@ var UpdateGlobalRemoteSessionClientForm = Type("UpdateGlobalRemoteSessionClientF
 	Attribute("id", String, "The remote_session_client id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("client_secret", String, "Rotate the client secret. Gram re-encrypts before persisting.")
+	Attribute("client_secret", String, "Rotate the client secret. Speakeasy re-encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", func() {
 		Enum("client_secret_basic", "client_secret_post", "none")
 	})
 	Attribute("scope", ArrayOf(String), func() {
 		rsclients.ScopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
 	})
-	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", rsclients.AudienceAttribute)
+	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Pass an empty string to clear it. Omit to leave unchanged.", rsclients.UpdateAudienceAttribute)
 
 	Required("id")
 })

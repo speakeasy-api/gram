@@ -1,23 +1,18 @@
+import { isBillingRecoveryPath } from "@/lib/billing-recovery-path";
 import { FullPageError } from "@/components/full-page-error";
-import { GramLogo } from "@/components/gram-logo";
-import { HatchRule } from "@/components/hatch-rule";
-import { SidebarNavSkeleton } from "@/components/sidebar-nav-skeleton";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarInset,
-  SidebarProvider,
-} from "@/components/ui/Sidebar";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
+import { useOrganizationHostMove } from "@/hooks/useOrganizationHostMove";
 import { useTrialNow } from "@/hooks/useTrialNow";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
+import {
+  organizationHostRedirectTarget,
+  recordOrganizationSwitch,
+  switchedRecently,
+} from "@/lib/organization-host";
 import { isGramSessionUnauthorizedError } from "@/lib/route-errors";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useIsPlatformAdminRef, useSdkClient } from "@/contexts/Sdk";
 import {
   capturePreservedStorage,
@@ -33,7 +28,7 @@ import {
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
 import { isPortablePath, resolvePortablePath } from "@/lib/portable-path";
-import { safeRedirectPath, UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
+import { isServerRenderedPath, safeRedirectPath } from "@/lib/session-expired";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -195,26 +190,45 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     }
   }, [session?.session, isImpersonating]);
 
+  // An organization that lives on another platform host is used there, on the
+  // same page. auth.info names that host only for an ordinary session whose
+  // active organization belongs elsewhere; session cookies are host-only, so
+  // the session is handed over with a session transfer.
+  // A URL naming another of the user's organizations switches scope first;
+  // the move then follows the organization the switch selects.
+  const urlNamesOtherOrganization = Boolean(
+    session?.organizations.some(
+      (organization) =>
+        organization.slug === orgSlug &&
+        organization.id !== session.activeOrganizationId,
+    ),
+  );
+  const sessionAuthorized =
+    Boolean(session?.session) && !isGramSessionUnauthorizedError(error);
+  const organizationHostTarget =
+    sessionAuthorized &&
+    session?.activeOrganizationId &&
+    !isImpersonating &&
+    !urlNamesOtherOrganization
+      ? organizationHostRedirectTarget(
+          session.activeOrganizationDashboardUrl,
+          window.location,
+          switchedRecently(session.activeOrganizationId),
+        )
+      : undefined;
+  const movingHost = useOrganizationHostMove(
+    session?.activeOrganizationId,
+    organizationHostTarget,
+  );
+
   // you need something like this so you don't redirect with empty session too soon
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
   // !! Very important that auth.info returns an error if there's no session
   if (isLoading || (!session && !error)) {
-    // Don't show the authenticated app skeleton on routes that always redirect
-    // (root "/" and unauthenticated pages like /login). This avoids a jarring
-    // skeleton flash for logged-out users before the redirect to /login fires.
-    // A minimal centered pending state (not a blank viewport) covers the
-    // seconds the session check can take before login paints.
-    if (
-      location.pathname === "/" ||
-      UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p)) ||
-      location.pathname.endsWith("/setup")
-    ) {
-      return <AuthPendingScreen />;
-    }
-    return <AppLoadingShell />;
+    return <SplashScreen fullScreen />;
   }
 
-  // A portable "/~" path (an external link that cannot know the viewer's
+  // A portable "/@self" path (an external link that cannot know the viewer's
   // slugs) matches no route, so the gates below must resolve it before route
   // matching gets a say. Logged out it bounces through login carrying the
   // full destination — the same shape LoginCheck produces for slugged paths.
@@ -233,6 +247,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
+  if (movingHost) {
+    return <SplashScreen fullScreen />;
+  }
+
   // Show book demo page if organization is not whitelisted
   // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
   // /explore-demo stays reachable: it's the gate page's own escape hatch into
@@ -240,6 +258,11 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   if (
     session.activeOrganizationId &&
     !session.whitelisted &&
+    !isBillingRecoveryPath(
+      location.pathname,
+      location.search,
+      session.organization?.slug,
+    ) &&
     !isPath(location.pathname, "/explore-demo")
   ) {
     // The switcher wins even on the upgrade gate's own route. Someone with a
@@ -270,14 +293,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // Fully authenticated: expand "/~" into the active org and the project the
-  // user last visited, keeping the destination's own query and hash.
+  // Fully authenticated: expand "/@self" into the active org, keeping the
+  // destination's own query and hash.
   if (session.organization) {
-    const resolved = resolvePortablePath(
-      location,
-      session.organization,
-      localStorage.getItem(PREFERRED_PROJECT_KEY),
-    );
+    const resolved = resolvePortablePath(location, session.organization);
     if (resolved) {
       return <Navigate to={resolved} replace />;
     }
@@ -318,6 +337,9 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // freshly authenticated user to a foreign origin.
   const redirectParam = safeRedirectPath(searchParams.get("redirect"));
   if (redirectParam) {
+    if (isServerRenderedPath(redirectParam)) {
+      return <ServerRenderedRedirect to={redirectParam} />;
+    }
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {
     // Fall through to render children
@@ -382,6 +404,16 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+// A return target the server renders (see isServerRenderedPath) is loaded
+// with a full navigation. A router <Navigate> would keep the dashboard in
+// charge of a path it has no route for.
+function ServerRenderedRedirect({ to }: { to: string }): JSX.Element {
+  useEffect(() => {
+    window.location.replace(to);
+  }, [to]);
+  return <SplashScreen fullScreen />;
+}
+
 function OrganizationScopeSwitch({
   organizationId,
   destination,
@@ -436,6 +468,7 @@ function OrganizationScopeSwitch({
 
     void request.promise
       .then(() => {
+        recordOrganizationSwitch(organizationId);
         if (cancelled) {
           clearOrganizationScopeSwitchAttempt(attempt);
           return;
@@ -458,7 +491,7 @@ function OrganizationScopeSwitch({
   if (error) {
     return <FullPageError error={error} />;
   }
-  return <AuthPendingScreen />;
+  return <SplashScreen fullScreen />;
 }
 
 export const ProjectProvider = ({
@@ -534,71 +567,3 @@ export const ProjectProvider = ({
     <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>
   );
 };
-
-/**
- * Minimal centered pending state shown while the session check resolves on
- * routes that always redirect (root "/", /login, setup). Mirrors the
- * thin-serif treatment CliCallback uses; the copy stays a neutral "Loading…"
- * because on /login itself no redirect is coming.
- */
-const AuthPendingScreen = () => (
-  <div className="flex h-screen items-center justify-center">
-    <h1 className="text-display-sm font-thin">Loading…</h1>
-  </div>
-);
-
-/**
- * Lightweight shell that mirrors the real AppLayout structure,
- * shown while the auth session is still loading so the user
- * sees the app chrome immediately instead of a blank screen.
- *
- * Keep the structure in sync with AppLayout/AppSidebar: the logo belongs
- * inside SidebarHeader, not a sibling header. The sidebar renders as a
- * `fixed inset-y-0 z-10` container, so a sibling header would sit under it.
- */
-const AppLoadingShell = () => (
-  <SidebarProvider
-    style={{ "--sidebar-width": "16rem" } as React.CSSProperties}
-  >
-    <div className="flex h-screen w-full flex-col">
-      <div className="flex w-full flex-1 overflow-hidden">
-        <Sidebar collapsible="icon">
-          {/* Logo row + crosshatch rule, exactly as AppSidebar renders it —
-              the switcher lives in the page header now, so no placeholder
-              for it here. */}
-          <SidebarHeader className="gap-0 p-0">
-            <div className="flex h-(--header-height) items-center px-2">
-              <div className="flex h-full items-center px-1">
-                <GramLogo className="w-28" />
-              </div>
-            </div>
-            <HatchRule />
-          </SidebarHeader>
-          <SidebarContent className="pt-2">
-            <SidebarNavSkeleton
-              rows={8}
-              divideAfter={3}
-              className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0"
-            />
-          </SidebarContent>
-          <SidebarFooter className="border-t">
-            <div className="flex items-center gap-2 py-2">
-              <Skeleton className="size-8 shrink-0 rounded-full" />
-              <Skeleton className="h-3.5 w-24" />
-            </div>
-          </SidebarFooter>
-        </Sidebar>
-        <SidebarInset>
-          {/* Mirrors PageHeader's own geometry (h-(--header-height), px-8,
-              hatch rule) without mounting it: the switcher inside needs the
-              auth context this shell is still waiting on. */}
-          <header className="flex h-(--header-height) shrink-0 items-center gap-3 px-8">
-            <Skeleton className="h-6 w-40" />
-            <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
-          </header>
-          <HatchRule />
-        </SidebarInset>
-      </div>
-    </div>
-  </SidebarProvider>
-);

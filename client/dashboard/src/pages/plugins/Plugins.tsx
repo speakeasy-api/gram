@@ -1,19 +1,20 @@
+import { McpEntityCard } from "@/components/mcp/McpEntityCard";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { useOrganization } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
-import { CreateResourceCard } from "@/components/create-resource-card";
 import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
+import { Page } from "@/components/page-layout";
+import { Icon } from "@/components/ui/Icon";
 import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
-import { Card } from "@/components/ui/Card";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { Text } from "@/components/ui/Text";
-import { RequireScope } from "@/components/require-scope";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
-import { Plugin } from "@gram/client/models/components/plugin.js";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { useCreatePluginMutation } from "@gram/client/react-query/createPlugin";
 import {
   invalidateAllPlugins,
@@ -38,7 +39,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
+import { MoreActions } from "@/components/ui/MoreActions";
 import { Stack } from "@/components/ui/Stack";
+import { Label } from "@/components/ui/Label";
 import { Switch } from "@/components/ui/Switch";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Activity, Network } from "lucide-react";
@@ -54,6 +57,9 @@ import {
 } from "./MarketplaceCard";
 import { PluginCard } from "./PluginCard";
 import { PluginInstallButton } from "./PluginInstallButton";
+import type { ObservabilityDownloadPlatform } from "./observability-platforms";
+import { OBSERVABILITY_DOWNLOAD_PLATFORMS } from "./observability-platforms";
+import { RotateObservabilityCredentialDialog } from "./RotateObservabilityCredentialDialog";
 import { downloadResponse } from "./downloadPluginPackage";
 import {
   matchesPluginFilters,
@@ -70,7 +76,7 @@ export default function Plugins(): JSX.Element | null {
   const { hasScope, isLoading } = useRBAC();
   const organization = useOrganization();
   const canWritePlugin = usePluginWriteAccess();
-  if (isLoading) return null;
+  if (isLoading) return <SplashScreen />;
   if (!canWritePlugin && !hasScope("org:read", organization.id)) return null;
   return hasScope("org:admin", organization.id) ? (
     <PluginsWithMarketplaceSettings />
@@ -97,6 +103,7 @@ function PluginsContent({
   >["data"];
 }): JSX.Element {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [createAutoSyncEnabled, setCreateAutoSyncEnabled] = useState(true);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isManageCollaboratorsOpen, setIsManageCollaboratorsOpen] =
     useState(false);
@@ -119,12 +126,11 @@ function PluginsContent({
   const { fetch: authFetch } = useFetcher();
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
-  const [isDownloadingObservability, setIsDownloadingObservability] = useState<
-    "claude" | "cursor" | "codex" | "opencode" | "openclaw" | "pi" | null
-  >(null);
+  const [isDownloadingObservability, setIsDownloadingObservability] =
+    useState<ObservabilityDownloadPlatform | null>(null);
 
   const handleObservabilityDownload = async (
-    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw" | "pi",
+    platform: ObservabilityDownloadPlatform,
   ) => {
     setIsObservabilityDownloadMenuOpen(false);
     setIsDownloadingObservability(platform);
@@ -220,10 +226,26 @@ function PluginsContent({
         createPluginForm: {
           name,
           description: description || undefined,
+          autoSyncEnabled: createAutoSyncEnabled,
         },
       },
     });
   };
+
+  const openCreateDialog = () => {
+    setCreateAutoSyncEnabled(true);
+    setIsCreateDialogOpen(true);
+  };
+
+  // Plugins whose auto sync is off only publish their changes on a manual
+  // sync, so the marketplace card says so.
+  const pausedPluginNames = useMemo(
+    () =>
+      (data?.plugins ?? [])
+        .filter((plugin) => plugin.autoSyncEnabled === false)
+        .map((plugin) => plugin.name),
+    [data?.plugins],
+  );
 
   // Destructure mutate so the dep array references the stable function
   // directly (TanStack Query keeps mutate referentially stable, but the
@@ -368,18 +390,11 @@ function PluginsContent({
     );
   };
 
-  const createCard = canWritePlugin ? (
-    <CreateResourceCard
-      title="New Plugin"
-      description="Bundle MCP servers and hooks for distribution to supported coding agents."
-      onClick={() => setIsCreateDialogOpen(true)}
-    />
-  ) : null;
-
   return (
     <>
       <ResourceListPage
         title="Plugins"
+        bodyClassName="-mt-6"
         description={
           <span className={hasPlugins ? "block w-3/4" : undefined}>
             Create distributable plugin bundles that package MCP servers and
@@ -387,23 +402,16 @@ function PluginsContent({
             supported agent marketplaces via GitHub.
           </span>
         }
-        hideToolbar={!hasPlugins}
-        search={{
-          value: search,
-          onChange: setSearch,
-          placeholder: "Search plugins",
-        }}
-        filters={{
-          schema: PLUGINS_FILTERS,
-          values: pluginFilters.values,
-          optionsById: pluginFilterOptions,
-          onChange: pluginFilters.setValue as (
-            id: string,
-            value: FilterValue,
-          ) => void,
-          onClear: pluginFilters.clearValue as (id: string) => void,
-          onClearAll: pluginFilters.clearAll,
-        }}
+        primaryAction={
+          canWritePlugin ? (
+            <Button onClick={openCreateDialog}>
+              <Button.LeftIcon>
+                <Icon name="plus" />
+              </Button.LeftIcon>
+              <Button.Text>Create plugin</Button.Text>
+            </Button>
+          ) : undefined
+        }
       >
         <Stack direction="vertical" gap={8}>
           {canManageMarketplace &&
@@ -429,7 +437,6 @@ function PluginsContent({
                       marketplaceSettings.observabilityEnabled
                     }
                   />
-                  <div className="border-border border-t" />
                 </>
               ) : (
                 <>
@@ -452,8 +459,8 @@ function PluginsContent({
                     observabilityEnabled={
                       marketplaceSettings.observabilityEnabled
                     }
+                    pausedPluginNames={pausedPluginNames}
                   />
-                  <div className="border-border border-t" />
                 </>
               )
             ) : (
@@ -474,9 +481,30 @@ function PluginsContent({
                     marketplaceSettings.observabilityEnabled
                   }
                 />
-                <div className="border-border border-t" />
               </>
             ))}
+          {hasPlugins && (
+            <Page.Toolbar>
+              <Page.Toolbar.Search
+                value={search}
+                onChange={setSearch}
+                placeholder="Search plugins"
+              />
+              <Page.Toolbar.Filters
+                schema={PLUGINS_FILTERS}
+                values={pluginFilters.values}
+                optionsById={pluginFilterOptions}
+                onChange={
+                  pluginFilters.setValue as (
+                    id: string,
+                    value: FilterValue,
+                  ) => void
+                }
+                onClear={pluginFilters.clearValue as (id: string) => void}
+                onClearAll={pluginFilters.clearAll}
+              />
+            </Page.Toolbar>
+          )}
           <Text small muted>
             The default plugin is where all newly created MCP servers will be
             automatically published to. If you have the default plugin installed
@@ -497,7 +525,6 @@ function PluginsContent({
             plugins={filteredPlugins}
             publishStatus={canManageMarketplace ? publishStatus : undefined}
             searchQuery={hasPlugins ? search : ""}
-            createCard={createCard}
           />
           {canManageMarketplace && (
             <>
@@ -526,9 +553,7 @@ function PluginsContent({
                     void handleObservabilityDownload(platform);
                   }}
                 />
-                <RequireScope scope="org:admin" level="section">
-                  <PlatformMCPPluginCard />
-                </RequireScope>
+                <PlatformMCPPluginCard />
               </div>
             </>
           )}
@@ -547,6 +572,22 @@ function PluginsContent({
           <form onSubmit={handleCreate} className="flex flex-col gap-4">
             <InputField label="Name" name="name" required autoFocus />
             <InputField label="Description" name="description" />
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <Label id="create-plugin-auto-sync-label">
+                  Sync changes automatically
+                </Label>
+                <Text small muted>
+                  When off, the plugin reaches your marketplace only when
+                  someone clicks Sync changes.
+                </Text>
+              </div>
+              <Switch
+                aria-labelledby="create-plugin-auto-sync-label"
+                checked={createAutoSyncEnabled}
+                onCheckedChange={setCreateAutoSyncEnabled}
+              />
+            </div>
             <Dialog.Footer>
               <Button
                 variant="secondary"
@@ -679,11 +720,14 @@ function ObservabilityPluginCard({
   isDownloadMenuOpen: boolean;
   onDownloadMenuOpenChange: (open: boolean) => void;
   isDownloading: boolean;
-  onDownload: (
-    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw" | "pi",
-  ) => void;
+  onDownload: (platform: ObservabilityDownloadPlatform) => void;
 }) {
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
+  const [isRotateDialogOpen, setIsRotateDialogOpen] = useState(false);
+  const { hasScope } = useRBAC();
+  // Rotation mints an org-wide ingest credential, so it matches the plugin
+  // download's org:admin gate rather than the page's read access.
+  const canRotateCredential = hasScope("org:admin");
   const isConnected = !!publishStatus?.connected;
   const installTarget =
     isConnected && publishStatus?.repoOwner && publishStatus.repoName
@@ -695,7 +739,7 @@ function ObservabilityPluginCard({
       : undefined;
 
   return (
-    <Card.Entity
+    <McpEntityCard
       className="border-primary/30 bg-primary/[0.02]"
       icon={<Activity className="text-primary h-10 w-10 opacity-80" />}
     >
@@ -736,85 +780,85 @@ function ObservabilityPluginCard({
           {observabilityInstallHint(enabled, isConnected)}
         </Text>
         {enabled ? (
-          <DropdownMenu
-            open={isDownloadMenuOpen}
-            onOpenChange={onDownloadMenuOpenChange}
-          >
-            <DropdownMenuTrigger asChild>
-              <PluginInstallButton size="sm" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                disabled={!installTarget}
-                onClick={() => {
-                  // Defer until after the dropdown has fully closed to avoid a
-                  // Radix focus-trap/body-lock conflict between the closing
-                  // menu and the opening sheet (same pattern as MCPDetails.tsx).
-                  setTimeout(() => setIsInstallSheetOpen(true), 0);
-                }}
-              >
-                <div className="flex flex-col">
-                  <span>GitHub installation (preferred)</span>
-                  {!installTarget && (
-                    <span className="text-muted-foreground text-xs">
-                      Requires marketplace setup
-                    </span>
-                  )}
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={isDownloading}
-                onClick={() => {
-                  onDownload("claude");
-                }}
-              >
-                Download as zip — Claude
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isDownloading}
-                onClick={() => {
-                  onDownload("cursor");
-                }}
-              >
-                Download as zip — Cursor
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isDownloading}
-                onClick={() => {
-                  onDownload("codex");
-                }}
-              >
-                Download as zip — Codex
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isDownloading}
-                onClick={() => {
-                  onDownload("opencode");
-                }}
-              >
-                Download as zip — OpenCode
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isDownloading}
-                onClick={() => {
-                  onDownload("openclaw");
-                }}
-              >
-                Download as zip — OpenClaw
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isDownloading}
-                onClick={() => {
-                  onDownload("pi");
-                }}
-              >
-                Download as zip — Pi
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          // The icon-only MoreActions trigger carries mx-[-4px] to sit flush
+          // with a container edge, which here eats the gap against Install and
+          // leaves the two hit boxes touching. gap-3 nets the usual 8px.
+          <div className="flex items-center gap-3">
+            <MoreActions
+              triggerAriaLabel="Observability plugin actions"
+              triggerDisabled={!canRotateCredential}
+              actions={[
+                {
+                  label: "Rotate credential",
+                  icon: "rotate-ccw-key",
+                  disabled: !canRotateCredential,
+                  description: canRotateCredential
+                    ? undefined
+                    : "Requires an organization admin",
+                  onClick: () => {
+                    // Defer until after the menu has fully closed to avoid a
+                    // Radix focus-trap/body-lock conflict between the closing
+                    // menu and the opening dialog (same pattern as the install
+                    // sheet above).
+                    setTimeout(() => setIsRotateDialogOpen(true), 0);
+                  },
+                },
+              ]}
+            />
+            <DropdownMenu
+              open={isDownloadMenuOpen}
+              onOpenChange={onDownloadMenuOpenChange}
+            >
+              <DropdownMenuTrigger asChild>
+                <PluginInstallButton size="sm" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={!installTarget}
+                  onClick={() => {
+                    // Defer until after the dropdown has fully closed to avoid a
+                    // Radix focus-trap/body-lock conflict between the closing
+                    // menu and the opening sheet (same pattern as MCPDetails.tsx).
+                    setTimeout(() => setIsInstallSheetOpen(true), 0);
+                  }}
+                >
+                  <div className="flex flex-col">
+                    <span>GitHub installation (preferred)</span>
+                    {!installTarget && (
+                      <span className="text-muted-foreground text-xs">
+                        Requires marketplace setup
+                      </span>
+                    )}
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {OBSERVABILITY_DOWNLOAD_PLATFORMS.map(({ platform, label }) => (
+                  <DropdownMenuItem
+                    key={platform}
+                    disabled={isDownloading}
+                    onClick={() => {
+                      onDownload(platform);
+                    }}
+                  >
+                    Download as zip — {label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         ) : null}
       </div>
+
+      {/* Mounted only while open so the rotation mutation is not instantiated
+          for every render of this card. */}
+      {isRotateDialogOpen && (
+        <RotateObservabilityCredentialDialog
+          open
+          onOpenChange={setIsRotateDialogOpen}
+          isDownloading={isDownloading}
+          onDownload={onDownload}
+        />
+      )}
 
       {/* Reuses the onboarding wizard's platform-by-platform setup sheet
           (real per-platform slugs, API key minting, full instructions)
@@ -825,7 +869,7 @@ function ObservabilityPluginCard({
         open={isInstallSheetOpen}
         onOpenChange={setIsInstallSheetOpen}
       />
-    </Card.Entity>
+    </McpEntityCard>
   );
 }
 
@@ -842,11 +886,13 @@ function observabilityInstallHint(
   return "Available as a direct download";
 }
 
-function PlatformMCPPluginCard(): JSX.Element {
+function PlatformMCPPluginCard(): JSX.Element | null {
   const [installOpen, setInstallOpen] = useState(false);
+  const { hasScope } = useRBAC();
+  if (!hasScope("org:admin")) return null;
 
   return (
-    <Card.Entity
+    <McpEntityCard
       className="border-primary/30 bg-primary/[0.02]"
       icon={<Network className="text-primary h-10 w-10 opacity-80" />}
     >
@@ -880,7 +926,7 @@ function PlatformMCPPluginCard(): JSX.Element {
         setupOpen={installOpen}
         onSetupOpenChange={setInstallOpen}
       />
-    </Card.Entity>
+    </McpEntityCard>
   );
 }
 
@@ -888,12 +934,10 @@ function PluginGrid({
   plugins,
   publishStatus,
   searchQuery,
-  createCard,
 }: {
   plugins: Plugin[];
   publishStatus: PublishStatusResult | undefined;
   searchQuery: string;
-  createCard: React.ReactNode;
 }) {
   if (plugins.length === 0) {
     return (
@@ -901,9 +945,6 @@ function PluginGrid({
         {searchQuery ? (
           <Text muted>No plugins matching &ldquo;{searchQuery}&rdquo;</Text>
         ) : null}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {createCard}
-        </div>
       </div>
     );
   }
@@ -917,7 +958,6 @@ function PluginGrid({
           publishStatus={publishStatus}
         />
       ))}
-      {createCard}
     </div>
   );
 }

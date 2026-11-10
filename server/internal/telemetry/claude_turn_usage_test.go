@@ -43,9 +43,10 @@ func TestGetClaudeTurnUsageByChatIDs_MultipleTurns(t *testing.T) {
 		costUSD: 0.0025, costMicros: 2500, model: "claude-haiku-4-5-20251001", querySource: "generate_session_title",
 	})
 
-	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeTurnUsage(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
+		EventTimeFrom: time.Time{},
 	}, chatID, 2)
 	require.Equal(t, "prompt-1", got[chatID][0].PromptID)
 	require.Equal(t, int64(20), got[chatID][0].TotalTokens)
@@ -80,9 +81,10 @@ func TestGetClaudeTurnUsageByChatIDs_MultipleAPIRequestsInTurn(t *testing.T) {
 		costUSD: 0.0094443, costMicros: 9444, model: "claude-sonnet-4-6", querySource: "sdk",
 	})
 
-	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeTurnUsage(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
+		EventTimeFrom: time.Time{},
 	}, chatID, 1)
 
 	turn := got[chatID][0]
@@ -112,9 +114,10 @@ func TestGetClaudeTurnUsageByChatIDs_NoCostBearingRequest(t *testing.T) {
 		timestamp: time.Now().UTC(), promptID: "prompt-without-request", eventName: "tool_result",
 	})
 
-	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeTurnUsage(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
+		EventTimeFrom: time.Time{},
 	}, chatID, 1)
 
 	turn := got[chatID][0]
@@ -137,10 +140,41 @@ func TestGetClaudeTurnUsageByChatIDs_NoOTELData(t *testing.T) {
 	got, err := ti.chClient.GetClaudeTurnUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
+		EventTimeFrom: time.Time{},
 	})
 	require.NoError(t, err)
 	require.Contains(t, got, chatID)
 	require.Empty(t, got[chatID])
+}
+
+func TestGetClaudeTurnUsageByChatIDs_EventTimeFrom(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	chatID := uuid.New().String()
+	now := time.Now().UTC()
+
+	insertClaudeOTELLog(t, ctx, claudeOTELLogParams{
+		projectID: projectID, deploymentID: deploymentID, chatID: chatID,
+		timestamp: now.Add(-48 * time.Hour), promptID: "old-prompt", eventName: "api_request",
+		inputTokens: 10, outputTokens: 5,
+	})
+	insertClaudeOTELLog(t, ctx, claudeOTELLogParams{
+		projectID: projectID, deploymentID: deploymentID, chatID: chatID,
+		timestamp: now, promptID: "new-prompt", eventName: "api_request",
+		inputTokens: 20, outputTokens: 8,
+	})
+
+	got := requireClaudeTurnUsage(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
+		GramProjectID: projectID,
+		ChatIDs:       []string{chatID},
+		EventTimeFrom: now.Add(-time.Hour),
+	}, chatID, 1)
+	require.Equal(t, "new-prompt", got[chatID][0].PromptID)
+	require.Equal(t, int64(20), got[chatID][0].InputTokens)
 }
 
 func TestGetClaudeToolUsageByChatIDs(t *testing.T) {
@@ -164,9 +198,10 @@ func TestGetClaudeToolUsageByChatIDs(t *testing.T) {
 		toolUseID: "toolu_2", toolName: "WebFetch", toolInputSizeBytes: 512, toolResultSizeBytes: 4096,
 	})
 
-	got := requireClaudeToolUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeToolUsage(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
+		EventTimeFrom: time.Time{},
 	}, chatID, 2)
 
 	require.Equal(t, "toolu_1", got[chatID][0].ToolUseID)
@@ -181,7 +216,7 @@ func TestGetClaudeToolUsageByChatIDs(t *testing.T) {
 	require.Equal(t, int64(4096), got[chatID][1].ResultSizeBytes)
 }
 
-func requireClaudeTurnUsageEventually(
+func requireClaudeTurnUsage(
 	ctx context.Context,
 	t *testing.T,
 	ti *testInstance,
@@ -191,17 +226,14 @@ func requireClaudeTurnUsageEventually(
 ) map[string][]repo.ClaudeTurnUsageRow {
 	t.Helper()
 
-	var got map[string][]repo.ClaudeTurnUsageRow
-	require.Eventually(t, func() bool {
-		var err error
-		got, err = ti.chClient.GetClaudeTurnUsageByChatIDs(ctx, params)
-		return err == nil && len(got[chatID]) == expectedRows
-	}, 2*time.Second, 50*time.Millisecond)
+	got, err := ti.chClient.GetClaudeTurnUsageByChatIDs(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, got[chatID], expectedRows)
 
 	return got
 }
 
-func requireClaudeToolUsageEventually(
+func requireClaudeToolUsage(
 	ctx context.Context,
 	t *testing.T,
 	ti *testInstance,
@@ -211,12 +243,9 @@ func requireClaudeToolUsageEventually(
 ) map[string][]repo.ClaudeToolUsageRow {
 	t.Helper()
 
-	var got map[string][]repo.ClaudeToolUsageRow
-	require.Eventually(t, func() bool {
-		var err error
-		got, err = ti.chClient.GetClaudeToolUsageByChatIDs(ctx, params)
-		return err == nil && len(got[chatID]) == expectedRows
-	}, 2*time.Second, 50*time.Millisecond)
+	got, err := ti.chClient.GetClaudeToolUsageByChatIDs(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, got[chatID], expectedRows)
 
 	return got
 }

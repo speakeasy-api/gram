@@ -15,13 +15,17 @@ const (
 	// constant rather than configuration.
 	DefaultTimeout = 15 * time.Second
 
-	// DefaultMaxTokens caps the completion length. A verdict is a small JSON
-	// object; the headroom exists only so the model is never cut mid-object.
-	DefaultMaxTokens = 1024
+	// DefaultMaxTokens is zero: no max_tokens is sent and the model answers
+	// at whatever length it needs; the reply is parsed as it comes. The
+	// request timeout bounds a completion that never ends, so a cap would
+	// only turn a long reply into an unparsable one.
+	DefaultMaxTokens = 0
 
 	// DefaultModel is the served model name of the merged fine-tune. It must
 	// equal the --served-model-name of the deployment the base URL points at.
-	DefaultModel = "risk-judge-4b"
+	// risk-judge-9b is the compact-format model SystemPrompt was written for;
+	// the 4B deployments serve as risk-judge-4b and need the previous prompt.
+	DefaultModel = "risk-judge-9b"
 )
 
 // Config configures the fine-tuned risk model client.
@@ -43,7 +47,7 @@ type Config struct {
 	Timeout time.Duration
 
 	// MaxTokens caps the completion length requested from the model. Zero
-	// selects DefaultMaxTokens.
+	// (the default) sends no cap: the model answers at its own length.
 	MaxTokens int
 }
 
@@ -57,8 +61,8 @@ func (c Config) Enabled() bool {
 // Validate checks the fields a client needs: an absolute https base URL with a
 // host, a model name and an API key. The guardian dialer still enforces the
 // private-network blocklist on every request, so this only rejects
-// configurations that could never work. Zero Timeout and MaxTokens are valid
-// and take their defaults in NewClient.
+// configurations that could never work. A zero Timeout is valid and takes its
+// default in NewClient; a zero MaxTokens means no cap.
 func (c Config) Validate() error {
 	var errs []error
 

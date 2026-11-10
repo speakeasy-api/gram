@@ -24,6 +24,9 @@ type Service interface {
 	// Aggregate work-units analysis results over time for the project: work done
 	// and cost/token efficiency per UTC day.
 	GetWorkUnitsTrend(context.Context, *GetWorkUnitsTrendPayload) (res *WorkUnitsTrendResult, err error)
+	// Load authorized chat overview metadata by exact ID without reading messages
+	// or recording a transcript-open audit event.
+	LoadChatOverview(context.Context, *LoadChatOverviewPayload) (res *ChatOverview, err error)
 	// Load a chat by its ID. Messages within a generation are paginated by `seq`
 	// keyset: omit cursors to receive the newest page, pass `before_seq` to load
 	// older messages (scroll up) or `after_seq` to load newer ones (scroll down).
@@ -59,6 +62,10 @@ type Service interface {
 	// List the distinct agent sources present in this project's chats, for
 	// populating the agent-type filter on the Agent Sessions page.
 	ListSources(context.Context, *ListSourcesPayload) (res *ListSourcesResult, err error)
+	// Count agent sessions per user for a time range. Uses the same population and
+	// visibility scoping as listChats, so each user's count matches listChats
+	// filtered to that user and the total matches the unfiltered listChats total.
+	CountByUser(context.Context, *CountByUserPayload) (res *CountChatsByUserResult, err error)
 	// List session-lineage links touching the given chats (session portability). A
 	// link records that a session was moved to another harness; the child side is
 	// present when the continuation's session id was known at move time. Returns
@@ -89,7 +96,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"listChats", "getAssistantSessionSummary", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources", "listSessionLinks"}
+var MethodNames = [15]string{"listChats", "getAssistantSessionSummary", "getWorkUnitsTrend", "loadChatOverview", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources", "countByUser", "listSessionLinks"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -149,6 +156,14 @@ type Chat struct {
 	// Full work-units analysis verdict as JSON (per-task breakdown, rationales,
 	// and flags). Present only when `work_units` is present.
 	WorkUnitsReport *string
+	// Observed Slack workspace associated with this session.
+	SlackTeamID *string
+	// Observed Slack channel associated with this session.
+	SlackChannelID *string
+	// Observed Slack channel name as reported by the captured envelope.
+	SlackChannelName *string
+	// Distinct observed conversation participants across the session.
+	Participants []*ChatParticipant
 	// The ID of the chat
 	ID string
 	// The title of the chat
@@ -161,6 +176,16 @@ type Chat struct {
 	AssistantID *string
 	// The name of the assistant that produced this chat, if any
 	AssistantName *string
+	// The ID of the agent the assistant acts as, when the assistant has a
+	// dedicated agent identity
+	AssistantAgentID *string
+	// The ID of the agent that produced this session, recorded from the
+	// authenticated actor at capture. Set for sessions an agent drove directly,
+	// such as a channel session, which has no assistant record.
+	AgentID *string
+	// The current name of the agent that produced this session. Absent when the
+	// agent has since been deleted, in which case agent_id is still reported.
+	AgentName *string
 	// The number of messages in the chat
 	NumMessages int
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -256,13 +281,25 @@ type ChatMessage struct {
 	UserID *string
 	// The ID of the external user who created the message
 	ExternalUserID *string
+	// Observed per-message conversation participants, independent of message
+	// ownership.
+	Participants []*ChatParticipant
 	// When the message was created.
 	CreatedAt string
 	// Conversation generation — bumps on compaction or edit divergence
 	Generation int
 }
 
+// ChatOverview is the result type of the chat service loadChatOverview method.
 type ChatOverview struct {
+	// Observed Slack workspace associated with this session.
+	SlackTeamID *string
+	// Observed Slack channel associated with this session.
+	SlackChannelID *string
+	// Observed Slack channel name as reported by the captured envelope.
+	SlackChannelName *string
+	// Distinct observed conversation participants across the session.
+	Participants []*ChatParticipant
 	// The ID of the chat
 	ID string
 	// The title of the chat
@@ -275,6 +312,16 @@ type ChatOverview struct {
 	AssistantID *string
 	// The name of the assistant that produced this chat, if any
 	AssistantName *string
+	// The ID of the agent the assistant acts as, when the assistant has a
+	// dedicated agent identity
+	AssistantAgentID *string
+	// The ID of the agent that produced this session, recorded from the
+	// authenticated actor at capture. Set for sessions an agent drove directly,
+	// such as a channel session, which has no assistant record.
+	AgentID *string
+	// The current name of the agent that produced this session. Absent when the
+	// agent has since been deleted, in which case agent_id is still reported.
+	AgentName *string
 	// The number of messages in the chat
 	NumMessages int
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -322,15 +369,29 @@ type ChatOverview struct {
 	SummaryGeneratedAt *string
 }
 
+type ChatParticipant struct {
+	// Directory provider that identifies this conversation participant.
+	Provider string
+	// Provider identity observed in the message envelope.
+	ProviderUserID string
+	// Workspace resolved from the organization directory, when unambiguous.
+	ProviderTeamID *string
+	// Explicitly mapped Speakeasy person at capture time; this attribution grants
+	// no permissions.
+	UserID *string
+	// Directory display name at capture time.
+	DisplayName *string
+}
+
 type ChatSessionLink struct {
-	// Chat id of the session the move originated from. Absent when the caller's
+	// Chat id of the parent session in this relationship. Absent when the caller's
 	// visibility scope cannot read the parent — a masked end exposes no identity,
 	// matching parent_captured.
 	ParentChatID *string
-	// Chat id derived for the continuation. Absent when the continuation's session
-	// id was unknowable at move time (e.g. Cursor mints ids server-side) — or when
-	// the caller's visibility scope cannot read the child, which is deliberately
-	// indistinguishable.
+	// Chat id of the child session in this relationship. Absent when its session
+	// id was unknowable when the relationship was recorded (e.g. Cursor mints ids
+	// server-side) — or when the caller's visibility scope cannot read the child,
+	// which is deliberately indistinguishable.
 	ChildChatID *string
 	// Title of the parent chat, when it has been captured and titled and the
 	// caller's visibility scope can read it.
@@ -344,7 +405,8 @@ type ChatSessionLink struct {
 	// Whether the continuation exists as a captured chat the caller can read, i.e.
 	// whether the child side is navigable.
 	ChildCaptured bool
-	// Link kind. Currently always 'move'.
+	// Link kind: move for continuations, recall for recalled context, or subagent
+	// for a helper session.
 	Kind string
 	// Harness the session was moved to (e.g. cursor, codex, claude-code).
 	TargetHarness string
@@ -376,6 +438,18 @@ type ChatTotals struct {
 	// Number of messages with an active (found, non-suppressed) risk finding in
 	// the generation.
 	RiskOnly int64
+}
+
+type ChatUserSessionCount struct {
+	// Speakeasy user ID. Empty for sessions with no Speakeasy user (external
+	// users, agent actors).
+	UserID string
+	// The user's email, empty when unknown
+	Email string
+	// The user's display name, empty when unknown
+	DisplayName string
+	// Number of sessions; equals the chat.list total when filtered to this user
+	Count int
 }
 
 type ClaudeAgentUsage struct {
@@ -425,6 +499,31 @@ type ClaudeTurnUsage struct {
 	Models []string
 	// Distinct Claude query sources used by this turn.
 	QuerySources []string
+}
+
+// CountByUserPayload is the payload type of the chat service countByUser
+// method.
+type CountByUserPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	// Count chats last active after this timestamp (ISO 8601)
+	From *string
+	// Count chats created before this timestamp (ISO 8601)
+	To *string
+	// Maximum number of users to return
+	Limit int
+}
+
+// CountChatsByUserResult is the result type of the chat service countByUser
+// method.
+type CountChatsByUserResult struct {
+	// Users ranked by session count, highest first, truncated to the requested
+	// limit
+	Users []*ChatUserSessionCount
+	// Total sessions across all users; equals the unfiltered chat.list total for
+	// the same range
+	Total int
 }
 
 // CreditUsagePayload is the payload type of the chat service creditUsage
@@ -502,7 +601,7 @@ type ListChatsPayload struct {
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
-	// Filter by Gram user ID
+	// Filter by Speakeasy user ID
 	UserID *string
 	// Filter by agent source. Comma-separated list of exact source values (e.g.
 	// 'claude-code,Codex,playground') matched against each session's inferred
@@ -511,6 +610,9 @@ type ListChatsPayload struct {
 	Source *string
 	// Filter to chats produced by this assistant
 	AssistantID *string
+	// Filter to chats produced by this agent (the agent principal recorded on the
+	// session at capture)
+	AgentID *string
 	// When set with assistant_id, list only that assistant's threads whose
 	// source_kind matches this value (e.g. 'setup' for onboarding threads). Empty
 	// for no filter.
@@ -542,6 +644,9 @@ type ListChatsPayload struct {
 	SortBy string
 	// Sort order
 	SortOrder string
+	// List pinned chats before unpinned ones, then apply sort_by and sort_order
+	// within each group
+	PinnedFirst bool
 }
 
 // ListChatsResult is the result type of the chat service listChats method.
@@ -582,6 +687,17 @@ type ListSourcesResult struct {
 	// The distinct agent sources present in this project's chats (raw source
 	// strings such as 'claude-code', 'Codex', 'playground').
 	Sources []string
+}
+
+// LoadChatOverviewPayload is the payload type of the chat service
+// loadChatOverview method.
+type LoadChatOverviewPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	ApikeyToken       *string
+	// The ID of the chat
+	ID string
 }
 
 // LoadChatPayload is the payload type of the chat service loadChat method.

@@ -10,10 +10,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // TestListRiskResults_ClickHouseShadowRowsHidden pins the shadow
@@ -28,7 +26,6 @@ func TestListRiskResults_ClickHouseShadowRowsHidden(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -69,7 +66,6 @@ func TestListRiskResults_ClickHouseShadowRowsHidden(t *testing.T) {
 	legacyDismissed.FalsePositiveAt = &excludedAt
 
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{legacy, shadow, shadowSuppressed, legacyDismissed}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// Stored: every row landed, and only the model's carry the marker. Raw
 	// SQL on purpose: ClickHouse fixture reads are exempt from the

@@ -73,7 +73,7 @@ func (c *kmsSigningClient) Close() error {
 // it actually signs with, which is what lets callers detect a key pointed at a
 // row configured for a different algorithm.
 //
-// It fails rather than returning a key when the algorithm is one Gram does not
+// It fails rather than returning a key when the algorithm is one Speakeasy does not
 // publish (ErrUnsupportedAlgorithm), when the PEM checksum does not match, or
 // when the PEM cannot be parsed. Note this is a KMS management-tier operation:
 // its quota is far below that of the cryptographic operations, so it is not

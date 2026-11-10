@@ -38,21 +38,37 @@ export type UpdateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
 >;
 
 /**
- * Form for updating a remote_session_client. All non-id fields are optional patches.
+ * Form for updating a remote_session_client. All non-id fields are optional patches. credential_owner is fixed at creation and cannot be changed.
  */
 export type UpdateRemoteSessionClientForm = {
   /**
-   * Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
+   * Replace the upstream OAuth audience sent for this client. Pass an empty string to clear it. Omit to leave unchanged.
    */
   audience?: string | undefined;
   /**
-   * Rotate the client secret. Gram re-encrypts before persisting.
+   * Correct the client_id registered with the issuer. Refused for Client ID Metadata Document (CIMD) clients and clients managed by an identity provider connection. A changed value revokes every remote session obtained through the client, so each user must reconnect. Omit to leave unchanged.
+   */
+  clientId?: string | undefined;
+  /**
+   * Rotate the client secret. Speakeasy re-encrypts before persisting.
    */
   clientSecret?: string | undefined;
+  /**
+   * Replace the client's display name. Pass an empty string to clear it so the client shows its client_id. Omit to leave unchanged.
+   */
+  displayName?: string | undefined;
+  /**
+   * Send the connecting MCP client's self-reported name to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions. Omit to leave unchanged.
+   */
+  forwardClientName?: boolean | undefined;
   /**
    * The remote_session_client id.
    */
   id: string;
+  /**
+   * Platform admins only. Set true to run the client in compatibility mode with the legacy callback URL, or false to migrate it to the current callback URL once that URL is registered with the identity provider. Omit to leave unchanged.
+   */
+  legacyCallbackUrl?: boolean | undefined;
   /**
    * Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.
    */
@@ -85,8 +101,12 @@ export const UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema
 /** @internal */
 export type UpdateRemoteSessionClientForm$Outbound = {
   audience?: string | undefined;
+  client_id?: string | undefined;
   client_secret?: string | undefined;
+  display_name?: string | undefined;
+  forward_client_name?: boolean | undefined;
   id: string;
+  legacy_callback_url?: boolean | undefined;
   scope?: Array<string> | undefined;
   token_endpoint_auth_audience_format?: string | undefined;
   token_endpoint_auth_method?: string | undefined;
@@ -99,8 +119,12 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     audience: z.optional(z.string()),
+    clientId: z.optional(z.string()),
     clientSecret: z.optional(z.string()),
+    displayName: z.optional(z.string()),
+    forwardClientName: z.optional(z.boolean()),
     id: z.string(),
+    legacyCallbackUrl: z.optional(z.boolean()),
     scope: z.optional(z.array(z.string())),
     tokenEndpointAuthAudienceFormat: z.optional(
       UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema,
@@ -111,7 +135,11 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      clientId: "client_id",
       clientSecret: "client_secret",
+      displayName: "display_name",
+      forwardClientName: "forward_client_name",
+      legacyCallbackUrl: "legacy_callback_url",
       tokenEndpointAuthAudienceFormat: "token_endpoint_auth_audience_format",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",
     });

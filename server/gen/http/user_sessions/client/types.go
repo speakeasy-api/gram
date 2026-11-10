@@ -31,6 +31,9 @@ type MintUserSessionRequestBody struct {
 	// Mutually exclusive with the other targets; exactly one must be set. Must be
 	// issuer-gated and live in the caller's project.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// An explicit discovery mode for a gateway Inspect connection. Valid only with
+	// meta_mcp_server_id. Omit to follow the gateway default.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
 }
 
 // ListUserSessionsResponseBody is the type of the "userSessions" service
@@ -56,7 +59,7 @@ type ListFacetsResponseBody struct {
 // "mintUserSession" endpoint HTTP response body.
 type MintUserSessionResponseBody struct {
 	// The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests
-	// to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.
+	// to the bound /mcp/{slug} surface.
 	AccessToken *string `form:"access_token,omitempty" json:"access_token,omitempty" xml:"access_token,omitempty"`
 	// Lifetime of the access token in seconds.
 	ExpiresIn *int `form:"expires_in,omitempty" json:"expires_in,omitempty" xml:"expires_in,omitempty"`
@@ -824,9 +827,12 @@ type UserSessionResponseBody struct {
 	SubjectUrn *string `form:"subject_urn,omitempty" json:"subject_urn,omitempty" xml:"subject_urn,omitempty"`
 	// Current access-token JTI; used by the revocation path.
 	Jti *string `form:"jti,omitempty" json:"jti,omitempty" xml:"jti,omitempty"`
-	// Next refresh deadline.
+	// Inbound authorization deadline. Refresh is possible until this time only
+	// when the session has a refresh grant.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
-	// Terminal session expiry; ceiling on refresh_expires_at.
+	// Current access-token expiry. Sessions with a refresh grant may refresh
+	// before refresh_expires_at; workload and other sessions without a refresh
+	// grant cannot.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -859,8 +865,8 @@ type UserSessionResponseBody struct {
 	SubjectType *string `form:"subject_type,omitempty" json:"subject_type,omitempty" xml:"subject_type,omitempty"`
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
-	// Avatar URL for the subject when it resolves to a Gram user with one. Null
-	// for API key and anonymous subjects, and for users who have no photo.
+	// Avatar URL for the subject when it resolves to a Speakeasy user with one.
+	// Null for API key and anonymous subjects, and for users who have no photo.
 	SubjectPhotoURL *string `form:"subject_photo_url,omitempty" json:"subject_photo_url,omitempty" xml:"subject_photo_url,omitempty"`
 	// When the session was revoked, if it has been.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
@@ -869,10 +875,10 @@ type UserSessionResponseBody struct {
 	// that. Null means the session has not been used since the column was
 	// introduced — unknown, not never.
 	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
-	// The upstream providers Gram holds tokens for on this session's subject,
-	// through the same issuer. Empty when the session reaches only Gram-native
-	// tools. A session can have several: an issuer may have more than one
-	// remote_session_client attached.
+	// The upstream providers Speakeasy holds tokens for on this session's subject,
+	// through the same issuer. Empty when the session reaches only
+	// Speakeasy-native tools. A session can have several: an issuer may have more
+	// than one remote_session_client attached.
 	Upstreams []*UserSessionUpstreamResponseBody `form:"upstreams,omitempty" json:"upstreams,omitempty" xml:"upstreams,omitempty"`
 	// Set only when subject_type is 'workload': the external issuer that vouched
 	// for the machine, the subject it asserted, and the agent the workload
@@ -968,6 +974,7 @@ func NewMintUserSessionRequestBody(p *usersessions.MintUserSessionPayload) *Mint
 		ToolsetID:       p.ToolsetID,
 		McpServerID:     p.McpServerID,
 		MetaMcpServerID: p.MetaMcpServerID,
+		DiscoveryMode:   p.DiscoveryMode,
 	}
 	return body
 }

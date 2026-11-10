@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
+import { Bot, CircleSlash, Pencil, UserRound } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+
 import { RadioCard, RadioCardGroup } from ".";
 
 const meta: Meta<typeof RadioCardGroup> = {
@@ -28,6 +31,61 @@ export const Default: Story = {
         </RadioCard>
         <RadioCard value="pickup" title="Collect from a nearby location." />
       </RadioCardGroup>
+    );
+  },
+};
+
+export const Compact: Story = {
+  render: function Render() {
+    const [value, setValue] = useState("standard");
+
+    return (
+      <div className="flex flex-col gap-6">
+        <RadioCardGroup
+          aria-label="Delivery speed, default density"
+          value={value}
+          onValueChange={setValue}
+        >
+          <RadioCard
+            value="standard"
+            leading={<UserRound aria-hidden="true" className="size-4" />}
+            title="Standard delivery"
+          >
+            Arrives in three to five working days.
+          </RadioCard>
+          <RadioCard
+            value="express"
+            leading={<Bot aria-hidden="true" className="size-4" />}
+            title="Express delivery"
+          >
+            Arrives sooner with priority handling.
+          </RadioCard>
+        </RadioCardGroup>
+
+        {/* size="sm" is for a choice inside a dialog or form step, where the
+            full-size title competes with the step's own heading. */}
+        <RadioCardGroup
+          size="sm"
+          aria-label="Delivery speed, compact density"
+          value={value}
+          onValueChange={setValue}
+        >
+          <RadioCard
+            value="standard"
+            leading={<UserRound aria-hidden="true" className="size-4" />}
+            title="Standard delivery"
+          >
+            Arrives in three to five working days.
+          </RadioCard>
+          <RadioCard
+            value="express"
+            leading={<CircleSlash aria-hidden="true" className="size-4" />}
+            title="Express delivery"
+          >
+            Arrives sooner with priority handling.
+          </RadioCard>
+        </RadioCardGroup>
+      </div>
     );
   },
 };
@@ -130,6 +188,74 @@ export const CustomContent: Story = {
               A full breakdown at month's end
             </span>
           </div>
+        </RadioCard>
+      </RadioCardGroup>
+    );
+  },
+};
+
+export const WithDetail: Story = {
+  render: function Render() {
+    const [value, setValue] = useState("standard");
+
+    return (
+      <RadioCardGroup
+        aria-label="Delivery speed"
+        size="sm"
+        value={value}
+        onValueChange={setValue}
+      >
+        {["standard", "express"].map((option) => (
+          <RadioCard
+            key={option}
+            value={option}
+            title={
+              option === "standard" ? "Standard delivery" : "Express delivery"
+            }
+            detail={
+              value === option ? (
+                <p className="text-muted-foreground text-sm">
+                  Shown only for the selected option, outside its description.
+                </p>
+              ) : null
+            }
+          >
+            {option === "standard" ? "Three to five days." : "Next day."}
+          </RadioCard>
+        ))}
+      </RadioCardGroup>
+    );
+  },
+};
+
+export const WithTrailing: Story = {
+  render: function Render() {
+    const [value, setValue] = useState("all");
+
+    return (
+      <RadioCardGroup
+        aria-label="Server access"
+        size="sm"
+        value={value}
+        onValueChange={setValue}
+      >
+        <RadioCard value="specific" title="Specific servers">
+          Choose servers project by project.
+        </RadioCard>
+        <RadioCard
+          value="all"
+          title="All servers"
+          trailing={
+            value === "all" ? (
+              <Button variant="tertiary" size="sm" aria-label="Edit">
+                <Button.LeftIcon>
+                  <Pencil className="h-4 w-4" />
+                </Button.LeftIcon>
+              </Button>
+            ) : null
+          }
+        >
+          Every server in every project, including ones added later.
         </RadioCard>
       </RadioCardGroup>
     );

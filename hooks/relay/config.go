@@ -1,6 +1,6 @@
-// Package relay wires the agenthooks runtime to the Gram hooks backend. It
+// Package relay wires the agenthooks runtime to the Speakeasy hooks backend. It
 // builds an agenthooks.Runner whose handlers translate every coding-agent hook
-// event into the canonical Gram ingest contract, POST it to the authenticated
+// event into the canonical Speakeasy ingest contract, POST it to the authenticated
 // /rpc/hooks.ingest endpoint, and honor the server's allow/deny verdict. The
 // server remains the sole authority on blocking; this package only relays
 // events and enforces the returned decision.
@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// DefaultServerURL is the production Gram endpoint used when no override is
+// DefaultServerURL is the production Speakeasy endpoint used when no override is
 // configured in the environment.
 const DefaultServerURL = "https://app.getgram.ai"
 
@@ -22,7 +22,7 @@ const DefaultServerURL = "https://app.getgram.ai"
 // project/org without recompilation, mirroring the env knobs the legacy bash
 // senders read.
 type Config struct {
-	// ServerURL is the Gram API base, e.g. https://app.getgram.ai.
+	// ServerURL is the Speakeasy API base, e.g. https://app.getgram.ai.
 	ServerURL string
 	// SiteURL is the dashboard origin the browser sign-in opens. Production
 	// serves the API and dashboard from one domain, so this stays empty and
@@ -36,9 +36,14 @@ type Config struct {
 	// cross project boundaries).
 	OrgID string
 	// HooksAPIKey is the shared org-wide hooks key baked into a published
-	// plugin. It is a fallback behind explicit and cached per-user keys and is
-	// never persisted locally.
+	// plugin. It is a fallback behind explicit and cached per-user keys, unless
+	// AgentKey marks it as an agent's key, and is never persisted locally.
 	HooksAPIKey string
+	// AgentKey marks HooksAPIKey as an agent identity's own key rather than
+	// the shared org key. It then outranks a cached personal sign-in, so an
+	// agent installed on a machine where a person has signed in still records
+	// its events under the agent.
+	AgentKey bool
 	// BrowserLogin controls whether fresh machines may mint a per-user hooks
 	// key through the dashboard. Published plugins default this off and use the
 	// shared org key unless the organization opts in.
@@ -48,8 +53,12 @@ type Config struct {
 	// the fail-open posture (unreachable/5xx allow); explicit deny decisions
 	// and credential failures enforce regardless. New plugins never set it.
 	Nonblocking bool
-	// DebugLog, when set, appends one diagnostic line per event. It travels as a
-	// command flag so it survives providers that scrub the hook environment.
+	// DebugLog, when set, appends one diagnostic line per event. It travels as
+	// a command flag (--debug-log=) so it survives providers that scrub the
+	// hook environment, and as SPEAKEASY_AI_HOOKS_DEBUG_LOG for the providers that
+	// pass the environment through, where a customer can turn diagnostics on
+	// without hand-editing a generated hook command. The flag wins when both
+	// name a path.
 	DebugLog string
 	// ConfigPath records the speakeasy.json the config was loaded from, so the
 	// login nudge can point the sign-in command at the same deployment identity
@@ -60,6 +69,11 @@ type Config struct {
 	// fall back to the default server where a cached key could route them to
 	// another workspace.
 	ConfigError string
+	// InstallRoute names how this install was distributed (marketplace,
+	// download, agent install, the binary's own install command), so the
+	// server can tell install routes apart. SPEAKEASY_AI_HOOKS_INSTALL_ROUTE
+	// overrides it for managed installs.
+	InstallRoute string
 }
 
 // FileConfig is the on-disk schema of a plugin's speakeasy.json. Evolution is
@@ -72,8 +86,10 @@ type FileConfig struct {
 	Project      string `json:"project"`
 	Org          string `json:"org,omitempty"`
 	HooksAPIKey  string `json:"hooks_api_key,omitempty"`
+	AgentKey     bool   `json:"agent_key,omitempty"`
 	BrowserLogin bool   `json:"browser_login,omitempty"`
 	Nonblocking  bool   `json:"nonblocking,omitempty"`
+	InstallRoute string `json:"install_route,omitempty"`
 }
 
 // SplitInlineFlags extracts the deployment flags from a hook command's argv and
@@ -85,7 +101,7 @@ type FileConfig struct {
 // manual overrides layered on top of the file.
 func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 	cfg := defaults
-	overrides := Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	overrides := Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", InstallRoute: ""}
 	rest := make([]string, 0, len(args))
 	for _, a := range args {
 		switch {
@@ -98,8 +114,10 @@ func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 				cfg.ProjectSlug = fc.Project
 				cfg.OrgID = fc.Org
 				cfg.HooksAPIKey = fc.HooksAPIKey
+				cfg.AgentKey = fc.AgentKey
 				cfg.BrowserLogin = fc.BrowserLogin
 				cfg.Nonblocking = fc.Nonblocking
+				cfg.InstallRoute = fc.InstallRoute
 			} else {
 				cfg.ConfigError = err.Error()
 			}
@@ -140,6 +158,16 @@ func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 	return cfg, rest
 }
 
+// envDebugLog returns the SPEAKEASY_AI_HOOKS_DEBUG_LOG path, or "" when the override
+// is unset. It is the environment half of the debug log: the flag remains the
+// only way to reach providers that scrub the hook environment, so this is a
+// fallback rather than a replacement, and every entrypoint that resolves a
+// config picks it up. Entrypoints that run without one (the drain process)
+// read it directly.
+func envDebugLog() string {
+	return Env("HOOKS_DEBUG_LOG")
+}
+
 // readFileConfig loads a speakeasy.json. A missing or malformed file yields an
 // error so the caller keeps its defaults; hooks must not crash over config.
 func readFileConfig(path string) (FileConfig, error) {
@@ -155,32 +183,39 @@ func readFileConfig(path string) (FileConfig, error) {
 }
 
 // LoadConfig resolves the effective config from the environment, layering the
-// GRAM_HOOKS_* overrides over the provided defaults.
+// SPEAKEASY_AI_HOOKS_* overrides over the provided defaults.
 func LoadConfig(defaults Config) Config {
 	cfg := defaults
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_SERVER_URL")); v != "" {
+	if v := Env("HOOKS_SERVER_URL"); v != "" {
 		cfg.ServerURL = v
 	}
 	if cfg.ServerURL == "" {
 		cfg.ServerURL = DefaultServerURL
 	}
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_SITE_URL")); v != "" {
+	if v := Env("HOOKS_SITE_URL"); v != "" {
 		cfg.SiteURL = v
 	}
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_PROJECT_SLUG")); v != "" {
+	if v := Env("HOOKS_PROJECT_SLUG"); v != "" {
 		cfg.ProjectSlug = v
 	}
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_ORG_ID")); v != "" {
+	if v := Env("HOOKS_ORG_ID"); v != "" {
 		cfg.OrgID = v
 	}
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_ORG_KEY")); v != "" {
+	if v := Env("HOOKS_ORG_KEY"); v != "" {
 		cfg.HooksAPIKey = v
+		cfg.AgentKey = false
 	}
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_BROWSER_LOGIN")); v != "" {
+	if v := Env("HOOKS_BROWSER_LOGIN"); v != "" {
 		cfg.BrowserLogin = v == "1" || strings.EqualFold(v, "true")
 	}
-	if os.Getenv("GRAM_HOOKS_NONBLOCKING") != "" || os.Getenv("GRAM_HOOKS_OBSERVABILITY_MODE") != "" {
+	if Env("HOOKS_NONBLOCKING") != "" || Env("HOOKS_OBSERVABILITY_MODE") != "" {
 		cfg.Nonblocking = true
+	}
+	if cfg.DebugLog == "" {
+		cfg.DebugLog = envDebugLog()
+	}
+	if v := Env("HOOKS_INSTALL_ROUTE"); v != "" {
+		cfg.InstallRoute = v
 	}
 	cfg.ServerURL = strings.TrimRight(cfg.ServerURL, "/")
 	cfg.SiteURL = strings.TrimRight(cfg.SiteURL, "/")

@@ -1,4 +1,4 @@
-// Package sessionhandoff renders a captured Gram chat transcript into a
+// Package sessionhandoff renders a captured Speakeasy chat transcript into a
 // deterministic markdown handoff digest — the document served to a harness
 // that wants to continue a previous session's work. No LLM sits in this path:
 // the same transcript always renders the same digest, which is what makes the
@@ -6,7 +6,7 @@
 //
 // The renderer is a stdlib-only port of the device-agent handoff renderer
 // (core/sessionport, ADR-0018 session portability), adapted to transcripts
-// recalled from Gram's capture store rather than a harness's native session
+// recalled from Speakeasy's capture store rather than a harness's native session
 // file.
 package sessionhandoff
 
@@ -57,7 +57,7 @@ type SessionMeta struct {
 	// recorded (external_chat_id), falling back to the chat uuid.
 	SessionID string
 
-	// ChatID is the Gram chat uuid the transcript was recalled from.
+	// ChatID is the Speakeasy chat uuid the transcript was recalled from.
 	ChatID string
 
 	// Source is the harness that produced the session (a capture surface slug
@@ -154,7 +154,7 @@ func Render(t *Transcript, opts Options) Handoff {
 			"intermediate assistant messages within turns (capture records each turn's final message only)",
 		},
 		Warnings: []string{
-			"rendered from Gram's captured transcript, not the harness's native session file; lower fidelity than a device-local move",
+			"rendered from Speakeasy's captured transcript, not the harness's native session file; lower fidelity than a device-local move",
 		},
 	}
 	if opts.RedactToolPayloads {
@@ -213,7 +213,7 @@ func Render(t *Transcript, opts Options) Handoff {
 	// continuation's own context/transcript, so a continuation whose new id
 	// nobody could know at recall time can still be tied back to its origin
 	// later. The gram chat uuid rides next to it for the same reason.
-	fmt.Fprintf(&b, "Recalled from %s · source session %s · gram chat %s · project: %s · last active %s · via Gram\n\n",
+	fmt.Fprintf(&b, "Recalled from %s · source session %s · gram chat %s · project: %s · last active %s · via Speakeasy\n\n",
 		clip(t.Session.Source, maxMetaField), clip(t.Session.SessionID, maxMetaField), t.Session.ChatID,
 		clip(valueOr(t.Session.Cwd, "(unknown)"), maxMetaField), t.Session.LastActivity.Format("2006-01-02 15:04 MST"))
 

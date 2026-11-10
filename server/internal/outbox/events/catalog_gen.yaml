@@ -32,6 +32,68 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.access_grant_event_v1:
+        post:
+            description: Emitted when access grants are given, renewed or revoked
+            operationId: audit_log.access_grant_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -90,6 +152,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -148,6 +212,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -206,6 +272,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -264,6 +332,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -322,6 +392,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -380,6 +452,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -438,6 +512,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -496,6 +572,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -554,6 +632,128 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.assistant_execution_profile_event_v1:
+        post:
+            description: Emitted when the upstream credentials an assistant's turns use are changed
+            operationId: audit_log.assistant_execution_profile_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.assistant_identity_event_v1:
+        post:
+            description: Emitted when workload identity is configured for an assistant
+            operationId: audit_log.assistant_identity_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -612,6 +812,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -670,6 +872,68 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.auth_client_event_v1:
+        post:
+            description: Emitted when changes to MCP auth clients or the servers offering them are made
+            operationId: audit_log.auth_client_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -728,6 +992,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -786,6 +1052,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -844,6 +1112,68 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.catalog_promotion_event_v1:
+        post:
+            description: Emitted when staff curate catalogue promotion candidates or retry setup documentation
+            operationId: audit_log.catalog_promotion_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -902,6 +1232,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -960,6 +1292,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1018,6 +1352,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1076,6 +1412,128 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.dashboard_event_v1:
+        post:
+            description: Emitted when changes to dashboards are made
+            operationId: audit_log.dashboard_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.data_encryption_key_event_v1:
+        post:
+            description: Emitted when an organization data encryption key is created or rotated
+            operationId: audit_log.data_encryption_key_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1134,6 +1592,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1192,6 +1652,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1250,6 +1712,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1308,6 +1772,188 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.directory_review_item_event_v1:
+        post:
+            description: Emitted when an admin approves, dismisses or opts out of a directory review decision
+            operationId: audit_log.directory_review_item_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.directory_review_settings_event_v1:
+        post:
+            description: Emitted when an admin turns directory review emails on or off
+            operationId: audit_log.directory_review_settings_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.directory_role_mapping_event_v1:
+        post:
+            description: Emitted when changes to directory role mappings are made
+            operationId: audit_log.directory_role_mapping_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1366,6 +2012,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1424,6 +2072,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1482,6 +2132,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1540,6 +2192,128 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.internal_session_issuer_event_v1:
+        post:
+            description: Emitted when an organization enables or disables its internal session issuer
+            operationId: audit_log.internal_session_issuer_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.issuance_selection_profile_event_v1:
+        post:
+            description: Emitted when the upstream credentials a headless caller's sessions use are configured
+            operationId: audit_log.issuance_selection_profile_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1598,6 +2372,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1656,6 +2432,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1714,6 +2492,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1772,6 +2552,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1830,6 +2612,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1888,6 +2672,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1946,6 +2732,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2004,6 +2792,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2062,6 +2852,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2120,6 +2912,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2178,6 +2972,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2210,7 +3006,7 @@ webhooks:
                 required: true
     audit_log.okta_resource_connection_event_v1:
         post:
-            description: Emitted when an organization confirms or resets a Cross App Access resource connection
+            description: Emitted when an organization confirms or resets a Cross App Access resource connection, or an exchange changes its observed result
             operationId: audit_log.okta_resource_connection_event_v1
             requestBody:
                 content:
@@ -2236,6 +3032,68 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.okta_server_suggestion_event_v1:
+        post:
+            description: Emitted when an organization dismisses or restores an MCP server suggestion derived from its Okta applications
+            operationId: audit_log.okta_server_suggestion_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2294,6 +3152,128 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.organization_access_event_v1:
+        post:
+            description: Emitted when staff enable or disable organization access, or change its demo-access whitelisting
+            operationId: audit_log.organization_access_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.organization_account_type_event_v1:
+        post:
+            description: Emitted when staff apply organization account type policy, including same-tier repair
+            operationId: audit_log.organization_account_type_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2352,6 +3332,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2410,6 +3392,68 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.organization_encryption_config_event_v1:
+        post:
+            description: Emitted when an organization encryption key configuration is created, switched to another key, suspended or resumed
+            operationId: audit_log.organization_encryption_config_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2468,6 +3512,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2526,6 +3572,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2584,6 +3632,68 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.organization_onboarding_event_v1:
+        post:
+            description: Emitted when an organization's onboarding selection is saved
+            operationId: audit_log.organization_onboarding_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2642,6 +3752,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2700,6 +3812,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2758,6 +3872,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2816,6 +3932,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2874,6 +3992,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2932,6 +4052,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2990,6 +4112,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3048,6 +4172,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3106,6 +4232,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3164,6 +4292,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3222,6 +4352,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3280,6 +4412,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3338,6 +4472,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3396,6 +4532,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3454,6 +4592,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3512,6 +4652,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3570,6 +4712,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3602,7 +4746,7 @@ webhooks:
                 required: true
     audit_log.risk_result_event_v1:
         post:
-            description: Emitted when a risk result's match is unmasked
+            description: Emitted when a risk result's match is unmasked, its scanned payload is revealed, or it is dismissed or restored
             operationId: audit_log.risk_result_event_v1
             requestBody:
                 content:
@@ -3628,6 +4772,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3686,6 +4832,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3744,6 +4892,128 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.sigint_sensor_event_v1:
+        post:
+            description: Emitted when changes to signals intelligence sensors are made
+            operationId: audit_log.sigint_sensor_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.sigint_signal_event_v1:
+        post:
+            description: Emitted when changes to custom signals are made
+            operationId: audit_log.sigint_signal_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3802,6 +5072,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3860,6 +5132,128 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.slack_directory_connection_event_v1:
+        post:
+            description: An organization Slack workspace authorization changed or its directory was synced.
+            operationId: audit_log.slack_directory_connection_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.slack_identity_mapping_event_v1:
+        post:
+            description: An administrator confirmed or removed a Slack identity association.
+            operationId: audit_log.slack_identity_mapping_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3918,6 +5312,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3976,6 +5372,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4034,6 +5432,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4092,6 +5492,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4150,6 +5552,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4208,6 +5612,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4266,6 +5672,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4324,6 +5732,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4382,6 +5792,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4440,6 +5852,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4498,6 +5912,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4556,6 +5972,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4584,6 +6002,336 @@ webhooks:
                                 - action
                                 - subject_id
                                 - subject_type
+                            type: object
+                required: true
+    audit_log.widget_event_v1:
+        post:
+            description: Emitted when changes to widgets are made
+            operationId: audit_log.widget_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.workload_admission_event_v1:
+        post:
+            description: Emitted when a workload subject is admitted or withdrawn, which grants or revokes machine access
+            operationId: audit_log.workload_admission_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.workload_device_join_token_event_v1:
+        post:
+            description: Emitted when a device join token is created or redeemed to enroll a device as a workload
+            operationId: audit_log.workload_device_join_token_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.workload_issuer_event_v1:
+        post:
+            description: Emitted when the external issuers an organization trusts to vouch for its workloads are changed
+            operationId: audit_log.workload_issuer_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                category:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    directory_review.opened_v1:
+        post:
+            description: 'A directory change needs a decision from an organization admin: a new group, a new attribute value, or a mapped source that has gone'
+            operationId: directory_review.opened_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                directory_group_id:
+                                    format: uuid
+                                    type:
+                                        - "null"
+                                        - string
+                                id:
+                                    format: uuid
+                                    type: string
+                                kind:
+                                    type: string
+                                occurred_at:
+                                    type: string
+                                occurrence:
+                                    maximum: 2.147483647e+09
+                                    minimum: -2.147483648e+09
+                                    type: integer
+                                organization_id:
+                                    type: string
+                                pending_count:
+                                    type: integer
+                                source_kind:
+                                    type: string
+                                state:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - kind
+                                - source_kind
+                                - occurrence
+                                - state
+                                - pending_count
+                                - occurred_at
+                            type: object
+                required: true
+    directory_review.resolved_v1:
+        post:
+            description: 'A directory change no longer needs a decision: an admin approved or dismissed it, or a later directory change superseded it'
+            operationId: directory_review.resolved_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                directory_group_id:
+                                    format: uuid
+                                    type:
+                                        - "null"
+                                        - string
+                                id:
+                                    format: uuid
+                                    type: string
+                                kind:
+                                    type: string
+                                occurred_at:
+                                    type: string
+                                occurrence:
+                                    maximum: 2.147483647e+09
+                                    minimum: -2.147483648e+09
+                                    type: integer
+                                organization_id:
+                                    type: string
+                                pending_count:
+                                    type: integer
+                                source_kind:
+                                    type: string
+                                state:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - kind
+                                - source_kind
+                                - occurrence
+                                - state
+                                - pending_count
+                                - occurred_at
                             type: object
                 required: true
     risk_finding.created:

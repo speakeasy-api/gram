@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Run the opt-in worktree Stripe sandbox webhook listener"
 //MISE hide=true
@@ -92,6 +92,17 @@ try {
       "off",
       "--log-level",
       "debug",
+      // Keep this list aligned with acceptedStripeWebhookEvents in
+      // server/internal/usage/stripe_webhook.go.
+      "--events",
+      [
+        "checkout.session.completed",
+        "checkout.session.async_payment_succeeded",
+        "checkout.session.async_payment_failed",
+        "customer.subscription.deleted",
+        "invoice.created",
+        "invoice.payment_failed",
+      ].join(","),
       "--forward-to",
       config.target,
     ],

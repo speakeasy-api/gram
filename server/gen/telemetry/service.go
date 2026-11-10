@@ -14,7 +14,7 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Fetch telemetry data for tools in Gram.
+// Fetch telemetry data for tools in Speakeasy.
 type Service interface {
 	// Search and list telemetry logs that match a search filter
 	SearchLogs(context.Context, *SearchLogsPayload) (res *SearchLogsResult, err error)
@@ -36,9 +36,18 @@ type Service interface {
 	// Get observability overview metrics including time series, tool breakdowns,
 	// and summary stats
 	GetObservabilityOverview(context.Context, *GetObservabilityOverviewPayload) (res *GetObservabilityOverviewResult, err error)
+	// Observed inbound public and private MCP request counts for a server or
+	// gateway over a recent window
+	GetMcpNetworkTraffic(context.Context, *GetMcpNetworkTrafficPayload) (res *GetMcpNetworkTrafficResult, err error)
 	// Discovery funnel and per-member execution breakdown for one gateway (meta
 	// MCP server), from gateway-attributed telemetry.
 	GetMetaMcpServerUsage(context.Context, *GetMetaMcpServerUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
+	// Observability overview metrics for calls dispatched through the caller's
+	// Organization Gateway, across every project in the organization.
+	GetOrganizationGatewayOverview(context.Context, *GetOrganizationGatewayOverviewPayload) (res *GetObservabilityOverviewResult, err error)
+	// Discovery funnel and per-server execution breakdown for the caller's
+	// Organization Gateway, across every project in the organization.
+	GetOrganizationGatewayUsage(context.Context, *GetOrganizationGatewayUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
 	// Get project-level overview including total chats, tool calls, active
 	// servers/users, and top lists
 	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
@@ -111,6 +120,10 @@ type Service interface {
 	// and recent tool-call counts plus the last tool-call time, so the listing can
 	// flag servers that have never received a tool call or that have gone quiet.
 	GetMcpServerActivity(context.Context, *GetMcpServerActivityPayload) (res *GetMcpServerActivityResult, err error)
+	// Get recent per-MCP-server tool-call activity for every project in the
+	// organization the caller can read, in one request. Only the recent window is
+	// scanned.
+	GetOrgMcpServerActivity(context.Context, *GetOrgMcpServerActivityPayload) (res *GetOrgMcpServerActivityResult, err error)
 	// List hook traces aggregated by trace_id with user information
 	ListHooksTraces(context.Context, *ListHooksTracesPayload) (res *ListHooksTracesResult, err error)
 }
@@ -137,7 +150,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [35]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMetaMcpServerUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
+var MethodNames = [39]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getOrganizationGatewayOverview", "getOrganizationGatewayUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "getOrgMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -302,6 +315,35 @@ type GetHooksSummaryResult struct {
 	SkillBreakdown []*SkillBreakdownRow
 }
 
+// GetMcpNetworkTrafficPayload is the payload type of the telemetry service
+// getMcpNetworkTraffic method.
+type GetMcpNetworkTrafficPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// MCP server ID (mutually exclusive with meta_mcp_server_id)
+	McpServerID *string
+	// Gateway ID (mutually exclusive with mcp_server_id)
+	MetaMcpServerID *string
+	// Recent traffic window
+	Window string
+}
+
+// GetMcpNetworkTrafficResult is the result type of the telemetry service
+// getMcpNetworkTraffic method.
+type GetMcpNetworkTrafficResult struct {
+	// Start of the window
+	From string
+	// End of the window
+	To string
+	// Hourly request counts
+	Points []*McpNetworkTrafficPoint
+	// Most recent observed public request in the window
+	LastPublicAt *string
+	// Most recent observed private request in the window
+	LastPrivateAt *string
+}
+
 // GetMcpServerActivityPayload is the payload type of the telemetry service
 // getMcpServerActivity method.
 type GetMcpServerActivityPayload struct {
@@ -411,6 +453,45 @@ type GetObservabilityOverviewResult struct {
 	IntervalSeconds int64
 }
 
+// GetOrgMcpServerActivityPayload is the payload type of the telemetry service
+// getOrgMcpServerActivity method.
+type GetOrgMcpServerActivityPayload struct {
+	SessionToken *string
+	// Size of the recent-activity window in days. A server with tool calls in the
+	// overall lookback window but none inside this window is flagged as stale.
+	// Defaults to 14.
+	RecentWindowDays int
+}
+
+// GetOrgMcpServerActivityResult is the result type of the telemetry service
+// getOrgMcpServerActivity method.
+type GetOrgMcpServerActivityResult struct {
+	// One entry per readable project whose activity was read
+	Projects []*ProjectMcpServerActivity
+	// The recent-activity window size in days that was applied
+	RecentWindowDays int
+}
+
+// GetOrganizationGatewayOverviewPayload is the payload type of the telemetry
+// service getOrganizationGatewayOverview method.
+type GetOrganizationGatewayOverviewPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
+// GetOrganizationGatewayUsagePayload is the payload type of the telemetry
+// service getOrganizationGatewayUsage method.
+type GetOrganizationGatewayUsagePayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
 // GetProjectMetricsSummaryPayload is the payload type of the telemetry service
 // getProjectMetricsSummary method.
 type GetProjectMetricsSummaryPayload struct {
@@ -433,6 +514,9 @@ type GetProjectOverviewPayload struct {
 	From string
 	// End time in ISO 8601 format
 	To string
+	// Also return the project home usage breakdowns (usage_by_user,
+	// usage_by_agent, mcp_usage) in the same response
+	IncludeUsage bool
 }
 
 // GetProjectOverviewResult is the result type of the telemetry service
@@ -440,10 +524,18 @@ type GetProjectOverviewPayload struct {
 type GetProjectOverviewResult struct {
 	// Current period summary metrics
 	Summary *ProjectOverviewSummary
-	// Previous period summary metrics for trend calculation
-	Comparison *ProjectOverviewSummary
-	// Indicates whether metrics are session-based or tool-call-based
-	MetricsMode string
+	// Agent usage grouped by user email, ranked by LLM tokens (top 100, no time
+	// series). Only set when include_usage is true and the caller has org:read.
+	UsageByUser *QueryResult
+	// Agent usage grouped by hook source, ranked by LLM tokens (top 10, no time
+	// series). Only set when include_usage is true and usage_by_user has agent
+	// usage.
+	UsageByAgent *QueryResult
+	// External end user and tool usage summary. Only set when include_usage is
+	// true and usage_by_user shows no agent usage, which includes when that read
+	// fails or the caller lacks org:read. Do not treat its presence as proof the
+	// project has no agent usage.
+	McpUsage *ProjectMcpUsage
 }
 
 // GetToolUsageClientToolBreakdownPayload is the payload type of the telemetry
@@ -458,20 +550,27 @@ type GetToolUsageClientToolBreakdownPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -504,20 +603,27 @@ type GetToolUsageClientsPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -550,6 +656,34 @@ type GetToolUsageFilterOptionsPayload struct {
 	To string
 	// Filter option types to include. Empty means all option types.
 	OptionTypes []ToolUsageFilterOptionType
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not
+	// applied to the server options.
+	HostedToolsetSlugs []string
+	// MCP server ids to narrow by. Not applied to the server options.
+	McpServerIds []string
+	// Shadow MCP server names to narrow by. Not applied to the server options.
+	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to narrow by. Not applied to the server
+	// options.
+	MetaMcpServerIds []string
+	// Typed user identities to narrow by. Not applied to the email user options.
+	UserFilters []*ToolUsageUserFilter
+	// Agent identities to narrow by. Not applied to the agent user options.
+	AgentIds []string
+	// Hook plugin sources to narrow by.
+	HookSources []string
+	// MCP client keys to narrow by. Not applied to the client options.
+	ClientKeys []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+	// Trace outcomes to narrow by. Empty means all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageFilterOptionsResult is the result type of the telemetry service
@@ -579,20 +713,27 @@ type GetToolUsageSummaryPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -641,20 +782,27 @@ type GetToolUsageTargetTimeSeriesPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -687,20 +835,27 @@ type GetToolUsageTargetToolBreakdownPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -733,20 +888,27 @@ type GetToolUsageTargetsPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -779,20 +941,27 @@ type GetToolUsageTotalsPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -825,20 +994,27 @@ type GetToolUsageUserTimeSeriesPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -871,20 +1047,27 @@ type GetToolUsageUsersByTargetPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -917,20 +1100,27 @@ type GetToolUsageUsersPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -1101,7 +1291,7 @@ type HookTraceSummary struct {
 	HookStatus *string
 	// Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
 	BlockReason *string
-	// Gram URN associated with this hook trace
+	// Speakeasy URN associated with this hook trace
 	GramUrn string
 	// Tool name (from materialized column)
 	ToolName *string
@@ -1178,14 +1368,6 @@ type HooksUserSummary struct {
 	FailureCount int64
 	// Failure rate as a decimal (0.0 to 1.0)
 	FailureRate float64
-}
-
-// Usage breakdown by LLM client/agent
-type LLMClientUsage struct {
-	// Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
-	ClientName string
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount int64
 }
 
 // ListAttributeKeysPayload is the payload type of the telemetry service
@@ -1301,20 +1483,27 @@ type ListToolUsageTracesPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal'). 'team' includes
 	// unclassified traces.
@@ -1323,7 +1512,7 @@ type ListToolUsageTracesPayload struct {
 	// all.
 	Statuses []ToolUsageStatus
 	// Free-text attribute search string from the q URL param. Matches useful
-	// identifier attributes such as Gram URN, conversation ID, and trigger
+	// identifier attributes such as Speakeasy URN, conversation ID, and trigger
 	// instance ID.
 	Query *string
 	// Arbitrary attribute filter conditions from the af URL param
@@ -1356,6 +1545,15 @@ type LogFilter struct {
 	// not_eq, contains) and multiple for 'in'. Ignored for 'exists' and
 	// 'not_exists'.
 	Values []string
+}
+
+type McpNetworkTrafficPoint struct {
+	// Start of the UTC hour
+	BucketStart string
+	// Observed public requests
+	PublicRequests int64
+	// Observed private requests
+	PrivateRequests int64
 }
 
 // Tool-call activity for one MCP server, keyed by the same target identifier
@@ -1405,6 +1603,9 @@ type MetaMcpMemberUsage struct {
 	ErrorCount int64
 	// ISO 8601 timestamp of the most recent call
 	LastCalledAt *string
+	// Display name of the server. Set for Organization Gateway usage, whose
+	// servers span projects the caller may not have loaded.
+	McpServerName *string
 }
 
 // Model usage statistics
@@ -1447,29 +1648,58 @@ type ObservabilitySummary struct {
 	AvgLatencyMs float64
 }
 
+// Tool calls made by one external end user
+type ProjectMcpEndUser struct {
+	// External end user ID
+	UserID string
+	// Number of tool calls
+	ToolCalls int64
+}
+
+// Recent MCP server activity for one project
+type ProjectMcpServerActivity struct {
+	// The project the activity belongs to
+	ProjectID string
+	// One entry per MCP server in the project with at least one tool call inside
+	// the recent window
+	Activity []*McpServerActivity
+}
+
+// Calls and failures for one tool made by external end users
+type ProjectMcpToolUsage struct {
+	// Tool URN, or the tool name for agent hook events
+	Urn string
+	// Number of calls
+	Calls int64
+	// Number of failed calls
+	Failures int64
+}
+
+// External end user and MCP tool usage for a project in a time period
+type ProjectMcpUsage struct {
+	// Number of distinct external end users with activity in the period
+	EndUsersCount int64
+	// Top 5 external end users by tool calls
+	TopEndUsers []*ProjectMcpEndUser
+	// Top 5 tools by calls
+	TopTools []*ProjectMcpToolUsage
+	// Top 5 tools with at least one failure, ranked by failure rate, then by
+	// failures
+	TopFailingTools []*ProjectMcpToolUsage
+}
+
 // Aggregated project-level summary metrics for a time period
 type ProjectOverviewSummary struct {
 	// Total number of chat sessions
 	TotalChats int64
-	// Number of resolved chat sessions
-	ResolvedChats int64
-	// Number of failed chat sessions
-	FailedChats int64
 	// Total number of tool calls
 	TotalToolCalls int64
 	// Number of failed tool calls
 	FailedToolCalls int64
 	// Number of MCP servers with at least one tool call in the time period
 	ActiveServersCount int64
-	// Number of unique users with activity in the time period
-	ActiveUsersCount int64
-	// Top 10 users by activity (# of messages or tool calls depending on
-	// metrics_mode)
-	TopUsers []*TopUser
 	// Top 10 MCP servers by tool call count
 	TopServers []*TopServer
-	// Breakdown of messages/activity by LLM client/agent
-	LlmClientBreakdown []*LLMClientUsage
 }
 
 // Aggregated metrics
@@ -1584,6 +1814,9 @@ type QueryPayload struct {
 	// from the time range and is floored to 3600 (the source data is bucketed
 	// hourly).
 	GranularitySeconds *int64
+	// Whether to include distinct values for other dimensions in each table row.
+	// When omitted, defaults to true.
+	IncludeDimensionValues bool
 	// When group_by is set, keep at most this many groups (ranked by sort_by); the
 	// remainder are rolled into an 'Other' group. Defaults to 10.
 	TopN int
@@ -1678,7 +1911,7 @@ type SearchChatsFilter struct {
 	To *string
 	// Deployment ID filter
 	DeploymentID *string
-	// Gram URN filter (single URN, use gram_urns for multiple)
+	// Speakeasy URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string
 	// User ID filter
 	UserID *string
@@ -1725,7 +1958,7 @@ type SearchLogsFilter struct {
 	HTTPMethod *string
 	// Service name filter
 	ServiceName *string
-	// Gram URN filter (one or more URNs)
+	// Speakeasy URN filter (one or more URNs)
 	GramUrns []string
 	// Chat ID filter
 	GramChatID *string
@@ -1743,7 +1976,7 @@ type SearchLogsFilter struct {
 	DeploymentID *string
 	// Function ID filter
 	FunctionID *string
-	// Gram URN filter (single URN, use gram_urns for multiple)
+	// Speakeasy URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string
 }
 
@@ -1790,7 +2023,7 @@ type SearchToolCallsFilter struct {
 	DeploymentID *string
 	// Function ID filter
 	FunctionID *string
-	// Gram URN filter (single URN, use gram_urns for multiple)
+	// Speakeasy URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string
 }
 
@@ -2035,7 +2268,7 @@ type ToolCallSummary struct {
 	LogCount uint64
 	// HTTP status code (if applicable)
 	HTTPStatusCode *int32
-	// Gram URN associated with this tool call
+	// Speakeasy URN associated with this tool call
 	GramUrn string
 	// Tool name (from attributes.gram.tool.name)
 	ToolName *string
@@ -2141,6 +2374,8 @@ type ToolUsageHostedServerFilterOption struct {
 	ToolsetSlug string
 	// Hosted MCP toolset display name
 	ToolsetName string
+	// MCP server id to filter by; absent when the server has no mcp_servers row
+	McpServerID *string
 	// Number of tool usage events observed for the hosted MCP server
 	EventCount int64
 }
@@ -2169,6 +2404,8 @@ type ToolUsageTargetSummary struct {
 	TargetID string
 	// User-facing label for the target
 	TargetLabel string
+	// MCP server id for hosted and tunneled targets; absent for other targets
+	McpServerID *string
 	// Total number of tool usage events for the target
 	EventCount int64
 	// Number of distinct tools observed for the target
@@ -2276,7 +2513,7 @@ type ToolUsageTraceSummary struct {
 	StartTimeUnixNano string
 	// Number of logs in the trace
 	LogCount uint64
-	// Gram URN associated with the trace
+	// Speakeasy URN associated with the trace
 	GramUrn string
 	// Tool name shown in the row
 	ToolName string
@@ -2288,12 +2525,32 @@ type ToolUsageTraceSummary struct {
 	TargetID string
 	// User-facing target label
 	TargetLabel string
+	// MCP server id for hosted and tunneled targets; absent for other targets
+	McpServerID *string
 	// Stable user identity value
 	UserKey string
 	// User-facing user identity label
 	UserLabel string
 	// Type of user identity represented by the row
 	UserKind ToolUsageUserKind
+	// Person an agent call acted on behalf of; absent for direct calls and for
+	// agents that sign in as themselves
+	AuthorizerUserID *string
+	// Email of the authorizer when they resolve to a known user
+	AuthorizerLabel *string
+	// Type of the auth client that signed an agent's gateway call in to its
+	// upstream server, such as remote_session for a person's connection or
+	// service_account for a shared credential; absent for calls recorded before it
+	// was tracked
+	AuthClientType *string
+	// Auth client that signed an agent's gateway call in to its upstream server
+	AuthClientID *string
+	// Person whose own connection signed an agent's gateway call in; absent for a
+	// shared credential
+	ConnectionOwnerUserID *string
+	// Display name, or email, of the connection owner when they resolve to a known
+	// user
+	ConnectionOwnerLabel *string
 	// Hook plugin source when the row came from hook telemetry
 	HookSource *string
 	// Telemetry event source
@@ -2313,6 +2570,31 @@ type ToolUsageTraceSummary struct {
 	// Display name of the dispatching gateway; a deleted gateway keeps its last
 	// name
 	ViaMetaMcpServerName *string
+	// Kind of the dispatching gateway: project for a gateway stored in a project,
+	// organization for the organization gateway, agent for an agent's gateway;
+	// absent when the gateway id resolves to no gateway of the organization
+	ViaMetaMcpServerKind *string
+	// Slug of the project whose page shows the dispatching gateway: the project
+	// holding a project gateway, or the project an organization gateway was
+	// restricted to; absent when the gateway or its project is deleted, and for an
+	// organization gateway serving the whole organization
+	ViaMetaMcpServerProjectSlug *string
+	// Agent whose gateway dispatched this call; absent for other gateway kinds and
+	// when the agent is deleted
+	ViaMetaMcpServerAgentID *string
+	// Kind of the gateway the call reached when target_type is meta_mcp_server:
+	// project for a gateway stored in a project, organization for the organization
+	// gateway, agent for an agent's gateway; absent for other targets and when the
+	// gateway id resolves to no gateway of the organization
+	TargetMetaMcpServerKind *string
+	// Slug of the project whose page shows the gateway the call reached: the
+	// project holding a project gateway, or the project an organization gateway
+	// was restricted to; absent when the gateway or its project is deleted, and
+	// for an organization gateway serving the whole organization
+	TargetMetaMcpServerProjectSlug *string
+	// Agent whose gateway the call reached; absent for other gateway kinds and
+	// when the agent is deleted
+	TargetMetaMcpServerAgentID *string
 	// Stable MCP client identity used by filters; 'unattributed' when the caller
 	// never reported one
 	ClientKey string
@@ -2410,16 +2692,6 @@ type TopServer struct {
 	ServerName string
 	// Total number of tool calls
 	ToolCallCount int64
-}
-
-// Top user by activity
-type TopUser struct {
-	// User ID (internal or external depending on availability)
-	UserID string
-	// Type of user ID
-	UserType string
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount int64
 }
 
 // Per-dimension billed token breakdown for the usage details table
@@ -2529,8 +2801,8 @@ type UserAccount struct {
 	// Account record id (user_accounts.id); used to scope chat/session views to
 	// this account
 	ID *string
-	// Gram user id of the directory owner of this account; the authoritative link
-	// between account-email-keyed usage and the org member
+	// Speakeasy user id of the directory owner of this account; the authoritative
+	// link between account-email-keyed usage and the org member
 	UserID *string
 	// AI provider the account belongs to ('anthropic', 'openai', 'cursor')
 	Provider string

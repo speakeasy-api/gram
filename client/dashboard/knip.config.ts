@@ -8,24 +8,32 @@ const config: KnipConfig = {
   // infer any of them. The consent page's entry is the stylesheet itself: that
   // build emits CSS for the server-rendered page and has no JS.
   entry: [
+    // Invoked by the Go registry HTTP integration test, outside Knip's import graph.
+    "scripts/registry-discovery-wire.ts",
     "src/theme-init.ts",
     "src/consent-tools/main.tsx",
     "src/consent-page/consent-page.css",
   ],
   // Vitest, ESLint, Tailwind, and TypeScript plugins are auto-enabled.
+  ignoreDependencies: [
+    // Launched by .mise-tasks/start/agentation.sh, outside the import graph.
+    "agentation-mcp",
+  ],
   ignoreBinaries: [
     // The package manager itself, used to chain scripts and to reach the
     // workspace-root oxfmt binary; not on the dep tree.
     "aube",
     // Invoked from the prebuild script to build cel.wasm; not on the dep tree.
     "mise",
+    // System interpreter the Cursor install-command test spawns; not on the dep tree.
+    "python3",
   ],
   ignore: [
     // Global ambient declarations (FIXME<M> escape-hatch + JSX namespace
     // re-export). No import sites by design.
     "src/lib.d.ts",
     "src/sdk/**/*",
-    // Inlined Gram Elements library (formerly @gram-ai/elements). Its public
+    // Inlined Speakeasy Elements library (formerly @gram-ai/elements). Its public
     // surface is wider than what the dashboard consumes today.
     "src/elements/**/*",
     // Internalised design system. Same reasoning: a component library exposes

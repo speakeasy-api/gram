@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -101,91 +100,6 @@ func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMe
 // 5xx via [oops.E] with [oops.CodeUnexpected] rather than as a user-facing
 // JSON-RPC rejection.
 func (r *ToolsListResponse) SetTools(tools []*mcp.Tool) error {
-	return r.setTools(tools, false)
-}
-
-// SetPrivateTools replaces the tools array and labels the rewritten result
-// caller-varying. Use it for per-principal filters: MCP defaults an absent
-// cacheScope to public, so an unlabelled result could let a shared
-// intermediary serve one caller's filtered inventory to another.
-//
-// [ToolsListResponse.MarkCallerVarying] applies the same label when the tools
-// array itself needs no rewrite.
-func (r *ToolsListResponse) SetPrivateTools(tools []*mcp.Tool) error {
-	return r.setTools(tools, true)
-}
-
-// callerVaryingCacheable is the cache stance for a tools/list result whose
-// content depends on who asked, matching the hosted surface's
-// cacheHintsCallerVarying so both paths label the same property identically.
-// The zero ttlMs is part of the stance: an upstream's own ttl would let the
-// requesting client keep serving a filtered inventory from cache after the
-// grants that shaped it were revoked.
-var callerVaryingCacheable = mcp.Cacheable{TTLMs: 0, CacheScope: "private"}
-
-// spliceCallerVaryingHints overwrites both caching members of a tools/list
-// result payload with [callerVaryingCacheable]. Overwrite rather than fill: an
-// upstream declaring its own result public and long-lived is describing its
-// own caller-uniformity and cannot account for the RBAC layer Gram puts in
-// front of it.
-//
-// Both members go in on one splice, since a chained pair would re-decode the
-// whole result, tools array included, a second time. A result payload of
-// literal null becomes an object carrying only these two members, per
-// [spliceTopLevelKeys]; upstream was already non-conformant there, because
-// tools is a required member.
-func spliceCallerVaryingHints(result json.RawMessage) (json.RawMessage, error) {
-	spliced, err := spliceTopLevelKeys(result, map[string]json.RawMessage{
-		"cacheScope": json.RawMessage(strconv.Quote(callerVaryingCacheable.CacheScope)),
-		"ttlMs":      json.RawMessage(strconv.Itoa(callerVaryingCacheable.TTLMs)),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("mark result caller-varying: %w", err)
-	}
-	return spliced, nil
-}
-
-// MarkCallerVarying labels the result caller-varying without rewriting the
-// tools array. Use it when a per-principal filter is in force but left the
-// catalog intact: that result is still shaped by the caller's grants, and it
-// is the widest such result, so a shared cache populated from it would serve a
-// complete inventory to a caller whose grants cover less.
-//
-// Only the two caching members are spliced, so the tools member keeps its
-// original wire bytes and per-tool members the SDK does not model survive. The
-// rewrite still flips the message dirty, re-encoding the JSON-RPC envelope, so
-// envelope member order, insignificant whitespace, and unknown envelope
-// members are lost. That is the same cost the filtered path already accepts.
-//
-// Returns a [*MutationError] when the response carries a JSON-RPC Error rather
-// than a Result, when it carries no remote message, when the underlying
-// jsonrpc.Message is not a *jsonrpc.Response, or when the splice fails.
-// Nothing is mutated on those paths, so the typed view and the wire stay in
-// sync.
-func (r *ToolsListResponse) MarkCallerVarying() error {
-	if r.Result == nil {
-		return &MutationError{Op: "mark caller-varying", Cause: errors.New("response carries an error, not a result")}
-	}
-	if r.RemoteMessage == nil {
-		return &MutationError{Op: "mark caller-varying", Cause: errors.New("response carries no remote message")}
-	}
-	rpcResp, ok := r.RemoteMessage.Message.(*jsonrpc.Response)
-	if !ok {
-		return &MutationError{Op: "mark caller-varying", Cause: fmt.Errorf("underlying message is %T, want *jsonrpc.Response", r.RemoteMessage.Message)}
-	}
-
-	result, err := spliceCallerVaryingHints(rpcResp.Result)
-	if err != nil {
-		return &MutationError{Op: "mark caller-varying", Cause: err}
-	}
-
-	r.Result.Cacheable = callerVaryingCacheable
-	rpcResp.Result = result
-	r.RemoteMessage.dirty = true
-	return nil
-}
-
-func (r *ToolsListResponse) setTools(tools []*mcp.Tool, private bool) error {
 	if r.Result == nil {
 		return &MutationError{Op: "set tools", Cause: errors.New("response carries an error, not a result")}
 	}
@@ -211,17 +125,8 @@ func (r *ToolsListResponse) setTools(tools []*mcp.Tool, private bool) error {
 	if err != nil {
 		return &MutationError{Op: "set tools", Cause: fmt.Errorf("splice replacement tools array: %w", err)}
 	}
-	if private {
-		result, err = spliceCallerVaryingHints(result)
-		if err != nil {
-			return &MutationError{Op: "set tools", Cause: err}
-		}
-	}
 
 	r.Result.Tools = tools
-	if private {
-		r.Result.Cacheable = callerVaryingCacheable
-	}
 	rpcResp.Result = result
 	r.RemoteMessage.dirty = true
 	return nil

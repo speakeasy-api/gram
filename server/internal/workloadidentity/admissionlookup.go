@@ -32,6 +32,14 @@ type AdmissionParams struct {
 // assertion says only that the platform minted it. Presence here is what makes
 // the machine ours.
 //
+// An admission matches the whole subject, or the stem of a `subject*` rule when
+// the row says wildcard and its issuer permits wildcard matching. Wildcard exists
+// for platforms that mint an identity per resource, where the subject cannot be
+// known before the first assertion arrives. See MatchKind for why the `*` is
+// mandatory and where it may appear; for where wildcard matching is sound at all,
+// see the allow_wildcard_admission comment in the schema, which is why that gate
+// sits on the issuer rather than on the rule.
+//
 // False and an error must never be collapsed: false is a decision, an error is
 // the absence of one.
 func IsAdmitted(ctx context.Context, db repo.DBTX, params AdmissionParams) (bool, error) {

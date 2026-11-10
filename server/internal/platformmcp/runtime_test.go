@@ -171,20 +171,20 @@ func TestRuntimeHandlerFiltersToolsListByPreparedGrants(t *testing.T) {
 		{
 			name:        "skill reader",
 			grants:      []authz.Grant{authz.NewGrant(authz.ScopeSkillRead, "skill-1")},
-			contains:    []string{"get_platform_context", "list_skills", "get_skill"},
-			notContains: []string{"list_projects", "create_skill", "distribute_skill"},
+			contains:    []string{"get_platform_context", "list_skills", "get_skill", "list_skill_distributions"},
+			notContains: []string{"list_projects", "create_skill", "distribute_skill", "undistribute_skill"},
 		},
 		{
 			name:        "skill writer",
 			grants:      []authz.Grant{authz.NewGrant(authz.ScopeSkillWrite, "skill-1")},
-			contains:    []string{"list_skills", "create_skill", "add_skill_version", "update_skill_metadata"},
-			notContains: []string{"list_projects", "distribute_skill"},
+			contains:    []string{"list_skills", "list_skill_distributions", "create_skill", "add_skill_version", "update_skill_metadata"},
+			notContains: []string{"list_projects", "distribute_skill", "undistribute_skill"},
 		},
 		{
 			name:        "organization admin",
 			grants:      []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, testPrincipal().OrganizationID)},
-			contains:    []string{"get_platform_context", "distribute_skill"},
-			notContains: []string{"list_projects", "list_skills", "create_skill"},
+			contains:    []string{"get_platform_context", "distribute_skill", "undistribute_skill"},
+			notContains: []string{"list_projects", "list_skills", "create_skill", "list_skill_distributions"},
 		},
 		{
 			name:        "missing prepared grants",

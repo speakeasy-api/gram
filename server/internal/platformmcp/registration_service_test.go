@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -103,6 +105,86 @@ func TestRegistrationServiceRegistersDirectRemoteWithFreshInspection(t *testing.
 	require.Equal(t, registrationID.String(), result.Registration)
 }
 
+// A remote MCP added without a display name is named after the upstream's own
+// server name, then the URL's host name. The idempotency hash depends only on
+// what the caller supplied, so the upstream's name cannot change it.
+func TestRegistrationServiceDefaultsDirectRemoteDisplayName(t *testing.T) {
+	t.Parallel()
+
+	hashFor := func(name string) string {
+		return catalogRegistrationInputHash("project", directRemoteSourceKind, directRemoteProviderKey, "https://remote.example.test/mcp", catalogConfigurationHash(CatalogConfigurationValues{"name": name}))
+	}
+	urlNameHash := hashFor("https://remote.example.test/mcp")
+	cases := []struct {
+		name        string
+		displayName string
+		serverName  string
+		wantName    string
+		wantHash    string
+	}{
+		{name: "server name", serverName: "Linear", wantName: "Linear", wantHash: urlNameHash},
+		{name: "server name made printable", serverName: "  Line\x1bar\r\n\u2028MCP  ", wantName: "Line ar MCP", wantHash: urlNameHash},
+		{name: "host name when the server gives none", wantName: "remote.example.test", wantHash: urlNameHash},
+		{name: "host name when the server name is not printable", serverName: "\x00\u2029", wantName: "remote.example.test", wantHash: urlNameHash},
+		{name: "explicit display name wins", displayName: "External MCP", serverName: "Linear", wantName: "External MCP", wantHash: hashFor("External MCP")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
+			registrationID := uuid.New()
+			store := &recordingRegistrationStore{
+				project:   project,
+				begin:     OperationReceipt{ID: uuid.New()},
+				converged: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusPending},
+				completed: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded},
+			}
+			inspector := &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: "https://remote.example.test/mcp", Transport: "streamable-http", Trust: "user_supplied_unreviewed", ServerName: tc.serverName}}
+			service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+
+			_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: project.Slug, RemoteURL: "https://remote.example.test/mcp", DisplayName: tc.displayName, IdempotencyKey: "request-key"})
+
+			require.NoError(t, err)
+			require.Equal(t, tc.wantName, store.configuration.displayName)
+			require.Equal(t, tc.wantHash, store.request.InputHash)
+		})
+	}
+}
+
+// A URL longer than the display name limit is accepted when no display name
+// is given, because the stored name is the server's own name or host name.
+func TestRegistrationServiceAcceptsLongDirectRemoteURLWithoutDisplayName(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
+	registrationID := uuid.New()
+	store := &recordingRegistrationStore{
+		project:   project,
+		begin:     OperationReceipt{ID: uuid.New()},
+		converged: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusPending},
+		completed: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded},
+	}
+	longURL := "https://remote.example.test/mcp?workspace=" + strings.Repeat("a", directRemoteDisplayNameMaxBytes)
+	inspector := &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: longURL, Transport: "streamable-http", Trust: "user_supplied_unreviewed", ServerName: "Linear"}}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+
+	_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: project.Slug, RemoteURL: longURL, IdempotencyKey: "request-key"})
+
+	require.NoError(t, err)
+	require.Equal(t, "Linear", store.configuration.displayName)
+}
+
+func TestDirectRemoteServerNameIsBoundedOnACharacterBoundary(t *testing.T) {
+	t.Parallel()
+
+	name := directRemoteServerName(strings.Repeat("é", directRemoteDisplayNameMaxBytes))
+
+	require.LessOrEqual(t, len(name), directRemoteDisplayNameMaxBytes)
+	require.True(t, utf8.ValidString(name))
+	require.Equal(t, strings.Repeat("é", directRemoteDisplayNameMaxBytes/2), name)
+}
+
 func TestRegistrationServiceRejectsOversizedDirectRemoteDisplayNameBeforePersistence(t *testing.T) {
 	t.Parallel()
 
@@ -194,7 +276,12 @@ func TestRegistrationServiceRejectsUnreviewedCandidateAfterMutationGate(t *testi
 
 	require.ErrorIs(t, err, ErrCatalogRejected)
 	require.Equal(t, 1, gate.calls)
-	require.Zero(t, store.resolveCalls)
+	// Retained replay admission first resolves the authorized project and reads
+	// any prior receipt; rejected new candidates must never mutate persistence.
+	require.Equal(t, 1, store.resolveCalls)
+	require.Zero(t, store.beginCalls)
+	require.Zero(t, store.convergeCalls)
+	require.Zero(t, store.completeCalls)
 }
 
 func TestRegistrationServiceRejectsIneligibleTargetBeforeReceipt(t *testing.T) {
@@ -322,7 +409,7 @@ func TestRegistrationServiceReturnsPersistedSameOriginDashboardSetupURL(t *testi
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/x/server%20route/settings#authentication", setupURL)
+	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/server%20route/settings#authentication", setupURL)
 	require.Equal(t, 1, store.resolveCalls)
 }
 
@@ -344,8 +431,46 @@ func TestRegistrationServiceReturnsDashboardSetupURLForDirectRemote(t *testing.T
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/x/server%20route/settings#authentication", setupURL)
+	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/server%20route/settings#authentication", setupURL)
 	require.Equal(t, 1, store.resolveCalls)
+}
+
+func TestRegistrationServiceDashboardSetupURLNamesTheOpenStep(t *testing.T) {
+	t.Parallel()
+
+	const settings = "https://localhost:5173/organization/projects/project/mcp/server%20route/settings"
+	cases := []struct {
+		nextAction string
+		want       string
+	}{
+		{nextAction: nextActionSecureDashboardSetup, want: settings + "?setup=credentials#authentication"},
+		{nextAction: nextActionContinueDashboardSetup, want: settings + "?setup=oauth-client#authentication"},
+		{nextAction: nextActionConnectSignIn, want: settings + "?setup=sign-in#authentication"},
+		{nextAction: nextActionReady, want: settings + "#authentication"},
+		{nextAction: nextActionStartSetup, want: settings + "#authentication"},
+		{nextAction: "", want: settings + "#authentication"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.nextAction, func(t *testing.T) {
+			t.Parallel()
+
+			project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+			store := &recordingRegistrationStore{
+				project:   project,
+				candidate: CatalogCandidate{ProviderKey: directRemoteProviderKey, CatalogRef: "https://remote.example.test/mcp"},
+				dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server route"},
+			}
+			service := newRegistrationService(nil, &testRegistrationGate{enabled: true}, store)
+			service.WithDashboardURL(&url.URL{Scheme: "https", Host: "localhost:5173"})
+
+			setupURL, err := service.DashboardSetupURL(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
+				ProjectSlug: project.Slug, RegistrationID: uuid.NewString(), ProviderKey: directRemoteProviderKey, CatalogRef: "https://remote.example.test/mcp", NextAction: tc.nextAction,
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, tc.want, setupURL)
+		})
+	}
 }
 
 func TestRegistrationServiceBuildsInspectAuthorizationURLOnlyAfterAttachment(t *testing.T) {
@@ -355,15 +480,15 @@ func TestRegistrationServiceBuildsInspectAuthorizationURLOnlyAfterAttachment(t *
 	registrationID := uuid.New()
 	store := &recordingRegistrationStore{
 		project:   project,
-		dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server route"},
+		dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server route", ServerName: "Example Server"},
 	}
 	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store)
 	service.WithDashboardURL(&url.URL{Scheme: "https", Host: "localhost:5173"})
 
-	authorizationURL, err := service.DashboardAuthorizationURL(t.Context(), registrationServicePrincipal(), project.Slug, registrationID.String())
+	authorization, err := service.DashboardAuthorization(t.Context(), registrationServicePrincipal(), project.Slug, registrationID.String())
 
 	require.NoError(t, err)
-	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/x/server%20route/inspect", authorizationURL)
+	require.Equal(t, DashboardAuthorization{URL: "https://localhost:5173/organization/projects/project/mcp/server%20route/inspect", ServerName: "Example Server"}, authorization)
 }
 
 func TestRegistrationServiceStopsBeforeAttachmentWhenSetupBudgetDenies(t *testing.T) {
@@ -417,34 +542,6 @@ func TestRegistrationServiceStopsBeforePersistenceWhenBudgetDenies(t *testing.T)
 	require.ErrorIs(t, err, ErrOperationRateLimited)
 	require.Zero(t, store.resolveCalls)
 	require.Zero(t, store.beginCalls)
-}
-
-func TestRegistrationServiceReturnsActiveRegistrationCapConflict(t *testing.T) {
-	t.Parallel()
-
-	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
-	store := &recordingRegistrationStore{
-		project: project,
-		begin: OperationReceipt{
-			ID:         uuid.New(),
-			Status:     receiptStatusSucceeded,
-			ResultCode: receiptResultActiveCap,
-			Replayed:   true,
-		},
-	}
-	service := newRegistrationService(
-		testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"}, Transport: "streamable-http", remoteURL: "https://provider.test/mcp"}},
-		&testRegistrationGate{enabled: true},
-		store,
-	)
-
-	_, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{
-		ProjectSlug: project.Slug, ProviderKey: "provider", CatalogRef: "reviewed/mcp", IdempotencyKey: "request-key",
-	})
-
-	require.ErrorIs(t, err, ErrRegistrationCap)
-	require.Zero(t, store.convergeCalls)
-	require.Zero(t, store.completeCalls)
 }
 
 func TestRegistrationServiceReplayReturnsPersistedSecretSetupState(t *testing.T) {
@@ -572,6 +669,9 @@ type recordingRegistrationStore struct {
 	dashboard                RegistrationDashboardSetup
 	pendingSecretFields      []CatalogConfigurationField
 	pendingSecretFieldsCalls int
+	readiness                Readiness
+	readinessFound           bool
+	readinessCalls           int
 }
 
 func (s *recordingRegistrationStore) ResolveProject(context.Context, string, string) (ResolvedProject, error) {
@@ -608,6 +708,11 @@ func (s *recordingRegistrationStore) CompleteRegistration(_ context.Context, _ P
 func (s *recordingRegistrationStore) ResolveRegistrationPendingSecretFields(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID, _ []CatalogConfigurationField) ([]CatalogConfigurationField, error) {
 	s.pendingSecretFieldsCalls++
 	return append([]CatalogConfigurationField(nil), s.pendingSecretFields...), s.err
+}
+
+func (s *recordingRegistrationStore) GetProviderReadiness(context.Context, Principal, uuid.UUID, uuid.UUID) (Readiness, bool, error) {
+	s.readinessCalls++
+	return s.readiness, s.readinessFound, s.err
 }
 
 func (s *recordingRegistrationStore) ResolveRegistrationCatalogIdentity(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID) (CatalogCandidate, error) {
@@ -654,6 +759,33 @@ func allowBudget() OperationBudget {
 	return OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}
 }
 
+func denyBudget() OperationBudget {
+	return OperationBudget{Connection: denyOperationLimiter{}, Organization: denyOperationLimiter{}}
+}
+
+// withSpentBudget swaps *budget for one that refuses every charge and returns
+// the restore, which also runs when the test ends, so a failed assertion
+// cannot leave the budget spent for the rest of the test.
+func withSpentBudget(t *testing.T, budget *OperationBudget) (restore func()) {
+	t.Helper()
+	saved := *budget
+	*budget = denyBudget()
+	restore = func() { *budget = saved }
+	t.Cleanup(restore)
+	return restore
+}
+
+// failingOperationLimiter models a budget store that cannot be reached.
+type failingOperationLimiter struct{}
+
+func (failingOperationLimiter) Allow(context.Context, string) (ratelimit.Result, error) {
+	return ratelimit.Result{}, errors.New("budget store unreachable")
+}
+
+func (failingOperationLimiter) AllowN(context.Context, string, int) (ratelimit.Result, error) {
+	return ratelimit.Result{}, errors.New("budget store unreachable")
+}
+
 func newRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
 	budget := allowBudget()
 	return NewRegistrationService(catalog, gate, store).WithOperationBudgets(OperationBudgets{
@@ -680,4 +812,199 @@ func TestRegistrationServiceReturnsCatalogInspectionErrors(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, upstreamErr)
+}
+
+func TestRegistrationRetainsAcceptedCatalogIdentity(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{receiptStatusPending, receiptStatusSucceeded} {
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			id := uuid.New()
+			receipt := OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: id, Valid: true}, Status: status, Replayed: true}
+			store := &retainedReceiptStore{recordingRegistrationStore: recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}, converged: receipt, completed: receipt}, receipt: receipt}
+			details := CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"}, Transport: "streamable-http", remoteURL: "https://provider.test/mcp"}
+			service := newRegistrationService(retainedTestCatalog{testCatalog: testCatalog{err: ErrCatalogRejected}, details: details}, &testRegistrationGate{enabled: true}, store)
+			result, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{ProjectSlug: "project", ProviderKey: "provider", CatalogRef: "reviewed/mcp", IdempotencyKey: "accepted"})
+			require.NoError(t, err)
+			require.Equal(t, id.String(), result.Registration)
+			require.Equal(t, receipt.ID, result.Receipt.ID)
+			require.Zero(t, store.beginCalls)
+		})
+	}
+}
+
+type retainedReceiptStore struct {
+	recordingRegistrationStore
+	receipt OperationReceipt
+}
+
+func (s *retainedReceiptStore) FindReceipt(context.Context, Principal, ResolvedProject, CatalogRegistrationRequest, time.Time) (OperationReceipt, bool, error) {
+	return s.receipt, true, nil
+}
+
+type retainedTestCatalog struct {
+	testCatalog
+	details CatalogDetails
+}
+
+func (c retainedTestCatalog) InspectIdentity(context.Context, string, string) (CatalogDetails, error) {
+	return c.details, nil
+}
+
+func (s *recordingRegistrationStore) FindReceipt(context.Context, Principal, ResolvedProject, CatalogRegistrationRequest, time.Time) (OperationReceipt, bool, error) {
+	return OperationReceipt{}, false, nil
+}
+
+func TestRegistrationServiceDirectRemoteProtocols(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mode       string
+		nextAction string
+	}{
+		{"modern", "ready"},
+		{"legacy", "ready"},
+		{"stateful", "ready"},
+		// These fixtures advertise dynamic client registration, so sign-in can be
+		// connected in chat.
+		{"auth401", "connect_sign_in"},
+		{"auth403", "connect_sign_in"},
+		{"tools-auth", "connect_sign_in"},
+		{"discover-auth", "connect_sign_in"},
+		{"stateful-auth-cleanup", "connect_sign_in"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			t.Parallel()
+			inspector, _ := directRemoteProtocolFixture(t, tc.mode)
+			registrationID := uuid.New()
+			store := &recordingRegistrationStore{
+				project:   ResolvedProject{ID: uuid.New(), Slug: "project"},
+				begin:     OperationReceipt{ID: uuid.New()},
+				converged: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusPending},
+				completed: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded},
+				dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server"},
+			}
+			service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+			service.WithDashboardURL(&url.URL{Scheme: "https", Host: "dashboard.example.test"})
+			result, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: "project", RemoteURL: "https://remote.example.test/mcp", DisplayName: "Example", IdempotencyKey: "request-key"})
+			require.NoError(t, err)
+			require.Equal(t, registrationID.String(), result.Registration)
+			require.Equal(t, "https://remote.example.test/mcp", store.configuration.remoteURL)
+			require.Equal(t, tc.nextAction, result.NextAction)
+			if tc.nextAction != "ready" {
+				require.NotEmpty(t, result.DashboardSetupURL)
+			} else {
+				require.Empty(t, result.DashboardSetupURL)
+			}
+		})
+	}
+}
+
+func TestRegistrationServiceOffersSignInInChatWhenTheClientIsAutomatic(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                string
+		oauthDiscovery      string
+		attachmentSupported bool
+		nextAction          string
+		registration        string
+	}{
+		{"dcr", oauthDiscoveryAvailableDCR, true, "connect_sign_in", AutomaticClientRegistrationDCR},
+		{"dcr_dashboard_only", oauthDiscoveryAvailableDCR, false, "secure_dashboard_setup_required", AutomaticClientRegistrationDCR},
+		{"cimd", oauthDiscoveryAvailableCIMD, true, "connect_sign_in", AutomaticClientRegistrationCIMD},
+		{"available", oauthDiscoveryAvailable, false, "secure_dashboard_setup_required", AutomaticClientRegistrationNone},
+		{"incomplete", oauthDiscoveryIncomplete, false, "secure_dashboard_setup_required", AutomaticClientRegistrationNone},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			registrationID := uuid.New()
+			store := &recordingRegistrationStore{
+				project:   ResolvedProject{ID: uuid.New(), Slug: "project"},
+				begin:     OperationReceipt{ID: uuid.New()},
+				converged: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusPending},
+				completed: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded},
+				dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server"},
+			}
+			inspection := directRemoteInspection("https://remote.example.test/mcp", nil, "authentication_required", tc.oauthDiscovery, true)
+			inspection.AttachmentSupported = tc.attachmentSupported
+			inspector := &testDirectRemoteInspector{inspection: inspection}
+			service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+			service.WithDashboardURL(&url.URL{Scheme: "https", Host: "dashboard.example.test"})
+
+			result, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: "project", RemoteURL: "https://remote.example.test/mcp", DisplayName: "Example", IdempotencyKey: "request-key"})
+			require.NoError(t, err)
+			require.Equal(t, tc.nextAction, result.NextAction)
+			require.Equal(t, tc.registration, result.AutomaticClientRegistration)
+			require.NotEmpty(t, result.DashboardSetupURL, "the dashboard stays available as the fallback")
+		})
+	}
+}
+
+func TestCatalogNextActionNamesTheOneRequiredStepLeft(t *testing.T) {
+	t.Parallel()
+
+	browser := "browser-catalog-registry-" + uuid.NewString()
+	for _, tc := range []struct {
+		name           string
+		providerKey    string
+		authSetup      string
+		secretsPending bool
+		ready          bool
+		want           string
+	}{
+		{"secrets pending win over sign-in", browser, "dcr", true, false, nextActionSecureDashboardSetup},
+		{"secrets pending win over stored readiness", browser, "none", true, true, nextActionSecureDashboardSetup},
+		{"stored readiness means nothing is left", browser, "manual", false, true, nextActionReady},
+		{"no sign-in means nothing is left", browser, "none", false, false, nextActionReady},
+		{"dynamic client registration leaves only sign-in", browser, "dcr", false, false, nextActionConnectSignIn},
+		{"client metadata document leaves only sign-in", browser, "cimd", false, false, nextActionConnectSignIn},
+		{"manual client setup needs the dashboard", browser, "manual", false, false, nextActionContinueDashboardSetup},
+		{"unknown sign-in needs the dashboard", browser, "unknown", false, false, nextActionContinueDashboardSetup},
+		{"reviewed provider starts setup", "provider", "dcr", false, false, nextActionStartSetup},
+	} {
+		require.Equal(t, tc.want, catalogNextAction(tc.providerKey, tc.authSetup, tc.secretsPending, tc.ready), tc.name)
+	}
+}
+
+func TestRegistrationServiceReplayOfAReadyServerLeavesNoSetup(t *testing.T) {
+	t.Parallel()
+
+	providerKey := "browser-catalog-registry-" + uuid.NewString()
+	for _, tc := range []struct {
+		name      string
+		readiness Readiness
+		found     bool
+		want      string
+	}{
+		{"fresh ready check", Readiness{State: ReadinessReady, Fresh: true}, true, nextActionReady},
+		{"stale ready check", Readiness{State: ReadinessReady, Fresh: false}, true, nextActionConnectSignIn},
+		{"not ready", Readiness{State: ReadinessNeedsGramAuthorization, Fresh: true}, true, nextActionConnectSignIn},
+		{"never checked", Readiness{}, false, nextActionConnectSignIn},
+	} {
+		project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+		store := &recordingRegistrationStore{
+			project:        project,
+			readiness:      tc.readiness,
+			readinessFound: tc.found,
+			begin: OperationReceipt{
+				ID:                uuid.New(),
+				RegistrationID:    uuid.NullUUID{UUID: uuid.New(), Valid: true},
+				Status:            receiptStatusSucceeded,
+				Replayed:          true,
+				AlreadyRegistered: true,
+			},
+		}
+		service := newRegistrationService(
+			testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: providerKey, CatalogRef: "reviewed/mcp", SetupIntent: "dashboard_source_settings", AuthSetup: "dcr"}, Transport: "streamable-http", remoteURL: "https://provider.test/mcp"}},
+			&testRegistrationGate{enabled: true},
+			store,
+		)
+
+		result, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{
+			ProjectSlug: project.Slug, ProviderKey: providerKey, CatalogRef: "reviewed/mcp", IdempotencyKey: "request-key",
+		})
+
+		require.NoError(t, err, tc.name)
+		require.Equal(t, tc.want, result.NextAction, tc.name)
+		require.Equal(t, 1, store.readinessCalls, tc.name)
+	}
 }

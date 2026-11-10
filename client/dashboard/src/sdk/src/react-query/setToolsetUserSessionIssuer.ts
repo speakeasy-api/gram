@@ -55,6 +55,10 @@ export type SetToolsetUserSessionIssuerMutationError =
  *
  * @remarks
  * Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
+ *
+ * Deprecated: use mcpServers.update with user_session_issuer_id, or clear_user_session_issuer to unlink. This endpoint will be removed on 2026-11-25.
+ *
+ * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
  */
 export function useSetToolsetUserSessionIssuerMutation(
   options?: MutationHookOptions<

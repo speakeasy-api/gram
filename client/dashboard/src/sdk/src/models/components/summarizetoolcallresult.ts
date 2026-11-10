@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -18,7 +19,7 @@ export const Impact = {
 /**
  * Whether the tool call only read data or could change state
  */
-export type Impact = ClosedEnum<typeof Impact>;
+export type Impact = OpenEnum<typeof Impact>;
 
 export type SummarizeToolCallResult = {
   /**
@@ -36,9 +37,8 @@ export type SummarizeToolCallResult = {
 };
 
 /** @internal */
-export const Impact$inboundSchema: z.ZodMiniEnum<typeof Impact> = z.enum(
-  Impact,
-);
+export const Impact$inboundSchema: z.ZodMiniType<Impact, unknown> = openEnums
+  .inboundSchema(Impact);
 
 /** @internal */
 export const SummarizeToolCallResult$inboundSchema: z.ZodMiniType<

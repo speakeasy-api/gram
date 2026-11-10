@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -31,7 +32,7 @@ export const LastError = {
 /**
  * Why the last verification did not complete: Okta rejected the credential, or could not be reached. Omitted when it completed.
  */
-export type LastError = ClosedEnum<typeof LastError>;
+export type LastError = OpenEnum<typeof LastError>;
 
 /**
  * Which checklist template applies: custom_app when the admin creates the API Services app by hand, oin when the Speakeasy OIN listing is added from the catalog.
@@ -43,7 +44,7 @@ export const OktaIdentityProviderConnectionListingMode = {
 /**
  * Which checklist template applies: custom_app when the admin creates the API Services app by hand, oin when the Speakeasy OIN listing is added from the catalog.
  */
-export type OktaIdentityProviderConnectionListingMode = ClosedEnum<
+export type OktaIdentityProviderConnectionListingMode = OpenEnum<
   typeof OktaIdentityProviderConnectionListingMode
 >;
 
@@ -56,7 +57,7 @@ export const OktaIdentityProviderConnectionProvider = {
 /**
  * Identity provider; always okta.
  */
-export type OktaIdentityProviderConnectionProvider = ClosedEnum<
+export type OktaIdentityProviderConnectionProvider = OpenEnum<
   typeof OktaIdentityProviderConnectionProvider
 >;
 
@@ -72,7 +73,7 @@ export const OktaIdentityProviderConnectionStatus = {
 /**
  * Connection state. pending until the client ID is submitted and verified; verified when every required scope is granted over DPoP; degraded when verification found gaps (see verification_reasons); revoked once the credential was withdrawn.
  */
-export type OktaIdentityProviderConnectionStatus = ClosedEnum<
+export type OktaIdentityProviderConnectionStatus = OpenEnum<
   typeof OktaIdentityProviderConnectionStatus
 >;
 
@@ -81,14 +82,15 @@ export const VerificationReasons = {
   MissingRole: "missing_role",
   DpopNotBound: "dpop_not_bound",
   KeyNotFetched: "key_not_fetched",
+  SecretRejected: "secret_rejected",
   ReadFailedOktaAppsRead: "read_failed:okta.apps.read",
   ReadFailedOktaUsersRead: "read_failed:okta.users.read",
   ReadFailedOktaGroupsRead: "read_failed:okta.groups.read",
 } as const;
-export type VerificationReasons = ClosedEnum<typeof VerificationReasons>;
+export type VerificationReasons = OpenEnum<typeof VerificationReasons>;
 
 /**
- * An organization's Okta connection: the service application Gram authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.
+ * An organization's Okta connection: the service application Speakeasy authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.
  */
 export type OktaIdentityProviderConnection = {
   /**
@@ -137,9 +139,9 @@ export type OktaIdentityProviderConnection = {
    */
   issuerUrl: string;
   /**
-   * Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+   * Public JWKS URL the Okta app is configured to trust for private_key_jwt. Omitted for connections installed from the Okta Integration Network, which authenticate with a client secret.
    */
-  jwksUrl: string;
+  jwksUrl?: string | undefined;
   /**
    * Why the last verification did not complete: Okta rejected the credential, or could not be reached. Omitted when it completed.
    */
@@ -169,6 +171,10 @@ export type OktaIdentityProviderConnection = {
    */
   provider: OktaIdentityProviderConnectionProvider;
   /**
+   * Organization remote session issuer that backs this connection. Omitted until the managed client is provisioned.
+   */
+  remoteSessionIssuerId?: string | undefined;
+  /**
    * Okta API scopes the integration needs.
    */
   requiredScopes: Array<string>;
@@ -184,31 +190,30 @@ export type OktaIdentityProviderConnection = {
 };
 
 /** @internal */
-export const LastError$inboundSchema: z.ZodMiniEnum<typeof LastError> = z.enum(
-  LastError,
-);
+export const LastError$inboundSchema: z.ZodMiniType<LastError, unknown> =
+  openEnums.inboundSchema(LastError);
 
 /** @internal */
 export const OktaIdentityProviderConnectionListingMode$inboundSchema:
-  z.ZodMiniEnum<typeof OktaIdentityProviderConnectionListingMode> = z.enum(
-    OktaIdentityProviderConnectionListingMode,
-  );
+  z.ZodMiniType<OktaIdentityProviderConnectionListingMode, unknown> = openEnums
+    .inboundSchema(OktaIdentityProviderConnectionListingMode);
 
 /** @internal */
 export const OktaIdentityProviderConnectionProvider$inboundSchema:
-  z.ZodMiniEnum<typeof OktaIdentityProviderConnectionProvider> = z.enum(
-    OktaIdentityProviderConnectionProvider,
-  );
+  z.ZodMiniType<OktaIdentityProviderConnectionProvider, unknown> = openEnums
+    .inboundSchema(OktaIdentityProviderConnectionProvider);
 
 /** @internal */
-export const OktaIdentityProviderConnectionStatus$inboundSchema: z.ZodMiniEnum<
-  typeof OktaIdentityProviderConnectionStatus
-> = z.enum(OktaIdentityProviderConnectionStatus);
+export const OktaIdentityProviderConnectionStatus$inboundSchema: z.ZodMiniType<
+  OktaIdentityProviderConnectionStatus,
+  unknown
+> = openEnums.inboundSchema(OktaIdentityProviderConnectionStatus);
 
 /** @internal */
-export const VerificationReasons$inboundSchema: z.ZodMiniEnum<
-  typeof VerificationReasons
-> = z.enum(VerificationReasons);
+export const VerificationReasons$inboundSchema: z.ZodMiniType<
+  VerificationReasons,
+  unknown
+> = openEnums.inboundSchema(VerificationReasons);
 
 /** @internal */
 export const OktaIdentityProviderConnection$inboundSchema: z.ZodMiniType<
@@ -231,7 +236,7 @@ export const OktaIdentityProviderConnection$inboundSchema: z.ZodMiniType<
     granted_scopes: z.array(z.string()),
     id: z.string(),
     issuer_url: z.string(),
-    jwks_url: z.string(),
+    jwks_url: z.optional(z.string()),
     last_error: z.optional(LastError$inboundSchema),
     last_verified_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -241,6 +246,7 @@ export const OktaIdentityProviderConnection$inboundSchema: z.ZodMiniType<
     org_url: z.string(),
     organization_id: z.string(),
     provider: OktaIdentityProviderConnectionProvider$inboundSchema,
+    remote_session_issuer_id: z.optional(z.string()),
     required_scopes: z.array(z.string()),
     status: OktaIdentityProviderConnectionStatus$inboundSchema,
     updated_at: z.pipe(
@@ -268,6 +274,7 @@ export const OktaIdentityProviderConnection$inboundSchema: z.ZodMiniType<
       "missing_scopes": "missingScopes",
       "org_url": "orgUrl",
       "organization_id": "organizationId",
+      "remote_session_issuer_id": "remoteSessionIssuerId",
       "required_scopes": "requiredScopes",
       "updated_at": "updatedAt",
       "verification_reasons": "verificationReasons",

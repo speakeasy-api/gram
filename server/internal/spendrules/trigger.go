@@ -41,7 +41,7 @@ func isSpendRelevantURN(urn string) bool {
 }
 
 // UsageTrigger turns spend-relevant telemetry writes into debounced per-actor
-// evaluation signals. It observes the telemetry logger, throttles per Gram user
+// evaluation signals. It observes the telemetry logger, throttles per Speakeasy user
 // ID, and only signals organizations that currently have spend gate rules.
 type UsageTrigger struct {
 	logger   *slog.Logger

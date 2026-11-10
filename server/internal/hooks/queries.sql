@@ -127,6 +127,15 @@ FROM skill_observations
 WHERE project_id = @project_id
 ORDER BY seen_at ASC, id ASC;
 
+-- name: GetChatProjectID :one
+-- Looks up a chat by id alone so hook ingest can refuse a write whose session
+-- already lives in another project. Session ids hash to chat ids with no
+-- project in the derivation, and an org-scoped key can present any project
+-- header in the org.
+SELECT project_id
+FROM chats
+WHERE id = @id;
+
 -- name: UpsertClaudeCodeSession :one
 -- Creates the chat row a captured agent session hangs off, or refreshes the one
 -- already there. The chat id is derived from a client-supplied session id, so a
@@ -182,6 +191,55 @@ WHERE id = @id
   AND user_account_id IS NULL
   AND deleted IS FALSE;
 
+-- name: LinkChatOwner :execrows
+-- Backfills the human owner of a session whose chat row was created before the
+-- session's identity was known: a shared plugin key with no self-reported email
+-- creates the chat ownerless when its first prompt beats the first OTEL export.
+-- Fill-once and only for a chat with no owner at all, so it never replaces an
+-- identity chat creation recorded, and never names a person on a session an
+-- agent key produced.
+UPDATE chats
+SET user_id = sqlc.narg(user_id)
+  , external_user_id = @external_user_id
+  , updated_at = NOW()
+WHERE id = @id
+  AND project_id = @project_id
+  AND COALESCE(user_id, '') = ''
+  AND COALESCE(external_user_id, '') = ''
+  AND agent_id IS NULL
+  AND deleted IS FALSE;
+
+-- name: LinkChatActingAgent :execrows
+-- Records the Speakeasy agent principal that produced a captured session, so a
+-- session list can name the agent that made the calls. A channel session has no
+-- assistant record, and agent-actor capture deliberately blanks the human
+-- identity columns, so without this the acting agent is invisible.
+--
+-- Fill-once, like the user_accounts link above: a chat row is created on the
+-- session's first persisted message and reused for every later delivery, so
+-- stamping only at creation would leave every chat created before this landed
+-- unattributed forever. Never overwrites an agent an earlier delivery set, so a
+-- later caller cannot reassign an existing session to a different agent.
+--
+-- The agent id arrives from the server-stamped authenticated actor, never from
+-- client input, and the EXISTS guard resolves it against a live agent row in the
+-- chat's own organization at write time. chats.agent_id carries no foreign key
+-- (agents is declared after chats), so this guard is what keeps the column from
+-- naming a deleted agent or one belonging to another tenant.
+UPDATE chats
+SET agent_id = @agent_id
+  , updated_at = NOW()
+WHERE chats.id = @id
+  AND chats.project_id = @project_id
+  AND chats.agent_id IS NULL
+  AND chats.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM agents a
+    WHERE a.id = @agent_id
+      AND a.organization_id = chats.organization_id
+      AND a.deleted IS FALSE
+  );
+
 -- name: UpsertUserAccount :one
 -- Records the external AI provider account observed for a session, keyed by the
 -- provider's stable per-account id. COALESCE on conflict keeps a previously
@@ -222,7 +280,7 @@ DO UPDATE SET
 RETURNING id, billing_mode;
 
 -- name: CountEmployeesForExternalOrg :one
--- Distinct employees (resolved Gram users) ever seen under a provider org. An
+-- Distinct employees (resolved Speakeasy users) ever seen under a provider org. An
 -- enterprise org is shared by many employees; a personal org maps to exactly one.
 -- A count >= 2 marks the org as the company's enterprise org: accounts under it
 -- classify team even when their own email has not resolved, and a resolved work
@@ -398,7 +456,7 @@ VALUES (
 -- Records a durable block row at hook-time deny. The reason is captured verbatim
 -- so the block page renders from this row alone; the risk_result_id / chat
 -- foreign keys are optional enrichment set when those rows are known synchronously.
--- user_id is the Gram user whose agent was blocked (empty string when unresolved)
+-- user_id is the Speakeasy user whose agent was blocked (empty string when unresolved)
 -- and is used to authorize the block page.
 INSERT INTO tool_call_blocks (
     id
@@ -432,3 +490,53 @@ UPDATE chats SET title = @title, updated_at = NOW()
 WHERE id = @id AND project_id = @project_id
   AND NOT title_manually_set
   AND title IS DISTINCT FROM @title;
+
+-- name: ListToolCallBlockSurfaceEvidence :many
+-- Per-provider, per-chat block counts inside a window, used to attribute
+-- synchronous policy decisions to the consuming surface they were returned to.
+-- chat_id is the join key onto the ClickHouse session summaries that carry
+-- hook_source: blocks whose chat was never resolved (enforcement can run
+-- before the chat row is persisted) come back under a NULL chat_id and are
+-- attributed at the coarser provider granularity instead of being dropped.
+SELECT
+    provider
+  , chat_id
+  , count(*) AS block_count
+  , max(created_at)::timestamptz AS last_block_at
+FROM tool_call_blocks
+WHERE organization_id = sqlc.arg(organization_id)
+  AND project_id = ANY(sqlc.arg(project_ids)::uuid[])
+  AND deleted IS FALSE
+  AND created_at >= sqlc.arg(from_time)
+  AND created_at <= sqlc.arg(to_time)
+GROUP BY provider, chat_id;
+
+-- name: RecordCapturedSessionID :exec
+-- Keep the native session identifier when hook capture derives a chat UUID.
+UPDATE chats SET external_chat_id = @session_id::text
+WHERE id = @chat_id AND project_id = @project_id AND external_chat_id IS NULL;
+
+-- name: GetHooksConfiguration :one
+-- Whether the project has any hook telemetry source set up: an active
+-- hooks-scoped API key usable by the project (bound to it, or organization
+-- wide) or a connected Anthropic inference hooks integration for the project.
+-- Keys and integrations bound to another project feed only that project.
+SELECT
+  EXISTS (
+    SELECT 1
+    FROM api_keys
+    WHERE organization_id = @org_id::text
+      AND (project_id IS NULL OR project_id = @project_id::uuid)
+      AND deleted IS FALSE
+      AND scopes @> ARRAY['hooks']::text[]
+      AND (expires_at IS NULL OR expires_at > clock_timestamp())
+  )::boolean AS agent_hooks_key,
+  EXISTS (
+    SELECT 1
+    FROM ai_integration_configs
+    WHERE organization_id = @org_id::text
+      AND project_id = @project_id::uuid
+      AND provider = 'anthropic_inference'
+      AND enabled IS TRUE
+      AND deleted IS FALSE
+  )::boolean AS anthropic_inference_hooks;

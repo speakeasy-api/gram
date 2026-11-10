@@ -6,7 +6,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
-// Preset is one curated entry in Gram's CIMD client catalog: a vendor's
+// Preset is one curated entry in Speakeasy's CIMD client catalog: a vendor's
 // published Client ID Metadata Document, identified by the URL that
 // vendor's client presents as its client_id.
 //
@@ -39,7 +39,7 @@ type Preset struct {
 
 	// Enabled gates the entry without deleting it. A disabled entry is
 	// inert for admission but still listed by the management API, so an
-	// operator can see that Gram knows about the vendor and has chosen not
+	// operator can see that Speakeasy knows about the vendor and has chosen not
 	// to admit it. Disabling an entry immediately de-admits it on every
 	// presets-mode issuer at deploy, so it is only for pulling an entry
 	// that turns out to be wrong.
@@ -60,12 +60,12 @@ func (p Preset) IsPattern() bool {
 	return isPattern(p.URL)
 }
 
-// catalog is Gram's curated preset list. Issuers in ModePresets accept every
+// catalog is Speakeasy's curated preset list. Issuers in ModePresets accept every
 // enabled entry here, with no per-issuer rows and no customer action required.
 // ModePresets is opt-in; an issuer without an explicit mode uses ModeOpen and
 // evaluates this catalog only for its shadow measurement. Adding a vendor
 // extends every presets-mode issuer on deploy; that implicit membership is the
-// documented contract, and is what makes "Gram trusts Claude Code" a thing an
+// documented contract, and is what makes "Speakeasy trusts Claude Code" a thing an
 // operator gets for free.
 //
 // The flip side: a MISSING entry is a hard, unrecoverable auth failure for
@@ -76,7 +76,7 @@ func (p Preset) IsPattern() bool {
 // issuer custom URL). Be generous here; an extra entry costs a string
 // comparison, a missing one costs a support ticket.
 //
-// catalog is Gram's curated preset list, derived from the aivendors registry
+// catalog is Speakeasy's curated preset list, derived from the aivendors registry
 // so a vendor's documents and on-device signatures are declared once. Issuers
 // in ModePresets accept every enabled entry, so adding a vendor extends every
 // presets-mode issuer on deploy. The verification bar and the ordering rules
@@ -190,7 +190,7 @@ func CatalogPreset(clientID string) (Preset, bool) {
 
 // Catalog returns a copy of the full preset list, enabled and disabled
 // alike, for the listPresets management endpoint. Returning disabled
-// entries is deliberate — an operator asking "does Gram know about this
+// entries is deliberate — an operator asking "does Speakeasy know about this
 // vendor?" deserves a different answer from "no such vendor".
 func Catalog() []Preset {
 	return slices.Clone(catalog)

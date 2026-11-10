@@ -3,11 +3,11 @@ package access
 import (
 	"context"
 	"testing"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -16,9 +16,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // The version a save must carry: the fingerprint of the rules as they stand.
@@ -55,6 +61,12 @@ func seedProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organiza
 func seedRemoteMCPServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) string {
 	t.Helper()
 
+	return seedRemoteMCPServerWithVisibility(t, ctx, conn, organizationID, "private")
+}
+
+func seedRemoteMCPServerWithVisibility(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, visibility string) string {
+	t.Helper()
+
 	fixtures := testrepo.New(conn)
 	projectID := seedProject(t, ctx, conn, organizationID)
 
@@ -73,7 +85,7 @@ func seedRemoteMCPServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 		ID:         serverID,
 		ProjectID:  projectID,
 		ToolsetID:  uuid.NullUUID{UUID: toolsetID, Valid: true},
-		Visibility: "private",
+		Visibility: visibility,
 	})
 	require.NoError(t, err)
 	return serverID.String()
@@ -520,6 +532,62 @@ func TestService_ListResourceAudience_HonoursProjectScopedGrants(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func TestService_ListResourceAudience_OrgAdminReadsBlockedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	// An organization admin whose read of this server is blocked (for example
+	// by a block on everyone) can still read the rules they are allowed to
+	// write.
+	adminCtx := authz.GrantsToContext(contextvalues.SetAuthContext(ctx, authCtx), []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeMCPBlockedRead, serverID),
+	})
+
+	_, err := ti.service.ListResourceAudience(adminCtx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+}
+
+func TestService_ListResourceAudience_BlockedNonAdminForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	// The org admin exemption must not weaken blocks for everyone else: a
+	// non-admin whose read of this server is blocked still cannot list its rules.
+	blockedCtx := authz.GrantsToContext(contextvalues.SetAuthContext(ctx, authCtx), []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeMCPRead, serverID),
+		authz.NewGrant(authz.ScopeMCPBlockedRead, serverID),
+	})
+
+	_, err := ti.service.ListResourceAudience(blockedCtx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestService_SetResourceAudience_RefusesStaleVersion(t *testing.T) {
 	t.Parallel()
 
@@ -651,15 +719,96 @@ func TestService_SetResourceAudience_RefusesBlockingEveryonesView(t *testing.T) 
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
 
-// Restricting a server to one team is written as "everyone else: no access",
-// which stores a block — and a block outranks every grant. Naming the
-// administrator role there takes the server's own access page away from every
-// administrator, including the ones who would undo it, so it is refused at all
-// three block levels rather than only the one covering the caller.
-func TestService_SetResourceAudience_RefusesBlockingTheAdminRole(t *testing.T) {
+// A caller who keeps their own view rule is not locked out by blocking
+// everyone else's view: a direct grant naming the resource outranks it.
+func TestService_SetResourceAudience_AllowsBlockingEveryonesViewWhileKeepingOwn(t *testing.T) {
 	t.Parallel()
 
-	for _, level := range []string{"blocked", "blocked_view", "blocked_manage"} {
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	callerPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+
+	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: "*", Level: "blocked_view"},
+			{PrincipalUrn: callerPrincipal.String(), Level: "view"},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+}
+
+// A narrowed view rule still satisfies the page's server-level read, so it
+// keeps the caller in as well as an unnarrowed one.
+func TestService_SetResourceAudience_AllowsBlockingEveryonesViewWhileKeepingNarrowedOwn(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	callerPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+
+	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: "*", Level: "blocked_view"},
+			{PrincipalUrn: callerPrincipal.String(), Level: "view", Tools: []string{"search"}},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+}
+
+// A role block outranks every grant except one made to a person by name for
+// this resource. Blocking the administrator role's view takes the server's own
+// access page away from every administrator, including the ones who would undo
+// it, so it is refused even when the caller is not an administrator.
+func TestService_SetResourceAudience_RefusesBlockingTheAdminRoleView(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", authz.SystemRoleAdmin))
+	adminPrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authz.SystemRoleAdmin)
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: adminPrincipal.String(), Level: "blocked_view"},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
+// Blocks on connect and manage leave the access page readable, so
+// administrators can still be taken off a server's use or management.
+func TestService_SetResourceAudience_AllowsBlockingTheAdminRoleUseAndManage(t *testing.T) {
+	t.Parallel()
+
+	for _, level := range []string{"blocked", "blocked_manage"} {
 		t.Run(level, func(t *testing.T) {
 			t.Parallel()
 
@@ -671,7 +820,7 @@ func TestService_SetResourceAudience_RefusesBlockingTheAdminRole(t *testing.T) {
 			adminPrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authz.SystemRoleAdmin)
 			serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 
-			_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+			result, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 				ResourceKind: "mcp",
 				ResourceID:   serverID,
 				Entries: []*gen.SetResourceAudienceEntry{
@@ -681,13 +830,49 @@ func TestService_SetResourceAudience_RefusesBlockingTheAdminRole(t *testing.T) {
 				SessionToken:    nil,
 				ApikeyToken:     nil,
 			})
-			require.Error(t, err)
-
-			var oopsErr *oops.ShareableError
-			require.ErrorAs(t, err, &oopsErr)
-			require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+			require.NoError(t, err)
+			require.Len(t, result.Entries, 1)
+			require.Equal(t, level, result.Entries[0].Level)
 		})
 	}
+}
+
+// A use block on the administrator role leaves the access page readable, so an
+// administrator can lift it again from the same page.
+func TestService_SetResourceAudience_RestoresTheAdminRoleAfterAUseBlock(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", authz.SystemRoleAdmin))
+	adminPrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authz.SystemRoleAdmin)
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	blocked, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: adminPrincipal.String(), Level: "blocked"},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, blocked.Entries, 1)
+
+	restored, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         []*gen.SetResourceAudienceEntry{},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, restored.Entries)
 }
 
 // Taking a team off a server is what this surface is for, so every role other
@@ -920,6 +1105,110 @@ func TestService_SetResourceAudience_RefusesNewAccessForSuspendedAgent(t *testin
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
 
+// A rule naming a deleted agent is left out of the audience, so the page
+// never sends it back, and the next save removes its grant.
+func TestService_SetResourceAudience_HidesAndRemovesRulesForDeletedAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Retired assistant",
+	})
+	require.NoError(t, err)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: agentPrincipal.String(), Level: "blocked", Tools: nil, Dispositions: []string{"destructive"}},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+
+	_, err = agentsrepo.New(ti.conn).DeleteAgent(ctx, agentsrepo.DeleteAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             agent.ID,
+	})
+	require.NoError(t, err)
+
+	listed, err := ti.service.ListResourceAudience(ctx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	for _, entry := range listed.Entries {
+		require.NotEqual(t, agentPrincipal.String(), entry.PrincipalUrn, "deleted agent's rule should be hidden")
+	}
+
+	// The page saves what it shows, plus the edit.
+	userURN := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String()
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: userURN, Level: "use", Tools: nil, Dispositions: nil},
+		},
+		ExpectedVersion: listed.Version,
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+
+	grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{agentPrincipal})
+	require.NoError(t, err)
+	require.Empty(t, grants)
+}
+
+// A deleted agent with no rule on this server still cannot be given one.
+func TestService_SetResourceAudience_RefusesNewAccessForDeletedAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Gone assistant",
+	})
+	require.NoError(t, err)
+	_, err = agentsrepo.New(ti.conn).DeleteAgent(ctx, agentsrepo.DeleteAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             agent.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), Level: "use", Tools: nil, Dispositions: nil},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
 func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAccessService(t)
@@ -940,25 +1229,60 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 	// The two servers share one upstream session. A policy-only removal must
 	// not invoke credential revocation or erase the other server's connection.
 	otherServerID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
-	issuerID, remoteIssuerID, clientID, sessionID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	//nolint:glint // notestingrawsql: shared upstream session fixture
-	_, err = ti.conn.Exec(ctx, `INSERT INTO user_session_issuers (id, organization_id, slug, authn_challenge_mode, session_duration) VALUES ($1,$2,$3,'interactive','1 hour')`, issuerID, authCtx.ActiveOrganizationID, issuerID.String())
+	issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                         "shared-" + uuid.NewString(),
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TrustedRemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: shared upstream session fixture
-	_, err = ti.conn.Exec(ctx, `INSERT INTO remote_session_issuers (id, organization_id, slug, issuer) VALUES ($1,$2,$3,'https://idp.example.test')`, remoteIssuerID, authCtx.ActiveOrganizationID, remoteIssuerID.String())
+	remoteIssuer, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "remote-" + uuid.NewString(),
+		Issuer:                            "https://idp.example.test",
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{},
+		ResponseTypesSupported:            []string{},
+		TokenEndpointAuthMethodsSupported: []string{},
+	})
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: shared upstream session fixture
-	_, err = ti.conn.Exec(ctx, `INSERT INTO remote_session_clients (id, organization_id, remote_session_issuer_id, client_id) VALUES ($1,$2,$3,'fixture')`, clientID, authCtx.ActiveOrganizationID, remoteIssuerID)
+	client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID: remoteIssuer.ID,
+		ClientID:              "fixture",
+	})
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: shared upstream session fixture; ciphertext is never decrypted
-	_, err = ti.conn.Exec(ctx, `INSERT INTO remote_sessions (id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, refresh_token_encrypted) VALUES ($1,$2,$3,$4,'fixture-not-a-token','fixture-refresh')`, sessionID, principal.String(), issuerID, clientID)
+	// The ciphertext is never decrypted.
+	session, err := remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		SubjectUrn:            urn.NewAgentSubject(agent.ID),
+		UserSessionIssuerID:   issuer.ID,
+		RemoteSessionClientID: client.ID,
+		AccessTokenEncrypted:  "fixture-not-a-token",
+		RefreshTokenEncrypted: conv.ToPGText("fixture-refresh"),
+		Scopes:                []string{},
+	})
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: two servers deliberately share one issuer
-	_, err = ti.conn.Exec(ctx, `UPDATE toolsets SET user_session_issuer_id = $1 WHERE organization_id = $2 AND id IN ($3,$4)`, issuerID, authCtx.ActiveOrganizationID, serverID, otherServerID)
-	require.NoError(t, err)
-	var beforeSession, afterSession string
-	//nolint:glint // notestingrawsql: capture the shared credential without logging it
-	err = ti.conn.QueryRow(ctx, `SELECT row_to_json(s)::text FROM remote_sessions s WHERE id = $1`, sessionID).Scan(&beforeSession)
+	sessionID := session.ID
+	// The two servers deliberately share one issuer.
+	for _, toolsetID := range []string{serverID, otherServerID} {
+		toolset, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndOrganization(ctx, toolsetsrepo.GetToolsetByIDAndOrganizationParams{
+			ID: uuid.MustParse(toolsetID), OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		require.NoError(t, err)
+		_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+			ID: toolset.ID, ProjectID: toolset.ProjectID, Name: pgtype.Text{String: toolset.Name, Valid: true}, Slug: pgtype.Text{String: toolset.Slug, Valid: true},
+			EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{}, TunneledMcpServerID: uuid.NullUUID{},
+			ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, UnproxiedMcpServerID: uuid.NullUUID{}, ToolVariationsGroupID: uuid.NullUUID{},
+			Visibility: "private", NetworkAccessMode: pgtype.Text{},
+		})
+		require.NoError(t, err)
+	}
+	// Capture the shared credential without logging it.
+	beforeSession, err := accessrepo.New(ti.conn).GetRemoteSessionRowDigestFixture(ctx, sessionID)
 	require.NoError(t, err)
 	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp", ResourceID: serverID,
@@ -974,8 +1298,8 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 	allowed, err = authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: otherServerID})
 	require.NoError(t, err)
 	require.True(t, allowed)
-	//nolint:glint // notestingrawsql: prove server-local policy removal leaves shared upstream authority intact
-	err = ti.conn.QueryRow(ctx, `SELECT row_to_json(s)::text FROM remote_sessions s WHERE id = $1`, sessionID).Scan(&afterSession)
+	// Server-local policy removal leaves shared upstream authority intact.
+	afterSession, err := accessrepo.New(ti.conn).GetRemoteSessionRowDigestFixture(ctx, sessionID)
 	require.NoError(t, err)
 	require.Equal(t, beforeSession, afterSession, "shared upstream session must be unchanged")
 }

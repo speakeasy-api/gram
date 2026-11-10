@@ -89,11 +89,12 @@ var Toolset = Type("Toolset", func() {
 	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
+	Attribute("network_access_mode", NetworkAccessMode, "The hosted MCP network access mode; public_only by default")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("origin", ToolsetOrigin, "The registry lineage for toolsets installed from an external MCP catalog")
 	Attribute("external_oauth_server", ExternalOAuthServer, "The external OAuth server details")
-	Attribute("user_session_issuer_id", String, "The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.")
+	Attribute("user_session_issuer_id", String, "The id of the user_session_issuer wired to this toolset's hosted MCP server. Set via mcpServers.update; null when no USI is linked.")
 	Attribute("user_session_issuer_slug", Slug, "The slug of the user_session_issuer wired to this toolset; present when user_session_issuer_id is.")
 	Attribute("tool_variations_group_id", String, "The id of the tool variations group enabling MCP tool filtering for this toolset. Set via toolsets.setToolVariationsGroup; null when filtering is disabled.")
 	Attribute("created_at", String, func() {
@@ -176,7 +177,7 @@ var ExternalOAuthServer = Type("ExternalOAuthServer", func() {
 	Attribute("id", String, "The ID of the external OAuth server")
 	Attribute("project_id", String, "The project ID this external OAuth server belongs to")
 	Attribute("slug", Slug, "The slug of the external OAuth server")
-	Attribute("metadata", Any, "The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.")
+	Attribute("metadata", Any, "The validated RFC 8414 metadata Speakeasy hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.")
 	Attribute("authorization_server_issuer", String, "The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery. Exactly one of authorization_server_issuer and metadata is present; changing modes may require clients to register or authenticate again.", func() {
 		Format(FormatURI)
 		MaxLength(500)
@@ -195,9 +196,9 @@ var ExternalOAuthServer = Type("ExternalOAuthServer", func() {
 var ExternalOAuthServerForm = Type("ExternalOAuthServerForm", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("slug", Slug, "Optional external OAuth server slug retained for compatibility. Gram generates one from the toolset slug when omitted.")
-	Attribute("metadata", Any, "JSON object metadata for Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.")
-	Attribute("authorization_server_issuer", String, "Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Gram fetches and strictly verifies this issuer before persistence. Supply exactly one of authorization_server_issuer and metadata.", func() {
+	Attribute("slug", Slug, "Optional external OAuth server slug retained for compatibility. Speakeasy generates one from the toolset slug when omitted.")
+	Attribute("metadata", Any, "JSON object metadata for Speakeasy-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.")
+	Attribute("authorization_server_issuer", String, "Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Speakeasy fetches and strictly verifies this issuer before persistence. Supply exactly one of authorization_server_issuer and metadata.", func() {
 		Format(FormatURI)
 		Pattern(`^https://`)
 		MaxLength(500)

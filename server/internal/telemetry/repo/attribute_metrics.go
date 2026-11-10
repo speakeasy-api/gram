@@ -204,6 +204,10 @@ type AttributeMetricsQueryParams struct {
 	// IntervalSeconds is the timeseries bucket width. The source is bucketed
 	// hourly so this is expected to be a multiple of 3600.
 	IntervalSeconds int64
+
+	// IncludeDimensionValues controls whether table rows collect distinct values
+	// for dimensions other than the requested group.
+	IncludeDimensionValues bool
 }
 
 // attributeGroupValueExpr returns the SQL expression to select/group by for the
@@ -384,7 +388,6 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 
 	sb := sq.Select(groupExpr+" AS group_value").
 		Columns(attributeMeasureSelects...).
-		Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)))).
 		From("attribute_metrics_summaries").
 		// Exclude tombstoned rows (soft-deleted backfill data; see the
 		// is_active column comment in server/clickhouse/schema.sql).
@@ -392,6 +395,10 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
+
+	if arg.IncludeDimensionValues {
+		sb = sb.Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))))
+	}
 
 	sb, err = applyAttributeFilters(sb, arg.Filters, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {

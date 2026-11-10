@@ -421,13 +421,14 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 				Generation:  0,
 				CreatedAt:   conv.ToPGTimestamptz(createdAt),
 			},
-			BillingUserID:  userID,
-			WorkloadSource: metering.WorkloadSourceImport,
-			UserEmail:      event.Actor.UserEmail,
-			Provider:       codexProviderOpenAI,
-			HookHostname:   "",
-			AccountType:    complianceAccountTypeTeam,
-			BillingMode:    src.cfg.BillingMode,
+			BillingUserID:     userID,
+			WorkloadSource:    metering.WorkloadSourceImport,
+			UserEmail:         event.Actor.UserEmail,
+			Provider:          codexProviderOpenAI,
+			InferenceProvider: codexProviderOpenAI,
+			HookHostname:      "",
+			AccountType:       complianceAccountTypeTeam,
+			BillingMode:       src.cfg.BillingMode,
 		})
 	}
 	if fallbacks := src.timestampFallbacks() - fallbacksBefore; fallbacks > 0 {
@@ -470,7 +471,7 @@ func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context
 		return err
 	}
 
-	chatID, err := chatrepo.New(src.svc.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
+	upserted, err := chatrepo.New(src.svc.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
 		ID:             uuid.New(),
 		ProjectID:      src.cfg.ProjectID,
 		OrganizationID: src.cfg.OrganizationID,
@@ -488,6 +489,7 @@ func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context
 	if err != nil {
 		return fmt.Errorf("upsert chatgpt compliance chat: %w", err)
 	}
+	chatID := upserted.ID
 	if !known {
 		if _, err := chatrepo.New(src.svc.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
 			AiIntegrationConfigID: src.cfg.ID,

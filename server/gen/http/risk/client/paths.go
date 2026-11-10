@@ -17,6 +17,16 @@ func ListRiskPoliciesRiskPath() string {
 	return "/rpc/risk.listPolicies"
 }
 
+// ListMCPPlatformToolsetsRiskPath returns the URL path to the risk service listMCPPlatformToolsets HTTP endpoint.
+func ListMCPPlatformToolsetsRiskPath() string {
+	return "/rpc/risk.listMCPPlatformToolsets"
+}
+
+// ListRiskPoliciesForMcpServerRiskPath returns the URL path to the risk service listRiskPoliciesForMcpServer HTTP endpoint.
+func ListRiskPoliciesForMcpServerRiskPath() string {
+	return "/rpc/risk.listRiskPoliciesForMcpServer"
+}
+
 // ListBuiltinExclusionsRiskPath returns the URL path to the risk service listBuiltinExclusions HTTP endpoint.
 func ListBuiltinExclusionsRiskPath() string {
 	return "/rpc/risk.listBuiltinExclusions"
@@ -62,6 +72,11 @@ func UnmaskRiskResultRiskPath() string {
 	return "/rpc/risk.unmaskResult"
 }
 
+// RevealRiskResultPayloadRiskPath returns the URL path to the risk service revealRiskResultPayload HTTP endpoint.
+func RevealRiskResultPayloadRiskPath() string {
+	return "/rpc/risk.revealResultPayload"
+}
+
 // ListRiskResultsByChatRiskPath returns the URL path to the risk service listRiskResultsByChat HTTP endpoint.
 func ListRiskResultsByChatRiskPath() string {
 	return "/rpc/risk.listResultsByChat"
@@ -92,6 +107,16 @@ func ListRiskCategoriesRiskPath() string {
 	return "/rpc/risk.listCategories"
 }
 
+// ListRiskPresetsRiskPath returns the URL path to the risk service listRiskPresets HTTP endpoint.
+func ListRiskPresetsRiskPath() string {
+	return "/rpc/risk.listPresets"
+}
+
+// SuggestRiskPolicyRiskPath returns the URL path to the risk service suggestRiskPolicy HTTP endpoint.
+func SuggestRiskPolicyRiskPath() string {
+	return "/rpc/risk.suggestPolicy"
+}
+
 // CompileExprRiskPath returns the URL path to the risk service compileExpr HTTP endpoint.
 func CompileExprRiskPath() string {
 	return "/rpc/risk.compileCELExpression"
@@ -102,24 +127,19 @@ func GetRiskUserBreakdownRiskPath() string {
 	return "/rpc/risk.getUserBreakdown"
 }
 
-// GetRiskRuleBreakdownRiskPath returns the URL path to the risk service getRiskRuleBreakdown HTTP endpoint.
-func GetRiskRuleBreakdownRiskPath() string {
-	return "/rpc/risk.getRuleBreakdown"
-}
-
 // GetRiskSignalsRiskPath returns the URL path to the risk service getRiskSignals HTTP endpoint.
 func GetRiskSignalsRiskPath() string {
 	return "/rpc/risk.getSignals"
 }
 
+// GetRiskMcpServerCountsRiskPath returns the URL path to the risk service getRiskMcpServerCounts HTTP endpoint.
+func GetRiskMcpServerCountsRiskPath() string {
+	return "/rpc/risk.getMcpServerCounts"
+}
+
 // GetRiskAnalysisStatusRiskPath returns the URL path to the risk service getRiskAnalysisStatus HTTP endpoint.
 func GetRiskAnalysisStatusRiskPath() string {
 	return "/rpc/risk.getAnalysisStatus"
-}
-
-// GetRiskPolicyStatusRiskPath returns the URL path to the risk service getRiskPolicyStatus HTTP endpoint.
-func GetRiskPolicyStatusRiskPath() string {
-	return "/rpc/risk.getPolicyStatus"
 }
 
 // CreateRiskPolicyBypassRequestRiskPath returns the URL path to the risk service createRiskPolicyBypassRequest HTTP endpoint.
@@ -170,6 +190,21 @@ func DenyRiskPolicyBypassRequestRiskPath() string {
 // RevokeRiskPolicyBypassRequestRiskPath returns the URL path to the risk service revokeRiskPolicyBypassRequest HTTP endpoint.
 func RevokeRiskPolicyBypassRequestRiskPath() string {
 	return "/rpc/risk.revokePolicyBypassRequest"
+}
+
+// ListRiskPolicyApprovalsRiskPath returns the URL path to the risk service listRiskPolicyApprovals HTTP endpoint.
+func ListRiskPolicyApprovalsRiskPath() string {
+	return "/rpc/risk.listApprovals"
+}
+
+// GetRiskPolicyApprovalRiskPath returns the URL path to the risk service getRiskPolicyApproval HTTP endpoint.
+func GetRiskPolicyApprovalRiskPath() string {
+	return "/rpc/risk.getApproval"
+}
+
+// DecideRiskPolicyApprovalRiskPath returns the URL path to the risk service decideRiskPolicyApproval HTTP endpoint.
+func DecideRiskPolicyApprovalRiskPath() string {
+	return "/rpc/risk.decideApproval"
 }
 
 // TriggerRiskAnalysisRiskPath returns the URL path to the risk service triggerRiskAnalysis HTTP endpoint.

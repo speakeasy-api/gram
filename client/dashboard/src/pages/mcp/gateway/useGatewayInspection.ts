@@ -9,11 +9,13 @@ const listedServerSchema = z.object({
   status: z.string().optional(),
 });
 
-const toolSchema = z.object({
-  name: z.string(),
-  description: z.string().optional(),
-  inputSchema: z.unknown().optional(),
-});
+const toolSchema = z
+  .object({
+    name: z.string(),
+    description: z.string().optional(),
+    inputSchema: z.unknown().optional(),
+  })
+  .passthrough();
 
 type GatewayTool = z.infer<typeof toolSchema>;
 type GatewayListedServer = z.infer<typeof listedServerSchema>;
@@ -27,6 +29,7 @@ export interface GatewayServerDescription {
 }
 
 export interface GatewayInspection {
+  discoveryMode: "direct" | "progressive" | "code_mode";
   /** Sent to every client on connect; the runtime generates it. */
   instructions: string | undefined;
   protocolVersion: string | undefined;
@@ -53,31 +56,70 @@ function authCacheKey(headers: Record<string, string> | undefined): string {
   return `auth:${hash}`;
 }
 
-class UnauthorizedError extends Error {}
+/**
+ * The gateway answered with an error instead of a result. `code` is the
+ * JSON-RPC error code when the answer carried one.
+ */
+export class GatewayRPCError extends Error {
+  readonly status: number;
+  readonly code: number | undefined;
+
+  constructor(message: string, status: number, code?: number) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+class UnauthorizedError extends GatewayRPCError {}
+
+const rpcErrorSchema = z.object({
+  code: z.number().optional(),
+  message: z.string(),
+});
 
 // The endpoint speaks streamable HTTP and answers stateless requests, so one
 // fetch per JSON-RPC call is enough — no session to establish or carry.
-async function rpc(
+export async function gatewayRPC(
   url: string,
   headers: Record<string, string> | undefined,
   method: string,
   params: unknown,
+  signal?: AbortSignal,
+  requestId: string = crypto.randomUUID(),
 ): Promise<unknown> {
   const response = await fetch(url, {
     method: "POST",
+    signal,
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
       ...headers,
     },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: requestId,
+      method,
+      params,
+    }),
   });
 
   if (response.status === 401 || response.status === 403) {
-    throw new UnauthorizedError("unauthorized");
+    throw new UnauthorizedError("unauthorized", response.status);
   }
   if (!response.ok) {
-    throw new Error(`${method} failed: ${response.status}`);
+    const failure: unknown = await response.json().catch(() => undefined);
+    const message = z.object({ error: rpcErrorSchema }).safeParse(failure);
+    if (message.success)
+      throw new GatewayRPCError(
+        message.data.error.message,
+        response.status,
+        message.data.error.code,
+      );
+    throw new GatewayRPCError(
+      `${method} failed: ${response.status}`,
+      response.status,
+    );
   }
 
   const body = await response.text();
@@ -97,17 +139,18 @@ async function rpc(
   const envelope = z
     .object({
       result: z.unknown().optional(),
-      error: z.object({ message: z.string() }).optional(),
+      error: rpcErrorSchema.optional(),
     })
     .parse(parsed);
 
   if (envelope.error) {
+    const { code, message } = envelope.error;
     // The runtime reports an expired or absent session as a JSON-RPC error
     // rather than an HTTP status.
-    if (/token|unauthor/i.test(envelope.error.message)) {
-      throw new UnauthorizedError(envelope.error.message);
+    if (/token|unauthor/i.test(message)) {
+      throw new UnauthorizedError(message, response.status, code);
     }
-    throw new Error(envelope.error.message);
+    throw new GatewayRPCError(message, response.status, code);
   }
   return envelope.result;
 }
@@ -120,7 +163,11 @@ async function rpc(
  */
 export function useGatewayInspection(
   mcpUrl: string | undefined,
-  options?: { headers?: Record<string, string>; enabled?: boolean },
+  options?: {
+    headers?: Record<string, string>;
+    enabled?: boolean;
+    configurationKey?: string;
+  },
 ): {
   data: GatewayInspection | undefined;
   isLoading: boolean;
@@ -129,15 +176,15 @@ export function useGatewayInspection(
   error: Error | null;
   refetch: () => void;
 } {
-  const { headers, enabled = true } = options ?? {};
+  const { headers, enabled = true, configurationKey } = options ?? {};
   const headersKey = authCacheKey(headers);
 
   const query = useQuery<GatewayInspection, Error>({
-    queryKey: ["gatewayInspection", mcpUrl, headersKey],
+    queryKey: ["gatewayInspection", mcpUrl, headersKey, configurationKey],
     queryFn: async () => {
       if (!mcpUrl) throw new Error("No gateway URL configured");
 
-      const initResult = await rpc(mcpUrl, headers, "initialize", {
+      const initResult = await gatewayRPC(mcpUrl, headers, "initialize", {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: {},
         clientInfo: { name: "gram-dashboard-gateway-inspect", version: "1" },
@@ -150,31 +197,58 @@ export function useGatewayInspection(
         })
         .parse(initResult);
 
-      const toolsResult = await rpc(mcpUrl, headers, "tools/list", {});
-      const { tools } = z
-        .object({ tools: z.array(toolSchema) })
-        .parse(toolsResult);
+      const tools: GatewayTool[] = [];
+      const seenCursors = new Set<string>();
+      let cursor: string | undefined;
+      do {
+        const toolsResult = await gatewayRPC(mcpUrl, headers, "tools/list", {
+          cursor,
+        });
+        const listing = z
+          .object({
+            tools: z.array(toolSchema),
+            nextCursor: z.string().optional(),
+          })
+          .parse(toolsResult);
+        tools.push(...listing.tools);
+        cursor = listing.nextCursor;
+        if (cursor) {
+          if (seenCursors.has(cursor) || seenCursors.size >= 100)
+            throw new Error(
+              "The gateway returned an incomplete tool list. Reconnect to try again.",
+            );
+          seenCursors.add(cursor);
+        }
+      } while (cursor);
+      let discoveryMode: GatewayInspection["discoveryMode"] = "direct";
+      if (tools.some((tool) => tool.name === "list_servers"))
+        discoveryMode = "progressive";
+      if (tools.length === 1 && tools[0]?.name === "execute")
+        discoveryMode = "code_mode";
 
       // Bundle state is a best-effort extra: a member outage must not blank
       // out the tool surface above, which is the tab's primary content.
       let servers: GatewayListedServer[] | undefined;
-      try {
-        const callResult = await rpc(mcpUrl, headers, "tools/call", {
-          name: "list_servers",
-          arguments: {},
-        });
-        servers = z
-          .object({
-            structuredContent: z.object({
-              servers: z.array(listedServerSchema),
-            }),
-          })
-          .parse(callResult).structuredContent.servers;
-      } catch {
-        servers = undefined;
+      if (discoveryMode === "progressive") {
+        try {
+          const callResult = await gatewayRPC(mcpUrl, headers, "tools/call", {
+            name: "list_servers",
+            arguments: {},
+          });
+          servers = z
+            .object({
+              structuredContent: z.object({
+                servers: z.array(listedServerSchema),
+              }),
+            })
+            .parse(callResult).structuredContent.servers;
+        } catch {
+          servers = undefined;
+        }
       }
 
       return {
+        discoveryMode,
         instructions: init.instructions,
         protocolVersion: init.protocolVersion,
         serverName: init.serverInfo?.name,
@@ -221,7 +295,7 @@ export function useGatewayDescribeServer(
     queryFn: async () => {
       if (!mcpUrl || !serverSlug) throw new Error("No member selected");
       try {
-        const described = await rpc(mcpUrl, headers, "tools/call", {
+        const described = await gatewayRPC(mcpUrl, headers, "tools/call", {
           name: "describe_server",
           arguments: { server: serverSlug },
         });

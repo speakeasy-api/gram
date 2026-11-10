@@ -539,6 +539,9 @@ it("omits seeded discovery metadata when saving an unrelated edit", async () => 
     serviceDocumentation: "https://saved.example/docs",
     codeChallengeMethodsSupported: ["S256"],
     clientIdMetadataDocumentSupported: true,
+    authorizationGrantProfilesSupported: [
+      "urn:ietf:params:oauth:grant-profile:id-jag",
+    ],
   });
   api.update.mockResolvedValue(savedIssuer);
   fireEvent.change(screen.getByLabelText("Display name"), {
@@ -554,6 +557,7 @@ it("omits seeded discovery metadata when saving an unrelated edit", async () => 
     "serviceDocumentation",
     "codeChallengeMethodsSupported",
     "clientIdMetadataDocumentSupported",
+    "authorizationGrantProfilesSupported",
   ]) {
     expect(JSON.parse(JSON.stringify(payload))).not.toHaveProperty(key);
   }

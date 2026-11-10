@@ -5,14 +5,15 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
  * What the principal identifies.
  */
-export const Kind = {
+export const AudienceOptionKind = {
   Everyone: "everyone",
   Role: "role",
   User: "user",
@@ -21,7 +22,7 @@ export const Kind = {
 /**
  * What the principal identifies.
  */
-export type Kind = ClosedEnum<typeof Kind>;
+export type AudienceOptionKind = OpenEnum<typeof AudienceOptionKind>;
 
 export type AudienceOption = {
   /**
@@ -35,7 +36,7 @@ export type AudienceOption = {
   /**
    * What the principal identifies.
    */
-  kind: Kind;
+  kind: AudienceOptionKind;
   /**
    * How many people the principal reaches, when known.
    */
@@ -47,7 +48,10 @@ export type AudienceOption = {
 };
 
 /** @internal */
-export const Kind$inboundSchema: z.ZodMiniEnum<typeof Kind> = z.enum(Kind);
+export const AudienceOptionKind$inboundSchema: z.ZodMiniType<
+  AudienceOptionKind,
+  unknown
+> = openEnums.inboundSchema(AudienceOptionKind);
 
 /** @internal */
 export const AudienceOption$inboundSchema: z.ZodMiniType<
@@ -57,7 +61,7 @@ export const AudienceOption$inboundSchema: z.ZodMiniType<
   z.object({
     description: z.optional(z.string()),
     display_name: z.string(),
-    kind: Kind$inboundSchema,
+    kind: AudienceOptionKind$inboundSchema,
     member_count: z.optional(z.int()),
     principal_urn: z.string(),
   }),

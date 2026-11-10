@@ -55,6 +55,7 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		RemoteSessionIssuerID:           row.RemoteSessionIssuerID.String(),
 		UserSessionIssuerIds:            issuerIDs,
 		ClientID:                        row.ClientID,
+		DisplayName:                     conv.FromPGText[string](row.DisplayName),
 		ClientIDMetadataURI:             conv.FromPGText[string](row.ClientIDMetadataUri),
 		ClientIDIssuedAt:                issuedAt,
 		ClientSecretExpiresAt:           expiresAt,
@@ -62,10 +63,18 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		TokenEndpointAuthMethod:         conv.FromPGText[string](row.TokenEndpointAuthMethod),
 		TokenEndpointAuthAudienceFormat: conv.FromPGText[string](row.TokenEndpointAuthAudienceFormat),
 		JSONWebKeySetID:                 conv.FromNullableUUID(row.JsonWebKeySetID),
+		IdentityProviderConnectionID:    conv.FromNullableUUID(row.IdentityProviderConnectionID),
 		Scope:                           row.Scope,
 		Audience:                        conv.FromPGText[string](row.Audience),
+		LegacyCallbackURL:               row.LegacyCallbackUrl,
+		ForwardClientName:               row.ForwardClientName,
+		CredentialOwner:                 row.CredentialOwner,
 		CreatedAt:                       row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                       row.UpdatedAt.Time.Format(time.RFC3339),
+		GrantTypes:                      row.GrantTypes,
+		// The owning service fills this in from its pinned callback origins.
+		CallbackURL:          nil,
+		FederatedCallbackURL: nil,
 	}, nil
 }
 
@@ -108,6 +117,7 @@ func BuildGlobalRemoteSessionClientView(row repo.RemoteSessionClient) *types.Rem
 		RemoteSessionIssuerID:           row.RemoteSessionIssuerID.String(),
 		UserSessionIssuerIds:            []string{},
 		ClientID:                        row.ClientID,
+		DisplayName:                     conv.FromPGText[string](row.DisplayName),
 		ClientIDMetadataURI:             conv.FromPGText[string](row.ClientIDMetadataUri),
 		ClientIDIssuedAt:                issuedAt,
 		ClientSecretExpiresAt:           expiresAt,
@@ -115,9 +125,17 @@ func BuildGlobalRemoteSessionClientView(row repo.RemoteSessionClient) *types.Rem
 		TokenEndpointAuthMethod:         conv.FromPGText[string](row.TokenEndpointAuthMethod),
 		TokenEndpointAuthAudienceFormat: conv.FromPGText[string](row.TokenEndpointAuthAudienceFormat),
 		JSONWebKeySetID:                 conv.FromNullableUUID(row.JsonWebKeySetID),
+		IdentityProviderConnectionID:    conv.FromNullableUUID(row.IdentityProviderConnectionID),
 		Scope:                           row.Scope,
 		Audience:                        conv.FromPGText[string](row.Audience),
+		LegacyCallbackURL:               row.LegacyCallbackUrl,
+		ForwardClientName:               row.ForwardClientName,
+		CredentialOwner:                 row.CredentialOwner,
 		CreatedAt:                       row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                       row.UpdatedAt.Time.Format(time.RFC3339),
+		GrantTypes:                      row.GrantTypes,
+		// Global clients are shared and keep the pinned outbound origin.
+		CallbackURL:          nil,
+		FederatedCallbackURL: nil,
 	}
 }

@@ -10,17 +10,54 @@ import (
 )
 
 type Agent struct {
-	ID                          uuid.UUID
-	OrganizationID              string
-	OwnerUserID                 string
-	ProjectID                   uuid.NullUUID
-	Name                        string
-	SuspendedAt                 pgtype.Timestamptz
-	RevokedAt                   pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	OwnerUserID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	SuspendedAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
 	OwnerReassignmentRequiredAt pgtype.Timestamptz
-	OwnerReassignmentReason     pgtype.Text
-	CreatedAt                   pgtype.Timestamptz
-	UpdatedAt                   pgtype.Timestamptz
-	DeletedAt                   pgtype.Timestamptz
-	Deleted                     bool
+	// @access: confidential
+	OwnerReassignmentReason pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+// Agents blocked by a connection owner from that owner's connection to one upstream OAuth client, kept beside the mcp:blocked_auth grant that enforces it.
+type AgentConnectionBlock struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// The blocked agent.
+	// @access: confidential
+	AgentID uuid.UUID
+	// The connection owner who wrote the block; the grant names this user as connection_owner.
+	// @access: confidential-pii
+	OwnerUserID string
+	// The upstream OAuth client the connection uses; the block covers every auth client sharing it.
+	// @access: confidential
+	RemoteSessionClientID uuid.UUID
+	// When an agent manager wrote the same grant, making it theirs: removing the block then keeps the grant. NULL while only the owner holds it.
+	// @access: confidential
+	TakenOverAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

@@ -47,19 +47,25 @@ type RiskPolicy struct {
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session).
+	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
+	// freeze the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string
+	// Optional MCP server and tool restriction. Null applies the policy to every
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
+	McpScope *RiskMCPScope
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
-	// non-Gram-hosted server unless allowed, allow_all permits every server unless
-	// blocked. Blocked URLs are stored as risk_policy:block grants, not on the
-	// policy. Immutable after create. Only present on policies with the shadow_mcp
-	// source and block action.
+	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
+	// unless blocked. Blocked URLs are stored as risk_policy:block grants, not on
+	// the policy. Immutable after create. Only present on policies with the
+	// shadow_mcp source and block action.
 	ShadowMcpDisposition *string
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
@@ -73,6 +79,9 @@ type RiskPolicy struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfig
+	// For require_approval policies: who may approve held calls. Null for every
+	// other action.
+	ApprovalConfig *RiskPolicyApprovalConfig
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -83,11 +92,4 @@ type RiskPolicy struct {
 	CreatedAt string
 	// When the policy was last updated.
 	UpdatedAt string
-	// Number of messages not yet analyzed at the current policy version. Populated
-	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
-	// for progress).
-	PendingMessages *int64
-	// Total number of messages in the project. Populated on single-policy reads;
-	// omitted from list responses.
-	TotalMessages *int64
 }

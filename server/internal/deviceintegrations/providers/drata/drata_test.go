@@ -237,7 +237,7 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 		}
 		f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"id": %s, "name": "Gram Device Agent Coverage", "customResources": [%s]}`, testConnectionID, strings.Join(resources, ","))
+		_, _ = fmt.Fprintf(w, `{"id": %s, "name": "Speakeasy Device Agent Coverage", "customResources": [%s]}`, testConnectionID, strings.Join(resources, ","))
 	})
 	mux.HandleFunc(sessionsBase, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(f.t, http.MethodPost, r.Method)
@@ -566,7 +566,7 @@ func TestConnectionResourceCardinality(t *testing.T) {
 	// one's records, so the sink must refuse instead.
 	fake.resourceIDs = []string{"42", "43"}
 	err = s.TestConnection(t.Context(), fake.creds(), fake.settings())
-	require.ErrorContains(t, err, "dedicated to Gram")
+	require.ErrorContains(t, err, "dedicated to Speakeasy")
 }
 
 func TestStringResourceIDTolerated(t *testing.T) {
@@ -832,7 +832,7 @@ func TestProvisionCreatesConnection(t *testing.T) {
 
 	require.Len(t, fake.createdConnections, 1)
 	body := fake.createdConnections[0]
-	require.Equal(t, connectionNameForOrg(testOrgID), body["name"], "the connection is named per Gram org")
+	require.Equal(t, connectionNameForOrg(testOrgID), body["name"], "the connection is named per Speakeasy org")
 	require.Contains(t, body["name"], provisionConnectionName, "the org-scoped name keeps the readable stem")
 	require.Equal(t, []any{"CUSTOM"}, body["providerTypes"])
 	require.Equal(t, displayNameKey, body["displayNameKey"])
@@ -866,14 +866,14 @@ func TestProvisionReusesExistingConnection(t *testing.T) {
 
 	out, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
 	require.NoError(t, err)
-	require.Equal(t, "777", out[fieldConnectionID], "reuses this org's existing Gram connection by name")
+	require.Equal(t, "777", out[fieldConnectionID], "reuses this org's existing Speakeasy connection by name")
 	require.Empty(t, fake.createdConnections, "a matching connection must never be duplicated")
 }
 
 func TestProvisionSeparatesConnectionsPerOrg(t *testing.T) {
 	t.Parallel()
 
-	// Two Gram orgs sharing one Drata tenant: the second must not resolve to
+	// Two Speakeasy orgs sharing one Drata tenant: the second must not resolve to
 	// (and clobber) the first's connection — it provisions its own.
 	fake := newFakeDrata(t)
 	s := fake.newSink(t)
@@ -888,14 +888,14 @@ func TestProvisionSeparatesConnectionsPerOrg(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotEqual(t, first[fieldConnectionID], second[fieldConnectionID], "each org owns a distinct connection")
-	require.Len(t, fake.createdConnections, 2, "the shared tenant gets one connection per Gram org")
+	require.Len(t, fake.createdConnections, 2, "the shared tenant gets one connection per Speakeasy org")
 }
 
 func TestProvisionFindsConnectionOnLaterPage(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeDrata(t)
-	// A tenant with more connections than one page fits, with the Gram
+	// A tenant with more connections than one page fits, with the Speakeasy
 	// connection last: a single-page lookup would miss it and duplicate on
 	// every save. The lookup must follow the cursor to find it.
 	for i := range connectionListLimit + 5 {

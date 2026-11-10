@@ -1,3 +1,4 @@
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -23,7 +24,7 @@ import { Text } from "@/components/ui/Text";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { Check, Plus, X } from "lucide-react";
-import { useState, type JSX, type ReactNode } from "react";
+import { useRef, useState, type JSX, type ReactNode } from "react";
 import type { ResourceType } from "./types";
 
 export interface ScopeGroup {
@@ -34,10 +35,32 @@ export interface ScopeGroup {
 }
 
 /**
+ * MCP permissions for administering servers rather than using them. They sit
+ * under Platform access, but each still lets its holder connect to the servers
+ * it covers with every tool (scopeExpansions in server/internal/authz/scopes.go).
+ */
+const MCP_ADMIN_SCOPES: ReadonlySet<string> = new Set([
+  "mcp:read",
+  "mcp:write",
+]);
+
+function isMcpAccessScope(scope: ScopeDefinition): boolean {
+  return scope.resourceType === "mcp" && !MCP_ADMIN_SCOPES.has(scope.slug);
+}
+
+function mcpTabLabel(
+  serverCount: number | null | undefined,
+  permissionCount: number,
+): string {
+  if (serverCount === null) return "MCP access";
+  return `MCP access (${serverCount ?? permissionCount})`;
+}
+
+/**
  * The permissions a role carries, as a list you build rather than a tree you
  * walk: pick permissions from one searchable menu, then narrow each one on its
- * own row. MCP permissions are separated from the rest because they are the
- * ones with something to narrow — a server, and inside it, particular tools.
+ * own row. Connecting to MCP servers is separated from the rest because it is
+ * the one with something to narrow — a server, and inside it, particular tools.
  */
 export function RolePermissionsSection({
   groups,
@@ -47,6 +70,8 @@ export function RolePermissionsSection({
   renderScopeRule,
   subjectLabel = "this role",
   markAgentIneligible = false,
+  renderMcpAccess,
+  mcpAccessCount,
 }: {
   groups: ScopeGroup[];
   selectedScopes: Set<string>;
@@ -63,12 +88,36 @@ export function RolePermissionsSection({
    * its agent members rather than granted. Set once the role has any.
    */
   markAgentIneligible?: boolean;
+  /**
+   * Replaces the MCP access tab's permission list with a server picker. Given
+   * a way back to Platform access, where the admin permissions that also
+   * connect are managed.
+   */
+  renderMcpAccess?: (controls: { showPlatformAccess: () => void }) => ReactNode;
+  /**
+   * What the MCP access tab counts when it shows servers, not permissions.
+   * Null while that count is still loading.
+   */
+  mcpAccessCount?: number | null;
 }): JSX.Element {
-  const [tab, setTab] = useState("mcp");
+  const [chosenTab, setTab] = useState("mcp");
   const [pickerOpen, setPickerOpen] = useState(false);
+  // A pick from the empty state waits here until the picker has closed.
+  const pendingScope = useRef<Scope | null>(null);
 
-  const mcpGroups = groups.filter((group) => group.resourceType === "mcp");
-  const otherGroups = groups.filter((group) => group.resourceType !== "mcp");
+  // Split by permission, not by group: the MCP group's admin permissions
+  // belong with the platform ones.
+  const groupsWith = (keep: (scope: ScopeDefinition) => boolean) =>
+    groups
+      .map((group) => ({ ...group, scopes: group.scopes.filter(keep) }))
+      .filter((group) => group.scopes.length > 0);
+  const mcpGroups = groupsWith(isMcpAccessScope);
+  const otherGroups = groupsWith((scope) => !isMcpAccessScope(scope));
+  // A subject whose servers are chosen elsewhere (an agent's are chosen in
+  // its setup flow) has no MCP access to give here, so it gets no tab that
+  // could only ever be empty.
+  const hasMcpTab = mcpGroups.length > 0 || !!renderMcpAccess;
+  const tab = hasMcpTab ? chosenTab : "organization";
 
   const selectedIn = (list: ScopeGroup[]) =>
     list.flatMap((group) =>
@@ -79,41 +128,60 @@ export function RolePermissionsSection({
   const otherSelected = selectedIn(otherGroups);
   const activeGroups = tab === "mcp" ? mcpGroups : otherGroups;
   const activeSelected = tab === "mcp" ? mcpSelected : otherSelected;
+  const showsMcpAccess = tab === "mcp" && !!renderMcpAccess;
+
+  const addButton = (
+    <PopoverTrigger asChild>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={disabled}
+        // The header bar is tinted, so the button keeps its own surface
+        // rather than dissolving into it.
+        className="bg-background"
+      >
+        <Button.LeftIcon>
+          <Plus className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>Add permissions</Button.Text>
+      </Button>
+    </PopoverTrigger>
+  );
 
   return (
+    // No heading or rule of its own: every caller already introduces this
+    // block, and a second "Add permissions" above a button of the same name
+    // read as two different controls.
     <div className="border-border border">
       {/* gap-0: the tab strip and the list share one bordered box, so the
             Tabs default gap left the first row sitting lower than the rest. */}
-      <Tabs value={tab} onValueChange={setTab} className="gap-0">
-        <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border-b px-4">
-          <PageTabsList>
-            <PageTabsTrigger value="mcp">
-              MCP access ({mcpSelected.length})
-            </PageTabsTrigger>
-            <PageTabsTrigger value="organization">
-              Platform access ({otherSelected.length})
-            </PageTabsTrigger>
-          </PageTabsList>
+      {/* One picker, opened from the empty state while the tab has no
+            permissions and from the header once it has some. */}
+      <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+        <Tabs value={tab} onValueChange={setTab} className="gap-0">
+          <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border-b px-4">
+            <PageTabsList>
+              {hasMcpTab && (
+                <PageTabsTrigger value="mcp">
+                  {mcpTabLabel(mcpAccessCount, mcpSelected.length)}
+                </PageTabsTrigger>
+              )}
+              <PageTabsTrigger value="organization">
+                Platform access ({otherSelected.length})
+              </PageTabsTrigger>
+            </PageTabsList>
 
-          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={disabled}
-                // The bar behind it is tinted, so the button keeps its own
-                // surface rather than dissolving into the header.
-                className="bg-background"
-              >
-                <Button.LeftIcon>
-                  <Plus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add permissions</Button.Text>
-              </Button>
-            </PopoverTrigger>
+            {activeSelected.length > 0 && !showsMcpAccess && addButton}
             <PopoverContent
               align="end"
               className="w-[min(24rem,calc(100vw-2rem))] p-0"
+              // Runs once the picker has fully closed.
+              onCloseAutoFocus={() => {
+                if (pendingScope.current) {
+                  onToggleScope(pendingScope.current);
+                  pendingScope.current = null;
+                }
+              }}
             >
               <Command className="[&_[data-slot=command-input-wrapper]]:h-10 [&_[data-slot=command-input]]:h-10">
                 <CommandInput placeholder="Search permissions" />
@@ -124,13 +192,29 @@ export function RolePermissionsSection({
                       {group.scopes.map((scope) => (
                         <CommandItem
                           key={scope.slug}
-                          value={`${scope.slug} ${scope.description}`}
-                          onSelect={() => onToggleScope(scope.slug as Scope)}
+                          value={`${scope.label} ${scope.slug} ${scope.description}`}
+                          onSelect={() => {
+                            // The first pick moves the trigger from the empty
+                            // state to the header. Close first and add once
+                            // the picker is gone, so it never flashes at the
+                            // header while it animates out.
+                            if (activeSelected.length === 0) {
+                              pendingScope.current = scope.slug as Scope;
+                              setPickerOpen(false);
+                              return;
+                            }
+                            onToggleScope(scope.slug as Scope);
+                          }}
                           className="items-start gap-2"
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="font-mono text-sm">
-                              {scope.slug}
+                            <div className="flex flex-wrap items-baseline gap-x-2">
+                              <span className="text-sm font-medium">
+                                {scope.label}
+                              </span>
+                              <span className="text-muted-foreground font-mono text-xs">
+                                {scope.slug}
+                              </span>
                             </div>
                             <div className="text-muted-foreground text-xs">
                               {scope.description}
@@ -153,80 +237,93 @@ export function RolePermissionsSection({
                 </CommandList>
               </Command>
             </PopoverContent>
-          </Popover>
-        </div>
+          </div>
 
-        {/* One height whether empty, one row, or several: the box is
+          {/* One height whether empty, one row, or several: the box is
               directly under a popover trigger, so a box that grew or shrank as
               permissions came and went would shift the page under the cursor. */}
-        <TabsContent value={tab} forceMount className="min-h-[13.5rem]">
-          {activeSelected.length === 0 ? (
-            <div className="flex min-h-[13.5rem] flex-col items-center justify-center px-4 text-center">
-              <Text variant="body" className="font-medium">
-                {tab === "mcp"
-                  ? "No MCP permissions"
-                  : "No platform permissions"}
-              </Text>
-              <Text muted small className="mt-1">
-                {tab === "mcp"
-                  ? `Add a permission to let ${subjectLabel} reach MCP servers and their tools.`
-                  : `Add a permission to let ${subjectLabel} work with projects, environments and skills.`}
-              </Text>
-            </div>
-          ) : (
-            <div className="divide-border divide-y">
-              {activeSelected.map((scope) => {
-                const rule = renderScopeRule(scope);
-                return (
-                  <div
-                    key={scope.slug}
-                    className="flex items-start gap-3 px-4 py-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Text
-                          variant="body"
-                          className="font-mono text-sm font-medium"
-                        >
-                          {scope.slug}
+          <TabsContent value={tab} forceMount className="min-h-[13.5rem]">
+            {showsMcpAccess ? (
+              renderMcpAccess?.({
+                showPlatformAccess: () => setTab("organization"),
+              })
+            ) : activeSelected.length === 0 ? (
+              <div className="flex min-h-[13.5rem] flex-col items-center justify-center px-4 text-center">
+                <Text variant="body" className="font-medium">
+                  {tab === "mcp"
+                    ? "No MCP permissions"
+                    : "No platform permissions"}
+                </Text>
+                <Text muted small className="mt-1">
+                  {tab === "mcp"
+                    ? `Add a permission to let ${subjectLabel} reach MCP servers and their tools.`
+                    : `Add a permission to let ${subjectLabel} work with projects, environments, skills and MCP servers.`}
+                </Text>
+                <div className="mt-4">{addButton}</div>
+              </div>
+            ) : (
+              <div className="divide-border divide-y">
+                {activeSelected.map((scope) => {
+                  const rule = renderScopeRule(scope);
+                  return (
+                    <div
+                      key={scope.slug}
+                      className="flex items-start gap-3 px-4 py-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Text variant="body" className="text-sm font-medium">
+                            {scope.label}
+                          </Text>
+                          <span className="text-muted-foreground font-mono text-xs">
+                            {scope.slug}
+                          </span>
+                          {markAgentIneligible &&
+                            scope.agentEligible === false && (
+                              <Badge variant="neutral" size="sm">
+                                Not available to agents
+                              </Badge>
+                            )}
+                        </div>
+                        <Text muted small>
+                          {scope.description}
                         </Text>
-                        {markAgentIneligible &&
-                          scope.agentEligible === false && (
-                            <Badge variant="neutral" size="sm">
-                              Not available to agents
-                            </Badge>
-                          )}
-                      </div>
-                      <Text muted small>
-                        {scope.description}
-                      </Text>
-                      {/* Only permissions that can be narrowed carry a control;
+                        {/* Only permissions that can be narrowed carry a control;
                           an empty container left the row taller than its
                           neighbours. */}
-                      {rule && (
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {rule}
-                        </div>
-                      )}
+                        {rule && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            {rule}
+                          </div>
+                        )}
+                        {MCP_ADMIN_SCOPES.has(scope.slug) && (
+                          <Alert iconName="lock" className="mt-2 text-xs">
+                            Also allows connecting to these servers with every
+                            tool.
+                            {renderMcpAccess &&
+                              " They show as locked on the MCP access tab."}
+                          </Alert>
+                        )}
+                      </div>
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        disabled={disabled}
+                        onClick={() => onToggleScope(scope.slug as Scope)}
+                        aria-label={`Remove ${scope.slug}`}
+                      >
+                        <Button.LeftIcon>
+                          <X className="h-4 w-4" />
+                        </Button.LeftIcon>
+                      </Button>
                     </div>
-                    <Button
-                      variant="tertiary"
-                      size="sm"
-                      disabled={disabled}
-                      onClick={() => onToggleScope(scope.slug as Scope)}
-                      aria-label={`Remove ${scope.slug}`}
-                    >
-                      <Button.LeftIcon>
-                        <X className="h-4 w-4" />
-                      </Button.LeftIcon>
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </Popover>
     </div>
   );
 }

@@ -43,14 +43,16 @@ export type Classifications = ClosedEnum<typeof Classifications>;
 /**
  * How to order skills.
  */
-export const Sort = {
+export const ListSkillsQueryParamSort = {
   Name: "name",
   Updated: "updated",
 } as const;
 /**
  * How to order skills.
  */
-export type Sort = ClosedEnum<typeof Sort>;
+export type ListSkillsQueryParamSort = ClosedEnum<
+  typeof ListSkillsQueryParamSort
+>;
 
 export type ListSkillsRequest = {
   /**
@@ -78,13 +80,13 @@ export type ListSkillsRequest = {
    */
   tags?: Array<string> | undefined;
   /**
-   * Only return skills at least one of these Gram users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.
+   * Only return skills at least one of these Speakeasy users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.
    */
   accessibleBy?: Array<string> | undefined;
   /**
    * How to order skills.
    */
-  sort?: Sort | undefined;
+  sort?: ListSkillsQueryParamSort | undefined;
   /**
    * Session header
    */
@@ -206,7 +208,9 @@ export const Classifications$outboundSchema: z.ZodMiniEnum<
 > = z.enum(Classifications);
 
 /** @internal */
-export const Sort$outboundSchema: z.ZodMiniEnum<typeof Sort> = z.enum(Sort);
+export const ListSkillsQueryParamSort$outboundSchema: z.ZodMiniEnum<
+  typeof ListSkillsQueryParamSort
+> = z.enum(ListSkillsQueryParamSort);
 
 /** @internal */
 export type ListSkillsRequest$Outbound = {
@@ -236,7 +240,7 @@ export const ListSkillsRequest$outboundSchema: z.ZodMiniType<
     classifications: z.optional(z.array(Classifications$outboundSchema)),
     tags: z.optional(z.array(z.string())),
     accessibleBy: z.optional(z.array(z.string())),
-    sort: z._default(Sort$outboundSchema, "name"),
+    sort: z._default(ListSkillsQueryParamSort$outboundSchema, "name"),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),

@@ -66,6 +66,7 @@ func seedGramSession(
 		RefreshTokenHash:    conv.ToPGText("hash-" + slug),
 		RefreshExpiresAt:    conv.ToPGTimestamptz(time.Now().Add(refreshExpiresIn)),
 		ExpiresAt:           conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 }
@@ -182,7 +183,7 @@ func TestRefreshSweep_RequiresDueOptedInRenewableSession(t *testing.T) {
 		{name: "fresh", slug: "fresh", withRefreshToken: true, autoRefresh: true, updatedAgo: 23 * time.Hour, withGramSession: true},
 		{name: "no refresh grant", slug: "no-refresh", autoRefresh: true, updatedAgo: 25 * time.Hour, withGramSession: true},
 		{name: "opted out", slug: "opted-out", withRefreshToken: true, updatedAgo: 25 * time.Hour, withGramSession: true},
-		{name: "no live Gram session", slug: "no-gram", withRefreshToken: true, autoRefresh: true, updatedAgo: 25 * time.Hour},
+		{name: "no live Speakeasy session", slug: "no-gram", withRefreshToken: true, autoRefresh: true, updatedAgo: 25 * time.Hour},
 	}
 
 	for _, tt := range tests {

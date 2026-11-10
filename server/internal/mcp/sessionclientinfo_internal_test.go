@@ -65,7 +65,6 @@ func newClientIdentityFixture(t *testing.T) (*fakeClientInfoStore, *mcpInputs) {
 		toolVariationsGroupID: nil,
 		mcpServerID:           nil,
 		metaMcpServerID:       "",
-		skipProxyTools:        false,
 		tags:                  nil,
 		protocolVersion:       mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
 	}
@@ -293,37 +292,77 @@ func TestResolveClientIdentity_StampsBothProtocolVersions(t *testing.T) {
 
 // TestResolveClientIdentity_DerivesDowngradedNegotiatedVersion covers the
 // derivation's downgrade arm: a session whose handshake requested a revision
-// outside the supported set was answered the newest supported one, and the
+// outside the handshake revisions was answered the newest one, and the
 // replayed negotiated attribute must reproduce that answer rather than echo
-// the stored request.
+// the stored request. A supported revision without initialize and an
+// unrecognized revision both take that arm.
 func TestResolveClientIdentity_DerivesDowngradedNegotiatedVersion(t *testing.T) {
+	t.Parallel()
+
+	for _, requested := range []string{mcpversions.Version20260728, "2031-01-01"} {
+		t.Run(requested, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			logger := testenv.NewLogger(t)
+			store, payload := newClientIdentityFixture(t)
+
+			storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", requested)
+
+			recorder := tracetest.NewSpanRecorder()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+			t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+
+			spanCtx, span := provider.Tracer("test").Start(ctx, "tools/call")
+			resolveClientIdentity(spanCtx, logger, store, payload, nil)
+			span.End()
+
+			ended := recorder.Ended()
+			require.Len(t, ended, 1)
+
+			got := map[string]string{}
+			for _, kv := range ended[0].Attributes() {
+				got[string(kv.Key)] = kv.Value.AsString()
+			}
+
+			// The expected value is pinned rather than derived from the
+			// supported set: it is the newest revision defining initialize.
+			require.Equal(t, requested, got[string(attr.McpRequestedProtocolVersionKey)])
+			require.Equal(t, mcpversions.Version20251125, got[string(attr.McpNegotiatedProtocolVersionKey)])
+		})
+	}
+}
+
+// A gateway handshakes once under its own project but dispatches to members
+// that may sit in other projects. The record is keyed by (project, scope,
+// session), so a member dispatch must look it up under the gateway's project
+// or every cross-project member call loses the reported client name.
+func TestResolveClientIdentity_CrossProjectMemberFindsGatewayHandshake(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
-	store, payload := newClientIdentityFixture(t)
+	store, gateway := newClientIdentityFixture(t)
+	scope := metaClientInfoScope(uuid.New())
+	gateway.clientInfoScope = scope
 
-	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", mcpversions.Version20260728)
+	storeSessionClientInfo(ctx, logger, store, gateway, "gateway-client", "4.5.6", mcpversions.Version20250618)
 
-	recorder := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+	member := *gateway
+	// The member's own project: what dispatch needs, and not where the
+	// handshake record lives. A gateway scope names one gateway uniquely, so
+	// the record is keyed without a project and the dispatch still finds it.
+	member.projectID = uuid.New()
 
-	spanCtx, span := provider.Tracer("test").Start(ctx, "tools/call")
-	resolveClientIdentity(spanCtx, logger, store, payload, nil)
-	span.End()
+	identity, _ := resolveClientIdentity(ctx, logger, store, &member, nil)
+	require.Equal(t, "gateway-client", identity.Name)
+	require.Equal(t, "4.5.6", identity.Version)
 
-	ended := recorder.Ended()
-	require.Len(t, ended, 1)
-
-	got := map[string]string{}
-	for _, kv := range ended[0].Attributes() {
-		got[string(kv.Key)] = kv.Value.AsString()
-	}
-
-	// The expected value is pinned rather than derived from the supported
-	// set, so raising the ceiling breaks this test and forces choosing a new
-	// out-of-set stored version that keeps the downgrade arm exercised.
-	require.Equal(t, mcpversions.Version20260728, got[string(attr.McpRequestedProtocolVersionKey)])
-	require.Equal(t, mcpversions.Version20251125, got[string(attr.McpNegotiatedProtocolVersionKey)])
+	// A hosted scope keys by project, so the same member project misses —
+	// which is what the gateway scope exists to avoid.
+	hosted := member
+	hosted.clientInfoScope = ""
+	hosted.toolset = "some-toolset"
+	missed, _ := resolveClientIdentity(ctx, logger, store, &hosted, nil)
+	require.Empty(t, missed.Name)
 }

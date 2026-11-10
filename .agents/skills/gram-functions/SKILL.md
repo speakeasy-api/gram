@@ -1,6 +1,6 @@
 ---
 name: gram-functions
-description: A walkthrough of the Gram Functions feature in this codebase
+description: A walkthrough of the Speakeasy Functions feature in this codebase
 metadata:
   relevant_files:
     - "server/internal/functions/**/*.go"
@@ -9,9 +9,9 @@ metadata:
     - "functions/**/*"
 ---
 
-# Gram Functions
+# Speakeasy Functions
 
-Gram Functions is a serverless code execution feature that allows users to deploy custom JavaScript/TypeScript or Python code as callable tools within Gram deployments. Functions can be invoked by AI agents during conversations.
+Speakeasy Functions is a serverless code execution feature that allows users to deploy custom JavaScript/TypeScript or Python code as callable tools within Speakeasy deployments. Functions can be invoked by AI agents during conversations.
 
 ## Key Server Packages
 
@@ -113,7 +113,7 @@ For large function bundles (>700KiB), the code isn't embedded in the Fly machine
 
 1. A `.lazy` file is written containing the asset ID
 2. On init, `bootstrap.resolveLazyFile()` detects the `.lazy` file
-3. Runner fetches a pre-signed URL from the Gram server
+3. Runner fetches a pre-signed URL from the Speakeasy server
 4. Code is downloaded from Tigris blob storage and unzipped
 
 ## Database Tables

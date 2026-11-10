@@ -56,8 +56,8 @@ type RefreshTokenResult struct {
 }
 
 // CreateRefreshToken inserts a refresh token directly into the dev-idp's
-// tokens table, bypassing DCR + the auth-code flow. Useful when a Gram-side
-// test needs to wrap a known upstream refresh-token string in a Gram-issued
+// tokens table, bypassing DCR + the auth-code flow. Useful when a Speakeasy-side
+// test needs to wrap a known upstream refresh-token string in a Speakeasy-issued
 // token without driving the full authorization dance.
 //
 // The dev-idp's /token refresh handler looks the presented refresh token up

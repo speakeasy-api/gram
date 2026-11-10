@@ -94,7 +94,7 @@ func (s *LifecycleMetadataService) Update(ctx context.Context, principal Princip
 	if err != nil {
 		return UpdateMCPMetadataResult{}, ErrLifecycleMetadataInvalid
 	}
-	project, err := NewRegistrationStore(s.db, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	project, err := NewRegistrationStore(s.db)
 	if err != nil {
 		return UpdateMCPMetadataResult{}, err
 	}

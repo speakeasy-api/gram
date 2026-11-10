@@ -177,7 +177,7 @@ func TestStartPublishFindingsStampsRevealMetadata(t *testing.T) {
 	spanFinding.Path = "command.0"
 
 	contentFinding := testFinding()
-	contentFinding.Source = "prompt_injection"
+	contentFinding.Source = "gitleaks"
 
 	judgeFinding := testFinding()
 	judgeFinding.Source = "llm_judge"
@@ -293,7 +293,7 @@ func TestFindingSurface(t *testing.T) {
 		{source: "custom", field: "tool.name", path: "", want: ""},
 		{source: "gitleaks", field: "", path: "", want: "content"},
 		{source: "presidio", field: "", path: "", want: "content"},
-		{source: "prompt_injection", field: "", path: "", want: "content"},
+		{source: "prompt_injection", field: "", path: "", want: "none"},
 		{source: "llm_judge", field: "", path: "", want: "none"},
 		{source: "llm_analyzer", field: "", path: "", want: "none"},
 		{source: "shadow_mcp", field: "", path: "", want: "derived"},

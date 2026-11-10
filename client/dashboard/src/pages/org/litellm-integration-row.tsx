@@ -1,3 +1,5 @@
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
+import { FailurePosture as KnownFailurePosture } from "@gram/client/models/components/createinstancerequestbody.js";
 import { CodeBlock } from "@/components/code";
 import { InputField } from "@/components/moon/input-field";
 import { Alert, ErrorAlert } from "@/components/ui/Alert";
@@ -15,8 +17,10 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 import { Stack } from "@/components/ui/Stack";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { getServerURL } from "@/lib/utils";
@@ -31,9 +35,10 @@ import { useRevokeLiteLLMInstanceMutation } from "@gram/client/react-query/revok
 import { useRotateLiteLLMInstanceKeyMutation } from "@gram/client/react-query/rotateLiteLLMInstanceKey.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Network, Plus, RefreshCw } from "lucide-react";
-import { FormEvent, useState } from "react";
+import type { FormEvent } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { ConfirmDialog } from "../remote-identity-providers/ConfirmDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useLiteLLMInstanceProjects } from "./use-litellm-instance-projects";
 import {
   buildLiteLLMEnvironment,
@@ -234,8 +239,8 @@ export function LiteLLMIntegrationRow(): JSX.Element {
                 <Badge variant="information">Push</Badge>
               </Stack>
               <Text muted small className="ml-6 truncate">
-                Enforce Gram risk policies and send LiteLLM usage telemetry to
-                Gram.
+                Enforce Speakeasy risk policies and send LiteLLM usage telemetry
+                to Speakeasy.
               </Text>
             </Stack>
             <Stack direction="horizontal" align="center" gap={3}>
@@ -295,9 +300,11 @@ export function LiteLLMIntegrationRow(): JSX.Element {
                   disabled={instancesQuery.isFetching}
                 >
                   <Button.LeftIcon>
-                    <RefreshCw
-                      className={`size-3.5 ${instancesQuery.isFetching ? "animate-spin" : ""}`}
-                    />
+                    {instancesQuery.isFetching ? (
+                      <Spinner className="mr-0 size-3.5" />
+                    ) : (
+                      <RefreshCw className="size-3.5" />
+                    )}
                   </Button.LeftIcon>
                   <Button.Text>Refresh</Button.Text>
                 </Button>
@@ -419,7 +426,10 @@ export function CreateInstanceDialog({
         gramProject: projectSlug,
         createInstanceRequestBody: {
           name: name.trim(),
-          failurePosture,
+          failurePosture: requireKnownEnumValue(
+            KnownFailurePosture,
+            failurePosture,
+          ),
         },
       },
     });
@@ -453,7 +463,7 @@ export function CreateInstanceDialog({
               <Dialog.Title>Create LiteLLM integration</Dialog.Title>
               <Dialog.Description>
                 Provision a dedicated ingestion key for one LiteLLM deployment
-                and Gram project.
+                and Speakeasy project.
               </Dialog.Description>
             </Dialog.Header>
             <form className="space-y-5" onSubmit={handleSubmit}>
@@ -499,7 +509,8 @@ export function CreateInstanceDialog({
                         Fail closed (recommended)
                       </Text>
                       <Text muted small>
-                        Block model requests when Gram cannot evaluate them.
+                        Block model requests when Speakeasy cannot evaluate
+                        them.
                       </Text>
                     </Stack>
                   </label>
@@ -508,8 +519,8 @@ export function CreateInstanceDialog({
                     <Stack gap={1}>
                       <Text className="font-medium">Fail open</Text>
                       <Text muted small>
-                        Allow model requests during a Gram outage. This is an
-                        explicit security posture decision.
+                        Allow model requests during a Speakeasy outage. This is
+                        an explicit security posture decision.
                       </Text>
                     </Stack>
                   </label>
@@ -715,14 +726,14 @@ export function SetupContent({
         </Alert>
       ) : (
         <Alert variant="info">
-          Gram no longer has the plaintext key. Replace the placeholder with the
-          key stored by your team.
+          Speakeasy no longer has the plaintext key. Replace the placeholder
+          with the key stored by your team.
         </Alert>
       )}
       {result ? (
         <SetupSection
           title="Integration key"
-          description="Store this dedicated project-bound key securely. Gram cannot show it again."
+          description="Store this dedicated project-bound key securely. Speakeasy cannot show it again."
         >
           <CodeBlock copyLabel="integration key">{result.key}</CodeBlock>
         </SetupSection>
@@ -735,14 +746,23 @@ export function SetupContent({
           {buildLiteLLMEnvironment(serverURL, instance.project.slug)}
         </CodeBlock>
       </SetupSection>
-      <SetupSection
-        title="LiteLLM configuration"
-        description="Merge this guardrail fragment into your LiteLLM configuration."
-      >
-        <CodeBlock language="yaml" copyLabel="LiteLLM configuration">
-          {buildLiteLLMGuardrailConfig(serverURL, instance.failurePosture)}
-        </CodeBlock>
-      </SetupSection>
+      {isKnownEnumValue(KnownFailurePosture, instance.failurePosture) ? (
+        <SetupSection
+          title="LiteLLM configuration"
+          description="Merge this guardrail fragment into your LiteLLM configuration."
+        >
+          <CodeBlock language="yaml" copyLabel="LiteLLM configuration">
+            {buildLiteLLMGuardrailConfig(serverURL, instance.failurePosture)}
+          </CodeBlock>
+        </SetupSection>
+      ) : (
+        <Alert variant="warning">
+          This instance uses an unsupported failure posture.{" "}
+          {result
+            ? "Save the integration key securely before refreshing the page."
+            : "Refresh the page before configuring LiteLLM."}
+        </Alert>
+      )}
       <SetupSection
         title="Verify safe traffic"
         description="Set LITELLM_VIRTUAL_KEY and LITELLM_MODEL in your shell, then run this against the proxy."
@@ -799,18 +819,22 @@ export function HealthBadge({
     case "pending":
       return <Badge variant="neutral">Waiting for traffic</Badge>;
   }
+  return <Badge variant="neutral">Unknown</Badge>;
 }
 
-function FailurePostureBadge({
+export function FailurePostureBadge({
   posture,
 }: {
   posture: FailurePosture;
 }): JSX.Element {
-  return posture === "fail_closed" ? (
-    <Badge variant="neutral">Fail closed</Badge>
-  ) : (
-    <Badge variant="warning">Fail open</Badge>
-  );
+  switch (posture) {
+    case "fail_closed":
+      return <Badge variant="neutral">Fail closed</Badge>;
+    case "fail_open":
+      return <Badge variant="warning">Fail open</Badge>;
+    default:
+      return <Badge variant="neutral">Unknown</Badge>;
+  }
 }
 
 export function DiagnosticsPanel({
@@ -844,7 +868,7 @@ export function DiagnosticsPanel({
         value={formatPercentage(diagnostics.virtualKeyEmailPct24h)}
       />
       <Diagnostic
-        label="Gram user attribution (24h)"
+        label="Speakeasy user attribution (24h)"
         value={formatPercentage(diagnostics.platformUserPct24h)}
       />
       <Diagnostic label="Created" date={instance.createdAt} />
@@ -900,5 +924,7 @@ function errorKindLabel(
       return "Payload limit exceeded";
     case undefined:
       return undefined;
+    default:
+      return "Unknown";
   }
 }

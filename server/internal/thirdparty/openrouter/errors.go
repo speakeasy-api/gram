@@ -32,7 +32,7 @@ func (e *HTTPError) Unwrap() error {
 }
 
 // ErrAPIKeyIdentityMismatch is returned when OpenRouter acknowledges a key
-// mutation for a different key than the one Gram requested. Repeating the same
+// mutation for a different key than the one Speakeasy requested. Repeating the same
 // mutation cannot safely repair that invariant violation.
 var ErrAPIKeyIdentityMismatch = errors.New("openrouter: upstream API key identity mismatch")
 

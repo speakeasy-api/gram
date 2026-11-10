@@ -5,8 +5,19 @@ procs:
     cmd: ["docker", "compose", "logs", "-f", "otel-collector"]
     stop:
       send-keys: ["<C-c>"]
-  lgtm:
-    cmd: ["docker", "compose", "logs", "-f", "lgtm"]
+  otlp-sink:
+    cmd:
+      [
+        "docker",
+        "compose",
+        "-f",
+        "compose.shared.yml",
+        "-p",
+        "gram-shared",
+        "logs",
+        "-f",
+        "otlp-sink",
+      ]
     stop:
       send-keys: ["<C-c>"]
   dev-idp:

@@ -86,7 +86,7 @@ func TestCreateGcpIamPlatformCredential_ExemptsOwnProjectSigner(t *testing.T) {
 
 	row, err := repo.New(ti.conn).GetGcpIamCredential(ctx, repo.GetGcpIamCredentialParams{ID: uuid.MustParse(cred.ID), OrganizationID: pgtype.Text{}})
 	require.NoError(t, err)
-	require.True(t, row.GcpIamCredential.SkipProjectVerification, "a signer in Gram's own project must pass the own-project screen")
+	require.True(t, row.GcpIamCredential.SkipProjectVerification, "a signer in Speakeasy's own project must pass the own-project screen")
 }
 
 func TestCreateGcpIamPlatformCredential_RejectsStaleAdminFlag(t *testing.T) {

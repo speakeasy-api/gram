@@ -39,6 +39,8 @@ func NewDeploymentsClient(options *DeploymentsClientOptions) *DeploymentsClient 
 		h.Redeploy(),
 		h.ListDeployments(),
 		h.GetDeploymentLogs(),
+		h.EvaluateOpenAPIv3(),
+		h.GetDeploymentEvaluation(),
 	)
 
 	return &DeploymentsClient{client: client}
@@ -76,7 +78,6 @@ func (c *DeploymentsClient) CreateDeployment(
 		ExternalID:       nil,
 		ExternalURL:      nil,
 		Packages:         nil,
-		ExternalMcps:     nil,
 	}
 	result, err := c.client.CreateDeployment(ctx, payload)
 	if err != nil {
@@ -200,7 +201,6 @@ func (c *DeploymentsClient) Evolve(
 		ExcludePackages:        []string{},
 		UpsertPackages:         []*deployments.AddPackageForm{},
 		SessionToken:           nil,
-		UpsertExternalMcps:     nil,
 		ExcludeExternalMcps:    []string{},
 	})
 	if err != nil {

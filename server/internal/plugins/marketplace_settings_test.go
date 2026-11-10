@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
@@ -87,7 +87,7 @@ func defaultMarketplaceNameForTest(t *testing.T, ctx context.Context, ti *testIn
 	}
 	// The test instance's project is its org's only (hence default) project, so
 	// the default name is the bare org-derived one — the slug is ignored.
-	return plugins.DefaultMarketplaceName(orgName, "", true)
+	return naming.MarketplaceName(orgName, "", true)
 }
 
 func TestPluginsService_UpdateMarketplaceSettings_RejectsInvalidName(t *testing.T) {
@@ -247,6 +247,13 @@ func TestPluginsService_UpdateMarketplaceSettings_OmitsObservabilityFromRepublis
 	require.NoError(t, err)
 	require.Nil(t, status.ClaudeObservabilityPlugin)
 	require.Nil(t, status.CodexObservabilityPlugin)
+
+	// With no hooks subtree to carry, a dashboard publish regenerates
+	// everything and has no reason to read the existing repo.
+	mock.getRepoFilesCalled = false
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	require.False(t, mock.getRepoFilesCalled, "a publish with nothing to carry must not fetch the existing repo")
 
 	// Re-enabling republishes the subtree: the toggle is reversible, and a
 	// disabled project's cleared hooks version makes this look like a first

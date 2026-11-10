@@ -52,13 +52,16 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("getMcpServer", func() {
-		Description("Get an MCP server by ID or slug. Exactly one of id or slug must be provided.")
+		Description("Get an MCP server by ID, slug, or backing toolset ID. Exactly one selector must be provided. Toolset lookup prefers enabled servers, then the canonical wrapper, then the oldest server.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the MCP server. Mutually exclusive with slug.", func() {
 				Format(FormatUUID)
 			})
 			Attribute("slug", String, "The slug of the MCP server. Mutually exclusive with id.")
+			Attribute("toolset_id", String, "Resolve the preferred MCP server for this toolset. Mutually exclusive with id and slug.", func() {
+				Format(FormatUUID)
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -70,6 +73,7 @@ var _ = Service("mcpServers", func() {
 			GET("/rpc/mcpServers.get")
 			Param("id")
 			Param("slug")
+			Param("toolset_id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -351,7 +355,7 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("deleteMcpServer", func() {
-		Description("Delete an MCP server")
+		Description("Delete an MCP server. A toolset's own hosted server (its id equals the toolset id) is disabled instead, as turning MCP off on the toolset does, and stays listed with visibility disabled. Other servers, including other toolset-backed ones, are deleted.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the MCP server to delete", func() {
@@ -376,6 +380,75 @@ var _ = Service("mcpServers", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteMcpServer"}`)
 	})
+
+	Method("getMcpServerUsageImpact", func() {
+		Description("Preview who a breaking change to an MCP server affects: the server's active signed-in connections and when each subject last used them. Authorizes the caller as updateMcpServer does. Only sessions issued by the server's user session issuer are counted, so servers without sign-in report sign_in_required=false and no subjects.")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the MCP server", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(McpServerUsageImpact)
+
+		HTTP(func() {
+			GET("/rpc/mcpServers.getUsageImpact")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMcpServerUsageImpact")
+		Meta("openapi:extension:x-speakeasy-name-override", "getUsageImpact")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpServerUsageImpact"}`)
+	})
+})
+
+var McpServerUsageImpact = Type("McpServerUsageImpact", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Active signed-in usage of an MCP server, for confirming a breaking change.")
+
+	Attribute("server_name", String, "The server's display name, which confirmations ask the operator to type.")
+	Attribute("sign_in_required", Boolean, "Whether the server has a user session issuer. When false nothing is counted: callers are not signed in, so their usage is unknown.")
+	Attribute("shared_sign_in", Boolean, "Whether the server's user session issuer also serves other MCP servers or gateways. Connections not bound to this server's address may then be using one of those instead.")
+	Attribute("active_connection_count", Int, "Unexpired, unrevoked sessions that can reach this server.")
+	Attribute("active_subject_count", Int, "Distinct subjects (people, API keys, agents, workloads, anonymous callers) holding those sessions.")
+	Attribute("shared_connection_count", Int, "Of active_connection_count, the sessions issued for the whole shared sign-in rather than this server's address. Always zero when shared_sign_in is false.")
+	Attribute("last_used_at", String, "Most recent use across all those sessions, accurate to within five minutes. Absent when none has a recorded use.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("subjects", ArrayOf(McpServerUsageSubject), "Subjects holding active sessions, most recently used first.")
+	Attribute("subjects_truncated", Boolean, "Whether more subjects exist than are listed.")
+
+	Required("server_name", "sign_in_required", "shared_sign_in", "active_connection_count", "active_subject_count", "shared_connection_count", "subjects", "subjects_truncated")
+})
+
+var McpServerUsageSubject = Type("McpServerUsageSubject", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("One subject's active connections to an MCP server.")
+
+	Attribute("subject_urn", String, "The subject URN (user:<id> | apikey:<uuid> | agent:<uuid> | anonymous:<id> | workload:<issuer-id>:<external-subject>).")
+	Attribute("subject_type", String, "Subject kind: 'user', 'apikey', 'agent', 'anonymous', or 'workload'.")
+	Attribute("display_name", String, "Resolved human-readable name of the subject, if known.")
+	Attribute("email", String, "Email of the subject when it is a Speakeasy user.")
+	Attribute("photo_url", String, "Avatar URL of the subject when it is a Speakeasy user with one.")
+	Attribute("connection_count", Int, "Active sessions this subject holds.")
+	Attribute("last_used_at", String, "Most recent use across this subject's sessions, accurate to within five minutes. Absent when unknown.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("client_names", ArrayOf(String), "Self-reported names of the MCP clients behind the sessions. Unverified.")
+	Attribute("shared_sign_in", Boolean, "Whether every one of this subject's sessions was issued for the whole shared sign-in rather than this server, so the subject may be using another server instead.")
+
+	Required("subject_urn", "subject_type", "connection_count", "client_names", "shared_sign_in")
 })
 
 var McpServerVisibility = Type("McpServerVisibility", String, func() {
@@ -416,7 +489,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 })
 
 var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
-	Description("Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value; the slug is recomputed server-side from the resulting name.")
+	Description("Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value, and set clear_user_session_issuer to detach the issuer; the slug is recomputed server-side from the resulting name.")
 
 	Attribute("id", String, "The ID of the MCP server to update", func() {
 		Format(FormatUUID)
@@ -443,6 +516,7 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 	Attribute("user_session_issuer_id", String, "The ID of an existing project- or organization-owned user session issuer to attach. Omit to preserve the current issuer.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("clear_user_session_issuer", Boolean, "Detach the current user session issuer, so the server no longer requires user sessions. Must not be true when user_session_issuer_id is set.")
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to preserve the stored mode.")
 
@@ -462,6 +536,8 @@ var McpServer = Type("McpServer", func() {
 	})
 	Attribute("name", String, "A human-readable display name for the server")
 	Attribute("slug", String, "A URL-safe, project-unique slug derived server-side from the name and ID")
+	Attribute("platform_endpoint_slug", String, "The slug of this server's primary platform endpoint, the oldest one. Absent when no platform endpoint exists; never a custom-domain slug.")
+	Attribute("legacy_platform_slug", String, "The slug of an older Speakeasy-hosted address of this hosted server: its legacy custom-domain address, which the Speakeasy domain also answers under the same access rules. Absent when a platform endpoint or another alias holds that slug.")
 	Attribute("environment_id", String, "The ID of the environment associated with the server", func() {
 		Format(FormatUUID)
 	})
@@ -477,7 +553,7 @@ var McpServer = Type("McpServer", func() {
 	Attribute("toolset_id", String, "The ID of the toolset used as the backend", func() {
 		Format(FormatUUID)
 	})
-	Attribute("unproxied_mcp_server_id", String, "The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Gram.", func() {
+	Attribute("unproxied_mcp_server_id", String, "The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Speakeasy.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server, if any.", func() {
@@ -485,6 +561,12 @@ var McpServer = Type("McpServer", func() {
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
+	Attribute("toolset", McpServerToolsetSummary, "A summary of the backing toolset. Present only for toolset-backed (hosted) servers whose toolset is live.")
+	Attribute("primary_endpoint_id", String, "The ID of the endpoint that stands for this server when a single address must be chosen: domain-root custom-domain endpoints first, then other custom-domain endpoints, then platform endpoints. Absent when the server has no addressable endpoint.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("primary_endpoint_url", String, "The public MCP URL of the primary endpoint. Absent when the server has no addressable endpoint.")
+	Attribute("has_endpoint", Boolean, "Whether any endpoint routes to this server, including one on a custom domain that is not live yet. Absent when it could not be read.")
 	Attribute("created_at", String, func() {
 		Description("When the MCP server was created")
 		Format(FormatDateTime)
@@ -495,6 +577,32 @@ var McpServer = Type("McpServer", func() {
 	})
 
 	Required("id", "project_id", "visibility", "network_access_mode", "created_at", "updated_at")
+})
+
+var McpServerToolsetSummary = Type("McpServerToolsetSummary", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A summary of the toolset backing a hosted MCP server.")
+
+	Attribute("id", String, "The ID of the toolset", func() {
+		Format(FormatUUID)
+	})
+	Attribute("slug", String, "The slug of the toolset")
+	Attribute("name", String, "The name of the toolset")
+	Attribute("description", String, "The toolset's description, if any")
+	Attribute("tool_count", Int, "Number of tools the toolset serves: deployment-backed tools (HTTP, function, external MCP) that resolve in the project's latest completed deployment, plus its prompt templates and registered platform tools. External MCP proxy tools are excluded.")
+	Attribute("tool_selection_mode", String, "The toolset's tool selection mode")
+	Attribute("external_mcp_slugs", ArrayOf(String), "The distinct slugs of the external MCP sources the toolset's configured tools come from, sorted")
+	Attribute("external_mcp_proxy_only", Boolean, "Whether every configured tool is an external MCP proxy tool, so the real tool count is unknown until a user signs in")
+	Attribute("external_oauth_server_id", String, "The ID of the external OAuth server attached to the toolset, if any", func() {
+		Format(FormatUUID)
+	})
+	Attribute("registry_specifier", String, "The registry specifier the toolset originated from, if any")
+	Attribute("hosting_mcp_server_id", String, "The ID of the MCP server that stands in for the toolset: its canonical server, whose ID is the toolset's, or when it has none, its oldest live server with a live endpoint. Absent when it has neither.", func() {
+		Format(FormatUUID)
+	})
+
+	Required("id", "slug", "name", "tool_count", "tool_selection_mode", "external_mcp_slugs", "external_mcp_proxy_only")
 })
 
 var ListMcpServersResult = Type("ListMcpServersResult", func() {

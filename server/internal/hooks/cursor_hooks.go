@@ -14,7 +14,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -40,7 +40,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
 	// APIKeyAuth already put the actor on ctx: scope the session ids first.
@@ -71,7 +71,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		)
 		return &gen.CursorHookResult{
 			Permission:        new("deny"),
-			UserMessage:       new("Speakeasy hooks: unauthorized — check your Gram API key and project slug."),
+			UserMessage:       new("Speakeasy hooks: unauthorized — check your Speakeasy API key and project slug."),
 			AdditionalContext: nil,
 			AgentMessage:      nil,
 		}, nil
@@ -407,12 +407,12 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 			return
 		}
 		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist Cursor conversation event", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Cursor conversation event", err)
 		}
 	} else {
 		// Tool call events: ClickHouse + PG
 		if err := s.persistCursorToolCallEvent(ctx, payload, metadata, blockReason, hookEvent); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist Cursor tool call event", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Cursor tool call event", err)
 		}
 	}
 }
@@ -469,6 +469,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 		FunctionID:     nil,
 	}
 
+	stampEndpointGeneration(ctx, attrs)
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  s.now(),
@@ -553,6 +554,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 		FunctionID:     nil,
 	}
 
+	stampEndpointGeneration(ctx, attrs)
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  s.now(),
 		ToolInfo:   toolInfo,
@@ -806,7 +808,7 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCursorChatTitle)
 }
 
 // writeCursorToolCallResultToPG writes a Cursor tool call result (postToolUse/postToolUseFailure) to PostgreSQL.
@@ -877,7 +879,7 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCursorChatTitle)
 }
 
 // persistCursorAgentResponse writes the assistant's response text to PostgreSQL as a chat message.
@@ -927,7 +929,7 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 		Generation:       0,
 	}
 
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle); err != nil {
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCursorChatTitle); err != nil {
 		return err
 	}
 
@@ -993,5 +995,5 @@ func (s *Service) persistCursorUserPrompt(ctx context.Context, payload *gen.Curs
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, parsedProjectID, msgParams, activities.DefaultCursorChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, parsedProjectID, msgParams, chat.DefaultCursorChatTitle)
 }

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Configure the dev-idp identity backend: local (default) or real WorkOS"
 //MISE hide=true

@@ -54,6 +54,7 @@ func (l *Logger) LogPlatformMcpDiagnosticsUserStatusRead(ctx context.Context, db
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -98,10 +99,14 @@ func (l *Logger) LogPlatformMcpDiagnosticsAttributionRead(ctx context.Context, d
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 	typeOfSubject := subjectTypeMcpServer
-	if event.TargetKind == "skill" {
+	switch event.TargetKind {
+	case "skill":
 		typeOfSubject = subjectTypeSkill
+	case "project":
+		typeOfSubject = subjectTypeProject
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,

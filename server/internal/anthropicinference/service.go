@@ -2,6 +2,7 @@ package anthropicinference
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -29,18 +31,18 @@ import (
 )
 
 const (
-	// verdictBudget caps risk evaluation at nine seconds. Earlier request work
-	// can shorten it to preserve checkpoint and response headroom.
-	verdictBudget = 9 * time.Second
+	// verdictBudget fits the exchange within Anthropic's default 5-second timeout.
+	verdictBudget = 4250 * time.Millisecond
 	// scanConcurrency bounds how many inputs of one transcript are evaluated
 	// at once.
 	scanConcurrency = 4
-	// checkpointBudget bounds the marker write that follows scanning.
-	checkpointBudget = 500 * time.Millisecond
-	// responseBudget reserves time to serialize the verdict after checkpointing.
+	// responseBudget reserves time to serialize the verdict.
 	responseBudget = 250 * time.Millisecond
-	// requestBudget leaves 250ms before the documented 10-second upstream timeout.
-	requestBudget = verdictBudget + checkpointBudget + responseBudget
+	// requestBudget leaves 500ms of Anthropic's default 5-second timeout for the network.
+	requestBudget = verdictBudget + responseBudget
+	// titleScheduleTimeout bounds the goroutine that asks for a title, so a
+	// degraded Temporal frontend cannot pin one goroutine per inference request.
+	titleScheduleTimeout = 2 * time.Second
 	// unavailableDenyReason is the fail-closed copy for a request that could
 	// not be evaluated in full.
 	unavailableDenyReason = "Speakeasy could not evaluate this request. Please try again."
@@ -52,7 +54,6 @@ var errPolicyDenied = errors.New("inference policy denied")
 // budget or an earlier denial cut off stays unevaluated.
 type inputScan struct {
 	evaluated bool
-	complete  bool
 	result    *risk.ScanResult
 }
 
@@ -61,17 +62,32 @@ func denies(result *risk.ScanResult) bool {
 	return result != nil && (result.Action == "block" || result.Action == "warn" || result.Action == "quarantine")
 }
 
+func allowVerdict() Verdict {
+	return Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
+}
+
+func denyVerdict(reason string) Verdict {
+	return Verdict{Action: "deny", DenyReason: reason, ReferenceID: ""}
+}
+
 type scanner interface {
 	ScanForInferenceEnforcement(context.Context, risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error)
 }
 
+// ChatTitleGenerator schedules async chat title generation.
+type ChatTitleGenerator interface {
+	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
+}
+
 type transcriptStore interface {
+	// ResolveConversation maps the frame onto the stored chat that continues
+	// it and reports how (a conversationOutcome* constant). Process calls it
+	// once per request and carries the result on the frame for the other
+	// methods.
+	ResolveConversation(context.Context, Config, Frame) (uuid.UUID, string, error)
 	ResolveActor(context.Context, Config, Frame) (string, error)
-	Begin(context.Context, Config, Frame, string) (checkpointSession, error)
-	// Save archives the frame's conversation messages that are not yet stored
-	// and returns the index, within conversationMessages(frame.Messages), of
-	// the first message it had not seen before.
-	Save(context.Context, Config, Frame, string) (int, error)
+	// Save archives the frame's conversation messages that are not yet stored.
+	Save(context.Context, Config, Frame, string) error
 }
 
 // Service archives transcripts and runs the existing risk-policy scanner.
@@ -79,136 +95,192 @@ type Service struct {
 	logger  *slog.Logger
 	store   transcriptStore
 	scanner scanner
+	metrics *metrics
 }
 
 // NewService uses the shared chat writer so captured messages receive the same
 // storage, metering, and asynchronous analysis as other imported conversations.
-func NewService(logger *slog.Logger, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner) *Service {
-	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer}, scanner: scanner}
+// A nil titles leaves archived conversations with their placeholder title.
+func NewService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner, titles ChatTitleGenerator) *Service {
+	logger = logger.With(attr.SlogComponent("anthropic-inference"))
+
+	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer, titles: titles, logger: logger}, scanner: scanner, metrics: newMetrics(meterProvider, logger)}
 }
 
-// Process archives attempts independently of enforcement. Only a successfully
-// evaluated checkpoint can exempt historical content from another scan.
+// Process archives the transcript and evaluates its latest exchange. Earlier
+// messages were evaluated when they arrived, and every archived message also
+// gets asynchronous risk analysis, so they are not scanned again.
 func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verdict, error) {
 	ctx = policyflags.WithRequestMemo(ctx)
-	duration := verdictBudget
-	if deadline, ok := ctx.Deadline(); ok {
-		duration = min(duration, time.Until(deadline)-checkpointBudget-responseBudget)
+	if frame.Type == frameTypeToolCall {
+		return s.processToolCall(ctx, config, frame)
 	}
-	budget, cancel := context.WithTimeout(ctx, duration)
+	budget, cancel := verdictContext(ctx)
 	defer cancel()
+	messages := conversationMessages(frame.Messages)
+	inputs, err := policyInputs(messages)
+	if err != nil {
+		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
+	}
+	conversation, outcome, err := s.store.ResolveConversation(budget, config, frame)
+	if err != nil {
+		return Verdict{}, fmt.Errorf("resolve inference conversation: %w", err)
+	}
+	frame.conversation, frame.conversationOutcome = conversation, outcome
+	// A frame with no conversation messages (Anthropic's connection probe)
+	// stores nothing, so it is not a conversation to count.
+	if len(messages) > 0 {
+		s.metrics.RecordConversation(ctx, frame, outcome)
+		s.logger.DebugContext(ctx, "resolved inference conversation",
+			attr.SlogOrganizationID(config.OrganizationID), attr.SlogProjectID(config.ProjectID.String()),
+			attr.SlogChatID(conversation.String()), attr.SlogInferenceConversationOutcome(outcome),
+			attr.SlogInferenceApplication(inferenceSource(frame.Source.Application)),
+			attr.SlogInferenceHasSessionID(frame.SessionID != ""),
+			attr.SlogInferenceMessageCount(len(messages)))
+	}
 	userID, err := s.store.ResolveActor(budget, config, frame)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("resolve inference hook actor: %w", err)
 	}
-	messages := conversationMessages(frame.Messages)
-	if _, err := policyInputs(messages); err != nil {
-		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
-	}
-	_, err = s.store.Save(budget, config, frame, userID)
-	if err != nil {
+	if err := s.store.Save(budget, config, frame, userID); err != nil {
 		return Verdict{}, fmt.Errorf("store inference transcript: %w", err)
 	}
-	session, err := s.store.Begin(budget, config, frame, userID)
+	start := firstInputAt(inputs, latestExchangeStart(messages))
+	scans, err := s.scanInputs(budget, config, frame, userID, inputs, start)
 	if err != nil {
-		return Verdict{}, fmt.Errorf("begin inference checkpoint: %w", err)
+		return Verdict{}, err
 	}
-	accepted, err := session.Load(budget)
+	if err := ctx.Err(); err != nil {
+		return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
+	}
+	if match := firstDenial(scans[start:]); match != nil {
+		return policyDenial(match), nil
+	}
+	if slices.ContainsFunc(scans[start:], func(scan inputScan) bool { return !scan.evaluated }) {
+		// A failed evaluation must not silently allow inference, including when
+		// Anthropic's administrator selected allow-on-webhook-failure.
+		s.logger.WarnContext(ctx, "inference verdict budget exhausted",
+			attr.SlogOrganizationID(config.OrganizationID), attr.SlogProjectID(config.ProjectID.String()),
+			attr.SlogInferenceInputCount(len(inputs)-start))
+		return denyVerdict(unavailableDenyReason), nil
+	}
+	return allowVerdict(), nil
+}
+
+// processToolCall judges the tool calls Claude just produced, before any of
+// them runs. It stores nothing: the next prompt frame carries the same
+// assistant message and archives it once.
+func (s *Service) processToolCall(ctx context.Context, config Config, frame Frame) (Verdict, error) {
+	budget, cancel := verdictContext(ctx)
+	defer cancel()
+	inputs, err := toolCallInputs(frame.Messages)
 	if err != nil {
-		return Verdict{}, fmt.Errorf("load inference checkpoint: %w", err)
+		return Verdict{}, fmt.Errorf("decode inference tool calls: %w", err)
 	}
-	hashes := transcriptHashes(messages)
-	matched := acceptedPrefix(accepted, hashes)
-	scanStart := min(matched, currentTurnStart(messages))
-	inputs, err := policyInputs(messages[scanStart:])
+	if len(inputs) == 0 {
+		return allowVerdict(), nil
+	}
+	userID, err := s.store.ResolveActor(budget, config, frame)
 	if err != nil {
-		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
+		return Verdict{}, fmt.Errorf("resolve inference hook actor: %w", err)
 	}
-	priorInputs, err := policyInputs(messages[:scanStart])
+	scans, err := s.scanInputs(budget, config, frame, userID, inputs, 0)
 	if err != nil {
-		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
+		return Verdict{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
+	}
+	if match := firstDenial(scans); match != nil {
+		return policyDenial(match), nil
+	}
+	if slices.ContainsFunc(scans, func(scan inputScan) bool { return !scan.evaluated }) {
+		s.logger.WarnContext(ctx, "inference tool call verdict budget exhausted",
+			attr.SlogOrganizationID(config.OrganizationID), attr.SlogProjectID(config.ProjectID.String()),
+			attr.SlogInferenceInputCount(len(inputs)))
+		return denyVerdict(unavailableDenyReason), nil
+	}
+	return allowVerdict(), nil
+}
+
+// toolCallInputs are the tool requests in a tool call frame's last message,
+// the assistant message whose calls the verdict gates. Earlier messages the
+// protocol may add were judged by their prompt frame, and the message's text
+// has already been delivered, so neither is scanned here.
+func toolCallInputs(messages []Message) ([]policyInput, error) {
+	if len(messages) == 0 {
+		return nil, nil
+	}
+	inputs, err := policyInputs(messages[len(messages)-1:])
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(inputs, func(input policyInput) bool { return input.kind != message.ToolRequest }), nil
+}
+
+func policyDenial(match *risk.ScanResult) Verdict {
+	return denyVerdict(conv.Default(conv.PtrValOr(match.UserMessage, ""), "This request was blocked by your organization's security policy."))
+}
+
+// verdictContext keeps response headroom before ctx's deadline.
+func verdictContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	duration := verdictBudget
+	if deadline, ok := ctx.Deadline(); ok {
+		duration = min(duration, time.Until(deadline)-responseBudget)
+	}
+	return context.WithTimeout(ctx, duration)
+}
+
+func firstInputAt(inputs []policyInput, message int) int {
+	if index := slices.IndexFunc(inputs, func(input policyInput) bool { return input.message >= message }); index >= 0 {
+		return index
+	}
+	return len(inputs)
+}
+
+// scanInputs evaluates inputs[start:]. A policy match stops the remaining scans.
+func (s *Service) scanInputs(ctx context.Context, config Config, frame Frame, userID string, inputs []policyInput, start int) ([]inputScan, error) {
 	scans := make([]inputScan, len(inputs))
-	group, groupCtx := errgroup.WithContext(budget)
+	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(scanConcurrency)
-	for offset, input := range inputs {
-		if groupCtx.Err() != nil {
-			break
-		}
+	for index := start; index < len(inputs) && groupCtx.Err() == nil; index++ {
 		group.Go(func() error {
-			outcome, err := s.scanner.ScanForInferenceEnforcement(groupCtx, scanRequest(config, frame, userID, len(priorInputs)+offset, input))
+			// group.Go can block on a free slot past the budget, so the loop
+			// check may be stale by the time this runs.
+			if groupCtx.Err() != nil {
+				return nil
+			}
+			outcome, err := s.scanner.ScanForInferenceEnforcement(groupCtx, scanRequest(config, frame, userID, index, inputs[index]))
 			if err != nil {
 				if groupCtx.Err() != nil {
 					return nil
 				}
-				return fmt.Errorf("scan input %d: %w", len(priorInputs)+offset, err)
+				return fmt.Errorf("scan input %d: %w", index, err)
 			}
-			scans[offset] = inputScan{evaluated: true, complete: outcome != nil && outcome.Complete, result: nil}
+			scan := inputScan{evaluated: true, result: nil}
 			if outcome != nil {
-				scans[offset].result = outcome.Result
+				scan.result = outcome.Result
 			}
-			if denies(scans[offset].result) {
+			scans[index] = scan
+			if denies(scan.result) {
 				return errPolicyDenied
 			}
 			return nil
 		})
 	}
 	if err := group.Wait(); err != nil && !errors.Is(err, errPolicyDenied) {
-		return Verdict{}, fmt.Errorf("evaluate inference policy: %w", err)
+		return nil, fmt.Errorf("evaluate inference policy: %w", err)
 	}
-	if err := ctx.Err(); err != nil {
-		return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
-	}
+	return scans, nil
+}
+
+func firstDenial(scans []inputScan) *risk.ScanResult {
 	for _, scan := range scans {
 		if denies(scan.result) {
-			return Verdict{
-				Action:      "deny",
-				DenyReason:  conv.Default(conv.PtrValOr(scan.result.UserMessage, ""), "This request was blocked by your organization's security policy."),
-				ReferenceID: "",
-			}, nil
+			return scan.result
 		}
 	}
-	verdict := Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
-	// Only the leading messages whose inputs all evaluated complete can be
-	// accepted. Accepting them after a cut-off makes the redelivery
-	// incremental instead of repeating the same scans into the same budget.
-	cleanThrough := len(messages)
-	for offset, scan := range scans {
-		if !scan.evaluated || !scan.complete {
-			cleanThrough = scanStart + inputs[offset].message
-			break
-		}
-	}
-	if slices.ContainsFunc(scans, func(scan inputScan) bool { return !scan.evaluated }) {
-		// A failed evaluation must not silently allow inference, including when
-		// Anthropic's administrator selected allow-on-webhook-failure.
-		s.logger.WarnContext(ctx, "inference verdict budget exhausted",
-			attr.SlogOrganizationID(config.OrganizationID), attr.SlogProjectID(config.ProjectID.String()),
-			attr.SlogInferenceInputCount(len(inputs)), attr.SlogInferenceAcceptedMessages(cleanThrough))
-		verdict = Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}
-	}
-	if cleanThrough > matched || cleanThrough == len(messages) {
-		// The scan budget may already be spent; the marker gets its own short
-		// window so a slow write cannot push the verdict past the provider's.
-		acceptCtx, cancelAccept := context.WithTimeout(ctx, checkpointBudget)
-		defer cancelAccept()
-		err := session.Accept(acceptCtx, hashes[:cleanThrough])
-		switch {
-		case err == nil:
-		case ctx.Err() != nil:
-			return Verdict{}, fmt.Errorf("accept inference checkpoint context: %w", ctx.Err())
-		case errors.Is(err, errCheckpointConflict):
-			// Another fully scanned delivery won. Keep its marker, without
-			// turning this optimization into an artificial denial.
-		case verdict.Action == "deny":
-			// The verdict already fails closed; the marker only makes the
-			// redelivery incremental.
-			s.logger.WarnContext(ctx, "accept partial inference checkpoint", attr.SlogError(err))
-		default:
-			return Verdict{}, fmt.Errorf("accept inference checkpoint: %w", err)
-		}
-	}
-	return verdict, nil
+	return nil
 }
 
 func scanRequest(config Config, frame Frame, userID string, index int, input policyInput) risk.RealtimeScanRequest {
@@ -295,6 +367,8 @@ func policyInputs(messages []Message) ([]policyInput, error) {
 type postgresStore struct {
 	db     *pgxpool.Pool
 	writer *chat.ChatMessageWriter
+	titles ChatTitleGenerator
+	logger *slog.Logger
 }
 
 func (s *postgresStore) ResolveActor(ctx context.Context, config Config, frame Frame) (string, error) {
@@ -319,7 +393,11 @@ func (s *postgresStore) ResolveActor(ctx context.Context, config Config, frame F
 	}
 	// Conversation identity includes the provider actor, so this fallback cannot
 	// borrow the owner of another actor's conversation.
-	conversation, err := chatrepo.New(s.db).GetChat(ctx, chatrepo.GetChatParams{ID: conversationID(config, frame), ProjectID: config.ProjectID})
+	chatID, err := s.conversation(ctx, config, frame)
+	if err != nil {
+		return "", err
+	}
+	conversation, err := chatrepo.New(s.db).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: config.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
 	}
@@ -329,7 +407,14 @@ func (s *postgresStore) ResolveActor(ctx context.Context, config Config, frame F
 	return conversation.UserID.String, nil
 }
 
-func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, userID string) (int, error) {
+func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, userID string) error {
+	_, err := s.archive(ctx, config, frame, userID)
+	return err
+}
+
+// archive stores the frame's new messages and returns the index, within
+// conversationMessages(frame.Messages), of the first one it had not seen before.
+func (s *postgresStore) archive(ctx context.Context, config Config, frame Frame, userID string) (int, error) {
 	if len(frame.Messages) == 0 {
 		return 0, nil
 	}
@@ -341,23 +426,40 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	externalUserIDLabel := conv.NormalizeEmail(frame.Actor.EmailAddress)
 	now := time.Now().UTC()
 	// Namespacing isolates these opaque, sometimes client-asserted session ids
-	// from native hooks and Compliance imports. Null sessions are request-local.
-	candidateID := conversationID(config, frame)
+	// from native hooks and Compliance imports. A frame without a usable
+	// session is keyed by the chat already holding its transcript prefix when
+	// there is one (see ResolveConversation), else by its request.
+	candidateID, err := s.conversation(ctx, config, frame)
+	if err != nil {
+		return 0, err
+	}
 	externalChatID := "anthropic-inference:" + candidateID.String()
-	chatID, err := chatrepo.New(s.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
+	conversation, err := chatrepo.New(s.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
 		ID:                candidateID,
 		ProjectID:         config.ProjectID,
 		OrganizationID:    config.OrganizationID,
 		UserID:            conv.ToPGTextEmpty(userID),
 		ExternalUserID:    conv.ToPGTextEmpty(externalUserIDLabel),
 		ExternalChatID:    conv.ToPGText(externalChatID),
-		Title:             conv.ToPGText("Claude inference conversation"),
+		Title:             conv.ToPGText(chat.DefaultInferenceChatTitle),
 		CreatedAt:         conv.ToPGTimestamptz(now),
 		UpdatedAt:         conv.ToPGTimestamptz(now),
 		PreferStoredTitle: true,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("upsert inference conversation: %w", err)
+	}
+	chatID := conversation.ID
+	// Only a chat this frame created can lack the key: an adopted chat was
+	// matched on it and a chat continued by session was keyed when created.
+	// The update keeps an existing key, so a redelivery is harmless.
+	// Anonymous frames have no key to record.
+	if key := actorKey(config, frame); key != nil && frame.conversationOutcome != conversationOutcomeAdoptedPrefix && frame.conversationOutcome != conversationOutcomeSession {
+		if err := chatrepo.New(s.db).SetInferenceActorKey(ctx, chatrepo.SetInferenceActorKeyParams{
+			InferenceActorKey: key, ID: chatID, ProjectID: config.ProjectID,
+		}); err != nil {
+			return 0, fmt.Errorf("record inference actor key: %w", err)
+		}
 	}
 	// When this frame omits the actor email, use the label preserved on the
 	// conversation (written by an earlier frame that had one) so new messages
@@ -463,20 +565,45 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 					Generation:        0,
 					CreatedAt:         createdAt,
 				},
-				BillingUserID:  userID,
-				WorkloadSource: metering.WorkloadSourceHook,
-				UserEmail:      frame.Actor.EmailAddress,
-				Provider:       "anthropic",
-				HookHostname:   "",
-				AccountType:    "team",
-				BillingMode:    "unknown",
+				BillingUserID:     userID,
+				WorkloadSource:    metering.WorkloadSourceHook,
+				UserEmail:         frame.Actor.EmailAddress,
+				Provider:          "anthropic",
+				InferenceProvider: "anthropic",
+				HookHostname:      "",
+				AccountType:       "team",
+				BillingMode:       "unknown",
 			})
 		}
 	}
 	if _, err := s.writer.WriteExternalWithContentParts(ctx, config.ProjectID, writes, parts); err != nil {
 		return 0, fmt.Errorf("write inference messages: %w", err)
 	}
+	// PreferStoredTitle keeps a generated title, so scheduling stops once one
+	// lands and an agent loop costs one start rather than one per model call.
+	if len(writes) > 0 && chat.IsPlaceholderTitle(conversation.Title.String) {
+		s.scheduleTitle(ctx, config, chatID)
+	}
 	return start, nil
+}
+
+// scheduleTitle asks the title generator to replace the inference placeholder.
+// It runs off the request goroutine: the verdict is on a hard budget and a
+// Temporal round trip must not spend any of it.
+func (s *postgresStore) scheduleTitle(ctx context.Context, config Config, chatID uuid.UUID) {
+	if s.titles == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), titleScheduleTimeout)
+		defer cancel()
+		if err := s.titles.ScheduleChatTitleGeneration(ctx, chatID.String(), config.OrganizationID, config.ProjectID.String()); err != nil {
+			s.logger.WarnContext(ctx, "failed to schedule inference conversation title generation",
+				attr.SlogError(err),
+				attr.SlogChatID(chatID.String()),
+			)
+		}
+	}()
 }
 
 // alignFrame locates the incoming transcript within stored history. A frame
@@ -511,29 +638,141 @@ func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uu
 	return min(int(storedCount), len(messages)), nil, nil
 }
 
+// actorIdentity is the stable provider actor id a frame asserts, preferring
+// the account id over the email, and whether it has one at all.
+func actorIdentity(frame Frame) (string, bool) {
+	actorID := conv.Default(frame.Actor.ID, conv.NormalizeEmail(frame.Actor.EmailAddress))
+	return actorID, actorID != ""
+}
+
 // Include the actor because Claude Code session ids can be client asserted.
 // Neither another actor nor another project can append to this conversation.
+// A frame with no actor is request-scoped.
 func conversationID(config Config, frame Frame) uuid.UUID {
-	actorID := conv.Default(frame.Actor.ID, conv.NormalizeEmail(frame.Actor.EmailAddress))
+	actorID, hasActor := actorIdentity(frame)
 	sessionID := conv.Default(frame.SessionID, frame.RequestID)
-	if actorID == "" {
+	if !hasActor {
 		sessionID = frame.RequestID
 	}
 	identity, _ := json.Marshal([]string{config.TenantID, frame.Actor.Type, actorID, sessionID})
 	return uuid.NewSHA1(config.ProjectID, identity)
 }
 
-// inferenceSource maps Anthropic's application names to product surfaces. In
-// this protocol claude-code identifies the web product, not the local CLI.
-func inferenceSource(application string) string {
+// actorKey fingerprints the provider actor a conversation belongs to: the
+// same tuple conversationID hashes, minus the session. It is stored on the
+// chat so a transcript prefix match can refuse another actor's conversation.
+// A frame with no actor has no key: it can neither be adopted into nor
+// adopt an archived conversation.
+func actorKey(config Config, frame Frame) []byte {
+	actorID, hasActor := actorIdentity(frame)
+	if !hasActor {
+		return nil
+	}
+	identity, _ := json.Marshal([]string{config.TenantID, frame.Actor.Type, actorID})
+	sum := sha256.Sum256(identity)
+	return sum[:]
+}
+
+// conversation returns the chat the frame resolved to, resolving it when the
+// caller did not go through Process.
+func (s *postgresStore) conversation(ctx context.Context, config Config, frame Frame) (uuid.UUID, error) {
+	if frame.conversation != uuid.Nil {
+		return frame.conversation, nil
+	}
+	id, _, err := s.ResolveConversation(ctx, config, frame)
+	return id, err
+}
+
+// ResolveConversation maps a frame onto a stored chat. A frame with a session
+// id continues the chat that id names, or starts it: a sessioned product
+// that forks a conversation under a new session id must not be folded into
+// the original, so content matching is reserved for frames that carry no
+// session id at all (the protocol allows that, and some products send none).
+// For those, the identities the frame's own newest prefixes would carry are
+// looked up, and the actor's chat whose newest stored message is one of them
+// is adopted. A chat whose history merely starts like the frame is never
+// adopted, so two conversations sharing an opening stay apart, and when two
+// of the actor's chats end in the same prefix none is chosen. Anything else
+// is a new chat keyed as conversationID does.
+func (s *postgresStore) ResolveConversation(ctx context.Context, config Config, frame Frame) (uuid.UUID, string, error) {
+	candidate := conversationID(config, frame)
+	queries := chatrepo.New(s.db)
+	if frame.SessionID != "" {
+		exists, err := queries.InferenceChatExists(ctx, chatrepo.InferenceChatExistsParams{ID: candidate, ProjectID: config.ProjectID})
+		if err != nil {
+			return uuid.Nil, "", fmt.Errorf("load inference conversation: %w", err)
+		}
+		if exists {
+			return candidate, conversationOutcomeSession, nil
+		}
+		return candidate, conversationOutcomeNew, nil
+	}
+	messages := conversationMessages(frame.Messages)
+	key := actorKey(config, frame)
+	if len(messages) < 2 || key == nil {
+		// A single message has no stored prefix to continue, and an anonymous
+		// frame has no actor to continue it as.
+		return candidate, conversationOutcomeNew, nil
+	}
+	// Newest prefix first: a continuation normally appends a few messages,
+	// and the longest stored prefix is the chat to continue. One query takes
+	// every candidate identity and returns the longest match.
+	chains := prefixIdentities(messages)
+	identities := make([]string, 0, alignmentAnchors)
+	for k := len(messages); k >= max(1, len(messages)-alignmentAnchors+1); k-- {
+		identities = append(identities, messageIdentityID(chains[k-1]))
+	}
+	rows, err := queries.FindInferenceChatsByNewestMessageIdentity(ctx, chatrepo.FindInferenceChatsByNewestMessageIdentityParams{
+		ProjectID:          uuid.NullUUID{UUID: config.ProjectID, Valid: true},
+		ExternalMessageIds: identities,
+		InferenceActorKey:  key,
+	})
+	if err != nil {
+		return uuid.Nil, "", fmt.Errorf("find inference conversation by transcript prefix: %w", err)
+	}
+	// The first identity any chat ends in is the longest stored prefix. Two
+	// chats ending in it are two conversations that so far read the same
+	// (the same opening prompt twice), and neither may be guessed.
+	for _, identity := range identities {
+		var matches []uuid.UUID
+		for _, row := range rows {
+			if row.ExternalMessageID.String == identity {
+				matches = append(matches, row.ChatID)
+			}
+		}
+		switch len(matches) {
+		case 0:
+			continue
+		case 1:
+			return matches[0], conversationOutcomeAdoptedPrefix, nil
+		default:
+			return candidate, conversationOutcomeAmbiguousPrefix, nil
+		}
+	}
+	return candidate, conversationOutcomeNew, nil
+}
+
+// productSource maps Anthropic's application names to product surfaces and
+// reports whether the name is one it knows. In this protocol claude-code
+// identifies the web product, not the local CLI. Unknown names pass through
+// unchanged, so storage keeps whatever the client sent.
+func productSource(application string) (string, bool) {
 	switch source := strings.TrimSpace(application); source {
 	case "claude-ai":
-		return "claude-chat-web"
+		return "claude-chat-web", true
 	case "claude-code":
-		return "claude-code-web"
+		return "claude-code-web", true
+	case "claude-design":
+		return source, true
 	case "":
-		return "anthropic-inference"
+		return "anthropic-inference", true
 	default:
-		return source
+		return source, false
 	}
+}
+
+// inferenceSource is the product surface recorded on stored messages.
+func inferenceSource(application string) string {
+	source, _ := productSource(application)
+	return source
 }

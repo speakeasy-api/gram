@@ -19,6 +19,43 @@ const sdk = vi.hoisted(() => ({
   updateClient: vi.fn(async () => ({})),
 }));
 
+const rbac = vi.hoisted(() => ({
+  canWrite: true,
+  requested: [] as string[][],
+}));
+const fixture = vi.hoisted(() => ({
+  legacyCallbackUrl: false,
+  authMethod: "private_key_jwt",
+  audienceFormat: undefined as string | undefined,
+}));
+
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasAnyScope: (scopes: string[]) => {
+      rbac.requested.push(scopes);
+      return rbac.canWrite;
+    },
+  }),
+}));
+// The alert's own rendering is covered in clientAlerts.test.tsx; this stub
+// only exposes what the sheet passes it.
+vi.mock("@/pages/remote-identity-providers/clientAlerts", () => ({
+  LegacyCallbackAlert: ({
+    legacyCallbackUrl,
+    onMigrate,
+    canMigrate,
+  }: {
+    legacyCallbackUrl: boolean;
+    onMigrate: () => void;
+    canMigrate: boolean;
+  }) =>
+    legacyCallbackUrl ? (
+      <div>
+        legacy callback warning
+        {canMigrate && <button onClick={onMigrate}>Migrate</button>}
+      </div>
+    ) : null,
+}));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     remoteSessionIssuers: { update: sdk.updateIssuer },
@@ -40,15 +77,17 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   useMcpServers: () => ({ data: { mcpServers: [] } }),
   invalidateAllMcpServers: vi.fn(async () => undefined),
 }));
-vi.mock("./useAllRemoteSessionClients", () => ({
+vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
   useAllRemoteSessionClients: () => ({
     items: [
       {
         id: "client-1",
         clientId: "oauth-client",
         userSessionIssuerIds: ["user-issuer-1"],
-        tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
+        tokenEndpointAuthMethod: fixture.authMethod,
+        tokenEndpointAuthAudienceFormat: fixture.audienceFormat,
         jsonWebKeySetId: "set-1",
+        legacyCallbackUrl: fixture.legacyCallbackUrl,
       },
     ],
     isLoading: false,
@@ -79,27 +118,33 @@ vi.mock("./IssuerFormFields", () => ({
   ClientCredentialsFields: ({
     clientSecret,
     tokenEndpointAuthMethod,
+    unsupportedAuthMethod,
     onClientSecretChange,
     onTokenEndpointAuthMethodChange,
   }: {
     clientSecret: string;
     tokenEndpointAuthMethod: AuthMethod | "";
+    unsupportedAuthMethod?: boolean;
     onClientSecretChange: (value: string) => void;
     onTokenEndpointAuthMethodChange: (method: AuthMethod) => void;
   }) => (
     <>
-      <select
-        aria-label="Authentication method"
-        value={tokenEndpointAuthMethod}
-        onChange={(event) =>
-          onTokenEndpointAuthMethodChange(event.target.value as AuthMethod)
-        }
-      >
-        <option value={AuthMethod.ClientSecretBasic}>
-          client_secret_basic
-        </option>
-        <option value={AuthMethod.PrivateKeyJwt}>private_key_jwt</option>
-      </select>
+      {unsupportedAuthMethod ? (
+        <span>Unsupported authentication method</span>
+      ) : (
+        <select
+          aria-label="Authentication method"
+          value={tokenEndpointAuthMethod}
+          onChange={(event) =>
+            onTokenEndpointAuthMethodChange(event.target.value as AuthMethod)
+          }
+        >
+          <option value={AuthMethod.ClientSecretBasic}>
+            client_secret_basic
+          </option>
+          <option value={AuthMethod.PrivateKeyJwt}>private_key_jwt</option>
+        </select>
+      )}
       {tokenEndpointAuthMethod !== AuthMethod.PrivateKeyJwt && (
         <input
           aria-label="Rotate client secret"
@@ -132,9 +177,154 @@ vi.mock("./IssuerFormFields", () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  rbac.canWrite = true;
+  rbac.requested = [];
+  fixture.legacyCallbackUrl = false;
+  fixture.authMethod = "private_key_jwt";
+  fixture.audienceFormat = undefined;
+});
+
+function renderSheet() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ModifyRemoteIdentityProviderSheet
+        open
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
+        issuer={
+          {
+            id: "issuer-1",
+            issuer: "https://idp.example.com",
+            slug: "idp",
+            clientIdMetadataDocumentSupported: false,
+          } as RemoteSessionIssuer
+        }
+      />
+    </QueryClientProvider>,
+  );
+}
+
+const ID_JAG_PROFILE = "urn:ietf:params:oauth:grant-profile:id-jag";
+
+function renderGrantProfileSheet() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ModifyRemoteIdentityProviderSheet
+        open
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
+        issuer={
+          {
+            id: "issuer-1",
+            issuer: "https://idp.example.com",
+            slug: "idp",
+            authorizationEndpoint: "https://idp.example.com/authorize",
+            tokenEndpoint: "https://idp.example.com/token",
+            authorizationGrantProfilesSupported: [ID_JAG_PROFILE],
+            clientIdMetadataDocumentSupported: false,
+          } as RemoteSessionIssuer
+        }
+      />
+    </QueryClientProvider>,
+  );
+}
+
+describe("ModifyRemoteIdentityProviderSheet legacy callback migration", () => {
+  it("migrates the client through the project endpoint with project:write", async () => {
+    fixture.legacyCallbackUrl = true;
+    renderSheet();
+
+    fireEvent.click(screen.getByRole("button", { name: "Migrate" }));
+
+    await waitFor(() =>
+      expect(sdk.updateClient).toHaveBeenCalledWith({
+        updateRemoteSessionClientForm: {
+          id: "client-1",
+          legacyCallbackUrl: false,
+        },
+      }),
+    );
+    expect(rbac.requested).toContainEqual(["project:write"]);
+  });
+
+  it("hides Migrate without project:write", () => {
+    fixture.legacyCallbackUrl = true;
+    rbac.canWrite = false;
+    renderSheet();
+
+    expect(screen.getByText(/legacy callback warning/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Migrate" })).toBeNull();
+    expect(rbac.requested).toContainEqual(["project:write"]);
+  });
 });
 
 describe("ModifyRemoteIdentityProviderSheet", () => {
+  it("blocks saving after selecting JWT when the stored audience is unsupported", () => {
+    fixture.authMethod = "client_secret_post";
+    fixture.audienceFormat = "future_audience";
+    renderSheet();
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Authentication method" }),
+      { target: { value: "private_key_jwt" } },
+    );
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toHaveProperty("disabled", true);
+    fireEvent.click(save);
+    expect(sdk.updateIssuer).not.toHaveBeenCalled();
+    expect(sdk.updateClient).not.toHaveBeenCalled();
+  });
+
+  it("preserves an unknown audience on a non-JWT save", async () => {
+    fixture.authMethod = "client_secret_post";
+    fixture.audienceFormat = "future_audience";
+    renderSheet();
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toHaveProperty("disabled", false);
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(sdk.updateClient).toHaveBeenCalledWith({
+        updateRemoteSessionClientForm: expect.objectContaining({
+          tokenEndpointAuthAudienceFormat: undefined,
+        }),
+      }),
+    );
+  });
+
+  it.each(["method", "audience"])(
+    "prevents modifying unsupported client %s",
+    (kind) => {
+      if (kind === "method") fixture.authMethod = "future_method";
+      else fixture.audienceFormat = "future_audience";
+      renderSheet();
+      const save = screen.getByRole("button", { name: "Save" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(save);
+      expect(sdk.updateIssuer).not.toHaveBeenCalled();
+      expect(sdk.updateClient).not.toHaveBeenCalled();
+      expect(screen.getByText(/unsupported client configuration/)).toBeTruthy();
+      if (kind === "method") {
+        expect(
+          screen.getByText("Unsupported authentication method"),
+        ).toBeTruthy();
+        expect(
+          screen.queryByRole("combobox", { name: "Authentication method" }),
+        ).toBeNull();
+      }
+    },
+  );
+
   it("keeps private_key_jwt and its audience control after an issuer URL edit", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
@@ -198,6 +388,38 @@ describe("ModifyRemoteIdentityProviderSheet", () => {
           tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
           tokenEndpointAuthAudienceFormat: AuthAudienceFormat.TokenEndpoint,
           clientSecret: undefined,
+        }),
+      }),
+    );
+  });
+
+  it("clears grant profiles when the issuer URL changes without rediscovery", async () => {
+    renderGrantProfileSheet();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Issuer URL" }), {
+      target: { value: "https://other.example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(sdk.updateIssuer).toHaveBeenCalledWith({
+        updateRemoteSessionIssuerForm: expect.objectContaining({
+          issuer: "https://other.example.com",
+          authorizationGrantProfilesSupported: [],
+        }),
+      }),
+    );
+  });
+
+  it("keeps saved grant profiles on an unrelated save", async () => {
+    renderGrantProfileSheet();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(sdk.updateIssuer).toHaveBeenCalledWith({
+        updateRemoteSessionIssuerForm: expect.objectContaining({
+          authorizationGrantProfilesSupported: [ID_JAG_PROFILE],
         }),
       }),
     );

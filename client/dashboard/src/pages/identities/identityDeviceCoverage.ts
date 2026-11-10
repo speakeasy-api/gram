@@ -7,7 +7,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
  * The devices endpoint answers per user id or email, which is a question the
  * detail page asks for one person. The roster asks it of everyone at once, so
  * this reads the fleet whole and indexes it by both keys — a device carries a
- * resolved Gram user id only when its MDM-reported email matched a member, so
+ * resolved Speakeasy user id only when its MDM-reported email matched a member, so
  * neither key alone reaches every row.
  */
 
@@ -34,7 +34,7 @@ const BUCKET_RANK = [
 export const NO_DEVICE_BUCKET = "no_device";
 
 export type DeviceCoverageIndex = {
-  /** Best bucket per Gram user id. */
+  /** Best bucket per Speakeasy user id. */
   byUserId: Map<string, string>;
   /** Best bucket per MDM-reported assigned email, lowercased. */
   byEmail: Map<string, string>;

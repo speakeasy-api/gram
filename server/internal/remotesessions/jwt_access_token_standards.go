@@ -13,7 +13,7 @@ func validateRFC9068Claims(claims jwt.Claims, all map[string]json.RawMessage, cl
 	if claims.IssuedAt == nil || claims.ID == "" || claimString(all, "client_id") == "" {
 		return errors.New("missing required profile claims")
 	}
-	// Gram binding policy: the profile's client_id must name this OAuth client.
+	// Speakeasy binding policy: the profile's client_id must name this OAuth client.
 	if claimString(all, "client_id") != clientID {
 		return errors.New("client mismatch")
 	}

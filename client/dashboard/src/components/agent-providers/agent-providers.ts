@@ -47,8 +47,8 @@ export const AGENT_PROVIDERS = {
     iconSource: "other",
   },
   copilot: {
-    name: "GitHub Copilot",
-    description: "Microsoft / GitHub AI pair programmer",
+    name: "GitHub Copilot CLI",
+    description: "GitHub’s terminal coding agent",
     iconSource: "copilot",
   },
   gemini: {
@@ -113,7 +113,15 @@ export const ACTIVE_AGENT_PROVIDER_IDS = {
   // agent's rollout, the agent does not cover OpenClaw, and listing it as a
   // setup platform offered a walkthrough nothing behind it could deliver. It
   // keeps its plugin on the plugins page.
-  setup: ["claude", "claude-cowork", "codex", "cursor", "opencode", "pi"],
+  setup: [
+    "claude",
+    "claude-cowork",
+    "codex",
+    "cursor",
+    "opencode",
+    "copilot",
+    "pi",
+  ],
 } as const satisfies Record<string, readonly AgentProviderId[]>;
 
 export function agentProvidersForSurface(

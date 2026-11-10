@@ -1,3 +1,6 @@
+// @vitest-environment node
+import { unrecognized } from "@gram/client/types/unrecognized.js";
+import { makeConnection } from "./tabs/setup/testFixtures";
 import { describe, expect, it } from "vitest";
 import type { IdentityProviderConnectionChecklistItem } from "@gram/client/models/components/identityproviderconnectionchecklistitem.js";
 
@@ -8,7 +11,9 @@ import {
   dpopObservation,
   groupChecklist,
   isConnectionChecked,
+  isConnected,
   isConnectionVerified,
+  usesClientSecret,
 } from "./connectionView";
 
 describe("connectionStep", () => {
@@ -153,4 +158,30 @@ describe("dpopObservation", () => {
       "unprotected",
     );
   });
+});
+
+describe("usesClientSecret", () => {
+  it("follows the stored auth method, not only the listing mode", () => {
+    expect(usesClientSecret({ listingMode: "oin", jwksUrl: undefined })).toBe(
+      true,
+    );
+    expect(
+      usesClientSecret({ listingMode: "oin", jwksUrl: "https://x/jwks.json" }),
+    ).toBe(false);
+    expect(
+      usesClientSecret({ listingMode: "custom_app", jwksUrl: undefined }),
+    ).toBe(false);
+  });
+});
+
+it("does not treat future connection statuses as connected or ready to configure", () => {
+  const connection = {
+    ...makeConnection(),
+    status: unrecognized("future_status"),
+  };
+  expect(isConnected(connection)).toBe(false);
+  expect(connectionStep(connection)).toBe("unknown");
+  expect(connectionStep({ ...connection, clientIdSubmitted: false })).toBe(
+    "unknown",
+  );
 });

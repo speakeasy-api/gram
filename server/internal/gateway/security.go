@@ -48,7 +48,7 @@ func processSecurity(
 		attrRecorder.RecordRequestHeaders(securityHeadersProcessed, true)
 	}()
 	// Each tool declares one or more security schemes derived from its OpenAPI
-	// definition, and Gram maps every scheme to the environment variable(s) that
+	// definition, and Speakeasy maps every scheme to the environment variable(s) that
 	// are expected to hold the credential. When a credential is missing or empty we
 	// log at info and continue WITHOUT setting that scheme's header rather than
 	// failing the request: the credential may still reach the upstream by another

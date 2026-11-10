@@ -40,7 +40,7 @@ func TokenV1(enc *encryption.Client, req TokenRequestV1) (string, error) {
 	return fmt.Sprintf("v01.%s", encBs), nil
 }
 
-// CallToolPayload is the request body Gram POSTs to a function runner's
+// CallToolPayload is the request body Speakeasy POSTs to a function runner's
 // /tool-call endpoint. Mirrored by the runner's own decode type in
 // `functions/internal/runner/handle_tool_call.go` — the two live in separate
 // `internal` subtrees and cannot import one another, so they must be changed

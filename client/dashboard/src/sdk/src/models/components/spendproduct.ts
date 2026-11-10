@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { SpendBucket, SpendBucket$inboundSchema } from "./spendbucket.js";
@@ -15,13 +16,13 @@ export const Id = {
   RiskContentScans: "risk_content_scans",
   McpEgress: "mcp_egress",
 } as const;
-export type Id = ClosedEnum<typeof Id>;
+export type Id = OpenEnum<typeof Id>;
 
 export const SpendProductUnit = {
   Stokens: "stokens",
   Bytes: "bytes",
 } as const;
-export type SpendProductUnit = ClosedEnum<typeof SpendProductUnit>;
+export type SpendProductUnit = OpenEnum<typeof SpendProductUnit>;
 
 export type SpendProduct = {
   /**
@@ -50,12 +51,14 @@ export type SpendProduct = {
 };
 
 /** @internal */
-export const Id$inboundSchema: z.ZodMiniEnum<typeof Id> = z.enum(Id);
+export const Id$inboundSchema: z.ZodMiniType<Id, unknown> = openEnums
+  .inboundSchema(Id);
 
 /** @internal */
-export const SpendProductUnit$inboundSchema: z.ZodMiniEnum<
-  typeof SpendProductUnit
-> = z.enum(SpendProductUnit);
+export const SpendProductUnit$inboundSchema: z.ZodMiniType<
+  SpendProductUnit,
+  unknown
+> = openEnums.inboundSchema(SpendProductUnit);
 
 /** @internal */
 export const SpendProduct$inboundSchema: z.ZodMiniType<SpendProduct, unknown> =

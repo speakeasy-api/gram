@@ -138,3 +138,29 @@ func TestRefreshSessionCookieIgnoresNilCallback(t *testing.T) {
 	ctx := WithSessionCookieRefresh(t.Context(), nil)
 	require.NotPanics(t, func() { RefreshSessionCookie(ctx, "session-id") })
 }
+
+func TestEffectiveAgent(t *testing.T) {
+	t.Parallel()
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, "019a0000-0000-7000-8000-000000000001")
+	workload := urn.NewPrincipal(urn.PrincipalTypeWorkload, "019a0000-0000-7000-8000-000000000002:device:x")
+	base := &AuthContext{ActiveOrganizationID: "org"}
+
+	_, ok := EffectiveAgent(t.Context())
+	require.False(t, ok, "no actor")
+
+	got, ok := EffectiveAgent(WithAuthenticatedActor(t.Context(), base, agent))
+	require.True(t, ok)
+	require.Equal(t, agent, got, "an agent actor is its own effective agent")
+
+	workloadCtx := WithAuthenticatedActor(t.Context(), base, workload)
+	_, ok = EffectiveAgent(workloadCtx)
+	require.False(t, ok, "a workload with no recorded agent has none")
+
+	got, ok = EffectiveAgent(WithWorkloadAgent(workloadCtx, agent))
+	require.True(t, ok)
+	require.Equal(t, agent, got, "a workload acts for its recorded agent")
+
+	userCtx := WithAuthenticatedActor(t.Context(), base, urn.NewPrincipal(urn.PrincipalTypeUser, "user_1"))
+	_, ok = EffectiveAgent(WithWorkloadAgent(userCtx, agent))
+	require.False(t, ok, "only a workload actor may act for a recorded agent")
+}

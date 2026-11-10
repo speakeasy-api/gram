@@ -2,13 +2,14 @@ package risk
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -17,23 +18,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // maxFalsePositiveBatch bounds a single mark/unmark request to what a UI
 // multiselect can realistically produce (a page of results, generously). It
-// is not a pattern-match sweep like exclusions, so there is no batch job —
-// just a single UPDATE ... WHERE id = ANY(@ids).
+// is not a pattern-match sweep like exclusions, so one request appends the
+// ClickHouse state copies for every id in a single call.
 const maxFalsePositiveBatch = 500
 
 // parseResultIDs converts the payload's result_ids strings to uuid.UUID,
 // rejecting the request if any entry is malformed or the batch exceeds
 // maxFalsePositiveBatch. Duplicates are dropped so the returned slice is a
-// set and every id counts once toward the UPDATE and the mirror.
+// set and every id counts once toward the dismissal.
 func parseResultIDs(raw []string) ([]uuid.UUID, error) {
 	if len(raw) == 0 {
 		return nil, oops.E(oops.CodeInvalid, nil, "result_ids must not be empty")
@@ -57,6 +56,157 @@ func parseResultIDs(raw []string) ([]uuid.UUID, error) {
 	return ids, nil
 }
 
+// FalsePositiveMutation names one manual dismissal or restore batch inside a
+// project. IDs must already be parsed and deduplicated. Ids that do not exist
+// in the project, or that are already in the requested state, are skipped;
+// the result's ChangedIDs are exactly the findings that changed.
+type FalsePositiveMutation struct {
+	// OrganizationID scopes the audit entries and the findings store.
+	OrganizationID string
+
+	// ProjectID bounds the mutation: ids from another project never match.
+	ProjectID uuid.UUID
+
+	// IDs are the finding ids to dismiss or restore.
+	IDs []uuid.UUID
+
+	// Reason is the optional free-text dismissal reason. Restores ignore it.
+	Reason *string
+
+	// Actor is the user attributed on every audit entry.
+	Actor urn.Principal
+
+	// ActorDisplayName is shown beside the actor in the audit log when known.
+	ActorDisplayName *string
+}
+
+// FalsePositiveFindingsStore mutates authoritative dismissal copies.
+type FalsePositiveFindingsStore interface {
+	ListFalsePositiveStates(ctx context.Context, organizationID, projectID string, ids []uuid.UUID) ([]chrepo.FalsePositiveState, error)
+	AppendFalsePositiveSuppression(ctx context.Context, organizationID, projectID, suppressedAt, insertedAt, reason string, ids []uuid.UUID) error
+	AppendFalsePositiveReversal(ctx context.Context, organizationID, projectID, insertedAt string, ids []uuid.UUID) error
+}
+
+// FalsePositiveMutationResult partitions existing and changed findings.
+type FalsePositiveMutationResult struct {
+	ExistingIDs []uuid.UUID
+	ChangedIDs  []uuid.UUID
+}
+
+// FalsePositiveCore records dismissals in the findings store with their audit entries.
+type FalsePositiveCore struct {
+	audit    *audit.Logger
+	findings FalsePositiveFindingsStore
+}
+
+// NewFalsePositiveCore builds the shared dismissal core. A nil findings store
+// makes every mark and restore fail rather than silently skip ClickHouse.
+func NewFalsePositiveCore(auditLogger *audit.Logger, findings FalsePositiveFindingsStore) *FalsePositiveCore {
+	return &FalsePositiveCore{audit: auditLogger, findings: findings}
+}
+
+// MarkInTransaction dismisses active ClickHouse findings.
+func (c *FalsePositiveCore) MarkInTransaction(ctx context.Context, dbtx pgx.Tx, mutation FalsePositiveMutation) (FalsePositiveMutationResult, error) {
+	if c.findings == nil {
+		return FalsePositiveMutationResult{}, errFindingsStoreUnavailable
+	}
+	if err := lockFalsePositiveTransitions(ctx, repo.New(dbtx), mutation.ProjectID, mutation.IDs); err != nil {
+		return FalsePositiveMutationResult{}, err
+	}
+
+	result, err := c.resolveMutation(ctx, mutation, false)
+	if err != nil {
+		return FalsePositiveMutationResult{}, err
+	}
+	if len(result.ChangedIDs) == 0 {
+		return result, nil
+	}
+
+	for _, id := range result.ChangedIDs {
+		if err := c.audit.LogRiskResultDismiss(ctx, dbtx, audit.LogRiskResultDismissEvent{
+			OrganizationID:   mutation.OrganizationID,
+			ProjectID:        mutation.ProjectID,
+			Actor:            mutation.Actor,
+			ActorDisplayName: mutation.ActorDisplayName,
+			ActorSlug:        nil,
+			RiskResultID:     id,
+		}); err != nil {
+			return FalsePositiveMutationResult{}, fmt.Errorf("log risk result dismiss: %w", err)
+		}
+	}
+
+	now := chrepo.FormatCHTime(time.Now().UTC())
+	if err := c.findings.AppendFalsePositiveSuppression(ctx, mutation.OrganizationID, mutation.ProjectID.String(), now, now, payloadReason(mutation.Reason), result.ChangedIDs); err != nil {
+		return FalsePositiveMutationResult{}, fmt.Errorf("record dismissal in the findings store: %w", err)
+	}
+
+	return result, nil
+}
+
+// UnmarkInTransaction restores dismissed ClickHouse findings.
+func (c *FalsePositiveCore) UnmarkInTransaction(ctx context.Context, dbtx pgx.Tx, mutation FalsePositiveMutation) (FalsePositiveMutationResult, error) {
+	if c.findings == nil {
+		return FalsePositiveMutationResult{}, errFindingsStoreUnavailable
+	}
+	if err := lockFalsePositiveTransitions(ctx, repo.New(dbtx), mutation.ProjectID, mutation.IDs); err != nil {
+		return FalsePositiveMutationResult{}, err
+	}
+
+	result, err := c.resolveMutation(ctx, mutation, true)
+	if err != nil {
+		return FalsePositiveMutationResult{}, err
+	}
+	if len(result.ChangedIDs) == 0 {
+		return result, nil
+	}
+
+	for _, id := range result.ChangedIDs {
+		if err := c.audit.LogRiskResultRestore(ctx, dbtx, audit.LogRiskResultRestoreEvent{
+			OrganizationID:   mutation.OrganizationID,
+			ProjectID:        mutation.ProjectID,
+			Actor:            mutation.Actor,
+			ActorDisplayName: mutation.ActorDisplayName,
+			ActorSlug:        nil,
+			RiskResultID:     id,
+		}); err != nil {
+			return FalsePositiveMutationResult{}, fmt.Errorf("log risk result restore: %w", err)
+		}
+	}
+
+	if err := c.findings.AppendFalsePositiveReversal(ctx, mutation.OrganizationID, mutation.ProjectID.String(), chrepo.FormatCHTime(time.Now().UTC()), result.ChangedIDs); err != nil {
+		return FalsePositiveMutationResult{}, fmt.Errorf("record restore in the findings store: %w", err)
+	}
+
+	return result, nil
+}
+
+func (c *FalsePositiveCore) resolveMutation(ctx context.Context, mutation FalsePositiveMutation, restore bool) (FalsePositiveMutationResult, error) {
+	states, err := c.findings.ListFalsePositiveStates(ctx, mutation.OrganizationID, mutation.ProjectID.String(), mutation.IDs)
+	if err != nil {
+		return FalsePositiveMutationResult{}, fmt.Errorf("resolve findings from the findings store: %w", err)
+	}
+	byID := make(map[uuid.UUID]chrepo.FalsePositiveState, len(states))
+	for _, state := range states {
+		byID[state.ID] = state
+	}
+
+	result := FalsePositiveMutationResult{
+		ExistingIDs: make([]uuid.UUID, 0, len(states)),
+		ChangedIDs:  make([]uuid.UUID, 0, len(states)),
+	}
+	for _, id := range mutation.IDs {
+		state, ok := byID[id]
+		if !ok {
+			continue
+		}
+		result.ExistingIDs = append(result.ExistingIDs, id)
+		if (!restore && !state.Dismissed) || (restore && state.Dismissed && !state.RuleSuppressed) {
+			result.ChangedIDs = append(result.ChangedIDs, id)
+		}
+	}
+	return result, nil
+}
+
 func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen.MarkRiskResultsFalsePositivePayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -77,31 +227,15 @@ func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	marked, err := repo.New(dbtx).MarkRiskResultsFalsePositive(ctx, repo.MarkRiskResultsFalsePositiveParams{
-		ProjectID: *authCtx.ProjectID,
-		Ids:       ids,
-		Reason:    nullableText(payloadReason(payload.Reason)),
-	})
-	if err != nil {
+	if _, err := s.falsePositiveCore().MarkInTransaction(ctx, dbtx, FalsePositiveMutation{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		IDs:              ids,
+		Reason:           payload.Reason,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "mark risk results false positive").LogError(ctx, s.logger)
-	}
-
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-	for _, row := range marked {
-		if err := s.audit.LogRiskResultDismiss(ctx, dbtx, audit.LogRiskResultDismissEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
-			Actor:            actor,
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			RiskResultID:     row.ID,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log risk result dismiss").LogError(ctx, s.logger)
-		}
-	}
-
-	if err := enqueueFalsePositiveMirror(ctx, dbtx, authCtx.ActiveOrganizationID, marked); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "record dismissal in the findings store").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -131,30 +265,15 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	restored, err := repo.New(dbtx).UnmarkRiskResultsFalsePositive(ctx, repo.UnmarkRiskResultsFalsePositiveParams{
-		ProjectID: *authCtx.ProjectID,
-		Ids:       ids,
-	})
-	if err != nil {
+	if _, err := s.falsePositiveCore().UnmarkInTransaction(ctx, dbtx, FalsePositiveMutation{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		IDs:              ids,
+		Reason:           nil,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "unmark risk results false positive").LogError(ctx, s.logger)
-	}
-
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-	for _, row := range restored {
-		if err := s.audit.LogRiskResultRestore(ctx, dbtx, audit.LogRiskResultRestoreEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
-			Actor:            actor,
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			RiskResultID:     row.ID,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log risk result restore").LogError(ctx, s.logger)
-		}
-	}
-
-	if err := enqueueFalsePositiveMirror(ctx, dbtx, authCtx.ActiveOrganizationID, restored); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "record restore in the findings store").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -164,134 +283,32 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 	return nil
 }
 
-// enqueueFalsePositiveMirror appends each state change to the transactional
-// outbox using the caller's transaction: the relay publishes the same
-// riskv1.Finding message the scanners produce onto the shared findings topic,
-// where FindingCHWriter appends a fresh risk_findings row recording the
-// result's new suppression state — set for a mark, cleared for an unmark. The
-// mark state is published twice over during the suppression convergence:
-// excluded_at/excluded_reason=manual/excluded_detail are the converged fields,
-// false_positive_at the legacy one the read paths still filter on.
-// Enqueued-at-commit rather than published post-commit, so the mirror is
-// atomic with the Postgres state change: no publish step remains that can fail
-// after the caller has been told the change happened, and a retried RPC whose
-// UPDATE matches nothing has nothing to repair — the original request either
-// committed (mirror durably enqueued) or changed nothing at all.
-func enqueueFalsePositiveMirror(ctx context.Context, dbtx pgx.Tx, orgID string, rows []repo.RiskResult) error {
-	if len(rows) == 0 {
-		return nil
-	}
+var errFindingsStoreUnavailable = errors.New("risk findings store is unavailable")
 
-	msgs := make([]outbox.Message, 0, len(rows))
-	for _, row := range rows {
-		// A row carrying an exclusion stamp is suppressed by the exclusion
-		// pipeline, which owns its ClickHouse identity: mirroring a manual
-		// suppression (or an unsuppression) over it would overwrite the rule
-		// suppression at read time, resurfacing or re-labeling a finding the
-		// exclusion still covers. Postgres keeps the mark either way.
-		if row.ExcludedAt.Valid {
-			continue
+// falsePositiveCore passes a nil store through as an untyped nil, so a missing
+// ClickHouse connection fails dismissals instead of panicking.
+func (s *Service) falsePositiveCore() *FalsePositiveCore {
+	var store FalsePositiveFindingsStore
+	if s.findingsCH != nil {
+		store = s.findingsCH
+	}
+	return NewFalsePositiveCore(s.audit, store)
+}
+
+// lockFalsePositiveTransitions serializes marks and restores per finding, in a
+// stable order so concurrent batches cannot deadlock.
+func lockFalsePositiveTransitions(ctx context.Context, queries *repo.Queries, projectID uuid.UUID, ids []uuid.UUID) error {
+	lockIDs := make([]string, len(ids))
+	for i, id := range ids {
+		lockIDs[i] = id.String()
+	}
+	sort.Strings(lockIDs)
+	for _, id := range lockIDs {
+		if err := queries.LockRiskResultFalsePositiveTransition(ctx, repo.LockRiskResultFalsePositiveTransitionParams{ProjectID: projectID.String(), ID: id}); err != nil {
+			return fmt.Errorf("lock false positive transition for result %s: %w", id, err)
 		}
-		msgs = append(msgs, outbox.Message{
-			Proto:      fpMirrorMessage(row),
-			PublicID:   uuid.Nil,
-			Attributes: nil,
-		})
-	}
-	if len(msgs) == 0 {
-		return nil
-	}
-	if _, err := outbox.PublishBatch(ctx, dbtx, orgID, msgs); err != nil {
-		return fmt.Errorf("enqueue suppression state change: %w", err)
 	}
 	return nil
-}
-
-// fpMirrorMessage renders one risk_results row as the finding message the
-// mirror republishes. falsePositiveAt doubles as the converged
-// excluded_at: same timestamp on a mark (with excluded_reason=manual and the
-// user-supplied reason as excluded_detail), all empty on an unmark. An unmark
-// republish deliberately carries no excluded state so the CH writer re-runs
-// its exclusion check and re-stamps rule suppression when an active exclusion
-// still matches, instead of resurfacing the finding. The event kind marks the
-// message as a state change either way, so read-time dedup ranks it above the
-// finding's scanner copies and a redelivered scanner row cannot undo it.
-func fpMirrorMessage(row repo.RiskResult) *riskv1.Finding {
-	id := row.ID.String()
-	projectID := row.ProjectID.String()
-	riskPolicyID := row.RiskPolicyID.String()
-	createdAt := row.CreatedAt.Time.UTC().Format(time.RFC3339)
-	var chatMessageID string
-	if row.ChatMessageID.Valid {
-		chatMessageID = row.ChatMessageID.UUID.String()
-	}
-	var falsePositiveAt string
-	excludedReason := ""
-	excludedDetail := ""
-	eventKind := chrepo.EventKindUnsuppression
-	if row.FalsePositiveAt.Valid {
-		eventKind = chrepo.EventKindSuppression
-		// RFC3339Nano, not RFC3339: the plain layout truncates
-		// clock_timestamp()'s fractional seconds, and the DateTime64(9)
-		// columns this lands in can hold the full precision. The writer's
-		// time.Parse(time.RFC3339, ...) accepts fractional seconds as-is.
-		falsePositiveAt = row.FalsePositiveAt.Time.UTC().Format(time.RFC3339Nano)
-		excludedReason = chrepo.ExcludedReasonManual
-		excludedDetail = row.FalsePositiveReason.String
-	}
-
-	surface := fpMirrorSurface(row.Source)
-
-	return riskv1.Finding_builder{
-		Id:                &id,
-		RequestId:         conv.PtrEmpty(""),
-		ChatMessageId:     &chatMessageID,
-		ProjectId:         &projectID,
-		OrganizationId:    &row.OrganizationID,
-		RiskPolicyId:      &riskPolicyID,
-		RiskPolicyVersion: &row.RiskPolicyVersion,
-		CreatedAt:         &createdAt,
-		RuleId:            &row.RuleID.String,
-		Description:       &row.Description.String,
-		Match:             &row.Match.String,
-		StartPos:          &row.StartPos.Int32,
-		EndPos:            &row.EndPos.Int32,
-		Tags:              row.Tags,
-		Source:            &row.Source,
-		Confidence:        &row.Confidence.Float64,
-		FalsePositiveAt:   &falsePositiveAt,
-		ExcludedAt:        &falsePositiveAt,
-		ExcludedReason:    &excludedReason,
-		ExcludedDetail:    &excludedDetail,
-		Surface:           &surface,
-		EventKind:         &eventKind,
-	}.Build()
-}
-
-// fpMirrorSurface maps a republished Postgres row's source to the text its
-// offsets index. Every risk_results row is batch-scanned, so this mirrors the
-// offline backfill's per-source mapping (riskfindings transform sourceSurface)
-// rather than the live stream defaults in scanners.FindingSurface: the mirror
-// row supersedes the backfilled row for the same id at read time and must not
-// change its reveal semantics. Batch gitleaks offsets index the composed scan
-// surface (content plus tool-call arguments) and batch presidio offsets index
-// a YAML transform of the message — neither is the anchored content the live
-// defaults describe. Custom rows fall to "" (no span context here), so reveal
-// uses its verified candidate cascade — the accepted precision loss on
-// FP-mirrored custom rows until the FP flow moves onto ClickHouse.
-func fpMirrorSurface(source string) string {
-	switch source {
-	case "gitleaks":
-		return "scan_surface"
-	case "presidio":
-		return "legacy_presidio"
-	case "prompt_injection", "llm_judge":
-		return scanners.SurfaceNone
-	case "shadow_mcp", "account_identity", "destructive_tool", "cli_destructive":
-		return scanners.SurfaceDerived
-	default:
-		return ""
-	}
 }
 
 // ListDismissedRiskResults serves the Dismissed tab from ClickHouse: findings
@@ -351,12 +368,17 @@ func (s *Service) ListDismissedRiskResults(ctx context.Context, payload *gen.Lis
 	for _, row := range rows {
 		listRows = append(listRows, row.RiskFindingListRow)
 	}
-	titles, blocks := s.listDisplayEnrichment(ctx, projectID, listRows)
+	titles, blocks, userEmails := s.listDisplayEnrichment(ctx, authCtx.ActiveOrganizationID, projectID, listRows)
 
 	results := make([]*types.RiskResult, 0, len(rows))
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
-		result := chListRowToResult(row.RiskFindingListRow, titles, blocks)
+		result := chListRowToResult(row.RiskFindingListRow, titles, blocks, userEmails)
+		// An impersonated session sees no stored chat title, as on the other
+		// risk listings.
+		if result.ChatTitle != nil {
+			result.ChatTitle = new(authz.RedactSessionTitle(ctx, *result.ChatTitle, result.ChatID))
+		}
 		suppressedAt := row.SuppressedAt.UTC().Format(time.RFC3339)
 		result.SuppressedAt = &suppressedAt
 		// FalsePositiveAt is the deprecated mirror of SuppressedAt, kept

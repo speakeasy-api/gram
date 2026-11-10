@@ -285,13 +285,13 @@ export type SlackManifestInput = {
   extraScopes?: readonly string[];
   extraBotEvents?: readonly string[];
   /**
-   * Hostname of the Gram dashboard (e.g. app.getgram.ai). When set alongside
-   * webhookUrl, it is registered as a Slack unfurl domain so link_shared
-   * events fire for dashboard links and the webhook can unfurl them with the
-   * Speakeasy logo. Hostnames without a dot (e.g. localhost) are skipped — Slack
-   * rejects them as unfurl domains.
+   * Hostnames of the Speakeasy dashboard (e.g. app.getgram.ai, ai.speakeasy.com).
+   * When set alongside webhookUrl, they are registered as Slack unfurl domains
+   * so link_shared events fire for dashboard links and the webhook can unfurl
+   * them with the Speakeasy logo. Hostnames without a dot (e.g. localhost) are
+   * skipped — Slack rejects them as unfurl domains.
    */
-  unfurlDomain?: string | undefined;
+  unfurlDomains?: readonly string[] | undefined;
 };
 
 export type SlackManifestResult = {
@@ -342,10 +342,24 @@ export function buildSlackManifest(
   };
   // Unfurl domains only make sense when link_shared events can actually be
   // delivered, which requires the event_subscriptions webhook below.
-  const unfurlDomain = input.unfurlDomain?.trim().toLowerCase();
-  if (input.webhookUrl && unfurlDomain && unfurlDomain.includes(".")) {
-    features.unfurl_domains = [unfurlDomain];
+  const unfurlDomains = [
+    ...new Set(
+      (input.unfurlDomains ?? [])
+        .map((domain) => domain.trim().toLowerCase())
+        .filter((domain) => domain.includes(".")),
+    ),
+  ];
+  if (input.webhookUrl && unfurlDomains.length > 0) {
+    features.unfurl_domains = unfurlDomains;
   }
+  // The Home tab is published by Speakeasy on app_home_opened, which only
+  // arrives over the event_subscriptions webhook. Without one, leave it off so
+  // Slack doesn't show a Home tab that spins forever.
+  features.app_home = {
+    home_tab_enabled: Boolean(input.webhookUrl),
+    messages_tab_enabled: true,
+    messages_tab_read_only_enabled: false,
+  };
 
   const manifest: Record<string, unknown> = {
     _metadata: { major_version: 1, minor_version: 1 },
@@ -355,7 +369,7 @@ export function buildSlackManifest(
   };
   if (input.webhookUrl) {
     // Slack interactivity (button clicks, modal submissions) uses a separate
-    // `request_url` from event_subscriptions, even though Gram answers both
+    // `request_url` from event_subscriptions, even though Speakeasy answers both
     // on the same trigger webhook. Without this Slack shows "This app is
     // not configured to handle interactive responses" the moment a user
     // clicks a Block Kit button. Always enable it when we have a webhook —

@@ -141,6 +141,57 @@ func BuildCreateAssistantPayload(assistantsCreateAssistantBody string, assistant
 	return v, nil
 }
 
+// BuildUpgradeAssistantIdentityPayload builds the payload for the assistants
+// upgradeAssistantIdentity endpoint from CLI flags.
+func BuildUpgradeAssistantIdentityPayload(assistantsUpgradeAssistantIdentityBody string, assistantsUpgradeAssistantIdentitySessionToken string, assistantsUpgradeAssistantIdentityProjectSlugInput string) (*assistants.UpgradeAssistantIdentityPayload, error) {
+	var err error
+	var body UpgradeAssistantIdentityRequestBody
+	{
+		err = json.Unmarshal([]byte(assistantsUpgradeAssistantIdentityBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"agent_name\": \"aa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.AgentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+		}
+		if body.AgentName != nil {
+			if utf8.RuneCountInString(*body.AgentName) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_name", *body.AgentName, utf8.RuneCountInString(*body.AgentName), 1, true))
+			}
+		}
+		if body.AgentName != nil {
+			if utf8.RuneCountInString(*body.AgentName) > 120 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_name", *body.AgentName, utf8.RuneCountInString(*body.AgentName), 120, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if assistantsUpgradeAssistantIdentitySessionToken != "" {
+			sessionToken = &assistantsUpgradeAssistantIdentitySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsUpgradeAssistantIdentityProjectSlugInput != "" {
+			projectSlugInput = &assistantsUpgradeAssistantIdentityProjectSlugInput
+		}
+	}
+	v := &assistants.UpgradeAssistantIdentityPayload{
+		ID:        body.ID,
+		AgentID:   body.AgentID,
+		AgentName: body.AgentName,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildUpdateAssistantPayload builds the payload for the assistants
 // updateAssistant endpoint from CLI flags.
 func BuildUpdateAssistantPayload(assistantsUpdateAssistantBody string, assistantsUpdateAssistantSessionToken string, assistantsUpdateAssistantProjectSlugInput string) (*assistants.UpdateAssistantPayload, error) {
@@ -149,9 +200,19 @@ func BuildUpdateAssistantPayload(assistantsUpdateAssistantBody string, assistant
 	{
 		err = json.Unmarshal([]byte(assistantsUpdateAssistantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"mcp_servers\": [\n         {\n            \"endpoint_slug\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"mcp_server_slug\": \"abc123\"\n         }\n      ],\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expected_runtime_version\": 3,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"mcp_servers\": [\n         {\n            \"endpoint_slug\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"mcp_server_slug\": \"abc123\"\n         }\n      ],\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"runtime_version\": 3,\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.RuntimeVersion != nil {
+			if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
+			}
+		}
+		if body.ExpectedRuntimeVersion != nil {
+			if !(*body.ExpectedRuntimeVersion == 2 || *body.ExpectedRuntimeVersion == 3) {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.expected_runtime_version", *body.ExpectedRuntimeVersion, []any{2, 3}))
+			}
+		}
 		if body.Status != nil {
 			if !(*body.Status == "active" || *body.Status == "paused") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
@@ -174,13 +235,15 @@ func BuildUpdateAssistantPayload(assistantsUpdateAssistantBody string, assistant
 		}
 	}
 	v := &assistants.UpdateAssistantPayload{
-		ID:             body.ID,
-		Name:           body.Name,
-		Model:          body.Model,
-		Instructions:   body.Instructions,
-		WarmTTLSeconds: body.WarmTTLSeconds,
-		MaxConcurrency: body.MaxConcurrency,
-		Status:         body.Status,
+		ID:                     body.ID,
+		Name:                   body.Name,
+		Model:                  body.Model,
+		Instructions:           body.Instructions,
+		WarmTTLSeconds:         body.WarmTTLSeconds,
+		MaxConcurrency:         body.MaxConcurrency,
+		RuntimeVersion:         body.RuntimeVersion,
+		ExpectedRuntimeVersion: body.ExpectedRuntimeVersion,
+		Status:                 body.Status,
 	}
 	if body.Toolsets != nil {
 		v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
@@ -398,6 +461,92 @@ func BuildEnsureManagedAssistantPayload(assistantsEnsureManagedAssistantSessionT
 		}
 	}
 	v := &assistants.EnsureManagedAssistantPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListExecutionProfilesPayload builds the payload for the assistants
+// listExecutionProfiles endpoint from CLI flags.
+func BuildListExecutionProfilesPayload(assistantsListExecutionProfilesAssistantID string, assistantsListExecutionProfilesSessionToken string, assistantsListExecutionProfilesProjectSlugInput string) (*assistants.ListExecutionProfilesPayload, error) {
+	var err error
+	var assistantID string
+	{
+		assistantID = assistantsListExecutionProfilesAssistantID
+		err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", assistantID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if assistantsListExecutionProfilesSessionToken != "" {
+			sessionToken = &assistantsListExecutionProfilesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsListExecutionProfilesProjectSlugInput != "" {
+			projectSlugInput = &assistantsListExecutionProfilesProjectSlugInput
+		}
+	}
+	v := &assistants.ListExecutionProfilesPayload{}
+	v.AssistantID = assistantID
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetExecutionProfileChoicePayload builds the payload for the assistants
+// setExecutionProfileChoice endpoint from CLI flags.
+func BuildSetExecutionProfileChoicePayload(assistantsSetExecutionProfileChoiceBody string, assistantsSetExecutionProfileChoiceSessionToken string, assistantsSetExecutionProfileChoiceProjectSlugInput string) (*assistants.SetExecutionProfileChoicePayload, error) {
+	var err error
+	var body SetExecutionProfileChoiceRequestBody
+	{
+		err = json.Unmarshal([]byte(assistantsSetExecutionProfileChoiceBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"automatic\": false,\n      \"execution_context\": \"userless\",\n      \"expected_version\": 1,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"no_auth\": false,\n      \"trigger_instance_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", body.AssistantID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trigger_instance_id", body.TriggerInstanceID, goa.FormatUUID))
+		if !(body.ExecutionContext == "user_backed" || body.ExecutionContext == "userless") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.execution_context", body.ExecutionContext, []any{"user_backed", "userless"}))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if body.AuthClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+		}
+		if body.ExpectedVersion < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expected_version", body.ExpectedVersion, 0, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if assistantsSetExecutionProfileChoiceSessionToken != "" {
+			sessionToken = &assistantsSetExecutionProfileChoiceSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsSetExecutionProfileChoiceProjectSlugInput != "" {
+			projectSlugInput = &assistantsSetExecutionProfileChoiceProjectSlugInput
+		}
+	}
+	v := &assistants.SetExecutionProfileChoicePayload{
+		AssistantID:       body.AssistantID,
+		TriggerInstanceID: body.TriggerInstanceID,
+		ExecutionContext:  body.ExecutionContext,
+		McpServerID:       body.McpServerID,
+		AuthClientID:      body.AuthClientID,
+		NoAuth:            body.NoAuth,
+		Automatic:         body.Automatic,
+		ExpectedVersion:   body.ExpectedVersion,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

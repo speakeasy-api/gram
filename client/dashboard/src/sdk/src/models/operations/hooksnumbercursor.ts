@@ -10,9 +10,19 @@ import {
   CursorHookPayload$outboundSchema,
 } from "../components/cursorhookpayload.js";
 
+export type HooksNumberCursorSecurityOption1 = {
+  deviceAgentTokenHeaderAuthorization: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type HooksNumberCursorSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
 export type HooksNumberCursorSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
-  projectSlugHeaderGramProject?: string | undefined;
+  option1?: HooksNumberCursorSecurityOption1 | undefined;
+  option2?: HooksNumberCursorSecurityOption2 | undefined;
 };
 
 export type HooksNumberCursorRequest = {
@@ -25,7 +35,7 @@ export type HooksNumberCursorRequest = {
    */
   gramProject?: string | undefined;
   /**
-   * Optional endpoint hostname supplied by the Gram hook plugin.
+   * Optional endpoint hostname supplied by the Speakeasy hook plugin.
    */
   xGramHookHostname?: string | undefined;
   /**
@@ -36,9 +46,76 @@ export type HooksNumberCursorRequest = {
 };
 
 /** @internal */
+export type HooksNumberCursorSecurityOption1$Outbound = {
+  device_agent_token_header_Authorization: string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const HooksNumberCursorSecurityOption1$outboundSchema: z.ZodMiniType<
+  HooksNumberCursorSecurityOption1$Outbound,
+  HooksNumberCursorSecurityOption1
+> = z.pipe(
+  z.object({
+    deviceAgentTokenHeaderAuthorization: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      deviceAgentTokenHeaderAuthorization:
+        "device_agent_token_header_Authorization",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
+  }),
+);
+
+export function hooksNumberCursorSecurityOption1ToJSON(
+  hooksNumberCursorSecurityOption1: HooksNumberCursorSecurityOption1,
+): string {
+  return JSON.stringify(
+    HooksNumberCursorSecurityOption1$outboundSchema.parse(
+      hooksNumberCursorSecurityOption1,
+    ),
+  );
+}
+
+/** @internal */
+export type HooksNumberCursorSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const HooksNumberCursorSecurityOption2$outboundSchema: z.ZodMiniType<
+  HooksNumberCursorSecurityOption2$Outbound,
+  HooksNumberCursorSecurityOption2
+> = z.pipe(
+  z.object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
+  }),
+);
+
+export function hooksNumberCursorSecurityOption2ToJSON(
+  hooksNumberCursorSecurityOption2: HooksNumberCursorSecurityOption2,
+): string {
+  return JSON.stringify(
+    HooksNumberCursorSecurityOption2$outboundSchema.parse(
+      hooksNumberCursorSecurityOption2,
+    ),
+  );
+}
+
+/** @internal */
 export type HooksNumberCursorSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
-  "project_slug_header_Gram-Project"?: string | undefined;
+  Option1?: HooksNumberCursorSecurityOption1$Outbound | undefined;
+  Option2?: HooksNumberCursorSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -47,13 +124,17 @@ export const HooksNumberCursorSecurity$outboundSchema: z.ZodMiniType<
   HooksNumberCursorSecurity
 > = z.pipe(
   z.object({
-    apikeyHeaderGramKey: z.optional(z.string()),
-    projectSlugHeaderGramProject: z.optional(z.string()),
+    option1: z.optional(
+      z.lazy(() => HooksNumberCursorSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => HooksNumberCursorSecurityOption2$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      option1: "Option1",
+      option2: "Option2",
     });
   }),
 );

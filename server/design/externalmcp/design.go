@@ -145,8 +145,8 @@ var _ = Service("mcpRegistries", func() {
 			Attribute("server_url", String, "URL of the upstream MCP server endpoint", func() {
 				Example("https://mcp.box.com")
 			})
-			Attribute("registry_specifier", String, "Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')", func() {
-				Example("com.pulsemcp.mirror/box")
+			Attribute("registry_specifier", String, "Registry specifier for the server, as returned by listCatalog (e.g., 'io.example/server')", func() {
+				Example("io.example/server")
 			})
 
 			security.SessionPayload()
@@ -208,12 +208,8 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 	Required("registry_specifier", "version", "description")
 })
 
-// ExternalMCPServerEntry is the lightweight shape returned by the catalog list
-// endpoint. It carries everything the index view needs (header, install state,
-// usage/auth metadata, remotes) but omits the per-tool definitions, which are
-// large and unused by the list. tool_count and is_read_only are precomputed so
-// cards and the tool-behavior filter don't need the tools. The detail page
-// fetches full tools via getServerDetails (ExternalMCPServer).
+// ExternalMCPServerEntry is the lightweight catalog listing shape. Tool evidence
+// is optional: native publication does not currently include tool declarations.
 var ExternalMCPServerEntry = Type("ExternalMCPServerEntry", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -240,15 +236,19 @@ var ExternalMCPServerEntry = Type("ExternalMCPServerEntry", func() {
 		Format(FormatURI)
 	})
 	Attribute("meta", Any, "Opaque metadata from the registry")
-	Attribute("tool_count", Int, "Number of tools the server exposes")
-	Attribute("is_read_only", Boolean, "Whether every tool on the server is read-only")
-	Attribute("supports_dcr", Boolean, "Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).")
+	Attribute("tool_count", Int, "Number of declared tools, when catalog evidence is available")
+	Attribute("is_read_only", Boolean, "Whether every declared tool is read-only, when catalog evidence is available")
+	Attribute("supports_dcr", Boolean, "Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). False alone does not establish that manual setup is required.")
+	Attribute("supports_cimd", Boolean, "Whether issuer metadata advertises compatible Client ID Metadata Document support.")
+	Attribute("auth_setup", String, "Advertised authentication setup; unknown means evidence is insufficient, not that manual setup is required.", func() { Enum("none", "dcr", "cimd", "manual", "unknown") })
+
 	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
 	Attribute("repository", ExternalMCPRepository, "The source repository the registry links for this server, when it declares one")
 	Attribute("packages", ArrayOf(ExternalMCPPackage), "Published packages that run this server, when the registry declares any")
 
-	// tool_count, is_read_only, and supports_dcr are always computed for every catalog entry.
-	Required("registry_specifier", "version", "description", "tool_count", "is_read_only", "supports_dcr")
+	// These computed fields are required by existing clients. New capability fields
+	// remain optional so clients can also read responses from older servers.
+	Required("registry_specifier", "version", "description", "supports_dcr")
 })
 
 var MCPRegistry = Type("MCPRegistry", func() {
@@ -277,7 +277,7 @@ var MCPSetupGuide = Type("MCPSetupGuide", func() {
 		Example("Box")
 	})
 	Attribute("summary", String, "One-line summary of what the guide covers")
-	Attribute("add_server_flow", String, "How the server is meant to be added in Gram, when the guide states one (e.g., 'catalog', 'custom-remote')")
+	Attribute("add_server_flow", String, "How the server is meant to be added in Speakeasy, when the guide states one (e.g., 'catalog', 'custom-remote')")
 	Attribute("aliases", ArrayOf(String), "Registry identifiers the guide is also published under")
 	Attribute("remotes", ArrayOf(MCPSetupGuideRemote), "Endpoints documented by the guide")
 	Attribute("matched_remote_id", String, "ID of the documented endpoint the lookup matched. Absent when the lookup identified the guide and not a specific endpoint, which is always the case for an 'alias' match.", func() {
@@ -287,7 +287,7 @@ var MCPSetupGuide = Type("MCPSetupGuide", func() {
 		Enum("endpoint", "alias")
 	})
 	Attribute("external_markdown", String, "Markdown instructions for the setup work that happens in the upstream provider")
-	Attribute("speakeasy_markdown", String, "Markdown instructions for the setup work that happens in Gram")
+	Attribute("speakeasy_markdown", String, "Markdown instructions for the setup work that happens in Speakeasy")
 
 	Required("slug", "title", "summary", "aliases", "remotes", "match_kind", "external_markdown", "speakeasy_markdown")
 })
@@ -304,7 +304,7 @@ var MCPSetupGuideRemote = Type("MCPSetupGuideRemote", func() {
 		Format(FormatURI)
 	})
 	// Left an open string rather than an enum: the value is passthrough data from
-	// the guides SDK that Gram does not control, so a closed enum would turn an
+	// the guides SDK that Speakeasy does not control, so a closed enum would turn an
 	// upstream publish into a decode failure in every generated client.
 	Attribute("transport_type", String, "Transport type as published by the guide (e.g., 'streamable-http', 'sse')", func() {
 		Example("streamable-http")

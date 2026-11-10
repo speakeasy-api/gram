@@ -54,6 +54,8 @@ type Toolset struct {
 	McpIsPublic *bool
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *NetworkAccessMode
 	// The mode to use for tool selection
 	ToolSelectionMode string
 	// The ID of the custom domain to use for the toolset
@@ -62,8 +64,8 @@ type Toolset struct {
 	Origin *ToolsetOrigin
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServer
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.

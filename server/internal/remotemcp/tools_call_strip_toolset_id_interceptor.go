@@ -11,12 +11,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-// ToolsCallStripToolsetIDInterceptor removes the Gram-injected
+// ToolsCallStripToolsetIDInterceptor removes the Speakeasy-injected
 // [shadowmcp.XGramToolsetIDField] property from tools/call arguments before
 // the proxy forwards them upstream, so the remote MCP server sees its own
-// declared argument shape rather than Gram's envelope.
+// declared argument shape rather than Speakeasy's envelope.
 //
-// Gram no longer injects that property into tools/list schemas (DNO-603).
+// Speakeasy no longer injects that property into tools/list schemas (DNO-603).
 // The strip stays because MCP clients cache tool schemas per session: a
 // caller that listed tools before the injection was removed keeps echoing
 // the property back for the life of its session. Delete this interceptor in
@@ -26,7 +26,7 @@ import (
 // [shadowmcp.Client.IsEnabledForProject], but gating a strip on a
 // 15-minute Redis-cached, per-project policy lookup that fails closed to
 // "off" meant a policy toggle or a transient cache/DB outage could forward
-// Gram's envelope upstream mid-session — exactly the leak the strip exists
+// Speakeasy's envelope upstream mid-session — exactly the leak the strip exists
 // to prevent. Running it always also keeps a Redis GET off the proxy hot
 // path.
 //
@@ -34,13 +34,13 @@ import (
 // byte-scan below matches raw wire bytes, so a caller that escapes the key
 // (`x-gram-toolset-id`) slips a decoded [shadowmcp.XGramToolsetIDField]
 // property past it. That is not a leak — the whole arguments payload is
-// caller-supplied and nothing of Gram's is exposed — just a caller
+// caller-supplied and nothing of Speakeasy's is exposed — just a caller
 // declining a courtesy scrub of their own request.
 //
 // One accepted consequence: an upstream tool that genuinely declares its
 // own [shadowmcp.XGramToolsetIDField] argument has it silently dropped.
 // For projects with a tool-identity policy enabled that collision was
-// already resolved in Gram's favour, since the injector deliberately
+// already resolved in Speakeasy's favour, since the injector deliberately
 // overwrote such a property. Every other project is newly affected,
 // because neither inject nor strip used to run there. No known upstream
 // server declares the property.
@@ -55,7 +55,7 @@ var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallStripToolsetIDInterceptor)(
 var toolsetIDFieldBytes = []byte(shadowmcp.XGramToolsetIDField)
 
 // NewToolsCallStripToolsetIDInterceptor constructs the strip interceptor.
-// It holds no per-server or per-project state: the property is Gram's own
+// It holds no per-server or per-project state: the property is Speakeasy's own
 // envelope regardless of which server the request routed to, so stripping
 // it needs no scope to consult.
 func NewToolsCallStripToolsetIDInterceptor(logger *slog.Logger) *ToolsCallStripToolsetIDInterceptor {
@@ -92,7 +92,7 @@ func (i *ToolsCallStripToolsetIDInterceptor) InterceptToolsCallRequest(ctx conte
 		// the request is rejected upstream of this chain. Should that ever
 		// change, surface a client-side parse error rather than letting the
 		// bare error fall through RejectErrorFromCause to
-		// RejectCodeInternalError and present a Gram 500 for a caller's
+		// RejectCodeInternalError and present a Speakeasy 500 for a caller's
 		// malformed body. Mirrors the toolset path, which maps the same
 		// failure to oops.CodeBadRequest.
 		i.logger.DebugContext(ctx, "tools/call arguments could not be parsed to strip the gram toolset id property",

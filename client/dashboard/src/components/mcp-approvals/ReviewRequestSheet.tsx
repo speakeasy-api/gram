@@ -31,11 +31,14 @@ export function ReviewRequestSheet({
   open,
   onOpenChange,
   onDecide,
+  decideDisabledReason,
 }: {
   request: ReviewSheetRequest | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDecide: (request: ReviewSheetRequest) => void;
+  /** Why deciding is unavailable right now; the button waits while set. */
+  decideDisabledReason?: string;
 }): JSX.Element | null {
   const project = useProject();
 
@@ -57,7 +60,12 @@ export function ReviewRequestSheet({
               projectSlug={project.slug}
               ready
             />
-            <Button size="sm" onClick={() => onDecide(request)}>
+            <Button
+              size="sm"
+              disabled={decideDisabledReason !== undefined}
+              title={decideDisabledReason}
+              onClick={() => onDecide(request)}
+            >
               Decide Access
             </Button>
           </div>

@@ -40,20 +40,22 @@ type Service interface {
 	// present or interpret the values. This supports reviewing the exact schema
 	// contents before changing how a toolset is shared.
 	ListToolSchemaStaticValues(context.Context, *ListToolSchemaStaticValuesPayload) (res *ListToolSchemaStaticValuesResult, err error)
-	// Check if a MCP slug is available
-	CheckMCPSlugAvailability(context.Context, *CheckMCPSlugAvailabilityPayload) (res bool, err error)
 	// Clone an existing toolset with a new name
 	CloneToolset(context.Context, *CloneToolsetPayload) (res *types.Toolset, err error)
 	// Associate an external OAuth server with a toolset
 	AddExternalOAuthServer(context.Context, *AddExternalOAuthServerPayload) (res *types.Toolset, err error)
 	// Change an attached external OAuth server between provider-hosted and
-	// Gram-hosted authorization-server metadata without replacing the server,
+	// Speakeasy-hosted authorization-server metadata without replacing the server,
 	// registrations, tokens, or toolset association
 	UpdateExternalOAuthServer(context.Context, *UpdateExternalOAuthServerPayload) (res *types.Toolset, err error)
 	// Remove OAuth server association from a toolset
 	RemoveOAuthServer(context.Context, *RemoveOAuthServerPayload) (res *types.Toolset, err error)
 	// Link a toolset to a user_session_issuer (or pass null to unlink). The
 	// user_session_issuer must already exist in the caller's project.
+
+	// Deprecated: use mcpServers.update with user_session_issuer_id, or
+	// clear_user_session_issuer to unlink. This endpoint will be removed on
+	// 2026-11-25.
 	SetUserSessionIssuer(context.Context, *SetUserSessionIssuerPayload) (res *types.Toolset, err error)
 	// Assign a tool variations group to a toolset to enable MCP tool filtering (or
 	// pass null to disable). The group must already exist in the caller's project.
@@ -80,7 +82,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [15]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "listToolFilters", "listToolSchemaStaticValues", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "updateExternalOAuthServer", "removeOAuthServer", "setUserSessionIssuer", "setToolVariationsGroup"}
+var MethodNames = [14]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "listToolFilters", "listToolSchemaStaticValues", "cloneToolset", "addExternalOAuthServer", "updateExternalOAuthServer", "removeOAuthServer", "setUserSessionIssuer", "setToolVariationsGroup"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -92,16 +94,6 @@ type AddExternalOAuthServerPayload struct {
 	// The external OAuth server data to create and associate with the toolset
 	ExternalOauthServer *types.ExternalOAuthServerForm
 	ProjectSlugInput    *string
-}
-
-// CheckMCPSlugAvailabilityPayload is the payload type of the toolsets service
-// checkMCPSlugAvailability method.
-type CheckMCPSlugAvailabilityPayload struct {
-	// The slug to check
-	Slug             types.Slug
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
 }
 
 // CloneToolsetPayload is the payload type of the toolsets service cloneToolset
@@ -148,7 +140,7 @@ type DeleteToolsetPayload struct {
 // method.
 type GetToolsetPayload struct {
 	// The slug of the toolset
-	Slug             types.Slug
+	Slug             string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -272,10 +264,10 @@ type UpdateExternalOAuthServerPayload struct {
 	ApikeyToken  *string
 	// The slug of the toolset whose attached external OAuth server is updated
 	Slug types.Slug
-	// JSON object metadata to restore Gram-hosted compatibility mode. Supply
+	// JSON object metadata to restore Speakeasy-hosted compatibility mode. Supply
 	// exactly one of metadata and authorization_server_issuer.
 	Metadata any
-	// Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly
+	// Exact HTTPS issuer to set for provider-hosted discovery. Speakeasy strictly
 	// discovers and verifies it before the atomic update. Supply exactly one of
 	// authorization_server_issuer and metadata; clients may need to register or
 	// authenticate again after a mode change.
@@ -303,13 +295,20 @@ type UpdateToolsetPayload struct {
 	ToolUrns []string
 	// List of resource URNs to include in the toolset
 	ResourceUrns []string
-	// Whether the toolset is enabled for MCP
+	// Deprecated: rejected; use mcpServers.update. Whether the toolset is enabled
+	// for MCP
 	McpEnabled *bool
-	// The slug of the MCP to use for the toolset
+	// Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The
+	// slug of the MCP to use for the toolset
 	McpSlug *types.Slug
-	// Whether the toolset is public in MCP
+	// Deprecated: rejected; use mcpServers.update. Whether the toolset is public
+	// in MCP
 	McpIsPublic *bool
-	// The ID of the custom domain to use for the toolset
+	// Deprecated: rejected; use mcpServers.update. Where the hosted MCP is
+	// accessible: public_only, dual, or private_only
+	NetworkAccessMode *types.NetworkAccessMode
+	// Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The ID
+	// of the custom domain to use for the toolset
 	CustomDomainID *string
 	// The mode to use for tool selection
 	ToolSelectionMode *string

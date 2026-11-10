@@ -1,10 +1,7 @@
 package agentmanagement
 
 import (
-	"bytes"
 	"context"
-	"errors"
-	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
@@ -16,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -45,7 +41,6 @@ func newDelegableFixture(t *testing.T) delegableFixture {
 	agent := createAgent(t, db, "org-delegable", "owner", "Delegable agent")
 	engine := authz.NewEngine(testenv.NewLogger(t), db, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	service := newTestService(db, engine)
-	service.features = &recordingAgentManagementFeatures{evaluation: feature.EvaluationEnabled}
 	seedGrant(t, t.Context(), db, "org-delegable", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentAuthorize, agent.ID.String())
 	return delegableFixture{db: db, service: service, agentID: agent.ID}
 }
@@ -210,6 +205,27 @@ func TestListDelegableGrantsConservativelyOmitsOverlappingExclusions(t *testing.
 	}
 }
 
+// An "All servers" key needs the project wildcard itself, or it reaches only
+// the servers that existed when it was issued. With carry_exclusions the
+// owner's blocked server comes back beside the wildcard rather than removing it.
+func TestListDelegableGrantsCarriesExclusionsBesideWildcard(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	projectWildcard := authz.NewSelector(authz.ScopeMCPConnect, "*")
+	projectWildcard[authz.SelectorKeyProjectID] = "project-one"
+	f.grant(t, "agent", authz.ScopeMCPConnect, projectWildcard)
+	f.grant(t, "owner", authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, "*"))
+	f.grant(t, "owner", authz.ScopeMCPBlockedConnect, authz.NewSelector(authz.ScopeMCPBlockedConnect, "blocked-server"))
+
+	require.Empty(t, f.list(t, "owner"), "without carrying, the overlapped wildcard is omitted")
+
+	result, err := f.service.ListDelegableGrants(validatedHumanContext(t, "org-delegable", "owner"), &gen.ListDelegableGrantsPayload{AgentID: f.agentID.String(), CarryExclusions: true})
+	require.NoError(t, err)
+	projectOne := "project-one"
+	require.Contains(t, result, &gen.AgentPolicyGrantForm{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*", ProjectID: &projectOne}})
+	require.Contains(t, result, &gen.AgentPolicyGrantForm{Scope: string(authz.ScopeMCPBlockedConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "blocked-server", ProjectID: &projectOne}})
+}
+
 func TestListDelegableGrantsRejectsInactiveAgentOrOwner(t *testing.T) {
 	t.Parallel()
 	for _, state := range []string{"suspended", "revoked", "deleted", "owner deleted", "owner membership removed"} {
@@ -255,7 +271,6 @@ func TestListDelegableGrantsRejectsCrossOrganizationAndNonhumanContexts(t *testi
 		"api key":                 contextvalues.WithValidatedGramSession(contextvalues.SetAuthContext(t.Context(), &apiKey), &apiKey, false),
 		"assistant":               contextvalues.SetAssistantPrincipal(valid, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()}),
 		"oauth":                   contextvalues.SetOAuthClientID(valid, "client-id"),
-		"scope override":          contextvalues.SetRBACScopeOverride(valid, "root"),
 		"legacy impersonation":    contextvalues.WithValidatedGramSession(t.Context(), mustAuthContext(t, valid), true),
 	}
 	for name, ctx := range contexts {
@@ -268,102 +283,16 @@ func TestListDelegableGrantsRejectsCrossOrganizationAndNonhumanContexts(t *testi
 	}
 }
 
-func TestListDelegableGrantsCredentialGateFailsClosed(t *testing.T) {
+func TestListDelegableGrantsAuthenticatesBeforeAnyLookup(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name     string
-		provider feature.Provider
-	}{
-		{name: "disabled", provider: &recordingAgentManagementFeatures{evaluation: feature.EvaluationDisabled}},
-		{name: "indeterminate", provider: &recordingAgentManagementFeatures{evaluation: feature.EvaluationIndeterminate}},
-		{name: "provider error", provider: &recordingAgentManagementFeatures{err: errors.New("feature provider unavailable")}},
-		{name: "missing provider"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			f := newDelegableFixture(t)
-			f.service.features = tc.provider
-			var logs bytes.Buffer
-			f.service.logger = slog.New(slog.NewTextHandler(&logs, nil))
-			result, err := f.service.ListDelegableGrants(validatedHumanContext(t, "org-delegable", "owner"), &gen.ListDelegableGrantsPayload{AgentID: f.agentID.String()})
-			require.Error(t, err)
-			require.Empty(t, result)
-			requireOopsCode(t, err, oops.CodeNotFound)
-			if tc.name == "provider error" {
-				require.Contains(t, logs.String(), "failed to evaluate agent credential rollout flag")
-				require.Contains(t, logs.String(), "feature provider unavailable")
-			}
-			if provider, ok := tc.provider.(*recordingAgentManagementFeatures); ok {
-				require.Equal(t, feature.FlagAgentIdentityCredentials, provider.flag)
-			}
-		})
-	}
-}
-
-func TestListDelegableGrantsGeneratedEndpointCannotBypassManagementGate(t *testing.T) {
-	t.Parallel()
-	for _, evaluation := range []feature.Evaluation{feature.EvaluationDisabled, feature.EvaluationIndeterminate} {
-		name := "disabled"
-		if evaluation == feature.EvaluationIndeterminate {
-			name = "indeterminate"
-		}
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			f := newDelegableFixture(t)
-			ctx := validatedHumanContext(t, "org-delegable", "owner")
-			flags := &recordingAgentManagementFeatures{evaluation: evaluation}
-			f.service.features = flags
-			f.service.auth = staticSessionAuthorizer{authCtx: mustAuthContext(t, ctx)}
-			endpoint := gen.NewListDelegableGrantsEndpoint(f.service, f.service.APIKeyAuth)
-			result, err := endpoint(ctx, &gen.ListDelegableGrantsPayload{AgentID: f.agentID.String()})
-			requireOopsCode(t, err, oops.CodeNotFound)
-			require.Nil(t, result)
-			require.Equal(t, feature.FlagAgentManagement, flags.flag)
-		})
-	}
-}
-
-func TestListDelegableGrantsGatePrecedesAuthorizationPreparation(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name     string
-		provider feature.Provider
-	}{
-		{name: "disabled", provider: &recordingAgentManagementFeatures{evaluation: feature.EvaluationDisabled}},
-		{name: "indeterminate", provider: &recordingAgentManagementFeatures{evaluation: feature.EvaluationIndeterminate}},
-		{name: "provider error", provider: &recordingAgentManagementFeatures{err: errors.New("feature provider unavailable")}},
-		{name: "missing provider", provider: nil},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			// No database or authorization engine: even an unknown agent and caller
-			// must receive the cohort's 404 without opening a transaction or loading grants.
-			service := newTestService(nil, nil)
-			service.features = tc.provider
-			var logs bytes.Buffer
-			service.logger = slog.New(slog.NewTextHandler(&logs, nil))
-			ctx := validatedHumanContext(t, "org-disabled", "unknown-member")
-			for _, agentID := range []string{uuid.NewString(), "invalid-id"} {
-				result, err := service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{AgentID: agentID})
-				requireOopsCode(t, err, oops.CodeNotFound)
-				require.Nil(t, result)
-			}
-			if tc.name == "provider error" {
-				require.Contains(t, logs.String(), "feature provider unavailable")
-			}
-		})
-	}
-}
-
-func TestListDelegableGrantsAuthenticatesBeforeCredentialGate(t *testing.T) {
-	t.Parallel()
+	// No database or authorization engine: an unauthenticated caller is
+	// refused before a transaction opens or grants load.
 	service := newTestService(nil, nil)
-	flags := &recordingAgentManagementFeatures{evaluation: feature.EvaluationDisabled}
-	service.features = flags
-	result, err := service.ListDelegableGrants(t.Context(), &gen.ListDelegableGrantsPayload{AgentID: uuid.NewString()})
-	requireOopsCode(t, err, oops.CodeUnauthorized)
-	require.Nil(t, result)
-	require.Empty(t, flags.flag, "unauthenticated callers must not evaluate tenant flags")
+	for _, agentID := range []string{uuid.NewString(), "invalid-id"} {
+		result, err := service.ListDelegableGrants(t.Context(), &gen.ListDelegableGrantsPayload{AgentID: agentID})
+		requireOopsCode(t, err, oops.CodeUnauthorized)
+		require.Nil(t, result)
+	}
 }
 
 func (f delegableFixture) toolset(t *testing.T, org, slug string) toolsetsrepo.Toolset {
@@ -373,7 +302,7 @@ func (f delegableFixture) toolset(t *testing.T, org, slug string) toolsetsrepo.T
 	})
 	require.NoError(t, err)
 	toolset, err := toolsetsrepo.New(f.db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
-		OrganizationID: org, ProjectID: project.ID, Name: slug, Slug: slug, McpEnabled: true,
+		OrganizationID: org, ProjectID: project.ID, Name: slug, Slug: slug,
 	})
 	require.NoError(t, err)
 	return toolset
@@ -414,6 +343,92 @@ func TestListDelegableGrantsScopedToolset(t *testing.T) {
 			require.Empty(t, grants)
 		})
 	}
+}
+
+func TestListDelegableGrantsBatchedToolsets(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	first := f.toolset(t, "org-delegable", "first")
+	second := f.toolset(t, "org-delegable", "second")
+	blocked := f.toolset(t, "org-delegable", "blocked")
+	for _, principal := range []string{"agent", "owner", "caller"} {
+		f.grant(t, principal, authz.ScopeMCPWrite, authz.NewSelector(authz.ScopeMCPWrite, "*"))
+	}
+	f.grant(t, "owner", authz.ScopeMCPBlockedConnect, authz.NewSelector(authz.ScopeMCPBlockedConnect, blocked.ID.String()))
+	ctx := validatedHumanContext(t, "org-delegable", "caller")
+
+	var want []*gen.AgentPolicyGrantForm
+	for _, id := range []string{first.ID.String(), second.ID.String(), blocked.ID.String()} {
+		grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{AgentID: f.agentID.String(), ToolsetID: new(id)})
+		require.NoError(t, err)
+		want = append(want, grants...)
+	}
+	require.NotEmpty(t, want)
+
+	// The legacy single field and the batch field combine, and repeats collapse.
+	grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+		AgentID:    f.agentID.String(),
+		ToolsetID:  new(first.ID.String()),
+		ToolsetIds: []string{first.ID.String(), second.ID.String(), blocked.ID.String()},
+	})
+	require.NoError(t, err)
+	require.ElementsMatch(t, want, grants)
+	for _, grant := range grants {
+		require.NotEqual(t, blocked.ID.String(), grant.Selector.ResourceID)
+	}
+}
+
+func TestListDelegableGrantsBatchOmitsUnavailableResources(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	live := f.toolset(t, "org-delegable", "live")
+	deleted := f.toolset(t, "org-delegable", "deleted")
+	// A live inventory wrapper can still refer to a deleted toolset.
+	f.modernServer(t, deleted.ProjectID, uuid.NullUUID{UUID: deleted.ID, Valid: true})
+	_, err := toolsetsrepo.New(f.db).DeleteToolset(t.Context(), toolsetsrepo.DeleteToolsetParams{
+		Slug: deleted.Slug, ProjectID: deleted.ProjectID,
+	})
+	require.NoError(t, err)
+	seedOrganization(t, f.db, "org-other-delegable")
+	foreign := f.toolset(t, "org-other-delegable", "foreign")
+	for _, principal := range []string{"agent", "owner", "caller"} {
+		f.grant(t, principal, authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, "*"))
+	}
+	ctx := validatedHumanContext(t, "org-delegable", "caller")
+	want, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+		AgentID: f.agentID.String(), ToolsetID: new(live.ID.String()),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, want)
+	for _, tc := range []struct{ name, id string }{
+		{name: "deleted backing toolset", id: deleted.ID.String()},
+		{name: "foreign organization", id: foreign.ID.String()},
+		{name: "missing resource", id: uuid.NewString()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			unavailable := tc.id
+			grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetIds: []string{unavailable, live.ID.String()},
+			})
+			require.NoError(t, err)
+			require.ElementsMatch(t, want, grants)
+			grants, err = f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetIds: []string{unavailable},
+			})
+			require.NoError(t, err)
+			require.Empty(t, grants, "an empty resolved batch must never become unscoped discovery")
+			_, err = f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetID: &unavailable, ToolsetIds: []string{live.ID.String()},
+			})
+			requireOopsCode(t, err, oops.CodeNotFound)
+		})
+	}
+	grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+		AgentID: f.agentID.String(), ToolsetIds: []string{live.ID.String(), "invalid"},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Nil(t, grants)
 }
 
 func TestListDelegableGrantsScopedToolsetRejectsInvalidResources(t *testing.T) {

@@ -15,8 +15,8 @@ import (
 )
 
 var _ = API("gram-dev-idp", func() {
-	Title("Gram dev-idp")
-	Description("Management API for the local-development IDP that backs Gram's auth flows in tests and dev. Permanently unauthenticated.")
+	Title("Speakeasy dev-idp")
+	Description("Management API for the local-development IDP that backs Speakeasy's auth flows in tests and dev. Permanently unauthenticated.")
 	Meta("openapi:example", "false")
 	Randomizer(expr.NewDeterministicRandomizer())
 })

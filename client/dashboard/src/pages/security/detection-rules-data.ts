@@ -145,6 +145,31 @@ export const BUILTIN_RULES_BY_CATEGORY: Record<RuleCategory, BuiltinRule[]> = (
   {} as Record<RuleCategory, BuiltinRule[]>,
 );
 
+/** Categories the Detection Rules tab lists, in display order. The Presidio
+ *  categories keep the order the policy form uses so the two surfaces read
+ *  the same way. Shadow AI is not listed: its targets live on the Shadow AI
+ *  targets tab. */
+export function detectionRulesTabCategories(): RuleCategory[] {
+  return [
+    "secrets",
+    "financial",
+    "pii",
+    "government_ids",
+    "healthcare",
+    "destructive_tool",
+    "account_identity",
+    "prompt_injection",
+  ];
+}
+
+/** Built-in rule ids the Detection Rules tab lists, derived from the tab's
+ *  category order so the tab and its insights context never disagree. */
+export function detectionRulesTabRuleIds(): string[] {
+  return detectionRulesTabCategories().flatMap((category) =>
+    BUILTIN_RULES_BY_CATEGORY[category].map((rule) => rule.id),
+  );
+}
+
 // Rule ids the exclusion AI suggestion may reference in rule_id clauses.
 // Built-ins only: they cover the common asks ("email findings", "AWS keys")
 // without an extra fetch; custom rule ids can still be named in the prompt

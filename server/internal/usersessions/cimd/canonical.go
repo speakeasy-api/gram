@@ -15,7 +15,7 @@ import (
 // Two members are withheld on purpose. client_secret and its expiry are
 // credentials and never belong in a rendered view. logo_uri is withheld
 // because Document.LogoURI is documented as deliberately not rendered: it is
-// attacker-controlled, nothing in Gram acts on it, and surfacing it here
+// attacker-controlled, nothing in Speakeasy acts on it, and surfacing it here
 // would put an attacker-chosen URL in front of the operator deciding whether
 // to trust the client. client_name is attacker-controlled too, but it is the
 // name the decision is actually about, so it has to be shown.

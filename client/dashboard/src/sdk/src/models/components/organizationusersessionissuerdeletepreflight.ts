@@ -17,13 +17,17 @@ import {
  */
 export type OrganizationUserSessionIssuerDeletePreflight = {
   /**
-   * True when no live MCP server or toolset references the issuer.
+   * True when no live MCP server, toolset, or active identity-chaining binding references the issuer.
    */
   canDelete: boolean;
   /**
    * Number of non-deleted user_session_clients registered with the issuer.
    */
   clientCount: number;
+  /**
+   * Active identity-chaining bindings that must be explicitly unlinked before deletion.
+   */
+  emaBindingCount: number;
   /**
    * Number of non-deleted, unexpired user_sessions issued by the issuer.
    */
@@ -36,6 +40,10 @@ export type OrganizationUserSessionIssuerDeletePreflight = {
    * Live toolsets that block deletion.
    */
   toolsets: Array<OrganizationUserSessionIssuerReference>;
+  /**
+   * True when this is the organization's only organization-level issuer, so deleting it stops serving the organization gateway its members sign in to. Does not block deletion.
+   */
+  withdrawsOrganizationGateway: boolean;
 };
 
 /** @internal */
@@ -44,18 +52,22 @@ export const OrganizationUserSessionIssuerDeletePreflight$inboundSchema:
     z.object({
       can_delete: z.boolean(),
       client_count: z.int(),
+      ema_binding_count: z.int(),
       live_session_count: z.int(),
       mcp_servers: z.array(
         OrganizationUserSessionIssuerReference$inboundSchema,
       ),
       toolsets: z.array(OrganizationUserSessionIssuerReference$inboundSchema),
+      withdraws_organization_gateway: z.boolean(),
     }),
     z.transform((v) => {
       return remap$(v, {
         "can_delete": "canDelete",
         "client_count": "clientCount",
+        "ema_binding_count": "emaBindingCount",
         "live_session_count": "liveSessionCount",
         "mcp_servers": "mcpServers",
+        "withdraws_organization_gateway": "withdrawsOrganizationGateway",
       });
     }),
   );

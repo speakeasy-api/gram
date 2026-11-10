@@ -7,6 +7,7 @@ import { organizationRemoteSessionClientsCreate } from "../funcs/organizationRem
 import { organizationRemoteSessionClientsCreateCimd } from "../funcs/organizationRemoteSessionClientsCreateCimd.js";
 import { organizationRemoteSessionClientsDelete } from "../funcs/organizationRemoteSessionClientsDelete.js";
 import { organizationRemoteSessionClientsDetachKeySet } from "../funcs/organizationRemoteSessionClientsDetachKeySet.js";
+import { organizationRemoteSessionClientsDuplicate } from "../funcs/organizationRemoteSessionClientsDuplicate.js";
 import { organizationRemoteSessionClientsGet } from "../funcs/organizationRemoteSessionClientsGet.js";
 import { organizationRemoteSessionClientsGetDelegationStatus } from "../funcs/organizationRemoteSessionClientsGetDelegationStatus.js";
 import { organizationRemoteSessionClientsGetDeletePreflight } from "../funcs/organizationRemoteSessionClientsGetDeletePreflight.js";
@@ -40,6 +41,10 @@ import {
   DetachOrganizationRemoteSessionClientKeySetRequest,
   DetachOrganizationRemoteSessionClientKeySetSecurity,
 } from "../models/operations/detachorganizationremotesessionclientkeyset.js";
+import {
+  DuplicateOrganizationRemoteSessionClientRequest,
+  DuplicateOrganizationRemoteSessionClientSecurity,
+} from "../models/operations/duplicateorganizationremotesessionclient.js";
 import {
   GetOrganizationRemoteSessionClientRequest,
   GetOrganizationRemoteSessionClientSecurity,
@@ -119,7 +124,7 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
    * createCimdClient organizationRemoteSessionClients
    *
    * @remarks
-   * Register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.
+   * Register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. Speakeasy generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.
    */
   async createCimd(
     request: CreateCimdOrganizationRemoteSessionClientRequest,
@@ -165,6 +170,25 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(organizationRemoteSessionClientsDetachKeySet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * duplicateClient organizationRemoteSessionClients
+   *
+   * @remarks
+   * Create a new standalone remote_session_client with a copy of an existing client's configuration in the caller's organization. The copy keeps the source's issuer, project, credential owner, authentication settings, key set, scopes, audience, and callback, and by default reuses its client_id and stored secret, so no secret is re-entered. A client metadata document (CIMD) client gets a new hosted document and client_id. To give the copy its own upstream registration instead, register one through /oauth/proxy-register and pass the returned credentials; this is refused for credential_owner self clients. A private_key_jwt client that is not a CIMD client cannot be duplicated, because the provider knows only the source's key set URL. The source is unchanged and the copy has no user_session_issuer attachments. Clients managed by an identity provider connection cannot be duplicated. Requires org:admin.
+   */
+  async duplicate(
+    request: DuplicateOrganizationRemoteSessionClientRequest,
+    security?: DuplicateOrganizationRemoteSessionClientSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionClient> {
+    return unwrapAsync(organizationRemoteSessionClientsDuplicate(
       this,
       request,
       security,

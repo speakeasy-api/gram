@@ -19,6 +19,9 @@ import (
 // Server lists the remoteSessionClients service endpoint HTTP handlers.
 type Server struct {
 	Mounts                    []*MountPoint
+	PrepareEMA                http.Handler
+	ReadEMA                   http.Handler
+	UnlinkEMA                 http.Handler
 	CreateRemoteSessionClient http.Handler
 	CreateCimd                http.Handler
 	UpdateRemoteSessionClient http.Handler
@@ -27,6 +30,7 @@ type Server struct {
 	AttachKeySet              http.Handler
 	DetachKeySet              http.Handler
 	ListRemoteSessionClients  http.Handler
+	GetNewClientCallbackURL   http.Handler
 	GetRemoteSessionClient    http.Handler
 	DeleteRemoteSessionClient http.Handler
 }
@@ -58,6 +62,9 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"PrepareEMA", "POST", "/rpc/remoteSessionClients.prepareEMA"},
+			{"ReadEMA", "POST", "/rpc/remoteSessionClients.readEMA"},
+			{"UnlinkEMA", "POST", "/rpc/remoteSessionClients.unlinkEMA"},
 			{"CreateRemoteSessionClient", "POST", "/rpc/remoteSessionClients.create"},
 			{"CreateCimd", "POST", "/rpc/remoteSessionClients.createCimd"},
 			{"UpdateRemoteSessionClient", "POST", "/rpc/remoteSessionClients.update"},
@@ -66,9 +73,13 @@ func New(
 			{"AttachKeySet", "POST", "/rpc/remoteSessionClients.attachKeySet"},
 			{"DetachKeySet", "DELETE", "/rpc/remoteSessionClients.detachKeySet"},
 			{"ListRemoteSessionClients", "GET", "/rpc/remoteSessionClients.list"},
+			{"GetNewClientCallbackURL", "GET", "/rpc/remoteSessionClients.newClientCallbackUrl"},
 			{"GetRemoteSessionClient", "GET", "/rpc/remoteSessionClients.get"},
 			{"DeleteRemoteSessionClient", "DELETE", "/rpc/remoteSessionClients.delete"},
 		},
+		PrepareEMA:                NewPrepareEMAHandler(e.PrepareEMA, mux, decoder, encoder, errhandler, formatter),
+		ReadEMA:                   NewReadEMAHandler(e.ReadEMA, mux, decoder, encoder, errhandler, formatter),
+		UnlinkEMA:                 NewUnlinkEMAHandler(e.UnlinkEMA, mux, decoder, encoder, errhandler, formatter),
 		CreateRemoteSessionClient: NewCreateRemoteSessionClientHandler(e.CreateRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
 		CreateCimd:                NewCreateCimdHandler(e.CreateCimd, mux, decoder, encoder, errhandler, formatter),
 		UpdateRemoteSessionClient: NewUpdateRemoteSessionClientHandler(e.UpdateRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
@@ -77,6 +88,7 @@ func New(
 		AttachKeySet:              NewAttachKeySetHandler(e.AttachKeySet, mux, decoder, encoder, errhandler, formatter),
 		DetachKeySet:              NewDetachKeySetHandler(e.DetachKeySet, mux, decoder, encoder, errhandler, formatter),
 		ListRemoteSessionClients:  NewListRemoteSessionClientsHandler(e.ListRemoteSessionClients, mux, decoder, encoder, errhandler, formatter),
+		GetNewClientCallbackURL:   NewGetNewClientCallbackURLHandler(e.GetNewClientCallbackURL, mux, decoder, encoder, errhandler, formatter),
 		GetRemoteSessionClient:    NewGetRemoteSessionClientHandler(e.GetRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
 		DeleteRemoteSessionClient: NewDeleteRemoteSessionClientHandler(e.DeleteRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -87,6 +99,9 @@ func (s *Server) Service() string { return "remoteSessionClients" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.PrepareEMA = m(s.PrepareEMA)
+	s.ReadEMA = m(s.ReadEMA)
+	s.UnlinkEMA = m(s.UnlinkEMA)
 	s.CreateRemoteSessionClient = m(s.CreateRemoteSessionClient)
 	s.CreateCimd = m(s.CreateCimd)
 	s.UpdateRemoteSessionClient = m(s.UpdateRemoteSessionClient)
@@ -95,6 +110,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.AttachKeySet = m(s.AttachKeySet)
 	s.DetachKeySet = m(s.DetachKeySet)
 	s.ListRemoteSessionClients = m(s.ListRemoteSessionClients)
+	s.GetNewClientCallbackURL = m(s.GetNewClientCallbackURL)
 	s.GetRemoteSessionClient = m(s.GetRemoteSessionClient)
 	s.DeleteRemoteSessionClient = m(s.DeleteRemoteSessionClient)
 }
@@ -104,6 +120,9 @@ func (s *Server) MethodNames() []string { return remotesessionclients.MethodName
 
 // Mount configures the mux to serve the remoteSessionClients endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountPrepareEMAHandler(mux, h.PrepareEMA)
+	MountReadEMAHandler(mux, h.ReadEMA)
+	MountUnlinkEMAHandler(mux, h.UnlinkEMA)
 	MountCreateRemoteSessionClientHandler(mux, h.CreateRemoteSessionClient)
 	MountCreateCimdHandler(mux, h.CreateCimd)
 	MountUpdateRemoteSessionClientHandler(mux, h.UpdateRemoteSessionClient)
@@ -112,6 +131,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountAttachKeySetHandler(mux, h.AttachKeySet)
 	MountDetachKeySetHandler(mux, h.DetachKeySet)
 	MountListRemoteSessionClientsHandler(mux, h.ListRemoteSessionClients)
+	MountGetNewClientCallbackURLHandler(mux, h.GetNewClientCallbackURL)
 	MountGetRemoteSessionClientHandler(mux, h.GetRemoteSessionClient)
 	MountDeleteRemoteSessionClientHandler(mux, h.DeleteRemoteSessionClient)
 }
@@ -119,6 +139,165 @@ func Mount(mux goahttp.Muxer, h *Server) {
 // Mount configures the mux to serve the remoteSessionClients endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountPrepareEMAHandler configures the mux to serve the
+// "remoteSessionClients" service "prepareEMA" endpoint.
+func MountPrepareEMAHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessionClients.prepareEMA", f)
+}
+
+// NewPrepareEMAHandler creates a HTTP handler which loads the HTTP request and
+// calls the "remoteSessionClients" service "prepareEMA" endpoint.
+func NewPrepareEMAHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodePrepareEMARequest(mux, decoder)
+		encodeResponse = EncodePrepareEMAResponse(encoder)
+		encodeError    = EncodePrepareEMAError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "prepareEMA")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountReadEMAHandler configures the mux to serve the "remoteSessionClients"
+// service "readEMA" endpoint.
+func MountReadEMAHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessionClients.readEMA", f)
+}
+
+// NewReadEMAHandler creates a HTTP handler which loads the HTTP request and
+// calls the "remoteSessionClients" service "readEMA" endpoint.
+func NewReadEMAHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeReadEMARequest(mux, decoder)
+		encodeResponse = EncodeReadEMAResponse(encoder)
+		encodeError    = EncodeReadEMAError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "readEMA")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUnlinkEMAHandler configures the mux to serve the "remoteSessionClients"
+// service "unlinkEMA" endpoint.
+func MountUnlinkEMAHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessionClients.unlinkEMA", f)
+}
+
+// NewUnlinkEMAHandler creates a HTTP handler which loads the HTTP request and
+// calls the "remoteSessionClients" service "unlinkEMA" endpoint.
+func NewUnlinkEMAHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUnlinkEMARequest(mux, decoder)
+		encodeResponse = EncodeUnlinkEMAResponse(encoder)
+		encodeError    = EncodeUnlinkEMAError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "unlinkEMA")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountCreateRemoteSessionClientHandler configures the mux to serve the
@@ -527,6 +706,60 @@ func NewListRemoteSessionClientsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listRemoteSessionClients")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetNewClientCallbackURLHandler configures the mux to serve the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint.
+func MountGetNewClientCallbackURLHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/remoteSessionClients.newClientCallbackUrl", f)
+}
+
+// NewGetNewClientCallbackURLHandler creates a HTTP handler which loads the
+// HTTP request and calls the "remoteSessionClients" service
+// "getNewClientCallbackUrl" endpoint.
+func NewGetNewClientCallbackURLHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetNewClientCallbackURLRequest(mux, decoder)
+		encodeResponse = EncodeGetNewClientCallbackURLResponse(encoder)
+		encodeError    = EncodeGetNewClientCallbackURLError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getNewClientCallbackUrl")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionClients")
 		payload, err := decodeRequest(r)
 		if err != nil {

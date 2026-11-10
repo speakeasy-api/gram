@@ -25,11 +25,11 @@ export type UpdateGlobalRemoteSessionClientFormTokenEndpointAuthMethod =
  */
 export type UpdateGlobalRemoteSessionClientForm = {
   /**
-   * Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
+   * Replace the upstream OAuth audience sent for this client. Pass an empty string to clear it. Omit to leave unchanged.
    */
   audience?: string | undefined;
   /**
-   * Rotate the client secret. Gram re-encrypts before persisting.
+   * Rotate the client secret. Speakeasy re-encrypts before persisting.
    */
   clientSecret?: string | undefined;
   /**

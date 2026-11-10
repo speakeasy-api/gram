@@ -101,7 +101,7 @@ func TestValidatorBoundaryWorkloadSessionReplacesEarlierProvenance(t *testing.T)
 func TestZeroValidatorBoundaryDoesNotClearProvenanceForWorkload(t *testing.T) {
 	t.Parallel()
 
-	stamped := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context())
+	stamped := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context(), "key_test")
 
 	var inert mcpidentity.ValidatorBoundary
 	subject := urn.NewWorkloadSubject(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "repo:acme/payments-api:ref:refs/heads/main")
@@ -127,8 +127,8 @@ func TestValidatorBoundaryNonUserStrategiesCannotCarryUser(t *testing.T) {
 		ctx  func() context.Context
 	}{
 		{want: mcpidentity.KindAssistant, ctx: func() context.Context { return boundary.StampAssistant(t.Context()) }},
-		{want: mcpidentity.KindAPIKey, ctx: func() context.Context { return boundary.StampAPIKey(t.Context()) }},
-		{want: mcpidentity.KindChatSession, ctx: func() context.Context { return boundary.StampChatSession(t.Context()) }},
+		{want: mcpidentity.KindAPIKey, ctx: func() context.Context { return boundary.StampAPIKey(t.Context(), "key_test") }},
+		{want: mcpidentity.KindChatSession, ctx: func() context.Context { return boundary.StampChatSession(t.Context(), "") }},
 	}
 	for _, tt := range tests {
 		identity, ok := mcpidentity.FromContext(tt.ctx())
@@ -157,12 +157,45 @@ func TestValidatorBoundaryStampAgent(t *testing.T) {
 	require.Equal(t, id.String(), identity.AgentID())
 	require.Empty(t, identity.UserID())
 	// A subsequent non-agent credential must not retain an earlier agent claim.
-	identity, ok = mcpidentity.FromContext(boundary.StampAPIKey(boundary.StampAgent(t.Context(), id)))
+	identity, ok = mcpidentity.FromContext(boundary.StampAPIKey(boundary.StampAgent(t.Context(), id), "key_test"))
 	require.True(t, ok)
 	require.Equal(t, mcpidentity.KindAPIKey, identity.Kind())
 	require.Empty(t, identity.AgentID())
 	for _, inert := range []*mcpidentity.ValidatorBoundary{nil, {}} {
 		_, ok := mcpidentity.FromContext(inert.StampAgent(t.Context(), id))
 		require.False(t, ok)
+	}
+}
+
+func TestValidatorBoundaryAdmittedWorkloadSession(t *testing.T) {
+	t.Parallel()
+	boundary := mcpidentity.NewValidatorBoundary()
+	agentID := uuid.New()
+	session := validatedSession(t, urn.NewWorkloadSubject(uuid.New(), "machine-test"))
+	earlier := boundary.StampValidatedSession(t.Context(), validatedSession(t, urn.NewUserSubject("user_test")))
+	identity, ok := mcpidentity.FromContext(boundary.StampValidatedWorkloadSession(earlier, session, agentID))
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindAgent, identity.Kind())
+	require.Equal(t, agentID.String(), identity.AgentID())
+	require.Empty(t, identity.UserID())
+	require.Equal(t, session.ExpiresAt(), identity.ExpiresAt())
+	require.Equal(t, session.JTI(), identity.SessionJTI())
+	for _, tc := range []struct {
+		name     string
+		boundary *mcpidentity.ValidatorBoundary
+		session  sessiontokens.ValidatedSession
+		agentID  uuid.UUID
+	}{
+		{"nil boundary", nil, session, agentID},
+		{"inert boundary", &mcpidentity.ValidatorBoundary{}, session, agentID},
+		{"invalid proof", boundary, sessiontokens.ValidatedSession{}, agentID},
+		{"missing agent", boundary, session, uuid.Nil},
+		{"user proof", boundary, validatedSession(t, urn.NewUserSubject("user_test")), agentID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, ok := mcpidentity.FromContext(tc.boundary.StampValidatedWorkloadSession(t.Context(), tc.session, tc.agentID))
+			require.False(t, ok)
+		})
 	}
 }

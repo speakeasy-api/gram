@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
@@ -27,19 +28,29 @@ type Service struct {
 	db        *pgxpool.Pool
 	workflows loops.WorkflowClient
 	logger    *slog.Logger
-	siteURL   string
+	orgHosts  *orghost.Resolver
 }
 
 var _ Notifier = (*Service)(nil)
 
 // NewService constructs a trial lifecycle email synchronizer.
-func NewService(db *pgxpool.Pool, workflows loops.WorkflowClient, logger *slog.Logger, siteURL string) *Service {
+func NewService(db *pgxpool.Pool, workflows loops.WorkflowClient, logger *slog.Logger, orgHosts *orghost.Resolver) *Service {
 	return &Service{
 		db:        db,
 		workflows: workflows,
 		logger:    logger,
-		siteURL:   strings.TrimRight(siteURL, "/"),
+		orgHosts:  orgHosts,
 	}
+}
+
+// dashboardURL links to the organization's dashboard on its default host. A
+// process without a dashboard URL renders only the path.
+func (s *Service) dashboardURL(organization orgrepo.OrganizationMetadatum) string {
+	base := ""
+	if siteURL := s.orgHosts.SiteURL(organization.DefaultHost); siteURL != nil {
+		base = strings.TrimRight(siteURL.String(), "/")
+	}
+	return base + "/" + organization.Slug
 }
 
 // TrialStarted enters every active organization administrator into the trial workflow.
@@ -64,7 +75,7 @@ func (s *Service) TrialStarted(ctx context.Context, organizationID string) error
 
 	properties := map[string]any{
 		"organizationName": organization.Name,
-		"dashboardUrl":     s.siteURL + "/" + organization.Slug,
+		"dashboardUrl":     s.dashboardURL(organization),
 		"trialEndsAt":      trial.EndsAt.Time.UTC().Format(time.RFC3339),
 		"trialActive":      true,
 	}
@@ -103,7 +114,7 @@ func (s *Service) AdminAdded(ctx context.Context, organizationID, userID string)
 		Email:       admin.Email,
 	}}, map[string]any{
 		"organizationName": organization.Name,
-		"dashboardUrl":     s.siteURL + "/" + organization.Slug,
+		"dashboardUrl":     s.dashboardURL(organization),
 		"trialEndsAt":      trial.EndsAt.Time.UTC().Format(time.RFC3339),
 		"trialActive":      true,
 	}, trial.CreatedAt.Time)

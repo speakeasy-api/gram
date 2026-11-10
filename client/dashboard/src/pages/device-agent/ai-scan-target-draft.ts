@@ -1,3 +1,5 @@
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
+import { UpsertAiScanTargetRequestBodyCategory } from "@gram/client/models/components/upsertaiscantargetrequestbody.js";
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
 import type { UpsertAiScanTargetRequestBody } from "@gram/client/models/components/upsertaiscantargetrequestbody.js";
 
@@ -44,7 +46,7 @@ export const TARGET_CATEGORIES: ReadonlyArray<{
 export type Draft = {
   id: string;
   displayName: string;
-  category: TargetCategory;
+  category: AiScanTarget["category"];
   bundleIds: string[];
   binaries: string[];
   configDirs: string[];
@@ -83,10 +85,8 @@ export function emptyDraft(): Draft {
 }
 
 // draftFromTarget seeds the editor from an existing target. The category is
-// carried through as-is: the API types it as a closed enum over the same
-// values as TargetCategory, so a server-side addition breaks this assignment
-// at compile time rather than silently rewriting the target's category on the
-// next upsert.
+// carried through as-is. Validation prevents saving unsupported categories
+// rather than replacing them with a known category on the next upsert.
 export function draftFromTarget(target: AiScanTarget): Draft {
   return {
     id: target.id,
@@ -170,9 +170,9 @@ function gatewayListProblem(
 }
 
 // callsGateway mirrors the server's aitargets.CallsGateway: which categories
-// ever reach Gram's MCP gateway, and so which ones it is meaningful to name a
+// ever reach Speakeasy's MCP gateway, and so which ones it is meaningful to name a
 // caller for. An open model run locally never connects.
-export function callsGateway(category: TargetCategory): boolean {
+export function callsGateway(category: string): boolean {
   return category === "harness" || category === "assistant";
 }
 
@@ -193,6 +193,9 @@ export function withCategory(draft: Draft, category: TargetCategory): Draft {
 
 export function validateDraft(draft: Draft): DraftErrors {
   const errors: DraftErrors = {};
+  if (!isKnownEnumValue(UpsertAiScanTargetRequestBodyCategory, draft.category))
+    errors.category =
+      "Refresh the page before editing this unsupported category.";
 
   if (draft.id.trim() === "") {
     errors.id = "The name needs at least one letter or digit to make an id";
@@ -240,7 +243,7 @@ export function validateDraft(draft: Draft): DraftErrors {
       "Use an Info.plist key made of letters and digits only";
   }
 
-  // A harness and an assistant both reach Gram's MCP gateway, so both may
+  // A harness and an assistant both reach Speakeasy's MCP gateway, so both may
   // carry matchers. An open model never does, and its draft never holds any:
   // withCategory drops them on the switch and draftToUpsertBody sends none.
   // There is nothing to check for it, and nowhere to show a finding, since
@@ -371,7 +374,10 @@ export function draftToUpsertBody(draft: Draft): UpsertAiScanTargetRequestBody {
   return {
     id: draft.id.trim(),
     displayName: draft.displayName.trim(),
-    category: draft.category,
+    category: requireKnownEnumValue(
+      UpsertAiScanTargetRequestBodyCategory,
+      draft.category,
+    ),
     signatures: {
       bundleIds: draft.bundleIds,
       binaries: draft.binaries,

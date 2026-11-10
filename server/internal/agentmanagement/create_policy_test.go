@@ -2,13 +2,14 @@ package agentmanagement
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
+	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -26,8 +27,8 @@ func TestCreateAgentWithInitialPolicy(t *testing.T) {
 	seedOrganizationUser(t, conn, "org-create-policy", "owner")
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	service := newTestService(conn, engine)
-	service.features = &recordingAgentManagementFeatures{evaluation: feature.EvaluationEnabled}
 	ctx := validatedHumanContext(t, "org-create-policy", "owner")
+	seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "owner"), authz.ScopeMCPRead, "*")
 	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Configured agent", PolicyGrants: []*gen.AgentPolicyGrantForm{initialMCPGrant()}})
 	require.NoError(t, err)
 	require.Equal(t, gen.AgentLifecycle("active"), created.Lifecycle)
@@ -37,10 +38,6 @@ func TestCreateAgentWithInitialPolicy(t *testing.T) {
 	require.Len(t, grants, 1)
 	require.Equal(t, string(authz.ScopeMCPRead), grants[0].Scope)
 	delegable, err := service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{AgentID: created.ID})
-	require.NoError(t, err)
-	require.Empty(t, delegable)
-	seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "owner"), authz.ScopeMCPRead, "*")
-	delegable, err = service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{AgentID: created.ID})
 	require.NoError(t, err)
 	// mcp:read implies mcp:connect.
 	require.ElementsMatch(t, []*gen.AgentPolicyGrantForm{
@@ -87,6 +84,7 @@ func TestCreateAgentInitialPolicyFailureIsAtomic(t *testing.T) {
 			seedOrganizationUser(t, conn, "org-create-policy", "other")
 			service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 			ctx := validatedHumanContext(t, "org-create-policy", "owner")
+			seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "owner"), authz.ScopeMCPRead, "*")
 			payload := &gen.CreatePayload{Name: "Failed agent", PolicyGrants: test.grants}
 			if test.otherOwner {
 				owner := "other"
@@ -108,13 +106,11 @@ func TestCreateAgentInitialPolicyFailureIsAtomic(t *testing.T) {
 			if test.otherOwner {
 				requireOopsCode(t, err, oops.CodeForbidden)
 			}
-			var agents, grants, audits int
-			//nolint:glint // notestingrawsql: directly verifies atomic rollback of agent, grants and audit rows
-			err = conn.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE organization_id = $1), (SELECT count(*) FROM principal_grants WHERE organization_id = $1), (SELECT count(*) FROM audit_logs WHERE organization_id = $1)`, "org-create-policy").Scan(&agents, &grants, &audits)
+			rows, err := testrepo.New(conn).CountAgentCreationRowsFixture(ctx, "org-create-policy")
 			require.NoError(t, err)
-			require.Zero(t, agents)
-			require.Zero(t, grants)
-			require.Zero(t, audits)
+			require.Zero(t, rows.Agents)
+			require.Zero(t, rows.Grants)
+			require.Zero(t, rows.Audits)
 			require.Empty(t, agentWebhookOutboxActions(t, conn, "org-create-policy"))
 		})
 	}
@@ -130,6 +126,9 @@ func TestCreateAgentInitialPolicyForOtherOwnerRequiresTenantMembership(t *testin
 	seedOrganizationUser(t, conn, "org-other-policy", "outside")
 	ctx := validatedHumanContext(t, "org-create-policy", "caller")
 	seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentWrite, "*")
+	for _, userID := range []string{"caller", "owner"} {
+		seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeMCPRead, "*")
+	}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	service := newTestService(conn, engine)
 	owner := "owner"
@@ -142,11 +141,37 @@ func TestCreateAgentInitialPolicyForOtherOwnerRequiresTenantMembership(t *testin
 	owner = "outside"
 	_, err = service.Create(ctx, &gen.CreatePayload{Name: "Cross tenant agent", OwnerUserID: &owner, PolicyGrants: []*gen.AgentPolicyGrantForm{initialMCPGrant()}})
 	requireOopsCode(t, err, oops.CodeForbidden)
-	var agents, policies int
-	//nolint:glint // notestingrawsql: verifies failed cross-tenant creation did not persist agent or policy
-	err = conn.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE organization_id = $1), (SELECT count(*) FROM principal_grants WHERE organization_id = $1 AND principal_urn LIKE 'agent:%')`, "org-create-policy").Scan(&agents, &policies)
+	rows, err := testrepo.New(conn).CountAgentCreationRowsFixture(ctx, "org-create-policy")
 	require.NoError(t, err)
-	require.Equal(t, 1, agents)
-	require.Equal(t, 1, policies)
+	require.Equal(t, int64(1), rows.Agents)
+	require.Equal(t, int64(1), rows.Grants)
 	require.Equal(t, []string{"agent:create", "agent:policy_grant_create"}, agentWebhookOutboxActions(t, conn, "org-create-policy"))
+}
+
+// Deleting an agent removes every grant naming it, including server rules
+// written elsewhere, so no surface keeps a rule for a principal that no
+// longer validates.
+func TestDeleteAgentRemovesItsGrants(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-delete-grants")
+	seedOrganizationUser(t, conn, "org-delete-grants", "owner")
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
+	service := newTestService(conn, engine)
+	ctx := validatedHumanContext(t, "org-delete-grants", "owner")
+	seedGrant(t, ctx, conn, "org-delete-grants", urn.NewPrincipal(urn.PrincipalTypeUser, "owner"), authz.ScopeMCPRead, "*")
+	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Retired agent", PolicyGrants: []*gen.AgentPolicyGrantForm{initialMCPGrant()}})
+	require.NoError(t, err)
+	agentID := uuid.MustParse(created.ID)
+	seedGrant(t, ctx, conn, "org-delete-grants", urn.NewPrincipal(urn.PrincipalTypeAgent, created.ID), authz.ScopeMCPBlockedConnect, uuid.NewString())
+
+	listGrants := func() []repo.ListAgentPolicyGrantsRow {
+		rows, err := repo.New(conn).ListAgentPolicyGrants(ctx, repo.ListAgentPolicyGrantsParams{OrganizationID: "org-delete-grants", AgentID: agentID})
+		require.NoError(t, err)
+		return rows
+	}
+	require.Len(t, listGrants(), 2)
+
+	require.NoError(t, service.Delete(ctx, &gen.DeletePayload{AgentID: created.ID}))
+	require.Empty(t, listGrants())
 }

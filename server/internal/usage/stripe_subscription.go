@@ -3,6 +3,7 @@ package usage
 import (
 	"context"
 	"errors"
+	"net/url"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -27,15 +28,18 @@ const (
 )
 
 type StripeSubscription struct {
-	Status             string
-	CurrentPeriodStart string
-	CurrentPeriodEnd   string
-	TrialStart         *string
-	TrialEnd           *string
-	CancelAtPeriodEnd  bool
-	CancelAt           *string
-	CanceledAt         *string
-	PaymentFailed      bool
+	DiscountDescription     *string
+	DiscountEndsAt          *string
+	GatewayPromotionApplied *bool
+	Status                  string
+	CurrentPeriodStart      string
+	CurrentPeriodEnd        string
+	TrialStart              *string
+	TrialEnd                *string
+	CancelAtPeriodEnd       bool
+	CancelAt                *string
+	CanceledAt              *string
+	PaymentFailed           bool
 }
 
 type BillingActor struct {
@@ -75,9 +79,15 @@ func (s *Service) CreateStripePortalSession(ctx context.Context, _ *gen.CreateSt
 	if err != nil {
 		return "", err
 	}
+	// The portal returns to the platform host the request came from, because
+	// the session cookie is host-only.
+	returnURL, err := url.JoinPath(s.platformHostBaseURL(ctx, s.siteURL), authCtx.OrganizationSlug, "billing")
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to build the billing return URL").LogError(ctx, s.logger)
+	}
 	portal, err := s.stripeClient.CreatePortalSession(ctx, stripeclient.CreatePortalSessionInput{
 		CustomerID: state.CustomerID,
-		ReturnURL:  s.siteURL.JoinPath(authCtx.OrganizationSlug, "billing").String(),
+		ReturnURL:  returnURL,
 	})
 	if err != nil {
 		return "", oops.E(oops.CodeUnavailable, err, "failed to create Stripe billing portal session").LogWarn(ctx, s.logger)
@@ -177,6 +187,28 @@ func canManageStripeSubscriptionLifecycle(status string) bool {
 	default:
 		return false
 	}
+}
+
+// GetStripeSubscriptionByID loads a live Stripe subscription for an independently
+// authorized admin operation. The caller checks that the customer matches the organization.
+// Adoption callers must explicitly require catalog eligibility; linked-subscription reads remain tolerant.
+func (s *Service) GetStripeSubscriptionByID(ctx context.Context, subscriptionID string, options ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error) {
+	if s.stripeClient == nil {
+		return nil, oops.E(oops.CodeUnavailable, nil, "Stripe subscription lookup is not configured")
+	}
+	state, err := s.stripeClient.GetSubscription(ctx, subscriptionID, options...)
+	if eligibilityErr, ok := errors.AsType[*stripeclient.SubscriptionEligibilityError](err); ok {
+		return nil, oops.E(oops.CodeConflict, err, "Stripe subscription cannot be linked: %s", eligibilityErr.Reason)
+	}
+	switch {
+	case errors.Is(err, stripeclient.ErrSubscriptionNotFound):
+		return nil, oops.E(oops.CodeNotFound, err, "Stripe subscription not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeGatewayError, err, "could not retrieve Stripe subscription").LogWarn(ctx, s.logger)
+	case state == nil || state.ID != subscriptionID || state.CustomerID == "":
+		return nil, oops.E(oops.CodeGatewayError, nil, "Stripe returned an unexpected subscription identity").LogWarn(ctx, s.logger)
+	}
+	return state, nil
 }
 
 func (s *Service) getStripeBillingState(ctx context.Context, organizationID string) (repo.BillingMetadatum, *stripeclient.SubscriptionState, error) {
@@ -282,21 +314,27 @@ func (s *Service) recordStripeBillingAction(
 
 func buildStripeSubscriptionView(state *stripeclient.SubscriptionState) *StripeSubscription {
 	return &StripeSubscription{
-		Status:             state.Status,
-		CurrentPeriodStart: state.CurrentPeriodStart.Format(time.RFC3339),
-		CurrentPeriodEnd:   state.CurrentPeriodEnd.Format(time.RFC3339),
-		TrialStart:         formatOptionalStripeTime(state.TrialStart),
-		TrialEnd:           formatOptionalStripeTime(state.TrialEnd),
-		CancelAtPeriodEnd:  state.CancelAtPeriodEnd,
-		CancelAt:           formatOptionalStripeTime(state.CancelAt),
-		CanceledAt:         formatOptionalStripeTime(state.CanceledAt),
-		PaymentFailed:      state.PaymentFailed,
+		DiscountDescription:     state.DiscountDescription,
+		DiscountEndsAt:          formatOptionalStripeTime(state.DiscountEndsAt),
+		GatewayPromotionApplied: new(state.GatewayPromotionApplied),
+		Status:                  state.Status,
+		CurrentPeriodStart:      state.CurrentPeriodStart.Format(time.RFC3339),
+		CurrentPeriodEnd:        state.CurrentPeriodEnd.Format(time.RFC3339),
+		TrialStart:              formatOptionalStripeTime(state.TrialStart),
+		TrialEnd:                formatOptionalStripeTime(state.TrialEnd),
+		CancelAtPeriodEnd:       state.CancelAtPeriodEnd,
+		CancelAt:                formatOptionalStripeTime(state.CancelAt),
+		CanceledAt:              formatOptionalStripeTime(state.CanceledAt),
+		PaymentFailed:           state.PaymentFailed,
 	}
 }
 
 func stripeSubscriptionGenView(value *StripeSubscription) *gen.StripeSubscription {
 	return &gen.StripeSubscription{
-		Status: value.Status, CurrentPeriodStart: value.CurrentPeriodStart, CurrentPeriodEnd: value.CurrentPeriodEnd,
+		DiscountDescription:     value.DiscountDescription,
+		DiscountEndsAt:          value.DiscountEndsAt,
+		GatewayPromotionApplied: value.GatewayPromotionApplied,
+		Status:                  value.Status, CurrentPeriodStart: value.CurrentPeriodStart, CurrentPeriodEnd: value.CurrentPeriodEnd,
 		TrialStart: value.TrialStart, TrialEnd: value.TrialEnd, CancelAtPeriodEnd: value.CancelAtPeriodEnd,
 		CancelAt: value.CancelAt, CanceledAt: value.CanceledAt, PaymentFailed: value.PaymentFailed,
 	}

@@ -11,6 +11,7 @@ import (
 
 	"cloud.google.com/go/pubsub/v2"
 	"github.com/speakeasy-api/gram/infra/internal/attr"
+	"github.com/speakeasy-api/gram/infra/internal/batching"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -21,6 +22,9 @@ const (
 	// defaultBatchMaxLatency is the maximum time a partial batch waits before
 	// being flushed when BatchReceiveSettings.MaxLatency is unset.
 	defaultBatchMaxLatency = time.Second
+
+	// defaultBatchBufferedBytes reserves 64 MiB when a byte budget is omitted.
+	defaultBatchBufferedBytes = 64 << 20
 )
 
 // BatchReceiveSettings tunes how Subscriber.ReceiveBatch groups messages. A
@@ -30,19 +34,20 @@ type BatchReceiveSettings struct {
 	// MaxMessages is the number of buffered messages that triggers a flush. A
 	// value <= 0 falls back to defaultBatchMaxMessages. It bounds how many
 	// messages are held in memory, and left un-acked, per batch. It is
-	// independent of the receiver's ReceiveSettings.MaxOutstandingMessages: the
-	// underlying client releases that limit (really a concurrency cap on in-flight
-	// receive callbacks) when our callback returns after buffering, not when the
-	// message is acked, so buffering does not consume outstanding slots and the
-	// buffer can always reach MaxMessages regardless of the outstanding limit.
+	// separate from the receiver's ReceiveSettings.MaxOutstandingMessages, which
+	// is also sent to Pub/Sub as a server-side unacknowledged-message limit.
+	// Returning from the receive callback releases client-side flow control but
+	// does not acknowledge buffered messages. Set the outstanding limit above
+	// MaxMessages to let batches fill without waiting for the latency timer.
 	MaxMessages int
 	// MaxBytes is the combined size of buffered message payloads, in bytes, that
 	// triggers a flush. A value <= 0 disables byte-based flushing, leaving
-	// MaxMessages and MaxLatency as the only triggers. Like MaxMessages it is a
-	// trigger, not a hard cap: a single payload at or above MaxBytes flushes on
-	// its own, and a batch can overshoot MaxBytes by up to the size of the
-	// message that crossed the threshold. Memory is bounded by the receiver's
-	// ReceiveSettings.MaxOutstandingBytes, not by this setting.
+	// MaxMessages and MaxLatency as the only triggers. It is not a hard cap:
+	// unbounded mode can overshoot by the message crossing the threshold;
+	// bounded mode's queued bundles can grow up to the count and buffered-byte
+	// limits while another handler runs. ReceiveSettings.MaxOutstandingBytes
+	// limits outstanding payload bytes separately; decoded messages and handler
+	// allocations add to the process's memory usage.
 	MaxBytes int
 	// MaxLatency is how long a partial batch waits before being flushed. A value
 	// <= 0 falls back to defaultBatchMaxLatency. It must stay well below the
@@ -54,6 +59,63 @@ type BatchReceiveSettings struct {
 	// MaxExtension the client stops extending, pubsub redelivers them before the
 	// batch flushes, and the eventual ack lands on a stale copy.
 	MaxLatency time.Duration
+
+	// MaxBufferedMessages opts into bounded batching and retains permits until
+	// settlement. Bounded mode uses a serial bundler handler with a bounded
+	// queue; deliveries unable to enter before cancellation are nacked.
+	MaxBufferedMessages int
+
+	// MaxBufferedBytes bounds admitted raw input through settlement. In bounded
+	// mode zero defaults to the greater of two MaxBytes-sized batches or 64 MiB.
+	// SDK callback flow control is separately capped at the same count/byte
+	// budgets (or tighter explicit limits), bounding callbacks waiting to enter.
+	// Those SDK buffers and decoded allocations add to the admitted-input budget.
+	MaxBufferedBytes int
+}
+
+func (s BatchReceiveSettings) bufferLimits() (messages, bytes int) {
+	messages = s.MaxBufferedMessages
+	if messages <= 0 {
+		size := s.MaxMessages
+		if size <= 0 {
+			size = defaultBatchMaxMessages
+		}
+		messages = 2 * size
+	}
+
+	bytes = s.MaxBufferedBytes
+	if bytes <= 0 {
+		bytes = max(2*s.MaxBytes, defaultBatchBufferedBytes)
+	}
+
+	return messages, bytes
+}
+
+// boundBatchReceiver also bounds payloads retained by callbacks waiting for an
+// application permit. Preserve any tighter flow-control limits from the caller.
+// The returned cleanup restores the caller's limits after the receive loop ends.
+func (s *psSubscriber[M]) boundBatchReceiver(settings BatchReceiveSettings) func() {
+	if settings.MaxBufferedMessages <= 0 && settings.MaxBufferedBytes <= 0 {
+		return func() {}
+	}
+
+	originalMessages := s.sub.ReceiveSettings.MaxOutstandingMessages
+	originalBytes := s.sub.ReceiveSettings.MaxOutstandingBytes
+	messages, bytes := settings.bufferLimits()
+	if limit := s.sub.ReceiveSettings.MaxOutstandingMessages; limit > 0 {
+		messages = min(messages, limit)
+	}
+	if limit := s.sub.ReceiveSettings.MaxOutstandingBytes; limit > 0 {
+		bytes = min(bytes, limit)
+	}
+
+	s.sub.ReceiveSettings.MaxOutstandingMessages = messages
+	s.sub.ReceiveSettings.MaxOutstandingBytes = bytes
+
+	return func() {
+		s.sub.ReceiveSettings.MaxOutstandingMessages = originalMessages
+		s.sub.ReceiveSettings.MaxOutstandingBytes = originalBytes
+	}
 }
 
 type SubscriberBroker interface {
@@ -264,6 +326,9 @@ func (s *psSubscriber[M]) handle(ctx context.Context, m incomingMessage, f func(
 // f returns an error (or panics) the whole batch is nacked. Messages that fail
 // to unmarshal are nacked individually and excluded from the batch handed to f.
 func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiveSettings, f func(context.Context, []M, []MessageMetadata) error) error {
+	restore := s.boundBatchReceiver(settings)
+	defer restore()
+
 	return s.batchLoop(ctx, settings, func(ctx context.Context, deliver func(incomingMessage)) error {
 		return s.sub.Receive(ctx, func(_ context.Context, m *pubsub.Message) {
 			deliver(incomingMessage{
@@ -289,6 +354,9 @@ func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiv
 // whole batch. Messages that fail to unmarshal are nacked individually and
 // excluded from f.
 func (s *psSubscriber[M]) ReceiveBatchWithResult(ctx context.Context, settings BatchReceiveSettings, f func(context.Context, []BatchMessage[M]) error) error {
+	restore := s.boundBatchReceiver(settings)
+	defer restore()
+
 	return s.batchLoopWithResult(ctx, settings, func(ctx context.Context, deliver func(incomingMessage)) error {
 		return s.sub.Receive(ctx, func(_ context.Context, m *pubsub.Message) {
 			deliver(incomingMessage{
@@ -352,6 +420,20 @@ func (s *psSubscriber[M]) batchLoopMessages(
 	// maxBytes is an optional trigger: a value <= 0 leaves count and latency as
 	// the only flush conditions.
 	maxBytes := settings.MaxBytes
+	if settings.MaxBufferedMessages > 0 || settings.MaxBufferedBytes > 0 {
+		messages, bytes := settings.bufferLimits()
+		err := batching.Run(ctx, batching.Settings{
+			MaxMessages: size, MaxBytes: maxBytes, MaxLatency: latency,
+			OutstandingMessages: messages, OutstandingBytes: bytes,
+		}, func(ctx context.Context, deliver func(context.Context, incomingMessage)) error {
+			return receive(ctx, func(m incomingMessage) { deliver(ctx, m) })
+		}, func(m incomingMessage) int { return len(m.data) }, func(m incomingMessage) { m.nack() }, handle)
+		if err != nil {
+			return fmt.Errorf("receive batch: %w", err)
+		}
+
+		return nil
+	}
 
 	newBuf := func() []incomingMessage { return make([]incomingMessage, 0, size) }
 

@@ -280,7 +280,9 @@ WHERE ai_integration_config_id = @ai_integration_config_id
 -- and, when pause_after is positive and the new count reaches it, pauses the
 -- schedule so candidate selection stops re-enqueueing it. Callers pass a zero
 -- pause_after for failures that should never pause (e.g. transient errors).
--- name: RecordUsagePollFailure :exec
+-- Returns rows updated, so callers can tell a recorded failure from one that
+-- matched no schedule (a config or sync deleted mid-poll).
+-- name: RecordUsagePollFailure :execrows
 UPDATE ai_integration_syncs
 SET next_poll_after = @next_poll_after,
     last_poll_error = @last_poll_error,

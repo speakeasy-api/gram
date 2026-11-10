@@ -88,7 +88,7 @@ func TestInspect_Unreachable_NoResponse(t *testing.T) {
 	require.Zero(t, result.HTTPStatus)
 	// The transport error names the refused connection and the local port;
 	// none of that may reach the operator.
-	require.Equal(t, "Gram could not reach the document endpoint.", result.Detail)
+	require.Equal(t, "Speakeasy could not reach the document endpoint.", result.Detail)
 }
 
 func TestInspect_Unreachable_OversizedBody(t *testing.T) {
@@ -212,7 +212,7 @@ func TestResolve_StaysOpaqueAfterInspectRefactor(t *testing.T) {
 	// A parse failure is still reported as an opaque wrapped error carrying
 	// no OAuth error shape, exactly as before the refactor — otherwise an
 	// unauthenticated caller could tell "reachable but not JSON" apart from
-	// "unreachable" and use Gram as a probe oracle.
+	// "unreachable" and use Speakeasy as a probe oracle.
 	require.Contains(t, err.Error(), "parse client metadata document")
 	require.Empty(t, safeDescriptionOf(err))
 }

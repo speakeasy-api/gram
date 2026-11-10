@@ -15,6 +15,8 @@ export interface UseSyncToolMetadataResult {
   /** Make the stored set mirror the session, removing tools it dropped. */
   sync: () => void;
   isSyncing: boolean;
+  /** This viewer can change the stored metadata (`mcp:write`). */
+  canWrite: boolean;
 }
 
 /**
@@ -22,7 +24,9 @@ export interface UseSyncToolMetadataResult {
  *
  * The session is only the source the annotations are read FROM — what gets
  * written is persisted against the MCP server for the whole project, so a sync
- * changes what every caller of that server sees, not just this viewer.
+ * changes what every caller of that server sees, not just this viewer. `live`
+ * must therefore be the server's whole catalog, not this viewer's filtered
+ * view of it (see useProxiedMcpTools).
  *
  * Tools the session advertises for the first time are recorded automatically —
  * there is no stored value to disagree with, so nothing needs confirming.
@@ -35,19 +39,22 @@ export function useSyncToolMetadata({
   live,
   stored,
   enabled,
+  project,
 }: {
   mcpServerId: string | undefined;
   live: Record<string, ProxiedMcpTool> | undefined;
   stored: ToolMetadataByName;
   /** False until both sides have loaded, and for servers without metadata. */
   enabled: boolean;
+  /** The server's project, for org-level pages with no ambient project. */
+  project?: { id: string; slug: string };
 }): UseSyncToolMetadataResult {
   const queryClient = useQueryClient();
   const { hasAnyScope } = useRBAC();
 
   // Writing is gated on mcp:write like any other mutation; a read-only viewer
   // must not have a page visit silently write on their behalf.
-  const canWrite = hasAnyScope(["mcp:write"], mcpServerId);
+  const canWrite = hasAnyScope(["mcp:write"], mcpServerId, project?.id);
 
   const refresh = () =>
     invalidateAllListMcpServerToolMetadata(queryClient, {
@@ -95,6 +102,7 @@ export function useSyncToolMetadata({
 
     add.mutate({
       request: {
+        gramProject: project?.slug,
         setToolMetadataBatchRequestBody: { mcpServerId, tools },
       },
     });
@@ -106,6 +114,7 @@ export function useSyncToolMetadata({
       if (!live || !mcpServerId) return;
       set.mutate({
         request: {
+          gramProject: project?.slug,
           setToolMetadataBatchRequestBody: {
             mcpServerId,
             tools: fullSyncBatch(live),
@@ -114,5 +123,6 @@ export function useSyncToolMetadata({
       });
     },
     isSyncing: set.isPending,
+    canWrite,
   };
 }

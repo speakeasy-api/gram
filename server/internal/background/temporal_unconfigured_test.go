@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/temporal"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 // These tests cover the Temporal dispatch helpers reachable from the MCP
@@ -27,11 +26,4 @@ func TestTemporalChatTitleGeneratorWithoutTemporal(t *testing.T) {
 
 	generator := &TemporalChatTitleGenerator{TemporalEnv: nil}
 	require.ErrorIs(t, generator.ScheduleChatTitleGeneration(t.Context(), "chat", "org", "project"), temporal.ErrNotConfigured)
-}
-
-func TestOpenRouterKeyRefresherScheduleWithoutTemporal(t *testing.T) {
-	t.Parallel()
-
-	refresher := &OpenRouterKeyRefresher{TemporalEnv: nil}
-	require.ErrorIs(t, refresher.ScheduleOpenRouterKeyRefresh(t.Context(), "org", openrouter.KeyType(""), nil), temporal.ErrNotConfigured)
 }

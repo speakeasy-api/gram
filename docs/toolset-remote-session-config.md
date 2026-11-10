@@ -51,7 +51,7 @@ Untouched on purpose: `WireUserSessionIssuerModal` and its machine, `ModifyRemot
 ## Remaining work
 
 1. Not manually verified: the `legacy` surface (legacy OAuth configured, unwired) with its convert buttons. No local toolset has an OAuth proxy or external OAuth configured. Options: seed one locally for a visual check, or rely on unit tests plus the untouched wire modal. Walker had not chosen when this doc was written.
-2. Commit + PR (use the `pr` skill; remember the `env -u GH_TOKEN -u GITHUB_TOKEN` prefix for gh writes). Suggested demo: pr-demo-gif of the toolset attach flow.
+2. Commit + PR (use the `pr` skill; remember the `env -u GH_TOKEN -u GITHUB_TOKEN` prefix for gh writes). Suggested demo: pull-request-demo of the toolset attach flow.
 3. Possible reviewer question: `ConvertToUserSessionsButton` mounts its own `useRemoteSessionIssuers()`; fine per React Query dedup.
 
 ## Related context

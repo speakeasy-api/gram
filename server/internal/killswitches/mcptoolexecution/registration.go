@@ -24,7 +24,7 @@ const (
 	// tools/call execution.
 	DefinitionKeyMCPToolExecution killswitches.DefinitionKey = "mcp_tool_execution"
 
-	// PrincipalKindUser is the concrete Gram user principal namespace; keys
+	// PrincipalKindUser is the concrete Speakeasy user principal namespace; keys
 	// are user IDs of authoritative active organization members.
 	PrincipalKindUser killswitches.PrincipalKind = "user"
 

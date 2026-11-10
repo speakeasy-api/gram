@@ -32,9 +32,6 @@ func (s *Service) authenticateIssuerGateAgentKey(ctx context.Context, token stri
 		if !ok || authCtx == nil || authCtx.ActiveOrganizationID != endpoint.OrganizationID || (authCtx.ProjectID != nil && *authCtx.ProjectID != endpoint.ProjectID) {
 			return oops.C(oops.CodeUnauthorized)
 		}
-		if enabled, _, _ := s.agentAuthorizationRollout(ctx, s.logger, endpoint); !enabled {
-			return oops.C(oops.CodeNotFound)
-		}
 		return nil
 	})
 	if err != nil {
@@ -69,7 +66,11 @@ func (s *Service) authenticateIssuerGateAgentKey(ctx context.Context, token stri
 func (s *Service) stampAuthenticatedAPIKey(ctx context.Context) (context.Context, error) {
 	mode, ok := contextvalues.APIKeyAuthorization(ctx)
 	if !ok || mode != contextvalues.APIKeyAuthorizationModePrincipal {
-		return s.identityValidator.StampAPIKey(ctx), nil
+		auth, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || auth == nil {
+			return ctx, oops.C(oops.CodeUnauthorized)
+		}
+		return s.identityValidator.StampAPIKey(ctx, auth.APIKeyID), nil
 	}
 	actor, ok := contextvalues.AuthenticatedActor(ctx)
 	if !ok || actor.Type != urn.PrincipalTypeAgent {

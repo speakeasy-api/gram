@@ -156,8 +156,20 @@ export function mcpServerRouteParam(server: {
   id: string;
   slug?: string | null | undefined;
 }): string {
-  return server.slug?.trim() || server.id;
+  const slug = server.slug?.trim();
+  return slug && !RESERVED_MCP_SEGMENTS.has(slug) ? slug : server.id;
 }
+
+// Static /mcp segments; servers slugged like one are linked by id.
+export const RESERVED_MCP_SEGMENTS: ReadonlySet<string> = new Set([
+  "add",
+  "catalog",
+  "deployments",
+  "sources",
+  "organization-gateway",
+  "gateway",
+  "x",
+]);
 
 // uuidRegex matches the canonical 8-4-4-4-12 hex form that Go's UUID package
 // emits via String() and that the Goa-generated SDK uses on the wire. It is

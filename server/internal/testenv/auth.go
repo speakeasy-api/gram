@@ -108,6 +108,7 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 		WorkosID:       pgtype.Text{String: mockidp.MockOrgID, Valid: true},
 		Whitelisted:    pgtype.Bool{Bool: false, Valid: false},
 		CreationSource: pgtype.Text{String: "", Valid: false},
+		DefaultHost:    pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 

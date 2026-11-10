@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export const UpdateMcpServerFormNetworkAccessMode = {
   PublicOnly: "public_only",
@@ -15,7 +15,7 @@ export const UpdateMcpServerFormNetworkAccessMode = {
   PrivateOnly: "private_only",
 } as const;
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export type UpdateMcpServerFormNetworkAccessMode = ClosedEnum<
   typeof UpdateMcpServerFormNetworkAccessMode
@@ -37,9 +37,13 @@ export type UpdateMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value; the slug is recomputed server-side from the resulting name.
+ * Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value, and set clear_user_session_issuer to detach the issuer; the slug is recomputed server-side from the resulting name.
  */
 export type UpdateMcpServerForm = {
+  /**
+   * Detach the current user session issuer, so the server no longer requires user sessions. Must not be true when user_session_issuer_id is set.
+   */
+  clearUserSessionIssuer?: boolean | undefined;
   /**
    * The ID of the environment to associate with the server
    */
@@ -53,7 +57,7 @@ export type UpdateMcpServerForm = {
    */
   name?: string | undefined;
   /**
-   * The network surfaces through which a Gram-hosted MCP server may be reached.
+   * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
    */
   networkAccessMode?: UpdateMcpServerFormNetworkAccessMode | undefined;
   /**
@@ -98,6 +102,7 @@ export const UpdateMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 
 /** @internal */
 export type UpdateMcpServerForm$Outbound = {
+  clear_user_session_issuer?: boolean | undefined;
   environment_id?: string | undefined;
   id: string;
   name?: string | undefined;
@@ -117,6 +122,7 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
   UpdateMcpServerForm
 > = z.pipe(
   z.object({
+    clearUserSessionIssuer: z.optional(z.boolean()),
     environmentId: z.optional(z.string()),
     id: z.string(),
     name: z.optional(z.string()),
@@ -133,6 +139,7 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      clearUserSessionIssuer: "clear_user_session_issuer",
       environmentId: "environment_id",
       networkAccessMode: "network_access_mode",
       remoteMcpServerId: "remote_mcp_server_id",

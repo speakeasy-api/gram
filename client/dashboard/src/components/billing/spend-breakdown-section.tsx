@@ -25,6 +25,7 @@ import {
   type SpendProduct,
   type SpendProductID,
   sumSelectedCost,
+  UnsupportedSpendBreakdownError,
   validateSpendBreakdown,
 } from "./spend-breakdown-adapter";
 import { meterPeriodDisplayRange, useMeterPeriod } from "./use-meter-period";
@@ -157,25 +158,42 @@ export function SpendBreakdownSection(): JSX.Element | null {
     emptyMessage = "Select a product to see its estimated spend.";
   }
 
+  const unsupportedResponse =
+    query.error instanceof UnsupportedSpendBreakdownError;
+  const errorContent = (
+    <div className="flex flex-wrap items-center gap-3" role="alert">
+      <span className="text-muted-foreground text-sm">
+        {unsupportedResponse
+          ? "Refresh the page to display these newer spend estimates."
+          : data
+            ? "Couldn't refresh estimated spend."
+            : "Couldn't load estimated spend."}
+        {data && " Showing the last loaded data."}
+      </span>
+      {unsupportedResponse ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => window.location.reload()}
+        >
+          Refresh page
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={query.isFetching}
+          onClick={() => void query.refetch()}
+        >
+          {query.isFetching ? "Retrying..." : "Retry"}
+        </Button>
+      )}
+    </div>
+  );
+
   let content: JSX.Element;
   if (!data && query.isError) {
-    content = (
-      <div className="border-border border p-6">
-        <div className="flex flex-wrap items-center gap-3" role="alert">
-          <span className="text-muted-foreground text-sm">
-            Couldn't load estimated spend.
-          </span>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={query.isFetching}
-            onClick={() => void query.refetch()}
-          >
-            {query.isFetching ? "RETRYING..." : "RETRY"}
-          </Button>
-        </div>
-      </div>
-    );
+    content = <div className="border-border border p-6">{errorContent}</div>;
   } else if (!data) {
     content = <Skeleton className="h-[520px] w-full" />;
   } else {
@@ -190,11 +208,7 @@ export function SpendBreakdownSection(): JSX.Element | null {
             Loading selected spend — showing the previous selection.
           </div>
         )}
-        {query.isError && (
-          <div className="text-muted-foreground text-sm" role="alert">
-            Couldn't refresh estimated spend — showing the last loaded data.
-          </div>
-        )}
+        {query.isError && errorContent}
         <MetricCard.Group>
           <MetricCard
             label="Selected estimated cost"

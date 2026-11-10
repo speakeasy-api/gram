@@ -74,12 +74,16 @@ func (f *fakeStripeWebhookClient) CreateCheckoutSession(context.Context, stripec
 	return nil, errors.New("not implemented")
 }
 
+func (*fakeStripeWebhookClient) PublishableKey() string {
+	return ""
+}
+
 func (f *fakeStripeWebhookClient) GetCheckoutSession(context.Context, string) (*stripeclient.CheckoutSessionState, error) {
 	f.checkoutCalls.Add(1)
 	return f.checkout, f.checkoutError
 }
 
-func (f *fakeStripeWebhookClient) GetSubscription(context.Context, string) (*stripeclient.SubscriptionState, error) {
+func (f *fakeStripeWebhookClient) GetSubscription(context.Context, string, ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -148,6 +152,10 @@ func (f *fakeStripeWebhookClient) FindCreditNote(context.Context, stripeclient.F
 func (f *fakeStripeWebhookClient) VerifyWebhook(payload []byte, signature string) (*stripeclient.WebhookEvent, error) {
 	f.verifyCalls.Add(1)
 	return f.verify(payload, signature)
+}
+
+func (c *fakeStripeWebhookClient) ResolveGatewayPromotionCode(context.Context, string) (string, error) {
+	return "", errors.New("promotion resolution is not used by billing")
 }
 
 func (f *fakeStripeWebhookClient) Catalog() stripeclient.Catalog {
@@ -382,8 +390,7 @@ func stripeLifecycleOpenRouterProvisioner(t *testing.T, db *pgxpool.Pool, baseUR
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	return openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 }
 
@@ -1081,8 +1088,11 @@ func configurePaygCheckout(t *testing.T, service *Service, eventID, subscription
 		}, nil
 	}
 	client.checkout = &stripeclient.CheckoutSessionState{
+		Partner:                nil,
 		ID:                     "checkout_placeholder",
 		Status:                 "complete",
+		PaymentStatus:          "paid",
+		OrganizationID:         stripeWebhookOrganizationID,
 		CustomerID:             "customer_placeholder",
 		SubscriptionID:         subscriptionID,
 		SubscriptionCustomerID: "customer_placeholder",
@@ -1161,63 +1171,6 @@ func TestStripeCheckoutCompletionActivatesColdPaygOrganization(t *testing.T) {
 	require.NotContains(t, string(record.AfterSnapshot), "subscription_activation")
 }
 
-func postgresBackendPID(t *testing.T, tx pgx.Tx) int32 {
-	t.Helper()
-
-	var pid int32
-	err := tx.QueryRow(t.Context(), `SELECT pg_backend_pid()`).Scan(&pid) //nolint:glint // notestingrawsql: backend identity is a PostgreSQL test synchronization primitive unavailable through application SQLc queries
-	require.NoError(t, err)
-	return pid
-}
-
-func waitForStripeWebhookWaitersBlockedByPID(t *testing.T, db *pgxpool.Pool, holderPID int32, count int) []int32 {
-	t.Helper()
-
-	var waiterPIDs []int32
-	require.Eventually(t, func() bool {
-		rows, err := db.Query( //nolint:glint // notestingrawsql: pg_blocking_pids is a PostgreSQL test synchronization primitive unavailable to SQLc generation
-			t.Context(), `
-SELECT activity.pid
-FROM pg_stat_activity AS activity
-WHERE activity.datname = current_database()
-  AND $1 = ANY(pg_blocking_pids(activity.pid))
-ORDER BY activity.pid
-`, holderPID)
-		if err != nil {
-			return false
-		}
-		waiterPIDs, err = pgx.CollectRows(rows, pgx.RowTo[int32])
-		require.NoError(t, err)
-		return len(waiterPIDs) == count
-	}, 2*time.Second, 10*time.Millisecond)
-	return waiterPIDs
-}
-
-func waitForStripeWebhookBlockedByPID(t *testing.T, db *pgxpool.Pool, holderPID int32) {
-	t.Helper()
-	waitForStripeWebhookWaitersBlockedByPID(t, db, holderPID, 1)
-}
-
-func waitForStripeReceiptInsertBlockedByPID(t *testing.T, db *pgxpool.Pool, holderPID int32) {
-	t.Helper()
-
-	require.Eventually(t, func() bool {
-		var blocked bool
-		err := db.QueryRow( //nolint:glint // notestingrawsql: pg_blocking_pids is a PostgreSQL test synchronization primitive unavailable to SQLc generation
-			t.Context(), `
-SELECT EXISTS (
-  SELECT 1
-  FROM pg_stat_activity AS activity
-  WHERE activity.datname = current_database()
-    AND $1 = ANY(pg_blocking_pids(activity.pid))
-    AND activity.query LIKE '%INSERT INTO stripe_webhook_receipts%'
-)
-`, holderPID).Scan(&blocked)
-		require.NoError(t, err)
-		return blocked
-	}, 2*time.Second, 10*time.Millisecond)
-}
-
 func receiveStripeWebhookStatus(t *testing.T, response <-chan int) int {
 	t.Helper()
 
@@ -1239,22 +1192,20 @@ func TestStripeCheckoutLocksConvertedTrialBeforeOpenRouterKeys(t *testing.T) {
 	_, err := trialsrepo.New(db).MarkTrialConverted(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 
-	trialTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test must hold a trial-row transaction open while the webhook blocks
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = trialTx.Rollback(context.Background()) })
-	trialHolderPID := postgresBackendPID(t, trialTx)
+	trialTx := testenv.BeginTx(t, t.Context(), db)
+	trialHolderPID := testenv.BackendPID(trialTx)
 	_, err = trialsrepo.New(trialTx).LockTrialLifecycle(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 
 	response := make(chan int, 1)
 	go func() { response <- serveStripeWebhook(service, "convert").Code }()
-	waitForStripeWebhookBlockedByPID(t, db, trialHolderPID)
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), db, trialHolderPID, 1)
 
-	probeTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the probe transaction proves the chat advisory lock remains available
-	require.NoError(t, err)
-	probeCtx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
-	defer cancel()
-	require.NoError(t, repo.New(probeTx).AcquireOpenRouterBillingLock(probeCtx, repo.AcquireOpenRouterBillingLockParams{
+	probeTx := testenv.BeginTx(t, t.Context(), db)
+	// probeTimeout bounds server-side acquisition of the exact lock under test.
+	const probeTimeout = 100 * time.Millisecond
+	testenv.SetLockTimeout(t, t.Context(), probeTx, probeTimeout)
+	require.NoError(t, repo.New(probeTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeChat),
 		OrganizationID: stripeWebhookOrganizationID,
 	}))
@@ -1270,10 +1221,8 @@ func TestStripeCheckoutAcquiresOpenRouterLocksInAllKeyTypesOrder(t *testing.T) {
 	configurePaygCheckout(t, service, "event_key_lock_order", "subscription_key_lock_order", "active")
 	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat, openrouter.KeyTypeInternal}, openrouter.AllKeyTypes)
 
-	chatTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test must hold the first advisory lock while the webhook blocks
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = chatTx.Rollback(context.Background()) })
-	chatHolderPID := postgresBackendPID(t, chatTx)
+	chatTx := testenv.BeginTx(t, t.Context(), db)
+	chatHolderPID := testenv.BackendPID(chatTx)
 	require.NoError(t, repo.New(chatTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeChat),
 		OrganizationID: stripeWebhookOrganizationID,
@@ -1281,13 +1230,13 @@ func TestStripeCheckoutAcquiresOpenRouterLocksInAllKeyTypesOrder(t *testing.T) {
 
 	response := make(chan int, 1)
 	go func() { response <- serveStripeWebhook(service, "activate").Code }()
-	waitForStripeWebhookBlockedByPID(t, db, chatHolderPID)
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), db, chatHolderPID, 1)
 
-	probeTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the probe transaction proves the internal advisory lock remains available
-	require.NoError(t, err)
-	probeCtx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
-	defer cancel()
-	require.NoError(t, repo.New(probeTx).AcquireOpenRouterBillingLock(probeCtx, repo.AcquireOpenRouterBillingLockParams{
+	probeTx := testenv.BeginTx(t, t.Context(), db)
+	// probeTimeout bounds server-side acquisition of the exact lock under test.
+	const probeTimeout = 100 * time.Millisecond
+	testenv.SetLockTimeout(t, t.Context(), probeTx, probeTimeout)
+	require.NoError(t, repo.New(probeTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeInternal),
 		OrganizationID: stripeWebhookOrganizationID,
 	}))
@@ -1304,10 +1253,8 @@ func TestStripeSubscriptionDeletionAcquiresEveryOpenRouterLockInOrder(t *testing
 	service.stripeHandler = service.serviceStripeWebhookHandler
 	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat, openrouter.KeyTypeInternal}, openrouter.AllKeyTypes)
 
-	internalTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the targeted backend holds the second canonical advisory lock
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = internalTx.Rollback(context.Background()) })
-	internalHolderPID := postgresBackendPID(t, internalTx)
+	internalTx := testenv.BeginTx(t, t.Context(), db)
+	internalHolderPID := testenv.BackendPID(internalTx)
 	require.NoError(t, repo.New(internalTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeInternal),
 		OrganizationID: stripeWebhookOrganizationID,
@@ -1317,18 +1264,18 @@ func TestStripeSubscriptionDeletionAcquiresEveryOpenRouterLockInOrder(t *testing
 	defer cancelRequest()
 	response := make(chan int, 1)
 	go func() { response <- serveStripeWebhookWithContext(requestCtx, service, "delete").Code }()
-	waitForStripeWebhookBlockedByPID(t, db, internalHolderPID)
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), db, internalHolderPID, 1)
 
-	probeTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the probe proves deletion retained the first lock while waiting for the second
-	require.NoError(t, err)
-	probeCtx, cancelProbe := context.WithTimeout(t.Context(), 500*time.Millisecond)
-	probeErr := repo.New(probeTx).AcquireOpenRouterBillingLock(probeCtx, repo.AcquireOpenRouterBillingLockParams{
+	probeTx := testenv.BeginTx(t, t.Context(), db)
+	// probeTimeout bounds server-side acquisition of the exact lock under test.
+	const probeTimeout = 100 * time.Millisecond
+	testenv.SetLockTimeout(t, t.Context(), probeTx, probeTimeout)
+	probeErr := repo.New(probeTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeChat),
 		OrganizationID: stripeWebhookOrganizationID,
 	})
-	cancelProbe()
 	_ = probeTx.Rollback(t.Context())
-	require.ErrorIs(t, probeErr, context.DeadlineExceeded)
+	testenv.RequireLockNotAvailable(t, probeErr)
 
 	require.NoError(t, internalTx.Rollback(t.Context()))
 	require.Equal(t, http.StatusOK, receiveStripeWebhookStatus(t, response))
@@ -1347,10 +1294,8 @@ func TestReplacementCheckoutAndPriorSubscriptionDeletionAcquireOpenRouterBeforeB
 	checkoutService.stripeClient = &fakeStripeWebhookClient{}
 	configurePaygCheckout(t, &checkoutService, "event_replacement_checkout", "subscription_replacement", "active")
 
-	holderTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test queues both lifecycle transactions behind one targeted backend
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = holderTx.Rollback(context.Background()) })
-	holderPID := postgresBackendPID(t, holderTx)
+	holderTx := testenv.BeginTx(t, t.Context(), db)
+	holderPID := testenv.BackendPID(holderTx)
 	require.NoError(t, repo.New(holderTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeChat),
 		OrganizationID: stripeWebhookOrganizationID,
@@ -1362,20 +1307,19 @@ func TestReplacementCheckoutAndPriorSubscriptionDeletionAcquireOpenRouterBeforeB
 	go func() {
 		deletionResponse <- serveStripeWebhookWithContext(requestCtx, deletionService, "delete prior").Code
 	}()
-	deletionWaiter := waitForStripeWebhookWaitersBlockedByPID(t, db, holderPID, 1)
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), db, holderPID, 1)
 
 	checkoutResponse := make(chan int, 1)
 	go func() {
 		checkoutResponse <- serveStripeWebhookWithContext(requestCtx, &checkoutService, "replace").Code
 	}()
-	waiters := waitForStripeWebhookWaitersBlockedByPID(t, db, holderPID, 2)
-	require.Contains(t, waiters, deletionWaiter[0])
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), db, holderPID, 2)
 
-	probeTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: availability of the canonical next lock is the ordering assertion
-	require.NoError(t, err)
-	probeCtx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
-	probeErr := repo.New(probeTx).LockBillingMetadataOrganization(probeCtx, stripeWebhookOrganizationID)
-	cancel()
+	probeTx := testenv.BeginTx(t, t.Context(), db)
+	// probeTimeout bounds server-side acquisition of the exact lock under test.
+	const probeTimeout = 100 * time.Millisecond
+	testenv.SetLockTimeout(t, t.Context(), probeTx, probeTimeout)
+	probeErr := repo.New(probeTx).LockBillingMetadataOrganization(t.Context(), stripeWebhookOrganizationID)
 	_ = probeTx.Rollback(t.Context())
 
 	require.NoError(t, holderTx.Rollback(t.Context()))
@@ -1885,8 +1829,7 @@ func TestStripeCheckoutDomainReplayIsNoop(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "first").Code)
@@ -1991,8 +1934,7 @@ func TestStripeCheckoutFinalBillingCauseRecoveryReconcilesStaleDisabledMirror(t 
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "final cause recovery").Code)
@@ -2041,8 +1983,7 @@ func TestStripeCheckoutLayeredBillingRecoveryDoesNotReconcileUnchangedAccess(t *
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "layered recovery").Code)
@@ -2193,8 +2134,7 @@ func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommit
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
@@ -2307,18 +2247,17 @@ func TestStripeCheckoutLostReceiptInsertRepairsWinnerPostCommitFailure(t *testin
 	}))
 	t.Cleanup(repairingUpstream.Close)
 
-	winnerEntered := make(chan int32, 1)
+	winnerEntered := make(chan uint32, 1)
 	releaseWinner := make(chan struct{})
+	release := sync.OnceFunc(func() { close(releaseWinner) })
+	t.Cleanup(release)
 	originalHandler := service.stripeHandler
 	service.stripeHandler = func(ctx context.Context, logger *slog.Logger, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, checkout *stripeclient.CheckoutSessionState, invoice *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 		result, err := originalHandler(ctx, logger, tx, organizationID, event, checkout, invoice)
 		if err != nil {
 			return stripeWebhookResult{}, err
 		}
-		var pid int32
-		if err := tx.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pid); err != nil { //nolint:glint // notestingrawsql: backend identity synchronizes the real PostgreSQL conflict
-			return stripeWebhookResult{}, fmt.Errorf("read winner backend PID: %w", err)
-		}
+		pid := testenv.BackendPID(tx)
 		select {
 		case winnerEntered <- pid:
 		default:
@@ -2348,7 +2287,7 @@ func TestStripeCheckoutLostReceiptInsertRepairsWinnerPostCommitFailure(t *testin
 
 	winnerResponse := make(chan int, 1)
 	go func() { winnerResponse <- serveStripeWebhook(service, "winner").Code }()
-	var winnerPID int32
+	var winnerPID uint32
 	select {
 	case winnerPID = <-winnerEntered:
 	case <-time.After(2 * time.Second):
@@ -2357,8 +2296,8 @@ func TestStripeCheckoutLostReceiptInsertRepairsWinnerPostCommitFailure(t *testin
 
 	duplicateResponse := make(chan int, 1)
 	go func() { duplicateResponse <- serveStripeWebhook(&duplicate, "duplicate").Code }()
-	waitForStripeReceiptInsertBlockedByPID(t, db, winnerPID)
-	close(releaseWinner)
+	testenv.WaitForQueryBlockedBy(t, t.Context(), db, winnerPID, "%INSERT INTO stripe_webhook_receipts%")
+	release()
 
 	require.Equal(t, http.StatusInternalServerError, receiveStripeWebhookStatus(t, winnerResponse))
 	require.Equal(t, http.StatusOK, receiveStripeWebhookStatus(t, duplicateResponse))
@@ -2417,8 +2356,7 @@ func TestStripeCheckoutExactReplayRepairsPostCommitOpenRouterFailure(t *testing.
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
@@ -2695,7 +2633,6 @@ func TestStripeSubscriptionDeletionPostCommitReconcileFailurePreservesDurableInt
 		"provisioning_key_placeholder",
 		nil,
 		nil,
-		nil,
 		testenv.NewEncryptionClient(t),
 		option,
 	)
@@ -2742,8 +2679,7 @@ func TestStripeSubscriptionDeletionExactReplayRepairsPostCommitOpenRouterFailure
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
@@ -2796,8 +2732,7 @@ func TestStripeSubscriptionDeletionReplayCannotOverrideLaterConversion(t *testin
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "loss").Code)
@@ -2861,8 +2796,7 @@ func TestConvertedDemotedTrialSubscriptionLossWinsBeforeDelayedActivationReconci
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	production := openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 	require.NoError(t, RepairPaygOpenRouterChatKey(
 		t.Context(), testenv.NewLogger(t), db, production, stripeWebhookOrganizationID, openrouter.KeyDesiredStateEnabled,
@@ -3192,4 +3126,111 @@ func TestStripeCheckoutRejectsMalformedIdentifiers(t *testing.T) {
 	}}
 	service := &Service{logger: testenv.NewLogger(t), stripeClient: client, stripeHandler: testStripeWebhookHandler}
 	require.Equal(t, http.StatusBadRequest, serveStripeWebhook(service, "malformed").Code)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesUnpaidCompletion(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.completed", "unpaid", "active", false, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesTrialCompletion(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.completed", "no_payment_required", "trialing", true, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesUnpaidTrialCompletion(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.completed", "unpaid", "trialing", true, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesAsyncSuccess(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.async_payment_succeeded", "paid", "active", true, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesUnpaidAsyncSuccess(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.async_payment_succeeded", "unpaid", "active", false, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesAsyncFailure(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.async_payment_failed", "unpaid", "active", false, true)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesStaleAsyncFailure(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.async_payment_failed", "paid", "active", false, false)
+}
+
+func testStripeCheckoutAsyncPaymentOutcomes(t *testing.T, tcEventType string, tcPaymentStatus string, tcSubscriptionStatus string, tcActivated bool, tcFailed bool) {
+	t.Helper()
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_async", "subscription_async", tcSubscriptionStatus)
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	verify := client.verify
+	client.verify = func(body []byte, signature string) (*stripeclient.WebhookEvent, error) {
+		event, err := verify(body, signature)
+		event.Type = tcEventType
+		return event, err
+	}
+	client.checkout.PaymentStatus = tcPaymentStatus
+	metrics := &captureStripeWebhookMetrics{}
+	service.stripeMetrics = metrics
+	for range 2 {
+		require.Equal(t, http.StatusOK, serveStripeWebhook(service, "async outcome").Code)
+	}
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, tcActivated, metadata.StripeSubscriptionID.Valid)
+	if !tcActivated && !tcFailed && tcPaymentStatus == "unpaid" {
+		require.Zero(t, stripeWebhookReceiptCount(t, db), "pending payment must not record an activation receipt")
+	}
+	if tcFailed {
+		require.EqualValues(t, 1, metrics.invoicePaymentFailures.Load())
+	} else {
+		require.Zero(t, metrics.invoicePaymentFailures.Load())
+	}
+}
+
+func TestStripeCheckoutRejectsOrganizationMetadataMismatch(t *testing.T) {
+	t.Parallel()
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_org_mismatch", "subscription_placeholder", "active")
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	client.checkout.OrganizationID = "org_other"
+	require.Equal(t, http.StatusBadRequest, serveStripeWebhook(service, "wrong organization").Code)
+	require.Zero(t, stripeWebhookReceiptCount(t, db))
+}
+
+func TestStripeCheckoutPendingPaymentCanLaterSucceed(t *testing.T) {
+	t.Parallel()
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_delayed_payment", "subscription_delayed_payment", "active")
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	client.checkout.PaymentStatus = "unpaid"
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "pending payment").Code)
+	require.Zero(t, stripeWebhookReceiptCount(t, db))
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.False(t, metadata.StripeSubscriptionID.Valid)
+
+	verify := client.verify
+	client.verify = func(body []byte, signature string) (*stripeclient.WebhookEvent, error) {
+		event, err := verify(body, signature)
+		event.ID = "event_delayed_payment_succeeded"
+		event.Type = "checkout.session.async_payment_succeeded"
+		return event, err
+	}
+	client.checkout.PaymentStatus = "paid"
+	for range 2 {
+		require.Equal(t, http.StatusOK, serveStripeWebhook(service, "payment succeeded").Code)
+	}
+	metadata, err = repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "subscription_delayed_payment", metadata.StripeSubscriptionID.String)
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
 }

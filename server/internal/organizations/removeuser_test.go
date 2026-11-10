@@ -3,16 +3,22 @@ package organizations_test
 import (
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -68,10 +74,10 @@ func TestService_RemoveUser(t *testing.T) {
 	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
 	require.Equal(t, "organization_membership_lost", latched.OwnerReassignmentReason.String)
 
-	var actorID string
-	err = ti.conn.QueryRow(ctx, `SELECT actor_id FROM audit_logs WHERE subject_id = $1 AND action = 'agent:owner_loss'`, agent.ID).Scan(&actorID) //nolint:glint // notestingrawsql: verifies the management actor is attributed
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAgentOwnerLoss)
 	require.NoError(t, err)
-	require.Equal(t, authCtx.UserID, actorID)
+	require.Equal(t, agent.ID.String(), record.SubjectID)
+	require.Equal(t, authCtx.UserID, record.ActorID)
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -122,8 +128,7 @@ func TestService_RollsBackOnWorkOSError(t *testing.T) {
 	stored, err := agentrepo.New(ti.conn).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: authCtx.ActiveOrganizationID, ID: agent.ID})
 	require.NoError(t, err)
 	require.False(t, stored.OwnerReassignmentRequiredAt.Valid)
-	var auditCount int
-	err = ti.conn.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE subject_id = $1 AND action = 'agent:owner_loss'`, agent.ID).Scan(&auditCount) //nolint:glint // notestingrawsql: rollback must remove the audit side effect too
+	auditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentOwnerLoss)
 	require.NoError(t, err)
 	require.Zero(t, auditCount)
 
@@ -209,4 +214,37 @@ func TestService_RemoveUser_ForbiddenWithGrantForDifferentOrganization(t *testin
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestService_RemoveUser_RevokesTheMembersSignInsWhereEnforced(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	flags := &feature.InMemory{}
+	signins.EnableForTests(flags, authCtx.ActiveOrganizationID)
+	ti.sessionManager.SetFlags(flags)
+
+	_, err := userrepo.New(ti.conn).UpsertUser(ctx, userrepo.UpsertUserParams{
+		ID: testOtherUserID, Email: "other@example.com", DisplayName: "Other User",
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText(testOtherUserID),
+	})
+	require.NoError(t, err)
+	workosSessionID := "session_" + uuid.NewString()
+	_, err = signins.Record(ctx, ti.conn, signins.RecordParams{OrganizationID: authCtx.ActiveOrganizationID, UserID: testOtherUserID, WorkOSSessionID: workosSessionID, AuthenticationMethod: signins.MethodSSO, Evidence: signins.Evidence{HostedDomain: "", TenantID: "", VerifiedEmail: "", IDPAuthenticatedAt: time.Time{}}, AuthenticatedAt: time.Now()})
+	require.NoError(t, err)
+
+	require.NoError(t, ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{UserID: testOtherUserID}))
+
+	live, err := signins.LiveSignInForSession(ctx, ti.conn, authCtx.ActiveOrganizationID, testOtherUserID, workosSessionID)
+	require.NoError(t, err)
+	require.False(t, live.Valid, "removing a member revokes their sign-ins here")
+	audited, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessMemberSignInsRevoke)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), audited)
 }

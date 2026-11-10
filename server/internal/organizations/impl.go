@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -46,10 +47,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	telemrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -68,7 +73,7 @@ const (
 // *workos.Client implements it.
 type OrganizationProvider interface {
 	DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error
-	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
+	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (*workos.Member, error)
 	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
 	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
 	GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*workos.OrganizationDomainPolicy, error)
@@ -128,17 +133,18 @@ type Service struct {
 	trialBundleSeeder auth.EnterpriseTrialBundleSeeder
 	posthog           onboardingTelemetry
 	growth            *growthsignals.Emitter
-	serverURL         string // API server URL; used to build invite links
-	siteURL           string // frontend URL; used for post-callback browser redirects
+	siteURL           string            // frontend URL; used for post-callback browser redirects
+	orgHosts          *orghost.Resolver // resolves the host of links sent by email
 	audit             *audit.Logger
 	svix              *svix.Svix
+	deliverer         *signins.Deliverer
 }
 
 var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService EmailSender, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, growthEmitter *growthsignals.Emitter, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService EmailSender, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, growthEmitter *growthsignals.Emitter, siteURL string, orgHosts *orghost.Resolver, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 	if trialNotifier == nil {
 		trialNotifier = trialemails.NoopNotifier{}
@@ -160,10 +166,11 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		trialBundleSeeder: trialBundleSeeder,
 		posthog:           posthog,
 		growth:            growthEmitter,
-		serverURL:         serverURL,
 		siteURL:           siteURL,
+		orgHosts:          orgHosts,
 		audit:             auditLogger,
 		svix:              svix,
+		deliverer:         signins.NewDeliverer(logger, noop.NewMeterProvider(), db, nil, sessionMgr, sessionMgr),
 	}
 }
 
@@ -179,7 +186,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 
-	// Raw HTTP handler for Gram invite-token acceptance.
+	// Raw HTTP handler for Speakeasy invite-token acceptance.
 	mux.Handle("GET", inviteCallbackPath, service.handleInviteCallback)
 
 	// Raw HTTP handler for onboarding setup portal callback.
@@ -337,7 +344,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 
 	inviteLink := ""
 	if s.email != nil {
-		inviteURL, err := url.Parse(s.serverURL + inviteCallbackPath)
+		inviteURL, err := url.Parse(s.orgHosts.ServerURL(org.DefaultHost).String() + inviteCallbackPath)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build invite link").LogError(ctx, logger)
 		}
@@ -422,7 +429,7 @@ func (s *Service) resolveInviteRoleSlug(ctx context.Context, organizationID stri
 		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role id is required").LogError(ctx, logger)
 	}
 
-	// The dashboard sends a Gram local role UUID (as returned by
+	// The dashboard sends a Speakeasy local role UUID (as returned by
 	// /rpc/access.listRoles). Resolve it against the local roles table to
 	// recover the WorkOS slug stored on the invite for acceptance time.
 	roleUUID, err := uuid.Parse(roleID)
@@ -655,9 +662,9 @@ func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*
 	return &gen.ListInvitesResult{Invitations: out}, nil
 }
 
-// ListUsers returns Gram organization members from organization_user_relationships.
+// ListUsers returns Speakeasy organization members from organization_user_relationships.
 // That table is the in-app source of truth for roster and RemoveUser; WorkOS owns
-// invite/membership lifecycle but the dashboard "team" list should match what Gram authorizes.
+// invite/membership lifecycle but the dashboard "team" list should match what Speakeasy authorizes.
 func (s *Service) ListUsers(ctx context.Context, _ *gen.ListUsersPayload) (*gen.ListUsersResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -708,6 +715,12 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		attr.UserID(ac.UserID),
 	)
 
+	removalRevokes := s.sessions.SignInEnforced(ctx, ac.ActiveOrganizationID)
+	removedEmail := ""
+	if removalRevokes {
+		removedEmail = s.memberEmail(ctx, payload.UserID)
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -742,6 +755,15 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		return oops.E(oops.CodeUnexpected, err, "latch agents after owner membership loss").LogError(ctx, logger)
 	}
 
+	// Removal revokes the member's sign-ins and grants here, as
+	// revokeMemberSignIns does, wherever enforcement is on.
+	var revoked signins.Revoked
+	if removalRevokes {
+		if revoked, err = s.revokeMember(ctx, tx, ac, payload.UserID, removedEmail); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "revoke removed member's sign-ins").LogError(ctx, logger)
+		}
+	}
+
 	if rel.WorkosMembershipID.Valid && rel.WorkosMembershipID.String != "" {
 		if err := s.orgs.DeleteOrganizationMembership(ctx, rel.WorkosMembershipID.String); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "remove user").LogError(ctx, logger)
@@ -756,6 +778,9 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+	if removalRevokes {
+		s.afterMemberRevoked(ctx, ac.ActiveOrganizationID, revoked)
 	}
 
 	return nil
@@ -981,7 +1006,12 @@ func (s *Service) GetOnboardingStatus(ctx context.Context, payload *gen.GetOnboa
 
 	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
 	if workosOrgID == "" {
-		return &gen.OnboardingStatusResult{SsoConfigured: false, DsyncConfigured: false}, nil
+		return &gen.OnboardingStatusResult{SsoConfigured: false, DsyncConfigured: false, DomainVerified: false, VerifiedDomains: []string{}}, nil
+	}
+
+	verifiedDomains, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to check domain verification").LogError(ctx, s.logger)
 	}
 
 	connections, err := s.orgs.ListConnections(ctx, workosOrgID)
@@ -997,7 +1027,35 @@ func (s *Service) GetOnboardingStatus(ctx context.Context, payload *gen.GetOnboa
 	return &gen.OnboardingStatusResult{
 		SsoConfigured:   workos.HasActiveConnection(connections),
 		DsyncConfigured: workos.HasActiveDirectory(directories),
+		DomainVerified:  len(verifiedDomains) > 0,
+		VerifiedDomains: verifiedDomains,
 	}, nil
+}
+
+// refreshVerifiedDomains returns the organization's verified domains. An empty
+// stored list is re-checked against WorkOS, so it is correct right after the
+// Admin Portal and for orgs verified before the event sync tracked domains.
+// The live result only fills a list that is still empty: a non-empty list is
+// kept current by the event sync, which may have written a newer list since
+// stored was read, so the save never overwrites it.
+func (s *Service) refreshVerifiedDomains(ctx context.Context, organizationID, workosOrgID string, stored []string) ([]string, error) {
+	if len(stored) > 0 {
+		return stored, nil
+	}
+
+	policy, err := s.orgs.GetOrganizationDomainPolicy(ctx, workosOrgID)
+	if err != nil {
+		return nil, fmt.Errorf("get workos organization domains: %w", err)
+	}
+	verified := policy.VerifiedDomains()
+	if len(verified) == 0 {
+		return []string{}, nil
+	}
+
+	if err := orgrepo.New(s.db).SetVerifiedDomains(ctx, orgrepo.SetVerifiedDomainsParams{ID: organizationID, VerifiedDomains: verified}); err != nil {
+		return nil, fmt.Errorf("save verified domains: %w", err)
+	}
+	return verified, nil
 }
 
 const verifyOnboardingHooksLimit = 50
@@ -1088,10 +1146,11 @@ func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.V
 
 // handleSetupCallback is the backend handler that WorkOS's success_url redirects to
 // after portal completion. It authenticates the session, verifies the setup
-// state with WorkOS, and 302-redirects to the appropriate wizard step.
+// state with WorkOS, and redirects to a visible configured wizard task.
 //
 // Query params:
-//   - intent: "sso" or "dsync"
+//   - intent: "domain_verification", "sso", or "dsync"
+//   - task: optional originating identity task, matched to the portal intent
 func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	ctx, span := s.tracer.Start(r.Context(), "organizations.handleSetupCallback")
 	defer span.End()
@@ -1099,7 +1158,15 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	intent := r.URL.Query().Get("intent")
 	if intent == "" {
 		span.SetStatus(codes.Error, "missing intent")
-		http.Error(w, "missing intent parameter", http.StatusBadRequest)
+		s.writeSetupCallbackError(w, r, "missing intent parameter", http.StatusBadRequest)
+		return
+	}
+	originTask := r.URL.Query().Get("task")
+	validOrigin := originTask == "" ||
+		((intent == "domain_verification" || intent == "sso" || intent == "dsync") && originTask == "identity-provider")
+	if !validOrigin {
+		span.SetStatus(codes.Error, "invalid originating task")
+		s.writeSetupCallbackError(w, r, "invalid originating task", http.StatusBadRequest)
 		return
 	}
 
@@ -1125,7 +1192,13 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		span.SetStatus(codes.Error, "missing auth context")
-		http.Error(w, "missing auth context", http.StatusUnauthorized)
+		s.writeSetupCallbackError(w, r, "missing auth context", http.StatusUnauthorized)
+		return
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		span.SetStatus(codes.Error, "forbidden")
+		s.writeSetupCallbackError(w, r, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -1133,39 +1206,61 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.logger.ErrorContext(ctx, "setup callback: read org", attr.SlogError(err))
 		span.SetStatus(codes.Error, "read org failed")
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		s.writeSetupCallbackError(w, r, "internal error", http.StatusInternalServerError)
 		return
 	}
 
 	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
 	orgSlug := org.Slug
 
-	// Determine the next step based on what was just completed and what's verified.
-	var nextStepSlug string
-	switch intent {
-	case "sso":
-		if workosOrgID != "" {
-			connections, err := s.orgs.ListConnections(ctx, workosOrgID)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "setup callback: list connections", attr.SlogError(err))
-			}
-			if workos.HasActiveConnection(connections) {
-				// Directory sync lives on the same card as single sign-on.
-				nextStepSlug = "identity-provider"
-			}
+	tasks, err := projectSetupTasks(ctx, orgrepo.New(s.db), org.ID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "setup callback: project setup tasks", attr.SlogError(err))
+		span.SetStatus(codes.Error, "project setup tasks failed")
+		s.writeSetupCallbackError(w, r, "internal error", http.StatusInternalServerError)
+		return
+	}
+	visible := make(map[string]bool, len(tasks))
+	for _, task := range tasks {
+		visible[task.Key] = !task.Hidden
+	}
+	// All identity setup steps belong to the combined card. Refresh domains even
+	// when DNS is still pending, but never navigate to a hidden or absent task.
+	if intent == "domain_verification" && workosOrgID != "" {
+		if _, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains); err != nil {
+			s.logger.ErrorContext(ctx, "setup callback: check domain verification", attr.SlogError(err))
 		}
-	case "dsync":
-		// Directory sync may take time to become "linked" after portal setup.
-		// Completing the portal is sufficient to advance — DSYNC is also skippable.
-		nextStepSlug = "anthropic-observability"
+	}
+	nextTask := ""
+	if visible["identity-provider"] {
+		nextTask = "identity-provider"
 	}
 
 	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)
-	if nextStepSlug != "" {
-		redirectURL += fmt.Sprintf("?step=%s", nextStepSlug)
+	if nextTask != "" {
+		redirectURL += fmt.Sprintf("?task=%s", nextTask)
 	}
 
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+}
+
+func (s *Service) writeSetupCallbackError(w http.ResponseWriter, r *http.Request, description string, status int) {
+	page := oauthui.AuthorizationError{
+		Recovery: &oauthui.RecoveryLink{URL: strings.TrimRight(s.siteURL, "/") + "/@self/setup", Label: "Open organization setup"},
+		Setup:    true, Status: status, Reason: oauthui.ReasonDefault,
+		ErrorID: "", Code: oautherr.CodeInvalidRequest, Description: description,
+		ProviderName: "",
+		CallbackURL:  "", ClientName: "", ClientID: "", ClientIDOrigin: "", ServerName: "",
+	}
+	switch {
+	case status >= http.StatusInternalServerError:
+		page.Code = oautherr.CodeServerError
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		page.Code = oautherr.CodeAccessDenied
+	}
+	if err := oauthui.WriteAuthorizationError(r.Context(), w, page); err != nil {
+		s.logger.ErrorContext(r.Context(), "render setup callback error", attr.SlogError(err))
+	}
 }
 
 func (s *Service) SendEnterpriseAdminOnboardingEmail(ctx context.Context, payload *gen.SendEnterpriseAdminOnboardingEmailPayload) (*gen.SendEnterpriseAdminOnboardingEmailResult, error) {
@@ -1187,7 +1282,7 @@ func (s *Service) SendEnterpriseAdminOnboardingEmail(ctx context.Context, payloa
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, s.logger)
 	}
 
-	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.siteURL, "/"), org.Slug)
+	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.orgHosts.SiteURL(org.DefaultHost).String(), "/"), org.Slug)
 
 	tmpl := email.EnterpriseAdminOnboarding{SetupLink: setupLink}
 
@@ -1260,14 +1355,105 @@ func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *ge
 		IntentOptions:   iopts,
 	}
 
-	link, err := s.orgs.GenerateAdminPortalLink(ctx, workosOrgID, workos.PortalIntent(payload.Intent), opts)
+	intent := workos.PortalIntent(payload.Intent)
+	link, err := s.orgs.GenerateAdminPortalLink(ctx, workosOrgID, intent, opts)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate WorkOS admin portal link").LogError(ctx, s.logger)
+		return nil, portalLinkError(intent, err).LogError(ctx, s.logger, attr.SlogWorkOSOrganizationID(workosOrgID))
+	}
+	if strings.TrimSpace(link) == "" {
+		return nil, oops.E(oops.CodeGatewayError, nil, portalRetryLater, portalIntentLabel(intent)).LogError(ctx, s.logger, attr.SlogWorkOSOrganizationID(workosOrgID))
 	}
 
 	return &gen.GenerateWorkOSAdminPortalLinkResult{
 		URL: link,
 	}, nil
+}
+
+// portalRetryLater is the answer to every portal failure the admin can only
+// wait out: unreachable, an upstream 5xx, and a success carrying no link. They
+// are three faults for us and one situation for them.
+const portalRetryLater = "%s setup could not be started right now. Try again in a few minutes."
+
+// portalIntentLabel names an Admin Portal intent as the thing the admin was
+// trying to set up. Capitalized because every message below opens with it.
+func portalIntentLabel(intent workos.PortalIntent) string {
+	switch intent {
+	case workos.PortalIntentDSync:
+		return "Directory Sync"
+	case workos.PortalIntentSSO:
+		return "Single Sign-On"
+	case workos.PortalIntentDomainVerification:
+		return "Domain verification"
+	case workos.PortalIntentAuditLogs:
+		return "Audit log export"
+	case workos.PortalIntentLogStreams:
+		return "Log streaming"
+	default:
+		return string(intent)
+	}
+}
+
+// portalLinkError turns a failed Admin Portal link request into something the
+// admin can act on.
+//
+// The messages describe the admin's setup and their next step, never our
+// dependency on WorkOS: that it was WorkOS rather than Speakeasy that refused,
+// and whether it refused on credentials or on a missing record, is a
+// distinction only we can act on, and naming it hands the reader a dead end.
+// WorkOS is named in this flow only where the admin's next action is in the
+// WorkOS tab.
+//
+// The failing status still decides which branch runs — it is what separates
+// "wait and retry" from "verify a domain" from "we have to fix this" — and the
+// cause, which carries WorkOS's response body, goes to the log and the span.
+//
+// Only error codes declared in the shared Goa error responses are used: an
+// undeclared code encodes as a bare status the SDK cannot parse, which would
+// put the caller right back at an opaque failure.
+func portalLinkError(intent workos.PortalIntent, cause error) *oops.ShareableError {
+	label := portalIntentLabel(intent)
+
+	var apiErr *workos.APIError
+	if !errors.As(cause, &apiErr) {
+		return oops.E(oops.CodeGatewayError, cause, portalRetryLater, label)
+	}
+
+	switch {
+	case apiErr.StatusCode == http.StatusNotFound:
+		return oops.E(oops.CodeBadRequest, cause, "%s setup is not available for this organization. Contact Speakeasy support.", label)
+	case apiErr.StatusCode == http.StatusUnauthorized, apiErr.StatusCode == http.StatusForbidden:
+		return oops.E(oops.CodeUnexpected, cause, "%s setup could not be started. Contact Speakeasy support.", label)
+	case apiErr.StatusCode == http.StatusTooManyRequests:
+		// Mapped to gateway_error, so this leaves as a 502 rather than a 429.
+		// CodeUnavailable is reserved for a Speakeasy-side dependency being
+		// down, and only codes declared in the shared Goa error responses keep
+		// their message through the SDK, so 502 is the closest declared fit.
+		return oops.E(oops.CodeGatewayError, cause, "Too many %s setup attempts. Wait a minute, then try again.", label)
+	case apiErr.StatusCode >= http.StatusInternalServerError:
+		return oops.E(oops.CodeGatewayError, cause, portalRetryLater, label)
+	case isPortalValidationStatus(apiErr.StatusCode) && intent == workos.PortalIntentSSO:
+		// A missing verified domain is the common cause of a refused SSO portal
+		// session and the one precondition an admin can clear without support,
+		// so it leads. It is not the only validation failure WorkOS can return
+		// here — a caller passing intent options can trip others — which is why
+		// the message offers support as the alternative rather than asserting
+		// the diagnosis. No equivalent precondition is established for the
+		// other intents, so they fall through to the generic next step.
+		return oops.E(oops.CodeBadRequest, cause, "%s setup was refused. Verify a domain for this organization, then try again, or contact Speakeasy support if one is already verified.", label)
+	default:
+		// Everything left is a 4xx WorkOS refused for a reason we cannot name:
+		// an APIError only exists for a status at or above 400, so there is no
+		// lower band to fall through to.
+		return oops.E(oops.CodeBadRequest, cause, "%s setup could not be started. Contact Speakeasy support if it keeps failing.", label)
+	}
+}
+
+// isPortalValidationStatus reports whether WorkOS rejected the content of the
+// request, as opposed to the statuses handled above or a transport-level 4xx
+// such as a 408 timeout. Only a rejection carries a precondition the admin
+// might be able to clear.
+func isPortalValidationStatus(status int) bool {
+	return status == http.StatusBadRequest || status == http.StatusUnprocessableEntity
 }
 
 // requirePortalIntentEntitlement fails closed: an intent without an explicit
@@ -1411,9 +1597,12 @@ func dbInvitationToGen(row *orgrepo.OrganizationInvitation, inviterUserID *strin
 	}
 }
 
-var errInvitationAcceptanceRace = errors.New("invitation is no longer pending")
+var (
+	errInvitationAcceptanceRace       = errors.New("invitation is no longer pending")
+	errInvitationOrganizationDisabled = errors.New("invitation organization is disabled")
+)
 
-func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID string) (orgrepo.OrganizationMetadatum, orgrepo.OrganizationInvitation, bool, error) {
+func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID string, requireSSO func(orgrepo.OrganizationMetadatum) bool) (orgrepo.OrganizationMetadatum, orgrepo.OrganizationInvitation, bool, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("begin invite acceptance transaction: %w", err)
@@ -1424,6 +1613,14 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 	org, err := repo.LockOrganizationForInviteAcceptance(ctx, organizationID)
 	if err != nil {
 		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("lock invite organization: %w", err)
+	}
+	// Checked under the lock, so an organization disabled after the
+	// invitation was listed gains no member.
+	if org.DisabledAt.Valid {
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, errInvitationOrganizationDisabled
+	}
+	if requireSSO != nil && requireSSO(org) {
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, ErrInvitationRequiresSSO
 	}
 
 	acceptedInvite, err := repo.AcceptInvitation(ctx, inviteID)
@@ -1499,6 +1696,39 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 	return org, acceptedInvite, trialArmed, nil
 }
 
+// acceptInvitation makes the user a member of the invitation's organization
+// and runs everything that follows an acceptance: the trial an eligible
+// invitation arms, the WorkOS membership, and the notifications. Only the
+// acceptance itself can fail. A non-nil requireSSO is checked under the
+// organization lock and refuses the acceptance with ErrInvitationRequiresSSO.
+func (s *Service) acceptInvitation(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID, inviteeEmail string, requireSSO func(orgrepo.OrganizationMetadatum) bool) error {
+	org, acceptedInvite, trialArmed, err := s.acceptInvitationTx(ctx, inviteID, organizationID, gramUserID, workosUserID, requireSSO)
+	if err != nil {
+		return err
+	}
+
+	if trialArmed {
+		for _, feature := range productfeatures.EnterpriseAccessBundle {
+			s.features.UpdateFeatureCache(ctx, acceptedInvite.OrganizationID, feature, true)
+		}
+	}
+
+	s.reconcileInvitationWorkOSMembership(ctx, acceptedInvite, org, gramUserID, workosUserID)
+
+	if trialArmed {
+		if err := s.trial.TrialStarted(ctx, acceptedInvite.OrganizationID); err != nil {
+			s.logger.ErrorContext(ctx, "invitation acceptance: failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID))
+		}
+		s.capturePlatformAdminInviteTelemetry(ctx, inviteeEmail, org)
+	} else if acceptedInvite.RoleSlug.Valid && acceptedInvite.RoleSlug.String == authz.SystemRoleAdmin {
+		if err := s.trial.AdminAdded(ctx, acceptedInvite.OrganizationID, gramUserID); err != nil {
+			s.logger.ErrorContext(ctx, "invitation acceptance: failed to notify trial admin added", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID), attr.SlogUserID(gramUserID), attr.SlogOrganizationInviteID(acceptedInvite.ID.String()))
+		}
+	}
+
+	return nil
+}
+
 func (s *Service) capturePlatformAdminInviteTelemetry(ctx context.Context, email string, org orgrepo.OrganizationMetadatum) {
 	// Emitted before the PostHog guard below, because the two are configured
 	// independently: a service with an emitter but no PostHog client would
@@ -1530,12 +1760,12 @@ func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invit
 		return
 	}
 
-	workosRoleSlugs := []string{invite.RoleSlug.String}
-	membershipID, err := s.orgs.CreateOrganizationMembership(ctx, workosUserID, org.WorkosID.String, invite.RoleSlug.String)
+	member, err := s.orgs.CreateOrganizationMembership(ctx, workosUserID, org.WorkosID.String, invite.RoleSlug.String)
 	if err != nil {
 		s.logger.WarnContext(ctx, "invite callback: failed to create WorkOS membership; checking for an existing membership", attr.SlogError(err))
 
-		member, lookupErr := s.orgs.GetOrgMembership(ctx, workosUserID, org.WorkosID.String)
+		var lookupErr error
+		member, lookupErr = s.orgs.GetOrgMembership(ctx, workosUserID, org.WorkosID.String)
 		if lookupErr != nil {
 			s.logger.WarnContext(ctx, "invite callback: failed to look up WorkOS membership", attr.SlogError(lookupErr))
 			return
@@ -1544,7 +1774,7 @@ func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invit
 			return
 		}
 
-		workosRoleSlugs = append([]string(nil), member.RoleSlugs...)
+		workosRoleSlugs := append([]string(nil), member.RoleSlugs...)
 		if !slices.Contains(workosRoleSlugs, invite.RoleSlug.String) {
 			workosRoleSlugs = append(workosRoleSlugs, invite.RoleSlug.String)
 		}
@@ -1553,18 +1783,15 @@ func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invit
 			s.logger.WarnContext(ctx, "invite callback: failed to update WorkOS membership role", attr.SlogError(updateErr))
 			return
 		}
-		membershipID = member.ID
-		if updated != nil && updated.ID != "" {
-			membershipID = updated.ID
-		}
+		member = updated
 	}
 
 	if err := orgrepo.New(s.db).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
 		OrganizationID:     invite.OrganizationID,
 		WorkosUserID:       workosUserID,
-		WorkosRoleSlugs:    workosRoleSlugs,
+		WorkosRoleSlugs:    member.RoleSlugs,
 		UserID:             conv.ToPGText(gramUserID),
-		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosMembershipID: conv.ToPGText(member.ID),
 		WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
 		WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
 	}); err != nil {
@@ -1572,10 +1799,10 @@ func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invit
 	}
 }
 
-// handleInviteCallback processes Gram invite-token links. Flow: invitee clicks
-// the Gram invite link, we validate the invite token, authenticate the invitee
+// handleInviteCallback processes Speakeasy invite-token links. Flow: invitee clicks
+// the Speakeasy invite link, we validate the invite token, authenticate the invitee
 // with a server-created WorkOS Magic Auth code, verify the email, accept the
-// invite, add the user to the org, then create a Gram session.
+// invite, add the user to the org, then create a Speakeasy session.
 func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	ctx, span := s.tracer.Start(r.Context(), "organizations.handleInviteCallback")
 	defer span.End()
@@ -1626,6 +1853,9 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Taken before authenticating so a sign-out everywhere that lands
+	// meanwhile still ends this session.
+	authenticatedAt := time.Now()
 	idpUser, err := s.invite.AuthenticateWithMagicAuth(ctx, invite.Email)
 	if err != nil {
 		if inviteRequiresNormalLogin(err) {
@@ -1684,12 +1914,17 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	)
 	span.AddEvent("invite.callback.user_provisioned", trace.WithAttributes(attr.UserID(gramUserID)))
 
-	org, acceptedInvite, trialArmed, err := s.acceptInvitationTx(ctx, invite.ID, invite.OrganizationID, gramUserID, idpUser.Sub)
-	if err != nil {
+	if err := s.acceptInvitation(ctx, invite.ID, invite.OrganizationID, gramUserID, idpUser.Sub, inviteeEmail, nil); err != nil {
 		if errors.Is(err, errInvitationAcceptanceRace) {
 			s.logger.WarnContext(ctx, "invite callback: invite was revoked or expired before acceptance")
 			span.AddEvent("invite.callback.acceptance_race_lost")
 			redirectError("invite already used, revoked, or expired")
+			return
+		}
+		if errors.Is(err, errInvitationOrganizationDisabled) {
+			s.logger.WarnContext(ctx, "invite callback: invitation organization is disabled")
+			span.AddEvent("invite.callback.organization_disabled")
+			redirectError("this organization is disabled, please reach out to support@speakeasy.com for more information")
 			return
 		}
 		s.logger.ErrorContext(ctx, "invite callback: failed to accept invitation", attr.SlogError(err))
@@ -1700,26 +1935,38 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	span.AddEvent("invite.callback.org_membership_created")
 	span.AddEvent("invite.callback.invitation_accepted")
 
-	if trialArmed {
-		for _, feature := range productfeatures.EnterpriseAccessBundle {
-			s.features.UpdateFeatureCache(ctx, acceptedInvite.OrganizationID, feature, true)
+	// Record the sign-in like any other login, so grants from this session
+	// link to it and later revocations reach them.
+	// Magic Auth selects no WorkOS organization; the invite's is the one.
+	workosOrganizationID := idpUser.OrganizationID
+	if workosOrganizationID == "" {
+		if org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, invite.OrganizationID); err == nil && org.WorkosID.Valid {
+			workosOrganizationID = org.WorkosID.String
 		}
 	}
-
-	s.reconcileInvitationWorkOSMembership(ctx, acceptedInvite, org, gramUserID, idpUser.Sub)
-
-	if trialArmed {
-		if err := s.trial.TrialStarted(ctx, acceptedInvite.OrganizationID); err != nil {
-			s.logger.ErrorContext(ctx, "invite callback: failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID))
-		}
-		s.capturePlatformAdminInviteTelemetry(ctx, inviteeEmail, org)
-	} else if acceptedInvite.RoleSlug.Valid && acceptedInvite.RoleSlug.String == authz.SystemRoleAdmin {
-		if err := s.trial.AdminAdded(ctx, acceptedInvite.OrganizationID, gramUserID); err != nil {
-			s.logger.ErrorContext(ctx, "invite callback: failed to notify trial admin added", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID), attr.SlogUserID(gramUserID), attr.SlogOrganizationInviteID(acceptedInvite.ID.String()))
-		}
+	recorded := signins.RecordExchange(ctx, s.logger, s.db, signins.ExchangeParams{
+		Flow:                   signins.FlowDashboard,
+		WorkOSOrganizationID:   workosOrganizationID,
+		ExpectedOrganizationID: invite.OrganizationID,
+		UserID:                 gramUserID,
+		WorkOSSessionID:        idpUser.WorkOSSessionID,
+		AuthenticationMethod:   idpUser.AuthenticationMethod,
+		Evidence: signins.Evidence{
+			HostedDomain:       idpUser.Evidence.HostedDomain,
+			TenantID:           idpUser.Evidence.TenantID,
+			VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
+			IDPAuthenticatedAt: idpUser.Evidence.AuthenticatedAt,
+		},
+		Impersonated:    idpUser.ImpersonatorEmail() != "",
+		AuthenticatedAt: authenticatedAt,
+	})
+	if (recorded.Failed || recorded.Revoked) && recorded.OrganizationID != "" && s.sessions.SignInEnforced(ctx, recorded.OrganizationID) {
+		s.logger.ErrorContext(ctx, "invite callback: sign-in could not back a session", attr.SlogOrganizationID(recorded.OrganizationID))
+		redirectError("invite authentication failed")
+		return
 	}
 
-	// Create a Gram session directly. The invitee is already authenticated
+	// Create a Speakeasy session directly. The invitee is already authenticated
 	// by Magic Auth, and the WorkOS session ID is stored for logout revocation.
 	sessionID := uuid.New().String()
 	session := sessions.Session{
@@ -1731,7 +1978,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
 	}
-	if err := s.sessions.StoreSession(ctx, session); err != nil {
+	if err := s.sessions.StoreSessionIssuedAt(ctx, session, authenticatedAt); err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))
 		span.RecordError(err)
 		redirectError("failed to create session")

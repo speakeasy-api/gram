@@ -9,9 +9,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-//nolint:glint // this test intentionally owns a transaction to prove the shared callback runs before every decision write.
 func TestDecideInTransactionValidatesLockedStateBeforeWriting(t *testing.T) {
 	t.Parallel()
 
@@ -21,9 +21,7 @@ func TestDecideInTransactionValidatesLockedStateBeforeWriting(t *testing.T) {
 	require.NoError(t, err)
 	conflict := errors.New("stale decision version")
 
-	tx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(ctx) })
+	tx := testenv.BeginTx(t, ctx, ti.conn)
 	_, err = ti.service.DecideInTransaction(ctx, tx, mcpapproval.DecisionCommandInput{
 		OrganizationID: ti.organizationID, ProjectID: ti.projectID, RequestID: requestID,
 		Decision: "denied", Rationale: "review changed", GrantedPrincipalURNs: []string{},

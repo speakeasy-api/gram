@@ -36,6 +36,10 @@ type Client struct {
 	// getOrganizationFeatures endpoint.
 	GetOrganizationFeaturesDoer goahttp.Doer
 
+	// SetOrganizationProviderSetup Doer is the HTTP client used to make requests
+	// to the setOrganizationProviderSetup endpoint.
+	SetOrganizationProviderSetupDoer goahttp.Doer
+
 	// SetOrganizationFeature Doer is the HTTP client used to make requests to the
 	// setOrganizationFeature endpoint.
 	SetOrganizationFeatureDoer goahttp.Doer
@@ -88,9 +92,21 @@ type Client struct {
 	// the listOrganizationProjects endpoint.
 	ListOrganizationProjectsDoer goahttp.Doer
 
+	// ListProjectMcpServers Doer is the HTTP client used to make requests to the
+	// listProjectMcpServers endpoint.
+	ListProjectMcpServersDoer goahttp.Doer
+
 	// ListOrganizationActivity Doer is the HTTP client used to make requests to
 	// the listOrganizationActivity endpoint.
 	ListOrganizationActivityDoer goahttp.Doer
+
+	// ListUsers Doer is the HTTP client used to make requests to the listUsers
+	// endpoint.
+	ListUsersDoer goahttp.Doer
+
+	// ListUserOrganizations Doer is the HTTP client used to make requests to the
+	// listUserOrganizations endpoint.
+	ListUserOrganizationsDoer goahttp.Doer
 
 	// ListOrganizations Doer is the HTTP client used to make requests to the
 	// listOrganizations endpoint.
@@ -111,6 +127,10 @@ type Client struct {
 	// GetOrganizationStats Doer is the HTTP client used to make requests to the
 	// getOrganizationStats endpoint.
 	GetOrganizationStatsDoer goahttp.Doer
+
+	// RepairInferenceKey Doer is the HTTP client used to make requests to the
+	// repairInferenceKey endpoint.
+	RepairInferenceKeyDoer goahttp.Doer
 
 	// GetInferenceKeys Doer is the HTTP client used to make requests to the
 	// getInferenceKeys endpoint.
@@ -135,6 +155,10 @@ type Client struct {
 	// SetStripeCustomer Doer is the HTTP client used to make requests to the
 	// setStripeCustomer endpoint.
 	SetStripeCustomerDoer goahttp.Doer
+
+	// SetAdoptionDashboardURL Doer is the HTTP client used to make requests to the
+	// setAdoptionDashboardUrl endpoint.
+	SetAdoptionDashboardURLDoer goahttp.Doer
 
 	// GetStripeSubscription Doer is the HTTP client used to make requests to the
 	// getStripeSubscription endpoint.
@@ -228,6 +252,206 @@ type Client struct {
 	// updateSupportMatrix endpoint.
 	UpdateSupportMatrixDoer goahttp.Doer
 
+	// GetSupportCoverage Doer is the HTTP client used to make requests to the
+	// getSupportCoverage endpoint.
+	GetSupportCoverageDoer goahttp.Doer
+
+	// DescribeMcpServerHealth Doer is the HTTP client used to make requests to the
+	// describeMcpServerHealth endpoint.
+	DescribeMcpServerHealthDoer goahttp.Doer
+
+	// SetMcpServerScopePin Doer is the HTTP client used to make requests to the
+	// setMcpServerScopePin endpoint.
+	SetMcpServerScopePinDoer goahttp.Doer
+
+	// GetMcpServerToolCalls Doer is the HTTP client used to make requests to the
+	// getMcpServerToolCalls endpoint.
+	GetMcpServerToolCallsDoer goahttp.Doer
+
+	// GetHookClients Doer is the HTTP client used to make requests to the
+	// getHookClients endpoint.
+	GetHookClientsDoer goahttp.Doer
+
+	// GetOrganizationHookFleet Doer is the HTTP client used to make requests to
+	// the getOrganizationHookFleet endpoint.
+	GetOrganizationHookFleetDoer goahttp.Doer
+
+	// ListRegistryPromotionCandidates Doer is the HTTP client used to make
+	// requests to the listRegistryPromotionCandidates endpoint.
+	ListRegistryPromotionCandidatesDoer goahttp.Doer
+
+	// GetRegistryPromotionCandidate Doer is the HTTP client used to make requests
+	// to the getRegistryPromotionCandidate endpoint.
+	GetRegistryPromotionCandidateDoer goahttp.Doer
+
+	// PromoteRegistryCandidate Doer is the HTTP client used to make requests to
+	// the promoteRegistryCandidate endpoint.
+	PromoteRegistryCandidateDoer goahttp.Doer
+
+	// CurateRegistryPromotionCandidate Doer is the HTTP client used to make
+	// requests to the curateRegistryPromotionCandidate endpoint.
+	CurateRegistryPromotionCandidateDoer goahttp.Doer
+
+	// RetryRegistryPromotionDocs Doer is the HTTP client used to make requests to
+	// the retryRegistryPromotionDocs endpoint.
+	RetryRegistryPromotionDocsDoer goahttp.Doer
+
+	// GetRegistryOktaCandidates Doer is the HTTP client used to make requests to
+	// the getRegistryOktaCandidates endpoint.
+	GetRegistryOktaCandidatesDoer goahttp.Doer
+
+	// ListRegistryOktaUnmapped Doer is the HTTP client used to make requests to
+	// the listRegistryOktaUnmapped endpoint.
+	ListRegistryOktaUnmappedDoer goahttp.Doer
+
+	// ListRegistryEntries Doer is the HTTP client used to make requests to the
+	// listRegistryEntries endpoint.
+	ListRegistryEntriesDoer goahttp.Doer
+
+	// GetRegistryEntry Doer is the HTTP client used to make requests to the
+	// getRegistryEntry endpoint.
+	GetRegistryEntryDoer goahttp.Doer
+
+	// CreateRegistryEntry Doer is the HTTP client used to make requests to the
+	// createRegistryEntry endpoint.
+	CreateRegistryEntryDoer goahttp.Doer
+
+	// SaveRegistryEntry Doer is the HTTP client used to make requests to the
+	// saveRegistryEntry endpoint.
+	SaveRegistryEntryDoer goahttp.Doer
+
+	// SetRegistryEntryPublished Doer is the HTTP client used to make requests to
+	// the setRegistryEntryPublished endpoint.
+	SetRegistryEntryPublishedDoer goahttp.Doer
+
+	// ListOnboardingSteps Doer is the HTTP client used to make requests to the
+	// listOnboardingSteps endpoint.
+	ListOnboardingStepsDoer goahttp.Doer
+
+	// GetOnboardingStackOptions Doer is the HTTP client used to make requests to
+	// the getOnboardingStackOptions endpoint.
+	GetOnboardingStackOptionsDoer goahttp.Doer
+
+	// GetOrganizationOnboardingStack Doer is the HTTP client used to make requests
+	// to the getOrganizationOnboardingStack endpoint.
+	GetOrganizationOnboardingStackDoer goahttp.Doer
+
+	// SetOrganizationOnboardingStack Doer is the HTTP client used to make requests
+	// to the setOrganizationOnboardingStack endpoint.
+	SetOrganizationOnboardingStackDoer goahttp.Doer
+
+	// ListOnboardingUseCases Doer is the HTTP client used to make requests to the
+	// listOnboardingUseCases endpoint.
+	ListOnboardingUseCasesDoer goahttp.Doer
+
+	// CreateOnboardingUseCase Doer is the HTTP client used to make requests to the
+	// createOnboardingUseCase endpoint.
+	CreateOnboardingUseCaseDoer goahttp.Doer
+
+	// UpdateOnboardingUseCase Doer is the HTTP client used to make requests to the
+	// updateOnboardingUseCase endpoint.
+	UpdateOnboardingUseCaseDoer goahttp.Doer
+
+	// DeleteOnboardingUseCase Doer is the HTTP client used to make requests to the
+	// deleteOnboardingUseCase endpoint.
+	DeleteOnboardingUseCaseDoer goahttp.Doer
+
+	// ListOnboardingPlaybooks Doer is the HTTP client used to make requests to the
+	// listOnboardingPlaybooks endpoint.
+	ListOnboardingPlaybooksDoer goahttp.Doer
+
+	// CreateOnboardingPlaybook Doer is the HTTP client used to make requests to
+	// the createOnboardingPlaybook endpoint.
+	CreateOnboardingPlaybookDoer goahttp.Doer
+
+	// UpdateOnboardingPlaybook Doer is the HTTP client used to make requests to
+	// the updateOnboardingPlaybook endpoint.
+	UpdateOnboardingPlaybookDoer goahttp.Doer
+
+	// DeleteOnboardingPlaybook Doer is the HTTP client used to make requests to
+	// the deleteOnboardingPlaybook endpoint.
+	DeleteOnboardingPlaybookDoer goahttp.Doer
+
+	// CloneOnboardingPlaybook Doer is the HTTP client used to make requests to the
+	// cloneOnboardingPlaybook endpoint.
+	CloneOnboardingPlaybookDoer goahttp.Doer
+
+	// GetOrganizationOnboardingPlaybook Doer is the HTTP client used to make
+	// requests to the getOrganizationOnboardingPlaybook endpoint.
+	GetOrganizationOnboardingPlaybookDoer goahttp.Doer
+
+	// AssignOrganizationOnboardingPlaybook Doer is the HTTP client used to make
+	// requests to the assignOrganizationOnboardingPlaybook endpoint.
+	AssignOrganizationOnboardingPlaybookDoer goahttp.Doer
+
+	// ListSignupOffers Doer is the HTTP client used to make requests to the
+	// listSignupOffers endpoint.
+	ListSignupOffersDoer goahttp.Doer
+
+	// CreateSignupOffer Doer is the HTTP client used to make requests to the
+	// createSignupOffer endpoint.
+	CreateSignupOfferDoer goahttp.Doer
+
+	// UpdateSignupOffer Doer is the HTTP client used to make requests to the
+	// updateSignupOffer endpoint.
+	UpdateSignupOfferDoer goahttp.Doer
+
+	// ListPlatformMcpFeedback Doer is the HTTP client used to make requests to the
+	// listPlatformMcpFeedback endpoint.
+	ListPlatformMcpFeedbackDoer goahttp.Doer
+
+	// GetStripeSubscriptionCandidate Doer is the HTTP client used to make requests
+	// to the getStripeSubscriptionCandidate endpoint.
+	GetStripeSubscriptionCandidateDoer goahttp.Doer
+
+	// SetStripeSubscription Doer is the HTTP client used to make requests to the
+	// setStripeSubscription endpoint.
+	SetStripeSubscriptionDoer goahttp.Doer
+
+	// ListCustomerUsage Doer is the HTTP client used to make requests to the
+	// listCustomerUsage endpoint.
+	ListCustomerUsageDoer goahttp.Doer
+
+	// ListUpstreamOAuthMigrationOrganizations Doer is the HTTP client used to make
+	// requests to the listUpstreamOAuthMigrationOrganizations endpoint.
+	ListUpstreamOAuthMigrationOrganizationsDoer goahttp.Doer
+
+	// GetUpstreamOAuthMigrationStatus Doer is the HTTP client used to make
+	// requests to the getUpstreamOAuthMigrationStatus endpoint.
+	GetUpstreamOAuthMigrationStatusDoer goahttp.Doer
+
+	// RunUpstreamOAuthMigration Doer is the HTTP client used to make requests to
+	// the runUpstreamOAuthMigration endpoint.
+	RunUpstreamOAuthMigrationDoer goahttp.Doer
+
+	// EnableUpstreamAuthEnforcement Doer is the HTTP client used to make requests
+	// to the enableUpstreamAuthEnforcement endpoint.
+	EnableUpstreamAuthEnforcementDoer goahttp.Doer
+
+	// DisableUpstreamAuthEnforcement Doer is the HTTP client used to make requests
+	// to the disableUpstreamAuthEnforcement endpoint.
+	DisableUpstreamAuthEnforcementDoer goahttp.Doer
+
+	// BackfillMcpAuthGrants Doer is the HTTP client used to make requests to the
+	// backfillMcpAuthGrants endpoint.
+	BackfillMcpAuthGrantsDoer goahttp.Doer
+
+	// BackfillMcpConnectGrants Doer is the HTTP client used to make requests to
+	// the backfillMcpConnectGrants endpoint.
+	BackfillMcpConnectGrantsDoer goahttp.Doer
+
+	// GetProjectRedeployPreview Doer is the HTTP client used to make requests to
+	// the getProjectRedeployPreview endpoint.
+	GetProjectRedeployPreviewDoer goahttp.Doer
+
+	// RedeployProject Doer is the HTTP client used to make requests to the
+	// redeployProject endpoint.
+	RedeployProjectDoer goahttp.Doer
+
+	// ListCustomDomains Doer is the HTTP client used to make requests to the
+	// listCustomDomains endpoint.
+	ListCustomDomainsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -248,64 +472,120 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		LoginDoer:                                 doer,
-		CallbackDoer:                              doer,
-		LogoutDoer:                                doer,
-		GetSessionDoer:                            doer,
-		GetOrganizationFeaturesDoer:               doer,
-		SetOrganizationFeatureDoer:                doer,
-		GetOrganizationChatAnalysisSettingsDoer:   doer,
-		SetOrganizationChatAnalysisSettingsDoer:   doer,
-		TriggerOrganizationChatAnalysisDoer:       doer,
-		OpenOrganizationInDashboardDoer:           doer,
-		GetProjectDoer:                            doer,
-		UpdateOrganizationDoer:                    doer,
-		BulkUpdateAccountTypeDoer:                 doer,
-		DisableOrganizationDoer:                   doer,
-		EnableOrganizationDoer:                    doer,
-		GetOrganizationDoer:                       doer,
-		ListOrganizationMembersDoer:               doer,
-		ListOrganizationProjectsDoer:              doer,
-		ListOrganizationActivityDoer:              doer,
-		ListOrganizationsDoer:                     doer,
-		ExtendTrialDoer:                           doer,
-		CreateOrganizationDoer:                    doer,
-		RearmTrialDoer:                            doer,
-		GetOrganizationStatsDoer:                  doer,
-		GetInferenceKeysDoer:                      doer,
-		SetInferenceKeyMonthlyLimitDoer:           doer,
-		GetInferenceSpendHistoryDoer:              doer,
-		GetPaygBillingSummaryDoer:                 doer,
-		GetStripeCustomerDoer:                     doer,
-		SetStripeCustomerDoer:                     doer,
-		GetStripeSubscriptionDoer:                 doer,
-		CancelStripeSubscriptionDoer:              doer,
-		ResumeStripeSubscriptionDoer:              doer,
-		MarkEnterpriseTrialConvertedDoer:          doer,
-		CreateGlobalIssuerDoer:                    doer,
-		GetGlobalIssuerDuplicatePreflightDoer:     doer,
-		ListGlobalIssuersDoer:                     doer,
-		GetGlobalIssuerDoer:                       doer,
-		UpdateGlobalIssuerDoer:                    doer,
-		DeleteGlobalIssuerDoer:                    doer,
-		FetchGlobalIssuerMetadataDoer:             doer,
-		RefreshGlobalIssuerMetadataDoer:           doer,
-		ListGlobalIssuerConvergenceCandidatesDoer: doer,
-		GetGlobalIssuerMigratePreflightDoer:       doer,
-		MigrateToGlobalIssuerDoer:                 doer,
-		UploadPlatformImageDoer:                   doer,
-		ServeImageDoer:                            doer,
-		StartTrialDoer:                            doer,
-		ChangeTrialEndDateDoer:                    doer,
-		GetMeterUsageDoer:                         doer,
-		GetSpendBreakdownDoer:                     doer,
-		GetSupportMatrixDoer:                      doer,
-		UpdateSupportMatrixDoer:                   doer,
-		RestoreResponseBody:                       restoreBody,
-		scheme:                                    scheme,
-		host:                                      host,
-		decoder:                                   dec,
-		encoder:                                   enc,
+		LoginDoer:                                   doer,
+		CallbackDoer:                                doer,
+		LogoutDoer:                                  doer,
+		GetSessionDoer:                              doer,
+		GetOrganizationFeaturesDoer:                 doer,
+		SetOrganizationProviderSetupDoer:            doer,
+		SetOrganizationFeatureDoer:                  doer,
+		GetOrganizationChatAnalysisSettingsDoer:     doer,
+		SetOrganizationChatAnalysisSettingsDoer:     doer,
+		TriggerOrganizationChatAnalysisDoer:         doer,
+		OpenOrganizationInDashboardDoer:             doer,
+		GetProjectDoer:                              doer,
+		UpdateOrganizationDoer:                      doer,
+		BulkUpdateAccountTypeDoer:                   doer,
+		DisableOrganizationDoer:                     doer,
+		EnableOrganizationDoer:                      doer,
+		GetOrganizationDoer:                         doer,
+		ListOrganizationMembersDoer:                 doer,
+		ListOrganizationProjectsDoer:                doer,
+		ListProjectMcpServersDoer:                   doer,
+		ListOrganizationActivityDoer:                doer,
+		ListUsersDoer:                               doer,
+		ListUserOrganizationsDoer:                   doer,
+		ListOrganizationsDoer:                       doer,
+		ExtendTrialDoer:                             doer,
+		CreateOrganizationDoer:                      doer,
+		RearmTrialDoer:                              doer,
+		GetOrganizationStatsDoer:                    doer,
+		RepairInferenceKeyDoer:                      doer,
+		GetInferenceKeysDoer:                        doer,
+		SetInferenceKeyMonthlyLimitDoer:             doer,
+		GetInferenceSpendHistoryDoer:                doer,
+		GetPaygBillingSummaryDoer:                   doer,
+		GetStripeCustomerDoer:                       doer,
+		SetStripeCustomerDoer:                       doer,
+		SetAdoptionDashboardURLDoer:                 doer,
+		GetStripeSubscriptionDoer:                   doer,
+		CancelStripeSubscriptionDoer:                doer,
+		ResumeStripeSubscriptionDoer:                doer,
+		MarkEnterpriseTrialConvertedDoer:            doer,
+		CreateGlobalIssuerDoer:                      doer,
+		GetGlobalIssuerDuplicatePreflightDoer:       doer,
+		ListGlobalIssuersDoer:                       doer,
+		GetGlobalIssuerDoer:                         doer,
+		UpdateGlobalIssuerDoer:                      doer,
+		DeleteGlobalIssuerDoer:                      doer,
+		FetchGlobalIssuerMetadataDoer:               doer,
+		RefreshGlobalIssuerMetadataDoer:             doer,
+		ListGlobalIssuerConvergenceCandidatesDoer:   doer,
+		GetGlobalIssuerMigratePreflightDoer:         doer,
+		MigrateToGlobalIssuerDoer:                   doer,
+		UploadPlatformImageDoer:                     doer,
+		ServeImageDoer:                              doer,
+		StartTrialDoer:                              doer,
+		ChangeTrialEndDateDoer:                      doer,
+		GetMeterUsageDoer:                           doer,
+		GetSpendBreakdownDoer:                       doer,
+		GetSupportMatrixDoer:                        doer,
+		UpdateSupportMatrixDoer:                     doer,
+		GetSupportCoverageDoer:                      doer,
+		DescribeMcpServerHealthDoer:                 doer,
+		SetMcpServerScopePinDoer:                    doer,
+		GetMcpServerToolCallsDoer:                   doer,
+		GetHookClientsDoer:                          doer,
+		GetOrganizationHookFleetDoer:                doer,
+		ListRegistryPromotionCandidatesDoer:         doer,
+		GetRegistryPromotionCandidateDoer:           doer,
+		PromoteRegistryCandidateDoer:                doer,
+		CurateRegistryPromotionCandidateDoer:        doer,
+		RetryRegistryPromotionDocsDoer:              doer,
+		GetRegistryOktaCandidatesDoer:               doer,
+		ListRegistryOktaUnmappedDoer:                doer,
+		ListRegistryEntriesDoer:                     doer,
+		GetRegistryEntryDoer:                        doer,
+		CreateRegistryEntryDoer:                     doer,
+		SaveRegistryEntryDoer:                       doer,
+		SetRegistryEntryPublishedDoer:               doer,
+		ListOnboardingStepsDoer:                     doer,
+		GetOnboardingStackOptionsDoer:               doer,
+		GetOrganizationOnboardingStackDoer:          doer,
+		SetOrganizationOnboardingStackDoer:          doer,
+		ListOnboardingUseCasesDoer:                  doer,
+		CreateOnboardingUseCaseDoer:                 doer,
+		UpdateOnboardingUseCaseDoer:                 doer,
+		DeleteOnboardingUseCaseDoer:                 doer,
+		ListOnboardingPlaybooksDoer:                 doer,
+		CreateOnboardingPlaybookDoer:                doer,
+		UpdateOnboardingPlaybookDoer:                doer,
+		DeleteOnboardingPlaybookDoer:                doer,
+		CloneOnboardingPlaybookDoer:                 doer,
+		GetOrganizationOnboardingPlaybookDoer:       doer,
+		AssignOrganizationOnboardingPlaybookDoer:    doer,
+		ListSignupOffersDoer:                        doer,
+		CreateSignupOfferDoer:                       doer,
+		UpdateSignupOfferDoer:                       doer,
+		ListPlatformMcpFeedbackDoer:                 doer,
+		GetStripeSubscriptionCandidateDoer:          doer,
+		SetStripeSubscriptionDoer:                   doer,
+		ListCustomerUsageDoer:                       doer,
+		ListUpstreamOAuthMigrationOrganizationsDoer: doer,
+		GetUpstreamOAuthMigrationStatusDoer:         doer,
+		RunUpstreamOAuthMigrationDoer:               doer,
+		EnableUpstreamAuthEnforcementDoer:           doer,
+		DisableUpstreamAuthEnforcementDoer:          doer,
+		BackfillMcpAuthGrantsDoer:                   doer,
+		BackfillMcpConnectGrantsDoer:                doer,
+		GetProjectRedeployPreviewDoer:               doer,
+		RedeployProjectDoer:                         doer,
+		ListCustomDomainsDoer:                       doer,
+		RestoreResponseBody:                         restoreBody,
+		scheme:                                      scheme,
+		host:                                        host,
+		decoder:                                     dec,
+		encoder:                                     enc,
 	}
 }
 
@@ -424,6 +704,30 @@ func (c *Client) GetOrganizationFeatures() goa.Endpoint {
 		resp, err := c.GetOrganizationFeaturesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getOrganizationFeatures", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetOrganizationProviderSetup returns an endpoint that makes HTTP requests to
+// the admin service setOrganizationProviderSetup server.
+func (c *Client) SetOrganizationProviderSetup() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetOrganizationProviderSetupRequest(c.encoder)
+		decodeResponse = DecodeSetOrganizationProviderSetupResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetOrganizationProviderSetupRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetOrganizationProviderSetupDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setOrganizationProviderSetup", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -741,6 +1045,30 @@ func (c *Client) ListOrganizationProjects() goa.Endpoint {
 	}
 }
 
+// ListProjectMcpServers returns an endpoint that makes HTTP requests to the
+// admin service listProjectMcpServers server.
+func (c *Client) ListProjectMcpServers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListProjectMcpServersRequest(c.encoder)
+		decodeResponse = DecodeListProjectMcpServersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListProjectMcpServersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListProjectMcpServersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listProjectMcpServers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // ListOrganizationActivity returns an endpoint that makes HTTP requests to the
 // admin service listOrganizationActivity server.
 func (c *Client) ListOrganizationActivity() goa.Endpoint {
@@ -760,6 +1088,54 @@ func (c *Client) ListOrganizationActivity() goa.Endpoint {
 		resp, err := c.ListOrganizationActivityDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "listOrganizationActivity", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListUsers returns an endpoint that makes HTTP requests to the admin service
+// listUsers server.
+func (c *Client) ListUsers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListUsersRequest(c.encoder)
+		decodeResponse = DecodeListUsersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListUsersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListUsersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listUsers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListUserOrganizations returns an endpoint that makes HTTP requests to the
+// admin service listUserOrganizations server.
+func (c *Client) ListUserOrganizations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListUserOrganizationsRequest(c.encoder)
+		decodeResponse = DecodeListUserOrganizationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListUserOrganizationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListUserOrganizationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listUserOrganizations", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -880,6 +1256,30 @@ func (c *Client) GetOrganizationStats() goa.Endpoint {
 		resp, err := c.GetOrganizationStatsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getOrganizationStats", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RepairInferenceKey returns an endpoint that makes HTTP requests to the admin
+// service repairInferenceKey server.
+func (c *Client) RepairInferenceKey() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRepairInferenceKeyRequest(c.encoder)
+		decodeResponse = DecodeRepairInferenceKeyResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRepairInferenceKeyRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RepairInferenceKeyDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "repairInferenceKey", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -1024,6 +1424,30 @@ func (c *Client) SetStripeCustomer() goa.Endpoint {
 		resp, err := c.SetStripeCustomerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "setStripeCustomer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetAdoptionDashboardURL returns an endpoint that makes HTTP requests to the
+// admin service setAdoptionDashboardUrl server.
+func (c *Client) SetAdoptionDashboardURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetAdoptionDashboardURLRequest(c.encoder)
+		decodeResponse = DecodeSetAdoptionDashboardURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetAdoptionDashboardURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetAdoptionDashboardURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setAdoptionDashboardUrl", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -1581,6 +2005,1206 @@ func (c *Client) UpdateSupportMatrix() goa.Endpoint {
 		resp, err := c.UpdateSupportMatrixDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "updateSupportMatrix", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSupportCoverage returns an endpoint that makes HTTP requests to the admin
+// service getSupportCoverage server.
+func (c *Client) GetSupportCoverage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSupportCoverageRequest(c.encoder)
+		decodeResponse = DecodeGetSupportCoverageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSupportCoverageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSupportCoverageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getSupportCoverage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DescribeMcpServerHealth returns an endpoint that makes HTTP requests to the
+// admin service describeMcpServerHealth server.
+func (c *Client) DescribeMcpServerHealth() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDescribeMcpServerHealthRequest(c.encoder)
+		decodeResponse = DecodeDescribeMcpServerHealthResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDescribeMcpServerHealthRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DescribeMcpServerHealthDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "describeMcpServerHealth", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetMcpServerScopePin returns an endpoint that makes HTTP requests to the
+// admin service setMcpServerScopePin server.
+func (c *Client) SetMcpServerScopePin() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetMcpServerScopePinRequest(c.encoder)
+		decodeResponse = DecodeSetMcpServerScopePinResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetMcpServerScopePinRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetMcpServerScopePinDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setMcpServerScopePin", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMcpServerToolCalls returns an endpoint that makes HTTP requests to the
+// admin service getMcpServerToolCalls server.
+func (c *Client) GetMcpServerToolCalls() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMcpServerToolCallsRequest(c.encoder)
+		decodeResponse = DecodeGetMcpServerToolCallsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMcpServerToolCallsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMcpServerToolCallsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getMcpServerToolCalls", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetHookClients returns an endpoint that makes HTTP requests to the admin
+// service getHookClients server.
+func (c *Client) GetHookClients() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetHookClientsRequest(c.encoder)
+		decodeResponse = DecodeGetHookClientsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetHookClientsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetHookClientsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getHookClients", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrganizationHookFleet returns an endpoint that makes HTTP requests to the
+// admin service getOrganizationHookFleet server.
+func (c *Client) GetOrganizationHookFleet() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrganizationHookFleetRequest(c.encoder)
+		decodeResponse = DecodeGetOrganizationHookFleetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrganizationHookFleetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrganizationHookFleetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOrganizationHookFleet", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRegistryPromotionCandidates returns an endpoint that makes HTTP requests
+// to the admin service listRegistryPromotionCandidates server.
+func (c *Client) ListRegistryPromotionCandidates() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRegistryPromotionCandidatesRequest(c.encoder)
+		decodeResponse = DecodeListRegistryPromotionCandidatesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRegistryPromotionCandidatesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRegistryPromotionCandidatesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listRegistryPromotionCandidates", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRegistryPromotionCandidate returns an endpoint that makes HTTP requests
+// to the admin service getRegistryPromotionCandidate server.
+func (c *Client) GetRegistryPromotionCandidate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRegistryPromotionCandidateRequest(c.encoder)
+		decodeResponse = DecodeGetRegistryPromotionCandidateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRegistryPromotionCandidateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRegistryPromotionCandidateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getRegistryPromotionCandidate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// PromoteRegistryCandidate returns an endpoint that makes HTTP requests to the
+// admin service promoteRegistryCandidate server.
+func (c *Client) PromoteRegistryCandidate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePromoteRegistryCandidateRequest(c.encoder)
+		decodeResponse = DecodePromoteRegistryCandidateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPromoteRegistryCandidateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PromoteRegistryCandidateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "promoteRegistryCandidate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CurateRegistryPromotionCandidate returns an endpoint that makes HTTP
+// requests to the admin service curateRegistryPromotionCandidate server.
+func (c *Client) CurateRegistryPromotionCandidate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCurateRegistryPromotionCandidateRequest(c.encoder)
+		decodeResponse = DecodeCurateRegistryPromotionCandidateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCurateRegistryPromotionCandidateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CurateRegistryPromotionCandidateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "curateRegistryPromotionCandidate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RetryRegistryPromotionDocs returns an endpoint that makes HTTP requests to
+// the admin service retryRegistryPromotionDocs server.
+func (c *Client) RetryRegistryPromotionDocs() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRetryRegistryPromotionDocsRequest(c.encoder)
+		decodeResponse = DecodeRetryRegistryPromotionDocsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRetryRegistryPromotionDocsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RetryRegistryPromotionDocsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "retryRegistryPromotionDocs", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRegistryOktaCandidates returns an endpoint that makes HTTP requests to
+// the admin service getRegistryOktaCandidates server.
+func (c *Client) GetRegistryOktaCandidates() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRegistryOktaCandidatesRequest(c.encoder)
+		decodeResponse = DecodeGetRegistryOktaCandidatesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRegistryOktaCandidatesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRegistryOktaCandidatesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getRegistryOktaCandidates", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRegistryOktaUnmapped returns an endpoint that makes HTTP requests to the
+// admin service listRegistryOktaUnmapped server.
+func (c *Client) ListRegistryOktaUnmapped() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRegistryOktaUnmappedRequest(c.encoder)
+		decodeResponse = DecodeListRegistryOktaUnmappedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRegistryOktaUnmappedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRegistryOktaUnmappedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listRegistryOktaUnmapped", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRegistryEntries returns an endpoint that makes HTTP requests to the
+// admin service listRegistryEntries server.
+func (c *Client) ListRegistryEntries() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRegistryEntriesRequest(c.encoder)
+		decodeResponse = DecodeListRegistryEntriesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRegistryEntriesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRegistryEntriesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listRegistryEntries", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRegistryEntry returns an endpoint that makes HTTP requests to the admin
+// service getRegistryEntry server.
+func (c *Client) GetRegistryEntry() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRegistryEntryRequest(c.encoder)
+		decodeResponse = DecodeGetRegistryEntryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRegistryEntryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRegistryEntryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getRegistryEntry", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateRegistryEntry returns an endpoint that makes HTTP requests to the
+// admin service createRegistryEntry server.
+func (c *Client) CreateRegistryEntry() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateRegistryEntryRequest(c.encoder)
+		decodeResponse = DecodeCreateRegistryEntryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateRegistryEntryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateRegistryEntryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "createRegistryEntry", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SaveRegistryEntry returns an endpoint that makes HTTP requests to the admin
+// service saveRegistryEntry server.
+func (c *Client) SaveRegistryEntry() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSaveRegistryEntryRequest(c.encoder)
+		decodeResponse = DecodeSaveRegistryEntryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSaveRegistryEntryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SaveRegistryEntryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "saveRegistryEntry", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetRegistryEntryPublished returns an endpoint that makes HTTP requests to
+// the admin service setRegistryEntryPublished server.
+func (c *Client) SetRegistryEntryPublished() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetRegistryEntryPublishedRequest(c.encoder)
+		decodeResponse = DecodeSetRegistryEntryPublishedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetRegistryEntryPublishedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetRegistryEntryPublishedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setRegistryEntryPublished", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListOnboardingSteps returns an endpoint that makes HTTP requests to the
+// admin service listOnboardingSteps server.
+func (c *Client) ListOnboardingSteps() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListOnboardingStepsRequest(c.encoder)
+		decodeResponse = DecodeListOnboardingStepsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListOnboardingStepsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListOnboardingStepsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listOnboardingSteps", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOnboardingStackOptions returns an endpoint that makes HTTP requests to
+// the admin service getOnboardingStackOptions server.
+func (c *Client) GetOnboardingStackOptions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOnboardingStackOptionsRequest(c.encoder)
+		decodeResponse = DecodeGetOnboardingStackOptionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOnboardingStackOptionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOnboardingStackOptionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOnboardingStackOptions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrganizationOnboardingStack returns an endpoint that makes HTTP requests
+// to the admin service getOrganizationOnboardingStack server.
+func (c *Client) GetOrganizationOnboardingStack() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrganizationOnboardingStackRequest(c.encoder)
+		decodeResponse = DecodeGetOrganizationOnboardingStackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrganizationOnboardingStackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrganizationOnboardingStackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOrganizationOnboardingStack", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetOrganizationOnboardingStack returns an endpoint that makes HTTP requests
+// to the admin service setOrganizationOnboardingStack server.
+func (c *Client) SetOrganizationOnboardingStack() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetOrganizationOnboardingStackRequest(c.encoder)
+		decodeResponse = DecodeSetOrganizationOnboardingStackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetOrganizationOnboardingStackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetOrganizationOnboardingStackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setOrganizationOnboardingStack", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListOnboardingUseCases returns an endpoint that makes HTTP requests to the
+// admin service listOnboardingUseCases server.
+func (c *Client) ListOnboardingUseCases() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListOnboardingUseCasesRequest(c.encoder)
+		decodeResponse = DecodeListOnboardingUseCasesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListOnboardingUseCasesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListOnboardingUseCasesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listOnboardingUseCases", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateOnboardingUseCase returns an endpoint that makes HTTP requests to the
+// admin service createOnboardingUseCase server.
+func (c *Client) CreateOnboardingUseCase() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateOnboardingUseCaseRequest(c.encoder)
+		decodeResponse = DecodeCreateOnboardingUseCaseResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateOnboardingUseCaseRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateOnboardingUseCaseDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "createOnboardingUseCase", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateOnboardingUseCase returns an endpoint that makes HTTP requests to the
+// admin service updateOnboardingUseCase server.
+func (c *Client) UpdateOnboardingUseCase() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateOnboardingUseCaseRequest(c.encoder)
+		decodeResponse = DecodeUpdateOnboardingUseCaseResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateOnboardingUseCaseRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateOnboardingUseCaseDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "updateOnboardingUseCase", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteOnboardingUseCase returns an endpoint that makes HTTP requests to the
+// admin service deleteOnboardingUseCase server.
+func (c *Client) DeleteOnboardingUseCase() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteOnboardingUseCaseRequest(c.encoder)
+		decodeResponse = DecodeDeleteOnboardingUseCaseResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteOnboardingUseCaseRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteOnboardingUseCaseDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "deleteOnboardingUseCase", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListOnboardingPlaybooks returns an endpoint that makes HTTP requests to the
+// admin service listOnboardingPlaybooks server.
+func (c *Client) ListOnboardingPlaybooks() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListOnboardingPlaybooksRequest(c.encoder)
+		decodeResponse = DecodeListOnboardingPlaybooksResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListOnboardingPlaybooksRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListOnboardingPlaybooksDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listOnboardingPlaybooks", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateOnboardingPlaybook returns an endpoint that makes HTTP requests to the
+// admin service createOnboardingPlaybook server.
+func (c *Client) CreateOnboardingPlaybook() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateOnboardingPlaybookRequest(c.encoder)
+		decodeResponse = DecodeCreateOnboardingPlaybookResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateOnboardingPlaybookRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateOnboardingPlaybookDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "createOnboardingPlaybook", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateOnboardingPlaybook returns an endpoint that makes HTTP requests to the
+// admin service updateOnboardingPlaybook server.
+func (c *Client) UpdateOnboardingPlaybook() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateOnboardingPlaybookRequest(c.encoder)
+		decodeResponse = DecodeUpdateOnboardingPlaybookResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateOnboardingPlaybookRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateOnboardingPlaybookDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "updateOnboardingPlaybook", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteOnboardingPlaybook returns an endpoint that makes HTTP requests to the
+// admin service deleteOnboardingPlaybook server.
+func (c *Client) DeleteOnboardingPlaybook() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteOnboardingPlaybookRequest(c.encoder)
+		decodeResponse = DecodeDeleteOnboardingPlaybookResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteOnboardingPlaybookRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteOnboardingPlaybookDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "deleteOnboardingPlaybook", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CloneOnboardingPlaybook returns an endpoint that makes HTTP requests to the
+// admin service cloneOnboardingPlaybook server.
+func (c *Client) CloneOnboardingPlaybook() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCloneOnboardingPlaybookRequest(c.encoder)
+		decodeResponse = DecodeCloneOnboardingPlaybookResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCloneOnboardingPlaybookRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CloneOnboardingPlaybookDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "cloneOnboardingPlaybook", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrganizationOnboardingPlaybook returns an endpoint that makes HTTP
+// requests to the admin service getOrganizationOnboardingPlaybook server.
+func (c *Client) GetOrganizationOnboardingPlaybook() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrganizationOnboardingPlaybookRequest(c.encoder)
+		decodeResponse = DecodeGetOrganizationOnboardingPlaybookResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrganizationOnboardingPlaybookRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrganizationOnboardingPlaybookDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOrganizationOnboardingPlaybook", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AssignOrganizationOnboardingPlaybook returns an endpoint that makes HTTP
+// requests to the admin service assignOrganizationOnboardingPlaybook server.
+func (c *Client) AssignOrganizationOnboardingPlaybook() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAssignOrganizationOnboardingPlaybookRequest(c.encoder)
+		decodeResponse = DecodeAssignOrganizationOnboardingPlaybookResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAssignOrganizationOnboardingPlaybookRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AssignOrganizationOnboardingPlaybookDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "assignOrganizationOnboardingPlaybook", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSignupOffers returns an endpoint that makes HTTP requests to the admin
+// service listSignupOffers server.
+func (c *Client) ListSignupOffers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSignupOffersRequest(c.encoder)
+		decodeResponse = DecodeListSignupOffersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSignupOffersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSignupOffersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listSignupOffers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateSignupOffer returns an endpoint that makes HTTP requests to the admin
+// service createSignupOffer server.
+func (c *Client) CreateSignupOffer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateSignupOfferRequest(c.encoder)
+		decodeResponse = DecodeCreateSignupOfferResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateSignupOfferRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateSignupOfferDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "createSignupOffer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateSignupOffer returns an endpoint that makes HTTP requests to the admin
+// service updateSignupOffer server.
+func (c *Client) UpdateSignupOffer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateSignupOfferRequest(c.encoder)
+		decodeResponse = DecodeUpdateSignupOfferResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateSignupOfferRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateSignupOfferDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "updateSignupOffer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPlatformMcpFeedback returns an endpoint that makes HTTP requests to the
+// admin service listPlatformMcpFeedback server.
+func (c *Client) ListPlatformMcpFeedback() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPlatformMcpFeedbackRequest(c.encoder)
+		decodeResponse = DecodeListPlatformMcpFeedbackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPlatformMcpFeedbackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPlatformMcpFeedbackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listPlatformMcpFeedback", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetStripeSubscriptionCandidate returns an endpoint that makes HTTP requests
+// to the admin service getStripeSubscriptionCandidate server.
+func (c *Client) GetStripeSubscriptionCandidate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetStripeSubscriptionCandidateRequest(c.encoder)
+		decodeResponse = DecodeGetStripeSubscriptionCandidateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetStripeSubscriptionCandidateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetStripeSubscriptionCandidateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getStripeSubscriptionCandidate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetStripeSubscription returns an endpoint that makes HTTP requests to the
+// admin service setStripeSubscription server.
+func (c *Client) SetStripeSubscription() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetStripeSubscriptionRequest(c.encoder)
+		decodeResponse = DecodeSetStripeSubscriptionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetStripeSubscriptionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetStripeSubscriptionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setStripeSubscription", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListCustomerUsage returns an endpoint that makes HTTP requests to the admin
+// service listCustomerUsage server.
+func (c *Client) ListCustomerUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListCustomerUsageRequest(c.encoder)
+		decodeResponse = DecodeListCustomerUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListCustomerUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListCustomerUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listCustomerUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListUpstreamOAuthMigrationOrganizations returns an endpoint that makes HTTP
+// requests to the admin service listUpstreamOAuthMigrationOrganizations server.
+func (c *Client) ListUpstreamOAuthMigrationOrganizations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListUpstreamOAuthMigrationOrganizationsRequest(c.encoder)
+		decodeResponse = DecodeListUpstreamOAuthMigrationOrganizationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListUpstreamOAuthMigrationOrganizationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListUpstreamOAuthMigrationOrganizationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetUpstreamOAuthMigrationStatus returns an endpoint that makes HTTP requests
+// to the admin service getUpstreamOAuthMigrationStatus server.
+func (c *Client) GetUpstreamOAuthMigrationStatus() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetUpstreamOAuthMigrationStatusRequest(c.encoder)
+		decodeResponse = DecodeGetUpstreamOAuthMigrationStatusResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUpstreamOAuthMigrationStatusRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUpstreamOAuthMigrationStatusDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getUpstreamOAuthMigrationStatus", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RunUpstreamOAuthMigration returns an endpoint that makes HTTP requests to
+// the admin service runUpstreamOAuthMigration server.
+func (c *Client) RunUpstreamOAuthMigration() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRunUpstreamOAuthMigrationRequest(c.encoder)
+		decodeResponse = DecodeRunUpstreamOAuthMigrationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRunUpstreamOAuthMigrationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RunUpstreamOAuthMigrationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "runUpstreamOAuthMigration", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EnableUpstreamAuthEnforcement returns an endpoint that makes HTTP requests
+// to the admin service enableUpstreamAuthEnforcement server.
+func (c *Client) EnableUpstreamAuthEnforcement() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEnableUpstreamAuthEnforcementRequest(c.encoder)
+		decodeResponse = DecodeEnableUpstreamAuthEnforcementResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEnableUpstreamAuthEnforcementRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EnableUpstreamAuthEnforcementDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "enableUpstreamAuthEnforcement", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DisableUpstreamAuthEnforcement returns an endpoint that makes HTTP requests
+// to the admin service disableUpstreamAuthEnforcement server.
+func (c *Client) DisableUpstreamAuthEnforcement() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDisableUpstreamAuthEnforcementRequest(c.encoder)
+		decodeResponse = DecodeDisableUpstreamAuthEnforcementResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDisableUpstreamAuthEnforcementRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DisableUpstreamAuthEnforcementDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "disableUpstreamAuthEnforcement", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// BackfillMcpAuthGrants returns an endpoint that makes HTTP requests to the
+// admin service backfillMcpAuthGrants server.
+func (c *Client) BackfillMcpAuthGrants() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeBackfillMcpAuthGrantsRequest(c.encoder)
+		decodeResponse = DecodeBackfillMcpAuthGrantsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildBackfillMcpAuthGrantsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.BackfillMcpAuthGrantsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "backfillMcpAuthGrants", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// BackfillMcpConnectGrants returns an endpoint that makes HTTP requests to the
+// admin service backfillMcpConnectGrants server.
+func (c *Client) BackfillMcpConnectGrants() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeBackfillMcpConnectGrantsRequest(c.encoder)
+		decodeResponse = DecodeBackfillMcpConnectGrantsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildBackfillMcpConnectGrantsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.BackfillMcpConnectGrantsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "backfillMcpConnectGrants", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetProjectRedeployPreview returns an endpoint that makes HTTP requests to
+// the admin service getProjectRedeployPreview server.
+func (c *Client) GetProjectRedeployPreview() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetProjectRedeployPreviewRequest(c.encoder)
+		decodeResponse = DecodeGetProjectRedeployPreviewResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetProjectRedeployPreviewRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetProjectRedeployPreviewDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getProjectRedeployPreview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RedeployProject returns an endpoint that makes HTTP requests to the admin
+// service redeployProject server.
+func (c *Client) RedeployProject() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRedeployProjectRequest(c.encoder)
+		decodeResponse = DecodeRedeployProjectResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRedeployProjectRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RedeployProjectDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "redeployProject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListCustomDomains returns an endpoint that makes HTTP requests to the admin
+// service listCustomDomains server.
+func (c *Client) ListCustomDomains() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListCustomDomainsRequest(c.encoder)
+		decodeResponse = DecodeListCustomDomainsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListCustomDomainsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListCustomDomainsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listCustomDomains", err)
 		}
 		return decodeResponse(resp)
 	}

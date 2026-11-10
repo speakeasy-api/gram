@@ -10,17 +10,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EvidenceTitle } from "./EvidenceTitle";
 
 const hasScope = vi.fn<(scope: string, resourceId?: string) => boolean>();
+let scopesLoading = false;
 const loadChat = vi.fn<(req: unknown) => Promise<unknown>>();
 const listFindings = vi.fn<(req: { cursor?: string }) => Promise<unknown>>();
 
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope }),
+  useRBAC: () => ({ hasScope, isLoading: scopesLoading }),
 }));
+
+const DENIED = /don't have access to view session transcripts/;
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     risk: { results: { list: listFindings } },
   }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("@gram/client/react-query/loadChat.js", () => ({
@@ -34,10 +38,6 @@ vi.mock("@gram/client/react-query/loadChat.js", () => ({
       queryFn: () => loadChat(request),
       enabled: options.enabled,
     }),
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ agentSessions: { href: () => "/agent-sessions" } }),
 }));
 
 const TITLE = "Please refund order #4023. Customer card";
@@ -70,6 +70,7 @@ function renderTitle(
 afterEach(cleanup);
 beforeEach(() => {
   hasScope.mockReset();
+  scopesLoading = false;
   loadChat.mockReset();
   listFindings.mockReset();
   // The card number's finding sits on the second page, so masking only works
@@ -102,6 +103,23 @@ describe("EvidenceTitle", () => {
     expect(listFindings).not.toHaveBeenCalled();
   });
 
+  it("says the transcript is off limits without chat:read", () => {
+    hasScope.mockReturnValue(false);
+    renderTitle("chat-1");
+
+    expect(screen.getByText(DENIED).textContent).toContain(
+      "Contact your admin",
+    );
+  });
+
+  it("stays quiet about access while grants are still loading", () => {
+    hasScope.mockReturnValue(false);
+    scopesLoading = true;
+    renderTitle("chat-1");
+
+    expect(screen.queryByText(DENIED)).toBeNull();
+  });
+
   it("opens the session from the title and links to Agent Sessions", async () => {
     hasScope.mockReturnValue(true);
     const onOpenChat = renderTitle("chat-1");
@@ -112,7 +130,7 @@ describe("EvidenceTitle", () => {
       screen
         .getByRole("link", { name: "Open session in Agent Sessions" })
         .getAttribute("href"),
-    ).toBe("/agent-sessions?chatId=chat-1");
+    ).toBe("/org/projects/project/agent-sessions?chatId=chat-1");
   });
 
   it("expands to the flagged message, not the opening one, with matches masked", async () => {
@@ -365,5 +383,6 @@ describe("EvidenceTitle", () => {
 
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByText(DENIED)).toBeNull();
   });
 });

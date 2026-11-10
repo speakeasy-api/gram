@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Service("userSessionIssuersCimdClients", func() {
-	Description("Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.")
+	Description("Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Speakeasy curates, plus per-issuer custom document URLs.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -16,7 +16,7 @@ var _ = Service("userSessionIssuersCimdClients", func() {
 	shared.DeclareErrorResponses()
 
 	Method("listPresets", func() {
-		Description("List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.")
+		Description("List Speakeasy's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -65,7 +65,7 @@ var _ = Service("userSessionIssuersCimdClients", func() {
 	})
 
 	Method("verifyURL", func() {
-		Description("Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.")
+		Description("Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Speakeasy fetch a caller-chosen URL.")
 
 		Payload(func() {
 			Attribute("client_id_metadata_uri", String, "The https URL to probe.")
@@ -248,7 +248,7 @@ var VerifyCimdURLResult = Type("VerifyCimdURLResult", func() {
 	Attribute("reason", String, "Stable machine label for the rule that rejected the document, e.g. client_id_mismatch. Set only for invalid_url and invalid_document.")
 	Attribute("detail", String, "Human-readable explanation, safe to display to the operator.")
 	Attribute("client_name", String, "The document's client_name, set only when verified. Lets an operator confirm the URL names the client they intended.")
-	Attribute("document", String, "The validated document rendered as JSON, set only when verified. Re-encoded from what Gram parsed rather than echoed from the wire, so it shows what the authorization server will act on.")
+	Attribute("document", String, "The validated document rendered as JSON, set only when verified. Re-encoded from what Speakeasy parsed rather than echoed from the wire, so it shows what the authorization server will act on.")
 
 	Required("verified", "outcome", "detail")
 })
@@ -256,13 +256,13 @@ var VerifyCimdURLResult = Type("VerifyCimdURLResult", func() {
 var CimdClientPreset = Type("CimdClientPreset", func() {
 	Meta("struct:pkg:path", "types")
 
-	Description("An entry in Gram's curated CIMD preset catalog.")
+	Description("An entry in Speakeasy's curated CIMD preset catalog.")
 
 	Attribute("vendor_key", String, "Stable identifier for the publishing vendor. Not unique — a vendor may publish several client documents.")
 	Attribute("display_name", String, "Human-readable client name.")
 	Attribute("client_id_metadata_uri", String, "The https URL this client presents as its client_id. Usually exact; when is_pattern is true this is a wildcard pattern rather than a literal URL.")
 	Attribute("is_pattern", Boolean, "True when client_id_metadata_uri contains a `*` wildcard, matching a whole namespace of client_ids rather than one URL. Used for vendors that mint a separate metadata document per connector or install, so their client_ids cannot be enumerated. A `*` stands for exactly one path segment and never widens the host.")
-	Attribute("enabled", Boolean, "Whether presets-mode issuers currently admit this entry. Disabled entries are listed so operators can see that Gram knows about the vendor.")
+	Attribute("enabled", Boolean, "Whether presets-mode issuers currently admit this entry. Disabled entries are listed so operators can see that Speakeasy knows about the vendor.")
 
 	Required("vendor_key", "display_name", "client_id_metadata_uri", "is_pattern", "enabled")
 })

@@ -1,8 +1,8 @@
-# Pylon Task Management with Gram Functions
+# Pylon Task Management with Speakeasy Functions
 
-This project provides Gram Functions for interacting with the [Pylon](https://usepylon.com) API, specifically for creating tasks.
+This project provides Speakeasy Functions for interacting with the [Pylon](https://usepylon.com) API, specifically for creating tasks.
 
-Gram Functions are tools for LLMs and MCP servers that can do arbitrary tasks such as fetching data from APIs, performing calculations, or interacting with hosted databases.
+Speakeasy Functions are tools for LLMs and MCP servers that can do arbitrary tasks such as fetching data from APIs, performing calculations, or interacting with hosted databases.
 
 ## Available Tools
 
@@ -60,13 +60,13 @@ You can get your Pylon API key from the [Pylon dashboard](https://app.usepylon.c
 
 ### 3. Build and deploy
 
-To build a zip file that can be deployed to Gram, run:
+To build a zip file that can be deployed to Speakeasy, run:
 
 ```bash
 pnpm build
 ```
 
-After building, push your function to Gram with:
+After building, push your function to Speakeasy with:
 
 ```bash
 pnpm push

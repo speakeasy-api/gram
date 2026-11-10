@@ -10,7 +10,7 @@ const (
 	// Credentials — the local-dev ambient path.
 	SourceADC Source = "application_default_credentials"
 
-	// SourceImpersonation means the principal is a service account Gram
+	// SourceImpersonation means the principal is a service account Speakeasy
 	// successfully impersonated from its own identity.
 	SourceImpersonation Source = "impersonation"
 

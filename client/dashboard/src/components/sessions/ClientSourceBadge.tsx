@@ -9,7 +9,7 @@ import {
   userSessionClientSource,
 } from "@/lib/user-session-client-source";
 
-// How the client registered with Gram: CIMD or DCR. Rendered on the clients
+// How the client registered with Speakeasy: CIMD or DCR. Rendered on the clients
 // listing and on both session listings, so the distinction reads the same
 // everywhere. Each mode carries its own color so the two are separable at a
 // glance in a long list; the colors say "different", not "better" or "worse".

@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -16,7 +17,7 @@ export const AnalyticsDatasetKind = {
   Event: "event",
   Metric: "metric",
 } as const;
-export type AnalyticsDatasetKind = ClosedEnum<typeof AnalyticsDatasetKind>;
+export type AnalyticsDatasetKind = OpenEnum<typeof AnalyticsDatasetKind>;
 
 /**
  * A dataset and the fields it exposes. The builder is generated from this.
@@ -33,9 +34,10 @@ export type AnalyticsDataset = {
 };
 
 /** @internal */
-export const AnalyticsDatasetKind$inboundSchema: z.ZodMiniEnum<
-  typeof AnalyticsDatasetKind
-> = z.enum(AnalyticsDatasetKind);
+export const AnalyticsDatasetKind$inboundSchema: z.ZodMiniType<
+  AnalyticsDatasetKind,
+  unknown
+> = openEnums.inboundSchema(AnalyticsDatasetKind);
 
 /** @internal */
 export const AnalyticsDataset$inboundSchema: z.ZodMiniType<

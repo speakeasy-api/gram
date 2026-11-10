@@ -42,6 +42,8 @@ const (
 	tailscaleExposeAnnotation            = "tailscale.com/expose"
 	tailscaleHostnameAnnotation          = "tailscale.com/hostname"
 	tailscaleIngressClass                = "tailscale"
+	tailscaleReasonInvalidOAuth          = "InvalidOAuth"
+	tailscaleReasonInvalidSecret         = "InvalidSecret" // #nosec G101 -- Tailnet condition reason, not credential material.
 	networkIngressAttestorPort           = 8080
 	networkIngressAttestorHealthPort     = 8081
 	networkIngressTokenAudience          = "gram-netingress"             // #nosec G101 -- Kubernetes TokenReview audience, not a credential.
@@ -325,6 +327,27 @@ func runNetworkIngressDeletionPhase(deletes ...func() error) error {
 }
 
 func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resources NetworkIngressResourceNames) error {
+	err := p.teardown(ctx, resources)
+	if errors.Is(err, ErrNetworkIngressDeletionPending) && p.tailnetCredentialsRejected(ctx, resources) {
+		return fmt.Errorf("%w: Tailnet", ErrNetworkIngressProviderCredentialsRejected)
+	}
+	return err
+}
+
+// tailnetCredentialsRejected reports whether the operator has marked the
+// Tailnet's OAuth credentials invalid. Operator finalizers on the ProxyGroup and
+// Ingress need a working Tailscale API client to remove devices and services,
+// so teardown stays blocked until the credentials work again.
+func (p *TailscaleNetworkIngressProvisioner) tailnetCredentialsRejected(ctx context.Context, resources NetworkIngressResourceNames) bool {
+	tailnet, err := p.dynamic.Resource(tailnetGVR).Get(ctx, resources.Tailnet, metav1.GetOptions{})
+	if err != nil || ensureResourceOwned(tailnet.GetLabels(), resources.OwnerID.String()) != nil {
+		return false
+	}
+	reason, found := unstructuredConditionReason(tailnet, "TailnetReady", "False")
+	return found && (reason == tailscaleReasonInvalidOAuth || reason == tailscaleReasonInvalidSecret)
+}
+
+func (p *TailscaleNetworkIngressProvisioner) teardown(ctx context.Context, resources NetworkIngressResourceNames) error {
 	if err := resources.Validate(); err != nil {
 		return err
 	}
@@ -988,17 +1011,23 @@ func proxyGroupPolicyObject(desired NetworkIngressDesired) *unstructured.Unstruc
 }
 
 func unstructuredConditionTrue(resource *unstructured.Unstructured, conditionType string) bool {
+	_, found := unstructuredConditionReason(resource, conditionType, "True")
+	return found
+}
+
+func unstructuredConditionReason(resource *unstructured.Unstructured, conditionType, status string) (string, bool) {
 	conditions, found, err := unstructured.NestedSlice(resource.Object, "status", "conditions")
 	if err != nil || !found {
-		return false
+		return "", false
 	}
 	for _, candidate := range conditions {
 		condition, ok := candidate.(map[string]any)
-		if ok && condition["type"] == conditionType && condition["status"] == "True" {
-			return true
+		if ok && condition["type"] == conditionType && condition["status"] == status {
+			reason, _ := condition["reason"].(string)
+			return reason, true
 		}
 	}
-	return false
+	return "", false
 }
 
 func hostnameMatchesDesired(dnsName, desiredHostname string) bool {

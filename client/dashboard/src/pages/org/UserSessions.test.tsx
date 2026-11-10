@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import UserSessions from "./UserSessions";
 
@@ -7,10 +8,12 @@ const state = vi.hoisted(() => ({
   project: { id: "project_a", slug: "first" },
 }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => state.project }));
-vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ isFeatureEnabled: () => true }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "first" }),
 }));
-vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: ReactNode }) => children,
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => false }),
 }));
@@ -29,9 +32,6 @@ vi.mock("@gram/client/react-query/userSessions.js", () => ({
 }));
 vi.mock("./RemoteSessionRefreshPolicySetting", () => ({
   RemoteSessionRefreshPolicySetting: () => null,
-}));
-vi.mock("./ConsentToolFilteringSetting", () => ({
-  ConsentToolFilteringSetting: () => null,
 }));
 vi.mock("@/components/connections/ConnectionsList", () => ({
   ConnectionsList: () => null,
@@ -80,7 +80,14 @@ afterEach(cleanup);
 
 it("clears the session search when switching projects and scopes the page to the new project", () => {
   state.project = { id: "project_a", slug: "first" };
-  const { rerender } = render(<UserSessions />);
+  const { rerender } = render(
+    <MemoryRouter>
+      <UserSessions />
+    </MemoryRouter>,
+  );
+  expect(
+    screen.getByRole("link", { name: "Add MCP server" }).getAttribute("href"),
+  ).toBe("/org/projects/first/mcp/add");
   fireEvent.change(screen.getByRole("textbox"), {
     target: { value: "old project server" },
   });
@@ -94,7 +101,11 @@ it("clears the session search when switching projects and scopes the page to the
     "project_a",
   );
   state.project = { id: "project_b", slug: "second" };
-  rerender(<UserSessions />);
+  rerender(
+    <MemoryRouter>
+      <UserSessions />
+    </MemoryRouter>,
+  );
   expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("");
   expect(screen.getByTestId("page").getAttribute("data-resource")).toBe(
     "project_b",

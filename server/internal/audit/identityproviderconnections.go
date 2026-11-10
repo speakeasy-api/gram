@@ -13,12 +13,14 @@ import (
 )
 
 const (
-	ActionIdentityProviderConnectionCreate           Action = "identity-provider-connection:create"
-	ActionIdentityProviderConnectionSubmitClientID   Action = "identity-provider-connection:submit-client-id"
-	ActionIdentityProviderConnectionVerify           Action = "identity-provider-connection:verify"
-	ActionIdentityProviderConnectionRecordAgent      Action = "identity-provider-connection:record-agent"
-	ActionIdentityProviderConnectionRevoke           Action = "identity-provider-connection:revoke"
-	ActionIdentityProviderConnectionSyncApplications Action = "identity-provider-connection:sync-applications"
+	ActionIdentityProviderConnectionCreate              Action = "identity-provider-connection:create"
+	ActionIdentityProviderConnectionSubmitClientID      Action = "identity-provider-connection:submit-client-id"
+	ActionIdentityProviderConnectionReplaceClientSecret Action = "identity-provider-connection:replace-client-secret"
+	ActionIdentityProviderConnectionSetSetupMethod      Action = "identity-provider-connection:set-setup-method"
+	ActionIdentityProviderConnectionVerify              Action = "identity-provider-connection:verify"
+	ActionIdentityProviderConnectionRecordAgent         Action = "identity-provider-connection:record-agent"
+	ActionIdentityProviderConnectionRevoke              Action = "identity-provider-connection:revoke"
+	ActionIdentityProviderConnectionSyncApplications    Action = "identity-provider-connection:sync-applications"
 )
 
 // IdentityProviderConnectionSnapshot is the connection state an audit entry
@@ -59,6 +61,14 @@ func (l *Logger) LogIdentityProviderConnectionSubmitClientID(ctx context.Context
 	return l.logIdentityProviderConnection(ctx, dbtx, ActionIdentityProviderConnectionSubmitClientID, event)
 }
 
+func (l *Logger) LogIdentityProviderConnectionReplaceClientSecret(ctx context.Context, dbtx repo.DBTX, event LogIdentityProviderConnectionEvent) error {
+	return l.logIdentityProviderConnection(ctx, dbtx, ActionIdentityProviderConnectionReplaceClientSecret, event)
+}
+
+func (l *Logger) LogIdentityProviderConnectionSetSetupMethod(ctx context.Context, dbtx repo.DBTX, event LogIdentityProviderConnectionEvent) error {
+	return l.logIdentityProviderConnection(ctx, dbtx, ActionIdentityProviderConnectionSetSetupMethod, event)
+}
+
 func (l *Logger) LogIdentityProviderConnectionVerify(ctx context.Context, dbtx repo.DBTX, event LogIdentityProviderConnectionEvent) error {
 	return l.logIdentityProviderConnection(ctx, dbtx, ActionIdentityProviderConnectionVerify, event)
 }
@@ -87,6 +97,7 @@ func (l *Logger) logIdentityProviderConnection(ctx context.Context, dbtx repo.DB
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -19,6 +21,27 @@ import (
 type HTTPEndpoint struct {
 	URL            *url.URL
 	TLSCertificate []byte
+}
+
+// probeServerName returns the name to verify a self-probe against. The probe
+// dials the listener's address, which may be an IP the certificate does not
+// list (a Tailscale certificate names only the machine's DNS name). The pool
+// trusts only this certificate, so verifying it under one of its own DNS names
+// still proves the listener serves it. Hosts given by name are verified as
+// dialed, so a listener whose certificate does not cover its name still fails.
+func probeServerName(certPEM []byte, host string) string {
+	if net.ParseIP(host) == nil {
+		return ""
+	}
+	block, _ := pem.Decode(certPEM)
+	if block == nil {
+		return ""
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil || leaf.VerifyHostname(host) == nil || len(leaf.DNSNames) == 0 {
+		return ""
+	}
+	return leaf.DNSNames[0]
 }
 
 type ping struct {
@@ -62,7 +85,10 @@ func NewHealthCheckHandler(
 		if h.Resource.TLSCertificate != nil {
 			certPool := x509.NewCertPool()
 			certPool.AppendCertsFromPEM(h.Resource.TLSCertificate)
-			transport.TLSClientConfig = &tls.Config{RootCAs: certPool}
+			transport.TLSClientConfig = &tls.Config{
+				RootCAs:    certPool,
+				ServerName: probeServerName(h.Resource.TLSCertificate, u.Hostname()),
+			}
 		}
 
 		opts := []health.Option{

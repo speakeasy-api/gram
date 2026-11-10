@@ -213,6 +213,19 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- Flip only a locked route's enabled flag. Pausing and resuming carry no
+-- configuration, so the data source and destination are deliberately absent
+-- from the SET list and can never be overwritten by this statement.
+-- name: SetDataExportRouteEnabled :one
+UPDATE data_export_routes
+SET enabled = @enabled,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- Atomically lock and tombstone a route, returning the deleted audit subject.
 -- name: SoftDeleteDataExportRoute :one
 UPDATE data_export_routes

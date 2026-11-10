@@ -2,22 +2,23 @@ package access
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -106,6 +107,45 @@ func TestRoleManager_MembersAndCounts(t *testing.T) {
 	require.Equal(t, 1, counts["Custom Builder"])
 }
 
+func TestRoleManager_ListMembersFilteredLimitsDistinctMembersWithCompleteRoles(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+	builderID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Custom Builder", "builder", ""))
+	readerID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_reader", "Custom Reader", "reader", ""))
+	for i := range 2 {
+		userID := fmt.Sprintf("local_user_%d", i)
+		workosID := fmt.Sprintf("user_%d", i)
+		membershipID := fmt.Sprintf("membership_%d", i)
+		seedConnectedUser(t, ctx, ti.conn, orgID, userID, fmt.Sprintf("user%d@example.test", i), "Person", workosID, membershipID)
+		for _, slug := range []string{"builder", "reader"} {
+			seedRoleAssignment(t, ctx, ti.conn, orgID, userID, mockMember("", membershipID, workosID, slug))
+		}
+	}
+	page, err := ti.service.roleMgr.ListMembersFiltered(ctx, orgID, MemberListFilter{Query: "  CUSTOM   READER ", RoleID: builderID, Limit: 1})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), page.TotalMatches)
+	require.Zero(t, page.ExactEmailMatches)
+	require.Len(t, page.Members, 1)
+	require.Equal(t, "local_user_0", page.Members[0].ID)
+	require.ElementsMatch(t, []string{builderID, readerID}, page.Members[0].RoleIds)
+
+	all, err := ti.service.roleMgr.ListMembers(ctx, orgID)
+	require.NoError(t, err)
+	require.Len(t, all.Members, 3)
+	for _, member := range all.Members {
+		if member.ID != authCtx.UserID {
+			require.ElementsMatch(t, []string{builderID, readerID}, member.RoleIds)
+		}
+	}
+	literal, err := ti.service.roleMgr.ListMembersFiltered(ctx, orgID, MemberListFilter{Query: "%_", RoleID: "", Limit: 1})
+	require.NoError(t, err)
+	require.Zero(t, literal.TotalMatches)
+	require.Empty(t, literal.Members)
+}
+
 func TestRoleManager_AssignMembersToRoleAcceptsConnectedMemberWithoutAssignment(t *testing.T) {
 	t.Parallel()
 
@@ -185,7 +225,7 @@ func TestRoleManager_MemberRoleSyncSerializesManagersAndLocksMember(t *testing.T
 			seedRoleAssignment(t, ctx, ti.conn, orgID, "", mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom"))
 			target := MemberRoleReconciliation{organizationID: orgID, workosUserID: "user_1", membershipID: "membership_1"}
 			manager := ti.service.roleMgr
-			other := NewRoleManager(manager.logger, ti.conn, ti.roles, manager.audit)
+			other := NewRoleManager(manager.logger, ti.conn, ti.roles, manager.audit, plugins.PublicationRequests{}, nil)
 			entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
 			t.Cleanup(func() {
 				close(release)
@@ -219,10 +259,28 @@ func TestRoleManager_MemberRoleSyncSerializesManagersAndLocksMember(t *testing.T
 				t.Fatal("first provider send did not start")
 			}
 
-			waitCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-			defer cancel()
-			other.memberRoleSync(target)(waitCtx)
-			require.ErrorIs(t, waitCtx.Err(), context.DeadlineExceeded)
+			holderPID, err := testrepo.New(ti.conn).GetAdvisoryLockHolderFixture(ctx, fmt.Sprintf(`["access.member-role-sync", %q, "user_1"]`, orgID))
+			require.NoError(t, err)
+			waitCtx, cancel := context.WithCancel(ctx)
+			otherDone := make(chan struct{})
+			go func() { other.memberRoleSync(target)(waitCtx); close(otherDone) }()
+			// syncCompletionTimeout bounds cancellation cleanup for the contender.
+			const syncCompletionTimeout = time.Second
+			t.Cleanup(func() {
+				cancel()
+				select {
+				case <-otherDone:
+				case <-time.After(syncCompletionTimeout):
+					t.Error("second member sync did not finish after cancellation")
+				}
+			})
+			testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, uint32(holderPID), 1)
+			cancel()
+			select {
+			case <-otherDone:
+			case <-time.After(syncCompletionTimeout):
+				t.Fatal("second member sync did not finish after cancellation")
+			}
 			ti.roles.AssertNumberOfCalls(t, "UpdateMemberRoles", 1)
 
 			if name == "legacy" {
@@ -230,11 +288,9 @@ func TestRoleManager_MemberRoleSyncSerializesManagersAndLocksMember(t *testing.T
 			}
 			tx := testenv.BeginTx(t, ctx, ti.conn)
 			defer func() { _ = tx.Rollback(ctx) }()
-			lockCtx, cancelLock := context.WithTimeout(ctx, 100*time.Millisecond)
-			defer cancelLock()
-			_, err := accessrepo.New(tx).LockOrganizationUserRelationship(lockCtx, accessrepo.LockOrganizationUserRelationshipParams{OrganizationID: orgID, UserID: "local_user_1"})
-			require.Error(t, err)
-			require.ErrorIs(t, lockCtx.Err(), context.DeadlineExceeded)
+			testenv.SetLockTimeout(t, ctx, tx, 50*time.Millisecond)
+			_, err = accessrepo.New(tx).LockOrganizationUserRelationship(ctx, accessrepo.LockOrganizationUserRelationshipParams{OrganizationID: orgID, UserID: "local_user_1"})
+			testenv.RequireLockNotAvailable(t, err)
 		})
 	}
 }
@@ -309,7 +365,7 @@ type memberAssignmentRaceTx struct {
 
 func (tx *memberAssignmentRaceTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	tx.once.Do(tx.beforeLock)
-	return tx.Tx.QueryRow(ctx, sql, args...) //nolint:glint // forwards SQLc SQL while synchronizing a membership-change regression
+	return tx.Tx.QueryRow(ctx, sql, args...) //nolint:glint // notestingrawsql: forwards SQLc SQL while synchronizing a membership-change regression
 }
 
 func TestRoleManager_BulkAssignmentRevalidatesLockedMembership(t *testing.T) {

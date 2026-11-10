@@ -118,3 +118,70 @@ func newTriggerRepoTestContext(t *testing.T) (context.Context, *pgxpool.Pool, uu
 
 	return ctx, conn, project.ID, orgID
 }
+
+func TestUpsertTriggerThreadRouteStateOnlyAdvancesCursor(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, _ := newTriggerRepoTestContext(t)
+	queries := triggerrepo.New(conn)
+
+	subscribe := func(cursor string) triggerrepo.TriggerThreadRoute {
+		row, err := queries.UpsertTriggerThreadRouteState(ctx, triggerrepo.UpsertTriggerThreadRouteStateParams{
+			ProjectID:      projectID,
+			TargetKind:     "assistant",
+			TargetRef:      "assistant-1",
+			CorrelationID:  "C1:1.0",
+			State:          "subscribed",
+			LastSeenCursor: pgtype.Text{String: cursor, Valid: cursor != ""},
+		})
+		require.NoError(t, err)
+		return row
+	}
+
+	require.Equal(t, "1700000002.000100", subscribe("1700000002.000100").LastSeenCursor.String)
+	require.Equal(t, "1700000002.000100", subscribe("1700000001.999999").LastSeenCursor.String)
+	require.Equal(t, "1700000002.000100", subscribe("").LastSeenCursor.String)
+	require.Equal(t, "1700000003.000000", subscribe("1700000003.000000").LastSeenCursor.String)
+}
+
+func TestSetTriggerThreadRoutesStateForTargetCoversRoutedThreads(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, _ := newTriggerRepoTestContext(t)
+	queries := triggerrepo.New(conn)
+
+	for _, params := range []triggerrepo.RouteTriggerThreadParams{
+		{ProjectID: projectID, TargetKind: "assistant", TargetRef: "assistant-1", CorrelationID: "C1:1.0", RouteToCorrelationID: pgtype.Text{}, State: "subscribed", LastSeenCursor: pgtype.Text{}},
+		{ProjectID: projectID, TargetKind: "assistant", TargetRef: "assistant-1", CorrelationID: "C1:2.0", RouteToCorrelationID: pgtype.Text{String: "C1:1.0", Valid: true}, State: "subscribed", LastSeenCursor: pgtype.Text{}},
+		{ProjectID: projectID, TargetKind: "assistant", TargetRef: "assistant-1", CorrelationID: "C1:3.0", RouteToCorrelationID: pgtype.Text{}, State: "subscribed", LastSeenCursor: pgtype.Text{}},
+		{ProjectID: projectID, TargetKind: "assistant", TargetRef: "assistant-2", CorrelationID: "C1:1.0", RouteToCorrelationID: pgtype.Text{}, State: "subscribed", LastSeenCursor: pgtype.Text{}},
+	} {
+		_, err := queries.RouteTriggerThread(ctx, params)
+		require.NoError(t, err)
+	}
+
+	updated, err := queries.SetTriggerThreadRoutesStateForTarget(ctx, triggerrepo.SetTriggerThreadRoutesStateForTargetParams{
+		State:         "unsubscribed",
+		ProjectID:     projectID,
+		TargetKind:    "assistant",
+		TargetRef:     "assistant-1",
+		CorrelationID: "C1:1.0",
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, updated)
+
+	state := func(targetRef, correlationID string) string {
+		row, err := queries.GetTriggerThreadRoute(ctx, triggerrepo.GetTriggerThreadRouteParams{
+			ProjectID:     projectID,
+			TargetKind:    "assistant",
+			TargetRef:     targetRef,
+			CorrelationID: correlationID,
+		})
+		require.NoError(t, err)
+		return row.State
+	}
+	require.Equal(t, "unsubscribed", state("assistant-1", "C1:1.0"))
+	require.Equal(t, "unsubscribed", state("assistant-1", "C1:2.0"))
+	require.Equal(t, "subscribed", state("assistant-1", "C1:3.0"))
+	require.Equal(t, "subscribed", state("assistant-2", "C1:1.0"))
+}

@@ -15,31 +15,31 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manages assets used by Gram projects.
+// Manages assets used by Speakeasy projects.
 type Service interface {
-	// Serve an image from Gram.
+	// Serve an image from Speakeasy.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	ServeImage(context.Context, *ServeImageForm) (res *ServeImageResult, body io.ReadCloser, err error)
-	// Upload an image to Gram.
+	// Upload an image to Speakeasy.
 	UploadImage(context.Context, *UploadImageForm, io.ReadCloser) (res *UploadImageResult, err error)
-	// Upload functions to Gram.
+	// Upload functions to Speakeasy.
 	UploadFunctions(context.Context, *UploadFunctionsForm, io.ReadCloser) (res *UploadFunctionsResult, err error)
-	// Upload an OpenAPI v3 document to Gram.
+	// Upload an OpenAPI v3 document to Speakeasy.
 	UploadOpenAPIv3(context.Context, *UploadOpenAPIv3Form, io.ReadCloser) (res *UploadOpenAPIv3Result, err error)
-	// Fetch an image from a URL and upload it to Gram as an image asset.
+	// Fetch an image from a URL and upload it to Speakeasy as an image asset.
 	FetchImageFromURL(context.Context, *FetchImageFromURLForm) (res *UploadImageResult, err error)
-	// Fetch an OpenAPI v3 document from a URL and upload it to Gram.
+	// Fetch an OpenAPI v3 document from a URL and upload it to Speakeasy.
 	FetchOpenAPIv3FromURL(context.Context, *FetchOpenAPIv3FromURLForm) (res *UploadOpenAPIv3Result, err error)
-	// Serve an OpenAPIv3 asset from Gram.
+	// Serve an OpenAPIv3 asset from Speakeasy.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	ServeOpenAPIv3(context.Context, *ServeOpenAPIv3Form) (res *ServeOpenAPIv3Result, body io.ReadCloser, err error)
-	// Serve a Gram Functions asset from Gram.
+	// Serve a Speakeasy Functions asset from Speakeasy.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
@@ -47,9 +47,9 @@ type Service interface {
 	ServeFunction(context.Context, *ServeFunctionForm) (res *ServeFunctionResult, body io.ReadCloser, err error)
 	// List all assets for a project.
 	ListAssets(context.Context, *ListAssetsPayload) (res *ListAssetsResult, err error)
-	// Upload a chat attachment to Gram.
+	// Upload a chat attachment to Speakeasy.
 	UploadChatAttachment(context.Context, *UploadChatAttachmentForm, io.ReadCloser) (res *UploadChatAttachmentResult, err error)
-	// Serve a chat attachment from Gram.
+	// Serve a chat attachment from Speakeasy.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
@@ -179,9 +179,12 @@ type ServeChatAttachmentForm struct {
 // ServeChatAttachmentResult is the result type of the assets service
 // serveChatAttachment method.
 type ServeChatAttachmentResult struct {
-	ContentType   string
-	ContentLength int64
-	LastModified  string
+	ContentType           string
+	ContentLength         int64
+	LastModified          string
+	ContentDisposition    string
+	ContentSecurityPolicy string
+	XContentTypeOptions   string
 }
 
 // ServeChatAttachmentSignedForm is the payload type of the assets service
@@ -198,6 +201,9 @@ type ServeChatAttachmentSignedResult struct {
 	ContentLength            int64
 	LastModified             string
 	AccessControlAllowOrigin *string
+	ContentDisposition       string
+	ContentSecurityPolicy    string
+	XContentTypeOptions      string
 }
 
 // ServeFunctionForm is the payload type of the assets service serveFunction
@@ -232,6 +238,8 @@ type ServeImageResult struct {
 	LastModified              string
 	AccessControlAllowOrigin  *string
 	CrossOriginResourcePolicy string
+	ContentSecurityPolicy     *string
+	XContentTypeOptions       *string
 }
 
 // ServeOpenAPIv3Form is the payload type of the assets service serveOpenAPIv3
@@ -267,7 +275,7 @@ type UploadChatAttachmentForm struct {
 // UploadChatAttachmentResult is the result type of the assets service
 // uploadChatAttachment method.
 type UploadChatAttachmentResult struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *Asset
 	// The URL to serve the chat attachment
 	URL string
@@ -286,7 +294,7 @@ type UploadFunctionsForm struct {
 // UploadFunctionsResult is the result type of the assets service
 // uploadFunctions method.
 type UploadFunctionsResult struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *Asset
 }
 
@@ -302,7 +310,7 @@ type UploadImageForm struct {
 // UploadImageResult is the result type of the assets service uploadImage
 // method.
 type UploadImageResult struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *Asset
 }
 
@@ -319,7 +327,7 @@ type UploadOpenAPIv3Form struct {
 // UploadOpenAPIv3Result is the result type of the assets service
 // uploadOpenAPIv3 method.
 type UploadOpenAPIv3Result struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *Asset
 }
 

@@ -7,6 +7,20 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
+ * Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.
+ */
+export const CreateRemoteSessionClientFormCredentialOwner = {
+  Subject: "subject",
+  Self: "self",
+} as const;
+/**
+ * Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.
+ */
+export type CreateRemoteSessionClientFormCredentialOwner = ClosedEnum<
+  typeof CreateRemoteSessionClientFormCredentialOwner
+>;
+
+/**
  * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
  */
 export const CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat = {
@@ -38,7 +52,7 @@ export type CreateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
 >;
 
 /**
- * Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.
+ * Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer, or names a stored client in template_client_id whose secret and callback the server copies without returning them.
  */
 export type CreateRemoteSessionClientForm = {
   /**
@@ -54,13 +68,21 @@ export type CreateRemoteSessionClientForm = {
    */
   clientIdIssuedAt?: Date | undefined;
   /**
-   * client_secret supplied by the caller. Gram encrypts before persisting.
+   * client_secret supplied by the caller. Speakeasy encrypts before persisting.
    */
   clientSecret?: string | undefined;
   /**
    * When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
    */
   clientSecretExpiresAt?: Date | undefined;
+  /**
+   * Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.
+   */
+  credentialOwner?: CreateRemoteSessionClientFormCredentialOwner | undefined;
+  /**
+   * Organization JSON Web Key Set to sign private_key_jwt assertions with. Required when token_endpoint_auth_method is private_key_jwt and optional otherwise, as with attachKeySet. Must belong to the caller's organization, which needs the customer-managed encryption keys entitlement.
+   */
+  jsonWebKeySetId?: string | undefined;
   /**
    * The owning remote_session_issuer id.
    */
@@ -69,6 +91,10 @@ export type CreateRemoteSessionClientForm = {
    * Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
    */
   scope?: Array<string> | undefined;
+  /**
+   * An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template's stored client_secret, unless client_secret is supplied, and the callback the template's registration lists. client_id must equal the template's. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, a client the issuer has rejected, and a template whose stored secret has expired unless client_secret is supplied.
+   */
+  templateClientId?: string | undefined;
   /**
    * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
    */
@@ -88,6 +114,12 @@ export type CreateRemoteSessionClientForm = {
 };
 
 /** @internal */
+export const CreateRemoteSessionClientFormCredentialOwner$outboundSchema:
+  z.ZodMiniEnum<typeof CreateRemoteSessionClientFormCredentialOwner> = z.enum(
+    CreateRemoteSessionClientFormCredentialOwner,
+  );
+
+/** @internal */
 export const CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema:
   z.ZodMiniEnum<
     typeof CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat
@@ -105,8 +137,11 @@ export type CreateRemoteSessionClientForm$Outbound = {
   client_id_issued_at?: string | undefined;
   client_secret?: string | undefined;
   client_secret_expires_at?: string | undefined;
+  credential_owner: string;
+  json_web_key_set_id?: string | undefined;
   remote_session_issuer_id: string;
   scope?: Array<string> | undefined;
+  template_client_id?: string | undefined;
   token_endpoint_auth_audience_format?: string | undefined;
   token_endpoint_auth_method?: string | undefined;
   user_session_issuer_ids?: Array<string> | undefined;
@@ -127,8 +162,14 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
     clientSecretExpiresAt: z.optional(
       z.pipe(z.date(), z.transform(v => v.toISOString())),
     ),
+    credentialOwner: z._default(
+      CreateRemoteSessionClientFormCredentialOwner$outboundSchema,
+      "subject",
+    ),
+    jsonWebKeySetId: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
     scope: z.optional(z.array(z.string())),
+    templateClientId: z.optional(z.string()),
     tokenEndpointAuthAudienceFormat: z.optional(
       CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema,
     ),
@@ -143,7 +184,10 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
       clientIdIssuedAt: "client_id_issued_at",
       clientSecret: "client_secret",
       clientSecretExpiresAt: "client_secret_expires_at",
+      credentialOwner: "credential_owner",
+      jsonWebKeySetId: "json_web_key_set_id",
       remoteSessionIssuerId: "remote_session_issuer_id",
+      templateClientId: "template_client_id",
       tokenEndpointAuthAudienceFormat: "token_endpoint_auth_audience_format",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",
       userSessionIssuerIds: "user_session_issuer_ids",

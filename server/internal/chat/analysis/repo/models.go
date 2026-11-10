@@ -10,27 +10,47 @@ import (
 )
 
 type ChatAnalysisEvaluation struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	ProjectID      uuid.UUID
-	ChatID         uuid.UUID
-	SessionID      string
-	Judge          string
-	ObservedAt     pgtype.Timestamptz
-	State          string
-	ReservedOn     pgtype.Date
-	Attempts       int32
-	LastError      pgtype.Text
-	ScoredAt       pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	ChatID uuid.UUID
+	// @access: confidential
+	SessionID string
+	// @access: confidential
+	Judge string
+	// @access: confidential
+	ObservedAt pgtype.Timestamptz
+	// @access: confidential
+	State string
+	// @access: confidential
+	ReservedOn pgtype.Date
+	// @access: confidential
+	Attempts int32
+	// @access: opaque-restricted
+	LastError pgtype.Text
+	// @access: confidential
+	ScoredAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type ChatAnalysisSetting struct {
+	// @access: confidential
 	OrganizationID string
-	Judge          string
-	Enabled        bool
-	DailyCap       int32
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	// @access: confidential
+	Judge string
+	// @access: confidential
+	Enabled bool
+	// @access: confidential
+	DailyCap int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

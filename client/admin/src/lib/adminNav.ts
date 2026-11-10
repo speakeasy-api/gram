@@ -10,11 +10,21 @@
 
 import {
   BuildingIcon,
+  UsersIcon,
   CalculatorIcon,
   FolderIcon,
-  KeyRoundIcon,
+  BookOpenIcon,
   Grid2X2Icon,
+  KeyRoundIcon,
+  PlugZapIcon,
+  ListChecksIcon,
+  ChartColumnStackedIcon,
+  ActivityIcon,
+  GlobeIcon,
+  MessageSquareIcon,
 } from "lucide-react";
+
+import { McpIcon } from "@/components/ui/mcp-icon";
 
 export const ADMIN_NAV_GROUPS = [
   {
@@ -28,6 +38,12 @@ export const ADMIN_NAV_GROUPS = [
         // the label still finds the page rather than reading as "no results".
         keywords: "orgs accounts customers tenants companies",
         icon: BuildingIcon,
+      },
+      {
+        to: "/users",
+        label: "Users",
+        keywords: "people email members directory",
+        icon: UsersIcon,
       },
       {
         to: "/projects",
@@ -47,16 +63,80 @@ export const ADMIN_NAV_GROUPS = [
     label: "Platform Management",
     items: [
       {
+        to: "/registry",
+        label: "MCP Registry",
+        keywords: "catalog mcp servers",
+        icon: McpIcon,
+      },
+      {
         to: "/integration-coverage",
         label: "Support matrix",
         keywords: "support matrix products capabilities integrations",
         icon: Grid2X2Icon,
       },
       {
+        to: "/signup-offers",
+        label: "Signup offers",
+        keywords: "signup stripe promotion tailscale partner gateway",
+        icon: BookOpenIcon,
+      },
+      {
+        to: "/onboarding-steps",
+        label: "Steps",
+        keywords: "onboarding steps setup wizard cards groups playbooks",
+        icon: ListChecksIcon,
+      },
+      {
+        to: "/onboarding-playbooks",
+        label: "Use Cases & Playbooks",
+        keywords: "onboarding use cases playbooks outcomes default",
+        icon: BookOpenIcon,
+      },
+      {
         to: "/remote-session-issuers",
         label: "Remote Session Issuers",
         keywords: "oauth identity providers issuers",
         icon: KeyRoundIcon,
+      },
+      {
+        to: "/upstream-oauth-migration",
+        label: "Upstream OAuth migration",
+        keywords: "oauth clients associations credentials backfill migrate",
+        icon: KeyRoundIcon,
+      },
+      {
+        to: "/custom-domains",
+        label: "Custom domains",
+        keywords: "dns cname routing target hostname domain vanity",
+        icon: GlobeIcon,
+      },
+      {
+        to: "/fleet-health",
+        label: "Fleet health",
+        keywords:
+          "hook clients curl binary versions sessions inference device agents speakeasyd rollout",
+        icon: ActivityIcon,
+      },
+      {
+        to: "/platform-mcp-feedback",
+        label: "Platform MCP feedback",
+        keywords: "feedback reports ratings notes users platform mcp",
+        icon: MessageSquareIcon,
+      },
+      {
+        to: "/mcp-setup",
+        label: "Admin MCP",
+        keywords: "install connect agents claude codex cursor tailscale",
+        icon: PlugZapIcon,
+      },
+      {
+        to: "/customer-usage",
+        label: "Customer usage",
+        keywords: "spend billing usage customers paying growth estimate",
+        icon: ChartColumnStackedIcon,
+        // Rendered after the external Demo organization link rather than in
+        // array order, so the sidebar lists it below that link.
+        afterDemoOrganization: true,
       },
     ],
   },

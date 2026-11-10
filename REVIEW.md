@@ -7,12 +7,17 @@ This document consolidates the project's coding conventions and review rules so 
 - `server/` — Go backend (Goa HTTP-RPC API, Temporal workflows)
 - `client/dashboard/` — React frontend (TypeScript, Tailwind, Moonshine design system)
 - `functions/` — Serverless function runner
-- `cli/` — CLI for Gram
+- `cli/` — CLI for Speakeasy
 - `server/database/schema.sql` — DDL-only schema definition
 - `server/migrations/` — Atlas-generated migration files (never hand-edit)
 - `server/design/` — Goa API design files
 - `server/gen/` — Generated code (DO NOT EDIT)
 - `server/internal/*/repo/` — SQLc-generated code (DO NOT EDIT)
+
+## Product Naming
+
+- The product is called Speakeasy, not Gram. Flag any new "Gram" in user-facing text, error messages, comments, docs, or changesets. `mise run lint:brand` enforces this on added lines. <!-- brand-ok: states the naming rule -->
+- Still allowed until their own renames land: HTTP headers (`Gram-Key`, `X-Gram-*`), `GRAM_*` environment variables, import lines, and code uses of the SDK/Functions `Gram` class in code files. Lowercase `gram` (package names, URLs) is not checked. Other intentional uses need a `brand-ok: <reason>` comment on the line.
 
 ---
 
@@ -183,6 +188,14 @@ Instead: add nullable columns, deprecate by making nullable, use expand-contract
 - Use `@gram/sdk` for server interactions.
 - Use `@tanstack/react-query` for data fetching — never manual `useEffect`/`useState` for server state.
 - When invalidating React Query caches, invalidate ALL relevant query keys (different hooks may use different prefixes).
+
+### Command K Discoverability
+
+For dashboard changes to pages/navigation, named resource lists/details, names, permissions, feature gates, or Command K search candidates/ranking/registration, follow `.agents/skills/maintaining-command-palette/SKILL.md`:
+
+- Check page actions and individual resource candidates separately. A sidebar entry, overview route, or Recently Visited entry does not make named resources searchable. Inspect existing sources and `useLauncherCandidates` registration even when palette files are absent from the diff.
+- Flag concrete omissions or stale names/aliases, destinations, pagination/search coverage, tenant-scoped keys, access/product/session gates, closed-palette fetching, failure handling, and identity privacy. Attach findings to the changed feature and describe the failed search.
+- Expect coverage or a justified exclusion and focused test evidence. Do not demand indexing secrets, high-volume telemetry/events/logs, transient dialogs, legacy redirects, or internal/admin-only operations not intended for this launcher. Do not require new candidates for cosmetic/field-only changes or flag unrelated pre-existing debt.
 
 ### Component Structure
 

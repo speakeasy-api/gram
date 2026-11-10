@@ -2,12 +2,77 @@ package remotesessions
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTokenResponseExpiresIn(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
+	for _, value := range []string{`3600`, `"3600"`, `"03600"`, `0`, `"0"`, `"000"`, `null`} {
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+			var response tokenResponse
+			require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","scope":"read","expires_in":`+value+`}`), &response))
+			require.Equal(t, "a", response.AccessToken)
+			require.True(t, response.ScopeReported())
+			if value == `3600` || value == `"3600"` || value == `"03600"` {
+				require.Equal(t, 3600, response.ExpiresIn)
+				require.Equal(t, now.Add(time.Hour), *response.AccessExpiresAt(now))
+			} else {
+				require.Zero(t, response.ExpiresIn)
+				require.Nil(t, response.AccessExpiresAt(now))
+			}
+		})
+	}
+	var omitted tokenResponse
+	require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a"}`), &omitted))
+	require.Zero(t, omitted.ExpiresIn)
+	for _, value := range []string{`-1`, `"-1"`, `9223372037`, `"9223372037"`, `""`, `"never"`, `1.5`, `"1.5"`, `true`, `{}`, `[]`, `"999999999999999999999999"`} {
+		t.Run("unusable_"+value, func(t *testing.T) {
+			t.Parallel()
+			var response tokenResponse
+			require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","expires_in":`+value+`}`), &response))
+			require.Zero(t, response.ExpiresIn)
+			require.Equal(t, "a", response.AccessToken)
+		})
+	}
+}
+
+func TestTokenResponseWireExpiresIn(t *testing.T) {
+	t.Parallel()
+	maxSeconds := int(min(int64(^uint(0)>>1), int64((1<<63-1)/time.Second)))
+	for _, want := range []int{0, 60, 7200, maxSeconds} {
+		number := strconv.Itoa(want)
+		for _, raw := range []string{number, strconv.Quote(number)} {
+			t.Run(raw, func(t *testing.T) {
+				t.Parallel()
+				var wire tokenResponseWire
+				require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","expires_in":`+raw+`}`), &wire))
+				require.Equal(t, want, wire.ExpiresIn)
+				require.Equal(t, "a", wire.AccessToken)
+				encoded, err := json.Marshal(wire)
+				require.NoError(t, err)
+				var members map[string]json.RawMessage
+				require.NoError(t, json.Unmarshal(encoded, &members))
+				require.JSONEq(t, number, string(members["expires_in"]))
+			})
+		}
+	}
+	for _, raw := range []string{`-1`, `"-1"`, `9223372037`, `"9223372037"`, `1e3`, `"1e3"`, `999999999999999999999999`, `"999999999999999999999999"`} {
+		t.Run("unusable_"+raw, func(t *testing.T) {
+			t.Parallel()
+			var wire tokenResponseWire
+			require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","expires_in":`+raw+`}`), &wire))
+			require.Zero(t, wire.ExpiresIn)
+			require.Equal(t, "a", wire.AccessToken)
+		})
+	}
+}
 
 func TestTokenResponseRejectsMalformedScope(t *testing.T) {
 	t.Parallel()
@@ -58,15 +123,10 @@ func TestTokenResponseRefreshTokenTimeoutSeconds(t *testing.T) {
 func TestTokenResponseStandardExpirationFields(t *testing.T) {
 	t.Parallel()
 
-	zero := int64(0)
 	refreshTimeout := int64(3600)
 	authorizationLifetime := int64(7200)
 
-	seconds, reported := (tokenResponse{RefreshTokenTimeout: &zero}).RefreshTokenTimeoutSeconds()
-	require.True(t, reported)
-	require.Zero(t, seconds)
-
-	seconds, reported = (tokenResponse{
+	seconds, reported := (tokenResponse{
 		RefreshTokenTimeout: &refreshTimeout,
 		RefreshExpiresIn:    1800,
 	}).RefreshTokenTimeoutSeconds()
@@ -78,6 +138,59 @@ func TestTokenResponseStandardExpirationFields(t *testing.T) {
 	}).AuthorizationLifetimeSeconds()
 	require.True(t, reported)
 	require.EqualValues(t, 7200, seconds)
+}
+
+func TestTokenResponseLifetimeDecoding(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		value   string
+		seconds int64
+	}{
+		{value: `0`},
+		{value: `-1`},
+		{value: `-86400`},
+		{value: `null`},
+		{value: `9223372036854775807`},
+		{value: `18446744073709551615`},
+		{value: `3600.5`},
+		{value: `1e3`},
+		{value: `true`},
+		{value: `{}`},
+		{value: `[]`},
+		{value: `"0"`},
+		{value: `"-1"`},
+		{value: `"soon"`},
+		{value: `""`},
+		{value: `1`, seconds: 1},
+		{value: `3600`, seconds: 3600},
+		{value: `"3600"`, seconds: 3600},
+	} {
+		for _, member := range []string{"refresh_token_timeout", "authorization_expires_in", "refresh_expires_in", "refresh_token_expires_in"} {
+			t.Run(member+" "+tc.value, func(t *testing.T) {
+				t.Parallel()
+				var response tokenResponse
+				require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","`+member+`":`+tc.value+`}`), &response))
+				require.Equal(t, "a", response.AccessToken)
+				seconds, reported := response.RefreshTokenTimeoutSeconds()
+				if member == "authorization_expires_in" {
+					seconds, reported = response.AuthorizationLifetimeSeconds()
+				}
+				require.Equal(t, tc.seconds > 0, reported)
+				require.Equal(t, tc.seconds, seconds)
+			})
+		}
+	}
+}
+
+func TestTokenResponseUnusableTimeoutFallsBackToAlias(t *testing.T) {
+	t.Parallel()
+
+	var response tokenResponse
+	require.NoError(t, json.Unmarshal([]byte(`{"refresh_token_timeout":0,"refresh_expires_in":1800}`), &response))
+	seconds, reported := response.RefreshTokenTimeoutSeconds()
+	require.True(t, reported)
+	require.EqualValues(t, 1800, seconds)
 }
 
 // mintJWT signs claims with a throwaway HMAC key. AccessExpiresAt decodes

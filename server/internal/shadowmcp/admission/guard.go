@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -23,51 +23,47 @@ var (
 	// ErrUnavailable means distribution admission could not reach a complete,
 	// trustworthy decision.
 	ErrUnavailable = errors.New("shadow MCP distribution admission unavailable")
-	// ErrDistributionDisabled means the direct-remote distribution kill switch is
-	// active for this project.
-	ErrDistributionDisabled = errors.New("direct-remote distribution disabled")
+	// ErrPrivateGatewayAudience prevents a private-only gateway address from
+	// being advertised to an unrestricted plugin audience.
+	ErrPrivateGatewayAudience = errors.New("private-only gateway cannot be distributed to Everyone")
 )
 
-// Guard applies one rollout decision to every direct-remote exposure mutation.
-// Resolve must run before opening the caller's transaction so feature-provider
-// I/O never occurs while database locks are held. The returned error is retained
-// and passed to check methods: it blocks only when the transaction proves the
-// requested operation is in scope.
+// ApprovalRequiredError is the ErrApprovalRequired refusal with the exact
+// direct-remote target that lacked standing approval, so a caller can file a
+// review request for that URL rather than only reporting the refusal.
+type ApprovalRequiredError struct {
+	// CanonicalURL is the Shadow MCP inventory form of the refused target.
+	CanonicalURL string
+}
+
+func (e *ApprovalRequiredError) Error() string { return ErrApprovalRequired.Error() }
+func (e *ApprovalRequiredError) Unwrap() error { return ErrApprovalRequired }
+
+// Guard applies the organisation's enabled Shadow MCP block policies to every
+// direct-remote exposure mutation: when a block policy is enabled on the
+// project and the complete desired audience is not covered by a standing
+// approval, the write is refused with ErrApprovalRequired. Every decision is
+// made inside the caller's transaction from the same policy and decision rows
+// the runtime scanner reads, so no exposure write can bypass the policy the
+// dashboard enforces.
+//
+// One actor is not refused: an organization administrator. Their write is the
+// review the policy asks for, so when an approver is wired the guard records
+// the approval for the write's audience in the same transaction and lets the
+// write proceed. The server then appears in the Shadow MCP inventory as
+// approved for exactly the people who receive it.
 type Guard struct {
-	flags   feature.Provider
-	reports ReportObserver
+	approver Approver
 }
 
-func NewGuard(flags feature.Provider, reports ReportObserver) *Guard {
-	return &Guard{flags: flags, reports: reports}
-}
-
-func (g *Guard) Resolve(ctx context.Context, organizationID, organizationSlug, projectSlug string) (RolloutConfig, error) {
-	if g == nil {
-		return RolloutConfig{}, fmt.Errorf("%w: guard is nil", ErrUnavailable)
-	}
-	config, err := ResolveRollout(ctx, g.flags, organizationID, organizationSlug, projectSlug)
-	if err != nil {
-		return RolloutConfig{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
-	}
-	return config, nil
-}
-
-func (g *Guard) ResolveProject(ctx context.Context, db projectsrepo.DBTX, organizationID, organizationSlug string, projectID uuid.UUID) (RolloutConfig, error) {
-	if db == nil || projectID == uuid.Nil {
-		return RolloutConfig{}, fmt.Errorf("%w: project rollout identity is incomplete", ErrUnavailable)
-	}
-	project, err := projectsrepo.New(db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: organizationID})
-	if err != nil {
-		return RolloutConfig{}, fmt.Errorf("%w: resolve project rollout identity: %w", ErrUnavailable, err)
-	}
-	return g.Resolve(ctx, organizationID, organizationSlug, project.Slug)
+func NewGuard() *Guard {
+	return &Guard{approver: nil}
 }
 
 // CheckAttachment validates adding one MCP server to an exact existing plugin.
 // The plugin's complete current audience is the resulting audience because
 // attachment does not mutate assignments.
-func (g *Guard) CheckAttachment(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, pluginID, mcpServerID uuid.UUID) error {
+func (g *Guard) CheckAttachment(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID, mcpServerID uuid.UUID) error {
 	target, scoped, err := directRemoteTarget(ctx, tx, organizationID, projectID, mcpServerID)
 	if err != nil {
 		return unavailable(err)
@@ -77,23 +73,20 @@ func (g *Guard) CheckAttachment(ctx context.Context, tx pgx.Tx, rollout RolloutC
 	}
 	if target == "" {
 		return unavailable(errors.New("direct-remote provenance has no live remote target"))
-	}
-	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
-		return err
 	}
 
 	assignments, err := listPluginAssignments(ctx, tx, organizationID, projectID, pluginID)
 	if err != nil {
 		return unavailable(err)
 	}
-	return g.checkURL(ctx, tx, rollout, organizationID, projectID, target, assignments)
+	return g.checkURL(ctx, tx, organizationID, projectID, target, assignments)
 }
 
 // CheckAttachmentWithSeededAudience validates an attachment against an already
 // resolved plugin plus the audience that plugin creation would seed. It avoids
 // creating the plugin before admission while preserving the existing default-
 // project Everyone behavior.
-func (g *Guard) CheckAttachmentWithSeededAudience(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, mcpServerID uuid.UUID, desired []string) error {
+func (g *Guard) CheckAttachmentWithSeededAudience(ctx context.Context, tx pgx.Tx, organizationID string, projectID, mcpServerID uuid.UUID, desired []string) error {
 	target, scoped, err := directRemoteTarget(ctx, tx, organizationID, projectID, mcpServerID)
 	if err != nil {
 		return unavailable(err)
@@ -104,19 +97,16 @@ func (g *Guard) CheckAttachmentWithSeededAudience(ctx context.Context, tx pgx.Tx
 	if target == "" {
 		return unavailable(errors.New("direct-remote provenance has no live remote target"))
 	}
-	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
-		return err
-	}
-	return g.checkURL(ctx, tx, rollout, organizationID, projectID, target, desired)
+	return g.checkURL(ctx, tx, organizationID, projectID, target, desired)
 }
 
 // CheckProspectiveDefaultAttachment checks an existing Default plugin's complete
 // audience, or the exact audience EnsureDefaultPlugin would seed if missing,
 // without creating rows or suppressing the established creation audit.
-func (g *Guard) CheckProspectiveDefaultAttachment(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, mcpServerID uuid.UUID) error {
+func (g *Guard) CheckProspectiveDefaultAttachment(ctx context.Context, tx pgx.Tx, organizationID string, projectID, mcpServerID uuid.UUID) error {
 	plugin, err := pluginsrepo.New(tx).GetProspectiveDefaultPlugin(ctx, pluginsrepo.GetProspectiveDefaultPluginParams{OrganizationID: organizationID, ProjectID: projectID})
 	if err == nil {
-		return g.CheckAttachment(ctx, tx, rollout, rolloutErr, organizationID, projectID, plugin.ID, mcpServerID)
+		return g.CheckAttachment(ctx, tx, organizationID, projectID, plugin.ID, mcpServerID)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return unavailable(fmt.Errorf("resolve prospective default plugin: %w", err))
@@ -129,12 +119,101 @@ func (g *Guard) CheckProspectiveDefaultAttachment(ctx context.Context, tx pgx.Tx
 	if isDefaultProject {
 		desired = []string{urn.PrincipalWildcard}
 	}
-	return g.CheckAttachmentWithSeededAudience(ctx, tx, rollout, rolloutErr, organizationID, projectID, mcpServerID, desired)
+	return g.CheckAttachmentWithSeededAudience(ctx, tx, organizationID, projectID, mcpServerID, desired)
+}
+
+// CheckGatewayAttachment validates adding one gateway to an exact existing
+// plugin against every direct-remote member reached by that gateway. The
+// gateway's immediate member set is resolved transactionally by the query, and
+// nested gateways are not traversed.
+func (g *Guard) CheckGatewayAttachment(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID, gatewayID uuid.UUID) error {
+	assignments, err := listPluginAssignments(ctx, tx, organizationID, projectID, pluginID)
+	if err != nil {
+		return unavailable(err)
+	}
+	if err := checkPrivateGatewayAudience(ctx, tx, organizationID, projectID, pluginID, gatewayID, assignments); err != nil {
+		return err
+	}
+	targets, err := platformrepo.New(tx).ListDirectRemoteAdmissionTargetsForGateway(ctx, platformrepo.ListDirectRemoteAdmissionTargetsForGatewayParams{
+		PluginID:       pluginID,
+		GatewayID:      gatewayID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return unavailable(fmt.Errorf("list direct-remote gateway targets: %w", err))
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	if g == nil {
+		return unavailable(errors.New("distribution admission guard is missing"))
+	}
+
+	for _, target := range targets {
+		if !target.RemoteUrl.Valid || target.RemoteUrl.String == "" {
+			return unavailable(errors.New("direct-remote gateway target has no live remote URL"))
+		}
+		if err := g.checkURL(ctx, tx, organizationID, projectID, target.RemoteUrl.String, assignments); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CheckGatewayMemberAddition checks a new member against every live plugin
+// carrying its gateway. The query preserves plugins with no assignments so
+// the complete audience, including an empty one, is evaluated.
+func (g *Guard) CheckGatewayMemberAddition(ctx context.Context, tx pgx.Tx, organizationID string, projectID, gatewayID, mcpServerID uuid.UUID) error {
+	target, scoped, err := directRemoteTarget(ctx, tx, organizationID, projectID, mcpServerID)
+	if err != nil {
+		return unavailable(err)
+	}
+	if !scoped {
+		return nil
+	}
+
+	rows, err := platformrepo.New(tx).ListDirectRemoteAdmissionAudiencesForGateway(ctx, platformrepo.ListDirectRemoteAdmissionAudiencesForGatewayParams{
+		GatewayID:      gatewayID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return unavailable(fmt.Errorf("list direct-remote gateway audiences: %w", err))
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	if target == "" {
+		return unavailable(errors.New("direct-remote gateway member has no live remote URL"))
+	}
+	if g == nil {
+		return unavailable(errors.New("distribution admission guard is missing"))
+	}
+
+	audiences := make(map[uuid.UUID][]string)
+	for _, row := range rows {
+		if _, ok := audiences[row.PluginID]; !ok {
+			audiences[row.PluginID] = nil
+		}
+		if row.PrincipalUrn.Valid {
+			audiences[row.PluginID] = append(audiences[row.PluginID], row.PrincipalUrn.String)
+		}
+	}
+	for _, audience := range audiences {
+		if err := g.checkURL(ctx, tx, organizationID, projectID, target, audience); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // CheckPluginAudience validates the complete desired assignment set against
 // every in-scope MCP currently attached to one exact plugin.
-func (g *Guard) CheckPluginAudience(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, pluginID uuid.UUID, desired []string) error {
+func (g *Guard) CheckPluginAudience(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID, desired []string) error {
+	if err := checkPluginPrivateGateways(ctx, tx, organizationID, projectID, pluginID, desired); err != nil {
+		return err
+	}
 	targets, err := platformrepo.New(tx).ListDirectRemoteAdmissionTargetsForPlugin(ctx, platformrepo.ListDirectRemoteAdmissionTargetsForPluginParams{
 		PluginID:       pluginID,
 		OrganizationID: organizationID,
@@ -146,14 +225,11 @@ func (g *Guard) CheckPluginAudience(ctx context.Context, tx pgx.Tx, rollout Roll
 	if len(targets) == 0 {
 		return nil
 	}
-	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
-		return err
-	}
 	for _, target := range targets {
 		if !target.RemoteUrl.Valid || target.RemoteUrl.String == "" {
 			return unavailable(errors.New("direct-remote plugin target has no live remote URL"))
 		}
-		if err := g.checkURL(ctx, tx, rollout, organizationID, projectID, target.RemoteUrl.String, desired); err != nil {
+		if err := g.checkURL(ctx, tx, organizationID, projectID, target.RemoteUrl.String, desired); err != nil {
 			return err
 		}
 	}
@@ -161,10 +237,9 @@ func (g *Guard) CheckPluginAudience(ctx context.Context, tx pgx.Tx, rollout Roll
 }
 
 // CheckMCPServerTarget validates the proposed live URL against every current
-// plugin audience for one provenance-bound MCP server. When targetChange is true
-// the kill switch blocks the operation even if the server currently reaches no
-// audience.
-func (g *Guard) CheckMCPServerTarget(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, mcpServerID uuid.UUID, proposedURL string, targetChange bool) error {
+// plugin audience for one provenance-bound MCP server. A server that reaches no
+// audience is never refused: nobody receives it yet.
+func (g *Guard) CheckMCPServerTarget(ctx context.Context, tx pgx.Tx, organizationID string, projectID, mcpServerID uuid.UUID, proposedURL string, targetChange bool) error {
 	currentURL, scoped, err := directRemoteTarget(ctx, tx, organizationID, projectID, mcpServerID)
 	if err != nil {
 		return unavailable(err)
@@ -193,25 +268,11 @@ func (g *Guard) CheckMCPServerTarget(ctx context.Context, tx pgx.Tx, rollout Rol
 			audiences[row.PluginID.UUID] = append(audiences[row.PluginID.UUID], row.PrincipalUrn.String)
 		}
 	}
-	if targetChange {
-		if err := requireUsableRollout(rollout, rolloutErr); err != nil {
-			return err
-		}
-		if rollout.DirectRemoteDistributionDisabled {
-			return ErrDistributionDisabled
-		}
-	}
 	if len(audiences) == 0 {
 		return nil
 	}
-	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
-		return err
-	}
 	if targetChange && proposedURL == "" {
-		if rollout.Mode == ModeEnforce {
-			return unavailable(errors.New("attached direct-remote MCP cannot switch to an unresolved backend"))
-		}
-		return nil
+		return unavailable(errors.New("attached direct-remote MCP cannot switch to an unresolved backend"))
 	}
 	if proposedURL == "" {
 		proposedURL = currentURL
@@ -220,7 +281,7 @@ func (g *Guard) CheckMCPServerTarget(ctx context.Context, tx pgx.Tx, rollout Rol
 		return unavailable(errors.New("direct-remote provenance has no live remote target"))
 	}
 	for _, audience := range audiences {
-		if err := g.checkURL(ctx, tx, rollout, organizationID, projectID, proposedURL, audience); err != nil {
+		if err := g.checkURL(ctx, tx, organizationID, projectID, proposedURL, audience); err != nil {
 			return err
 		}
 	}
@@ -228,9 +289,11 @@ func (g *Guard) CheckMCPServerTarget(ctx context.Context, tx pgx.Tx, rollout Rol
 }
 
 // CheckPublicVisibility blocks public exposure of provenance-bound direct-remote
-// MCPs in enforce mode. Organisation audience approval does not grant anonymous
-// access, so no standing plugin approval can authorize this transition.
-func (g *Guard) CheckPublicVisibility(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, mcpServerID uuid.UUID) error {
+// MCPs while the project has an enabled Shadow MCP block policy. Organisation
+// audience approval does not grant anonymous access, so no standing approval,
+// and no administrator's write, can authorize this transition; only a project
+// without a block policy is free to make it.
+func (g *Guard) CheckPublicVisibility(ctx context.Context, tx pgx.Tx, organizationID string, projectID, mcpServerID uuid.UUID) error {
 	_, scoped, err := directRemoteTarget(ctx, tx, organizationID, projectID, mcpServerID)
 	if err != nil {
 		return unavailable(err)
@@ -238,24 +301,19 @@ func (g *Guard) CheckPublicVisibility(ctx context.Context, tx pgx.Tx, rollout Ro
 	if !scoped {
 		return nil
 	}
-	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
-		return err
+	blocking, err := blockPolicyEnabled(ctx, tx, organizationID, projectID)
+	if err != nil {
+		return unavailable(err)
 	}
-	if rollout.DirectRemoteDistributionDisabled {
-		return ErrDistributionDisabled
+	if !blocking {
+		return nil
 	}
-	if rollout.Mode == ModeEnforce {
-		return ErrApprovalRequired
-	}
-	if rollout.Mode == ModeReport && g.reports != nil {
-		g.reports.RecordReport(ctx, ReportApprovalRequired)
-	}
-	return nil
+	return ErrApprovalRequired
 }
 
 // CheckRemoteTarget validates a proposed URL for every provenance-bound MCP
 // server currently using one remote source.
-func (g *Guard) CheckRemoteTarget(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, remoteMCPServerID uuid.UUID, proposedURL string) error {
+func (g *Guard) CheckRemoteTarget(ctx context.Context, tx pgx.Tx, organizationID string, projectID, remoteMCPServerID uuid.UUID, proposedURL string) error {
 	serverIDs, err := platformrepo.New(tx).ListDirectRemoteAdmissionMCPServersForRemote(ctx, platformrepo.ListDirectRemoteAdmissionMCPServersForRemoteParams{
 		OrganizationID:    organizationID,
 		ProjectID:         projectID,
@@ -268,42 +326,48 @@ func (g *Guard) CheckRemoteTarget(ctx context.Context, tx pgx.Tx, rollout Rollou
 		return nil
 	}
 	for _, serverID := range serverIDs {
-		if err := g.CheckMCPServerTarget(ctx, tx, rollout, rolloutErr, organizationID, projectID, serverID, proposedURL, true); err != nil {
+		if err := g.CheckMCPServerTarget(ctx, tx, organizationID, projectID, serverID, proposedURL, true); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (g *Guard) checkURL(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, organizationID string, projectID uuid.UUID, rawURL string, desired []string) error {
-	if rollout.DirectRemoteDistributionDisabled {
-		return ErrDistributionDisabled
-	}
-	if rollout.Mode == ModeLegacy {
-		return nil
-	}
-	outcome := ReportUnavailable
-	if rollout.Mode == ModeReport && g.reports != nil {
-		defer func() { g.reports.RecordReport(ctx, outcome) }()
-	}
+func (g *Guard) checkURL(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, rawURL string, desired []string) error {
 	canonical, ok := shadowmcp.CanonicalizeInventoryURL(rawURL)
 	if !ok {
-		outcome = ReportInvalidTarget
-		if rollout.Mode == ModeReport {
-			return nil
-		}
 		return unavailable(errors.New("direct-remote URL is not canonicalizable"))
 	}
 	verdict, err := Check(ctx, tx, organizationID, projectID, canonical.CanonicalURL, desired)
 	if err != nil {
-		if rollout.Mode == ModeReport {
-			return nil
-		}
 		return unavailable(err)
 	}
-	outcome = ReportOutcome(verdict.State)
-	if rollout.Mode == ModeEnforce && verdict.State == StateApprovalRequired {
-		return ErrApprovalRequired
+	if verdict.State != StateApprovalRequired {
+		return nil
+	}
+	actor := ActorFromContext(ctx)
+	if g.approver == nil || !actor.OrgAdmin {
+		return &ApprovalRequiredError{CanonicalURL: canonical.CanonicalURL}
+	}
+	if err := g.approver.ApproveDirectRemote(ctx, tx, ApproveDirectRemoteInput{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		CanonicalURL:   canonical.CanonicalURL,
+		PrincipalURNs:  append([]string(nil), desired...),
+		ActorUserID:    actor.UserID,
+		ActorEmail:     actor.Email,
+		Rationale:      "Approved by an organization administrator who shared this server with these people.",
+	}); err != nil {
+		return unavailable(fmt.Errorf("record administrator approval: %w", err))
+	}
+	// Read the decision back rather than trusting the write: the approval must
+	// cover the audience the way the runtime will evaluate it.
+	verdict, err = Check(ctx, tx, organizationID, projectID, canonical.CanonicalURL, desired)
+	if err != nil {
+		return unavailable(err)
+	}
+	if verdict.State == StateApprovalRequired {
+		return unavailable(errors.New("administrator approval did not cover the audience"))
 	}
 	return nil
 }
@@ -326,46 +390,88 @@ func directRemoteTarget(ctx context.Context, tx pgx.Tx, organizationID string, p
 	return row.RemoteUrl.String, true, nil
 }
 
+// CheckGatewayNetworkMode prevents an existing Everyone assignment from
+// becoming incompatible when its attached gateway switches to private-only.
+func CheckGatewayNetworkMode(ctx context.Context, tx pgx.Tx, organizationID string, projectID, gatewayID uuid.UUID, mode networkaccess.Mode) error {
+	if mode != networkaccess.ModePrivateOnly {
+		return nil
+	}
+	distributed, err := pluginsrepo.New(tx).GatewayDistributedToPrincipal(ctx, pluginsrepo.GatewayDistributedToPrincipalParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		PrincipalUrn:   urn.PrincipalWildcard,
+		GatewayID:      uuid.NullUUID{UUID: gatewayID, Valid: true},
+	})
+	if err != nil {
+		return unavailable(fmt.Errorf("check gateway plugin audience: %w", err))
+	}
+	if distributed {
+		return ErrPrivateGatewayAudience
+	}
+	return nil
+}
+
+func checkPrivateGatewayAudience(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID, gatewayID uuid.UUID, desired []string) error {
+	if !containsEveryone(desired) {
+		return nil
+	}
+	storedMode, err := pluginsrepo.New(tx).GetPluginGatewayNetworkAccessMode(ctx, pluginsrepo.GetPluginGatewayNetworkAccessModeParams{
+		PluginID:       pluginID,
+		GatewayID:      gatewayID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return unavailable(fmt.Errorf("resolve plugin gateway network access: %w", err))
+	}
+	mode, err := networkaccess.Effective(storedMode)
+	if err != nil {
+		return unavailable(fmt.Errorf("resolve plugin gateway network access: %w", err))
+	}
+	if mode == networkaccess.ModePrivateOnly {
+		return ErrPrivateGatewayAudience
+	}
+	return nil
+}
+
+func checkPluginPrivateGateways(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID, desired []string) error {
+	if !containsEveryone(desired) {
+		return nil
+	}
+	storedModes, err := pluginsrepo.New(tx).ListPluginGatewayNetworkAccessModes(ctx, pluginsrepo.ListPluginGatewayNetworkAccessModesParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		PluginID:       pluginID,
+	})
+	if err != nil {
+		return unavailable(fmt.Errorf("list plugin gateway network access: %w", err))
+	}
+	for _, storedMode := range storedModes {
+		mode, err := networkaccess.Effective(storedMode)
+		if err != nil {
+			return unavailable(fmt.Errorf("resolve plugin gateway network access: %w", err))
+		}
+		if mode == networkaccess.ModePrivateOnly {
+			return ErrPrivateGatewayAudience
+		}
+	}
+	return nil
+}
+
+func containsEveryone(principals []string) bool {
+	return slices.Contains(principals, urn.PrincipalWildcard)
+}
+
 func listPluginAssignments(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID) ([]string, error) {
-	rows, err := tx.Query(ctx, `
-SELECT assignment.principal_urn
-FROM plugin_assignments AS assignment
-JOIN plugins AS plugin
-  ON plugin.id = assignment.plugin_id
- AND plugin.organization_id = assignment.organization_id
- AND plugin.deleted IS FALSE
-WHERE assignment.plugin_id = $1
-  AND assignment.organization_id = $2
-  AND plugin.project_id = $3
-ORDER BY assignment.principal_urn`, pluginID, organizationID, projectID)
+	result, err := pluginsrepo.New(tx).ListCompletePluginAudience(ctx, pluginsrepo.ListCompletePluginAudienceParams{
+		PluginID:       pluginID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list complete plugin audience: %w", err)
 	}
-	defer rows.Close()
-	var result []string
-	for rows.Next() {
-		var principal string
-		if err := rows.Scan(&principal); err != nil {
-			return nil, fmt.Errorf("scan plugin audience: %w", err)
-		}
-		result = append(result, principal)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate plugin audience: %w", err)
-	}
 	return result, nil
-}
-
-func requireUsableRollout(config RolloutConfig, rolloutErr error) error {
-	if rolloutErr != nil {
-		return unavailable(rolloutErr)
-	}
-	switch config.Mode {
-	case ModeLegacy, ModeReport, ModeEnforce:
-		return nil
-	default:
-		return unavailable(errors.New("distribution rollout mode is invalid"))
-	}
 }
 
 func unavailable(cause error) error {

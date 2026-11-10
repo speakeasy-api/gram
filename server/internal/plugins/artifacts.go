@@ -22,7 +22,7 @@ import (
 
 // HooksReleaseRoutePrefix is the top-level path namespace reserved for hooks
 // binary artifacts. Generated bootstrap scripts download from this prefix on
-// the org's Gram server domain, so customers only ever need to allow egress to
+// the org's Speakeasy server domain, so customers only ever need to allow egress to
 // the one domain their hooks already ingest to — GitHub never has to be
 // reachable from the machines running hooks. Sandboxed harnesses (Claude
 // Cowork) gate GitHub per-session with no way to grant artifact access, which
@@ -73,7 +73,7 @@ const hooksArtifactFetchTimeout = 30 * time.Second
 const hooksArtifactFailureTTL = 15 * time.Second
 
 // HooksArtifactServer serves the pinned speakeasy-hooks release archives from
-// the Gram server domain. It is a verifying proxy in front of the GitHub
+// the Speakeasy server domain. It is a verifying proxy in front of the GitHub
 // release: only the exact version × target set in hooksArtifactIndex is
 // served, every archive is checked against its pinned SHA-256 before the
 // first byte goes out, and verified archives are cached in memory (bounded by

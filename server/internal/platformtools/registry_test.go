@@ -44,6 +44,21 @@ func TestFindToolEntries(t *testing.T) {
 	require.Equal(t, "platform_search_logs", entries[0].Name)
 }
 
+func TestCountTools(t *testing.T) {
+	t.Parallel()
+
+	searchLogsURN := urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs").String()
+
+	require.Equal(t, 1, CountTools([]string{
+		urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets").String(),
+		urn.NewTool(urn.ToolKindPlatform, "nowhere", "missing").String(),
+		"not-a-tool-urn",
+		searchLogsURN,
+		searchLogsURN,
+	}))
+	require.Zero(t, CountTools(nil))
+}
+
 func TestFindTypedTools(t *testing.T) {
 	t.Parallel()
 
@@ -76,6 +91,7 @@ func TestFindToolEntries_PreservesBuiltInPrecedence(t *testing.T) {
 		ExternalTool{
 			Executor:        &fixedDescriptorExecutor{descriptor: override},
 			RequiredFeature: "",
+			RequiredScope:   "",
 		},
 	)
 
@@ -111,6 +127,7 @@ func TestBuildToolsetsIncludesPlatformMCPReadToolset(t *testing.T) {
 			Name:        ToolNameListProjects,
 		}},
 		RequiredFeature: "",
+		RequiredScope:   "",
 	}
 
 	toolsets := BuildToolsets(ToolsetDependencies{
@@ -125,4 +142,13 @@ func TestBuildToolsetsIncludesPlatformMCPReadToolset(t *testing.T) {
 	require.True(t, ok, "platform toolset must be registered")
 	require.Len(t, ts.Tools, 1)
 	require.Equal(t, ToolNameListProjects, ts.Tools[0].Executor.Descriptor().Name)
+}
+
+func TestPlatformToolsetIdentityIsStableAndDistinct(t *testing.T) {
+	t.Parallel()
+
+	assistantsID := PlatformToolsetID(AssistantsPlatformToolsetSlug)
+	require.Equal(t, assistantsID, PlatformToolsetID(AssistantsPlatformToolsetSlug))
+	require.NotEqual(t, assistantsID, PlatformToolsetID(ManagedAssistantPlatformToolsetSlug))
+	require.Equal(t, "Speakeasy assistant tools", PlatformToolsetName(AssistantsPlatformToolsetSlug))
 }

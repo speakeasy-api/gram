@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -53,93 +54,92 @@ func TestLimiterAllowsWhenSlotAvailable(t *testing.T) {
 func TestLimiterDisabledWhenMaxConcurrencyZero(t *testing.T) {
 	t.Parallel()
 
-	s := newLimiterService(0, 50*time.Millisecond)
+	synctest.Test(t, func(t *testing.T) {
+		s := newLimiterService(0, 50*time.Millisecond)
 
-	// With limiting disabled, many concurrent handlers must all proceed even
-	// though no slots exist.
-	release := make(chan struct{})
-	entered := make(chan struct{}, 4)
-	h := s.limit(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		entered <- struct{}{}
-		<-release
-		w.WriteHeader(http.StatusOK)
-	}))
+		// With limiting disabled, many concurrent handlers must all proceed
+		// even though no slots exist.
+		release := make(chan struct{})
+		defer close(release)
+		var entered atomic.Int32
+		h := s.limit(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			entered.Add(1)
+			<-release
+			w.WriteHeader(http.StatusOK)
+		}))
 
-	for range 4 {
-		go h.ServeHTTP(httptest.NewRecorder(), limiterRequest())
-	}
-	for range 4 {
-		select {
-		case <-entered:
-		case <-time.After(time.Second):
-			t.Fatal("handler did not run with limiting disabled")
+		for range 4 {
+			go h.ServeHTTP(httptest.NewRecorder(), limiterRequest())
 		}
-	}
-	close(release)
+		synctest.Wait()
+
+		require.Equal(t, int32(4), entered.Load(), "every handler should run with limiting disabled")
+	})
 }
 
 func TestLimiterShedsWhenSaturated(t *testing.T) {
 	t.Parallel()
 
-	s := newLimiterService(1, 20*time.Millisecond)
+	synctest.Test(t, func(t *testing.T) {
+		hold := 20 * time.Millisecond
+		s := newLimiterService(1, hold)
 
-	release := make(chan struct{})
-	entered := make(chan struct{})
-	h := s.limit(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		entered <- struct{}{}
-		<-release
-		w.WriteHeader(http.StatusOK)
-	}))
+		release := make(chan struct{})
+		defer close(release)
+		h := s.limit(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			<-release
+			w.WriteHeader(http.StatusOK)
+		}))
 
-	// Occupy the only slot.
-	go h.ServeHTTP(httptest.NewRecorder(), limiterRequest())
-	select {
-	case <-entered:
-	case <-time.After(time.Second):
-		t.Fatal("first request never acquired the slot")
-	}
+		// Occupy the only slot; once the bubble is idle the handler holds it.
+		go h.ServeHTTP(httptest.NewRecorder(), limiterRequest())
+		synctest.Wait()
 
-	// A second request finds no slot and is shed after the brief hold.
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, limiterRequest())
+		// A second request finds no slot and is shed after the brief hold.
+		start := time.Now()
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, limiterRequest())
 
-	require.Equal(t, http.StatusTooManyRequests, rec.Code)
-	require.Equal(t, "1", rec.Header().Get("Retry-After"))
-	require.Contains(t, rec.Body.String(), "capacity")
-
-	close(release)
+		require.Equal(t, http.StatusTooManyRequests, rec.Code)
+		require.Equal(t, "1", rec.Header().Get("Retry-After"))
+		require.Contains(t, rec.Body.String(), "capacity")
+		require.Equal(t, hold, time.Since(start), "request should be shed exactly when the hold expires")
+	})
 }
 
 func TestLimiterAdmitsWhenSlotFreesDuringHold(t *testing.T) {
 	t.Parallel()
 
-	// A generous hold ensures the freed slot is observed before shedding.
-	s := newLimiterService(1, 500*time.Millisecond)
+	synctest.Test(t, func(t *testing.T) {
+		freeAfter := 50 * time.Millisecond
+		s := newLimiterService(1, 500*time.Millisecond)
 
-	firstRelease := make(chan struct{})
-	firstEntered := make(chan struct{})
-	first := s.limit(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		firstEntered <- struct{}{}
-		<-firstRelease
-		w.WriteHeader(http.StatusOK)
-	}))
+		firstRelease := make(chan struct{})
+		first := s.limit(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			<-firstRelease
+			w.WriteHeader(http.StatusOK)
+		}))
 
-	go first.ServeHTTP(httptest.NewRecorder(), limiterRequest())
-	<-firstEntered
+		// Occupy the only slot; once the bubble is idle the handler holds it.
+		go first.ServeHTTP(httptest.NewRecorder(), limiterRequest())
+		synctest.Wait()
 
-	// Free the slot shortly after the second request starts holding.
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		close(firstRelease)
-	}()
+		// Free the slot partway through the second request's hold.
+		go func() {
+			time.Sleep(freeAfter)
+			close(firstRelease)
+		}()
 
-	second := s.limit(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	rec := httptest.NewRecorder()
-	second.ServeHTTP(rec, limiterRequest())
+		second := s.limit(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		start := time.Now()
+		rec := httptest.NewRecorder()
+		second.ServeHTTP(rec, limiterRequest())
 
-	require.Equal(t, http.StatusOK, rec.Code, "request should be admitted once the slot frees within the hold")
+		require.Equal(t, http.StatusOK, rec.Code, "request should be admitted once the slot frees within the hold")
+		require.Equal(t, freeAfter, time.Since(start), "request should be admitted as soon as the slot frees")
+	})
 }
 
 func TestLimiterReleasesSlotAfterCompletion(t *testing.T) {

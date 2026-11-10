@@ -41,7 +41,7 @@ const (
 var workloadIssuerLookupRate = ratelimit.PerMinute(120).WithBurst(30)
 
 // errWorkloadIssuerUntrusted reports an iss resolving to no workload issuer
-// row in the endpoint's tenancy — its own project, or the organization above.
+// row in the grant's tenancy — its project, or the organization above.
 //
 // Weaker than "trusted for this workload": this stage establishes only that the
 // tenant registered the issuer. A CI provider signs every job on its platform,
@@ -96,14 +96,13 @@ func newWorkloadIssuerLookupBudget(redisClient *redis.Client, meterProvider metr
 type workloadIssuerBudget func(ctx context.Context, scope string) (ratelimit.Result, error)
 
 // workloadIssuerLookup resolves an iss to the workload issuer row the
-// endpoint's tenant registered for it, false when none does. The endpoint is
-// the input because it names the tenancy the resolution runs against.
+// tenant registered for it, false when none does.
 //
 // The whole row rather than its id, because workloadIssuerKeySource reads
 // jwks_uri off it. A value that is not an issuer identifier is reported as an
 // error wrapping workloadidentity.ErrIssuerURLInvalid before the store is
 // consulted, as workloadidentity.ResolveIssuerByURL reports it.
-type workloadIssuerLookup func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, bool, error)
+type workloadIssuerLookup func(ctx context.Context, tenancy workloadTenancy, issuerURL string) (workloadidentity_repo.WorkloadIssuer, bool, error)
 
 // workloadIssuerAdmission resolves an assertion's issuer to the row that
 // describes it.
@@ -130,8 +129,9 @@ func newWorkloadIssuerAdmission(lookup workloadIssuerLookup, charge workloadIssu
 	}
 }
 
-// workloadIssuerLookupScope names the budget an endpoint's lookups are charged
-// to: the authorization server's identifier, so no endpoint spends another's.
+// workloadIssuerLookupScope names the budget a tenancy's lookups are charged
+// to: the authorization server's identifier, so no authorization server spends
+// another's.
 //
 // A denial-of-service bound, deliberately not the tenancy the lookup resolves
 // against, so a flood at one of a tenant's servers cannot starve the rest.
@@ -139,8 +139,8 @@ func newWorkloadIssuerAdmission(lookup workloadIssuerLookup, charge workloadIssu
 // Never the issuer URL, which two organizations may share, and never anything
 // derived from the request, which would let a caller mint a fresh budget by
 // varying what it sends.
-func workloadIssuerLookupScope(endpoint *ResolvedMcpEndpoint) string {
-	return "workload-issuer-lookup:" + endpoint.UserSessionIssuerID.String()
+func workloadIssuerLookupScope(tenancy workloadTenancy) string {
+	return "workload-issuer-lookup:" + tenancy.UserSessionIssuerID.String()
 }
 
 // workloadIssuerResolution carries a lookup's result through singleflight, so
@@ -155,19 +155,20 @@ type workloadIssuerResolution struct {
 // Nothing here fetches, so an unrecognised iss cannot become an outbound
 // request. A rejection costs one indexed SELECT, bounded anyway because this
 // grant is reachable without credentials.
-func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, error) {
+func (a *workloadIssuerAdmission) admit(ctx context.Context, tenancy workloadTenancy, issuerURL string) (workloadidentity_repo.WorkloadIssuer, error) {
 	switch {
-	// An unwired lookup reads as "no issuer registered" and a missing endpoint
-	// as "no tenancy to resolve under", as admitWorkloadIdentity treats them.
-	case a.lookup == nil, endpoint == nil:
+	// An unwired lookup reads as "no issuer registered" and a missing
+	// organization as "no tenancy to resolve under", as admitWorkloadIdentity
+	// treats them.
+	case a.lookup == nil, tenancy.OrganizationID == "":
 		return workloadidentity_repo.WorkloadIssuer{}, errWorkloadIssuerUntrusted
 	// No row can describe an empty iss, so it is refused before it spends the
-	// endpoint's budget.
+	// authorization server's budget.
 	case issuerURL == "":
 		return workloadidentity_repo.WorkloadIssuer{}, fmt.Errorf("%w: %w", errWorkloadIssuerUntrusted, workloadidentity.ErrIssuerURLInvalid)
 	}
 
-	ch := a.inflight.DoChan(workloadIssuerFlightKey(endpoint, issuerURL), func() (any, error) {
+	ch := a.inflight.DoChan(workloadIssuerFlightKey(tenancy, issuerURL), func() (any, error) {
 		// Detached from the caller that opened the flight: values carry
 		// through, cancellation does not. Tying the flight's lifetime to that
 		// one caller would hand context.Canceled to everyone sharing the
@@ -181,7 +182,7 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 		if a.charge == nil {
 			return nil, errWorkloadIssuerLimiterUnavailable
 		}
-		charged, chargeErr := a.charge(lookupCtx, workloadIssuerLookupScope(endpoint))
+		charged, chargeErr := a.charge(lookupCtx, workloadIssuerLookupScope(tenancy))
 		if chargeErr != nil {
 			return nil, fmt.Errorf("%w: %w", errWorkloadIssuerLimiterUnavailable, chargeErr)
 		}
@@ -189,7 +190,7 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 			return nil, &workloadIssuerRateLimitedError{retryAfter: charged.RetryAfter}
 		}
 
-		issuer, found, lookupErr := a.lookup(lookupCtx, endpoint, issuerURL)
+		issuer, found, lookupErr := a.lookup(lookupCtx, tenancy, issuerURL)
 		switch {
 		case errors.Is(lookupErr, workloadidentity.ErrIssuerURLInvalid):
 			// No row could ever describe it. Reported as untrusted with the
@@ -235,9 +236,9 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 //
 // Hashed and length-prefixed, as replay.Key is, because the spelling arrives
 // unauthenticated under no length bound.
-func workloadIssuerFlightKey(endpoint *ResolvedMcpEndpoint, issuerURL string) string {
+func workloadIssuerFlightKey(tenancy workloadTenancy, issuerURL string) string {
 	sum := sha256.New()
-	for _, part := range []string{endpoint.OrganizationID, endpoint.ProjectID.String(), issuerURL} {
+	for _, part := range []string{tenancy.OrganizationID, tenancy.ProjectID.String(), issuerURL} {
 		sum.Write([]byte(strconv.Itoa(len(part))))
 		sum.Write([]byte(":"))
 		sum.Write([]byte(part))

@@ -8,7 +8,13 @@
       "skipCI": false
     }
   ],
-  "fixed": [["@gram-ai/functions", "@gram-ai/create-function"]],
+  "fixed": [
+    [
+      "@speakeasy-api/functions",
+      "@gram-ai/functions",
+      "@gram-ai/create-function"
+    ]
+  ],
   "linked": [],
   "access": "restricted",
   "baseBranch": "origin/main",

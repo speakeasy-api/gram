@@ -15,6 +15,63 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// PrepareEMARequestBody is the type of the "remoteSessionClients" service
+// "prepareEMA" endpoint HTTP request body.
+type PrepareEMARequestBody struct {
+	UserSessionIssuerID   *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// Canonical intended resource URI.
+	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
+	// Explicit selected client row ID; never inferred.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// The scopes this preparation request supplies, which a DCR registration
+	// always asks for. Turning identity chaining on records the server
+	// connection's scopes (what an interactive sign-in through the selected client
+	// requests) and ignores these, unless the client is not linked to the user
+	// session issuer, no single remote MCP server signing in directly through it
+	// serves the resource (a gateway member qualified through another sign-in
+	// issuer is not resolved), or the connection names only OpenID Connect scopes
+	// while these name others; then these are recorded, and a scope outside the
+	// client's registered scope reports manual_setup_required. With neither naming
+	// a scope, nothing is recorded and identity chaining requests no scope.
+	Scopes    []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
+	Mechanism *string  `form:"mechanism,omitempty" json:"mechanism,omitempty" xml:"mechanism,omitempty"`
+	// Explicit DCR authentication method.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Optional caller-declared resource/authorization-server consistency hints,
+	// not provider-verified RFC 9728 discovery evidence. May be omitted for
+	// explicit manual configuration. Matching values do not establish trust,
+	// consent, or user access.
+	ResourceMetadata *struct {
+		Resource             *string  `form:"resource" json:"resource" xml:"resource"`
+		AuthorizationServers []string `form:"authorization_servers" json:"authorization_servers" xml:"authorization_servers"`
+	} `form:"resource_metadata,omitempty" json:"resource_metadata,omitempty" xml:"resource_metadata,omitempty"`
+	// Administrator-declared grants, not provider verification.
+	ConfirmGrants []string `form:"confirm_grants,omitempty" json:"confirm_grants,omitempty" xml:"confirm_grants,omitempty"`
+	// Optimistic binding generation.
+	ExpectedGeneration *int64 `form:"expected_generation,omitempty" json:"expected_generation,omitempty" xml:"expected_generation,omitempty"`
+}
+
+// ReadEMARequestBody is the type of the "remoteSessionClients" service
+// "readEMA" endpoint HTTP request body.
+type ReadEMARequestBody struct {
+	UserSessionIssuerID   *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// Canonical intended resource URI.
+	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
+}
+
+// UnlinkEMARequestBody is the type of the "remoteSessionClients" service
+// "unlinkEMA" endpoint HTTP request body.
+type UnlinkEMARequestBody struct {
+	UserSessionIssuerID   *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// Canonical intended resource URI.
+	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
+	// Optimistic binding generation.
+	ExpectedGeneration *int64 `form:"expected_generation,omitempty" json:"expected_generation,omitempty" xml:"expected_generation,omitempty"`
+}
+
 // CreateRemoteSessionClientRequestBody is the type of the
 // "remoteSessionClients" service "createRemoteSessionClient" endpoint HTTP
 // request body.
@@ -26,8 +83,20 @@ type CreateRemoteSessionClientRequestBody struct {
 	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
 	// client_id supplied by the caller.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// client_secret supplied by the caller. Gram encrypts before persisting.
+	// client_secret supplied by the caller. Speakeasy encrypts before persisting.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// An existing remote_session_client of the same issuer, visible to the
+	// project, whose upstream registration the new client reuses. The new client
+	// is an independent record with its own id: it copies the template's stored
+	// client_secret, unless client_secret is supplied, and the callback the
+	// template's registration lists. client_id must equal the template's.
+	// Sessions, grants, user_session_issuer attachments and MCP server
+	// associations are not copied, and the template is unchanged. Refused for a
+	// client metadata document client, a private_key_jwt client, a
+	// credential_owner self client, a client managed by an identity provider
+	// connection, a client the issuer has rejected, and a template whose stored
+	// secret has expired unless client_secret is supplied.
+	TemplateClientID *string `form:"template_client_id,omitempty" json:"template_client_id,omitempty" xml:"template_client_id,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -35,12 +104,25 @@ type CreateRemoteSessionClientRequestBody struct {
 	// the issuer identifier; token_endpoint is available for providers that
 	// require the token endpoint URL.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
+	// Organization JSON Web Key Set to sign private_key_jwt assertions with.
+	// Required when token_endpoint_auth_method is private_key_jwt and optional
+	// otherwise, as with attachKeySet. Must belong to the caller's organization,
+	// which needs the customer-managed encryption keys entitlement.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Who the upstream access credential belongs to, fixed at creation. subject
+	// (the default) means each caller connects their own upstream account through
+	// the client. self means the client obtains a credential for itself with the
+	// client_credentials grant and every caller shares it; it requires
+	// token_endpoint_auth_method client_secret_basic, client_secret_post (both
+	// with client_secret) or private_key_jwt (with json_web_key_set_id), and an
+	// issuer with a token_endpoint.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
 	// When the issuer reported issuing the client_id (RFC 7591
 	// client_id_issued_at). Omit to record the time of this call.
 	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
@@ -72,7 +154,15 @@ type CreateCimdRequestBody struct {
 type UpdateRemoteSessionClientRequestBody struct {
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Rotate the client secret. Gram re-encrypts before persisting.
+	// Correct the client_id registered with the issuer. Refused for Client ID
+	// Metadata Document (CIMD) clients and clients managed by an identity provider
+	// connection. A changed value revokes every remote session obtained through
+	// the client, so each user must reconnect. Omit to leave unchanged.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Replace the client's display name. Pass an empty string to clear it so the
+	// client shows its client_id. Omit to leave unchanged.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Rotate the client secret. Speakeasy re-encrypts before persisting.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -82,9 +172,18 @@ type UpdateRemoteSessionClientRequestBody struct {
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
 	// unchanged.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Replace the upstream OAuth audience sent for this client. Omit to leave
-	// unchanged.
+	// Replace the upstream OAuth audience sent for this client. Pass an empty
+	// string to clear it. Omit to leave unchanged.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Send the connecting MCP client's self-reported name to this provider as
+	// speakeasy_client_name on /authorize. Only sent for anonymous sessions. Omit
+	// to leave unchanged.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
+	// Platform admins only. Set true to run the client in compatibility mode with
+	// the legacy callback URL, or false to migrate it to the current callback URL
+	// once that URL is registered with the identity provider. Omit to leave
+	// unchanged.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
 }
 
 // AttachUserSessionIssuerRequestBody is the type of the "remoteSessionClients"
@@ -115,10 +214,160 @@ type AttachKeySetRequestBody struct {
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 }
 
+// PrepareEMAResponseBody is the type of the "remoteSessionClients" service
+// "prepareEMA" endpoint HTTP response body.
+type PrepareEMAResponseBody struct {
+	// Preparation state; readiness never proves user access.
+	State string `form:"state" json:"state" xml:"state"`
+	Stage string `form:"stage" json:"stage" xml:"stage"`
+	// Safe next action without provider bodies or credentials.
+	Remediation string  `form:"remediation" json:"remediation" xml:"remediation"`
+	Retryable   bool    `form:"retryable" json:"retryable" xml:"retryable"`
+	BindingID   *string `form:"binding_id,omitempty" json:"binding_id,omitempty" xml:"binding_id,omitempty"`
+	Generation  int64   `form:"generation" json:"generation" xml:"generation"`
+	// Exact selected remote_session_client row ID, when available.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Public OAuth client identifier, never a secret.
+	ExternalClientID *string `form:"external_client_id,omitempty" json:"external_client_id,omitempty" xml:"external_client_id,omitempty"`
+	Issuer           *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	Resource         string  `form:"resource" json:"resource" xml:"resource"`
+	// Null means unknown; an empty array means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	// Scopes recorded on the binding when identity chaining was turned on.
+	// Identity chaining requests exactly these, without OpenID Connect scopes;
+	// when that leaves none, an ID-JAG naming a scope outside these is rejected.
+	// Changes to the server connection apply only when identity chaining is
+	// prepared again.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Scopes preparing identity chaining again would record now, sorted: what an
+	// interactive sign-in through the selected client requests for this server, or
+	// the recorded scopes when the binding has no server connection to follow or
+	// the connection names only OpenID Connect scopes while the recorded ones name
+	// others. Returned by readEMA and prepareEMA when a client is selected.
+	ConnectionScopes []string `form:"connection_scopes,omitempty" json:"connection_scopes,omitempty" xml:"connection_scopes,omitempty"`
+	// True when connection_scopes differs from scopes; prepareEMA with the current
+	// expected_generation applies connection_scopes. Returned by readEMA and
+	// prepareEMA when a client is selected.
+	ScopesOutOfDate *bool `form:"scopes_out_of_date,omitempty" json:"scopes_out_of_date,omitempty" xml:"scopes_out_of_date,omitempty"`
+	// Provenance of recorded grants, not provider trust.
+	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
+	// The EMA providers the vendor accepts, resolved for this endpoint. A provider
+	// vouches only where the endpoint's sign-in goes through it, so at most one is
+	// usable here; entries with unavailable_reason cannot serve. Returned by
+	// readEMA only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	// When the vendor last accepted an assertion for this binding from a provider
+	// that can serve it now, so chaining has worked for it. Omitted when none is
+	// recorded for a usable provider or acceptance could not be read. Returned by
+	// readEMA only.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
+}
+
+// ReadEMAResponseBody is the type of the "remoteSessionClients" service
+// "readEMA" endpoint HTTP response body.
+type ReadEMAResponseBody struct {
+	// Preparation state; readiness never proves user access.
+	State string `form:"state" json:"state" xml:"state"`
+	Stage string `form:"stage" json:"stage" xml:"stage"`
+	// Safe next action without provider bodies or credentials.
+	Remediation string  `form:"remediation" json:"remediation" xml:"remediation"`
+	Retryable   bool    `form:"retryable" json:"retryable" xml:"retryable"`
+	BindingID   *string `form:"binding_id,omitempty" json:"binding_id,omitempty" xml:"binding_id,omitempty"`
+	Generation  int64   `form:"generation" json:"generation" xml:"generation"`
+	// Exact selected remote_session_client row ID, when available.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Public OAuth client identifier, never a secret.
+	ExternalClientID *string `form:"external_client_id,omitempty" json:"external_client_id,omitempty" xml:"external_client_id,omitempty"`
+	Issuer           *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	Resource         string  `form:"resource" json:"resource" xml:"resource"`
+	// Null means unknown; an empty array means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	// Scopes recorded on the binding when identity chaining was turned on.
+	// Identity chaining requests exactly these, without OpenID Connect scopes;
+	// when that leaves none, an ID-JAG naming a scope outside these is rejected.
+	// Changes to the server connection apply only when identity chaining is
+	// prepared again.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Scopes preparing identity chaining again would record now, sorted: what an
+	// interactive sign-in through the selected client requests for this server, or
+	// the recorded scopes when the binding has no server connection to follow or
+	// the connection names only OpenID Connect scopes while the recorded ones name
+	// others. Returned by readEMA and prepareEMA when a client is selected.
+	ConnectionScopes []string `form:"connection_scopes,omitempty" json:"connection_scopes,omitempty" xml:"connection_scopes,omitempty"`
+	// True when connection_scopes differs from scopes; prepareEMA with the current
+	// expected_generation applies connection_scopes. Returned by readEMA and
+	// prepareEMA when a client is selected.
+	ScopesOutOfDate *bool `form:"scopes_out_of_date,omitempty" json:"scopes_out_of_date,omitempty" xml:"scopes_out_of_date,omitempty"`
+	// Provenance of recorded grants, not provider trust.
+	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
+	// The EMA providers the vendor accepts, resolved for this endpoint. A provider
+	// vouches only where the endpoint's sign-in goes through it, so at most one is
+	// usable here; entries with unavailable_reason cannot serve. Returned by
+	// readEMA only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	// When the vendor last accepted an assertion for this binding from a provider
+	// that can serve it now, so chaining has worked for it. Omitted when none is
+	// recorded for a usable provider or acceptance could not be read. Returned by
+	// readEMA only.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
+}
+
+// UnlinkEMAResponseBody is the type of the "remoteSessionClients" service
+// "unlinkEMA" endpoint HTTP response body.
+type UnlinkEMAResponseBody struct {
+	// Preparation state; readiness never proves user access.
+	State string `form:"state" json:"state" xml:"state"`
+	Stage string `form:"stage" json:"stage" xml:"stage"`
+	// Safe next action without provider bodies or credentials.
+	Remediation string  `form:"remediation" json:"remediation" xml:"remediation"`
+	Retryable   bool    `form:"retryable" json:"retryable" xml:"retryable"`
+	BindingID   *string `form:"binding_id,omitempty" json:"binding_id,omitempty" xml:"binding_id,omitempty"`
+	Generation  int64   `form:"generation" json:"generation" xml:"generation"`
+	// Exact selected remote_session_client row ID, when available.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Public OAuth client identifier, never a secret.
+	ExternalClientID *string `form:"external_client_id,omitempty" json:"external_client_id,omitempty" xml:"external_client_id,omitempty"`
+	Issuer           *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	Resource         string  `form:"resource" json:"resource" xml:"resource"`
+	// Null means unknown; an empty array means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	// Scopes recorded on the binding when identity chaining was turned on.
+	// Identity chaining requests exactly these, without OpenID Connect scopes;
+	// when that leaves none, an ID-JAG naming a scope outside these is rejected.
+	// Changes to the server connection apply only when identity chaining is
+	// prepared again.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Scopes preparing identity chaining again would record now, sorted: what an
+	// interactive sign-in through the selected client requests for this server, or
+	// the recorded scopes when the binding has no server connection to follow or
+	// the connection names only OpenID Connect scopes while the recorded ones name
+	// others. Returned by readEMA and prepareEMA when a client is selected.
+	ConnectionScopes []string `form:"connection_scopes,omitempty" json:"connection_scopes,omitempty" xml:"connection_scopes,omitempty"`
+	// True when connection_scopes differs from scopes; prepareEMA with the current
+	// expected_generation applies connection_scopes. Returned by readEMA and
+	// prepareEMA when a client is selected.
+	ScopesOutOfDate *bool `form:"scopes_out_of_date,omitempty" json:"scopes_out_of_date,omitempty" xml:"scopes_out_of_date,omitempty"`
+	// Provenance of recorded grants, not provider trust.
+	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
+	// The EMA providers the vendor accepts, resolved for this endpoint. A provider
+	// vouches only where the endpoint's sign-in goes through it, so at most one is
+	// usable here; entries with unavailable_reason cannot serve. Returned by
+	// readEMA only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	// When the vendor last accepted an assertion for this binding from a provider
+	// that can serve it now, so chaining has worked for it. Omitted when none is
+	// recorded for a usable provider or acceptance could not be read. Returned by
+	// readEMA only.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
+}
+
 // CreateRemoteSessionClientResponseBody is the type of the
 // "remoteSessionClients" service "createRemoteSessionClient" endpoint HTTP
 // response body.
 type CreateRemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -134,9 +383,12 @@ type CreateRemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -152,22 +404,52 @@ type CreateRemoteSessionClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateCimdResponseBody is the type of the "remoteSessionClients" service
 // "createCimd" endpoint HTTP response body.
 type CreateCimdResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -183,9 +465,12 @@ type CreateCimdResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -201,23 +486,53 @@ type CreateCimdResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateRemoteSessionClientResponseBody is the type of the
 // "remoteSessionClients" service "updateRemoteSessionClient" endpoint HTTP
 // response body.
 type UpdateRemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -233,9 +548,12 @@ type UpdateRemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -251,23 +569,53 @@ type UpdateRemoteSessionClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AttachUserSessionIssuerResponseBody is the type of the
 // "remoteSessionClients" service "attachUserSessionIssuer" endpoint HTTP
 // response body.
 type AttachUserSessionIssuerResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -283,9 +631,12 @@ type AttachUserSessionIssuerResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -301,23 +652,53 @@ type AttachUserSessionIssuerResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // DetachUserSessionIssuerResponseBody is the type of the
 // "remoteSessionClients" service "detachUserSessionIssuer" endpoint HTTP
 // response body.
 type DetachUserSessionIssuerResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -333,9 +714,12 @@ type DetachUserSessionIssuerResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -351,22 +735,52 @@ type DetachUserSessionIssuerResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AttachKeySetResponseBody is the type of the "remoteSessionClients" service
 // "attachKeySet" endpoint HTTP response body.
 type AttachKeySetResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -382,9 +796,12 @@ type AttachKeySetResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -400,22 +817,52 @@ type AttachKeySetResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // DetachKeySetResponseBody is the type of the "remoteSessionClients" service
 // "detachKeySet" endpoint HTTP response body.
 type DetachKeySetResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -431,9 +878,12 @@ type DetachKeySetResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -449,17 +899,44 @@ type DetachKeySetResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListRemoteSessionClientsResponseBody is the type of the
@@ -471,9 +948,20 @@ type ListRemoteSessionClientsResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// GetNewClientCallbackURLResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body.
+type GetNewClientCallbackURLResponseBody struct {
+	// The redirect URI to register on the upstream provider's OAuth app.
+	CallbackURL string `form:"callback_url" json:"callback_url" xml:"callback_url"`
+}
+
 // GetRemoteSessionClientResponseBody is the type of the "remoteSessionClients"
 // service "getRemoteSessionClient" endpoint HTTP response body.
 type GetRemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -489,9 +977,12 @@ type GetRemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -507,17 +998,593 @@ type GetRemoteSessionClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// PrepareEMAUnauthorizedResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "unauthorized"
+// error.
+type PrepareEMAUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PrepareEMAForbiddenResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "forbidden" error.
+type PrepareEMAForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PrepareEMABadRequestResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "bad_request" error.
+type PrepareEMABadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PrepareEMANotFoundResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "not_found" error.
+type PrepareEMANotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PrepareEMAConflictResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "conflict" error.
+type PrepareEMAConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PrepareEMAUnsupportedMediaResponseBody is the type of the
+// "remoteSessionClients" service "prepareEMA" endpoint HTTP response body for
+// the "unsupported_media" error.
+type PrepareEMAUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PrepareEMAInvalidResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "invalid" error.
+type PrepareEMAInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PrepareEMAInvariantViolationResponseBody is the type of the
+// "remoteSessionClients" service "prepareEMA" endpoint HTTP response body for
+// the "invariant_violation" error.
+type PrepareEMAInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PrepareEMAUnexpectedResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "unexpected" error.
+type PrepareEMAUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PrepareEMAGatewayErrorResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "gateway_error"
+// error.
+type PrepareEMAGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReadEMAUnauthorizedResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "unauthorized" error.
+type ReadEMAUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReadEMAForbiddenResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "forbidden" error.
+type ReadEMAForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReadEMABadRequestResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "bad_request" error.
+type ReadEMABadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReadEMANotFoundResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "not_found" error.
+type ReadEMANotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReadEMAConflictResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "conflict" error.
+type ReadEMAConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReadEMAUnsupportedMediaResponseBody is the type of the
+// "remoteSessionClients" service "readEMA" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ReadEMAUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReadEMAInvalidResponseBody is the type of the "remoteSessionClients" service
+// "readEMA" endpoint HTTP response body for the "invalid" error.
+type ReadEMAInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReadEMAInvariantViolationResponseBody is the type of the
+// "remoteSessionClients" service "readEMA" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ReadEMAInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReadEMAUnexpectedResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "unexpected" error.
+type ReadEMAUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReadEMAGatewayErrorResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "gateway_error" error.
+type ReadEMAGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnlinkEMAUnauthorizedResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "unauthorized" error.
+type UnlinkEMAUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnlinkEMAForbiddenResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "forbidden" error.
+type UnlinkEMAForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnlinkEMABadRequestResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "bad_request" error.
+type UnlinkEMABadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnlinkEMANotFoundResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "not_found" error.
+type UnlinkEMANotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnlinkEMAConflictResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "conflict" error.
+type UnlinkEMAConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnlinkEMAUnsupportedMediaResponseBody is the type of the
+// "remoteSessionClients" service "unlinkEMA" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UnlinkEMAUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnlinkEMAInvalidResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "invalid" error.
+type UnlinkEMAInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnlinkEMAInvariantViolationResponseBody is the type of the
+// "remoteSessionClients" service "unlinkEMA" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UnlinkEMAInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnlinkEMAUnexpectedResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "unexpected" error.
+type UnlinkEMAUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnlinkEMAGatewayErrorResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "gateway_error"
+// error.
+type UnlinkEMAGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // CreateRemoteSessionClientUnauthorizedResponseBody is the type of the
@@ -2064,6 +3131,196 @@ type ListRemoteSessionClientsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetNewClientCallbackURLUnauthorizedResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "unauthorized" error.
+type GetNewClientCallbackURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLForbiddenResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "forbidden" error.
+type GetNewClientCallbackURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLBadRequestResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "bad_request" error.
+type GetNewClientCallbackURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLNotFoundResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "not_found" error.
+type GetNewClientCallbackURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLConflictResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "conflict" error.
+type GetNewClientCallbackURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLUnsupportedMediaResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetNewClientCallbackURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLInvalidResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "invalid" error.
+type GetNewClientCallbackURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLInvariantViolationResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetNewClientCallbackURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLUnexpectedResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "unexpected" error.
+type GetNewClientCallbackURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLGatewayErrorResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "gateway_error" error.
+type GetNewClientCallbackURLGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetRemoteSessionClientUnauthorizedResponseBody is the type of the
 // "remoteSessionClients" service "getRemoteSessionClient" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -2444,9 +3701,53 @@ type DeleteRemoteSessionClientGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
+	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
+	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
+}
+
+// EMAProviderResponseBody is used to define fields on response body types.
+type EMAProviderResponseBody struct {
+	// external or speakeasy.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The external provider's remote session issuer. Omitted for speakeasy, and in
+	// the organization-wide default order, where an external entry stands for each
+	// endpoint's own trusted issuer.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization's internal session issuer, for speakeasy.
+	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's sign-in doesn't go through this provider, so it can't vouch for
+	// people there: an external issuer other than the sign-in's trusted issuer, or
+	// Speakeasy on a sign-in federated through an external issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// When the vendor last accepted an assertion from this provider anywhere in
+	// the organization, so the vendor already trusts it, from cached credentials
+	// that still hold an access token. Attributed to the exact issuer that
+	// vouched; the organization-wide default's external entry takes the newest
+	// acceptance of any external issuer. Set on every response that returns an
+	// order; omitted when the vendor has never accepted it, when acceptance could
+	// not be read, or on readEMA when the caller lacks org:read.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
+}
+
 // RemoteSessionClientResponseBody is used to define fields on response body
 // types.
 type RemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -2462,9 +3763,12 @@ type RemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -2480,17 +3784,176 @@ type RemoteSessionClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// NewPrepareEMAResponseBody builds the HTTP response body from the result of
+// the "prepareEMA" endpoint of the "remoteSessionClients" service.
+func NewPrepareEMAResponseBody(res *remotesessionclients.IdentityChainingPreparation) *PrepareEMAResponseBody {
+	body := &PrepareEMAResponseBody{
+		State:            res.State,
+		Stage:            res.Stage,
+		Remediation:      res.Remediation,
+		Retryable:        res.Retryable,
+		BindingID:        res.BindingID,
+		Generation:       res.Generation,
+		ClientID:         res.ClientID,
+		ExternalClientID: res.ExternalClientID,
+		Issuer:           res.Issuer,
+		Resource:         res.Resource,
+		ScopesOutOfDate:  res.ScopesOutOfDate,
+		GrantSource:      res.GrantSource,
+		LastAcceptedAt:   res.LastAcceptedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
+	}
+	if res.Scopes != nil {
+		body.Scopes = make([]string, len(res.Scopes))
+		for i, val := range res.Scopes {
+			body.Scopes[i] = val
+		}
+	} else {
+		body.Scopes = []string{}
+	}
+	if res.ConnectionScopes != nil {
+		body.ConnectionScopes = make([]string, len(res.ConnectionScopes))
+		for i, val := range res.ConnectionScopes {
+			body.ConnectionScopes[i] = val
+		}
+	}
+	if res.EmaProviders != nil {
+		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
+	}
+	return body
+}
+
+// NewReadEMAResponseBody builds the HTTP response body from the result of the
+// "readEMA" endpoint of the "remoteSessionClients" service.
+func NewReadEMAResponseBody(res *remotesessionclients.IdentityChainingPreparation) *ReadEMAResponseBody {
+	body := &ReadEMAResponseBody{
+		State:            res.State,
+		Stage:            res.Stage,
+		Remediation:      res.Remediation,
+		Retryable:        res.Retryable,
+		BindingID:        res.BindingID,
+		Generation:       res.Generation,
+		ClientID:         res.ClientID,
+		ExternalClientID: res.ExternalClientID,
+		Issuer:           res.Issuer,
+		Resource:         res.Resource,
+		ScopesOutOfDate:  res.ScopesOutOfDate,
+		GrantSource:      res.GrantSource,
+		LastAcceptedAt:   res.LastAcceptedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
+	}
+	if res.Scopes != nil {
+		body.Scopes = make([]string, len(res.Scopes))
+		for i, val := range res.Scopes {
+			body.Scopes[i] = val
+		}
+	} else {
+		body.Scopes = []string{}
+	}
+	if res.ConnectionScopes != nil {
+		body.ConnectionScopes = make([]string, len(res.ConnectionScopes))
+		for i, val := range res.ConnectionScopes {
+			body.ConnectionScopes[i] = val
+		}
+	}
+	if res.EmaProviders != nil {
+		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
+	}
+	return body
+}
+
+// NewUnlinkEMAResponseBody builds the HTTP response body from the result of
+// the "unlinkEMA" endpoint of the "remoteSessionClients" service.
+func NewUnlinkEMAResponseBody(res *remotesessionclients.IdentityChainingPreparation) *UnlinkEMAResponseBody {
+	body := &UnlinkEMAResponseBody{
+		State:            res.State,
+		Stage:            res.Stage,
+		Remediation:      res.Remediation,
+		Retryable:        res.Retryable,
+		BindingID:        res.BindingID,
+		Generation:       res.Generation,
+		ClientID:         res.ClientID,
+		ExternalClientID: res.ExternalClientID,
+		Issuer:           res.Issuer,
+		Resource:         res.Resource,
+		ScopesOutOfDate:  res.ScopesOutOfDate,
+		GrantSource:      res.GrantSource,
+		LastAcceptedAt:   res.LastAcceptedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
+	}
+	if res.Scopes != nil {
+		body.Scopes = make([]string, len(res.Scopes))
+		for i, val := range res.Scopes {
+			body.Scopes[i] = val
+		}
+	} else {
+		body.Scopes = []string{}
+	}
+	if res.ConnectionScopes != nil {
+		body.ConnectionScopes = make([]string, len(res.ConnectionScopes))
+		for i, val := range res.ConnectionScopes {
+			body.ConnectionScopes[i] = val
+		}
+	}
+	if res.EmaProviders != nil {
+		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
+	}
+	return body
 }
 
 // NewCreateRemoteSessionClientResponseBody builds the HTTP response body from
@@ -2503,6 +3966,7 @@ func NewCreateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *C
 		OrganizationID:                  res.OrganizationID,
 		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
 		ClientID:                        res.ClientID,
+		DisplayName:                     res.DisplayName,
 		ClientIDMetadataURI:             res.ClientIDMetadataURI,
 		ClientIDIssuedAt:                res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
@@ -2510,9 +3974,21 @@ func NewCreateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *C
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CredentialOwner:                 res.CredentialOwner,
+		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -2540,6 +4016,7 @@ func NewCreateCimdResponseBody(res *types.RemoteSessionClient) *CreateCimdRespon
 		OrganizationID:                  res.OrganizationID,
 		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
 		ClientID:                        res.ClientID,
+		DisplayName:                     res.DisplayName,
 		ClientIDMetadataURI:             res.ClientIDMetadataURI,
 		ClientIDIssuedAt:                res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
@@ -2547,9 +4024,21 @@ func NewCreateCimdResponseBody(res *types.RemoteSessionClient) *CreateCimdRespon
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CredentialOwner:                 res.CredentialOwner,
+		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -2578,6 +4067,7 @@ func NewUpdateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *U
 		OrganizationID:                  res.OrganizationID,
 		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
 		ClientID:                        res.ClientID,
+		DisplayName:                     res.DisplayName,
 		ClientIDMetadataURI:             res.ClientIDMetadataURI,
 		ClientIDIssuedAt:                res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
@@ -2585,9 +4075,21 @@ func NewUpdateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *U
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CredentialOwner:                 res.CredentialOwner,
+		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -2616,6 +4118,7 @@ func NewAttachUserSessionIssuerResponseBody(res *types.RemoteSessionClient) *Att
 		OrganizationID:                  res.OrganizationID,
 		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
 		ClientID:                        res.ClientID,
+		DisplayName:                     res.DisplayName,
 		ClientIDMetadataURI:             res.ClientIDMetadataURI,
 		ClientIDIssuedAt:                res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
@@ -2623,9 +4126,21 @@ func NewAttachUserSessionIssuerResponseBody(res *types.RemoteSessionClient) *Att
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CredentialOwner:                 res.CredentialOwner,
+		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -2654,6 +4169,7 @@ func NewDetachUserSessionIssuerResponseBody(res *types.RemoteSessionClient) *Det
 		OrganizationID:                  res.OrganizationID,
 		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
 		ClientID:                        res.ClientID,
+		DisplayName:                     res.DisplayName,
 		ClientIDMetadataURI:             res.ClientIDMetadataURI,
 		ClientIDIssuedAt:                res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
@@ -2661,9 +4177,21 @@ func NewDetachUserSessionIssuerResponseBody(res *types.RemoteSessionClient) *Det
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CredentialOwner:                 res.CredentialOwner,
+		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -2691,6 +4219,7 @@ func NewAttachKeySetResponseBody(res *types.RemoteSessionClient) *AttachKeySetRe
 		OrganizationID:                  res.OrganizationID,
 		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
 		ClientID:                        res.ClientID,
+		DisplayName:                     res.DisplayName,
 		ClientIDMetadataURI:             res.ClientIDMetadataURI,
 		ClientIDIssuedAt:                res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
@@ -2698,9 +4227,21 @@ func NewAttachKeySetResponseBody(res *types.RemoteSessionClient) *AttachKeySetRe
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CredentialOwner:                 res.CredentialOwner,
+		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -2728,6 +4269,7 @@ func NewDetachKeySetResponseBody(res *types.RemoteSessionClient) *DetachKeySetRe
 		OrganizationID:                  res.OrganizationID,
 		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
 		ClientID:                        res.ClientID,
+		DisplayName:                     res.DisplayName,
 		ClientIDMetadataURI:             res.ClientIDMetadataURI,
 		ClientIDIssuedAt:                res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
@@ -2735,9 +4277,21 @@ func NewDetachKeySetResponseBody(res *types.RemoteSessionClient) *DetachKeySetRe
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CredentialOwner:                 res.CredentialOwner,
+		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -2778,6 +4332,16 @@ func NewListRemoteSessionClientsResponseBody(res *remotesessionclients.ListRemot
 	return body
 }
 
+// NewGetNewClientCallbackURLResponseBody builds the HTTP response body from
+// the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLResponseBody(res *remotesessionclients.NewClientCallbackURLResult) *GetNewClientCallbackURLResponseBody {
+	body := &GetNewClientCallbackURLResponseBody{
+		CallbackURL: res.CallbackURL,
+	}
+	return body
+}
+
 // NewGetRemoteSessionClientResponseBody builds the HTTP response body from the
 // result of the "getRemoteSessionClient" endpoint of the
 // "remoteSessionClients" service.
@@ -2788,6 +4352,7 @@ func NewGetRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *GetR
 		OrganizationID:                  res.OrganizationID,
 		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
 		ClientID:                        res.ClientID,
+		DisplayName:                     res.DisplayName,
 		ClientIDMetadataURI:             res.ClientIDMetadataURI,
 		ClientIDIssuedAt:                res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
@@ -2795,9 +4360,21 @@ func NewGetRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *GetR
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CredentialOwner:                 res.CredentialOwner,
+		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -2812,6 +4389,429 @@ func NewGetRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *GetR
 		for i, val := range res.Scope {
 			body.Scope[i] = val
 		}
+	}
+	return body
+}
+
+// NewPrepareEMAUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "prepareEMA" endpoint of the "remoteSessionClients" service.
+func NewPrepareEMAUnauthorizedResponseBody(res *goa.ServiceError) *PrepareEMAUnauthorizedResponseBody {
+	body := &PrepareEMAUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPrepareEMAForbiddenResponseBody builds the HTTP response body from the
+// result of the "prepareEMA" endpoint of the "remoteSessionClients" service.
+func NewPrepareEMAForbiddenResponseBody(res *goa.ServiceError) *PrepareEMAForbiddenResponseBody {
+	body := &PrepareEMAForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPrepareEMABadRequestResponseBody builds the HTTP response body from the
+// result of the "prepareEMA" endpoint of the "remoteSessionClients" service.
+func NewPrepareEMABadRequestResponseBody(res *goa.ServiceError) *PrepareEMABadRequestResponseBody {
+	body := &PrepareEMABadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPrepareEMANotFoundResponseBody builds the HTTP response body from the
+// result of the "prepareEMA" endpoint of the "remoteSessionClients" service.
+func NewPrepareEMANotFoundResponseBody(res *goa.ServiceError) *PrepareEMANotFoundResponseBody {
+	body := &PrepareEMANotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPrepareEMAConflictResponseBody builds the HTTP response body from the
+// result of the "prepareEMA" endpoint of the "remoteSessionClients" service.
+func NewPrepareEMAConflictResponseBody(res *goa.ServiceError) *PrepareEMAConflictResponseBody {
+	body := &PrepareEMAConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPrepareEMAUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "prepareEMA" endpoint of the "remoteSessionClients"
+// service.
+func NewPrepareEMAUnsupportedMediaResponseBody(res *goa.ServiceError) *PrepareEMAUnsupportedMediaResponseBody {
+	body := &PrepareEMAUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPrepareEMAInvalidResponseBody builds the HTTP response body from the
+// result of the "prepareEMA" endpoint of the "remoteSessionClients" service.
+func NewPrepareEMAInvalidResponseBody(res *goa.ServiceError) *PrepareEMAInvalidResponseBody {
+	body := &PrepareEMAInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPrepareEMAInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "prepareEMA" endpoint of the "remoteSessionClients"
+// service.
+func NewPrepareEMAInvariantViolationResponseBody(res *goa.ServiceError) *PrepareEMAInvariantViolationResponseBody {
+	body := &PrepareEMAInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPrepareEMAUnexpectedResponseBody builds the HTTP response body from the
+// result of the "prepareEMA" endpoint of the "remoteSessionClients" service.
+func NewPrepareEMAUnexpectedResponseBody(res *goa.ServiceError) *PrepareEMAUnexpectedResponseBody {
+	body := &PrepareEMAUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPrepareEMAGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "prepareEMA" endpoint of the "remoteSessionClients" service.
+func NewPrepareEMAGatewayErrorResponseBody(res *goa.ServiceError) *PrepareEMAGatewayErrorResponseBody {
+	body := &PrepareEMAGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReadEMAUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "readEMA" endpoint of the "remoteSessionClients" service.
+func NewReadEMAUnauthorizedResponseBody(res *goa.ServiceError) *ReadEMAUnauthorizedResponseBody {
+	body := &ReadEMAUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReadEMAForbiddenResponseBody builds the HTTP response body from the
+// result of the "readEMA" endpoint of the "remoteSessionClients" service.
+func NewReadEMAForbiddenResponseBody(res *goa.ServiceError) *ReadEMAForbiddenResponseBody {
+	body := &ReadEMAForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReadEMABadRequestResponseBody builds the HTTP response body from the
+// result of the "readEMA" endpoint of the "remoteSessionClients" service.
+func NewReadEMABadRequestResponseBody(res *goa.ServiceError) *ReadEMABadRequestResponseBody {
+	body := &ReadEMABadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReadEMANotFoundResponseBody builds the HTTP response body from the result
+// of the "readEMA" endpoint of the "remoteSessionClients" service.
+func NewReadEMANotFoundResponseBody(res *goa.ServiceError) *ReadEMANotFoundResponseBody {
+	body := &ReadEMANotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReadEMAConflictResponseBody builds the HTTP response body from the result
+// of the "readEMA" endpoint of the "remoteSessionClients" service.
+func NewReadEMAConflictResponseBody(res *goa.ServiceError) *ReadEMAConflictResponseBody {
+	body := &ReadEMAConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReadEMAUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "readEMA" endpoint of the "remoteSessionClients" service.
+func NewReadEMAUnsupportedMediaResponseBody(res *goa.ServiceError) *ReadEMAUnsupportedMediaResponseBody {
+	body := &ReadEMAUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReadEMAInvalidResponseBody builds the HTTP response body from the result
+// of the "readEMA" endpoint of the "remoteSessionClients" service.
+func NewReadEMAInvalidResponseBody(res *goa.ServiceError) *ReadEMAInvalidResponseBody {
+	body := &ReadEMAInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReadEMAInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "readEMA" endpoint of the "remoteSessionClients" service.
+func NewReadEMAInvariantViolationResponseBody(res *goa.ServiceError) *ReadEMAInvariantViolationResponseBody {
+	body := &ReadEMAInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReadEMAUnexpectedResponseBody builds the HTTP response body from the
+// result of the "readEMA" endpoint of the "remoteSessionClients" service.
+func NewReadEMAUnexpectedResponseBody(res *goa.ServiceError) *ReadEMAUnexpectedResponseBody {
+	body := &ReadEMAUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReadEMAGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "readEMA" endpoint of the "remoteSessionClients" service.
+func NewReadEMAGatewayErrorResponseBody(res *goa.ServiceError) *ReadEMAGatewayErrorResponseBody {
+	body := &ReadEMAGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnlinkEMAUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "unlinkEMA" endpoint of the "remoteSessionClients" service.
+func NewUnlinkEMAUnauthorizedResponseBody(res *goa.ServiceError) *UnlinkEMAUnauthorizedResponseBody {
+	body := &UnlinkEMAUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnlinkEMAForbiddenResponseBody builds the HTTP response body from the
+// result of the "unlinkEMA" endpoint of the "remoteSessionClients" service.
+func NewUnlinkEMAForbiddenResponseBody(res *goa.ServiceError) *UnlinkEMAForbiddenResponseBody {
+	body := &UnlinkEMAForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnlinkEMABadRequestResponseBody builds the HTTP response body from the
+// result of the "unlinkEMA" endpoint of the "remoteSessionClients" service.
+func NewUnlinkEMABadRequestResponseBody(res *goa.ServiceError) *UnlinkEMABadRequestResponseBody {
+	body := &UnlinkEMABadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnlinkEMANotFoundResponseBody builds the HTTP response body from the
+// result of the "unlinkEMA" endpoint of the "remoteSessionClients" service.
+func NewUnlinkEMANotFoundResponseBody(res *goa.ServiceError) *UnlinkEMANotFoundResponseBody {
+	body := &UnlinkEMANotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnlinkEMAConflictResponseBody builds the HTTP response body from the
+// result of the "unlinkEMA" endpoint of the "remoteSessionClients" service.
+func NewUnlinkEMAConflictResponseBody(res *goa.ServiceError) *UnlinkEMAConflictResponseBody {
+	body := &UnlinkEMAConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnlinkEMAUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "unlinkEMA" endpoint of the "remoteSessionClients" service.
+func NewUnlinkEMAUnsupportedMediaResponseBody(res *goa.ServiceError) *UnlinkEMAUnsupportedMediaResponseBody {
+	body := &UnlinkEMAUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnlinkEMAInvalidResponseBody builds the HTTP response body from the
+// result of the "unlinkEMA" endpoint of the "remoteSessionClients" service.
+func NewUnlinkEMAInvalidResponseBody(res *goa.ServiceError) *UnlinkEMAInvalidResponseBody {
+	body := &UnlinkEMAInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnlinkEMAInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "unlinkEMA" endpoint of the "remoteSessionClients"
+// service.
+func NewUnlinkEMAInvariantViolationResponseBody(res *goa.ServiceError) *UnlinkEMAInvariantViolationResponseBody {
+	body := &UnlinkEMAInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnlinkEMAUnexpectedResponseBody builds the HTTP response body from the
+// result of the "unlinkEMA" endpoint of the "remoteSessionClients" service.
+func NewUnlinkEMAUnexpectedResponseBody(res *goa.ServiceError) *UnlinkEMAUnexpectedResponseBody {
+	body := &UnlinkEMAUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnlinkEMAGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "unlinkEMA" endpoint of the "remoteSessionClients" service.
+func NewUnlinkEMAGatewayErrorResponseBody(res *goa.ServiceError) *UnlinkEMAGatewayErrorResponseBody {
+	body := &UnlinkEMAGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -4026,6 +6026,156 @@ func NewListRemoteSessionClientsGatewayErrorResponseBody(res *goa.ServiceError) 
 	return body
 }
 
+// NewGetNewClientCallbackURLUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLUnauthorizedResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLUnauthorizedResponseBody {
+	body := &GetNewClientCallbackURLUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLForbiddenResponseBody builds the HTTP response
+// body from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLForbiddenResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLForbiddenResponseBody {
+	body := &GetNewClientCallbackURLForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLBadRequestResponseBody builds the HTTP response
+// body from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLBadRequestResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLBadRequestResponseBody {
+	body := &GetNewClientCallbackURLBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLNotFoundResponseBody builds the HTTP response body
+// from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLNotFoundResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLNotFoundResponseBody {
+	body := &GetNewClientCallbackURLNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLConflictResponseBody builds the HTTP response body
+// from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLConflictResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLConflictResponseBody {
+	body := &GetNewClientCallbackURLConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getNewClientCallbackUrl" endpoint of
+// the "remoteSessionClients" service.
+func NewGetNewClientCallbackURLUnsupportedMediaResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLUnsupportedMediaResponseBody {
+	body := &GetNewClientCallbackURLUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLInvalidResponseBody builds the HTTP response body
+// from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLInvalidResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLInvalidResponseBody {
+	body := &GetNewClientCallbackURLInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getNewClientCallbackUrl" endpoint of
+// the "remoteSessionClients" service.
+func NewGetNewClientCallbackURLInvariantViolationResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLInvariantViolationResponseBody {
+	body := &GetNewClientCallbackURLInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLUnexpectedResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLUnexpectedResponseBody {
+	body := &GetNewClientCallbackURLUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLGatewayErrorResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLGatewayErrorResponseBody {
+	body := &GetNewClientCallbackURLGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetRemoteSessionClientUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "getRemoteSessionClient" endpoint of the
 // "remoteSessionClients" service.
@@ -4326,6 +6476,85 @@ func NewDeleteRemoteSessionClientGatewayErrorResponseBody(res *goa.ServiceError)
 	return body
 }
 
+// NewPrepareEMAPayload builds a remoteSessionClients service prepareEMA
+// endpoint payload.
+func NewPrepareEMAPayload(body *PrepareEMARequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.PrepareEMAPayload {
+	v := &remotesessionclients.PrepareEMAPayload{
+		UserSessionIssuerID:     *body.UserSessionIssuerID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		Resource:                *body.Resource,
+		ClientID:                body.ClientID,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		ExpectedGeneration:      *body.ExpectedGeneration,
+	}
+	if body.Mechanism != nil {
+		v.Mechanism = *body.Mechanism
+	}
+	if body.Scopes != nil {
+		v.Scopes = make([]string, len(body.Scopes))
+		for i, val := range body.Scopes {
+			v.Scopes[i] = val
+		}
+	}
+	if body.Mechanism == nil {
+		v.Mechanism = "manual"
+	}
+	if body.ResourceMetadata != nil {
+		v.ResourceMetadata = &struct {
+			Resource             string
+			AuthorizationServers []string
+		}{
+			Resource: *body.ResourceMetadata.Resource,
+		}
+		v.ResourceMetadata.AuthorizationServers = make([]string, len(body.ResourceMetadata.AuthorizationServers))
+		for i, val := range body.ResourceMetadata.AuthorizationServers {
+			v.ResourceMetadata.AuthorizationServers[i] = val
+		}
+	}
+	if body.ConfirmGrants != nil {
+		v.ConfirmGrants = make([]string, len(body.ConfirmGrants))
+		for i, val := range body.ConfirmGrants {
+			v.ConfirmGrants[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewReadEMAPayload builds a remoteSessionClients service readEMA endpoint
+// payload.
+func NewReadEMAPayload(body *ReadEMARequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.ReadEMAPayload {
+	v := &remotesessionclients.ReadEMAPayload{
+		UserSessionIssuerID:   *body.UserSessionIssuerID,
+		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
+		Resource:              *body.Resource,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewUnlinkEMAPayload builds a remoteSessionClients service unlinkEMA endpoint
+// payload.
+func NewUnlinkEMAPayload(body *UnlinkEMARequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.UnlinkEMAPayload {
+	v := &remotesessionclients.UnlinkEMAPayload{
+		UserSessionIssuerID:   *body.UserSessionIssuerID,
+		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
+		Resource:              *body.Resource,
+		ExpectedGeneration:    *body.ExpectedGeneration,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewCreateRemoteSessionClientPayload builds a remoteSessionClients service
 // createRemoteSessionClient endpoint payload.
 func NewCreateRemoteSessionClientPayload(body *CreateRemoteSessionClientRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.CreateRemoteSessionClientPayload {
@@ -4333,11 +6562,16 @@ func NewCreateRemoteSessionClientPayload(body *CreateRemoteSessionClientRequestB
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
 		ClientSecret:                    body.ClientSecret,
+		TemplateClientID:                body.TemplateClientID,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+	}
+	if body.CredentialOwner != nil {
+		v.CredentialOwner = *body.CredentialOwner
 	}
 	if body.UserSessionIssuerIds != nil {
 		v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
@@ -4350,6 +6584,9 @@ func NewCreateRemoteSessionClientPayload(body *CreateRemoteSessionClientRequestB
 		for i, val := range body.Scope {
 			v.Scope[i] = val
 		}
+	}
+	if body.CredentialOwner == nil {
+		v.CredentialOwner = "subject"
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -4389,10 +6626,14 @@ func NewCreateCimdPayload(body *CreateCimdRequestBody, sessionToken *string, api
 func NewUpdateRemoteSessionClientPayload(body *UpdateRemoteSessionClientRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.UpdateRemoteSessionClientPayload {
 	v := &remotesessionclients.UpdateRemoteSessionClientPayload{
 		ID:                              *body.ID,
+		ClientID:                        body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientSecret:                    body.ClientSecret,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		Audience:                        body.Audience,
+		ForwardClientName:               body.ForwardClientName,
+		LegacyCallbackURL:               body.LegacyCallbackURL,
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -4476,6 +6717,17 @@ func NewListRemoteSessionClientsPayload(remoteSessionIssuerID *string, userSessi
 	return v
 }
 
+// NewGetNewClientCallbackURLPayload builds a remoteSessionClients service
+// getNewClientCallbackUrl endpoint payload.
+func NewGetNewClientCallbackURLPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.GetNewClientCallbackURLPayload {
+	v := &remotesessionclients.GetNewClientCallbackURLPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewGetRemoteSessionClientPayload builds a remoteSessionClients service
 // getRemoteSessionClient endpoint payload.
 func NewGetRemoteSessionClientPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.GetRemoteSessionClientPayload {
@@ -4500,6 +6752,150 @@ func NewDeleteRemoteSessionClientPayload(id string, sessionToken *string, apikey
 	return v
 }
 
+// ValidatePrepareEMARequestBody runs the validations defined on
+// PrepareEMARequestBody
+func ValidatePrepareEMARequestBody(body *PrepareEMARequestBody) (err error) {
+	if body.ExpectedGeneration == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expected_generation", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.Resource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource", "body"))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.Resource != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource", *body.Resource, goa.FormatURI))
+	}
+	if body.Resource != nil {
+		if utf8.RuneCountInString(*body.Resource) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 1, true))
+		}
+	}
+	if body.Resource != nil {
+		if utf8.RuneCountInString(*body.Resource) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 2048, false))
+		}
+	}
+	if body.ClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id", *body.ClientID, goa.FormatUUID))
+	}
+	for _, e := range body.Scopes {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.scopes[*]", e, "^[!#-[\\]-~]+$"))
+		if utf8.RuneCountInString(e) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes[*]", e, utf8.RuneCountInString(e), 128, false))
+		}
+	}
+	if body.Mechanism != nil {
+		if !(*body.Mechanism == "manual" || *body.Mechanism == "cimd" || *body.Mechanism == "dcr") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mechanism", *body.Mechanism, []any{"manual", "cimd", "dcr"}))
+		}
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
+	}
+	if body.ResourceMetadata != nil {
+		if body.ResourceMetadata.Resource == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("resource", "body.resource_metadata"))
+		}
+		if body.ResourceMetadata.AuthorizationServers == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("authorization_servers", "body.resource_metadata"))
+		}
+	}
+	if body.ExpectedGeneration != nil {
+		if *body.ExpectedGeneration < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expected_generation", *body.ExpectedGeneration, 0, true))
+		}
+	}
+	return
+}
+
+// ValidateReadEMARequestBody runs the validations defined on ReadEMARequestBody
+func ValidateReadEMARequestBody(body *ReadEMARequestBody) (err error) {
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.Resource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource", "body"))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.Resource != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource", *body.Resource, goa.FormatURI))
+	}
+	if body.Resource != nil {
+		if utf8.RuneCountInString(*body.Resource) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 1, true))
+		}
+	}
+	if body.Resource != nil {
+		if utf8.RuneCountInString(*body.Resource) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 2048, false))
+		}
+	}
+	return
+}
+
+// ValidateUnlinkEMARequestBody runs the validations defined on
+// UnlinkEMARequestBody
+func ValidateUnlinkEMARequestBody(body *UnlinkEMARequestBody) (err error) {
+	if body.ExpectedGeneration == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expected_generation", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.Resource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource", "body"))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.Resource != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource", *body.Resource, goa.FormatURI))
+	}
+	if body.Resource != nil {
+		if utf8.RuneCountInString(*body.Resource) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 1, true))
+		}
+	}
+	if body.Resource != nil {
+		if utf8.RuneCountInString(*body.Resource) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 2048, false))
+		}
+	}
+	if body.ExpectedGeneration != nil {
+		if *body.ExpectedGeneration < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expected_generation", *body.ExpectedGeneration, 0, true))
+		}
+	}
+	return
+}
+
 // ValidateCreateRemoteSessionClientRequestBody runs the validations defined on
 // CreateRemoteSessionClientRequestBody
 func ValidateCreateRemoteSessionClientRequestBody(body *CreateRemoteSessionClientRequestBody) (err error) {
@@ -4515,6 +6911,9 @@ func ValidateCreateRemoteSessionClientRequestBody(body *CreateRemoteSessionClien
 	for _, e := range body.UserSessionIssuerIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
 	}
+	if body.TemplateClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.template_client_id", *body.TemplateClientID, goa.FormatUUID))
+	}
 	if body.TokenEndpointAuthMethod != nil {
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
@@ -4524,6 +6923,9 @@ func ValidateCreateRemoteSessionClientRequestBody(body *CreateRemoteSessionClien
 		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
 	}
 	for _, e := range body.Scope {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
@@ -4537,6 +6939,11 @@ func ValidateCreateRemoteSessionClientRequestBody(body *CreateRemoteSessionClien
 	if body.Audience != nil {
 		if utf8.RuneCountInString(*body.Audience) > 512 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+		}
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
 		}
 	}
 	if body.ClientIDIssuedAt != nil {
@@ -4586,6 +6993,16 @@ func ValidateUpdateRemoteSessionClientRequestBody(body *UpdateRemoteSessionClien
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
+	if body.ClientID != nil {
+		if utf8.RuneCountInString(*body.ClientID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_id", *body.ClientID, utf8.RuneCountInString(*body.ClientID), 1, true))
+		}
+	}
+	if body.DisplayName != nil {
+		if utf8.RuneCountInString(*body.DisplayName) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.display_name", *body.DisplayName, utf8.RuneCountInString(*body.DisplayName), 200, false))
+		}
+	}
 	if body.TokenEndpointAuthMethod != nil {
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
@@ -4603,7 +7020,7 @@ func ValidateUpdateRemoteSessionClientRequestBody(body *UpdateRemoteSessionClien
 		}
 	}
 	if body.Audience != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]*$"))
 	}
 	if body.Audience != nil {
 		if utf8.RuneCountInString(*body.Audience) > 512 {

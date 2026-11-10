@@ -14,7 +14,7 @@ func TestCredentialCodec_RoundTripKeepsOrganizationOpaque(t *testing.T) {
 	t.Parallel()
 
 	codec := newTestCredentialCodec(t)
-	credential, err := codec.Issue(refreshTokenCredential, "organization-1")
+	credential, err := codec.Issue(refreshTokenCredential, "organization-1", "")
 	require.NoError(t, err)
 	require.NotContains(t, credential, "organization-1")
 
@@ -27,7 +27,7 @@ func TestCredentialCodec_RejectsWrongKindAndTampering(t *testing.T) {
 	t.Parallel()
 
 	codec := newTestCredentialCodec(t)
-	credential, err := codec.Issue(authorizationCodeCredential, "organization-1")
+	credential, err := codec.Issue(authorizationCodeCredential, "organization-1", "")
 	require.NoError(t, err)
 
 	_, err = codec.OrganizationID(refreshTokenCredential, credential)

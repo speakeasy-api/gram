@@ -1,22 +1,34 @@
+import { defineConfig } from "vite";
 import fs from "node:fs";
 import path from "node:path";
-
-import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 
-// In production the admin dashboard and the Gram admin API share one origin,
+// In production the admin dashboard and the Speakeasy admin API share one origin,
 // so this config needs no CDN base and no build-time server URL.
 //
 // The dev proxy below reproduces that single origin locally: this dev server
 // is GRAM_ADMIN_SERVER_URL, and it forwards /admin to the admin API. It is not
 // the cross-origin machinery this app deliberately avoids: it is what lets the
 // app keep relative paths, no CORS and no `credentials: 'include'` in dev too.
-// 5173 belongs to the Gram dashboard. mise.toml owns this port and
+// 5173 belongs to the Speakeasy dashboard. mise.toml owns this port and
 // zero:remap-ports randomizes it per worktree, so the fallback only matters
 // when vite runs outside mise.
 const DEFAULT_DEV_PORT = 5174;
+
+// The address the Vite dev server listens on. It follows GRAM_BIND_IP so it
+// binds the same address as the other local daemons: loopback by default, the
+// devbox's Tailscale IP under zero:tailscale, and every interface when the
+// variable is empty, as mise.toml documents. Unset means Vite runs outside
+// mise. mise.toml brackets IPv6 literals for URLs, but Node's listen() rejects
+// the brackets. Keep in sync with client/{admin,dashboard}/vite.config.ts.
+function getHost(): string | true {
+  const bindIp = process.env["GRAM_BIND_IP"];
+  if (bindIp === undefined) return "localhost";
+  if (bindIp === "") return true;
+  return bindIp.replace(/^\[(.*)\]$/, "$1");
+}
 
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
@@ -52,6 +64,21 @@ export default defineConfig(({ command }) => {
   const adminBackendUrl = process.env["GRAM_ADMIN_BACKEND_URL"];
   if (isDev && !adminBackendUrl) {
     throw new Error("GRAM_ADMIN_BACKEND_URL must be set in development");
+  }
+  let allowSelfSignedBackend = false;
+  if (isDev && adminBackendUrl) {
+    let backend: URL;
+    try {
+      backend = new URL(adminBackendUrl);
+    } catch {
+      throw new Error("GRAM_ADMIN_BACKEND_URL must be an absolute HTTPS URL");
+    }
+    if (backend.protocol !== "https:") {
+      throw new Error("GRAM_ADMIN_BACKEND_URL must use HTTPS");
+    }
+    allowSelfSignedBackend = ["localhost", "127.0.0.1", "[::1]"].includes(
+      backend.hostname,
+    );
   }
 
   // Baked in: a different origin, so there is no runtime way to learn it.
@@ -92,8 +119,11 @@ export default defineConfig(({ command }) => {
     },
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "./src"),
-        "@gram/admin-client": path.resolve(__dirname, "./src/sdk/src"),
+        "@": path.resolve(import.meta.dirname, "./src"),
+        "@gram/admin-client": path.resolve(
+          import.meta.dirname,
+          "./src/sdk/src",
+        ),
       },
     },
     server: {
@@ -102,14 +132,30 @@ export default defineConfig(({ command }) => {
       // exactly.
       port: devPort,
       strictPort: true,
+      host: getHost(),
       https: key && cert ? { key, cert } : undefined,
       proxy: adminBackendUrl
         ? {
             "/admin": {
               target: adminBackendUrl,
               changeOrigin: true,
-              // The local admin API uses a self-signed certificate.
-              secure: false,
+              // Only the local admin API uses a self-signed certificate.
+              secure: !allowSelfSignedBackend,
+            },
+            "/admin-mcp": {
+              target: adminBackendUrl,
+              changeOrigin: true,
+              secure: !allowSelfSignedBackend,
+            },
+            "/.well-known/oauth-protected-resource/admin-mcp": {
+              target: adminBackendUrl,
+              changeOrigin: true,
+              secure: !allowSelfSignedBackend,
+            },
+            "/.well-known/oauth-authorization-server/admin-mcp/oauth": {
+              target: adminBackendUrl,
+              changeOrigin: true,
+              secure: !allowSelfSignedBackend,
             },
           }
         : undefined,

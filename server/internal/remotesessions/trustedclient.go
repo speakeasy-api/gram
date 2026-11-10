@@ -13,11 +13,15 @@ var requiredIdentityProviderScopes = [...]string{"openid", "email"}
 
 var errTrustedIdentityProviderClientIneligible = errors.New("trusted identity-provider client is ineligible")
 
-// ValidateTrustedIdentityProviderClient checks the stored configuration Gram
+// ValidateTrustedIdentityProviderClient checks the stored configuration Speakeasy
 // will use as an OAuth client of a trusted identity provider. It deliberately
 // validates the client's explicit upstream scope allowlist, not the downstream
 // scopes requested by an MCP server.
 func ValidateTrustedIdentityProviderClient(client repo.RemoteSessionClient, issuer repo.RemoteSessionIssuer) error {
+	if CredentialOwner(client.CredentialOwner) == CredentialOwnerSelf {
+		return fmt.Errorf("credential_owner self is not eligible for trusted identity-provider login; use a subject client")
+	}
+
 	effectiveScopes := client.Scope
 	if len(issuer.ScopeOverride) > 0 {
 		effectiveScopes = issuer.ScopeOverride

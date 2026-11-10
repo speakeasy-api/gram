@@ -101,7 +101,7 @@ type ShadowAIToolSummary struct {
 	DisplayName string `json:"display_name"`
 	Category    string `json:"category"`
 	// State is the enforcement verdict: allowed, blocked or unreviewed. A
-	// tool Gram cannot recognize at the gateway always reads unreviewed.
+	// tool Speakeasy cannot recognize at the gateway always reads unreviewed.
 	State string `json:"state"`
 	// Enforceable reports whether a decision about this tool could reach the
 	// gateway at all, which requires it to publish a client ID metadata
@@ -176,6 +176,15 @@ type AIScanTargetSummary struct {
 	// document, which is the only thing a gateway block can be enforced
 	// through.
 	Blockable bool `json:"blockable"`
+	// State is the enforcement verdict: allowed, blocked or unreviewed. A
+	// target that is not blockable always reads unreviewed, whatever was
+	// recorded about it.
+	State string `json:"state"`
+	// Decision is the organization's effective decision behind state:
+	// unreviewed, approved or blocked.
+	Decision string `json:"decision"`
+	// Rationale is why the decision was made, when an admin gave a reason.
+	Rationale string `json:"rationale,omitempty"`
 }
 
 type ListAIScanLibraryOutput struct {
@@ -201,12 +210,16 @@ func (s *ShadowAIService) ListLibrary(ctx context.Context, principal Principal, 
 		if category != "" && string(entry.Category) != category {
 			continue
 		}
+		access := aitargets.SummarizeAccess(entry.Target, entry.Decision)
 		targets = append(targets, AIScanTargetSummary{
 			TargetID:    entry.ID,
 			DisplayName: entry.DisplayName,
 			Category:    string(entry.Category),
 			Origin:      string(entry.Source),
-			Blockable:   aitargets.Enforceable(entry.Target),
+			Blockable:   access.Enforceable,
+			State:       string(access.State),
+			Decision:    string(access.Decision),
+			Rationale:   access.Record.Rationale,
 		})
 	}
 	return ListAIScanLibraryOutput{LibraryVersion: int64(list.Snapshot.ListVersion), Targets: targets}, nil

@@ -271,22 +271,21 @@ func (q *Queries) LockOpenRouterKeyProvisioning(ctx context.Context, arg LockOpe
 	return err
 }
 
-const prepareEnterpriseTrialConversionKey = `-- name: PrepareEnterpriseTrialConversionKey :one
+const prepareAPIKeyPolicy = `-- name: PrepareAPIKeyPolicy :one
 WITH existing AS MATERIALIZED (
   SELECT keys.key_type, keys.key_hash, keys.monthly_credits, keys.disabled, keys.disable_causes
   FROM openrouter_api_keys AS keys
   WHERE keys.organization_id = $1
     AND keys.key_type = $2
     AND keys.deleted IS FALSE
+  FOR UPDATE
 ), desired AS (
   SELECT
     key_type,
     key_hash,
-    GREATEST(monthly_credits, $3::bigint) AS monthly_credits,
-    CASE
-      WHEN key_type = 'chat' THEN array_remove(array_remove(disable_causes, 'trial_demotion'), 'billing_inactive')
-      ELSE array_remove(disable_causes, 'trial_demotion')
-    END AS disable_causes
+    COALESCE($3::bigint, GREATEST(monthly_credits, $4::bigint)) AS monthly_credits,
+    ARRAY(SELECT cause FROM unnest(disable_causes) WITH ORDINALITY AS causes(cause, position)
+      WHERE NOT (cause = ANY($5::text[])) ORDER BY position) AS disable_causes
   FROM existing
 ), updated AS (
   UPDATE openrouter_api_keys AS keys
@@ -304,7 +303,7 @@ WITH existing AS MATERIALIZED (
   WHERE keys.organization_id = $1
     AND keys.key_type = $2
     AND keys.key_hash = desired.key_hash
-    AND keys.key_hash = $4
+    AND keys.key_hash = $6
     AND keys.deleted IS FALSE
     AND keys.disable_causes IS NOT NULL
   RETURNING keys.key_hash, keys.monthly_credits, keys.disabled, keys.disable_causes
@@ -323,14 +322,16 @@ FROM existing
 LEFT JOIN updated ON TRUE
 `
 
-type PrepareEnterpriseTrialConversionKeyParams struct {
+type PrepareAPIKeyPolicyParams struct {
 	OrganizationID  string
 	KeyType         string
-	EnterpriseFloor int64
+	MonthlyCredits  pgtype.Int8
+	EnterpriseFloor pgtype.Int8
+	RemoveCauses    []string
 	ExpectedKeyHash string
 }
 
-type PrepareEnterpriseTrialConversionKeyRow struct {
+type PrepareAPIKeyPolicyRow struct {
 	KeyType              string
 	BeforeKeyHash        string
 	BeforeMonthlyCredits int64
@@ -342,16 +343,18 @@ type PrepareEnterpriseTrialConversionKeyRow struct {
 	AfterDisableCauses   []string
 }
 
-// Local-only conversion preparation. The caller owns the transaction and has
+// Local-only policy preparation. The caller owns the transaction and has
 // already acquired lifecycle and per-key advisory locks in canonical order.
-func (q *Queries) PrepareEnterpriseTrialConversionKey(ctx context.Context, arg PrepareEnterpriseTrialConversionKeyParams) (PrepareEnterpriseTrialConversionKeyRow, error) {
-	row := q.db.QueryRow(ctx, prepareEnterpriseTrialConversionKey,
+func (q *Queries) PrepareAPIKeyPolicy(ctx context.Context, arg PrepareAPIKeyPolicyParams) (PrepareAPIKeyPolicyRow, error) {
+	row := q.db.QueryRow(ctx, prepareAPIKeyPolicy,
 		arg.OrganizationID,
 		arg.KeyType,
+		arg.MonthlyCredits,
 		arg.EnterpriseFloor,
+		arg.RemoveCauses,
 		arg.ExpectedKeyHash,
 	)
-	var i PrepareEnterpriseTrialConversionKeyRow
+	var i PrepareAPIKeyPolicyRow
 	err := row.Scan(
 		&i.KeyType,
 		&i.BeforeKeyHash,

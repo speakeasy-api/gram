@@ -1,0 +1,33 @@
+{
+  "type": "module",
+  "name": "acme-tasks",
+  "version": "0.0.0",
+  "description": "Sample task tracker MCP server with fixed data, deployed to Speakeasy as a private upstream for review and monitoring.",
+  "private": true,
+  "license": "ISC",
+  "main": "dist/functions.js",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "mcp-inspector node ./src/server.ts",
+    "lint": "tsc --noEmit",
+    "test": "node --test ./src/*.test.ts",
+    "build": "speakeasy functions build",
+    "push": "speakeasy functions push"
+  },
+  "dependencies": {
+    "@speakeasy-api/functions": "^0.20.0",
+    "@modelcontextprotocol/sdk": "^1.20.1",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "^0.17.1",
+    "@types/node": "22.x",
+    "typescript": "^5"
+  }
+}

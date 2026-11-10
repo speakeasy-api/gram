@@ -42,6 +42,15 @@ func TestAdminSeedGuard(t *testing.T) {
 func TestAdminSeedFixtures(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 7, 15, 13, 20, 0, 0, time.FixedZone("offset", 3600))
+	users := adminSeedUserFixtures()
+	require.Len(t, users, 6)
+	require.Empty(t, users[0].Name)
+	require.Empty(t, users[0].Organizations)
+	require.Len(t, users[1].Organizations, 5)
+	require.True(t, users[2].Deleted)
+	require.True(t, users[3].WorkosDeleted)
+	require.True(t, users[4].DeletedMembership)
+	require.True(t, users[5].HasLogin)
 	fixtures := adminSeedFixtures(now)
 	require.Len(t, fixtures, 120)
 	ids := map[string]bool{}

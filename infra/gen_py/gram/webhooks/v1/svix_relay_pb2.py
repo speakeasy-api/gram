@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!gram/webhooks/v1/svix_relay.proto\x12\x10gram.webhooks.v1\x1a\x1bgcp/pubsub/v1/options.proto\"D\n\tSvixRelay:7\x92\xb5\x18\x33\x12\x04\x08\x80\xf5$\x18\x01\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04J\x02\x10\nR\x16gram.webhooks.v1.EventBEZCgithub.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1;webhooksv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!gram/webhooks/v1/svix_relay.proto\x12\x10gram.webhooks.v1\x1a\x1bgcp/pubsub/v1/options.proto\"@\n\tSvixRelay:3\x92\xb5\x18/\x12\x04\x08\x80\xf5$\x18\x01\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04R\x16gram.webhooks.v1.EventBEZCgithub.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1;webhooksv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZCgithub.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1;webhooksv1'
   _globals['_SVIXRELAY']._loaded_options = None
-  _globals['_SVIXRELAY']._serialized_options = b'\222\265\0303\022\004\010\200\365$\030\001\"\002\010<2\t\n\002\010\n\022\003\010\330\004J\002\020\nR\026gram.webhooks.v1.Event'
+  _globals['_SVIXRELAY']._serialized_options = b'\222\265\030/\022\004\010\200\365$\030\001\"\002\010<2\t\n\002\010\n\022\003\010\330\004R\026gram.webhooks.v1.Event'
   _globals['_SVIXRELAY']._serialized_start=84
-  _globals['_SVIXRELAY']._serialized_end=152
+  _globals['_SVIXRELAY']._serialized_end=148
 # @@protoc_insertion_point(module_scope)

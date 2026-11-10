@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -104,6 +105,10 @@ type testInstance struct {
 type testServiceConfig struct {
 	tunnelRouting bool
 	maxDBConns    int32
+	lockTimeout   time.Duration
+	// noProber builds the service without a protected resource prober, so
+	// scope resolution ignores resource rows.
+	noProber bool
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -132,6 +137,10 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		t.Cleanup(conn.Close)
 	}
 
+	if cfg.lockTimeout > 0 {
+		conn = testenv.NewLockTimeoutPool(t, conn, cfg.lockTimeout)
+	}
+
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	redisCache := cache.NewRedisCacheAdapter(redisClient)
@@ -154,6 +163,10 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 	}
 
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	prober := protectedresource.NewProber(conn, guardianPolicy)
+	if cfg.noProber {
+		prober = nil
+	}
 
 	svc := remotesessions.NewService(
 		logger,
@@ -168,8 +181,10 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		tunnels,
 		audit.NewLogger(),
 		serverURL,
+		remotesessions.NewIdentityCommitter(logger, conn, enc, audit.NewLogger(), serverURL, guardianPolicy, tunnels, nil),
 		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, tunnels, redisCache),
 		features,
+		prober,
 	)
 
 	return ctx, &testInstance{
@@ -255,11 +270,13 @@ func insertRemoteSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)
 
+	ciphertext, err := testenv.NewEncryptionClient(t).Encrypt([]byte("fixture-access"))
+	require.NoError(t, err)
 	row, err := repo.New(conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn:            principal,
 		UserSessionIssuerID:   userIssuerUUID,
 		RemoteSessionClientID: clientUUID,
-		AccessTokenEncrypted:  "ciphertext",
+		AccessTokenEncrypted:  ciphertext,
 		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 		Scopes:                []string{},
 	})
@@ -889,7 +906,7 @@ func revokeJsonWebKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 func forceTokenEndpointAuthMethod(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID uuid.UUID, projectID uuid.UUID, method string) {
 	t.Helper()
 
-	rows, err := repo.New(conn).ForceRemoteSessionClientAuthMethodFixture(ctx, repo.ForceRemoteSessionClientAuthMethodFixtureParams{
+	rows, err := testrepo.New(conn).ForceRemoteSessionClientAuthMethodFixture(ctx, testrepo.ForceRemoteSessionClientAuthMethodFixtureParams{
 		TokenEndpointAuthMethod: conv.ToPGText(method),
 		ID:                      clientID,
 		ProjectID:               conv.ToNullUUID(projectID),

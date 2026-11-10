@@ -623,14 +623,18 @@ func TestUpdateServer_OverlappingSavesReadPreviousURLUnderLock(t *testing.T) {
 
 	firstClaiming := make(chan struct{})
 	release := make(chan struct{})
+	releaseHolder := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(releaseHolder)
 	var mu sync.Mutex
 	var previous []string
 	var calls atomic.Int32
-	ti.service.SetBeforeClaim(func(previousURL string) {
+	var holderPID atomic.Uint32
+	ti.service.SetBeforeClaim(func(pid uint32, previousURL string) {
 		mu.Lock()
 		previous = append(previous, previousURL)
 		mu.Unlock()
 		if calls.Add(1) == 1 {
+			holderPID.Store(pid)
 			close(firstClaiming)
 			<-release
 		}
@@ -664,8 +668,8 @@ func TestUpdateServer_OverlappingSavesReadPreviousURLUnderLock(t *testing.T) {
 		})
 		moveToC <- err
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
-	close(release)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, holderPID.Load(), 1)
+	releaseHolder()
 	require.NoError(t, <-moveToB)
 	require.NoError(t, <-moveToC)
 
@@ -691,7 +695,7 @@ func TestUpdateServer_ClientDeletedDuringClaimIsSkipped(t *testing.T) {
 	attached := seedAttachedResource(t, ctx, ti, server, "https://a.example.test/mcp")
 	doomed := seedIssuerClient(t, ctx, ti, attached.issuer, attached.userSessionIssuerID, "https://a.example.test/mcp")
 
-	ti.service.SetBeforeClaim(func(string) {
+	ti.service.SetBeforeClaim(func(uint32, string) {
 		_, err := remotesessionsrepo.New(ti.conn).DeleteRemoteSessionClient(ctx, remotesessionsrepo.DeleteRemoteSessionClientParams{
 			ID:        doomed.ID,
 			ProjectID: doomed.ProjectID,

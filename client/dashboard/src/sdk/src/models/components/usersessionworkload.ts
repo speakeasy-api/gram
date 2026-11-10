@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -24,7 +25,7 @@ export const AgentStatus = {
 /**
  * Lifecycle state of the assigned agent.
  */
-export type AgentStatus = ClosedEnum<typeof AgentStatus>;
+export type AgentStatus = OpenEnum<typeof AgentStatus>;
 
 /**
  * The workload behind a workload session.
@@ -65,8 +66,8 @@ export type UserSessionWorkload = {
 };
 
 /** @internal */
-export const AgentStatus$inboundSchema: z.ZodMiniEnum<typeof AgentStatus> = z
-  .enum(AgentStatus);
+export const AgentStatus$inboundSchema: z.ZodMiniType<AgentStatus, unknown> =
+  openEnums.inboundSchema(AgentStatus);
 
 /** @internal */
 export const UserSessionWorkload$inboundSchema: z.ZodMiniType<

@@ -1,4 +1,5 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook as testingRenderHook } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlatformSetupStep } from "../types";
 
@@ -21,16 +22,17 @@ vi.mock("@gram/client/react-query/createAPIKey", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "default",
-}));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ deviceAgent: { href: () => "/acme/device-agent" } }),
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
 }));
 
-import { AGENT_PLATFORMS } from "../setup-data";
+import { getAgentPlatforms } from "../setup-data";
 import {
   usePlatformApiKeys,
   usePlatformPlaceholders,
 } from "./platform-setup-values";
+
+const renderHook = <Result,>(hook: () => Result) =>
+  testingRenderHook(hook, { wrapper: MemoryRouter });
 
 function step(code: string): PlatformSetupStep {
   return { title: "step", code, language: "text" };
@@ -105,6 +107,27 @@ describe("usePlatformPlaceholders", () => {
     );
   });
 
+  it.each([
+    "../other",
+    "plugin'; touch injected; #",
+    "{{UNRESOLVED}}",
+    "Plugin",
+    "plugin_name",
+  ])(
+    "withholds unsafe Cursor slug %s before shell interpolation",
+    (cursorObservabilityPlugin) => {
+      mocks.publishStatus = {
+        ...mocks.publishStatus!,
+        cursorObservabilityPlugin,
+      };
+      const { result } = renderHook(() => usePlatformPlaceholders());
+      const cursorStep = platform(
+        "cursor",
+      ).setupSteps[0]!.eligibility!.personalSteps.find(({ code }) => code)!;
+      expect(result.current.snippetFor(cursorStep)).toBeUndefined();
+    },
+  );
+
   it("withholds a plugin-slug snippet when the server reports none", () => {
     // Absent when observability is disabled for the project, or when the read
     // failed — either way the snippet would name nothing.
@@ -128,18 +151,19 @@ describe("usePlatformPlaceholders", () => {
     const { result } = renderHook(() => usePlatformPlaceholders());
     const keyed: PlatformSetupStep = {
       title: "keyed",
-      code: "Gram-Key={{GRAM_API_KEY}}",
+      code: "Speakeasy-AI-Key={{GRAM_API_KEY}}",
       requiresApiKey: true,
     };
 
     expect(result.current.snippetFor(keyed)).toBeUndefined();
     expect(result.current.snippetFor(keyed, "gram_live_x")).toBe(
-      "Gram-Key=gram_live_x",
+      "Speakeasy-AI-Key=gram_live_x",
     );
   });
 });
 
-const platform = (id: string) => AGENT_PLATFORMS.find((p) => p.id === id)!;
+const platform = (id: string) =>
+  getAgentPlatforms("https://app.getgram.ai").find((p) => p.id === id)!;
 const callbacks = (index = 0) =>
   mocks.mutate.mock.calls[index]![1] as {
     onSuccess: (data: { key?: string }) => void;

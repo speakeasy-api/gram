@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -18,16 +19,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // A GitHub Actions subject: colons inside the external subject are what make a
 // fixed-segment parse of the session subject wrong.
 const workloadTestSubject = "repo:acme/payments-api:ref:refs/heads/main"
 
-// seedWorkloadIssuer registers a workload issuer directly. There is no create
-// query yet: writes belong to the workload identity management API.
+// seedWorkloadIssuer registers a workload issuer in the caller's organization.
 func seedWorkloadIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.NullUUID, name string) uuid.UUID {
 	t.Helper()
 
@@ -35,16 +37,31 @@ func seedWorkloadIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, p
 	require.True(t, ok)
 
 	issuer := "https://token.actions.example.com/" + uuid.NewString()
-	var id uuid.UUID
-	err := conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `
-		INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`, authCtx.ActiveOrganizationID, projectID, name, issuer, issuer+"/.well-known/jwks.json").Scan(&id)
+	id, err := testrepo.New(conn).CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           name,
+		Issuer:         issuer,
+		JwksUri:        issuer + "/.well-known/jwks.json",
+	})
 	require.NoError(t, err)
 
 	return id
+}
+
+// softDeleteWorkloadIssuer tombstones a workload issuer in the caller's
+// organization.
+func softDeleteWorkloadIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, id uuid.UUID) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	deleted, err := testrepo.New(conn).SoftDeleteWorkloadIssuerFixture(ctx, testrepo.SoftDeleteWorkloadIssuerFixtureParams{
+		ID: id, OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
 }
 
 // seedWorkloadAgent creates an agent in the caller's organization, with the
@@ -82,19 +99,19 @@ func seedWorkloadAgent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, na
 }
 
 // seedWorkloadAssignment assigns an agent to a workload principal directly.
-// There is no create query yet: writes belong to the workload identity
-// management API.
+// Writes belong to the workload identity management API, so this uses a fixture.
 func seedWorkloadAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, subject string, agentID uuid.UUID) {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	_, err := conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `
-		INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
-		VALUES ($1, $2, $3, $4)
-	`, authCtx.ActiveOrganizationID, issuerID, subject, agentID)
+	err := usersessionsrepo.New(conn).SeedWorkloadAgentAssignmentFixture(ctx, usersessionsrepo.SeedWorkloadAgentAssignmentFixtureParams{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		WorkloadIssuerID: issuerID,
+		Subject:          subject,
+		AgentID:          agentID,
+	})
 	require.NoError(t, err)
 }
 
@@ -106,13 +123,13 @@ func seedWorkloadAdmission(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	var id uuid.UUID
-	err := conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `
-		INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, name)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`, authCtx.ActiveOrganizationID, projectID, issuerID, subject, name).Scan(&id)
+	id, err := usersessionsrepo.New(conn).SeedWorkloadAdmissionFixture(ctx, usersessionsrepo.SeedWorkloadAdmissionFixtureParams{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        projectID,
+		WorkloadIssuerID: issuerID,
+		Subject:          subject,
+		Name:             pgtype.Text{String: name, Valid: true},
+	})
 	require.NoError(t, err)
 
 	return id
@@ -275,8 +292,7 @@ func TestListUserSessions_ListsEveryAdmissionLettingTheWorkloadIn(t *testing.T) 
 	siblingProjectID := createSiblingProject(t, ctx, ti.conn, "workload-admissions-sibling")
 
 	withdrawn := seedWorkloadAdmission(t, ctx, ti.conn, project, workloadIssuerID, workloadTestSubject, "Withdrawn admission")
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = $1`, withdrawn)
+	err := usersessionsrepo.New(ti.conn).WithdrawWorkloadAdmissionFixture(ctx, withdrawn)
 	require.NoError(t, err)
 
 	projectAdmission := seedWorkloadAdmission(t, ctx, ti.conn, project, workloadIssuerID, workloadTestSubject, "Project admission")
@@ -305,9 +321,7 @@ func TestListUserSessions_AdmissionsUnderDeletedIssuerAreNotListed(t *testing.T)
 	issuerID := seedIssuer(t, ctx, ti, "workload-deleted-issuer")
 	workloadIssuerID := seedWorkloadIssuer(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "Deleted issuer")
 	seedWorkloadAdmission(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID, workloadTestSubject, "Orphaned admission")
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `UPDATE workload_issuers SET deleted_at = clock_timestamp() WHERE id = $1`, workloadIssuerID)
-	require.NoError(t, err)
+	softDeleteWorkloadIssuer(t, ctx, ti.conn, workloadIssuerID)
 
 	session, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewWorkloadSubject(workloadIssuerID, workloadTestSubject))
 	require.NoError(t, err)
@@ -336,9 +350,7 @@ func TestListUserSessions_DeletedIssuerDropsTheAssignedAgent(t *testing.T) {
 	live := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
 	require.NotNil(t, live.AgentID, "the assignment resolves while the issuer is live")
 
-	_, err = ti.conn.Exec( //nolint:glint // notestingrawsql: no delete query exists yet; writes belong to the management API milestone
-		ctx, `UPDATE workload_issuers SET deleted_at = clock_timestamp() WHERE id = $1`, workloadIssuerID)
-	require.NoError(t, err)
+	softDeleteWorkloadIssuer(t, ctx, ti.conn, workloadIssuerID)
 
 	got := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
 	require.NotNil(t, got)

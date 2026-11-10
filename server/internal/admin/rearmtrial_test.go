@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -118,7 +120,6 @@ func (p *rearmProvisioner) PrepareEnterpriseTrialConversionKeyWithDB(ctx context
 		return openrouter.EnterpriseTrialConversionKeyChange{}, fmt.Errorf("prepare enterprise conversion key: %w", err)
 	}
 	return change, nil
-
 }
 
 func (p *rearmProvisioner) ReconcileAPIKeyDisabled(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
@@ -395,8 +396,7 @@ func newProductionRearmService(t *testing.T) (context.Context, *Service, *pgxpoo
 	option, err := openrouter.WithTestBaseURL(server.URL)
 	require.NoError(t, err)
 	svc.openRouter = openrouter.New(
-		testenv.NewLogger(t), testenv.NewTracerProvider(t), policy, conn, "test", "provisioning-key",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), testenv.NewTracerProvider(t), policy, conn, "test", "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 
 	return ctx, svc, conn, upstream
@@ -627,6 +627,45 @@ func TestRearmTrial_MissingArmAuditIsRejected(t *testing.T) {
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.Zero(t, upstream.count())
+}
+
+func TestRearmTrial_AdminStartedGenerationCanBeRearmed(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, upstream := newProductionRearmService(t)
+	const orgID = "org_rearm_admin_started"
+	endsAt := time.Now().UTC().Add(-10 * 24 * time.Hour)
+	demotedAt := time.Now().UTC().Add(-9 * 24 * time.Hour)
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: endsAt, demotedAt: &demotedAt})
+	startOperationID, err := testrepo.New(conn).SeedTrialStartAuditFixture(ctx, orgID)
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).SeedTrialDemotionAuditFixture(ctx, orgID))
+	for _, keyType := range openrouter.AllKeyTypes {
+		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 50, disabled: true})
+	}
+
+	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	require.NoError(t, err)
+
+	rearmed := readTrial(t, ctx, conn, orgID)
+	require.False(t, rearmed.DemotedAt.Valid)
+	require.True(t, rearmed.EndsAt.Time.After(endsAt))
+	require.True(t, rearmed.EndsAt.Time.After(time.Now()))
+	for _, keyType := range openrouter.AllKeyTypes {
+		key := readOpenRouterKey(t, ctx, conn, orgID, keyType)
+		require.Empty(t, key.DisableCauses)
+		require.False(t, key.Disabled)
+	}
+	require.Equal(t, len(openrouter.AllKeyTypes), upstream.count())
+
+	rearmAudit, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
+	require.NoError(t, err)
+	var metadata struct {
+		ArmOperationID string `json:"arm_operation_id"`
+	}
+	require.NoError(t, json.Unmarshal(rearmAudit.Metadata, &metadata))
+	require.Equal(t, startOperationID, metadata.ArmOperationID)
 }
 
 func TestRearmTrial_AmbiguousRetryAuditIsRejected(t *testing.T) {
@@ -866,13 +905,7 @@ func TestRearmTrial_LocksLifecycleBeforeAllKeyLocksAndRows(t *testing.T) {
 
 	waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelWait()
-	requireAdminCondition(t, waitCtx, conn, func(check context.Context) (bool, error) {
-		blocked, err := testrepo.New(conn).IsQueryBlockedOnLockFixture(check, "%SELECT tier, ends_at, converted_at, demoted_at%")
-		if err != nil {
-			return false, fmt.Errorf("check blocked trial re-arm query: %w", err)
-		}
-		return blocked, nil
-	}, "re-arm did not block on the lifecycle row")
+	testenv.WaitForBackendsBlockedBy(t, waitCtx, conn, testenv.BackendPID(rowLock), 1)
 
 	probe, err := conn.Acquire(ctx)
 	require.NoError(t, err)
@@ -906,24 +939,13 @@ func TestRearmTrial_LocksLifecycleBeforeAllKeyLocksAndRows(t *testing.T) {
 	require.NoError(t, rowLock.Commit(ctx))
 	chatCtx, cancelChat := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelChat()
-	requireAdminCondition(t, chatCtx, conn, func(check context.Context) (bool, error) {
-		acquired, err := testrepo.New(probe).TryAcquireOpenRouterKeyBillingLockFixture(check, testrepo.TryAcquireOpenRouterKeyBillingLockFixtureParams{
-			KeyType: string(openrouter.KeyTypeChat), OrganizationID: orgID,
-		})
-		if err != nil {
-			return false, fmt.Errorf("probe chat billing lock: %w", err)
-		}
-		if !acquired {
-			return true, nil
-		}
-		_, err = activitiesrepo.New(probe).ReleaseOpenRouterKeyBillingLock(check, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams{
-			OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat),
-		})
-		if err != nil {
-			return false, fmt.Errorf("release chat billing lock probe: %w", err)
-		}
-		return false, nil
-	}, "chat lock was not acquired before the blocked internal lock")
+	testenv.WaitForBackendsBlockedBy(t, chatCtx, conn, internalLock.Conn().PgConn().PID(), 1)
+	chatProbe := testenv.BeginTx(t, ctx, conn)
+	// probeTimeout bounds the server's wait on the chat advisory lock.
+	const probeTimeout = 100 * time.Millisecond
+	testenv.SetLockTimeout(t, ctx, chatProbe, probeTimeout)
+	testenv.RequireLockNotAvailable(t, usagerepo.New(chatProbe).AcquireOpenRouterBillingLock(ctx, usagerepo.AcquireOpenRouterBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)}))
+	require.NoError(t, chatProbe.Rollback(ctx))
 
 	keyProbe := testenv.BeginTx(t, ctx, conn)
 	causesByKey, err := testrepo.New(keyProbe).ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture(ctx, orgID)
@@ -944,24 +966,6 @@ func TestRearmTrial_LocksLifecycleBeforeAllKeyLocksAndRows(t *testing.T) {
 		require.NoError(t, err)
 	case <-time.After(3 * time.Second):
 		require.FailNow(t, "re-arm did not finish after releasing locks")
-	}
-}
-
-func requireAdminCondition(t *testing.T, ctx context.Context, _ *pgxpool.Pool, condition func(context.Context) (bool, error), message string) {
-	t.Helper()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		met, err := condition(ctx)
-		require.NoError(t, err)
-		if met {
-			return
-		}
-		select {
-		case <-ctx.Done():
-			require.FailNow(t, message, ctx.Err().Error())
-		case <-ticker.C:
-		}
 	}
 }
 

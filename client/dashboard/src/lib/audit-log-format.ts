@@ -3,7 +3,29 @@ import { isAuditAction, staticActionPhrase } from "@/lib/audit-actions";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 
 export function getActorLabel(log: AuditLog): string {
-  return log.actorDisplayName || log.actorSlug || "Someone";
+  // The server nulls the display name and slug for an agent actor, so
+  // without this every agent-made change read as "Someone". An agent is a
+  // named thing; saying so beats a word that suggests we lost the name.
+  if (log.actorType === "agent") {
+    // Some writers prefix the actor id with its type, as the principal
+    // parser already allows for. Shortening that gives "Agent agent:ab":
+    // the type twice and two characters of the id.
+    const id = log.actorId.startsWith("agent:")
+      ? log.actorId.slice("agent:".length)
+      : log.actorId;
+    return `Agent ${id.slice(0, 8)}`;
+  }
+  const stored = log.actorDisplayName || log.actorSlug;
+  if (stored) return stored;
+  // A system actor is a Speakeasy component working with no person behind
+  // it. It is never anonymous, so it must not read as "Someone".
+  if (
+    log.actorType === "system" ||
+    ["system", "user:system"].includes(log.actorId)
+  ) {
+    return "Speakeasy";
+  }
+  return "Someone";
 }
 
 export function formatAuditAction(action: string): string {
@@ -151,6 +173,20 @@ function recordString(value: unknown, key: string): string | undefined {
   return typeof field === "string" && field !== "" ? field : undefined;
 }
 
+/**
+ * The sensitive scopes a role or membership change gave, as the server
+ * recorded them (`sensitive_scopes_added` in the row's metadata). Empty for
+ * every other row.
+ */
+export function sensitiveScopesAdded(log: AuditLog): string[] {
+  if (log.metadata == null || typeof log.metadata !== "object") return [];
+  const added = (log.metadata as Record<string, unknown>)[
+    "sensitive_scopes_added"
+  ];
+  if (!Array.isArray(added)) return [];
+  return added.filter((scope): scope is string => typeof scope === "string");
+}
+
 function humanizeSlug(slug: string): string {
   return slug.replace(/[-_]/g, " ");
 }
@@ -177,6 +213,13 @@ function describeInvitation(log: AuditLog): string | undefined {
   }
 
   return undefined;
+}
+
+function describeAuthClientDetach(log: AuditLog): string | undefined {
+  const server =
+    recordString(log.metadata, "mcp_server_name") ??
+    recordString(log.metadata, "mcp_server_id");
+  return server ? `removed MCP server ${server} from auth client` : undefined;
 }
 
 function describeProductFeatureToggle(log: AuditLog): string | undefined {
@@ -278,7 +321,7 @@ export function formatAuditActionLabel(action: string): string {
   const phrase = isAuditAction(action)
     ? staticActionPhrase(action)
     : describeUnknownAction(action);
-  const trimmed = phrase.replace(/\s+(for|to|from|on)$/, "");
+  const trimmed = phrase.replace(/\s+(for|to|from|on|under)$/, "");
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
@@ -293,6 +336,8 @@ export function renderVerb(log: AuditLog): string {
     case "organization_invitation:create":
     case "organization_invitation:update_role":
       return describeInvitation(log) ?? staticActionPhrase(log.action);
+    case "auth-client:detach-mcp-server":
+      return describeAuthClientDetach(log) ?? staticActionPhrase(log.action);
     case "organization:product_feature_enabled":
     case "organization:product_feature_disabled":
       return (

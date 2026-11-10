@@ -23,9 +23,10 @@ const mocks = vi.hoisted(() => {
     fetchRemoteSessionIssuerMetadata: vi.fn().mockResolvedValue({}),
     createRemoteSessionIssuer: vi.fn().mockResolvedValue({ id: "rsi-1" }),
     createRemoteSessionClient: vi.fn().mockResolvedValue({ id: "rsc-1" }),
-    setToolsetUserSessionIssuer: vi.fn().mockResolvedValue(undefined),
+    linkToolsetUserSessionIssuer: vi.fn().mockResolvedValue(undefined),
     capture: vi.fn(),
     invalidateAllToolset: vi.fn(),
+    invalidateAllMcpServers: vi.fn(),
     invalidateAllGetMcpMetadata: vi.fn(),
     invalidateAllListEnvironments: vi.fn(),
     isFeatureEnabled: vi.fn(() => false),
@@ -37,6 +38,9 @@ vi.mock("@gram/client/react-query/toolset.js", () => ({
   invalidateAllToolset: mocks.invalidateAllToolset,
 }));
 
+vi.mock("@gram/client/react-query/mcpServers.js", () => ({
+  invalidateAllMcpServers: mocks.invalidateAllMcpServers,
+}));
 vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
   invalidateAllGetMcpMetadata: mocks.invalidateAllGetMcpMetadata,
 }));
@@ -91,11 +95,8 @@ vi.mock("@gram/client/react-query/createRemoteSessionClient.js", () => ({
   }),
 }));
 
-vi.mock("@gram/client/react-query/setToolsetUserSessionIssuer.js", () => ({
-  buildSetToolsetUserSessionIssuerMutation: () => ({
-    mutationKey: [],
-    mutationFn: mocks.setToolsetUserSessionIssuer,
-  }),
+vi.mock("@/lib/linkUserSessionIssuer", () => ({
+  linkToolsetUserSessionIssuer: mocks.linkToolsetUserSessionIssuer,
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -110,6 +111,7 @@ vi.mock("@/contexts/Fetcher", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("@/contexts/Telemetry", () => ({
@@ -121,14 +123,6 @@ vi.mock("@/contexts/Telemetry", () => ({
 
 vi.mock("@/hooks/useProductTier", () => ({
   useProductTier: () => mocks.productTier,
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    environments: {
-      Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
-    },
-  }),
 }));
 
 vi.mock("@/components/FeatureRequestModal", () => ({
@@ -167,6 +161,7 @@ import { ConnectOAuthModal } from "./OAuthWizard";
 // ---------------------------------------------------------------------------
 
 const toolset = {
+  id: "toolset-1",
   name: "MyToolset",
   slug: "mytoolset",
   mcpSlug: "mytoolset",
@@ -260,7 +255,7 @@ describe("OAuthWizard - external OAuth sources", () => {
       screen.getByRole("button", { name: /Provider-hosted metadata/ }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: /Gram-hosted metadata/ }),
+      screen.getByRole("button", { name: /Speakeasy-hosted metadata/ }),
     ).toBeTruthy();
     expect(screen.queryByLabelText("OAuth Server Slug")).toBeNull();
   });
@@ -317,16 +312,16 @@ describe("OAuthWizard - external OAuth sources", () => {
     );
   });
 
-  it("warns that Gram-hosted metadata is for multi-origin compatibility", () => {
+  it("warns that Speakeasy-hosted metadata is for multi-origin compatibility", () => {
     renderWizard();
     fireEvent.click(screen.getByRole("button", { name: /External OAuth/ }));
     fireEvent.click(
-      screen.getByRole("button", { name: /Gram-hosted metadata/ }),
+      screen.getByRole("button", { name: /Speakeasy-hosted metadata/ }),
     );
 
     expect(
       screen.getByText(
-        "Gram hosts authorization-server metadata in this mode. Modern clients may reject multi-origin OAuth configurations without issuer-bound responses.",
+        "Speakeasy hosts authorization-server metadata in this mode. Modern clients may reject multi-origin OAuth configurations without issuer-bound responses.",
       ),
     ).toBeTruthy();
     expect(screen.getByLabelText("OAuth Metadata JSON")).toBeTruthy();
@@ -381,6 +376,7 @@ describe("OAuthWizard — existing external OAuth config", () => {
       expect(mocks.updateExternalOAuth).toHaveBeenCalledTimes(1),
     );
     expect(mocks.invalidateAllToolset).toHaveBeenCalled();
+    expect(mocks.invalidateAllMcpServers).toHaveBeenCalled();
     expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
   });
 
@@ -445,10 +441,10 @@ describe("OAuthWizard — existing external OAuth config", () => {
     );
   });
 
-  it("resets a Gram-hosted metadata draft after closing", () => {
+  it("resets a Speakeasy-hosted metadata draft after closing", () => {
     const rendered = renderWizard({ existingConfig });
     fireEvent.click(
-      screen.getByRole("button", { name: "Keep Gram-hosted metadata" }),
+      screen.getByRole("button", { name: "Keep Speakeasy-hosted metadata" }),
     );
     fireEvent.change(screen.getByLabelText("OAuth Metadata JSON"), {
       target: { value: '{"issuer":"https://draft.example.com"}' },
@@ -470,7 +466,7 @@ describe("OAuthWizard — existing external OAuth config", () => {
     rendered.rerender(modal(false));
     rendered.rerender(modal(true));
     fireEvent.click(
-      screen.getByRole("button", { name: "Keep Gram-hosted metadata" }),
+      screen.getByRole("button", { name: "Keep Speakeasy-hosted metadata" }),
     );
 
     expect(
@@ -546,12 +542,12 @@ describe("OAuthWizard — existing external OAuth config", () => {
   it("confirms clearing with stored metadata and never discovers", async () => {
     renderWizard({ existingConfig });
     fireEvent.click(
-      screen.getByRole("button", { name: "Keep Gram-hosted metadata" }),
+      screen.getByRole("button", { name: "Keep Speakeasy-hosted metadata" }),
     );
     expect(mocks.updateExternalOAuth).not.toHaveBeenCalled();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Confirm Gram-hosted metadata" }),
+      screen.getByRole("button", { name: "Confirm Speakeasy-hosted metadata" }),
     );
     await waitFor(() =>
       expect(mocks.updateExternalOAuth).toHaveBeenCalledTimes(1),
@@ -576,13 +572,13 @@ describe("OAuthWizard — existing external OAuth config", () => {
       },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "Use Gram-hosted metadata" }),
+      screen.getByRole("button", { name: "Use Speakeasy-hosted metadata" }),
     );
     fireEvent.change(screen.getByLabelText("OAuth Metadata JSON"), {
       target: { value: JSON.stringify(existingConfig.metadata) },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "Confirm Gram-hosted metadata" }),
+      screen.getByRole("button", { name: "Confirm Speakeasy-hosted metadata" }),
     );
 
     await waitFor(() => expect(mocks.updateExternalOAuth).toHaveBeenCalled());
@@ -604,15 +600,15 @@ describe("OAuthWizard — existing external OAuth config", () => {
     );
     renderWizard({ existingConfig });
     fireEvent.click(
-      screen.getByRole("button", { name: "Keep Gram-hosted metadata" }),
+      screen.getByRole("button", { name: "Keep Speakeasy-hosted metadata" }),
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Confirm Gram-hosted metadata" }),
+      screen.getByRole("button", { name: "Confirm Speakeasy-hosted metadata" }),
     );
 
     expect(await screen.findByText("update rejected")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Confirm Gram-hosted metadata" }),
+      screen.getByRole("button", { name: "Confirm Speakeasy-hosted metadata" }),
     ).toBeTruthy();
   });
 });
@@ -656,9 +652,27 @@ describe("OAuthWizard — happy proxy create", () => {
 
     expect(mocks.createUserSessionIssuer).toHaveBeenCalledTimes(1);
     expect(mocks.createRemoteSessionIssuer).toHaveBeenCalledTimes(1);
+    // Discovery succeeded with a document that omits the lists; entered scopes are kept.
+    expect(
+      mocks.createRemoteSessionIssuer.mock.calls[0]![0].request
+        .createRemoteSessionIssuerForm,
+    ).toMatchObject({
+      scopesSupported: ["read", "write"],
+      grantTypesSupported: [],
+      authorizationGrantProfilesSupported: [],
+      responseTypesSupported: [],
+      tokenEndpointAuthMethodsSupported: [],
+    });
     expect(mocks.createRemoteSessionClient).toHaveBeenCalledTimes(1);
-    expect(mocks.setToolsetUserSessionIssuer).toHaveBeenCalledTimes(1);
+    expect(mocks.linkToolsetUserSessionIssuer).toHaveBeenCalledTimes(1);
+    expect(mocks.linkToolsetUserSessionIssuer).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: "toolset-1" },
+      "usi-1",
+      expect.objectContaining({ fetchOptions: expect.anything() }),
+    );
     expect(mocks.invalidateAllToolset).toHaveBeenCalled();
+    expect(mocks.invalidateAllMcpServers).toHaveBeenCalled();
     expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
     expect(mocks.invalidateAllListEnvironments).toHaveBeenCalled();
     expect(mocks.capture).toHaveBeenCalledWith(
@@ -668,6 +682,52 @@ describe("OAuthWizard — happy proxy create", () => {
 
     fireEvent.click(screen.getByText("Done"));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("OAuthWizard — proxy create without discovery", () => {
+  it("falls back to operator defaults and omits grant profiles", async () => {
+    mocks.fetchRemoteSessionIssuerMetadata.mockRejectedValueOnce(
+      new Error("discovery failed"),
+    );
+    renderWizard();
+
+    fireEvent.click(screen.getByRole("button", { name: /OAuth Proxy/ }));
+    fireEvent.change(screen.getByPlaceholderText("my-oauth-proxy"), {
+      target: { value: "new-proxy" },
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText("https://provider.com/oauth/authorize"),
+      { target: { value: "https://e.example/auth" } },
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText("https://provider.com/oauth/token"),
+      { target: { value: "https://e.example/token" } },
+    );
+    fireEvent.change(screen.getByPlaceholderText("read, write, openid"), {
+      target: { value: "read" },
+    });
+    fireEvent.click(screen.getByText("Next"));
+    fireEvent.change(screen.getByPlaceholderText("your-client-id"), {
+      target: { value: "cid" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("your-client-secret"), {
+      target: { value: "csec" },
+    });
+    fireEvent.click(screen.getByText("Configure OAuth Proxy"));
+
+    await waitFor(() => {
+      expect(mocks.createRemoteSessionIssuer).toHaveBeenCalledTimes(1);
+    });
+    const form =
+      mocks.createRemoteSessionIssuer.mock.calls[0]![0].request
+        .createRemoteSessionIssuerForm;
+    expect(form).toMatchObject({
+      scopesSupported: ["read"],
+      grantTypesSupported: ["authorization_code", "refresh_token"],
+      responseTypesSupported: ["code"],
+    });
+    expect(form.authorizationGrantProfilesSupported).toBeUndefined();
   });
 });
 
@@ -707,6 +767,6 @@ describe("OAuthWizard — provisioning failure", () => {
     });
 
     expect(mocks.createUserSessionIssuer).toHaveBeenCalledTimes(1);
-    expect(mocks.setToolsetUserSessionIssuer).not.toHaveBeenCalled();
+    expect(mocks.linkToolsetUserSessionIssuer).not.toHaveBeenCalled();
   });
 });

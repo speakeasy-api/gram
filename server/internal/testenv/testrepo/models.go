@@ -11,128 +11,350 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type DeviceAgentStateReport struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential-pii
+	Email string
+	// @access: confidential-pii
+	SerialNumber pgtype.Text
+	// @access: confidential-pii
+	Hostname pgtype.Text
+	// @access: confidential
+	SchemaVersion int32
+	// @access: confidential
+	GeneratedAt pgtype.Timestamptz
+	// @access: confidential
+	ReportedAt pgtype.Timestamptz
+	// @access: confidential
+	AppliedEtag pgtype.Text
+	// @access: confidential
+	AppliedAt pgtype.Timestamptz
+	// @access: confidential
+	EnforcementHalted bool
+	// @access: confidential
+	RemoteConfigEtag pgtype.Text
+	// @access: confidential
+	RemoteConfigFailed bool
+	// Marketplace and plugin slugs chosen by the organization.
+	// @access: opaque-confidential
+	WithheldPlugins []byte
+	// Speakeasy-defined tool ids and enforcement enums.
+	// @access: confidential
+	Tools []byte
+	// @access: confidential
+	DegradedToolCount int32
+	// @access: confidential
+	DriftCountingSince pgtype.Timestamptz
+	// @access: confidential
+	SpeakeasydVersion pgtype.Text
+	// @access: confidential
+	SpeakeasyVersion pgtype.Text
+	// @access: confidential
+	SpeakeasyUiVersion pgtype.Text
+	// @access: confidential
+	Os pgtype.Text
+	// @access: confidential
+	Arch pgtype.Text
+	// @access: confidential
+	AutoUpdate pgtype.Text
+	// @access: confidential
+	UpdateChannel pgtype.Text
+	// @access: confidential
+	PinnedTarget pgtype.Text
+	// @access: confidential
+	CurrentBlocked bool
+	// @access: confidential
+	LastRollbackAt pgtype.Timestamptz
+	// @access: confidential
+	LastRollbackFrom pgtype.Text
+	// @access: confidential
+	LastRollbackTo pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type FunctionResourceDefinition struct {
-	ID           uuid.UUID
-	ResourceUrn  urn.Resource
-	ProjectID    uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: restricted
+	ResourceUrn urn.Resource
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	DeploymentID uuid.UUID
-	FunctionID   uuid.UUID
-	Runtime      string
-	Name         string
-	Description  string
-	Uri          string
-	Title        pgtype.Text
-	MimeType     pgtype.Text
-	Variables    []byte
-	Meta         []byte
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	Deleted      bool
+	// @access: confidential
+	FunctionID uuid.UUID
+	// @access: confidential
+	Runtime string
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description string
+	// @access: restricted
+	Uri string
+	// @access: confidential
+	Title pgtype.Text
+	// @access: confidential
+	MimeType pgtype.Text
+	// @access: opaque-restricted
+	Variables []byte
+	// @access: opaque-restricted
+	Meta []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type FunctionToolDefinition struct {
-	ID              uuid.UUID
-	ToolUrn         urn.Tool
-	ProjectID       uuid.UUID
-	DeploymentID    uuid.UUID
-	FunctionID      uuid.UUID
-	Runtime         string
-	Name            string
-	Description     string
-	Tags            []string
-	InputSchema     []byte
-	Variables       []byte
-	AuthInput       []byte
-	Meta            []byte
-	ReadOnlyHint    pgtype.Bool
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ToolUrn urn.Tool
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	DeploymentID uuid.UUID
+	// @access: confidential
+	FunctionID uuid.UUID
+	// @access: confidential
+	Runtime string
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description string
+	// @access: opaque-confidential
+	Tags []string
+	// @access: opaque-restricted
+	InputSchema []byte
+	// @access: opaque-restricted
+	Variables []byte
+	// @access: opaque-restricted
+	AuthInput []byte
+	// @access: opaque-restricted
+	Meta []byte
+	// @access: confidential
+	ReadOnlyHint pgtype.Bool
+	// @access: confidential
 	DestructiveHint pgtype.Bool
-	IdempotentHint  pgtype.Bool
-	OpenWorldHint   pgtype.Bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	IdempotentHint pgtype.Bool
+	// @access: confidential
+	OpenWorldHint pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type HttpToolDefinition struct {
-	ID                  uuid.UUID
-	ToolUrn             urn.Tool
-	ProjectID           uuid.UUID
-	DeploymentID        uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ToolUrn urn.Tool
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	DeploymentID uuid.UUID
+	// @access: confidential
 	Openapiv3DocumentID uuid.NullUUID
-	Confirm             pgtype.Text
-	ConfirmPrompt       pgtype.Text
-	Summarizer          pgtype.Text
-	Name                string
-	UntruncatedName     pgtype.Text
-	Summary             string
-	Description         string
-	Openapiv3Operation  pgtype.Text
-	Tags                []string
-	XGram               pgtype.Bool
-	OriginalName        pgtype.Text
-	OriginalSummary     pgtype.Text
+	// @access: confidential
+	Confirm pgtype.Text
+	// @access: opaque-restricted
+	ConfirmPrompt pgtype.Text
+	// @access: opaque-restricted
+	Summarizer pgtype.Text
+	// @access: confidential
+	Name string
+	// @access: confidential
+	UntruncatedName pgtype.Text
+	// @access: opaque-restricted
+	Summary string
+	// @access: opaque-restricted
+	Description string
+	// @access: confidential
+	Openapiv3Operation pgtype.Text
+	// @access: opaque-confidential
+	Tags []string
+	// @access: confidential
+	XGram pgtype.Bool
+	// @access: confidential
+	OriginalName pgtype.Text
+	// @access: opaque-restricted
+	OriginalSummary pgtype.Text
+	// @access: opaque-restricted
 	OriginalDescription pgtype.Text
-	ServerEnvVar        string
-	DefaultServerUrl    pgtype.Text
-	Security            []byte
-	HttpMethod          string
-	Path                string
-	SchemaVersion       string
-	Schema              []byte
-	HeaderSettings      []byte
-	QuerySettings       []byte
-	PathSettings        []byte
-	RequestContentType  pgtype.Text
-	ResponseFilter      *models.ResponseFilter
-	ReadOnlyHint        pgtype.Bool
-	DestructiveHint     pgtype.Bool
-	IdempotentHint      pgtype.Bool
-	OpenWorldHint       pgtype.Bool
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	Deleted             bool
+	// @access: confidential
+	ServerEnvVar string
+	// @access: restricted
+	DefaultServerUrl pgtype.Text
+	// @access: opaque-restricted
+	Security []byte
+	// @access: confidential
+	HttpMethod string
+	// @access: restricted
+	Path string
+	// @access: confidential
+	SchemaVersion string
+	// @access: opaque-restricted
+	Schema []byte
+	// @access: opaque-restricted
+	HeaderSettings []byte
+	// @access: opaque-restricted
+	QuerySettings []byte
+	// @access: opaque-restricted
+	PathSettings []byte
+	// @access: confidential
+	RequestContentType pgtype.Text
+	// @access: opaque-restricted
+	ResponseFilter *models.ResponseFilter
+	// @access: confidential
+	ReadOnlyHint pgtype.Bool
+	// @access: confidential
+	DestructiveHint pgtype.Bool
+	// @access: confidential
+	IdempotentHint pgtype.Bool
+	// @access: confidential
+	OpenWorldHint pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type PublishOutboxDeadLetter struct {
-	ID             int64
-	PublicID       uuid.UUID
+	// @access: confidential
+	ID int64
+	// @access: confidential
+	PublicID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	Topic          string
-	Message        []byte
-	Attributes     []byte
-	Attempts       int32
-	LastError      string
+	// @access: confidential
+	Topic string
+	// @access: opaque-restricted
+	Message []byte
+	// @access: opaque-restricted
+	Attributes []byte
+	// @access: confidential
+	Attempts int32
+	// @access: opaque-restricted
+	LastError string
 	// created_at of the originating publish_outbox row, preserved so the delay before giving up stays visible after the row moves.
+	// @access: confidential
 	EnqueuedAt pgtype.Timestamptz
-	CreatedAt  pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
 }
 
 type RiskResult struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	OrganizationID      string
-	RiskPolicyID        uuid.UUID
-	RiskPolicyVersion   int64
-	ChatMessageID       uuid.NullUUID
-	ChatContentPartID   uuid.NullUUID
-	SkillVersionID      uuid.NullUUID
-	Source              string
-	Found               bool
-	RuleID              pgtype.Text
-	Description         pgtype.Text
-	Match               pgtype.Text
-	StartPos            pgtype.Int4
-	EndPos              pgtype.Int4
-	Confidence          pgtype.Float8
-	Tags                []string
-	Spans               []byte
-	DeadLetterReason    pgtype.Text
-	ExcludedAt          pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	RiskPolicyID uuid.UUID
+	// @access: confidential
+	RiskPolicyVersion int64
+	// @access: confidential
+	ChatMessageID uuid.NullUUID
+	// @access: confidential
+	ChatContentPartID uuid.NullUUID
+	// @access: confidential
+	SkillVersionID uuid.NullUUID
+	// @access: confidential
+	Source string
+	// @access: confidential
+	Found bool
+	// @access: confidential
+	RuleID pgtype.Text
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: secret-restricted
+	Match pgtype.Text
+	// @access: confidential
+	StartPos pgtype.Int4
+	// @access: confidential
+	EndPos pgtype.Int4
+	// @access: confidential
+	Confidence pgtype.Float8
+	// @access: confidential
+	Tags []string
+	// @access: secret-restricted
+	Spans []byte
+	// @access: opaque-restricted
+	DeadLetterReason pgtype.Text
+	// @access: confidential
+	ExcludedAt pgtype.Timestamptz
+	// @access: confidential
 	ExcludedExclusionID uuid.NullUUID
-	FalsePositiveAt     pgtype.Timestamptz
+	// @access: confidential
+	FalsePositiveAt pgtype.Timestamptz
+	// @access: opaque-restricted
 	FalsePositiveReason pgtype.Text
-	CreatedAt           pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+}
+
+type SkillObservation struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: opaque-confidential
+	IdempotencyKey pgtype.Text
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential-pii
+	UserEmail pgtype.Text
+	// @access: confidential-pii
+	Hostname pgtype.Text
+	// @access: opaque-confidential
+	SessionID pgtype.Text
+	// @access: confidential
+	SkillName string
+	// @access: opaque-confidential
+	Source pgtype.Text
+	// @access: opaque-confidential
+	SourceLevel pgtype.Text
+	// @access: opaque-restricted
+	SourcePath pgtype.Text
+	// @access: confidential
+	RawSha256 pgtype.Text
+	// @access: confidential
+	SeenAt pgtype.Timestamptz
+	// @access: confidential
+	SkillID uuid.NullUUID
+	// @access: confidential
+	SkillVersionID uuid.NullUUID
+	// @access: confidential
+	ReconciledAt pgtype.Timestamptz
+	// @access: confidential
+	MetricsSyncedAt pgtype.Timestamptz
+	// @access: confidential
+	EfficacyEnqueuedAt pgtype.Timestamptz
+	// @access: confidential
+	ReconcileErrorCode pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
 }

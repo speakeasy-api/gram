@@ -328,6 +328,79 @@ func TestRedeemAcceptsAForeignIssuer(t *testing.T) {
 		"a subject from a foreign trust domain should be provisioned from the email claim")
 }
 
+func TestRedeemAcceptsAnOktaStyleAssertion(t *testing.T) {
+	t.Parallel()
+
+	const oinAudience = "https://auth.vendor.example"
+	h := newHarnessWithAliases(t, map[string][]string{testResourceSlug: {oinAudience}})
+	okta := newOktaStyleIDP(t)
+	h.trustIssuer(t, okta.issuer, "", "[]")
+
+	opts := h.defaultJAG()
+	opts.Audience = oinAudience
+	opts.Issuer = okta.issuer
+	opts.Key = okta.key
+	opts.KID = okta.kid
+	opts.Subject = "00u1okta"
+	opts.Email = "okta-user@partner.example"
+	opts.Resource = ""
+
+	resp := h.redeem(t, h.signJAG(t, opts), testClientID)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestRedeemRejectsALocalAssertionWithoutResource(t *testing.T) {
+	t.Parallel()
+
+	h := newHarnessWithAliases(t, map[string][]string{testResourceSlug: {"https://auth.vendor.example"}})
+	h.trustLocalIssuer(t, "")
+
+	opts := h.defaultJAG()
+	opts.Resource = ""
+
+	resp := h.redeem(t, h.signJAG(t, opts), testClientID)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestRedeemRejectsAnAliasedAssertionNamingAnotherResource(t *testing.T) {
+	t.Parallel()
+
+	const oinAudience = "https://auth.vendor.example"
+	h := newHarnessWithAliases(t, map[string][]string{testResourceSlug: {oinAudience}})
+	okta := newOktaStyleIDP(t)
+	h.trustIssuer(t, okta.issuer, "", "[]")
+
+	opts := h.defaultJAG()
+	opts.Audience = oinAudience
+	opts.Issuer = okta.issuer
+	opts.Key = okta.key
+	opts.KID = okta.kid
+	opts.Resource = "https://other-resource.example/mcp"
+
+	resp := h.redeem(t, h.signJAG(t, opts), testClientID)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestParseAudienceAliases(t *testing.T) {
+	t.Parallel()
+
+	got, err := ParseAudienceAliases("http://idp.local", " chat=https://a.example , chat=https://b.example,chat=https://a.example,,docs=https://c.example?x=1 ")
+	require.NoError(t, err)
+	require.Equal(t, map[string][]string{
+		"chat": {"https://a.example", "https://b.example"},
+		"docs": {"https://c.example?x=1"},
+	}, got)
+
+	got, err = ParseAudienceAliases("http://idp.local", "")
+	require.NoError(t, err)
+	require.Empty(t, got)
+
+	for _, raw := range []string{"chat:https://a.example", "=https://a.example", "chat=", "chat=https://a.example,docs=https://a.example", "docs=http://idp.local/resource-as/chat"} {
+		_, err := ParseAudienceAliases("http://idp.local", raw)
+		require.Error(t, err, raw)
+	}
+}
+
 func TestUnknownResourceSlugIsNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -493,4 +566,91 @@ func TestRedeemDoesNotLetAForeignIssuerClaimALocalSubject(t *testing.T) {
 	require.Equal(t, "impostor@partner.example", introspection.Username,
 		"a foreign subject must resolve by email, not by reusing the local id it names")
 	require.NotEqual(t, h.user.ID.String(), introspection.Sub)
+}
+
+func TestRedeemRejectsMalformedRequiredClaims(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]func(*harness, jwt.MapClaims){
+		"two audiences": func(h *harness, c jwt.MapClaims) { c["aud"] = []any{h.audience(), "https://other.example"} },
+		"missing iat":   func(_ *harness, c jwt.MapClaims) { delete(c, "iat") },
+		"future iat":    func(_ *harness, c jwt.MapClaims) { c["iat"] = time.Now().Add(time.Hour).Unix() },
+		"missing sub":   func(_ *harness, c jwt.MapClaims) { delete(c, "sub") },
+		"two resources": func(_ *harness, c jwt.MapClaims) { c["resource"] = []any{testResourceID, "https://other.example/"} },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			h.trustLocalIssuer(t, "")
+			opts := h.defaultJAG()
+			opts.Mutate = func(c jwt.MapClaims) { mutate(h, c) }
+			resp := h.redeem(t, h.signJAG(t, opts), testClientID)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode, "%s", resp.Body)
+		})
+	}
+}
+
+func TestRedeemAcceptsResourceAsArray(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.trustLocalIssuer(t, "")
+	opts := h.defaultJAG()
+	opts.Mutate = func(c jwt.MapClaims) { c["resource"] = []any{testResourceID} }
+
+	resp := h.redeem(t, h.signJAG(t, opts), testClientID)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "%s", resp.Body)
+}
+
+func TestRedeemIgnoresAliasesForTheLocalIssuer(t *testing.T) {
+	t.Parallel()
+
+	const oinAudience = "https://auth.vendor.example"
+	h := newHarnessWithAliases(t, map[string][]string{testResourceSlug: {oinAudience}})
+	h.trustLocalIssuer(t, "")
+	opts := h.defaultJAG()
+	opts.Audience = oinAudience
+
+	resp := h.redeem(t, h.signJAG(t, opts), testClientID)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestRedeemAudienceMismatchListsAliases(t *testing.T) {
+	t.Parallel()
+
+	const oinAudience = "https://auth.vendor.example"
+	h := newHarnessWithAliases(t, map[string][]string{testResourceSlug: {oinAudience}})
+	okta := newOktaStyleIDP(t)
+	h.trustIssuer(t, okta.issuer, "", "[]")
+	opts := h.defaultJAG()
+	opts.Audience = "https://wrong.example"
+	opts.Issuer = okta.issuer
+	opts.Key = okta.key
+	opts.KID = okta.kid
+
+	resp := h.redeem(t, h.signJAG(t, opts), testClientID)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.Contains(t, string(resp.Body), oinAudience)
+	require.Contains(t, string(resp.Body), h.audience())
+}
+
+func TestRedeemRejectsAnAliasedAssertionWithAnEmptyResource(t *testing.T) {
+	t.Parallel()
+
+	const oinAudience = "https://auth.vendor.example"
+	h := newHarnessWithAliases(t, map[string][]string{testResourceSlug: {oinAudience}})
+	okta := newOktaStyleIDP(t)
+	h.trustIssuer(t, okta.issuer, "", "[]")
+
+	opts := h.defaultJAG()
+	opts.Audience = oinAudience
+	opts.Issuer = okta.issuer
+	opts.Key = okta.key
+	opts.KID = okta.kid
+	opts.Resource = ""
+	opts.Mutate = func(c jwt.MapClaims) { c["resource"] = []any{} }
+
+	resp := h.redeem(t, h.signJAG(t, opts), testClientID)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }

@@ -90,7 +90,7 @@ func validRiskToolEvent(event RiskToolEvent) bool {
 
 func validRiskTelemetryTool(tool string) bool {
 	switch tool {
-	case "list_watchdog_findings", "list_risk_policies", "get_risk_policy", "create_risk_policy", "update_risk_policy", "list_risk_exclusions", "create_risk_exclusion", "update_risk_exclusion":
+	case "list_watchdog_findings", riskFindingListToolName, riskFindingByChatToolName, riskRuleBreakdownToolName, "list_risk_policies", "get_risk_policy", "create_risk_policy", "update_risk_policy", "list_risk_exclusions", "create_risk_exclusion", "update_risk_exclusion", operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive:
 		return true
 	default:
 		return false
@@ -99,7 +99,7 @@ func validRiskTelemetryTool(tool string) bool {
 
 func validRiskTelemetryOutcome(outcome string) bool {
 	switch outcome {
-	case "succeeded", unavailableCode, "invalid_request", "not_found", "conflict", "rate_limited", "repair_required", "unavailable":
+	case "succeeded", unavailableCode, "invalid_request", "not_found", "conflict", "rate_limited", "repair_required", "confirmation_required", "unavailable":
 		return true
 	default:
 		return false

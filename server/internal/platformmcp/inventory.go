@@ -1,10 +1,6 @@
 package platformmcp
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -25,31 +21,25 @@ type inventoryCursor struct {
 }
 
 type inventoryCursorCodec struct {
-	key []byte
+	key signedCursorKey
 }
 
 func newInventoryCursorCodec(keyMaterial string) (*inventoryCursorCodec, error) {
 	if keyMaterial == "" {
 		return nil, ErrInventoryCursorInvalid
 	}
-	key := sha256.Sum256([]byte("platform-mcp-inventory-cursor:" + keyMaterial))
-	return &inventoryCursorCodec{key: key[:]}, nil
+	return &inventoryCursorCodec{key: newSignedCursorKey("platform-mcp-inventory-cursor", keyMaterial)}, nil
 }
 
 func (c *inventoryCursorCodec) Encode(cursor inventoryCursor) (string, error) {
 	if c == nil || len(c.key) == 0 || cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.AfterMCPID == "" || cursor.Query != "" {
 		return "", ErrInventoryCursorInvalid
 	}
-	payload, err := json.Marshal(cursor)
+	token, err := sealCursor(c.key, cursor)
 	if err != nil {
 		return "", fmt.Errorf("encode Platform MCP inventory cursor: %w", err)
 	}
-	mac := hmac.New(sha256.New, c.key)
-	_, _ = mac.Write(payload)
-	token := make([]byte, 0, len(payload)+sha256.Size)
-	token = append(token, payload...)
-	token = append(token, mac.Sum(nil)...)
-	return base64.RawURLEncoding.EncodeToString(token), nil
+	return token, nil
 }
 
 func (c *inventoryCursorCodec) Decode(value string, principal Principal, projectID uuid.UUID, query string) (uuid.UUID, error) {
@@ -57,18 +47,8 @@ func (c *inventoryCursorCodec) Decode(value string, principal Principal, project
 	if c == nil || len(c.key) == 0 || value == "" || principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil || normalizeInventoryQuery(query) != "" {
 		return uuid.Nil, ErrInventoryCursorInvalid
 	}
-	token, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil || len(token) <= sha256.Size {
-		return uuid.Nil, ErrInventoryCursorInvalid
-	}
-	payload, signature := token[:len(token)-sha256.Size], token[len(token)-sha256.Size:]
-	mac := hmac.New(sha256.New, c.key)
-	_, _ = mac.Write(payload)
-	if !hmac.Equal(signature, mac.Sum(nil)) {
-		return uuid.Nil, ErrInventoryCursorInvalid
-	}
-	var cursor inventoryCursor
-	if err := json.Unmarshal(payload, &cursor); err != nil || cursor.OrganizationID != principal.OrganizationID || cursor.Binding != binding || cursor.ProjectID != projectID.String() || cursor.Query != "" {
+	cursor, ok := openCursor[inventoryCursor](c.key, value)
+	if !ok || cursor.OrganizationID != principal.OrganizationID || cursor.Binding != binding || cursor.ProjectID != projectID.String() || cursor.Query != "" {
 		return uuid.Nil, ErrInventoryCursorInvalid
 	}
 	after, err := uuid.Parse(cursor.AfterMCPID)
@@ -78,26 +58,35 @@ func (c *inventoryCursorCodec) Decode(value string, principal Principal, project
 	return after, nil
 }
 
-func inventoryRegistrationIDs(rows []platformrepo.ListPlatformMCPInventoryRow) []uuid.UUID {
+func inventoryMCPServerIDs(rows []platformrepo.ListPlatformMCPInventoryRow) []uuid.UUID {
 	ids := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {
-		if row.RegistrationID != uuid.Nil {
-			ids = append(ids, row.RegistrationID)
+		if row.McpServerID != uuid.Nil {
+			ids = append(ids, row.McpServerID)
 		}
 	}
 	return ids
 }
 
-func inventoryDistributions(rows []platformrepo.ListPlatformMCPInventoryDistributionsRow) map[uuid.UUID][]MCPDistribution {
-	byRegistration := make(map[uuid.UUID][]MCPDistribution)
+// inventoryDistributions keys plugin membership by MCP server, which is what
+// plugin_servers records. Keying it by registration would report no plugin for
+// every dashboard-managed and legacy MCP, because only a registration-backed
+// one has a registration to key on.
+func inventoryDistributions(rows []platformrepo.ListPlatformMCPInventoryPluginMembershipsRow) map[uuid.UUID][]MCPDistribution {
+	byMCPServer := make(map[uuid.UUID][]MCPDistribution)
 	for _, row := range rows {
-		byRegistration[row.RegistrationID] = append(byRegistration[row.RegistrationID], MCPDistribution{
+		if !row.McpServerID.Valid {
+			continue
+		}
+		byMCPServer[row.McpServerID.UUID] = append(byMCPServer[row.McpServerID.UUID], MCPDistribution{
 			PluginID:         row.PluginID.String(),
-			State:            row.State,
-			PublicationState: row.PublicationState,
+			PluginName:       row.PluginName,
+			PluginSlug:       row.PluginSlug,
+			State:            row.State.String,
+			PublicationState: row.PublicationState.String,
 		})
 	}
-	return byRegistration
+	return byMCPServer
 }
 
 func mcpFromInventoryRow(row platformrepo.ListPlatformMCPInventoryRow, distributions map[uuid.UUID][]MCPDistribution) MCP {
@@ -119,6 +108,14 @@ func mcpFromInventoryItem(row platformrepo.GetPlatformMCPInventoryItemRow, distr
 }
 
 func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, slug, visibility, model string, backendKind MCPBackendKind, upstreamURL string, registrationID uuid.UUID, sourceKind, provider, reference, registrationStatus string, registrationRemoteID, registrationIssuerID, registrationMCPID, registrationEndpointID uuid.NullUUID, readinessState, checkedAt, expiresAt string, distributions map[uuid.UUID][]MCPDistribution) MCP {
+	enabledState := "unknown"
+	switch visibility {
+	case "private", "public":
+		enabledState = "enabled"
+	case "disabled":
+		enabledState = "disabled"
+	}
+
 	mcp := MCP{
 		ID:               id.String(),
 		ProjectID:        projectID.String(),
@@ -128,7 +125,8 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		Slug:             slug,
 		Version:          "",
 		Visibility:       visibility,
-		EffectiveEnabled: visibility != "disabled",
+		EffectiveEnabled: enabledState == "enabled",
+		EnabledState:     enabledState,
 		Model:            "",
 		BackendKind:      backendKind,
 		UpstreamURL:      "",
@@ -138,6 +136,15 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		Distributions:    []MCPDistribution{},
 		Operations:       []string{"read"},
 		DashboardPath:    "",
+		// The inventory projection never reads a server's tool list: only the
+		// server detail does, and it fills this in after the read.
+		ToolExposure: nil,
+	}
+
+	// Every model can be carried by a plugin, so membership is attached before
+	// the model switch rather than inside the registration-backed branch.
+	if memberships := distributions[id]; memberships != nil {
+		mcp.Distributions = memberships
 	}
 
 	switch {
@@ -153,13 +160,10 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		if readinessState != "" {
 			mcp.Readiness = MCPReadiness{State: readinessState, CheckedAt: checkedAt, ExpiresAt: expiresAt}
 		}
-		// Disabled MCPs retain historical readiness evidence for audit and later
-		// diagnosis, but it cannot be treated as effective current readiness.
-		if visibility == "disabled" {
+		// Only confirmed enabled MCPs can expose historical readiness evidence
+		// as effective current readiness.
+		if enabledState != "enabled" {
 			mcp.Readiness = MCPReadiness{State: "unknown", CheckedAt: "", ExpiresAt: ""}
-		}
-		if registeredDistributions := distributions[registrationID]; registeredDistributions != nil {
-			mcp.Distributions = registeredDistributions
 		}
 		mcp.Operations = []string{"read", "dashboard_setup", "update_mcp_metadata"}
 		switch visibility {

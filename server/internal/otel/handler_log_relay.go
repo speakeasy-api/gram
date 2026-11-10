@@ -23,6 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
@@ -33,6 +35,9 @@ const (
 	logRelayExportConcurrency = 32
 
 	gramLogPrivateFieldStart protowire.Number = 1000
+
+	// minConnectionLogSeverity is the lowest severity an mcp_connection_logs route receives.
+	minConnectionLogSeverity = otelv1.LogRecord_SEVERITY_NUMBER_ERROR
 )
 
 type LogRelayHandler struct {
@@ -40,6 +45,8 @@ type LogRelayHandler struct {
 	recordsDropped metric.Int64Counter
 	recordsFailed  metric.Int64Counter
 	relay          *signalRelay
+	// connectionLogRelay carries connection attempts to their own route, off the same subscription.
+	connectionLogRelay *signalRelay
 }
 
 type logProvenanceKey struct {
@@ -94,6 +101,14 @@ func NewLogRelayHandler(
 			"/v1/logs",
 			"log",
 		),
+		connectionLogRelay: newSignalRelay(
+			db,
+			encryptionClient,
+			policy,
+			dataexports.DataSourceMCPConnectionLogs,
+			"/v1/logs",
+			"connection log",
+		),
 	}
 }
 
@@ -114,6 +129,17 @@ func (h *LogRelayHandler) HandleBatchWithResult(
 }
 
 func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMessage) error {
+	telemetry, connectionLogs, excluded, belowSeverity := splitLogRelayMessages(messages)
+	if excluded > 0 {
+		h.recordDroppedLogs(ctx, excluded, relayReasonExcluded)
+	}
+	if belowSeverity > 0 {
+		h.recordDroppedLogs(ctx, belowSeverity, relayReasonBelowSeverity)
+	}
+	return errors.Join(h.deliver(ctx, h.relay, telemetry), h.deliver(ctx, h.connectionLogRelay, connectionLogs))
+}
+
+func (h *LogRelayHandler) deliver(ctx context.Context, relay *signalRelay, messages []logRelayMessage) error {
 	logger := h.logger
 	groups, invalid := groupLogsByProvenance(messages)
 	if invalid > 0 {
@@ -138,7 +164,7 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 		}
 		result, ok := destinations[routeKey]
 		if !ok {
-			result.destination, result.err = h.relay.destinationForRoute(ctx, routeKey)
+			result.destination, result.err = relay.destinationForRoute(ctx, routeKey)
 			destinations[routeKey] = result
 		}
 		if result.err != nil {
@@ -236,6 +262,45 @@ func (h *LogRelayHandler) recordFailedLogs(ctx context.Context, count int, reaso
 	}
 
 	h.recordsFailed.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
+}
+
+// splitLogRelayMessages separates connection logs, which go to their own route,
+// from product telemetry. It drops gateway tool call records: the tool-call log
+// relay off telemetry_logs already delivers those calls, until DNO-1310.
+func splitLogRelayMessages(messages []logRelayMessage) (telemetry, connectionLogs []logRelayMessage, excluded, belowSeverity int) {
+	telemetry = messages[:0]
+	for _, message := range messages {
+		switch {
+		case isConnectionLogRecord(message.record):
+			if message.record.GetSeverityNumber() < minConnectionLogSeverity {
+				belowSeverity++
+				continue
+			}
+			connectionLogs = append(connectionLogs, message)
+		case logOriginalScopeName(message.record) == dialect.GatewayLogScope:
+			excluded++
+		default:
+			telemetry = append(telemetry, message)
+		}
+	}
+	return telemetry, connectionLogs, excluded, belowSeverity
+}
+
+// isConnectionLogRecord reports a record only the connection logs route carries, until AIM-960 adds them to the feed.
+// It reads the provenance source, which the ingest edges stamp, rather than the
+// scope, which any producer can set.
+func isConnectionLogRecord(record *otelv1.LogRecord) bool {
+	return record.GetProvenance().GetSource() == dialect.ConnectionLogSource
+}
+
+// logOriginalScopeName is the producer's scope as the transform preserved it.
+func logOriginalScopeName(record *otelv1.LogRecord) string {
+	for _, kv := range record.GetAttributes() {
+		if kv.GetKey() == string(enrich.OriginalInstrumentationScopeNameKey) {
+			return kv.GetValue().GetStringValue()
+		}
+	}
+	return ""
 }
 
 func groupLogsByProvenance(messages []logRelayMessage) ([]logProvenanceGroup, int) {

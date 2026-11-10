@@ -1,3 +1,4 @@
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Alert, AlertDescription } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -11,7 +12,7 @@ import { useSession } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Toolset } from "@/lib/toolTypes";
+import type { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useProductTier } from "@/hooks/useProductTier";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
@@ -208,6 +209,7 @@ function ExistingConfigReview({
       });
       await Promise.all([
         invalidateAllToolset(queryClient),
+        invalidateAllMcpServers(queryClient),
         invalidateAllGetMcpMetadata(queryClient),
       ]);
       setStage("success");
@@ -225,9 +227,9 @@ function ExistingConfigReview({
       <Dialog.Header>
         <Dialog.Title>Review OAuth metadata</Dialog.Title>
         <Dialog.Description>
-          Gram always hosts protected-resource metadata for this MCP server.
-          Switching authorization-server metadata keeps existing tokens and
-          registrations. Some clients may ask users to authenticate again.
+          Speakeasy always hosts protected-resource metadata for this MCP
+          server. Switching authorization-server metadata keeps existing tokens
+          and registrations. Some clients may ask users to authenticate again.
         </Dialog.Description>
       </Dialog.Header>
       <div className="min-h-0 overflow-y-auto">
@@ -253,7 +255,7 @@ function ExistingConfigReview({
           {stage === "clear" && (
             <Stack gap={2}>
               <Text>
-                Confirm the authorization-server metadata Gram should host.
+                Confirm the authorization-server metadata Speakeasy should host.
               </Text>
               <Label htmlFor="existing-oauth-metadata">
                 OAuth Metadata JSON
@@ -288,8 +290,8 @@ function ExistingConfigReview({
                 <>
                   <Button variant="secondary" onClick={() => setStage("clear")}>
                     {config.providerHosted
-                      ? "Use Gram-hosted metadata"
-                      : "Keep Gram-hosted metadata"}
+                      ? "Use Speakeasy-hosted metadata"
+                      : "Keep Speakeasy-hosted metadata"}
                   </Button>
                   <Button onClick={() => void review()} disabled={pending}>
                     {pending ? "Reviewing..." : "Review update"}
@@ -303,7 +305,9 @@ function ExistingConfigReview({
               )}
               {stage === "clear" && (
                 <Button onClick={() => void update(false)} disabled={pending}>
-                  {pending ? "Updating..." : "Confirm Gram-hosted metadata"}
+                  {pending
+                    ? "Updating..."
+                    : "Confirm Speakeasy-hosted metadata"}
                 </Button>
               )}
             </div>
@@ -345,9 +349,11 @@ function WizardBody({
         actions: {
           invalidateOnExternalSuccess: () => {
             void invalidateAllToolset(queryClient);
+            void invalidateAllMcpServers(queryClient);
           },
           invalidateOnProxyCreate: () => {
             void invalidateAllToolset(queryClient);
+            void invalidateAllMcpServers(queryClient);
             void invalidateAllGetMcpMetadata(queryClient);
             void invalidateAllListEnvironments(queryClient);
           },
@@ -371,6 +377,7 @@ function WizardBody({
   const input: WizardInput = {
     discovered,
     initialPath,
+    toolsetId: toolset.id,
     toolsetSlug,
     toolsetName: toolset.name,
     activeOrganizationId: session.activeOrganizationId,

@@ -68,11 +68,11 @@ var File_gram_risk_v1_presidio_enforcer_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_presidio_enforcer_proto_rawDesc = "" +
 	"\n" +
-	"$gram/risk/v1/presidio_enforcer.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"M\n" +
-	"\x10PresidioEnforcer:9\x92\xb5\x185\x12\x03\b\xd8\x04\"\x02\b\n" +
+	"$gram/risk/v1/presidio_enforcer.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"I\n" +
+	"\x10PresidioEnforcer:5\x92\xb5\x181\x12\x03\b\xd8\x04\"\x02\b\n" +
 	"2\x04\n" +
 	"\x02\b\n" +
-	"J\x02\x10\x05R gram.risk.v1.PresidioEnforcementB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
+	"R gram.risk.v1.PresidioEnforcementB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_presidio_enforcer_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_risk_v1_presidio_enforcer_proto_goTypes = []any{

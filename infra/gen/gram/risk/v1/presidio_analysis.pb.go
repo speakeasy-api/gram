@@ -818,7 +818,7 @@ type PresidioAnalysis_builder struct {
 	PolicyLinkReason *string
 	// Stored text surface indexed by finding offsets; unset means content.
 	FindingSurface *string
-	// Raw external conversation ID; independent of the persisted Gram chat_id.
+	// Raw external conversation ID; independent of the persisted Speakeasy chat_id.
 	ExternalConversationId *string
 }
 

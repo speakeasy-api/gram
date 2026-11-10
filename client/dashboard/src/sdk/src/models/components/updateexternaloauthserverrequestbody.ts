@@ -7,11 +7,11 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpdateExternalOAuthServerRequestBody = {
   /**
-   * Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.
+   * Exact HTTPS issuer to set for provider-hosted discovery. Speakeasy strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.
    */
   authorizationServerIssuer?: string | undefined;
   /**
-   * JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
+   * JSON object metadata to restore Speakeasy-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
    */
   metadata?: any | undefined;
 };

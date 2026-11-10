@@ -1,15 +1,16 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { Toolset } from "@/lib/toolTypes";
+import type { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { Badge } from "@/components/ui/Badge";
 import { Stack } from "@/components/ui/Stack";
-import { CheckCircle, ExternalLink, Loader2 } from "lucide-react";
+import { CheckCircle, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePlaygroundEnvironment } from "./usePlaygroundEnvironment";
 import {
@@ -18,6 +19,8 @@ import {
 } from "../mcp/environmentVariableUtils";
 import { useEnvironmentVariables } from "../mcp/useEnvironmentVariables";
 import { usePlaygroundIssuerConnection } from "./usePlaygroundIssuerConnection";
+import { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
+import { ToolsetMcpTargetStatus } from "@/components/ToolsetMcpTargetStatus";
 
 interface PlaygroundAuthProps {
   toolset: Toolset;
@@ -40,8 +43,16 @@ function IssuerLoginConnection({
   toolset: Toolset;
   providerName: string;
 }) {
-  const { connected, needsAuth, isLoading, refetch, connect, canConnect } =
-    usePlaygroundIssuerConnection(toolset);
+  const {
+    connected,
+    needsAuth,
+    isLoading,
+    isError,
+    errorMessage,
+    refetch,
+    connect,
+    canConnect,
+  } = usePlaygroundIssuerConnection(toolset);
 
   // Re-probe when the user returns from the connect tab so a newly linked
   // session surfaces without a manual refresh.
@@ -64,7 +75,15 @@ function IssuerLoginConnection({
             Login
           </Text>
           {isLoading ? (
-            <Loader2 className="text-muted-foreground size-4 animate-spin" />
+            <span
+              role="status"
+              className="text-muted-foreground flex items-center gap-2"
+            >
+              <Spinner className="mr-0 size-4" />
+              <Text variant="small">Checking connection…</Text>
+            </span>
+          ) : isError ? (
+            <Badge variant="warning">Connection unavailable</Badge>
           ) : connected ? (
             <Badge variant="success">
               <CheckCircle className="mr-1 size-3" />
@@ -79,7 +98,19 @@ function IssuerLoginConnection({
           {providerName}
         </Text>
 
-        {!connected && !isLoading && (
+        {isError && (
+          <Text variant="small" role="alert">
+            {errorMessage ?? "Unable to check the login connection."}
+          </Text>
+        )}
+
+        {isError && !isLoading && (
+          <Button size="sm" variant="secondary" onClick={refetch}>
+            Retry
+          </Button>
+        )}
+
+        {!connected && !isLoading && !isError && (
           <Button
             size="sm"
             variant="primary"
@@ -104,7 +135,8 @@ export function PlaygroundAuth({
 
   // Issuer-gated toolsets carry a user_session_issuer; interactive auth is the
   // first-party connect flow surfaced by IssuerLoginConnection below.
-  const loginSecured = !!toolset.userSessionIssuerSlug;
+  const target = useToolsetMcpTarget(toolset);
+  const loginSecured = !!target.userSessionIssuerId;
 
   // Use the same environment data fetching as MCPAuthenticationTab
   const { data: environmentsData } = useListEnvironments();
@@ -194,17 +226,6 @@ export function PlaygroundAuth({
     }
   };
 
-  // Show "no auth required" only if there are no env vars AND no interactive login
-  if (envVars.length === 0 && !loginSecured) {
-    return (
-      <div className="py-4 text-center">
-        <Text variant="small" className="text-muted-foreground">
-          No authentication required
-        </Text>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-3">
       {/* Environment indicator */}
@@ -218,9 +239,18 @@ export function PlaygroundAuth({
       )}
 
       {/* Interactive (first-party) login for issuer-gated toolsets */}
-      {loginSecured && (
+      {target.status !== "ready" ? (
+        <ToolsetMcpTargetStatus
+          status={target.status}
+          onRetry={target.refetch}
+        />
+      ) : loginSecured ? (
         <IssuerLoginConnection toolset={toolset} providerName={toolset.name} />
-      )}
+      ) : envVars.length === 0 ? (
+        <Text variant="small" className="text-muted-foreground">
+          No authentication required
+        </Text>
+      ) : null}
 
       {/* Environment Variables */}
       {envVars.map((envVar) => {
@@ -309,9 +339,7 @@ export function PlaygroundAuth({
           onClick={() => void handleSave()}
           disabled={editedKeys.size === 0 || playgroundEnv.isSaving}
         >
-          {playgroundEnv.isSaving ? (
-            <Loader2 className="mr-2 size-3 animate-spin" />
-          ) : null}
+          {playgroundEnv.isSaving ? <Spinner className="size-3" /> : null}
           Save
         </Button>
       )}
@@ -322,13 +350,13 @@ export function PlaygroundAuth({
         </Text>
       )}
       <Text variant="small" className="text-muted-foreground pt-2">
-        <routes.mcp.details.Link
+        <routes.toolset.Link
           params={[toolset.slug]}
           hash="authentication"
           className="hover:text-foreground underline"
         >
           Configure auth
-        </routes.mcp.details.Link>
+        </routes.toolset.Link>
       </Text>
     </div>
   );

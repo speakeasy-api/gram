@@ -1,6 +1,6 @@
 // Reads the Vite single-file build output and emits a TS module that inlines
 // it as a string literal. Mirrors the pizzaz example's build-inlined.ts: the
-// gram function bundler sees plain string imports rather than needing asset
+// function bundler sees plain string imports rather than needing asset
 // plugins.
 
 import { readFileSync, writeFileSync, mkdirSync, statSync } from "node:fs";

@@ -4,7 +4,7 @@
     "mcp-remote@0.1.25",
     "{{ .MCPURL }}"{{- range .SecurityInputs }},
     "--header",
-    "{{ .SystemName | asHTTPHeader }}:${{ "{" }}{{ .DisplayName | asPosixName }}{{ "}" }}"{{- end }}
+    "{{ .HTTPHeader }}:${{ "{" }}{{ .DisplayName | asPosixName }}{{ "}" }}"{{- end }}
   ]{{- if (gt (len .SecurityInputs) 0) }},
   "env": {
     {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}

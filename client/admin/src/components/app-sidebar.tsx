@@ -2,6 +2,7 @@ import type { ComponentProps, JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useMatchRoute } from "@tanstack/react-router";
 
+import { DemoOrganizationNavItem } from "@/components/demo-organization-nav-item";
 import { NavUser } from "@/components/nav-user";
 import { RecordNav } from "@/components/record-nav";
 import { SpeakeasyMark } from "@/components/speakeasy-mark";
@@ -38,6 +39,25 @@ export function AppSidebar({
     enabled: !!idOrSlug,
   });
 
+  const renderNavItem = ({
+    to,
+    label,
+    icon: Icon,
+  }: (typeof ADMIN_NAV_GROUPS)[number]["items"][number]): JSX.Element => (
+    <SidebarMenuItem key={to}>
+      <SidebarMenuButton
+        asChild
+        isActive={pathname.startsWith(to)}
+        tooltip={label}
+      >
+        <Link to={to}>
+          <Icon />
+          <span>{label}</span>
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+
   return (
     <Sidebar collapsible="icon" variant="inset" {...props}>
       <SidebarHeader>
@@ -67,20 +87,15 @@ export function AppSidebar({
               <SidebarGroupLabel>{groupLabel}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {items.map(({ to, label, icon: Icon }) => (
-                    <SidebarMenuItem key={to}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={pathname.startsWith(to)}
-                        tooltip={label}
-                      >
-                        <Link to={to}>
-                          <Icon />
-                          <span>{label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  {items
+                    .filter((item) => !("afterDemoOrganization" in item))
+                    .map(renderNavItem)}
+                  {groupLabel === "Platform Management" && (
+                    <DemoOrganizationNavItem />
+                  )}
+                  {items
+                    .filter((item) => "afterDemoOrganization" in item)
+                    .map(renderNavItem)}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>

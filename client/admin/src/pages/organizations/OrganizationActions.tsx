@@ -700,7 +700,7 @@ function ConfirmDisable({
         <DialogHeader>
           <DialogTitle>Disable {org.name}?</DialogTitle>
           <DialogDescription>
-            Every member loses access to Gram until the organization is
+            Every member loses access to Speakeasy until the organization is
             re-enabled.
           </DialogDescription>
         </DialogHeader>

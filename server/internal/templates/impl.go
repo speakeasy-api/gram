@@ -3,11 +3,8 @@ package templates
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/cbroglie/mustache"
 	"github.com/google/uuid"
@@ -108,6 +105,10 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		return nil, err
 	}
 
+	if payload.Kind != "prompt" {
+		return nil, oops.E(oops.CodeInvalid, nil, "unsupported template kind")
+	}
+
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
@@ -201,6 +202,10 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 		return nil, err
 	}
 
+	if payload.Kind != nil && *payload.Kind != "prompt" {
+		return nil, oops.E(oops.CodeInvalid, nil, "unsupported template kind")
+	}
+
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
@@ -225,6 +230,10 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 		return nil, oops.E(oops.CodeNotFound, err, "template not found").LogError(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").LogError(ctx, logger)
+	}
+
+	if current.Kind.String == "higher_order_tool" {
+		return nil, oops.E(oops.CodeInvalid, nil, "higher-order tools can no longer be updated")
 	}
 
 	nextid := current.ID
@@ -564,21 +573,17 @@ func (s *Service) RenderTemplate(ctx context.Context, payload *gen.RenderTemplat
 }
 
 func RenderTemplate(ctx context.Context, logger *slog.Logger, template string, kind string, engine string, arguments map[string]any) (string, error) {
-	var err error
-	renderedPrompt := template
 	if kind == "higher_order_tool" {
-		renderedPrompt, err = RenderTemplateJSON(ctx, logger, template)
-		if err != nil {
-			return "", oops.E(oops.CodeBadRequest, err, "failed to render template").LogError(ctx, logger)
-		}
+		return "", oops.E(oops.CodeInvalid, nil, "higher-order tools can no longer be rendered")
 	}
 
+	var err error
 	var data string
 	switch engine {
 	case "":
 		data = template
 	case "mustache":
-		data, err = mustache.Render(renderedPrompt, arguments)
+		data, err = mustache.Render(template, arguments)
 		if err != nil {
 			return "", oops.E(oops.CodeBadRequest, err, "failed to render template").LogError(ctx, logger)
 		}
@@ -587,76 +592,4 @@ func RenderTemplate(ctx context.Context, logger *slog.Logger, template string, k
 	}
 
 	return data, nil
-}
-
-type CustomToolJSONV1 struct {
-	ToolName string  `json:"toolName"`
-	Purpose  string  `json:"purpose"`
-	Inputs   []Input `json:"inputs"`
-	Steps    []Step  `json:"steps"`
-}
-
-type Input struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-
-type Step struct {
-	ID            string   `json:"id"`
-	Tool          string   `json:"tool"`
-	CanonicalTool string   `json:"canonicalTool"`
-	ToolUrn       string   `json:"toolUrn"`
-	Instructions  string   `json:"instructions"`
-	Inputs        []string `json:"inputs"`
-}
-
-func RenderTemplateJSON(ctx context.Context, logger *slog.Logger, promptJSON string) (string, error) {
-	var prompt CustomToolJSONV1
-	if err := json.Unmarshal([]byte(promptJSON), &prompt); err != nil {
-		return "", oops.E(oops.CodeBadRequest, err, "failed to unmarshal prompt").LogError(ctx, logger)
-	}
-
-	inputsPortion := ""
-	for _, input := range prompt.Inputs {
-		inputsPortion += fmt.Sprintf("  <Input name=\"%s\" description=\"%s\" />\n", input.Name, input.Description)
-	}
-	if inputsPortion == "" {
-		inputsPortion = "  No inputs needed\n"
-	}
-
-	var stepsPortion strings.Builder
-	for _, step := range prompt.Steps {
-		var stepInputs strings.Builder
-		for _, input := range step.Inputs {
-			fmt.Fprintf(&stepInputs, "    <Input name=\"%s\" />\n", input)
-		}
-
-		stepInstructions := fmt.Sprintf("  <Instruction>%s</Instruction>\n%s", step.Instructions, stepInputs.String())
-		if step.Tool == "" {
-			// When tool is empty, just show the instruction without CallTool wrapper
-			stepsPortion.WriteString(stepInstructions)
-		} else {
-			fmt.Fprintf(&stepsPortion, "  <CallTool tool_name=\"%s\">\n  %s  </CallTool>\n", step.Tool, stepInstructions)
-		}
-	}
-
-	renderedPrompt := fmt.Sprintf(`<Purpose>
-  <Instruction>
-    - The following is a step-by-step plan to achieve a <Purpose>. It relies on executing other tools available in context to achieve the desired purpose
-    - Do NOT use this tool (%s) again when executing the plan.
-    - You will be provided with a <Purpose>, a list of <Inputs>, and a <Plan>. Your goal is to use the <Plan> and <Inputs> to complete the <Purpose>.
-  </Instruction>
-  <Purpose>
-    %s
-  </Purpose>
-</Purpose>
-<Inputs>
-  <Instruction>
-    Ask me for each of these inputs before proceeding with the <Plan> below.
-  </Instruction>
-%s</Inputs>
-<Plan>
-%s</Plan>`, prompt.ToolName, prompt.Purpose, inputsPortion, stepsPortion.String())
-
-	return renderedPrompt, nil
 }

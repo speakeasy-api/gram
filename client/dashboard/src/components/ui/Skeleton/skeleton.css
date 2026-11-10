@@ -47,6 +47,12 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+}
+
 @keyframes skeleton-shimmer {
   100% {
     transform: translateX(100%);

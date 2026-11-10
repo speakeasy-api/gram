@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { GramChatMessage } from "@/elements";
 import { describe, expect, it } from "vitest";
 import { stripMessageContextFraming } from "./projectAssistantTranscript";

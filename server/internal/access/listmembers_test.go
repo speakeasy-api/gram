@@ -17,7 +17,7 @@ func TestService_ListMembers(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	// Seed local users so that the WorkOS-to-Gram ID resolution succeeds.
+	// Seed local users so that the WorkOS-to-Speakeasy ID resolution succeeds.
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "grace@example.com", "Grace", "user_2", "membership_2")
 
@@ -35,7 +35,7 @@ func TestService_ListMembers(t *testing.T) {
 		byID[member.ID] = member
 	}
 
-	// IDs should be Gram user IDs, not WorkOS user IDs.
+	// IDs should be Speakeasy user IDs, not WorkOS user IDs.
 	require.Equal(t, "Ada Lovelace", byID["local_user_1"].Name)
 	require.Equal(t, "user:local_user_1", byID["local_user_1"].PrincipalUrn)
 	require.Equal(t, "ada@example.com", byID["local_user_1"].Email)
@@ -164,4 +164,186 @@ func TestService_ListMembers_RejectsProjectFromAnotherActiveOrganization(t *test
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)
 	require.Equal(t, oops.CodeNotFound, shareableErr.Code)
+}
+
+func TestService_ListMembers_EmailFallbackIgnoresProfileLinkedToAnotherUser(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_user_a", "a@test.com", "User A", "user_a", "membership_a")
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_user_b", "b@test.com", "User B", "user_b", "membership_b")
+	// User A's directory profile carries user B's email address.
+	seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_user_a", "b@test.com", `{"department_name":"Sales"}`)
+
+	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	require.NoError(t, err)
+
+	byID := map[string]*gen.AccessMember{}
+	for _, member := range result.Members {
+		byID[member.ID] = member
+	}
+	require.Equal(t, new("Sales"), byID["local_user_a"].Department)
+	require.Nil(t, byID["local_user_b"].Department, "a profile linked to another user must not match by email")
+}
+
+func TestService_ListMembers_ReportsDirectoryMappedRolesSeparately(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+
+	builderID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	viewerID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_viewer", "Viewer", "viewer", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	viewer := seededRolePrincipal(t, ctx, ti.conn, orgID, "viewer").String()
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_sales_user", "sales@test.com", "Sales User", "user_sales", "membership_sales")
+	seedRoleAssignment(t, ctx, ti.conn, orgID, "local_sales_user", mockMember("", "membership_sales", "user_sales", "builder"))
+	directoryUserID, workosDirectoryUserID := seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_sales_user", "sales@test.com", `{"department_name":"Sales"}`)
+	groupID, workosGroupID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
+	addMappingGroupMember(t, ctx, ti.conn, directoryUserID, workosDirectoryUserID, groupID, workosGroupID)
+
+	key := "department_name"
+	value := "Sales"
+	seedMappingAdministrator(t, ctx, ti)
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind:     directoryRoleMappingSourceAttribute,
+		AttributeKey:   &key,
+		AttributeValue: &value,
+		RoleUrns:       []string{builder},
+	})
+	require.NoError(t, err)
+	groupIDString := groupID.String()
+	_, err = ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind:       directoryRoleMappingSourceGroup,
+		DirectoryGroupID: &groupIDString,
+		RoleUrns:         []string{viewer},
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	require.NoError(t, err)
+
+	byID := map[string]*gen.AccessMember{}
+	for _, member := range result.Members {
+		byID[member.ID] = member
+	}
+	// Builder is held both ways and reported in both lists; only the direct
+	// assignment can be removed through the member's roles.
+	require.Equal(t, []string{builderID}, byID["local_sales_user"].RoleIds)
+	require.ElementsMatch(t, []string{builderID, viewerID}, byID["local_sales_user"].DirectoryRoleIds)
+	require.Empty(t, byID[authCtx.UserID].DirectoryRoleIds)
+
+	// Each mapped role names the mapping it comes from. Attribute sources
+	// carry no key or value, since members are listed to organization readers.
+	sources := byID["local_sales_user"].DirectoryRoleSources
+	require.Len(t, sources, 2)
+	bySourceKind := map[string]*gen.AccessMemberDirectoryRoleSource{}
+	for _, source := range sources {
+		bySourceKind[source.SourceKind] = source
+	}
+	require.Equal(t, builderID, bySourceKind[directoryRoleMappingSourceAttribute].RoleID)
+	require.Nil(t, bySourceKind[directoryRoleMappingSourceAttribute].DirectoryGroupID)
+	require.Equal(t, viewerID, bySourceKind[directoryRoleMappingSourceGroup].RoleID)
+	require.Equal(t, &groupIDString, bySourceKind[directoryRoleMappingSourceGroup].DirectoryGroupID)
+	require.NotNil(t, byID[authCtx.UserID].DirectoryRoleSources)
+	require.Empty(t, byID[authCtx.UserID].DirectoryRoleSources)
+}
+
+func TestService_ListMembers_ReportsEveryDirectorySourceOfARole(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+
+	builderID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_eng_user", "eng@test.com", "Eng User", "user_eng", "membership_eng")
+	directoryUserID, workosDirectoryUserID := seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_eng_user", "eng@test.com", `{}`)
+	engineeringID, workosEngineeringID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
+	platformID, workosPlatformID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Platform")
+	addMappingGroupMember(t, ctx, ti.conn, directoryUserID, workosDirectoryUserID, engineeringID, workosEngineeringID)
+	addMappingGroupMember(t, ctx, ti.conn, directoryUserID, workosDirectoryUserID, platformID, workosPlatformID)
+
+	seedMappingAdministrator(t, ctx, ti)
+	mappingIDs := map[string]string{}
+	for _, groupID := range []string{engineeringID.String(), platformID.String()} {
+		created, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+			SourceKind:       directoryRoleMappingSourceGroup,
+			DirectoryGroupID: &groupID,
+			RoleUrns:         []string{builder},
+		})
+		require.NoError(t, err)
+		require.Len(t, created, 1)
+		mappingIDs[groupID] = created[0].ID
+	}
+
+	memberSources := func() []*gen.AccessMemberDirectoryRoleSource {
+		t.Helper()
+		result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+		require.NoError(t, err)
+		for _, member := range result.Members {
+			if member.ID == "local_eng_user" {
+				require.Equal(t, []string{builderID}, member.DirectoryRoleIds, "a role reached twice is held once")
+				return member.DirectoryRoleSources
+			}
+		}
+		require.FailNow(t, "member not listed")
+		return nil
+	}
+
+	sources := memberSources()
+	require.Len(t, sources, 2, "both groups give the role, so both are reported")
+	for _, source := range sources {
+		require.Equal(t, builderID, source.RoleID)
+		require.NotNil(t, source.DirectoryGroupID)
+		require.Equal(t, mappingIDs[*source.DirectoryGroupID], source.MappingID)
+	}
+
+	// A group deleted from the directory stops giving the role, so it is no
+	// longer a source.
+	deleteMappingDirectoryGroup(t, ctx, ti.conn, workosPlatformID)
+	sources = memberSources()
+	require.Len(t, sources, 1)
+	require.Equal(t, engineeringID.String(), *sources[0].DirectoryGroupID)
+}
+
+func TestService_ListMembers_ReportsDirectoryPresenceAndGroupIDs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_synced_user", "synced@test.com", "Synced User", "user_synced", "membership_synced")
+	directoryUserID, workosDirectoryUserID := seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_synced_user", "synced@test.com", `{}`)
+	// Two directories can each have a group with the same name; only the ID
+	// tells them apart.
+	firstID, workosFirstID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
+	secondID, workosSecondID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
+	addMappingGroupMember(t, ctx, ti.conn, directoryUserID, workosDirectoryUserID, firstID, workosFirstID)
+	addMappingGroupMember(t, ctx, ti.conn, directoryUserID, workosDirectoryUserID, secondID, workosSecondID)
+
+	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	require.NoError(t, err)
+	byID := map[string]*gen.AccessMember{}
+	for _, member := range result.Members {
+		byID[member.ID] = member
+	}
+
+	synced := byID["local_synced_user"]
+	require.Equal(t, new(true), synced.InDirectory)
+	require.Equal(t, []string{"Engineering"}, synced.Groups)
+	require.ElementsMatch(t, []*gen.AccessMemberDirectoryGroup{
+		{ID: firstID.String(), Name: "Engineering"},
+		{ID: secondID.String(), Name: "Engineering"},
+	}, synced.DirectoryGroups)
+
+	// The caller has no directory profile.
+	require.Equal(t, new(false), byID[authCtx.UserID].InDirectory)
+	require.Empty(t, byID[authCtx.UserID].DirectoryGroups)
 }

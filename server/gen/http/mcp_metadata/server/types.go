@@ -44,8 +44,11 @@ type SetMcpMetadataRequestBody struct {
 // ExportMcpMetadataRequestBody is the type of the "mcpMetadata" service
 // "exportMcpMetadata" endpoint HTTP request body.
 type ExportMcpMetadataRequestBody struct {
-	// The MCP server slug (from the install URL)
+	// The MCP server slug (from the install URL). Mutually exclusive with
+	// mcp_server_id.
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// The ID of a toolset-backed MCP server. Mutually exclusive with mcp_slug.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 }
 
 // GetMcpMetadataResponseBody is the type of the "mcpMetadata" service
@@ -60,11 +63,13 @@ type GetMcpMetadataResponseBody struct {
 type SetMcpMetadataResponseBody struct {
 	// The ID of the metadata record
 	ID string `form:"id" json:"id" xml:"id"`
-	// The toolset associated with this install page metadata. Mutually exclusive
-	// with mcp_server_id.
+	// The toolset associated with this install page metadata. Also set with
+	// mcp_server_id, to the same id, for a hosted MCP server with a live canonical
+	// MCP server.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// The MCP server associated with this install page metadata. Mutually
-	// exclusive with toolset_id.
+	// The MCP server associated with this install page metadata. Also set with
+	// toolset_id, to the same id, for a hosted MCP server with a live canonical
+	// MCP server.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// The asset ID for the MCP install page logo
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
@@ -675,11 +680,13 @@ type ExportMcpMetadataGatewayErrorResponseBody struct {
 type McpMetadataResponseBody struct {
 	// The ID of the metadata record
 	ID string `form:"id" json:"id" xml:"id"`
-	// The toolset associated with this install page metadata. Mutually exclusive
-	// with mcp_server_id.
+	// The toolset associated with this install page metadata. Also set with
+	// mcp_server_id, to the same id, for a hosted MCP server with a live canonical
+	// MCP server.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// The MCP server associated with this install page metadata. Mutually
-	// exclusive with toolset_id.
+	// The MCP server associated with this install page metadata. Also set with
+	// toolset_id, to the same id, for a hosted MCP server with a live canonical
+	// MCP server.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// The asset ID for the MCP install page logo
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
@@ -1309,7 +1316,11 @@ func NewSetMcpMetadataPayload(body *SetMcpMetadataRequestBody, apikeyToken *stri
 // endpoint payload.
 func NewExportMcpMetadataPayload(body *ExportMcpMetadataRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *mcpmetadata.ExportMcpMetadataPayload {
 	v := &mcpmetadata.ExportMcpMetadataPayload{
-		McpSlug: types.Slug(*body.McpSlug),
+		McpServerID: body.McpServerID,
+	}
+	if body.McpSlug != nil {
+		mcpSlug := types.Slug(*body.McpSlug)
+		v.McpSlug = &mcpSlug
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -1351,9 +1362,6 @@ func ValidateSetMcpMetadataRequestBody(body *SetMcpMetadataRequestBody) (err err
 // ValidateExportMcpMetadataRequestBody runs the validations defined on
 // ExportMcpMetadataRequestBody
 func ValidateExportMcpMetadataRequestBody(body *ExportMcpMetadataRequestBody) (err error) {
-	if body.McpSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_slug", "body"))
-	}
 	if body.McpSlug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 	}
@@ -1361,6 +1369,9 @@ func ValidateExportMcpMetadataRequestBody(body *ExportMcpMetadataRequestBody) (e
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
 		}
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	return
 }

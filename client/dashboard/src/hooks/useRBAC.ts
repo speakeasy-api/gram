@@ -3,20 +3,33 @@ import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+// Open SDK enums accept future values, but only understood scopes may authorize.
+const knownScopes: ReadonlySet<string> = new Set(Object.values(Scope));
+
 /**
  * Derive the resource kind from a scope's family prefix.
  * Mirrors the server-side ResourceKindForScope in authz/selector.go.
+ * mcp:auth is not checkable client-side: the server binds the connection owner.
  */
 export function resourceKindForScope(scope: string): string {
-  if (scope.startsWith("project:") || scope.startsWith("plugin:"))
+  if (scope === "mcp:auth" || scope === "mcp:blocked_auth")
+    return "mcp_auth_client";
+  if (
+    scope.startsWith("project:") ||
+    scope.startsWith("plugin:") ||
+    scope.startsWith("log:")
+  )
     return "project";
   if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
   if (scope.startsWith("org:")) return "org";
   if (scope.startsWith("environment:")) return "environment";
   if (scope.startsWith("skill:")) return "skill";
+  if (scope.startsWith("inference:")) return "inference";
+  if (scope.startsWith("assistant:")) return "assistant";
   if (scope.startsWith("risk_policy:")) return "risk_policy";
   if (scope.startsWith("chat:")) return "chat";
   if (scope.startsWith("agent:")) return "agent";
+  if (scope.startsWith("workload:")) return "workload";
   return "*";
 }
 
@@ -67,6 +80,7 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   "mcp:read": ["mcp:blocked_read"],
   "mcp:write": ["mcp:blocked_write"],
   "mcp:connect": ["mcp:blocked_connect"],
+  "mcp:auth": ["mcp:blocked_auth"],
   "environment:read": ["environment:blocked_read"],
   "environment:write": [
     "environment:blocked_write",
@@ -75,6 +89,8 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   "plugin:write": ["plugin:blocked_write"],
   "skill:read": ["skill:blocked_read"],
   "skill:write": ["skill:blocked_write", "skill:blocked_read"],
+  "assistant:read": ["assistant:blocked_read"],
+  "assistant:write": ["assistant:blocked_write", "assistant:blocked_read"],
   "risk_policy:evaluate": ["risk_policy:bypass"],
 };
 
@@ -85,6 +101,12 @@ export function exclusionScopesForScope(scope: Scope): readonly string[] {
 interface EffectiveGrant {
   scope?: string;
   selectors?: Array<Record<string, string>>;
+  /**
+   * Selectors granted to the caller by name. For allow scopes these name a
+   * concrete resource and outrank blocks inherited from a role or everyone;
+   * for blocked scopes they are the caller's own blocks, which always apply.
+   */
+  directSelectors?: Array<Record<string, string>>;
   subScopes?: string[];
   effect?: string;
 }
@@ -99,9 +121,32 @@ function grantSelectorsMatch(
   return grant.selectors.some((selector) => matches(selector, check));
 }
 
+function directSelectorsMatch(
+  grant: EffectiveGrant,
+  check: Record<string, string>,
+  strict: boolean,
+): boolean {
+  const matches = strict ? selectorMatchesStrict : selectorMatches;
+  return (grant.directSelectors ?? []).some((selector) =>
+    matches(selector, check),
+  );
+}
+
+/**
+ * Blocklist exclusions (`*:blocked_*`) yield to a direct grant naming the
+ * resource. Other exclusions such as risk_policy:bypass never do. Mirrors
+ * ExclusionYieldsToDirectGrants in server/internal/authz/precedence.go.
+ */
+function exclusionYieldsToDirectGrants(exclusionScope: string): boolean {
+  return exclusionScope.includes(":blocked_");
+}
+
 /**
  * Pure equivalent of hasScope for loaded effective grants. Multiple resource IDs
  * accept any allow, but an exclusion on ANY alternative wins (RequireAnyUnblocked).
+ * A block inherited from a role or everyone does not win on an alternative
+ * that a direct grant naming the resource satisfies; the caller's own block
+ * always does.
  */
 export function hasScopeInGrants(
   grants: EffectiveGrant[],
@@ -109,6 +154,10 @@ export function hasScopeInGrants(
   resourceId?: string | readonly string[],
   projectId?: string,
 ): boolean {
+  if (!knownScopes.has(scope)) return false;
+  // Only the server can bind the connection owner of an auth-client check.
+  if (resourceKindForScope(scope) === "mcp_auth_client") return false;
+
   const resourceIds =
     typeof resourceId === "string" || resourceId === undefined
       ? [resourceId]
@@ -129,8 +178,16 @@ export function hasScopeInGrants(
 
   const exclusionScopes = exclusionScopesForScope(scope);
   let hasAllow = false;
+  // Per alternative: whether a block that cannot be outranked matched, whether
+  // a block inherited from a role or everyone matched, and whether a direct
+  // grant naming the resource satisfies it.
+  const absoluteBlock = allowChecks.map(() => false);
+  const inheritedBlock = allowChecks.map(() => false);
+  const directAllow = allowChecks.map(() => false);
 
   for (const grant of grants) {
+    // An unknown parent must not authorize through its known sub-scopes either.
+    if (grant.scope === undefined || !knownScopes.has(grant.scope)) continue;
     const effect = grant.effect || "allow";
 
     const isLegacyDeny = effect === "deny" && grant.scope === scope;
@@ -138,25 +195,33 @@ export function hasScopeInGrants(
       effect === "allow" &&
       grant.scope !== undefined &&
       exclusionScopes.includes(grant.scope);
-    if (
-      (isLegacyDeny || isExclusion) &&
-      exclusionChecks.some((check) => grantSelectorsMatch(grant, check, true))
-    ) {
-      return false;
+    if (isLegacyDeny || isExclusion) {
+      const yields =
+        isExclusion && exclusionYieldsToDirectGrants(grant.scope ?? "");
+      exclusionChecks.forEach((check, i) => {
+        if (!grantSelectorsMatch(grant, check, true)) return;
+        if (yields && !directSelectorsMatch(grant, check, true)) {
+          inheritedBlock[i] = true;
+        } else {
+          absoluteBlock[i] = true;
+        }
+      });
     }
 
     const scopeMatches =
       grant.scope === scope || grant.subScopes?.includes(scope);
-    if (
-      effect === "allow" &&
-      scopeMatches &&
-      allowChecks.some((check) => grantSelectorsMatch(grant, check, false))
-    ) {
-      hasAllow = true;
+    if (effect === "allow" && scopeMatches) {
+      allowChecks.forEach((check, i) => {
+        if (grantSelectorsMatch(grant, check, false)) hasAllow = true;
+        if (directSelectorsMatch(grant, check, false)) directAllow[i] = true;
+      });
     }
   }
 
-  return hasAllow;
+  const blocked = allowChecks.some(
+    (_, i) => absoluteBlock[i] || (inheritedBlock[i] && !directAllow[i]),
+  );
+  return hasAllow && !blocked;
 }
 
 /** Any allow is sufficient, but an exclusion on any alternative wins. */
@@ -218,7 +283,10 @@ function useRBACImpl() {
   }, [data?.grants]);
 
   /**
-   * Check if the user has a given scope, optionally scoped to a resource ID.
+   * Check if the user has a given scope, optionally scoped to a resource ID
+   * and the project that resource belongs to. Passing `projectId` lets
+   * project-wide grants (`{ resourceId: "*", projectId }`) cover the resource
+   * and keeps grants for other projects from matching.
    *
    * Uses exclusion-wins semantics: matching internal exclusion grants (and
    * legacy deny-effect grants) override matching allow grants.
@@ -228,10 +296,10 @@ function useRBACImpl() {
    * - A grant with `selectors: [...]` means the scope is constrained by selectors.
    */
   const hasScope = useCallback(
-    (scope: Scope, resourceId?: string): boolean => {
+    (scope: Scope, resourceId?: string, projectId?: string): boolean => {
       if (!grants) return false;
 
-      return hasScopeInGrants(grants, scope, resourceId);
+      return hasScopeInGrants(grants, scope, resourceId, projectId);
     },
     [grants],
   );
@@ -240,8 +308,8 @@ function useRBACImpl() {
    * Check multiple scopes at once. Returns true if the user has ALL of them.
    */
   const hasAllScopes = useCallback(
-    (scopes: Scope[], resourceId?: string): boolean => {
-      return scopes.every((scope) => hasScope(scope, resourceId));
+    (scopes: Scope[], resourceId?: string, projectId?: string): boolean => {
+      return scopes.every((scope) => hasScope(scope, resourceId, projectId));
     },
     [hasScope],
   );
@@ -250,8 +318,8 @@ function useRBACImpl() {
    * Check multiple scopes at once. Returns true if the user has ANY of them.
    */
   const hasAnyScope = useCallback(
-    (scopes: Scope[], resourceId?: string): boolean => {
-      return scopes.some((scope) => hasScope(scope, resourceId));
+    (scopes: Scope[], resourceId?: string, projectId?: string): boolean => {
+      return scopes.some((scope) => hasScope(scope, resourceId, projectId));
     },
     [hasScope],
   );

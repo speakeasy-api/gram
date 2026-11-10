@@ -248,7 +248,7 @@ func TestResolveIssuerByURL_SoftDeletedDoesNotResolve(t *testing.T) {
 	tenant := newTenant(t, conn)
 
 	withdrawn := seedIssuer(t, conn, tenant.organizationID, organizationTier(), "withdrawn", testIssuerURL, epoch)
-	softDelete(t, conn, withdrawn)
+	softDelete(t, conn, tenant.organizationID, withdrawn)
 
 	_, err = workloadidentity.ResolveIssuerByURL(t.Context(), conn, workloadidentity.ResolveIssuerParams{
 		OrganizationID: tenant.organizationID,

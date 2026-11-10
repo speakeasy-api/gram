@@ -1,7 +1,10 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
+import { isProdHost } from "@/lib/utils";
 import { nullTelemetry, type Telemetry } from "./Telemetry";
 import {
   failOpenMissingFlags,
+  isGramHost,
   shouldFailOpenMissingFlags,
   shouldUseDevTelemetry,
 } from "./TelemetryProvider";
@@ -49,15 +52,15 @@ describe("failOpenMissingFlags", () => {
   }
 
   it("treats a missing flag as enabled", () => {
-    expect(wrap(undefined).isFeatureEnabled("gram-risk-watchdog")).toBe(true);
+    expect(wrap(undefined).isFeatureEnabled("gram-explore")).toBe(true);
   });
 
   it("preserves an explicit off so rollouts can be tested", () => {
-    expect(wrap(false).isFeatureEnabled("gram-risk-watchdog")).toBe(false);
+    expect(wrap(false).isFeatureEnabled("gram-explore")).toBe(false);
   });
 
   it("preserves an explicit on", () => {
-    expect(wrap(true).isFeatureEnabled("gram-risk-watchdog")).toBe(true);
+    expect(wrap(true).isFeatureEnabled("gram-explore")).toBe(true);
   });
 
   it("passes variants through without failing open", () => {
@@ -113,5 +116,37 @@ describe("failOpenMissingFlags", () => {
     wrapped.onFeatureFlags(() => {});
     wrapped.identify("user@example.com", {});
     expect(wrapped.getFeatureFlag("gram-risk-llm-analyzer")).toBeUndefined();
+  });
+});
+
+describe("isGramHost", () => {
+  it.each([
+    "https://getgram.ai",
+    "https://app.getgram.ai",
+    "https://pr-6012.dev.getgram.ai",
+    "https://ai.speakeasy.com",
+    "https://dev.ai.speakeasy.com",
+  ])("admits %s", (url) => {
+    expect(isGramHost(url)).toBe(true);
+  });
+
+  it.each([
+    "https://mygetgram.ai",
+    "https://fooai.speakeasy.com",
+    "https://getgram.ai.evil.com",
+    "https://evil.example/getgram.ai",
+    "https://speakeasy.com",
+  ])("rejects %s", (url) => {
+    expect(isGramHost(url)).toBe(false);
+  });
+});
+
+describe("isProdHost", () => {
+  it("treats only the production dashboard hosts as prod", () => {
+    expect(isProdHost("https://app.getgram.ai")).toBe(true);
+    expect(isProdHost("https://ai.speakeasy.com")).toBe(true);
+    expect(isProdHost("https://dev.ai.speakeasy.com")).toBe(false);
+    expect(isProdHost("https://dev.getgram.ai")).toBe(false);
+    expect(isProdHost("https://pr-6012.dev.getgram.ai")).toBe(false);
   });
 });

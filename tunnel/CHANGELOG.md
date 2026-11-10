@@ -1,5 +1,23 @@
 # tunnel
 
+## 0.2.1
+
+### Patch Changes
+
+- 49f5d2c: Add opt-in hooks that distinguish local request setup failures, private-connection capacity, and platform availability checks for MCP connection history. Nothing enables them yet, so connection history and request responses do not change. Tunnel gateways now label their own forward-token refusals with an internal status.
+
+## 0.2.0
+
+### Minor Changes
+
+- b772e91: Show connected tunnel agents, target network checks, and MCP request history in the dashboard. Agents report aggregate HTTP progress when a gateway with diagnostics enabled polls them without collecting payloads or making MCP calls. Existing agents continue forwarding traffic.
+
+## 0.1.1
+
+### Patch Changes
+
+- 3509e3e: The tunnel agent now forwards a tunneled OAuth call, such as a token exchange, to the request's own path on the host pinned by `TUNNEL_LOCAL_MCP_URL`, instead of appending that path to the pinned URL's path. With a `TUNNEL_LOCAL_MCP_URL` that carries a path, for example a Snowflake-managed MCP server URL, the old behavior sent the token request to a URL that does not exist, so logins through an identity provider bound to the tunnel failed with an empty 404. Any query pinned in `TUNNEL_LOCAL_MCP_URL` is kept on these forwards.
+
 ## 0.1.0
 
 ### Minor Changes

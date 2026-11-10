@@ -1,10 +1,12 @@
 package platformmcp
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"reflect"
 	"slices"
@@ -12,6 +14,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
@@ -81,7 +84,10 @@ type ToolMeta struct {
 var (
 	discoveryOrgRead             = []authz.Scope{authz.ScopeOrgRead}
 	discoveryProjectRead         = []authz.Scope{authz.ScopeProjectRead}
+	discoveryLogRead             = []authz.Scope{authz.ScopeLogRead}
+	discoveryProjectWrite        = []authz.Scope{authz.ScopeProjectWrite}
 	discoveryMCPRead             = []authz.Scope{authz.ScopeMCPRead}
+	discoveryMCPWrite            = []authz.Scope{authz.ScopeMCPWrite}
 	discoveryMCPReadOrConnect    = []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPConnect}
 	discoveryOrgReadOrMCPConnect = []authz.Scope{authz.ScopeOrgRead, authz.ScopeMCPConnect}
 	discoverySkillRead           = []authz.Scope{authz.ScopeSkillRead}
@@ -107,6 +113,10 @@ type Descriptor struct {
 	InputSchema []byte
 
 	invoke func(ctx context.Context, arguments json.RawMessage) (any, error)
+
+	// output is the handler's result type, the type the advertised output
+	// schema is inferred from.
+	output reflect.Type
 }
 
 // ToolRefusalError is a tool's own refusal — a rate limit, a disabled feature, an
@@ -174,10 +184,32 @@ type Registrar struct {
 	resources          []ResourceDescriptor
 	riskTelemetry      RiskTelemetry
 	externalAuthorizer Authorizer
+	// logger records the cause of a tool error no classifier recognised. It
+	// may be nil — a registrar composed without one still fails safe, it just
+	// cannot say why.
+	logger *slog.Logger
+	// instructions are the server instructions of the full catalogue. The
+	// progressive surface hands out the paragraphs that name a tool when that
+	// tool is described.
+	instructions string
+	// cardLinks builds the dashboard links on result cards. Without a
+	// dashboard URL, cards are drawn without a page link.
+	cardLinks cardLinks
+}
+
+// withDashboardLinks lets result cards link to dashboard pages.
+func (r *Registrar) withDashboardLinks(links cardLinks) {
+	r.cardLinks = links
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil}
+	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: "", cardLinks: cardLinks{dashboardURL: nil, serverURL: nil, projectSlug: nil}}
+}
+
+func (r *Registrar) withLogger(logger *slog.Logger) {
+	if r != nil {
+		r.logger = logger
+	}
 }
 
 func (r *Registrar) withExternalAuthorizer(authorizer Authorizer) {
@@ -217,6 +249,8 @@ func (r *Registrar) For(audience Audience) []Descriptor {
 // FilterExternalTools applies caller-specific discovery policy to an already
 // composed tools/list result. This is only a discovery filter: exact resource
 // checks remain in each handler and run again when a listed tool is called.
+// A client with a tool allowlist (see clientToolAllowlist) sees only those
+// tools, intersected with what its grants make discoverable.
 func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal, tools []*mcp.Tool) []*mcp.Tool {
 	if r == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return []*mcp.Tool{}
@@ -228,10 +262,16 @@ func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal
 		}
 	}
 	grants, grantsLoaded := authz.GrantsFromContext(ctx)
+	allowlist := clientToolAllowlist(principal.ClientID)
+	// The small discovery surface reaches every tool by design, so the
+	// allowlist only narrows the full catalogue.
+	if discoveryModeFromContext(ctx) != discoveryFull {
+		allowlist = nil
+	}
 	visible := make([]*mcp.Tool, 0, len(tools))
 	for _, tool := range tools {
 		descriptor, ok := descriptors[tool.Name]
-		if !ok || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
+		if !ok || (allowlist != nil && !slices.Contains(allowlist, tool.Name)) || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
 			continue
 		}
 		visible = append(visible, tool)
@@ -250,7 +290,12 @@ func externalToolDiscoverable(grants []authz.Grant, grantsLoaded bool, principal
 			return true
 		}
 	case ExternalAuthorizationOrgAdmin:
-		scopes = []authz.Scope{authz.ScopeOrgAdmin}
+		if !grantsAuthorizeAnyScope(grants, principal.OrganizationID, []authz.Scope{authz.ScopeOrgAdmin}) {
+			return false
+		}
+		if len(scopes) == 0 {
+			return true
+		}
 	default:
 		return false
 	}
@@ -318,16 +363,11 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 			if request.Params.URI != resource.URI {
 				return nil, mcp.ResourceNotFoundError(request.Params.URI)
 			}
-			if r.externalAuthorizer == nil {
-				return nil, ErrUnavailable
+			if err := r.authorizeExternal(ctx, meta.Authorization); err != nil {
+				return nil, r.failSafe(ctx, resource.URI, err)
 			}
-			principal, err := principalFromToolContext(ctx)
-			if err != nil {
-				return nil, err
-			}
-			if err := r.externalAuthorizer.AuthorizeExternalCall(ctx, principal, meta.Authorization); err != nil {
-				return nil, fmt.Errorf("authorize external resource: %w", err)
-			}
+			// Reads serve the pinned in-process corpus, and a withheld guide's
+			// error is its own answer, so only authorization needs the backstop.
 			text, err := read(ctx)
 			if err != nil {
 				return nil, err
@@ -337,6 +377,9 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 					URI:      resource.URI,
 					MIMEType: resource.MIMEType,
 					Text:     text,
+					// MCP Apps hosts read a view's presentation hints from
+					// the contents they render.
+					Meta: resource.Meta,
 				}}}, nil
 		})
 	}
@@ -371,22 +414,36 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 		if tool.OutputSchema == nil {
 			tool.OutputSchema = inferOutputSchema[Out](tool.Name)
 		}
+		// Every external tool draws its results as an MCP Apps card unless it
+		// is listed as text-only. The card rides in _meta, so text and
+		// structured content stay exactly what other clients read.
+		spec, carded := toolCardSpec(tool.Name)
+		if carded {
+			tool.Meta = withCardToolMeta(tool.Meta)
+		}
+		cardTitle := cmp.Or(tool.Title, cardFallbackTitle(tool.Name))
+		card := func(ctx context.Context, result *mcp.CallToolResult, output Out, input In) *mcp.CallToolResult {
+			if !carded {
+				return result
+			}
+			return withResultCard(ctx, r.cardLinks, cardTitle, spec, result, output, input)
+		}
 		mcp.AddTool(r.server, tool, func(ctx context.Context, request *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
-			var zero Out
-			if r.externalAuthorizer == nil {
-				return nil, zero, ErrUnavailable
+			var result *mcp.CallToolResult
+			var output Out
+			err := r.authorizeExternal(ctx, meta.Authorization)
+			if err == nil {
+				result, output, err = handler(ctx, request, input)
 			}
-			principal, err := principalFromToolContext(ctx)
-			if err != nil {
-				return nil, zero, err
+			if err == nil {
+				return card(ctx, result, output, input), output, nil
 			}
-			if err := r.externalAuthorizer.AuthorizeExternalCall(ctx, principal, meta.Authorization); err != nil {
-				if result, ok := externalAuthorizationToolResult(err); ok {
-					return result, zero, nil
-				}
-				return nil, zero, fmt.Errorf("authorize external tool %q: %w", tool.Name, err)
+			// A denial is projected from its fields wherever it was raised, so a
+			// handler that wraps one still answers with permission_denied.
+			if result, ok := externalAuthorizationToolResult(err); ok {
+				return card(ctx, result, output, input), output, nil
 			}
-			return handler(ctx, request, input)
+			return nil, output, r.failSafe(ctx, tool.Name, err)
 		})
 	}
 
@@ -416,13 +473,14 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 			request := &mcp.CallToolRequest{}
 			result, output, err := handler(ctx, request, input)
 			if err != nil {
-				return nil, err
+				return nil, r.failSafe(ctx, tool.Name, err)
 			}
 			if refusal, ok := refusalFromResult(result); ok {
 				return nil, refusal
 			}
 			return output, nil
 		},
+		output: reflect.TypeFor[Out](),
 	})
 }
 
@@ -433,6 +491,87 @@ func (d Descriptor) Invoke(ctx context.Context, arguments json.RawMessage) (any,
 		return nil, ErrUnavailable
 	}
 	return d.invoke(ctx, arguments)
+}
+
+// authorizeExternal admits the caller of one external tool call or resource
+// read under the policy it declared.
+func (r *Registrar) authorizeExternal(ctx context.Context, policy ExternalAuthorization) error {
+	if r.externalAuthorizer == nil {
+		return ErrUnavailable
+	}
+	principal, err := principalFromToolContext(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.externalAuthorizer.AuthorizeExternalCall(ctx, principal, policy); err != nil {
+		// A denial or bare sentinel is already the answer; only a cause is
+		// worth the context.
+		if safe, ok := recognisedToolError(err); ok {
+			return safe
+		}
+		return fmt.Errorf("authorize external call: %w", err)
+	}
+	return nil
+}
+
+// failSafe is the backstop for a tool error that no classifier recognised.
+//
+// Each tool family still projects its own errors into specific refusals —
+// those are what make the tools usable — but a projection is only as safe as
+// it is exhaustive, across every path including the shared cores a tool calls
+// and does not own. Whatever reaches here unrecognised would otherwise be
+// returned to the caller as its text, which can carry driver messages, SQL, or
+// relation and constraint names. So the caller gets the generic unavailable
+// refusal, and the server log keeps the full cause.
+//
+// It runs on every failure path, including a service that was never composed
+// and a registrar given no logger, so the log is guarded rather than assumed.
+// Resource authorization goes through it too, named by URI.
+func (r *Registrar) failSafe(ctx context.Context, tool string, err error) error {
+	if safe, ok := recognisedToolError(err); ok {
+		return safe
+	}
+	if r.logger != nil {
+		// A caller that went away or ran out of time is not a server fault.
+		level := slog.LevelError
+		if ctx.Err() != nil {
+			level = slog.LevelWarn
+		}
+		r.logger.Log(ctx, level, "platform mcp tool returned an unclassified error", attr.SlogToolName(tool), attr.SlogError(err))
+	}
+	payload, marshalErr := json.Marshal(featureUnavailableResult{
+		Code:    unavailableCode,
+		Feature: tool,
+		Message: "That is temporarily unavailable. Try again shortly, and read the current state again before repeating a change.",
+	})
+	if marshalErr != nil {
+		payload = []byte(`{"code":"` + unavailableCode + `"}`)
+	}
+	return &ToolRefusalError{Code: unavailableCode, Payload: string(payload)}
+}
+
+var recognisedSentinels = [...]error{ErrUnauthorized, ErrForbidden, ErrUnavailable}
+
+// recognisedToolError returns the form of err that is already safe to show a
+// caller: a tool's own refusal or authorization denial, or one of the
+// package's bare sentinels, whose text is fixed. A recognised error wrapped in
+// more context is returned unwrapped, because the wrapping text is exactly
+// what cannot be vouched for. A JSON-RPC error is not recognised: a remote MCP
+// server or the SDK authors its message and data.
+func recognisedToolError(err error) (error, bool) {
+	for _, sentinel := range recognisedSentinels {
+		// Only the bare sentinel: wrapped, it carries its cause's text too.
+		if errors.Is(err, sentinel) && err.Error() == sentinel.Error() {
+			return sentinel, true
+		}
+	}
+	if refusal, ok := errors.AsType[*ToolRefusalError](err); ok {
+		return refusal, true
+	}
+	if denied, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
+		return denied, true
+	}
+	return nil, false
 }
 
 // refusalFromResult turns a tool's error result into an error, so a direct
@@ -501,8 +640,9 @@ var wireTypeSchemas = map[reflect.Type]*jsonschema.Schema{
 }
 
 // inferOutputSchema derives the schema the tool advertises for its result,
-// honouring wireTypeSchemas. A tool with an untyped result gets no schema at
-// all, which is what the SDK would have done for it.
+// honouring wireTypeSchemas and leaving every object open to properties it does
+// not name. A tool with an untyped result gets no schema at all, which is what
+// the SDK would have done for it.
 func inferOutputSchema[Out any](name string) *jsonschema.Schema {
 	target := reflect.TypeFor[Out]()
 	if target == reflect.TypeFor[any]() {
@@ -520,7 +660,56 @@ func inferOutputSchema[Out any](name string) *jsonschema.Schema {
 	if err != nil {
 		panic(fmt.Sprintf("platformmcp: infer output schema for %q: %v", name, err))
 	}
+	openInferredObjects(schema, map[*jsonschema.Schema]bool{})
 	return schema
+}
+
+// openInferredObjects drops the `additionalProperties: false` that inference
+// puts on every struct-derived object, so a result may carry properties the
+// schema does not name.
+//
+// An output schema is a promise about what a result contains, not a bound on
+// what it may contain. A client keeps the schema it fetched when it connected,
+// and validates every later result against it; with objects closed, a field
+// added to a result after that point fails the whole result, and the client
+// reports the tool as broken. Schemas for maps are untouched: their
+// additionalProperties is the value schema, not a closure. Input schemas keep
+// the closed form, where an unrecognised argument is a caller mistake worth
+// rejecting.
+func openInferredObjects(schema *jsonschema.Schema, seen map[*jsonschema.Schema]bool) {
+	if schema == nil || seen[schema] {
+		return
+	}
+	seen[schema] = true
+	if isFalseSchema(schema.AdditionalProperties) {
+		schema.AdditionalProperties = nil
+	}
+	for _, child := range []*jsonschema.Schema{
+		schema.AdditionalProperties, schema.Items, schema.AdditionalItems, schema.Contains,
+		schema.UnevaluatedItems, schema.PropertyNames, schema.UnevaluatedProperties,
+		schema.Not, schema.If, schema.Then, schema.Else, schema.ContentSchema,
+	} {
+		openInferredObjects(child, seen)
+	}
+	for _, children := range [][]*jsonschema.Schema{schema.PrefixItems, schema.ItemsArray, schema.AllOf, schema.AnyOf, schema.OneOf} {
+		for _, child := range children {
+			openInferredObjects(child, seen)
+		}
+	}
+	for _, children := range []map[string]*jsonschema.Schema{
+		schema.Defs, schema.Definitions, schema.Properties, schema.PatternProperties,
+		schema.DependentSchemas, schema.DependencySchemas,
+	} {
+		for _, child := range children {
+			openInferredObjects(child, seen)
+		}
+	}
+}
+
+// isFalseSchema reports whether schema is the `false` schema, which
+// jsonschema-go represents as {"not": {}}.
+func isFalseSchema(schema *jsonschema.Schema) bool {
+	return schema != nil && schema.Not != nil && reflect.ValueOf(*schema.Not).IsZero()
 }
 
 // normalizeAgainstSchema applies defaults and validation from the tool's

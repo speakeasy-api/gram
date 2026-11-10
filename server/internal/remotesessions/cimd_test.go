@@ -218,7 +218,7 @@ func TestHandleClientMetadataDocument_ServesDocument(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
-	require.Equal(t, "public, max-age=3600", rec.Header().Get("Cache-Control"))
+	require.Equal(t, "public, no-cache", rec.Header().Get("Cache-Control"))
 	require.NotEmpty(t, rec.Header().Get("ETag"))
 
 	var got map[string]any
@@ -231,6 +231,59 @@ func TestHandleClientMetadataDocument_ServesDocument(t *testing.T) {
 	require.Equal(t, "read:tools", got["scope"])
 	_, present := got["jwks_uri"]
 	require.False(t, present)
+}
+
+func TestHandleClientMetadataDocument_RevalidatesChangedGrantEvidence(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, auth.ProjectID)
+	issuerID := createCIMDIssuer(t, ctx, ti, "cimd-revalidate", "https://idp.example.com/authorize", "https://idp.example.com/token")
+	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cimd-revalidate-usi")
+	created := createCimdClient(t, ctx, ti, issuerID.String(), userIssuer.String(), nil)
+	mgr := newCIMDChallengeManager(t, ti, cimdServerURL)
+	setGrants := func(grants []string) {
+		t.Helper()
+		_, err := repo.New(ti.conn).SetEMAClientGrants(ctx, repo.SetEMAClientGrantsParams{
+			ID: uuid.MustParse(created.ID), ProjectID: conv.ToNullUUID(*auth.ProjectID),
+			OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), GrantTypes: grants,
+		})
+		require.NoError(t, err)
+	}
+	fetch := func(etag string, status int) *httptest.ResponseRecorder {
+		t.Helper()
+		req := cimdDocumentRequest(t, created.ID, false)
+		req.Header.Set("If-None-Match", etag)
+		rec := httptest.NewRecorder()
+		require.NoError(t, mgr.HandleClientMetadataDocument(rec, req))
+		require.Equal(t, status, rec.Code)
+		require.Equal(t, "public, no-cache", rec.Result().Header.Get("Cache-Control"))
+		require.NotEmpty(t, rec.Header().Get("ETag"))
+		return rec
+	}
+	setGrants([]string{"authorization_code", "refresh_token"})
+	initial := fetch("", http.StatusOK)
+	etag := initial.Header().Get("ETag")
+	for _, validator := range []string{etag, "W/" + etag, `"other", ` + etag, "*"} {
+		unchanged := fetch(validator, http.StatusNotModified)
+		require.Equal(t, etag, unchanged.Header().Get("ETag"))
+		require.Empty(t, unchanged.Body.String())
+		require.Empty(t, unchanged.Header().Get("Content-Type"))
+	}
+	// Revoke recorded grant evidence explicitly. Unlinking a binding is not
+	// assumed to revoke the client's grants.
+	setGrants([]string{})
+	changed := fetch(etag, http.StatusOK)
+	require.NotEqual(t, etag, changed.Header().Get("ETag"))
+	require.Equal(t, "application/json; charset=utf-8", changed.Header().Get("Content-Type"))
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(changed.Body.Bytes(), &doc))
+	require.Equal(t, []any{}, doc["grant_types"])
+	require.Equal(t, []any{}, doc["response_types"])
+	unchanged := fetch(changed.Header().Get("ETag"), http.StatusNotModified)
+	require.Equal(t, changed.Header().Get("ETag"), unchanged.Header().Get("ETag"))
+	require.Empty(t, unchanged.Body.String())
 }
 
 func TestHandleClientMetadataDocument_PublishesAttachedKeySetAndStoredAuthMethod(t *testing.T) {
@@ -391,7 +444,7 @@ func TestCIMD_BuildAuthorizationUrlUsesMetadataURLAsClientID(t *testing.T) {
 func TestCIMD_CallbackAuthorizationFailureRecordsRegistrationOutcome(t *testing.T) {
 	t.Parallel()
 
-	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	mgr, reader, state, _ := newCIMDCallbackFailureFixture(t)
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=unauthorized_client&error_description="+url.QueryEscape(" rejected\nclient ")+"&state="+url.QueryEscape(state), nil)
 	untrustedCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=unauthorized_client&state=unknown", nil)
 
@@ -414,11 +467,19 @@ func TestCIMD_CallbackAuthorizationFailureRecordsRegistrationOutcome(t *testing.
 func TestCIMD_CallbackAccessDeniedDoesNotRecordRegistrationFailure(t *testing.T) {
 	t.Parallel()
 
-	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	mgr, reader, state, parentID := newCIMDCallbackFailureFixture(t)
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=access_denied&state="+url.QueryEscape(state), nil)
 
-	err := mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callback)
-	require.Error(t, err)
+	response := httptest.NewRecorder()
+	err := mgr.HandleRemoteLoginCallback(response, callback)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, response.Code)
+	location, err := url.Parse(response.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, mustURL(t, cimdServerURL).Scheme, location.Scheme)
+	require.Equal(t, mustURL(t, cimdServerURL).Host, location.Host)
+	require.Equal(t, "/mcp/cimd-callback-failure/connect", location.Path)
+	require.Equal(t, parentID, location.Query().Get("state"))
 	require.Empty(t, registrationFailurePoints(t, reader))
 }
 
@@ -428,7 +489,7 @@ func TestCIMD_CallbackAccessDeniedDoesNotRecordRegistrationFailure(t *testing.T)
 func TestCIMD_CallbackUpstreamUnavailableRecordsRetryableFailure(t *testing.T) {
 	t.Parallel()
 
-	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	mgr, reader, state, _ := newCIMDCallbackFailureFixture(t)
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=temporarily_unavailable&state="+url.QueryEscape(state), nil)
 
 	err := mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callback)
@@ -445,7 +506,7 @@ func TestCIMD_CallbackUpstreamUnavailableRecordsRetryableFailure(t *testing.T) {
 	), points[0].Attributes)
 }
 
-func newCIMDCallbackFailureFixture(t *testing.T) (*remotesessions.ChallengeManager, *sdkmetric.ManualReader, string) {
+func newCIMDCallbackFailureFixture(t *testing.T) (*remotesessions.ChallengeManager, *sdkmetric.ManualReader, string, string) {
 	t.Helper()
 
 	ctx, ti := newTestService(t)
@@ -465,8 +526,9 @@ func newCIMDCallbackFailureFixture(t *testing.T) (*remotesessions.ChallengeManag
 	require.NoError(t, err)
 	require.Len(t, clients, 1)
 	subject := urn.NewUserSubject("cimd-callback-failure-subject")
+	parentID := uuid.NewString()
 	authorizationURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
-		ID:                  uuid.NewString(),
+		ID:                  parentID,
 		ProjectID:           *authCtx.ProjectID,
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: userIssuer,
@@ -477,7 +539,7 @@ func newCIMDCallbackFailureFixture(t *testing.T) (*remotesessions.ChallengeManag
 	parsed, err := url.Parse(authorizationURL)
 	require.NoError(t, err)
 	require.NotEmpty(t, parsed.Query().Get("state"))
-	return mgr, reader, parsed.Query().Get("state")
+	return mgr, reader, parsed.Query().Get("state"), parentID
 }
 
 func registrationFailurePoints(t *testing.T, reader *sdkmetric.ManualReader) []metricdata.DataPoint[int64] {
@@ -527,7 +589,7 @@ func TestCIMD_RefreshUsesMetadataURLAsClientIDWithoutBasicAuth(t *testing.T) {
 	subject := urn.NewUserSubject("cimd-refresh-subject")
 	seedExpiredRemoteSession(t, ctx, ti, enc, subject, userIssuer, uuid.MustParse(created.ID))
 
-	tok, err := mgr.ResolveAccessToken(ctx, uuid.MustParse(created.ID), subject, "")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, uuid.MustParse(created.ID), subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)

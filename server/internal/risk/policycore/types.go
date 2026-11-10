@@ -2,16 +2,96 @@ package policycore
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
+
+// MCPScope restricts a policy to MCP tool traffic. A nil *MCPScope keeps the
+// policy on chat-session and hook evaluation paths only.
+type MCPScope struct {
+	AllServers      bool             `json:"all_servers,omitempty"`
+	ToolAnnotations []string         `json:"tool_annotations,omitempty"`
+	Servers         []MCPServerScope `json:"servers"`
+}
+
+// MCPServerScope selects one MCP server or gateway. A nil Tools slice follows
+// the policy tool rule; AllToolsWildcard matches every tool unconditionally,
+// ignoring the tool rule; any other non-nil slice is a custom tool selection.
+type MCPServerScope struct {
+	MCPServerID uuid.UUID `json:"mcp_server_id"`
+	Tools       []string  `json:"tools,omitempty"`
+}
+
+// AllToolsWildcard is the sole element of a Tools slice that selects every
+// tool on a server, unconditionally. NormalizeMCPScope maps an empty input
+// tool list onto this sentinel rather than storing an empty slice: Go's
+// omitempty JSON tag collapses nil and empty-slice to the same absent key,
+// so an empty slice could never survive a stored round-trip as "all tools"
+// distinct from "omitted, follow the tool rule" — and unmarshalMCPScope
+// treats a literal empty-but-non-nil Tools as corruption and fails the whole
+// scope closed. The wildcard is a real, non-empty value, so it survives
+// storage and does not trip that guard.
+const AllToolsWildcard = "*"
+
+// isAllToolsWildcard reports whether tools is exactly the wildcard sentinel.
+func isAllToolsWildcard(tools []string) bool {
+	return len(tools) == 1 && tools[0] == AllToolsWildcard
+}
+
+// Applies reports whether a policy scope applies to a concrete MCP server and
+// tool. gatewaysContaining must be resolved from current gateway membership.
+func (s *MCPScope) Applies(serverID uuid.UUID, toolName string, annotations *types.ToolAnnotations, gatewaysContaining []uuid.UUID) bool {
+	if s == nil {
+		return true
+	}
+	if s.AllServers {
+		for _, server := range s.Servers {
+			if server.MCPServerID == serverID {
+				return s.toolMatches(server, toolName, annotations)
+			}
+		}
+		return s.toolRuleMatches(toolName, annotations)
+	}
+	for _, server := range s.Servers {
+		if server.MCPServerID != serverID && !slices.Contains(gatewaysContaining, server.MCPServerID) {
+			continue
+		}
+		if s.toolMatches(server, toolName, annotations) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *MCPScope) toolMatches(server MCPServerScope, toolName string, annotations *types.ToolAnnotations) bool {
+	if toolName == "" {
+		return true
+	}
+	if server.Tools != nil {
+		if isAllToolsWildcard(server.Tools) {
+			return true
+		}
+		return slices.Contains(server.Tools, toolName)
+	}
+	return s.toolRuleMatches(toolName, annotations)
+}
+
+func (s *MCPScope) toolRuleMatches(toolName string, annotations *types.ToolAnnotations) bool {
+	if toolName == "" || len(s.ToolAnnotations) == 0 {
+		return true
+	}
+	return toolfilter.AnnotationsMatch(annotations, s.ToolAnnotations)
+}
 
 // Policy is the transport-neutral representation of a persisted risk policy.
 type Policy struct {
@@ -32,17 +112,17 @@ type Policy struct {
 	Action                 string
 	AudienceType           string
 	AudiencePrincipalURNs  []string
+	MCPScope               *MCPScope
 	ShadowMCPDisposition   *string
 	AutoName               bool
 	UserMessage            *string
 	Prompt                 *string
 	ModelConfig            *ModelConfig
+	ApprovalConfig         *ApprovalConfig
 	Score                  float64
 	Version                int64
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
-	PendingMessages        *int64
-	TotalMessages          *int64
 }
 
 // DetectionScope is one category's message-level detection scope.
@@ -58,10 +138,16 @@ type ModelConfig struct {
 	FailOpen    *bool    `json:"fail_open,omitempty"`
 }
 
-// Progress describes the message-analysis progress attached to single-policy reads.
-type Progress struct {
-	Total    int64
-	Analyzed int64
+// ActionRequireApproval holds an MCP tool call until a listed approver
+// approves it.
+const ActionRequireApproval = "require_approval"
+
+// ApprovalConfig is the persisted approval configuration of a
+// require_approval policy.
+type ApprovalConfig struct {
+	// Approvers are the user and role principal URNs that may approve calls the
+	// policy holds.
+	Approvers []string `json:"approvers"`
 }
 
 // AuditSnapshot strips policy content that must not enter audit or outbox
@@ -72,15 +158,7 @@ func AuditSnapshot(policy Policy) Policy {
 }
 
 // Project maps a database policy row into its canonical transport-neutral form.
-func Project(row repo.RiskPolicy, audiencePrincipalURNs []string, progress *Progress) Policy {
-	var pendingMessages, totalMessages *int64
-	if progress != nil {
-		total := progress.Total
-		pending := max(progress.Total-progress.Analyzed, 0)
-		totalMessages = &total
-		pendingMessages = &pending
-	}
-
+func Project(row repo.RiskPolicy, audiencePrincipalURNs []string) Policy {
 	audience := slices.Clone(audiencePrincipalURNs)
 	if audience == nil {
 		audience = []string{}
@@ -108,13 +186,13 @@ func Project(row repo.RiskPolicy, audiencePrincipalURNs []string, progress *Prog
 		AutoName:               row.AutoName,
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),
+		MCPScope:               unmarshalMCPScope(row.McpScope),
 		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
+		ApprovalConfig:         unmarshalApprovalConfig(row.ApprovalConfig),
 		Score:                  row.Score,
 		Version:                row.Version,
 		CreatedAt:              row.CreatedAt.Time,
 		UpdatedAt:              row.UpdatedAt.Time,
-		PendingMessages:        pendingMessages,
-		TotalMessages:          totalMessages,
 	}
 }
 
@@ -140,6 +218,69 @@ func shadowMCPDisposition(row repo.RiskPolicy) *string {
 		return nil
 	}
 	return &disposition
+}
+
+// DecodeMCPScope reads a stored scope as evaluation does; nil means the policy is not MCP-scoped.
+func DecodeMCPScope(raw []byte) *MCPScope {
+	return unmarshalMCPScope(raw)
+}
+
+func unmarshalMCPScope(raw []byte) *MCPScope {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var scope MCPScope
+	if err := json.Unmarshal(raw, &scope); err != nil {
+		return failClosedMCPScope()
+	}
+	if scope.Servers == nil {
+		return failClosedMCPScope()
+	}
+	for _, annotation := range scope.ToolAnnotations {
+		if !isKnownMCPToolAnnotation(annotation) {
+			return failClosedMCPScope()
+		}
+	}
+	for i := range scope.Servers {
+		if scope.Servers[i].Tools != nil && len(scope.Servers[i].Tools) == 0 {
+			return failClosedMCPScope()
+		}
+	}
+	if !scope.AllServers && len(scope.Servers) == 0 {
+		if len(scope.ToolAnnotations) == 0 {
+			return nil
+		}
+		return failClosedMCPScope()
+	}
+	return &scope
+}
+
+func failClosedMCPScope() *MCPScope {
+	return &MCPScope{AllServers: false, ToolAnnotations: nil, Servers: []MCPServerScope{}}
+}
+
+func unmarshalApprovalConfig(raw []byte) *ApprovalConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+	var config ApprovalConfig
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return nil
+	}
+	return &config
+}
+
+// MarshalApprovalConfig encodes an approval configuration for storage. A nil
+// configuration stores NULL.
+func MarshalApprovalConfig(config *ApprovalConfig) ([]byte, error) {
+	if config == nil {
+		return nil, nil
+	}
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("marshal approval config: %w", err)
+	}
+	return raw, nil
 }
 
 func unmarshalModelConfig(raw []byte) *ModelConfig {

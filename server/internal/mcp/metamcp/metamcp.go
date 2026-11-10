@@ -22,10 +22,14 @@ const MaxMemberResponseBytes = 4 << 20
 
 // The fixed gateway tool contract. ToolDescribeTools and ToolExecuteTool
 // intentionally carry the same wire names as the dynamic toolset surface's
-// tools so agents see one vocabulary across Gram surfaces.
+// tools so agents see one vocabulary across Speakeasy surfaces.
 const (
 	ToolListServers    = "list_servers"
 	ToolDescribeServer = "describe_server"
 	ToolDescribeTools  = "describe_tools"
 	ToolExecuteTool    = "execute_tool"
 )
+
+// ToolCodeExecute is the one tool Code Mode serves: it runs a Python program
+// against the connection's member servers.
+const ToolCodeExecute = "execute"

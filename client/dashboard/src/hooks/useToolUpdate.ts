@@ -1,7 +1,12 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import {
+  UpdatePromptTemplateFormEngine,
+  UpdatePromptTemplateFormKind,
+} from "@gram/client/models/components/updateprompttemplateform.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Tool } from "@/lib/toolTypes";
-import { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
+import type { Tool } from "@/lib/toolTypes";
+import type { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
 import { invalidateTemplate } from "@gram/client/react-query/template.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
@@ -58,6 +63,14 @@ export function useToolUpdate({
           updatePromptTemplateForm: {
             ...tool,
             ...updates,
+            engine: requireKnownEnumValue(
+              UpdatePromptTemplateFormEngine,
+              tool.engine,
+            ),
+            kind: requireKnownEnumValue(
+              UpdatePromptTemplateFormKind,
+              tool.kind,
+            ),
           },
         });
         void invalidateTemplate(queryClient, [{ name: tool.name }]);

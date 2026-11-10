@@ -35,7 +35,7 @@ func TestHandleResourcesTemplatesList_ReturnsEmptyList(t *testing.T) {
 		"cacheScope": "public",
 		"_meta": {
 			"io.modelcontextprotocol/serverInfo": {
-				"name": "Gram",
+				"name": "Speakeasy",
 				"version": "0.0.0"
 			}
 		}

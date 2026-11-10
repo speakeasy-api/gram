@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { NetworkIngressProvider } from "@gram/client/models/components/networkingress.js";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 
 import { PrivateNetworkSection } from "./PrivateNetworkSection";
 
@@ -14,23 +16,26 @@ const state = vi.hoisted(() => ({
   ingressPending: false,
   ingressOptions: undefined as
     | {
+        enabled?: boolean;
         refetchInterval?: (query: {
           state: { data?: { ingress?: { status?: string } } };
         }) => number | false;
       }
     | undefined,
   deleteMutate: vi.fn(),
+  healthMutate: vi.fn(),
   ingress: undefined as
     | {
         id: string;
         organizationId: string;
-        provider: "tailscale";
+        provider: NetworkIngressProvider;
         hostname: string;
         endpointNamespaceKind: "platform";
         enabled: boolean;
         identityRequired: boolean;
         credentialsConfigured: boolean;
         status: string;
+        lastError?: string;
         createdAt: Date;
         updatedAt: Date;
       }
@@ -107,7 +112,7 @@ vi.mock("@gram/client/react-query/networkIngressDeleteIngress.js", () => ({
 vi.mock("@gram/client/react-query/networkIngressCheckHealth.js", () => ({
   useNetworkIngressCheckHealthMutation: () => ({
     isPending: false,
-    mutate: vi.fn(),
+    mutate: state.healthMutate,
   }),
 }));
 vi.mock("@gram/client/react-query/networkIngressGetDeleteImpact.js", () => ({
@@ -136,16 +141,49 @@ beforeEach(() => {
   state.ingressPending = false;
   state.ingressOptions = undefined;
   state.deleteMutate.mockReset();
+  state.healthMutate.mockReset();
   state.ingress = undefined;
 });
 
 afterEach(cleanup);
 
 describe("PrivateNetworkSection", () => {
+  it.each(["online", "deleting"])(
+    "does not expose Tailscale settings for an unsupported provider (%s)",
+    (status) => {
+      state.ingress = {
+        id: "ingress-1",
+        organizationId: "org-1",
+        provider: unrecognized("future_provider"),
+        hostname: "private-mcp",
+        endpointNamespaceKind: "platform",
+        enabled: true,
+        identityRequired: false,
+        credentialsConfigured: true,
+        status,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      };
+      render(<PrivateNetworkSection />);
+      expect(
+        screen.getByText(/managing this unsupported private network provider/),
+      ).toBeTruthy();
+      expect(screen.queryByRole("switch")).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Rotate credentials" }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Retry cleanup" }),
+      ).toBeNull();
+      expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    },
+  );
+
   it.each(["base", "payg"] as const)(
     "shows a Tailscale Enterprise upsell for %s without exposing setup",
     (tier) => {
       state.productTier = tier;
+      state.entitled = false;
       render(<PrivateNetworkSection />);
       expect(screen.getByText("Tailscale private access")).toBeTruthy();
       expect(
@@ -157,20 +195,46 @@ describe("PrivateNetworkSection", () => {
     },
   );
 
-  it("shows the enablement message for Enterprise without staff entitlement", () => {
+  it.each(["base", "payg"] as const)(
+    "offers setup to %s when staff enabled Tailscale",
+    (tier) => {
+      state.productTier = tier;
+      render(<PrivateNetworkSection />);
+      expect(
+        screen.getByRole("button", { name: "Connect Tailscale" }),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole("link", { name: "Talk to our team" }),
+      ).toBeNull();
+    },
+  );
+
+  it("points Enterprise without staff entitlement to support", () => {
     state.entitled = false;
     render(<PrivateNetworkSection />);
-    expect(screen.getByText(/Contact our team to enable it/)).toBeTruthy();
+    expect(screen.getByText(/Contact support to enable it/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Contact support" })
+        .getAttribute("href"),
+    ).toContain("mailto:support@speakeasy.com");
     expect(
       screen.queryByRole("button", { name: "Connect Tailscale" }),
     ).toBeNull();
   });
 
-  it("renders no private controls for an organization reader", () => {
-    state.isAdmin = false;
-    const { container } = render(<PrivateNetworkSection />);
-    expect(container.textContent).toBe("");
-  });
+  it.each(["enabled", "disabled", "loading", "error"] as const)(
+    "keeps private controls and queries disabled for an organization reader (%s)",
+    (status) => {
+      state.isAdmin = false;
+      state.entitled = status === "enabled";
+      state.featuresLoading = status === "loading";
+      state.featuresError = status === "error";
+      const { container } = render(<PrivateNetworkSection />);
+      expect(container.textContent).toBe("");
+      expect(state.ingressOptions?.enabled).toBe(false);
+    },
+  );
 
   it.each(["features", "ingress"] as const)(
     "renders the loading panel while %s are loading",
@@ -203,6 +267,31 @@ describe("PrivateNetworkSection", () => {
     ).toBeTruthy();
   });
 
+  it("closes a setup draft when an unsupported provider arrives", () => {
+    const { rerender } = render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+    expect(
+      screen.getByRole("textbox", { name: "Organization private hostname" }),
+    ).toBeTruthy();
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: unrecognized("future_provider"),
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: true,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "online",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+    rerender(<PrivateNetworkSection />);
+    expect(
+      screen.queryByRole("textbox", { name: "Organization private hostname" }),
+    ).toBeNull();
+  });
+
   it.each([
     ["failed", true, true],
     ["missing", false, false],
@@ -232,6 +321,33 @@ describe("PrivateNetworkSection", () => {
       expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
     },
   );
+
+  it("offers retry and support when Tailscale provisioning fails", () => {
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: true,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "error",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry provisioning" }));
+    expect(state.healthMutate).toHaveBeenCalledWith({
+      security: { sessionHeaderGramSession: "" },
+    });
+    expect(
+      screen
+        .getByRole("link", { name: "Contact support" })
+        .getAttribute("href"),
+    ).toContain("mailto:support@speakeasy.com");
+  });
 
   it("shows and polls pending cleanup instead of clearing the UI", () => {
     state.ingress = {
@@ -295,8 +411,42 @@ describe("PrivateNetworkSection", () => {
     ).toBeNull();
   });
 
+  it("shows blocked cleanup when Tailscale rejects the saved credentials", () => {
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: false,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "deleting",
+      lastError: "provider_credentials_rejected",
+      createdAt: new Date(0),
+      updatedAt: new Date(1_000),
+    };
+
+    render(<PrivateNetworkSection />);
+
+    expect(screen.getByText("Cleanup blocked")).toBeTruthy();
+    expect(screen.queryByText("Cleaning up")).toBeNull();
+    expect(
+      screen.getByText(/Tailscale rejected the credentials saved/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry cleanup" }));
+    expect(state.deleteMutate).toHaveBeenCalledWith({
+      security: { sessionHeaderGramSession: "" },
+    });
+  });
+
   it.each([
-    ["plan downgrade", "payg", true, /requires an Enterprise plan/],
+    [
+      "staff entitlement removal without Enterprise",
+      "payg",
+      false,
+      /requires an Enterprise plan/,
+    ],
     [
       "staff entitlement removal",
       "enterprise",
@@ -345,4 +495,30 @@ describe("PrivateNetworkSection", () => {
       ).toBe(false);
     },
   );
+
+  it("keeps full controls after a plan downgrade while staff entitlement stays on", () => {
+    state.productTier = "payg";
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: true,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "online",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+
+    render(<PrivateNetworkSection />);
+    expect(screen.queryByText(/requires an Enterprise plan/)).toBeNull();
+    expect(screen.queryByText(/no longer enabled/)).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Rotate credentials" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+  });
 });

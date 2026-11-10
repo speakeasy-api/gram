@@ -28,7 +28,7 @@ type CountEmployeesForExternalOrgParams struct {
 	ExternalOrgID  pgtype.Text
 }
 
-// Distinct employees (resolved Gram users) ever seen under a provider org. An
+// Distinct employees (resolved Speakeasy users) ever seen under a provider org. An
 // enterprise org is shared by many employees; a personal org maps to exactly one.
 // A count >= 2 marks the org as the company's enterprise org: accounts under it
 // classify team even when their own email has not resolved, and a resolved work
@@ -129,6 +129,23 @@ func (q *Queries) FindAssistantToolCallMessageID(ctx context.Context, arg FindAs
 	return id, err
 }
 
+const getChatProjectID = `-- name: GetChatProjectID :one
+SELECT project_id
+FROM chats
+WHERE id = $1
+`
+
+// Looks up a chat by id alone so hook ingest can refuse a write whose session
+// already lives in another project. Session ids hash to chat ids with no
+// project in the derivation, and an org-scoped key can present any project
+// header in the org.
+func (q *Queries) GetChatProjectID(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getChatProjectID, id)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
+}
+
 const getDeviceOwner = `-- name: GetDeviceOwner :one
 SELECT id, organization_id, provider, device_id, linked_user_id, first_seen_at, last_seen_at, created_at, updated_at, deleted_at, deleted FROM device_owners
 WHERE organization_id = $1
@@ -159,6 +176,49 @@ func (q *Queries) GetDeviceOwner(ctx context.Context, arg GetDeviceOwnerParams) 
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const getHooksConfiguration = `-- name: GetHooksConfiguration :one
+SELECT
+  EXISTS (
+    SELECT 1
+    FROM api_keys
+    WHERE organization_id = $1::text
+      AND (project_id IS NULL OR project_id = $2::uuid)
+      AND deleted IS FALSE
+      AND scopes @> ARRAY['hooks']::text[]
+      AND (expires_at IS NULL OR expires_at > clock_timestamp())
+  )::boolean AS agent_hooks_key,
+  EXISTS (
+    SELECT 1
+    FROM ai_integration_configs
+    WHERE organization_id = $1::text
+      AND project_id = $2::uuid
+      AND provider = 'anthropic_inference'
+      AND enabled IS TRUE
+      AND deleted IS FALSE
+  )::boolean AS anthropic_inference_hooks
+`
+
+type GetHooksConfigurationParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+type GetHooksConfigurationRow struct {
+	AgentHooksKey           bool
+	AnthropicInferenceHooks bool
+}
+
+// Whether the project has any hook telemetry source set up: an active
+// hooks-scoped API key usable by the project (bound to it, or organization
+// wide) or a connected Anthropic inference hooks integration for the project.
+// Keys and integrations bound to another project feed only that project.
+func (q *Queries) GetHooksConfiguration(ctx context.Context, arg GetHooksConfigurationParams) (GetHooksConfigurationRow, error) {
+	row := q.db.QueryRow(ctx, getHooksConfiguration, arg.OrgID, arg.ProjectID)
+	var i GetHooksConfigurationRow
+	err := row.Scan(&i.AgentHooksKey, &i.AnthropicInferenceHooks)
 	return i, err
 }
 
@@ -447,7 +507,7 @@ type InsertToolCallBlockParams struct {
 // Records a durable block row at hook-time deny. The reason is captured verbatim
 // so the block page renders from this row alone; the risk_result_id / chat
 // foreign keys are optional enrichment set when those rows are known synchronously.
-// user_id is the Gram user whose agent was blocked (empty string when unresolved)
+// user_id is the Speakeasy user whose agent was blocked (empty string when unresolved)
 // and is used to authorize the block page.
 func (q *Queries) InsertToolCallBlock(ctx context.Context, arg InsertToolCallBlockParams) error {
 	_, err := q.db.Exec(ctx, insertToolCallBlock,
@@ -464,6 +524,91 @@ func (q *Queries) InsertToolCallBlock(ctx context.Context, arg InsertToolCallBlo
 		arg.UserID,
 	)
 	return err
+}
+
+const linkChatActingAgent = `-- name: LinkChatActingAgent :execrows
+UPDATE chats
+SET agent_id = $1
+  , updated_at = NOW()
+WHERE chats.id = $2
+  AND chats.project_id = $3
+  AND chats.agent_id IS NULL
+  AND chats.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM agents a
+    WHERE a.id = $1
+      AND a.organization_id = chats.organization_id
+      AND a.deleted IS FALSE
+  )
+`
+
+type LinkChatActingAgentParams struct {
+	AgentID   uuid.NullUUID
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Records the Speakeasy agent principal that produced a captured session, so a
+// session list can name the agent that made the calls. A channel session has no
+// assistant record, and agent-actor capture deliberately blanks the human
+// identity columns, so without this the acting agent is invisible.
+//
+// Fill-once, like the user_accounts link above: a chat row is created on the
+// session's first persisted message and reused for every later delivery, so
+// stamping only at creation would leave every chat created before this landed
+// unattributed forever. Never overwrites an agent an earlier delivery set, so a
+// later caller cannot reassign an existing session to a different agent.
+//
+// The agent id arrives from the server-stamped authenticated actor, never from
+// client input, and the EXISTS guard resolves it against a live agent row in the
+// chat's own organization at write time. chats.agent_id carries no foreign key
+// (agents is declared after chats), so this guard is what keeps the column from
+// naming a deleted agent or one belonging to another tenant.
+func (q *Queries) LinkChatActingAgent(ctx context.Context, arg LinkChatActingAgentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkChatActingAgent, arg.AgentID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const linkChatOwner = `-- name: LinkChatOwner :execrows
+UPDATE chats
+SET user_id = $1
+  , external_user_id = $2
+  , updated_at = NOW()
+WHERE id = $3
+  AND project_id = $4
+  AND COALESCE(user_id, '') = ''
+  AND COALESCE(external_user_id, '') = ''
+  AND agent_id IS NULL
+  AND deleted IS FALSE
+`
+
+type LinkChatOwnerParams struct {
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Backfills the human owner of a session whose chat row was created before the
+// session's identity was known: a shared plugin key with no self-reported email
+// creates the chat ownerless when its first prompt beats the first OTEL export.
+// Fill-once and only for a chat with no owner at all, so it never replaces an
+// identity chat creation recorded, and never names a person on a session an
+// agent key produced.
+func (q *Queries) LinkChatOwner(ctx context.Context, arg LinkChatOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkChatOwner,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const linkChatUserAccount = `-- name: LinkChatUserAccount :execrows
@@ -586,6 +731,71 @@ func (q *Queries) ListSkillObservations(ctx context.Context, projectID uuid.UUID
 	return items, nil
 }
 
+const listToolCallBlockSurfaceEvidence = `-- name: ListToolCallBlockSurfaceEvidence :many
+SELECT
+    provider
+  , chat_id
+  , count(*) AS block_count
+  , max(created_at)::timestamptz AS last_block_at
+FROM tool_call_blocks
+WHERE organization_id = $1
+  AND project_id = ANY($2::uuid[])
+  AND deleted IS FALSE
+  AND created_at >= $3
+  AND created_at <= $4
+GROUP BY provider, chat_id
+`
+
+type ListToolCallBlockSurfaceEvidenceParams struct {
+	OrganizationID string
+	ProjectIds     []uuid.UUID
+	FromTime       pgtype.Timestamptz
+	ToTime         pgtype.Timestamptz
+}
+
+type ListToolCallBlockSurfaceEvidenceRow struct {
+	Provider    string
+	ChatID      uuid.NullUUID
+	BlockCount  int64
+	LastBlockAt pgtype.Timestamptz
+}
+
+// Per-provider, per-chat block counts inside a window, used to attribute
+// synchronous policy decisions to the consuming surface they were returned to.
+// chat_id is the join key onto the ClickHouse session summaries that carry
+// hook_source: blocks whose chat was never resolved (enforcement can run
+// before the chat row is persisted) come back under a NULL chat_id and are
+// attributed at the coarser provider granularity instead of being dropped.
+func (q *Queries) ListToolCallBlockSurfaceEvidence(ctx context.Context, arg ListToolCallBlockSurfaceEvidenceParams) ([]ListToolCallBlockSurfaceEvidenceRow, error) {
+	rows, err := q.db.Query(ctx, listToolCallBlockSurfaceEvidence,
+		arg.OrganizationID,
+		arg.ProjectIds,
+		arg.FromTime,
+		arg.ToTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolCallBlockSurfaceEvidenceRow
+	for rows.Next() {
+		var i ListToolCallBlockSurfaceEvidenceRow
+		if err := rows.Scan(
+			&i.Provider,
+			&i.ChatID,
+			&i.BlockCount,
+			&i.LastBlockAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserAccountsByEmails = `-- name: ListUserAccountsByEmails :many
 SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
 FROM user_accounts
@@ -694,6 +904,23 @@ func (q *Queries) ListUserAccountsByUsers(ctx context.Context, arg ListUserAccou
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordCapturedSessionID = `-- name: RecordCapturedSessionID :exec
+UPDATE chats SET external_chat_id = $1::text
+WHERE id = $2 AND project_id = $3 AND external_chat_id IS NULL
+`
+
+type RecordCapturedSessionIDParams struct {
+	SessionID string
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Keep the native session identifier when hook capture derives a chat UUID.
+func (q *Queries) RecordCapturedSessionID(ctx context.Context, arg RecordCapturedSessionIDParams) error {
+	_, err := q.db.Exec(ctx, recordCapturedSessionID, arg.SessionID, arg.ChatID, arg.ProjectID)
+	return err
 }
 
 const rememberKnownSkillRawHash = `-- name: RememberKnownSkillRawHash :one

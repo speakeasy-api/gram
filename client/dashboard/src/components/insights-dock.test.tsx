@@ -1,11 +1,21 @@
-import { act, cleanup, render } from "@testing-library/react";
-import { type ReactNode } from "react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { type ReactNode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useHideInsightsDock } from "./insights-context";
+import { useHideInsightsDock, useInsightsState } from "./insights-context";
 import { InsightsProvider } from "./insights-dock";
+import { useFreshAssistantConversation } from "@/hooks/useFreshAssistantConversation";
+import { ComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
 import { GramElementsProvider } from "@/elements";
 
 const mocks = vi.hoisted(() => ({
+  elementsConfig: vi.fn(),
   skills: vi.fn(() => ({
     data: undefined as
       | {
@@ -31,7 +41,21 @@ const mocks = vi.hoisted(() => ({
   grants: [] as { scope: "skill:read"; selectors: Record<string, string>[] }[],
   permissionsLoading: false,
   getSkillIds: undefined as (() => string[]) | undefined,
-  activeRoute: "detail" as "detail" | "new" | "home",
+  activeRoute: "detail" as "detail" | "new" | "home" | "page",
+  assistantReady: true,
+  composerSetText: vi.fn(),
+  composerText: "",
+  composerBound: true,
+  runtimeMount: vi.fn(),
+  runtimeAbort: vi.fn(),
+  focusComposer: vi.fn(),
+  switchToNewThread: vi.fn(),
+  threadsLoading: false,
+  mainThreadId: "old",
+  listeners: new Set<() => void>(),
+  recentChats: undefined as
+    | { chats: { id: string; lastMessageTimestamp: Date }[] }
+    | undefined,
   resolveCreator: undefined as
     | ((chat: { userId: string }) => unknown)
     | undefined,
@@ -46,15 +70,16 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/elements", async () => {
-  const { createContext, createElement, useContext } = await import("react");
+  const { createContext, createElement, useContext, useEffect } =
+    await import("react");
   const RuntimeContext = createContext(false);
 
   return {
     ActiveChatTitle: () => null,
     Chat: () => null,
-    ChatComposer: () => null,
-    ChatHistory: () => null,
-    focusChatComposer: vi.fn(),
+    ChatComposer: () => <textarea aria-label="Shared composer" />,
+    ChatHistory: () => <div>Conversation history list</div>,
+    focusChatComposer: mocks.focusComposer,
     GramElementsProvider: ({
       children,
       config,
@@ -66,6 +91,14 @@ vi.mock("@/elements", async () => {
       };
     }) => {
       const hasRuntime = useContext(RuntimeContext);
+      useEffect(() => {
+        mocks.runtimeMount();
+        // A streaming transport aborts on provider teardown.
+        return () => {
+          mocks.runtimeAbort();
+        };
+      }, []);
+      mocks.elementsConfig(config);
       if (config.composer) mocks.skillContext = config.composer.skillContext;
       if (config.history) {
         mocks.resolveCreator = config.history.resolveCreator;
@@ -82,13 +115,48 @@ vi.mock("@/elements", async () => {
   };
 });
 
-vi.mock("@assistant-ui/react", () => ({
-  useAui: () => ({
-    composer: () => ({ stopDictation: vi.fn() }),
-    thread: () => ({ append: vi.fn() }),
-  }),
-  useAuiState: () => false,
-}));
+vi.mock("@assistant-ui/react", () => {
+  const aui = {
+    composer: () => ({
+      stopDictation: vi.fn(),
+      setText: (text: string) => {
+        mocks.composerSetText(text);
+        if (mocks.composerBound) mocks.composerText = text;
+      },
+      getState: () => ({ text: mocks.composerText }),
+    }),
+    thread: () => ({ append: vi.fn(), getState: () => ({ isLoading: false }) }),
+    threads: () => ({
+      getState: () => ({
+        isLoading: mocks.threadsLoading,
+        mainThreadId: mocks.mainThreadId,
+        newThreadId: "new",
+      }),
+      switchToNewThread: mocks.switchToNewThread,
+    }),
+    subscribe: (listener: () => void) => {
+      mocks.listeners.add(listener);
+      return () => mocks.listeners.delete(listener);
+    },
+  };
+  return {
+    useAui: () => aui,
+    useAuiState: (
+      selector: (state: {
+        threads: { isLoading: boolean };
+        thread: { isRunning: boolean; isLoading: boolean; isDisabled: boolean };
+        composer: { text: string; dictation: null };
+      }) => unknown,
+    ) =>
+      selector({
+        threads: { isLoading: mocks.threadsLoading },
+        thread: { isRunning: false, isLoading: false, isDisabled: false },
+        composer: { text: "", dictation: null },
+      }),
+    AuiConfig: () => ({}),
+    AuiProvider: ({ children }: { children: ReactNode }) => children,
+  };
+});
 
 vi.mock("@/hooks/useObservabilityMcpConfig", () => ({
   useNoToolsetsConfigured: () => false,
@@ -102,8 +170,9 @@ vi.mock("@/hooks/useServerAssistantTransport", () => ({
     mocks.getSkillIds = options.getSkillIds;
     return {
       transport: undefined,
-      assistantId: "managed-assistant",
-      ready: true,
+      assistantId: mocks.assistantReady ? "managed-assistant" : "",
+      ready: mocks.assistantReady,
+      allowed: true,
       error: undefined,
       needsAdmin: false,
     };
@@ -113,7 +182,7 @@ vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
   useDrainInfiniteQuery: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/listChats.js", () => ({
-  useListChats: () => ({ data: undefined }),
+  useListChats: () => ({ data: mocks.recentChats }),
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: mocks.members,
@@ -142,6 +211,7 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/lib/assistantEntityLinks", () => ({
   useAssistantLinkResolver: () => undefined,
@@ -157,27 +227,26 @@ vi.mock("@/components/ui/hooks/useConfig", () => ({
 vi.mock("./command-palette/askAiBridge", () => ({
   useAskAiListener: vi.fn(),
 }));
-vi.mock("react-router", () => ({
+// The real route helpers derive which assistant route is active from this
+// pathname.
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useNavigate: () => vi.fn(),
   useLocation: () => ({
-    pathname:
-      mocks.activeRoute === "new"
-        ? "/org/projects/project/assistants/new"
-        : "/org/projects/project/assistants/assistant-id",
-  }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    playground: { active: false },
-    assistants: {
-      newAssistant: { active: mocks.activeRoute === "new" },
-      detail: { active: mocks.activeRoute === "detail" },
-    },
-    chat: { conversation: { goTo: vi.fn() } },
+    pathname: {
+      new: "/org/projects/project/assistants/new",
+      detail: "/org/projects/project/assistants/assistant-id",
+      home: "/org/projects/project",
+      page: "/org/projects/project/settings",
+    }[mocks.activeRoute],
   }),
 }));
 
 afterEach(cleanup);
 beforeEach(() => {
+  mocks.recentChats = undefined;
+  mocks.listeners.clear();
+  mocks.elementsConfig.mockClear();
   mocks.skills.mockReturnValue({
     data: undefined,
     isPending: false,
@@ -188,6 +257,19 @@ beforeEach(() => {
   mocks.getSkillIds = undefined;
   mocks.skillContext = undefined;
   mocks.activeRoute = "detail";
+  mocks.assistantReady = true;
+  mocks.composerSetText.mockClear();
+  mocks.composerText = "";
+  mocks.composerBound = true;
+  mocks.runtimeMount.mockClear();
+  mocks.runtimeAbort.mockClear();
+  mocks.focusComposer.mockClear();
+  mocks.switchToNewThread.mockClear();
+  mocks.threadsLoading = false;
+  mocks.mainThreadId = "old";
+  mocks.switchToNewThread.mockImplementation(async () => {
+    mocks.mainThreadId = "new";
+  });
   mocks.resolveCreator = undefined;
   mocks.hasScope.mockReturnValue(false);
 });
@@ -200,6 +282,34 @@ function AssistantEditor(): JSX.Element {
 }
 
 describe("InsightsProvider", () => {
+  it("does not connect project MCP inventory in the shared server-assistant runtime", () => {
+    mocks.activeRoute = "home";
+    const mcps = Array.from({ length: 1767 }, (_, i) => ({
+      url: `https://gram.example/mcp/server-${i}`,
+      name: `server-${i}`,
+    }));
+    render(
+      <InsightsProvider
+        mcpConfig={{
+          projectSlug: "project",
+          mcp: "https://gram.example/mcp/legacy",
+          mcps,
+        }}
+        title="Assistant"
+        subtitle=""
+      >
+        <div />
+      </InsightsProvider>,
+    );
+    expect(mocks.elementsConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectSlug: "project",
+        mcp: undefined,
+        mcps: [],
+        history: expect.objectContaining({ enabled: true }),
+      }),
+    );
+  });
   it.each([
     ["target-id", true],
     ["project-id", false],
@@ -386,7 +496,7 @@ describe("InsightsProvider", () => {
     },
   );
   it.each(["new", "detail"] as const)(
-    "does not wrap the assistant %s route in the shared runtime",
+    "does not mount the shared runtime on the assistant %s route",
     (activeRoute) => {
       mocks.activeRoute = activeRoute;
 
@@ -401,6 +511,363 @@ describe("InsightsProvider", () => {
           </InsightsProvider>,
         ),
       ).not.toThrow();
+      expect(mocks.elementsConfig).not.toHaveBeenCalledWith(
+        expect.objectContaining({ history: expect.anything() }),
+      );
     },
   );
+
+  describe("page state", () => {
+    let mounts = 0;
+    let newConversation: () => void = () => {};
+
+    beforeEach(() => {
+      mounts = 0;
+      mocks.activeRoute = "page";
+    });
+
+    function StatefulPage(): JSX.Element {
+      const [draft, setDraft] = useState("");
+      const insights = useInsightsState();
+      newConversation = insights.newConversation;
+      useEffect(() => {
+        mounts += 1;
+      }, []);
+      return (
+        <input
+          aria-label="Project name"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+      );
+    }
+
+    function page(): JSX.Element {
+      return (
+        <InsightsProvider
+          mcpConfig={{ projectSlug: "project" } as never}
+          title="Assistant"
+          subtitle=""
+        >
+          <StatefulPage />
+        </InsightsProvider>
+      );
+    }
+
+    function typeDraft(): HTMLElement {
+      const input = screen.getByLabelText("Project name");
+      fireEvent.change(input, { target: { value: "half typed" } });
+      return input;
+    }
+
+    it("survives the runtime becoming ready", () => {
+      mocks.assistantReady = false;
+      const { rerender, container } = render(page());
+      const input = typeDraft();
+      expect(container.querySelector(".gram-elements")).toBeNull();
+
+      mocks.assistantReady = true;
+      rerender(page());
+
+      expect(screen.getByLabelText("Project name")).toBe(input);
+      expect(input).toHaveProperty("value", "half typed");
+      expect(mounts).toBe(1);
+      expect(input.closest(".gram-elements")).not.toBeNull();
+    });
+
+    it("survives a new conversation restarting the runtime", () => {
+      render(page());
+      const input = typeDraft();
+
+      act(() => newConversation());
+
+      expect(screen.getByLabelText("Project name")).toBe(input);
+      expect(input).toHaveProperty("value", "half typed");
+      expect(mounts).toBe(1);
+    });
+
+    it("survives the runtime going away for a route that owns its own", () => {
+      const { rerender } = render(page());
+      const input = typeDraft();
+
+      mocks.activeRoute = "detail";
+      rerender(page());
+      expect(input.closest(".gram-elements")).toBeNull();
+
+      mocks.activeRoute = "page";
+      rerender(page());
+
+      expect(screen.getByLabelText("Project name")).toBe(input);
+      expect(input).toHaveProperty("value", "half typed");
+      expect(mounts).toBe(1);
+    });
+
+    it("exposes the runtime as ready only once it can be read", () => {
+      const seen: boolean[] = [];
+      function ReadinessProbe(): null {
+        seen.push(useInsightsState().assistantReady);
+        return null;
+      }
+      mocks.assistantReady = false;
+      const probe = () => (
+        <InsightsProvider
+          mcpConfig={{ projectSlug: "project" } as never}
+          title="Assistant"
+          subtitle=""
+        >
+          <ReadinessProbe />
+        </InsightsProvider>
+      );
+      const { rerender } = render(probe());
+      expect(seen.at(-1)).toBe(false);
+
+      mocks.assistantReady = true;
+      rerender(probe());
+
+      expect(seen.at(-1)).toBe(true);
+    });
+
+    function FreshLanding({
+      initialValue = "",
+    }: {
+      initialValue?: string;
+    }): JSX.Element {
+      const ready = useFreshAssistantConversation();
+      const [value, setValue] = useState(initialValue);
+      return (
+        <>
+          <input
+            aria-label="Landing draft"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
+          {ready && (
+            <ComposerDraftHandover
+              value={value}
+              onAccepted={() => setValue("")}
+            />
+          )}
+        </>
+      );
+    }
+
+    function landing(initialValue = ""): JSX.Element {
+      return (
+        <InsightsProvider
+          mcpConfig={{ projectSlug: "project" } as never}
+          title="Assistant"
+          subtitle=""
+        >
+          <FreshLanding initialValue={initialValue} />
+        </InsightsProvider>
+      );
+    }
+
+    it("preserves history and a live stream through landing and back/forward navigation", async () => {
+      const route = (landingVisible: boolean) => (
+        <InsightsProvider
+          mcpConfig={{ projectSlug: "project" } as never}
+          title="Assistant"
+          subtitle=""
+        >
+          {landingVisible ? <FreshLanding /> : <StatefulPage />}
+        </InsightsProvider>
+      );
+      const { rerender } = render(route(false));
+      fireEvent.focus(screen.getAllByLabelText("Shared composer")[0]!);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Conversation history" }),
+      );
+      expect(screen.getByText("Conversation history list")).toBeTruthy();
+      rerender(route(true));
+      await waitFor(() =>
+        expect(mocks.switchToNewThread).toHaveBeenCalledTimes(1),
+      );
+      expect(screen.getByText("Conversation history list")).toBeTruthy();
+      rerender(route(false));
+      rerender(route(true));
+      await act(async () => {});
+      expect(screen.getByText("Conversation history list")).toBeTruthy();
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
+      expect(mocks.runtimeAbort).not.toHaveBeenCalled();
+      expect(mocks.switchToNewThread).toHaveBeenCalledTimes(1);
+    });
+
+    it("switches landing once without replacing the shared runtime, even without a draft", async () => {
+      const { rerender } = render(landing());
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
+      expect(mocks.switchToNewThread).toHaveBeenCalledTimes(1);
+      expect(mocks.composerSetText).not.toHaveBeenCalled();
+      rerender(landing());
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not seed the previous thread before the switch settles", async () => {
+      const writesAtMount: number[] = [];
+      mocks.composerSetText.mockImplementationOnce(() => {
+        writesAtMount.push(mocks.runtimeMount.mock.calls.length);
+      });
+      render(landing("pending draft"));
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(writesAtMount).toEqual([1]));
+      await waitFor(() => expect(mocks.composerText).toBe("pending draft"));
+      expect(mocks.switchToNewThread).toHaveBeenCalledTimes(1);
+    });
+
+    it("preserves the landing draft through connection and thread switching", async () => {
+      mocks.assistantReady = false;
+      const { rerender } = render(landing());
+      fireEvent.change(screen.getByLabelText("Landing draft"), {
+        target: { value: "pending draft" },
+      });
+      expect(mocks.composerSetText).not.toHaveBeenCalled();
+      mocks.assistantReady = true;
+      rerender(landing());
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(mocks.composerText).toBe("pending draft"));
+      expect(screen.getByLabelText("Landing draft")).toHaveProperty(
+        "value",
+        "",
+      );
+      expect(mocks.switchToNewThread).toHaveBeenCalledTimes(1);
+    });
+
+    it("retains landing text when the new thread drops a write and retries after binding", async () => {
+      mocks.assistantReady = false;
+      mocks.composerBound = false;
+      const { rerender } = render(landing());
+      fireEvent.change(screen.getByLabelText("Landing draft"), {
+        target: { value: "pending draft" },
+      });
+      mocks.assistantReady = true;
+      rerender(landing());
+      expect(screen.getByLabelText("Landing draft")).toHaveProperty(
+        "value",
+        "pending draft",
+      );
+      await act(async () => {});
+      mocks.composerBound = true;
+      act(() => mocks.listeners.forEach((listener) => listener()));
+      rerender(landing());
+      await waitFor(() => expect(mocks.composerText).toBe("pending draft"));
+      expect(screen.getByLabelText("Landing draft")).toHaveProperty(
+        "value",
+        "",
+      );
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
+      expect(mocks.switchToNewThread).toHaveBeenCalledTimes(1);
+    });
+
+    it("waits for landing list loading before switching the shared runtime", async () => {
+      mocks.assistantReady = false;
+      mocks.threadsLoading = true;
+      const { rerender } = render(landing());
+      fireEvent.change(screen.getByLabelText("Landing draft"), {
+        target: { value: "pending draft" },
+      });
+      mocks.assistantReady = true;
+      rerender(landing());
+      expect(mocks.composerSetText).not.toHaveBeenCalled();
+      expect(screen.getByLabelText("Landing draft")).toHaveProperty(
+        "value",
+        "pending draft",
+      );
+      mocks.threadsLoading = false;
+      act(() => mocks.listeners.forEach((listener) => listener()));
+      rerender(landing());
+      await waitFor(() => expect(mocks.composerText).toBe("pending draft"));
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
+      expect(mocks.switchToNewThread).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not replay the focus shortcut when connection hands over a draft", () => {
+      mocks.assistantReady = false;
+      const { rerender } = render(page());
+      const input = screen.getByLabelText("Ask the Project Assistant");
+      fireEvent.change(input, { target: { value: "pending draft" } });
+      fireEvent.keyDown(document, { code: "Slash", metaKey: true });
+      expect(document.activeElement).toBe(input);
+      const elsewhere = screen.getByLabelText("Project name");
+      act(() => elsewhere.focus());
+      mocks.assistantReady = true;
+      rerender(page());
+      expect(mocks.composerSetText).toHaveBeenCalledWith("pending draft");
+      expect(document.activeElement).toBe(elsewhere);
+      expect(mocks.focusComposer).not.toHaveBeenCalled();
+    });
+
+    it("restores focus to Continue chat when a focused fallback draft is cleared", () => {
+      mocks.assistantReady = false;
+      const { rerender } = render(page());
+      const input = screen.getByLabelText("Ask the Project Assistant");
+      fireEvent.change(input, { target: { value: "pending draft" } });
+      act(() => input.focus());
+      mocks.recentChats = {
+        chats: [{ id: "recent-chat", lastMessageTimestamp: new Date() }],
+      };
+      rerender(page());
+      expect(screen.getByLabelText("Ask the Project Assistant")).toBe(input);
+      expect(document.activeElement).toBe(input);
+      fireEvent.change(input, { target: { value: "" } });
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Continue chat" }),
+      );
+    });
+
+    it("moves a draft from the fallback input to the composer when ready", () => {
+      mocks.assistantReady = false;
+      const { rerender } = render(page());
+      fireEvent.change(screen.getByLabelText("Ask the Project Assistant"), {
+        target: { value: "why is usage up" },
+      });
+
+      mocks.assistantReady = true;
+      rerender(page());
+
+      expect(mocks.composerSetText).toHaveBeenCalledWith("why is usage up");
+      expect(screen.queryByLabelText("Ask the Project Assistant")).toBeNull();
+    });
+
+    it("keeps a pending draft editable instead of hiding it behind Continue chat", () => {
+      mocks.assistantReady = false;
+      mocks.threadsLoading = true;
+      const { rerender } = render(page());
+      const input = screen.getByLabelText("Ask the Project Assistant");
+      fireEvent.change(input, { target: { value: "pending draft" } });
+      mocks.recentChats = {
+        chats: [{ id: "recent-chat", lastMessageTimestamp: new Date() }],
+      };
+      mocks.assistantReady = true;
+      rerender(page());
+      expect(screen.getByLabelText("Ask the Project Assistant")).toBe(input);
+      expect(
+        screen.queryByRole("button", { name: "Continue chat" }),
+      ).toBeNull();
+      fireEvent.change(input, { target: { value: "pending draft and more" } });
+      mocks.threadsLoading = false;
+      act(() => mocks.listeners.forEach((listener) => listener()));
+      expect(mocks.composerSetText).toHaveBeenLastCalledWith(
+        "pending draft and more",
+      );
+      mocks.recentChats = undefined;
+    });
+
+    it("holds a fallback draft until the thread list has loaded", () => {
+      mocks.assistantReady = false;
+      mocks.threadsLoading = true;
+      const { rerender } = render(page());
+      fireEvent.change(screen.getByLabelText("Ask the Project Assistant"), {
+        target: { value: "why is usage up" },
+      });
+
+      mocks.assistantReady = true;
+      rerender(page());
+      expect(mocks.composerSetText).not.toHaveBeenCalled();
+
+      mocks.threadsLoading = false;
+      act(() => mocks.listeners.forEach((listener) => listener()));
+      rerender(page());
+      expect(mocks.composerSetText).toHaveBeenCalledWith("why is usage up");
+    });
+  });
 });

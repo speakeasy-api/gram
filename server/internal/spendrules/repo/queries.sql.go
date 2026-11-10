@@ -392,15 +392,17 @@ INNER JOIN users u
   ON u.id = our.user_id
   AND u.deleted_at IS NULL
 LEFT JOIN LATERAL (
-  -- The member's directory profile, preferring an explicit user link over an
-  -- email match so a stale email row cannot shadow the linked profile.
+  -- The member's directory profile, chosen the same way as in the access
+  -- package's ListUserRolePrincipals: the directory user linked to the member,
+  -- falling back to an unlinked directory user with the same email. A profile
+  -- linked to another user never matches.
   SELECT d.id, d.attributes
   FROM directory_users d
   WHERE d.organization_id = our.organization_id
     AND d.deleted IS FALSE
     AND d.workos_deleted IS FALSE
-    AND (d.user_id = u.id OR LOWER(d.email) = LOWER(u.email))
-  ORDER BY (d.user_id = u.id) DESC, d.created_at
+    AND (d.user_id = u.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(u.email)))
+  ORDER BY (d.user_id = u.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
   LIMIT 1
 ) du ON TRUE
 LEFT JOIN LATERAL (

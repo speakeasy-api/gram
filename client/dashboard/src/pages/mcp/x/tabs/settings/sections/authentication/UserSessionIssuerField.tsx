@@ -1,18 +1,20 @@
 import { RequireScope } from "@/components/require-scope";
 import { UserSessionIssuerSelect } from "@/components/user-session-issuer-select";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import { FieldError } from "@/components/ui/Field";
 import { Text } from "@/components/ui/Text";
-import { ScopeBadge } from "@/pages/remote-identity-providers/ScopeBadge";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { ScopeBadge } from "@/lib/remote-identity";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AuthRow, RowSave } from "./AuthRow";
 import type { AuthTarget } from "./authTarget";
+import { ChangeIssuerConfirmDialog } from "./ChangeIssuerConfirmDialog";
 
 export function UserSessionIssuerField({
   target,
@@ -27,6 +29,7 @@ export function UserSessionIssuerField({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [draftIssuerId, setDraftIssuerId] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const currentIssuerId = target.userSessionIssuerId ?? "";
   const selectedIssuerId = draftIssuerId ?? currentIssuerId;
   const selectedIssuer = issuers.find(
@@ -46,6 +49,7 @@ export function UserSessionIssuerField({
     },
     onSuccess: async () => {
       setDraftIssuerId(null);
+      setConfirmOpen(false);
       await Promise.all([
         target.invalidate(queryClient),
         invalidateAllUserSessionIssuer(queryClient, { refetchType: "all" }),
@@ -58,9 +62,7 @@ export function UserSessionIssuerField({
   let control: JSX.Element;
   if (isLoading) {
     control = (
-      <Text muted small>
-        Loading…
-      </Text>
+      <Skeleton label="Loading user session issuers" className="h-9 w-64" />
     );
   } else if (isError) {
     control = (
@@ -101,7 +103,9 @@ export function UserSessionIssuerField({
       hint="Chooses the authorization policy shared by clients connecting to this server."
     >
       {control}
-      {update.isError ? <FieldError>{update.error.message}</FieldError> : null}
+      {update.isError && !confirmOpen ? (
+        <FieldError>{update.error.message}</FieldError>
+      ) : null}
       <RowSave visible={dirty}>
         <RequireScope
           scope="mcp:write"
@@ -114,12 +118,16 @@ export function UserSessionIssuerField({
               size="md"
               disabled={disabled || update.isPending || !draftIssuerId}
               onClick={() => {
-                if (draftIssuerId) update.mutate(draftIssuerId);
+                if (!draftIssuerId) return;
+                // Every change disturbs connected clients: replacing an issuer
+                // signs them out, and a first one starts requiring sign-in.
+                update.reset();
+                setConfirmOpen(true);
               }}
             >
               {update.isPending ? (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0" />
                 </Button.LeftIcon>
               ) : null}
               <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>
@@ -127,6 +135,18 @@ export function UserSessionIssuerField({
           )}
         </RequireScope>
       </RowSave>
+      {selectedIssuer && dirty ? (
+        <ChangeIssuerConfirmDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          target={target}
+          replacing={!!currentIssuerId}
+          candidate={selectedIssuer}
+          onConfirm={() => update.mutate(selectedIssuer.id)}
+          isPending={update.isPending}
+          error={update.error}
+        />
+      ) : null}
     </AuthRow>
   );
 }

@@ -15,7 +15,7 @@ func TestAssignmentAdmissionAllowsWildcardNarrowingWhenUnavailable(t *testing.T)
 	t.Parallel()
 
 	service := &Service{}
-	guard := service.assignmentAdmissionGuard(admission.RolloutConfig{}, admission.ErrUnavailable)
+	guard := service.assignmentAdmissionGuard()
 	require.NoError(t, guard(t.Context(), nil, pluginsrepo.Plugin{}, []string{"*"}, []string{"user:member"}))
 	require.NoError(t, guard(t.Context(), nil, pluginsrepo.Plugin{}, []string{"*"}, nil))
 	require.NoError(t, guard(t.Context(), nil, pluginsrepo.Plugin{}, []string{"*"}, []string{"*"}))
@@ -29,7 +29,6 @@ func TestDistributionAdmissionErrorMappingsPreserveCauses(t *testing.T) {
 		code  oops.Code
 	}{
 		{cause: admission.ErrApprovalRequired, code: oops.CodeConflict},
-		{cause: admission.ErrDistributionDisabled, code: oops.CodeConflict},
 		{cause: admission.ErrUnavailable, code: oops.CodeUnavailable},
 	} {
 		err := mapDistributionAdmissionError(fmt.Errorf("guard: %w", test.cause))

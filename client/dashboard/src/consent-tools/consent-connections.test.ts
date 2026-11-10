@@ -8,15 +8,25 @@ const script = readFileSync(
   "utf8",
 );
 const fetchMock = vi.fn();
-function page(withProvider = true) {
+function page(withProvider = true, initialize = true) {
   document.body.innerHTML = `
-    <input type="radio" data-agent-select name="agent_id" value="" checked>
-    <input type="radio" data-agent-select name="agent_id" value="agent-a">
-    <input type="radio" data-agent-select name="agent_id" value="agent-b">
-    <form data-approve-form><input name="state" value="state-a"><input name="csrf_token" value="csrf-a">
+    <input type="radio" data-agent-mode name="consent_actor" value="self" checked data-subject-display="person@example.com">
+    <input type="radio" data-agent-mode name="consent_actor" value="agent" disabled>
+    <input type="hidden" data-agent-self name="agent_id" value="" form="approve">
+    <div data-agent-picker hidden>
+      <input type="search" data-agent-search>
+      <label data-agent-option><input type="radio" data-agent-select name="agent_id" value="agent-a" data-subject-display="Alpha Helper" form="approve" disabled></label>
+      <label data-agent-option><input type="radio" data-agent-select name="agent_id" value="agent-b" data-subject-display="Beta Helper" form="approve" disabled></label>
+      <p data-agent-empty hidden>No agents match your search.</p>
+    </div>
+    <p data-agent-setup hidden>Missing an agent?</p>
+    <div data-agent-self-only>Tool access</div>
+    <span data-consent-subject-display></span>
+    <div data-agent-policy hidden><span data-agent-policy-name></span></div>
+    <form id="approve" data-approve-form><input name="state" value="state-a"><input name="csrf_token" value="csrf-a">
       <button type="submit" data-self-label="Give access" data-agent-label="Authorize agent" data-consent-self-ready="true">Give access</button>
     </form>
-    <div data-service-connections data-action-url="/x/mcp/example/connect/remote-session">
+    <div data-service-connections data-action-url="/mcp/example/connect/remote-session">
       <li data-remote-client="client-a" data-remote-display="Example provider">
         <span>Example provider</span><span data-account-identity>Connected</span>
         <div data-agent-access hidden></div>
@@ -24,16 +34,26 @@ function page(withProvider = true) {
     </div>`;
   if (!withProvider)
     document.querySelector("[data-service-connections]")!.remove();
-  runInNewContext(script, {
-    window,
-    document,
-    sessionStorage,
-    URLSearchParams,
-    fetch: fetchMock,
-  });
+  if (initialize)
+    runInNewContext(script, {
+      window,
+      document,
+      sessionStorage,
+      URLSearchParams,
+      fetch: fetchMock,
+    });
   return document.querySelector<HTMLButtonElement>("form button")!;
 }
+function mode(value: "self" | "agent") {
+  const input = document.querySelector<HTMLInputElement>(
+    `input[data-agent-mode][value="${value}"]`,
+  )!;
+  input.checked = true;
+  fireEvent.change(input);
+}
 function select(id: string) {
+  mode(id ? "agent" : "self");
+  if (!id) return;
   const input = document.querySelector<HTMLInputElement>(
     `input[value="${id}"]`,
   )!;
@@ -41,7 +61,11 @@ function select(id: string) {
   fireEvent.change(input);
 }
 function reply(value: unknown, status = 200) {
-  return { ok: status === 200, status, json: async () => value };
+  return {
+    ok: status === 200,
+    status,
+    json: async () => ({ canManageConnections: true, ...(value as object) }),
+  };
 }
 beforeEach(() => {
   sessionStorage.clear();
@@ -54,6 +78,32 @@ afterEach(() => {
 });
 
 describe("consent agent connections", () => {
+  it("shows the agent setup hint only in Agent mode", () => {
+    page(false);
+    const hint = document.querySelector<HTMLElement>("[data-agent-setup]")!;
+    expect(hint.hidden).toBe(true);
+    mode("agent");
+    expect(hint.hidden).toBe(false);
+    mode("self");
+    expect(hint.hidden).toBe(true);
+  });
+
+  it("keeps Agent mode unavailable until its script initializes", () => {
+    page(false, false);
+    const agentMode = document.querySelector<HTMLInputElement>(
+      'input[data-agent-mode][value="agent"]',
+    )!;
+    expect(agentMode.disabled).toBe(true);
+    agentMode.click();
+    expect(agentMode.checked).toBe(false);
+    page(false);
+    expect(
+      document.querySelector<HTMLInputElement>(
+        'input[data-agent-mode][value="agent"]',
+      )!.disabled,
+    ).toBe(false);
+  });
+
   it.each([false, true])(
     "reuses the canonical combined account label (attached=%s)",
     async (attached) => {
@@ -214,17 +264,55 @@ describe("consent agent connections", () => {
     expect(button.disabled).toBe(true);
   });
 
-  it("keeps approval disabled and shows sign-in recovery when management authentication is missing", async () => {
+  it("ignores in-flight agent access when switching to self and back to empty Agent mode", async () => {
+    let resolve!: (value: unknown) => void;
+    fetchMock.mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const button = page();
+    select("agent-a");
+    mode("self");
+    expect(button.disabled).toBe(false);
+    mode("agent");
+    resolve(
+      reply({
+        candidates: [],
+        bindings: [
+          {
+            RemoteSessionClientID: "client-a",
+            RemoteSessionID: "session-a",
+            RemoteSession: { ID: "session-a" },
+          },
+        ],
+      }),
+    );
+    await waitFor(() => expect(fetchMock).toHaveResolved());
+    expect(button.disabled).toBe(true);
+    expect(
+      document.querySelector<HTMLInputElement>('input[value="agent-a"]')!
+        .checked,
+    ).toBe(false);
+    expect(fireEvent.submit(document.querySelector("form")!)).toBe(false);
+  });
+
+  it("keeps approval disabled when the consent human cannot authorize the agent", async () => {
     fetchMock.mockResolvedValue(reply({}, 401));
     const button = page();
     select("agent-a");
     await waitFor(() =>
       expect(
-        document.querySelector<HTMLElement>("[data-agent-access-login]")!
+        document.querySelector<HTMLElement>("[data-agent-access-unavailable]")!
           .hidden,
       ).toBe(false),
     );
     expect(button.disabled).toBe(true);
+    expect(document.body.textContent).toContain(
+      "not available for authorization",
+    );
+    expect(document.body.textContent).not.toContain("Sign in to Speakeasy");
   });
 });
 
@@ -380,4 +468,191 @@ describe("unified provider card", () => {
     ).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+});
+
+describe("consent actor picker", () => {
+  function element(selector: string) {
+    return document.querySelector<HTMLElement>(selector)!;
+  }
+  function formData() {
+    return new FormData(document.querySelector("form")!);
+  }
+  function search(value: string) {
+    fireEvent.input(element("[data-agent-search]"), { target: { value } });
+  }
+
+  it("defaults to Myself and prevents empty Agent mode from submitting as self", () => {
+    const button = page(false);
+    expect(element("[data-agent-picker]").hidden).toBe(true);
+    expect(button.disabled).toBe(false);
+    expect(formData().getAll("agent_id")).toEqual([""]);
+    mode("agent");
+    expect(element("[data-agent-picker]").hidden).toBe(false);
+    expect(element("[data-agent-self-only]").hidden).toBe(true);
+    expect(element("[data-agent-policy]").hidden).toBe(true);
+    expect(button.disabled).toBe(true);
+    expect(button.value).toBe("approve_agent");
+    // The tool-access island must not overwrite the Agent-mode gate.
+    expect(button.dataset.agentSelected).toBe("true");
+    expect(formData().has("agent_id")).toBe(false);
+    expect(document.querySelector("form")!.checkValidity()).toBe(false);
+    expect(fireEvent.submit(element("form"))).toBe(false);
+    // Even accidental re-enabling cannot turn an empty choice into self consent.
+    button.disabled = false;
+    expect(fireEvent.submit(element("form"))).toBe(false);
+    select("agent-a");
+    expect(button.disabled).toBe(false);
+    expect(formData().getAll("agent_id")).toEqual(["agent-a"]);
+    expect(element("[data-agent-policy]").hidden).toBe(false);
+    expect(element("[data-consent-subject-display]").textContent).toBe(
+      "Alpha Helper",
+    );
+    mode("self");
+    expect(button.value).toBe("approve");
+    expect(button.disabled).toBe(false);
+    expect(element("[data-agent-self-only]").hidden).toBe(false);
+    expect(element("[data-agent-picker]").hidden).toBe(true);
+    expect(element("[data-consent-subject-display]").textContent).toBe(
+      "person@example.com",
+    );
+    expect(formData().getAll("agent_id")).toEqual([""]);
+    expect(document.querySelector("form")!.checkValidity()).toBe(true);
+    button.dataset.consentSelfReady = "false";
+    mode("agent");
+    mode("self");
+    expect(button.disabled).toBe(true);
+  });
+
+  it("filters names case-insensitively and clears empty results without changing selection", () => {
+    page(false);
+    select("agent-a");
+    const options = document.querySelectorAll<HTMLElement>(
+      "[data-agent-option]",
+    );
+    search("  bEtA  ");
+    expect(options[0]!.hidden).toBe(true);
+    expect(options[1]!.hidden).toBe(false);
+    expect(formData().get("agent_id")).toBe("agent-a");
+    search("agent-a"); // IDs are not search terms.
+    expect(element("[data-agent-empty]").hidden).toBe(false);
+    expect(Array.from(options).every((option) => option.hidden)).toBe(true);
+    search("");
+    expect(element("[data-agent-empty]").hidden).toBe(true);
+    expect(Array.from(options).every((option) => !option.hidden)).toBe(true);
+  });
+
+  it("ignores unavailable saved agents and restores available agents in Agent mode", () => {
+    sessionStorage.setItem("gram-consent-agent-v1:state-a", "removed-agent");
+    page(false);
+    expect(element("[data-agent-picker]").hidden).toBe(true);
+    sessionStorage.setItem("gram-consent-agent-v1:state-a", "agent-b");
+    page(false);
+    expect(element("[data-agent-picker]").hidden).toBe(false);
+    expect(formData().getAll("agent_id")).toEqual(["agent-b"]);
+  });
+});
+
+describe("identity chaining checks", () => {
+  function chainedPage() {
+    document.body.innerHTML = `
+      <div data-service-connections data-action-url="/mcp/example/connect/remote-session">
+        ${["client-a", "client-b"]
+          .map(
+            (id) => `
+          <li data-remote-client="${id}">
+            <input name="state" value="state-a"><input name="csrf_token" value="csrf-a">
+            <span data-card-status data-identity-chained data-chain-check="pending">Managed by your identity provider</span>
+            <button type="button" data-connect-fallback>Use a separate sign-in instead</button>
+          </li>`,
+          )
+          .join("")}
+      </div>`;
+    const rejected = vi.fn<() => void>();
+    document.addEventListener("gram:consent-chain-rejected", () => {
+      rejected();
+    });
+    runInNewContext(script, {
+      window,
+      document,
+      sessionStorage,
+      URLSearchParams,
+      CustomEvent,
+      fetch: fetchMock,
+    });
+    return rejected;
+  }
+  function chainCheck(id: string) {
+    return document.querySelector(
+      `[data-remote-client="${id}"] [data-chain-check]`,
+    )!;
+  }
+
+  afterEach(() => {
+    document.documentElement.removeAttribute("data-consent-chain-rejected");
+  });
+
+  it("signals the island when one chained service is refused", async () => {
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      const clientID = (init.body as URLSearchParams).get("client_id");
+      return clientID === "client-a"
+        ? reply({ status: "rejected", message: "Refused." })
+        : reply({ status: "connected", message: "Connected" });
+    });
+    const rejected = chainedPage();
+    await waitFor(() => {
+      expect(chainCheck("client-a").getAttribute("data-chain-check")).toBe(
+        "rejected",
+      );
+      expect(chainCheck("client-b").getAttribute("data-chain-check")).toBe(
+        "connected",
+      );
+    });
+    expect(
+      document.documentElement.getAttribute("data-consent-chain-rejected"),
+    ).toBe("true");
+    expect(rejected).toHaveBeenCalled();
+  });
+
+  it("does not signal when chained services connect", async () => {
+    fetchMock.mockResolvedValue(
+      reply({ status: "connected", message: "Connected" }),
+    );
+    const rejected = chainedPage();
+    await waitFor(() =>
+      expect(chainCheck("client-b").getAttribute("data-chain-check")).toBe(
+        "connected",
+      ),
+    );
+    expect(
+      document.documentElement.hasAttribute("data-consent-chain-rejected"),
+    ).toBe(false);
+    expect(rejected).not.toHaveBeenCalled();
+  });
+});
+
+it("authorizers can use a valid attached connection without managing it", async () => {
+  fetchMock.mockResolvedValue(
+    reply({
+      canManageConnections: false,
+      candidates: [],
+      bindings: [
+        {
+          ID: "binding",
+          RemoteSessionClientID: "client-a",
+          RemoteSessionID: "other-session",
+          RemoteSession: {
+            ID: "other-session",
+            UpstreamDisplayName: "Another member",
+            RemoteSessionClientID: "client-a",
+          },
+        },
+      ],
+    }),
+  );
+  const approve = page();
+  select("agent-a");
+  await waitFor(() => expect(approve.disabled).toBe(false));
+  expect(document.body.textContent).toContain("Available to agent");
+  expect(document.body.textContent).not.toContain("Remove agent access");
+  expect(document.body.textContent).not.toContain("Use this account");
 });

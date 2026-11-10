@@ -35,7 +35,7 @@ if (process.env.FAIL_COMMAND === process.argv[2]) {
   chmodSync(mock, 0o755);
   writeFileSync(join(dir, "mise.local.toml"), settings);
   const run = (env: Record<string, string> = {}) =>
-    spawnSync(process.execPath, ["--experimental-strip-types", command], {
+    spawnSync(process.execPath, [command], {
       cwd: dir,
       encoding: "utf8",
       env: {

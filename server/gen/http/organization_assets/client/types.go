@@ -15,7 +15,7 @@ import (
 // UploadOrganizationImageResponseBody is the type of the "organizationAssets"
 // service "uploadOrganizationImage" endpoint HTTP response body.
 type UploadOrganizationImageResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
 

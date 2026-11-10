@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { ensureToolsetWrapper } from "@/pages/mcp/gateway/ensureToolsetWrapper";
 import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
 import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
@@ -16,7 +17,6 @@ import { useSidePanel } from "@/components/side-panel/side-panel-context";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useListTools } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
-import { Loader2 } from "lucide-react";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -147,7 +147,7 @@ export default function CreateFromSource(): JSX.Element {
         const serverId = await ensureToolsetWrapper(client, toolset, reconcile);
         await flow.complete(serverId);
       } else {
-        routes.mcp.details.tools.goTo(toolset.slug);
+        routes.toolset.tools.goTo(toolset.slug);
       }
     } catch (err) {
       setError(
@@ -292,7 +292,7 @@ export default function CreateFromSource(): JSX.Element {
             >
               {isCreating ? (
                 <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               ) : null}
               <Button.Text>

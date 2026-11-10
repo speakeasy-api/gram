@@ -24,6 +24,7 @@ type Endpoints struct {
 	SkillFeedback      goa.Endpoint
 	Logs               goa.Endpoint
 	Metrics            goa.Endpoint
+	GetStatus          goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "hooks" service with endpoints.
@@ -32,13 +33,14 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		Claude:             NewClaudeEndpoint(s),
-		Cursor:             NewCursorEndpoint(s, a.APIKeyAuth),
-		Codex:              NewCodexEndpoint(s, a.APIKeyAuth),
+		Cursor:             NewCursorEndpoint(s, a.JWTAuth, a.APIKeyAuth),
+		Codex:              NewCodexEndpoint(s, a.JWTAuth, a.APIKeyAuth),
 		Ingest:             NewIngestEndpoint(s),
 		UploadSkillContent: NewUploadSkillContentEndpoint(s, a.APIKeyAuth),
 		SkillFeedback:      NewSkillFeedbackEndpoint(s, a.APIKeyAuth),
-		Logs:               NewLogsEndpoint(s, a.APIKeyAuth),
-		Metrics:            NewMetricsEndpoint(s, a.APIKeyAuth),
+		Logs:               NewLogsEndpoint(s, a.JWTAuth, a.APIKeyAuth),
+		Metrics:            NewMetricsEndpoint(s, a.JWTAuth, a.APIKeyAuth),
+		GetStatus:          NewGetStatusEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -52,6 +54,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SkillFeedback = m(e.SkillFeedback)
 	e.Logs = m(e.Logs)
 	e.Metrics = m(e.Metrics)
+	e.GetStatus = m(e.GetStatus)
 }
 
 // NewClaudeEndpoint returns an endpoint function that calls the method
@@ -65,31 +68,55 @@ func NewClaudeEndpoint(s Service) goa.Endpoint {
 
 // NewCursorEndpoint returns an endpoint function that calls the method
 // "cursor" of service "hooks".
-func NewCursorEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewCursorEndpoint(s Service, authJWTFn security.AuthJWTFunc, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*CursorPayload)
 		var err error
-		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-			RequiredScopes: []string{"hooks"},
+		sc := security.JWTScheme{
+			Name:           "device_agent_token",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
-		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		var token string
+		if p.DeviceAgentToken != nil {
+			token = *p.DeviceAgentToken
 		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		ctx, err = authJWTFn(ctx, token, &sc)
 		if err == nil {
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{"hooks"},
+				RequiredScopes: []string{},
 			}
 			var key string
 			if p.ProjectSlugInput != nil {
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"hooks"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -100,31 +127,55 @@ func NewCursorEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 
 // NewCodexEndpoint returns an endpoint function that calls the method "codex"
 // of service "hooks".
-func NewCodexEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewCodexEndpoint(s Service, authJWTFn security.AuthJWTFunc, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*CodexPayload)
 		var err error
-		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-			RequiredScopes: []string{"hooks"},
+		sc := security.JWTScheme{
+			Name:           "device_agent_token",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
-		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		var token string
+		if p.DeviceAgentToken != nil {
+			token = *p.DeviceAgentToken
 		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		ctx, err = authJWTFn(ctx, token, &sc)
 		if err == nil {
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{"hooks"},
+				RequiredScopes: []string{},
 			}
 			var key string
 			if p.ProjectSlugInput != nil {
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"hooks"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -214,31 +265,55 @@ func NewSkillFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 
 // NewLogsEndpoint returns an endpoint function that calls the method "logs" of
 // service "hooks".
-func NewLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewLogsEndpoint(s Service, authJWTFn security.AuthJWTFunc, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*LogsPayload)
 		var err error
-		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-			RequiredScopes: []string{"hooks"},
+		sc := security.JWTScheme{
+			Name:           "device_agent_token",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
-		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		var token string
+		if p.DeviceAgentToken != nil {
+			token = *p.DeviceAgentToken
 		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		ctx, err = authJWTFn(ctx, token, &sc)
 		if err == nil {
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{"hooks"},
+				RequiredScopes: []string{},
 			}
 			var key string
 			if p.ProjectSlugInput != nil {
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"hooks"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -249,25 +324,25 @@ func NewLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoi
 
 // NewMetricsEndpoint returns an endpoint function that calls the method
 // "metrics" of service "hooks".
-func NewMetricsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewMetricsEndpoint(s Service, authJWTFn security.AuthJWTFunc, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*MetricsPayload)
 		var err error
-		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-			RequiredScopes: []string{"hooks"},
+		sc := security.JWTScheme{
+			Name:           "device_agent_token",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
-		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		var token string
+		if p.DeviceAgentToken != nil {
+			token = *p.DeviceAgentToken
 		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		ctx, err = authJWTFn(ctx, token, &sc)
 		if err == nil {
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{"hooks"},
+				RequiredScopes: []string{},
 			}
 			var key string
 			if p.ProjectSlugInput != nil {
@@ -276,8 +351,91 @@ func NewMetricsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
 		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"hooks"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
 			return nil, err
 		}
 		return nil, s.Metrics(ctx, p)
+	}
+}
+
+// NewGetStatusEndpoint returns an endpoint function that calls the method
+// "getStatus" of service "hooks".
+func NewGetStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetStatusPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetStatus(ctx, p)
 	}
 }

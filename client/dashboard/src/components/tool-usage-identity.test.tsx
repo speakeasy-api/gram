@@ -2,27 +2,92 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import type { ReactNode } from "react";
+import { identityUrnFor, type IdentityRef } from "@/lib/identity-urn";
 import { ToolUsageIdentity } from "./tool-usage-identity";
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    agents: { href: () => "/example/project/agent-management" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
+// The href carries the identifier the component asked for, so these tests
+// assert which identity a link points at rather than only that one rendered.
 vi.mock("@/components/identity-link", () => ({
   IdentityLink: ({
     children,
     identifier,
   }: {
     children: ReactNode;
-    identifier: unknown;
+    identifier: IdentityRef | null | undefined;
   }) =>
-    identifier ? <a href="/identity">{children}</a> : <span>{children}</span>,
+    identifier ? (
+      <a href={`/identity/${identityUrnFor(identifier)}`}>{children}</a>
+    ) : (
+      <span>{children}</span>
+    ),
 }));
 afterEach(cleanup);
 
 describe("ToolUsageIdentity", () => {
-  it("links readable agents to agent settings with dotted styling and an icon", () => {
+  it("names the person a readable agent acted for", () => {
+    render(
+      <MemoryRouter>
+        <ToolUsageIdentity
+          kind="agent_id"
+          identityKey="agent-1"
+          label="agent:agent-1"
+          agent={{ id: "agent-1", name: "Research agent" }}
+          authorizer={{ userId: "user-1", label: "ada@example.com" }}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("on behalf of")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "ada@example.com" })
+        .getAttribute("href"),
+    ).toBe(`/identity/${identityUrnFor({ userId: "user-1" })}`);
+  });
+
+  it("says a shared credential served the call, not the key's authorizer", () => {
+    render(
+      <MemoryRouter>
+        <ToolUsageIdentity
+          kind="agent_id"
+          identityKey="agent-1"
+          label="agent:agent-1"
+          agent={{ id: "agent-1", name: "Research agent" }}
+          authorizer={{ userId: "user-1", label: "ada@example.com" }}
+          credential={{ type: "service_account", clientId: "client-1" }}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("shared credential")).toBeTruthy();
+    expect(screen.queryByText("on behalf of")).toBeNull();
+    expect(screen.queryByText("ada@example.com")).toBeNull();
+  });
+
+  it("names whose personal connection served the call", () => {
+    render(
+      <MemoryRouter>
+        <ToolUsageIdentity
+          kind="agent_id"
+          identityKey="agent-1"
+          label="agent:agent-1"
+          agent={{ id: "agent-1", name: "Research agent" }}
+          authorizer={{ userId: "user-1", label: "ada@example.com" }}
+          credential={{
+            type: "remote_session",
+            clientId: "client-1",
+            ownerUserId: "user-2",
+            ownerName: "Alex Morgan",
+          }}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Alex Morgan's connection")).toBeTruthy();
+    expect(screen.queryByText("on behalf of")).toBeNull();
+  });
+
+  it("links readable agents to their identity overview with dotted styling and an icon", () => {
     render(
       <MemoryRouter>
         <ToolUsageIdentity
@@ -33,12 +98,13 @@ describe("ToolUsageIdentity", () => {
         />
       </MemoryRouter>,
     );
-    const link = screen.getByRole("link", { name: "Research agent" });
-    expect(link.getAttribute("href")).toBe(
-      "/example/project/agent-management?id=agent-1",
-    );
-    expect(link.className).toContain("decoration-dotted");
-    expect(screen.getByRole("img", { name: "Agent" })).toBeTruthy();
+    // Routed through the shared ActingPrincipal now, so the link is the
+    // identity resolver's rather than AgentLink's own href builder. What
+    // matters is unchanged: a readable agent is named, and the link lands on
+    // that agent's identity rather than on whatever the row happened to hold.
+    expect(
+      screen.getByRole("link", { name: "Research agent" }).getAttribute("href"),
+    ).toBe("/identity/agent:agent-1");
   });
 
   it("keeps unreadable agents distinct without revealing names or identity links", () => {
@@ -51,10 +117,11 @@ describe("ToolUsageIdentity", () => {
         />
       </MemoryRouter>,
     );
+    // The security-relevant half: an agent the caller may not read is shown
+    // as its id, never under a name from a stale row, and is not linked.
     expect(screen.getByText("agent:agent-1")).toBeTruthy();
     expect(screen.queryByText("Untrusted stale name")).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
-    expect(screen.getByRole("img", { name: "Agent" })).toBeTruthy();
   });
 
   it("preserves user identity links and genuinely unknown subjects", () => {
@@ -74,7 +141,7 @@ describe("ToolUsageIdentity", () => {
     );
     expect(
       screen.getByRole("link", { name: "Example User" }).getAttribute("href"),
-    ).toBe("/identity");
+    ).toBe("/identity/user:user-1");
     expect(screen.getByText("Unknown").closest("a")).toBeNull();
     expect(screen.queryByRole("img", { name: "Agent" })).toBeNull();
   });

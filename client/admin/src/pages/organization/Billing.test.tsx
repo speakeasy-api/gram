@@ -1,14 +1,16 @@
-import { QueryClient } from "@tanstack/react-query";
+import { onlineManager, QueryClient } from "@tanstack/react-query";
 import {
   act,
   cleanup,
   fireEvent,
   screen,
   within,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GramAdminError } from "@/lib/gramAdminApi";
+import { inferenceKeysQuery } from "@/lib/gramAdminClient";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -24,11 +26,24 @@ const mocks = vi.hoisted(() => ({
   cancelStripeSubscription: vi.fn(),
   resumeStripeSubscription: vi.fn(),
   setInferenceKeyMonthlyLimit: vi.fn(),
+  repairInferenceKey: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
   return { ...actual, ...mocks };
+});
+
+vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gramAdminClient")>();
+  return {
+    ...actual,
+    inferenceKeysQuery: (organizationID: string) => ({
+      ...actual.inferenceKeysQuery(organizationID),
+      queryFn: () => mocks.getInferenceKeys(organizationID),
+    }),
+    repairInferenceKey: mocks.repairInferenceKey,
+  };
 });
 
 // These tests exercise subscription and inference controls independently of
@@ -77,33 +92,33 @@ beforeEach(() => {
   mocks.getOrganization.mockResolvedValue(ORG);
   mocks.getInferenceKeys.mockResolvedValue([
     {
-      key_type: "chat",
-      credits_used: 42.75,
-      monthly_credits: 100,
+      keyType: "chat",
+      creditsUsed: 42.75,
+      monthlyCredits: 100,
       disabled: false,
-      disable_causes: [],
-      disable_causes_classified: true,
+      disableCauses: [],
+      disableCausesClassified: true,
     },
     {
-      key_type: "internal",
-      credits_used: 12.5,
-      monthly_credits: 0,
+      keyType: "internal",
+      creditsUsed: 12.5,
+      monthlyCredits: 0,
       disabled: true,
-      disable_causes: [
+      disableCauses: [
         "admin_lock",
         "billing_inactive",
         "future_policy",
         "constructor",
       ],
-      disable_causes_classified: true,
+      disableCausesClassified: true,
     },
     {
-      key_type: "future-purpose",
-      credits_used: 1.25,
-      monthly_credits: 25,
+      keyType: "future-purpose",
+      creditsUsed: 1.25,
+      monthlyCredits: 25,
       disabled: false,
-      disable_causes: null,
-      disable_causes_classified: false,
+      disableCauses: null,
+      disableCausesClassified: false,
     },
   ]);
   mocks.getInferenceSpendHistory.mockImplementation((organizationID: string) =>
@@ -242,9 +257,9 @@ describe("Billing", () => {
   it("shows a loaded unlimited key without an error but rejects zero as an edit", async () => {
     mocks.getInferenceKeys.mockResolvedValue([
       {
-        key_type: "chat",
-        credits_used: 4.25,
-        monthly_credits: 0,
+        keyType: "chat",
+        creditsUsed: 4.25,
+        monthlyCredits: 0,
         disabled: false,
       },
     ]);
@@ -274,17 +289,17 @@ describe("Billing", () => {
     mocks.getInferenceKeys
       .mockResolvedValueOnce([
         {
-          key_type: "chat",
-          credits_used: 42.75,
-          monthly_credits: 100,
+          keyType: "chat",
+          creditsUsed: 42.75,
+          monthlyCredits: 100,
           disabled: false,
         },
       ])
       .mockResolvedValue([
         {
-          key_type: "chat",
-          credits_used: 42.75,
-          monthly_credits: 750,
+          keyType: "chat",
+          creditsUsed: 42.75,
+          monthlyCredits: 750,
           disabled: false,
         },
       ]);
@@ -318,9 +333,7 @@ describe("Billing", () => {
         resolveUpdate = () =>
           resolve({
             key_type: "chat",
-            credits_used: 42.75,
             monthly_credits: 750,
-            disabled: false,
           });
       }),
     );
@@ -356,8 +369,19 @@ describe("Billing", () => {
     await vi.waitFor(() => expect(chatButton.textContent).toBe("Saving…"));
     expect((chatButton as HTMLButtonElement).disabled).toBe(true);
 
+    mocks.getInferenceKeys.mockResolvedValue([
+      {
+        keyType: "chat",
+        creditsUsed: 42.75,
+        monthlyCredits: 750,
+        disabled: false,
+        disableCausesClassified: true,
+        disableCauses: [],
+      },
+    ]);
     resolveUpdate?.();
     await vi.waitFor(() => expect(chatButton.textContent).toBe("Save limit"));
+    expect((chatInput as HTMLInputElement).value).toBe("750");
   });
 
   it.each(["incomplete", "paused"] as const)(
@@ -434,4 +458,188 @@ describe("Billing", () => {
       expect(mocks.resumeStripeSubscription).toHaveBeenCalledWith(ORG.id);
     });
   });
+});
+
+const REPAIR_KEY = {
+  keyType: "chat",
+  creditsUsed: 42.75,
+  monthlyCredits: 100,
+  disabled: true,
+  disableCauses: ["trial_demotion", "billing_inactive"],
+  disableCausesClassified: true,
+  causeDiagnostics: [
+    {
+      cause: "trial_demotion",
+      description: "Trial access ended automatically.",
+      removable: true,
+    },
+    {
+      cause: "billing_inactive",
+      description: "Billing needs attention.",
+      removable: false,
+      blockedReason: "Verified eligible billing is required.",
+    },
+  ],
+};
+async function openRepair() {
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Repair key locks" }),
+  );
+  fireEvent.click(screen.getByRole("checkbox", { name: "Trial demotion" }));
+  fireEvent.change(screen.getByLabelText("Reason or bug ticket"), {
+    target: { value: "BUG-123" },
+  });
+  fireEvent.change(screen.getByLabelText("Type I know what I'm doing"), {
+    target: { value: "I know what I'm doing" },
+  });
+}
+it("repairs the canonical key, preserves usage and concurrent locks when the accepted write refresh fails", async () => {
+  mocks.getInferenceKeys
+    .mockResolvedValueOnce([REPAIR_KEY])
+    .mockRejectedValue(new Error("Refresh unavailable"));
+  mocks.repairInferenceKey.mockResolvedValue({
+    key: {
+      ...REPAIR_KEY,
+      creditsUsed: undefined,
+      disableCauses: ["billing_inactive", "admin_lock"],
+      causeDiagnostics: [
+        REPAIR_KEY.causeDiagnostics[1],
+        {
+          cause: "admin_lock",
+          description: "Concurrent staff lock",
+          removable: true,
+        },
+      ],
+    },
+    reconciliationPending: true,
+  });
+  const qc = await renderBilling();
+  await openRepair();
+  expect(
+    (
+      screen.getByRole("checkbox", {
+        name: "Billing inactive",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Remove selected locks" }),
+  );
+  await waitFor(() =>
+    expect(mocks.repairInferenceKey).toHaveBeenCalledWith({
+      organizationId: ORG.id,
+      keyType: "chat",
+      removeCauses: ["trial_demotion"],
+      confirmation: "I know what I'm doing",
+      reason: "BUG-123",
+    }),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(
+    await screen.findByText(
+      /Could not load OpenRouter keys: Refresh unavailable/,
+    ),
+  ).toBeTruthy();
+  expect(
+    await screen.findByText(/Diagnostics refresh failed; reload to verify/),
+  ).toBeTruthy();
+  expect(screen.getByText("Billing inactive, Admin lock")).toBeTruthy();
+  expect(screen.getByText("$42.75 of $100.00")).toBeTruthy();
+  expect(
+    screen.getAllByText(/upstream reconciliation pending/i).length,
+  ).toBeGreaterThan(0);
+  expect(qc.getQueryData(inferenceKeysQuery(ORG.id).queryKey)).toMatchObject([
+    { creditsUsed: 42.75, disableCauses: ["billing_inactive", "admin_lock"] },
+  ]);
+});
+it("reports rejected writes without closing", async () => {
+  mocks.getInferenceKeys.mockResolvedValue([REPAIR_KEY]);
+  mocks.repairInferenceKey.mockRejectedValue(
+    new Error("Billing verification failed"),
+  );
+  await renderBilling();
+  await openRepair();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Remove selected locks" }),
+  );
+  expect(await screen.findByText("Billing verification failed")).toBeTruthy();
+  expect(screen.getByRole("dialog")).toBeTruthy();
+});
+it("blocks repair when lifecycle metadata is absent", async () => {
+  mocks.getInferenceKeys.mockResolvedValue([
+    { ...REPAIR_KEY, causeDiagnostics: undefined },
+  ]);
+  await renderBilling();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Repair key locks" }),
+  );
+  expect(
+    (
+      screen.getByRole("checkbox", {
+        name: "Trial demotion",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Remove selected locks",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+});
+
+it("blocks removal with outdated cause metadata", async () => {
+  mocks.getInferenceKeys.mockResolvedValue([
+    { ...REPAIR_KEY, causeDiagnostics: [REPAIR_KEY.causeDiagnostics[0]] },
+  ]);
+  await renderBilling();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Repair key locks" }),
+  );
+  for (const checkbox of screen.getAllByRole("checkbox"))
+    expect((checkbox as HTMLButtonElement).disabled).toBe(true);
+  expect(
+    screen.getAllByText(
+      "Current lock diagnostics are unavailable. Refresh before repairing this key.",
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(mocks.repairInferenceKey).not.toHaveBeenCalled();
+});
+
+it("blocks cached removable billing locks while diagnostics refetch is paused", async () => {
+  mocks.getInferenceKeys.mockResolvedValue([
+    {
+      ...REPAIR_KEY,
+      causeDiagnostics: REPAIR_KEY.causeDiagnostics.map((cause) => ({
+        ...cause,
+        removable: true,
+      })),
+    },
+  ]);
+  const qc = await renderBilling();
+  await openRepair();
+  const checkbox = screen.getByRole("checkbox", {
+    name: "Billing inactive",
+  }) as HTMLButtonElement;
+  expect(checkbox.disabled).toBe(false);
+  try {
+    onlineManager.setOnline(false);
+    act(() => {
+      void qc.invalidateQueries({
+        queryKey: inferenceKeysQuery(ORG.id).queryKey,
+      });
+    });
+    await waitFor(() =>
+      expect(
+        qc.getQueryState(inferenceKeysQuery(ORG.id).queryKey)?.fetchStatus,
+      ).toBe("paused"),
+    );
+    await waitFor(() => expect(checkbox.disabled).toBe(true));
+    fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+    expect(mocks.repairInferenceKey).not.toHaveBeenCalled();
+  } finally {
+    await qc.cancelQueries();
+    onlineManager.setOnline(true);
+  }
 });

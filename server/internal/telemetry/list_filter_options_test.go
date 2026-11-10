@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,26 +57,20 @@ func TestListFilterOptions_FilterByAPIKey(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
-			From:       from,
-			To:         to,
-			FilterType: "api_key",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Options, 2)
+	res, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
+		From:       from,
+		To:         to,
+		FilterType: "api_key",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Options, 2)
 
-		// Results should be ordered by count descending
-		assert.Equal(c, apiKey1, res.Options[0].ID)
-		assert.Equal(c, int64(3), res.Options[0].Count)
-		assert.Equal(c, apiKey2, res.Options[1].ID)
-		assert.Equal(c, int64(1), res.Options[1].Count)
-	}, 10*time.Second, 200*time.Millisecond)
+	// Results should be ordered by count descending
+	require.Equal(t, apiKey1, res.Options[0].ID)
+	require.Equal(t, int64(3), res.Options[0].Count)
+	require.Equal(t, apiKey2, res.Options[1].ID)
+	require.Equal(t, int64(1), res.Options[1].Count)
 }
 
 func TestListFilterOptions_FilterByUser(t *testing.T) {
@@ -106,26 +99,20 @@ func TestListFilterOptions_FilterByUser(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
-			From:       from,
-			To:         to,
-			FilterType: "user",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Options, 2)
+	res, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
+		From:       from,
+		To:         to,
+		FilterType: "user",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Options, 2)
 
-		// Results should be ordered by count descending
-		assert.Equal(c, user2, res.Options[0].ID)
-		assert.Equal(c, int64(3), res.Options[0].Count)
-		assert.Equal(c, user1, res.Options[1].ID)
-		assert.Equal(c, int64(2), res.Options[1].Count)
-	}, 10*time.Second, 200*time.Millisecond)
+	// Results should be ordered by count descending
+	require.Equal(t, user2, res.Options[0].ID)
+	require.Equal(t, int64(3), res.Options[0].Count)
+	require.Equal(t, user1, res.Options[1].ID)
+	require.Equal(t, int64(2), res.Options[1].Count)
 }
 
 func TestListFilterOptions_InvalidFilterType(t *testing.T) {
@@ -190,24 +177,18 @@ func TestListFilterOptions_CountsUniqueChatSessions(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
-			From:       from,
-			To:         to,
-			FilterType: "api_key",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Options, 1)
+	res, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
+		From:       from,
+		To:         to,
+		FilterType: "api_key",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Options, 1)
 
-		// Should count as 1 unique chat, not 3
-		assert.Equal(c, apiKey, res.Options[0].ID)
-		assert.Equal(c, int64(1), res.Options[0].Count)
-	}, 10*time.Second, 200*time.Millisecond)
+	// Should count as 1 unique chat, not 3
+	require.Equal(t, apiKey, res.Options[0].ID)
+	require.Equal(t, int64(1), res.Options[0].Count)
 }
 
 func TestListFilterOptions_TimeRangeFilter(t *testing.T) {
@@ -233,23 +214,17 @@ func TestListFilterOptions_TimeRangeFilter(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
-			From:       from,
-			To:         to,
-			FilterType: "api_key",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Options, 1)
+	res, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
+		From:       from,
+		To:         to,
+		FilterType: "api_key",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Options, 1)
 
-		// Only the in-range API key should be returned
-		assert.Equal(c, apiKeyInRange, res.Options[0].ID)
-	}, 10*time.Second, 200*time.Millisecond)
+	// Only the in-range API key should be returned
+	require.Equal(t, apiKeyInRange, res.Options[0].ID)
 }
 
 // insertLogWithAPIKey inserts a log with the gram.api_key.id attribute set.

@@ -15,25 +15,31 @@ import (
 
 // Client is the "auth" service client.
 type Client struct {
-	CallbackEndpoint     goa.Endpoint
-	LoginEndpoint        goa.Endpoint
-	SwitchScopesEndpoint goa.Endpoint
-	EnterDemoEndpoint    goa.Endpoint
-	LogoutEndpoint       goa.Endpoint
-	RegisterEndpoint     goa.Endpoint
-	InfoEndpoint         goa.Endpoint
+	CallbackEndpoint         goa.Endpoint
+	LoginEndpoint            goa.Endpoint
+	SwitchScopesEndpoint     goa.Endpoint
+	EnterDemoEndpoint        goa.Endpoint
+	LogoutEndpoint           goa.Endpoint
+	LogoutEverywhereEndpoint goa.Endpoint
+	RegisterEndpoint         goa.Endpoint
+	InfoEndpoint             goa.Endpoint
+	TransferOutEndpoint      goa.Endpoint
+	TransferInEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "auth" service client given the endpoints.
-func NewClient(callback, login, switchScopes, enterDemo, logout, register, info goa.Endpoint) *Client {
+func NewClient(callback, login, switchScopes, enterDemo, logout, logoutEverywhere, register, info, transferOut, transferIn goa.Endpoint) *Client {
 	return &Client{
-		CallbackEndpoint:     callback,
-		LoginEndpoint:        login,
-		SwitchScopesEndpoint: switchScopes,
-		EnterDemoEndpoint:    enterDemo,
-		LogoutEndpoint:       logout,
-		RegisterEndpoint:     register,
-		InfoEndpoint:         info,
+		CallbackEndpoint:         callback,
+		LoginEndpoint:            login,
+		SwitchScopesEndpoint:     switchScopes,
+		EnterDemoEndpoint:        enterDemo,
+		LogoutEndpoint:           logout,
+		LogoutEverywhereEndpoint: logoutEverywhere,
+		RegisterEndpoint:         register,
+		InfoEndpoint:             info,
+		TransferOutEndpoint:      transferOut,
+		TransferInEndpoint:       transferIn,
 	}
 }
 
@@ -147,6 +153,28 @@ func (c *Client) Logout(ctx context.Context, p *LogoutPayload) (res *LogoutResul
 	return ires.(*LogoutResult), nil
 }
 
+// LogoutEverywhere calls the "logoutEverywhere" endpoint of the "auth" service.
+// LogoutEverywhere may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) LogoutEverywhere(ctx context.Context, p *LogoutEverywherePayload) (res *LogoutEverywhereResult, err error) {
+	var ires any
+	ires, err = c.LogoutEverywhereEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*LogoutEverywhereResult), nil
+}
+
 // Register calls the "register" endpoint of the "auth" service.
 // Register may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -185,4 +213,48 @@ func (c *Client) Info(ctx context.Context, p *InfoPayload) (res *InfoResult, err
 		return
 	}
 	return ires.(*InfoResult), nil
+}
+
+// TransferOut calls the "transferOut" endpoint of the "auth" service.
+// TransferOut may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) TransferOut(ctx context.Context, p *TransferOutPayload) (res *TransferOutResult, err error) {
+	var ires any
+	ires, err = c.TransferOutEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*TransferOutResult), nil
+}
+
+// TransferIn calls the "transferIn" endpoint of the "auth" service.
+// TransferIn may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) TransferIn(ctx context.Context, p *TransferInPayload) (res *TransferInResult, err error) {
+	var ires any
+	ires, err = c.TransferInEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*TransferInResult), nil
 }

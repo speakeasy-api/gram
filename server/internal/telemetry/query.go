@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -116,6 +117,13 @@ func (s *Service) resolveOrgQueryScope(ctx context.Context, from, to string, pro
 // pre-aggregated attribute_metrics_summaries view; skill_version queries use
 // session-level raw telemetry joined to asynchronously reconciled mappings.
 func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*telem_gen.QueryResult, error) {
+	return s.query(ctx, payload, true)
+}
+
+// query runs Query. In-process callers that read only the table pass
+// withTimeseries=false to skip the per-group timeseries read; the result then
+// still carries a gap-filled zero series per group, which callers may drop.
+func (s *Service) query(ctx context.Context, payload *telem_gen.QueryPayload, withTimeseries bool) (*telem_gen.QueryResult, error) {
 	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, nil)
 	if err != nil {
 		return nil, err
@@ -175,15 +183,18 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	if foldIdentities {
 		canonicalOrg = authCtx.ActiveOrganizationID
 	}
+	// IncludeDimensionValues defaults to true only via HTTP decoding; in-process
+	// callers get the zero value (false) unless they set it.
 	params := repo.AttributeMetricsQueryParams{
-		ProjectIDs:           scope.projectIDs,
-		TimeStart:            timeStart,
-		TimeEnd:              timeEnd,
-		GroupBy:              groupBy,
-		SortBy:               sortBy,
-		Filters:              filters,
-		IntervalSeconds:      interval,
-		CanonicalIdentityOrg: canonicalOrg,
+		ProjectIDs:             scope.projectIDs,
+		TimeStart:              timeStart,
+		TimeEnd:                timeEnd,
+		GroupBy:                groupBy,
+		SortBy:                 sortBy,
+		Filters:                filters,
+		IntervalSeconds:        interval,
+		CanonicalIdentityOrg:   canonicalOrg,
+		IncludeDimensionValues: payload.IncludeDimensionValues,
 	}
 	useSkillVersions := groupBy == "skill_version"
 	for _, filter := range filters {
@@ -218,6 +229,9 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		return nil
 	})
 	eg.Go(func() error {
+		if !withTimeseries {
+			return nil
+		}
 		var egErr error
 		if useSkillVersions {
 			tsRows, egErr = s.chRepo.QuerySkillVersionMetricsTimeseries(egCtx, params)
@@ -264,7 +278,7 @@ var tumBreakdownDims = []string{"model", "hook_source", "provider", "account_typ
 //
 // Tokens under management are the agent traffic the platform OBSERVES from
 // the customer's users (Claude Code, Cursor, Codex sessions), excluding
-// cache reads — never the inference Gram itself spends (risk-policy judges,
+// cache reads — never the inference Speakeasy itself spends (risk-policy judges,
 // hosted chat surfaces). Reads attribute_metrics_summaries scoped exactly
 // like the billed totals (same source exclusions and measure), so the page
 // reports the billed population exactly.
@@ -628,7 +642,7 @@ func (s *Service) chatTitlesForSessions(ctx context.Context, items []repo.Sessio
 	titles := make(map[string]string, len(rows))
 	for _, row := range rows {
 		if row.Title.Valid && row.Title.String != "" {
-			titles[row.ID.String()] = row.Title.String
+			titles[row.ID.String()] = chattitle.Display(row.Title.String, row.TitleManuallySet)
 		}
 	}
 	return titles

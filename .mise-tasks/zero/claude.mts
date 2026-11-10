@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Install Claude Code hooks for auto-formatting"
 //MISE hide=true

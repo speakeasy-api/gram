@@ -1,10 +1,9 @@
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import type { Toolset } from "@/lib/toolTypes";
-import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { useState } from "react";
-import { PageSection } from "./MCPDetails";
+import { PageSection } from "./PageSection";
 import { ConnectOAuthModal } from "./oauth-wizard";
 import { AttachRemoteIdentityProviderSheet } from "./x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet";
 import { AuthenticationSectionBody } from "./x/tabs/settings/sections/authentication/AuthenticationSection";
@@ -38,6 +37,20 @@ export function ToolsetAuthenticationSection({
         heading="Authentication"
         description="Who may connect to this server and how they sign in. Changes take effect on new connections."
       >
+        {externalMcpOAuthStatus === "unknown" && (
+          <Alert variant="info" className="mb-4">
+            <AlertTitle>
+              Upstream authentication requirements are unknown
+            </AlertTitle>
+            <AlertDescription>
+              The catalog does not establish whether this MCP source requires
+              OAuth. Check the upstream provider’s documentation before
+              configuring access. Attaching an identity provider controls
+              sign-in to this server; it does not establish the upstream
+              source’s authentication requirements.
+            </AlertDescription>
+          </Alert>
+        )}
         <AuthenticationSectionBody
           target={target}
           additionalSetupAction={
@@ -73,10 +86,10 @@ export function ExternalOAuthMetadataRecommendation({
       <AlertTitle>Provider-hosted metadata is recommended</AlertTitle>
       <AlertDescription className="flex items-center justify-between gap-4">
         <span>
-          Gram continues to host protected-resource metadata. Review switching
-          authorization-server discovery to your provider without replacing
-          registrations or tokens. Some clients may request authentication
-          again.
+          Speakeasy continues to host protected-resource metadata. Review
+          switching authorization-server discovery to your provider without
+          replacing registrations or tokens. Some clients may request
+          authentication again.
         </span>
         <Button variant="secondary" onClick={onReview}>
           Review update
@@ -99,11 +112,6 @@ export function ConvertToUserSessionsButton({
 }): JSX.Element {
   const [sheetOpen, setSheetOpen] = useState(false);
   const target = useToolsetAuthTarget(toolset);
-  // No issuer wired yet, so every issuer this project can see is selectable.
-  // Pinned to the maximum page size so a large platform catalog does not push
-  // this project's own issuers out of the picker. See AuthenticationSection.
-  const { data: issuersResult } = useRemoteSessionIssuers({ limit: 100 });
-  const selectableIssuers = issuersResult?.result.items ?? [];
 
   return (
     <>
@@ -115,7 +123,6 @@ export function ConvertToUserSessionsButton({
         onOpenChange={setSheetOpen}
         target={target}
         userSessionIssuer={null}
-        selectableIssuers={selectableIssuers}
         initialIssuerUrl={externalOauthIssuerUrl(toolset)}
       />
     </>

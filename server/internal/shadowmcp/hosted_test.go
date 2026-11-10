@@ -26,7 +26,7 @@ func TestIsGramHostedMCPURL_CanonicalHosts(t *testing.T) {
 		{"unconfigured localhost rejected", "http://localhost:8080/mcp/x", false},
 		{"empty url", "", false},
 		{"unparseable url", "not a url at all", false},
-		// A Gram-shaped path on a foreign host must never pass: the check is
+		// A Speakeasy-shaped path on a foreign host must never pass: the check is
 		// on the host, never the path.
 		{"gram path on foreign host rejected", "https://evil.example.com/mcp/team-foo", false},
 	}

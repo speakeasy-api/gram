@@ -1,5 +1,6 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { computePanelState } from "./computePanelState";
+import { computePanelState, isProjectWideSelector } from "./computePanelState";
 import type { Selector } from "@gram/client/models/components/selector.js";
 
 // --- Helpers ---
@@ -40,6 +41,11 @@ describe("computePanelState", () => {
     it("null selectors with skill resourceType", () => {
       const result = computePanelState(null, "skill");
       expect(result).toEqual({ activePanel: "all", label: "All projects" });
+    });
+
+    it("null selectors with assistant resourceType", () => {
+      const result = computePanelState(null, "assistant");
+      expect(result).toEqual({ activePanel: "all", label: "All assistants" });
     });
   });
 
@@ -97,6 +103,21 @@ describe("computePanelState", () => {
       expect(result).toEqual({
         activePanel: "servers",
         selectedServerIds: ["proj-1", "proj-2"],
+        label: "2 projects selected",
+      });
+    });
+
+    it("assistant resource type selects projects through projectId", () => {
+      const result = computePanelState(
+        [
+          { resourceKind: "assistant", resourceId: "*", projectId: "proj-1" },
+          { resourceKind: "assistant", resourceId: "*", projectId: "proj-2" },
+        ] as unknown as Selector[],
+        "assistant",
+      );
+      expect(result).toEqual({
+        activePanel: "projects",
+        selectedProjectIds: ["proj-1", "proj-2"],
         label: "2 projects selected",
       });
     });
@@ -165,5 +186,84 @@ describe("computePanelState", () => {
         label: "1 rule selected",
       });
     });
+  });
+
+  describe("a named resource that carries its project", () => {
+    // An agent's server grants name the server and its project together.
+    it("is the resource's, shown on the servers panel", () => {
+      const state = computePanelState(
+        [
+          { ...server("srv-1"), projectId: "proj-1" },
+          { ...server("srv-2"), projectId: "proj-1" },
+        ],
+        "mcp",
+      );
+      expect(state).toMatchObject({
+        activePanel: "servers",
+        selectedServerIds: ["srv-1", "srv-2"],
+      });
+    });
+
+    it("leaves a project-wide selector on the projects panel", () => {
+      const state = computePanelState(
+        [{ resourceKind: "mcp", resourceId: "*", projectId: "proj-1" }],
+        "mcp",
+      );
+      expect(state).toMatchObject({
+        activePanel: "projects",
+        selectedProjectIds: ["proj-1"],
+      });
+    });
+
+    it("counts a named assistant as an assistant", () => {
+      const state = computePanelState(
+        [{ resourceKind: "assistant", resourceId: "a-1", projectId: "proj-1" }],
+        "assistant",
+      );
+      expect(state).toMatchObject({
+        activePanel: "servers",
+        selectedServerIds: ["a-1"],
+        label: "1 assistant selected",
+      });
+    });
+  });
+});
+
+describe("isProjectWideSelector", () => {
+  it('treats a "*" tool as no constraint', () => {
+    expect(
+      isProjectWideSelector({
+        resourceKind: "mcp",
+        resourceId: "*",
+        projectId: "p",
+        tool: "*",
+      }),
+    ).toBe(true);
+    expect(
+      isProjectWideSelector({
+        resourceKind: "mcp",
+        resourceId: "*",
+        projectId: "p",
+        tool: "search",
+      }),
+    ).toBe(false);
+  });
+
+  it("does not treat a disposition or a named resource as project-wide", () => {
+    expect(
+      isProjectWideSelector({
+        resourceKind: "mcp",
+        resourceId: "*",
+        projectId: "p",
+        disposition: "read_only",
+      }),
+    ).toBe(false);
+    expect(
+      isProjectWideSelector({
+        resourceKind: "mcp",
+        resourceId: "server_one",
+        projectId: "p",
+      }),
+    ).toBe(false);
   });
 });

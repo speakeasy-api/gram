@@ -108,8 +108,8 @@ func TestIdentity_ImpersonationTargetProblemAccepts(t *testing.T) {
 	require.Empty(t, reason)
 }
 
-// The screening exists because Gram publishes its own service account, so a
-// target inside Gram's own project must be refused rather than probed.
+// The screening exists because Speakeasy publishes its own service account, so a
+// target inside Speakeasy's own project must be refused rather than probed.
 func TestIdentity_ImpersonationTargetProblemRefusesGramProject(t *testing.T) {
 	t.Parallel()
 
@@ -137,7 +137,7 @@ func TestIdentity_ImpersonationTargetProblemRefusesUnplaceable(t *testing.T) {
 		"",
 		// Google-managed service agents live under *.iam.gserviceaccount.com too,
 		// but their domain names a Google namespace rather than a project. Left
-		// unrefused, one belonging to Gram's own project would never match Gram's
+		// unrefused, one belonging to Speakeasy's own project would never match Speakeasy's
 		// project id and would slip past the same-project comparison below.
 		"service-123456789012@gcp-sa-cloudkms.iam.gserviceaccount.com",
 		"service-123456789012@compute-system.iam.gserviceaccount.com",
@@ -167,7 +167,7 @@ func TestIdentity_ImpersonationTargetProblemErrorsWhenUnevaluatable(t *testing.T
 	require.Empty(t, reason)
 }
 
-// Gram running as something that cannot be placed in a project fails closed:
+// Speakeasy running as something that cannot be placed in a project fails closed:
 // comparing against nothing would silently accept every target.
 func TestIdentity_ImpersonationTargetProblemErrorsWhenGramIsUnplaceable(t *testing.T) {
 	t.Parallel()

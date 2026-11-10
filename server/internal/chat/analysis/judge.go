@@ -188,6 +188,7 @@ func CallStructured(ctx context.Context, logger *slog.Logger, client openrouter.
 	defer cancel()
 
 	response, err := client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
+		MaxTokens:    nil,
 		OrgID:        in.OrgID,
 		ProjectID:    in.ProjectID,
 		Model:        call.Model,

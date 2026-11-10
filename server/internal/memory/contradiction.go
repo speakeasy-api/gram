@@ -92,6 +92,7 @@ func (s *MemoryService) detectContradiction(ctx context.Context, orgID, projectI
 	}
 
 	req := openrouter.ObjectCompletionRequest{
+		MaxTokens:              nil,
 		OrgID:                  orgID,
 		ProjectID:              projectID,
 		Model:                  s.contradictionModel,

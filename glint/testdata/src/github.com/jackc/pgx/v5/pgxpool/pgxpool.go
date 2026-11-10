@@ -4,12 +4,13 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type Pool struct{}
 
-func (*Pool) Exec(ctx context.Context, sql string, args ...any) (pgx.CommandTag, error) {
-	return pgx.CommandTag{}, nil
+func (*Pool) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
 }
 
 func (*Pool) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {

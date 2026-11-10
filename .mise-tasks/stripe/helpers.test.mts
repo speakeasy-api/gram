@@ -34,10 +34,7 @@ for (const environment of ["production", "staging", ""]) {
   test(`listener rejects non-local environment: ${environment || "unset"}`, () => {
     const result = spawnSync(
       process.execPath,
-      [
-        "--experimental-strip-types",
-        join(root, ".mise-tasks/stripe/_listen.mts"),
-      ],
+      [join(root, ".mise-tasks/stripe/_listen.mts")],
       {
         env: { ...process.env, GRAM_ENVIRONMENT: environment },
         encoding: "utf8",
@@ -344,10 +341,7 @@ ${mode === "mismatch" ? "console.log('whsec_other');" : "console.error('expired_
     );
     const child = spawn(
       process.execPath,
-      [
-        "--experimental-strip-types",
-        join(root, ".mise-tasks/stripe/_listen.mts"),
-      ],
+      [join(root, ".mise-tasks/stripe/_listen.mts")],
       {
         cwd: dir,
         env: {
@@ -417,10 +411,7 @@ setInterval(() => {
   writeFileSync(join(dir, "bin/stripe"), script, { mode: 0o755 });
   const child = spawn(
     process.execPath,
-    [
-      "--experimental-strip-types",
-      join(root, ".mise-tasks/stripe/_listen.mts"),
-    ],
+    [join(root, ".mise-tasks/stripe/_listen.mts")],
     {
       cwd: dir,
       env: {

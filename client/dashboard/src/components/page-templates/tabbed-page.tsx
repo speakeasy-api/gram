@@ -5,7 +5,7 @@ import {
   type ReleaseStage,
 } from "@/components/release-stage-badge";
 import { PageTabsList, PageTabsTrigger, Tabs } from "@/components/ui/Tabs";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
 import {
   TemplateFrame,
@@ -65,6 +65,13 @@ export function TabbedPage({
     activeTab: string;
     children: ReactNode;
   }): JSX.Element {
+  // The page stays mounted across tab routes, so the strip keeps its scroll.
+  const tabStrip = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    tabStrip.current
+      ?.querySelector<HTMLElement>('[data-state="active"]')
+      ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [activeTab]);
   return (
     <TemplateFrame
       scope={scope}
@@ -88,15 +95,18 @@ export function TabbedPage({
           </div>
         ))}
 
-      <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
+      <Tabs value={activeTab} className="flex min-w-0 w-full flex-1 flex-col">
         <div className="shrink-0 border-b">
-          <div className="mx-auto max-w-[1270px] px-8">
-            <PageTabsList className="h-auto gap-6 bg-transparent p-0">
+          <div
+            ref={tabStrip}
+            className="mx-auto max-w-[1270px] overflow-x-auto px-8"
+          >
+            <PageTabsList className="h-auto w-max gap-6 bg-transparent p-0">
               {tabs.map((tab) => (
                 <PageTabsTrigger key={tab.value} value={tab.value} asChild>
                   <Link
                     to={tab.href}
-                    className="inline-flex items-center gap-2"
+                    className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap"
                   >
                     {tab.label}
                     {tab.stage != null && (

@@ -2304,10 +2304,11 @@ func NewUpdateMcpEndpointPayload(body *UpdateMcpEndpointRequestBody, sessionToke
 
 // NewCheckMcpEndpointSlugAvailabilityPayload builds a mcpEndpoints service
 // checkMcpEndpointSlugAvailability endpoint payload.
-func NewCheckMcpEndpointSlugAvailabilityPayload(slug string, customDomainID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpendpoints.CheckMcpEndpointSlugAvailabilityPayload {
+func NewCheckMcpEndpointSlugAvailabilityPayload(slug string, customDomainID *string, mcpServerID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpendpoints.CheckMcpEndpointSlugAvailabilityPayload {
 	v := &mcpendpoints.CheckMcpEndpointSlugAvailabilityPayload{}
 	v.Slug = types.McpEndpointSlug(slug)
 	v.CustomDomainID = customDomainID
+	v.McpServerID = mcpServerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

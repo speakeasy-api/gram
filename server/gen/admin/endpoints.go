@@ -17,59 +17,115 @@ import (
 
 // Endpoints wraps the "admin" service endpoints.
 type Endpoints struct {
-	Login                                 goa.Endpoint
-	Callback                              goa.Endpoint
-	Logout                                goa.Endpoint
-	GetSession                            goa.Endpoint
-	GetOrganizationFeatures               goa.Endpoint
-	SetOrganizationFeature                goa.Endpoint
-	GetOrganizationChatAnalysisSettings   goa.Endpoint
-	SetOrganizationChatAnalysisSettings   goa.Endpoint
-	TriggerOrganizationChatAnalysis       goa.Endpoint
-	OpenOrganizationInDashboard           goa.Endpoint
-	GetProject                            goa.Endpoint
-	UpdateOrganization                    goa.Endpoint
-	BulkUpdateAccountType                 goa.Endpoint
-	DisableOrganization                   goa.Endpoint
-	EnableOrganization                    goa.Endpoint
-	GetOrganization                       goa.Endpoint
-	ListOrganizationMembers               goa.Endpoint
-	ListOrganizationProjects              goa.Endpoint
-	ListOrganizationActivity              goa.Endpoint
-	ListOrganizations                     goa.Endpoint
-	ExtendTrial                           goa.Endpoint
-	CreateOrganization                    goa.Endpoint
-	RearmTrial                            goa.Endpoint
-	GetOrganizationStats                  goa.Endpoint
-	GetInferenceKeys                      goa.Endpoint
-	SetInferenceKeyMonthlyLimit           goa.Endpoint
-	GetInferenceSpendHistory              goa.Endpoint
-	GetPaygBillingSummary                 goa.Endpoint
-	GetStripeCustomer                     goa.Endpoint
-	SetStripeCustomer                     goa.Endpoint
-	GetStripeSubscription                 goa.Endpoint
-	CancelStripeSubscription              goa.Endpoint
-	ResumeStripeSubscription              goa.Endpoint
-	MarkEnterpriseTrialConverted          goa.Endpoint
-	CreateGlobalIssuer                    goa.Endpoint
-	GetGlobalIssuerDuplicatePreflight     goa.Endpoint
-	ListGlobalIssuers                     goa.Endpoint
-	GetGlobalIssuer                       goa.Endpoint
-	UpdateGlobalIssuer                    goa.Endpoint
-	DeleteGlobalIssuer                    goa.Endpoint
-	FetchGlobalIssuerMetadata             goa.Endpoint
-	RefreshGlobalIssuerMetadata           goa.Endpoint
-	ListGlobalIssuerConvergenceCandidates goa.Endpoint
-	GetGlobalIssuerMigratePreflight       goa.Endpoint
-	MigrateToGlobalIssuer                 goa.Endpoint
-	UploadPlatformImage                   goa.Endpoint
-	ServeImage                            goa.Endpoint
-	StartTrial                            goa.Endpoint
-	ChangeTrialEndDate                    goa.Endpoint
-	GetMeterUsage                         goa.Endpoint
-	GetSpendBreakdown                     goa.Endpoint
-	GetSupportMatrix                      goa.Endpoint
-	UpdateSupportMatrix                   goa.Endpoint
+	Login                                   goa.Endpoint
+	Callback                                goa.Endpoint
+	Logout                                  goa.Endpoint
+	GetSession                              goa.Endpoint
+	GetOrganizationFeatures                 goa.Endpoint
+	SetOrganizationProviderSetup            goa.Endpoint
+	SetOrganizationFeature                  goa.Endpoint
+	GetOrganizationChatAnalysisSettings     goa.Endpoint
+	SetOrganizationChatAnalysisSettings     goa.Endpoint
+	TriggerOrganizationChatAnalysis         goa.Endpoint
+	OpenOrganizationInDashboard             goa.Endpoint
+	GetProject                              goa.Endpoint
+	UpdateOrganization                      goa.Endpoint
+	BulkUpdateAccountType                   goa.Endpoint
+	DisableOrganization                     goa.Endpoint
+	EnableOrganization                      goa.Endpoint
+	GetOrganization                         goa.Endpoint
+	ListOrganizationMembers                 goa.Endpoint
+	ListOrganizationProjects                goa.Endpoint
+	ListProjectMcpServers                   goa.Endpoint
+	ListOrganizationActivity                goa.Endpoint
+	ListUsers                               goa.Endpoint
+	ListUserOrganizations                   goa.Endpoint
+	ListOrganizations                       goa.Endpoint
+	ExtendTrial                             goa.Endpoint
+	CreateOrganization                      goa.Endpoint
+	RearmTrial                              goa.Endpoint
+	GetOrganizationStats                    goa.Endpoint
+	RepairInferenceKey                      goa.Endpoint
+	GetInferenceKeys                        goa.Endpoint
+	SetInferenceKeyMonthlyLimit             goa.Endpoint
+	GetInferenceSpendHistory                goa.Endpoint
+	GetPaygBillingSummary                   goa.Endpoint
+	GetStripeCustomer                       goa.Endpoint
+	SetStripeCustomer                       goa.Endpoint
+	SetAdoptionDashboardURL                 goa.Endpoint
+	GetStripeSubscription                   goa.Endpoint
+	CancelStripeSubscription                goa.Endpoint
+	ResumeStripeSubscription                goa.Endpoint
+	MarkEnterpriseTrialConverted            goa.Endpoint
+	CreateGlobalIssuer                      goa.Endpoint
+	GetGlobalIssuerDuplicatePreflight       goa.Endpoint
+	ListGlobalIssuers                       goa.Endpoint
+	GetGlobalIssuer                         goa.Endpoint
+	UpdateGlobalIssuer                      goa.Endpoint
+	DeleteGlobalIssuer                      goa.Endpoint
+	FetchGlobalIssuerMetadata               goa.Endpoint
+	RefreshGlobalIssuerMetadata             goa.Endpoint
+	ListGlobalIssuerConvergenceCandidates   goa.Endpoint
+	GetGlobalIssuerMigratePreflight         goa.Endpoint
+	MigrateToGlobalIssuer                   goa.Endpoint
+	UploadPlatformImage                     goa.Endpoint
+	ServeImage                              goa.Endpoint
+	StartTrial                              goa.Endpoint
+	ChangeTrialEndDate                      goa.Endpoint
+	GetMeterUsage                           goa.Endpoint
+	GetSpendBreakdown                       goa.Endpoint
+	GetSupportMatrix                        goa.Endpoint
+	UpdateSupportMatrix                     goa.Endpoint
+	GetSupportCoverage                      goa.Endpoint
+	DescribeMcpServerHealth                 goa.Endpoint
+	SetMcpServerScopePin                    goa.Endpoint
+	GetMcpServerToolCalls                   goa.Endpoint
+	GetHookClients                          goa.Endpoint
+	GetOrganizationHookFleet                goa.Endpoint
+	ListRegistryPromotionCandidates         goa.Endpoint
+	GetRegistryPromotionCandidate           goa.Endpoint
+	PromoteRegistryCandidate                goa.Endpoint
+	CurateRegistryPromotionCandidate        goa.Endpoint
+	RetryRegistryPromotionDocs              goa.Endpoint
+	GetRegistryOktaCandidates               goa.Endpoint
+	ListRegistryOktaUnmapped                goa.Endpoint
+	ListRegistryEntries                     goa.Endpoint
+	GetRegistryEntry                        goa.Endpoint
+	CreateRegistryEntry                     goa.Endpoint
+	SaveRegistryEntry                       goa.Endpoint
+	SetRegistryEntryPublished               goa.Endpoint
+	ListOnboardingSteps                     goa.Endpoint
+	GetOnboardingStackOptions               goa.Endpoint
+	GetOrganizationOnboardingStack          goa.Endpoint
+	SetOrganizationOnboardingStack          goa.Endpoint
+	ListOnboardingUseCases                  goa.Endpoint
+	CreateOnboardingUseCase                 goa.Endpoint
+	UpdateOnboardingUseCase                 goa.Endpoint
+	DeleteOnboardingUseCase                 goa.Endpoint
+	ListOnboardingPlaybooks                 goa.Endpoint
+	CreateOnboardingPlaybook                goa.Endpoint
+	UpdateOnboardingPlaybook                goa.Endpoint
+	DeleteOnboardingPlaybook                goa.Endpoint
+	CloneOnboardingPlaybook                 goa.Endpoint
+	GetOrganizationOnboardingPlaybook       goa.Endpoint
+	AssignOrganizationOnboardingPlaybook    goa.Endpoint
+	ListSignupOffers                        goa.Endpoint
+	CreateSignupOffer                       goa.Endpoint
+	UpdateSignupOffer                       goa.Endpoint
+	ListPlatformMcpFeedback                 goa.Endpoint
+	GetStripeSubscriptionCandidate          goa.Endpoint
+	SetStripeSubscription                   goa.Endpoint
+	ListCustomerUsage                       goa.Endpoint
+	ListUpstreamOAuthMigrationOrganizations goa.Endpoint
+	GetUpstreamOAuthMigrationStatus         goa.Endpoint
+	RunUpstreamOAuthMigration               goa.Endpoint
+	EnableUpstreamAuthEnforcement           goa.Endpoint
+	DisableUpstreamAuthEnforcement          goa.Endpoint
+	BackfillMcpAuthGrants                   goa.Endpoint
+	BackfillMcpConnectGrants                goa.Endpoint
+	GetProjectRedeployPreview               goa.Endpoint
+	RedeployProject                         goa.Endpoint
+	ListCustomDomains                       goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -95,59 +151,115 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Login:                                 NewLoginEndpoint(s),
-		Callback:                              NewCallbackEndpoint(s),
-		Logout:                                NewLogoutEndpoint(s),
-		GetSession:                            NewGetSessionEndpoint(s, a.APIKeyAuth),
-		GetOrganizationFeatures:               NewGetOrganizationFeaturesEndpoint(s, a.APIKeyAuth),
-		SetOrganizationFeature:                NewSetOrganizationFeatureEndpoint(s, a.APIKeyAuth),
-		GetOrganizationChatAnalysisSettings:   NewGetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
-		SetOrganizationChatAnalysisSettings:   NewSetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
-		TriggerOrganizationChatAnalysis:       NewTriggerOrganizationChatAnalysisEndpoint(s, a.APIKeyAuth),
-		OpenOrganizationInDashboard:           NewOpenOrganizationInDashboardEndpoint(s, a.APIKeyAuth),
-		GetProject:                            NewGetProjectEndpoint(s, a.APIKeyAuth),
-		UpdateOrganization:                    NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
-		BulkUpdateAccountType:                 NewBulkUpdateAccountTypeEndpoint(s, a.APIKeyAuth),
-		DisableOrganization:                   NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
-		EnableOrganization:                    NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
-		GetOrganization:                       NewGetOrganizationEndpoint(s, a.APIKeyAuth),
-		ListOrganizationMembers:               NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
-		ListOrganizationProjects:              NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
-		ListOrganizationActivity:              NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
-		ListOrganizations:                     NewListOrganizationsEndpoint(s, a.APIKeyAuth),
-		ExtendTrial:                           NewExtendTrialEndpoint(s, a.APIKeyAuth),
-		CreateOrganization:                    NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
-		RearmTrial:                            NewRearmTrialEndpoint(s, a.APIKeyAuth),
-		GetOrganizationStats:                  NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
-		GetInferenceKeys:                      NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
-		SetInferenceKeyMonthlyLimit:           NewSetInferenceKeyMonthlyLimitEndpoint(s, a.APIKeyAuth),
-		GetInferenceSpendHistory:              NewGetInferenceSpendHistoryEndpoint(s, a.APIKeyAuth),
-		GetPaygBillingSummary:                 NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
-		GetStripeCustomer:                     NewGetStripeCustomerEndpoint(s, a.APIKeyAuth),
-		SetStripeCustomer:                     NewSetStripeCustomerEndpoint(s, a.APIKeyAuth),
-		GetStripeSubscription:                 NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		CancelStripeSubscription:              NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		ResumeStripeSubscription:              NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		MarkEnterpriseTrialConverted:          NewMarkEnterpriseTrialConvertedEndpoint(s, a.APIKeyAuth),
-		CreateGlobalIssuer:                    NewCreateGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		GetGlobalIssuerDuplicatePreflight:     NewGetGlobalIssuerDuplicatePreflightEndpoint(s, a.APIKeyAuth),
-		ListGlobalIssuers:                     NewListGlobalIssuersEndpoint(s, a.APIKeyAuth),
-		GetGlobalIssuer:                       NewGetGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		UpdateGlobalIssuer:                    NewUpdateGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		DeleteGlobalIssuer:                    NewDeleteGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		FetchGlobalIssuerMetadata:             NewFetchGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
-		RefreshGlobalIssuerMetadata:           NewRefreshGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
-		ListGlobalIssuerConvergenceCandidates: NewListGlobalIssuerConvergenceCandidatesEndpoint(s, a.APIKeyAuth),
-		GetGlobalIssuerMigratePreflight:       NewGetGlobalIssuerMigratePreflightEndpoint(s, a.APIKeyAuth),
-		MigrateToGlobalIssuer:                 NewMigrateToGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		UploadPlatformImage:                   NewUploadPlatformImageEndpoint(s, a.APIKeyAuth),
-		ServeImage:                            NewServeImageEndpoint(s),
-		StartTrial:                            NewStartTrialEndpoint(s, a.APIKeyAuth),
-		ChangeTrialEndDate:                    NewChangeTrialEndDateEndpoint(s, a.APIKeyAuth),
-		GetMeterUsage:                         NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
-		GetSpendBreakdown:                     NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
-		GetSupportMatrix:                      NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
-		UpdateSupportMatrix:                   NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
+		Login:                                   NewLoginEndpoint(s),
+		Callback:                                NewCallbackEndpoint(s),
+		Logout:                                  NewLogoutEndpoint(s),
+		GetSession:                              NewGetSessionEndpoint(s, a.APIKeyAuth),
+		GetOrganizationFeatures:                 NewGetOrganizationFeaturesEndpoint(s, a.APIKeyAuth),
+		SetOrganizationProviderSetup:            NewSetOrganizationProviderSetupEndpoint(s, a.APIKeyAuth),
+		SetOrganizationFeature:                  NewSetOrganizationFeatureEndpoint(s, a.APIKeyAuth),
+		GetOrganizationChatAnalysisSettings:     NewGetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
+		SetOrganizationChatAnalysisSettings:     NewSetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
+		TriggerOrganizationChatAnalysis:         NewTriggerOrganizationChatAnalysisEndpoint(s, a.APIKeyAuth),
+		OpenOrganizationInDashboard:             NewOpenOrganizationInDashboardEndpoint(s, a.APIKeyAuth),
+		GetProject:                              NewGetProjectEndpoint(s, a.APIKeyAuth),
+		UpdateOrganization:                      NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
+		BulkUpdateAccountType:                   NewBulkUpdateAccountTypeEndpoint(s, a.APIKeyAuth),
+		DisableOrganization:                     NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
+		EnableOrganization:                      NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
+		GetOrganization:                         NewGetOrganizationEndpoint(s, a.APIKeyAuth),
+		ListOrganizationMembers:                 NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
+		ListOrganizationProjects:                NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
+		ListProjectMcpServers:                   NewListProjectMcpServersEndpoint(s, a.APIKeyAuth),
+		ListOrganizationActivity:                NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
+		ListUsers:                               NewListUsersEndpoint(s, a.APIKeyAuth),
+		ListUserOrganizations:                   NewListUserOrganizationsEndpoint(s, a.APIKeyAuth),
+		ListOrganizations:                       NewListOrganizationsEndpoint(s, a.APIKeyAuth),
+		ExtendTrial:                             NewExtendTrialEndpoint(s, a.APIKeyAuth),
+		CreateOrganization:                      NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
+		RearmTrial:                              NewRearmTrialEndpoint(s, a.APIKeyAuth),
+		GetOrganizationStats:                    NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
+		RepairInferenceKey:                      NewRepairInferenceKeyEndpoint(s, a.APIKeyAuth),
+		GetInferenceKeys:                        NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
+		SetInferenceKeyMonthlyLimit:             NewSetInferenceKeyMonthlyLimitEndpoint(s, a.APIKeyAuth),
+		GetInferenceSpendHistory:                NewGetInferenceSpendHistoryEndpoint(s, a.APIKeyAuth),
+		GetPaygBillingSummary:                   NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
+		GetStripeCustomer:                       NewGetStripeCustomerEndpoint(s, a.APIKeyAuth),
+		SetStripeCustomer:                       NewSetStripeCustomerEndpoint(s, a.APIKeyAuth),
+		SetAdoptionDashboardURL:                 NewSetAdoptionDashboardURLEndpoint(s, a.APIKeyAuth),
+		GetStripeSubscription:                   NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		CancelStripeSubscription:                NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		ResumeStripeSubscription:                NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		MarkEnterpriseTrialConverted:            NewMarkEnterpriseTrialConvertedEndpoint(s, a.APIKeyAuth),
+		CreateGlobalIssuer:                      NewCreateGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuerDuplicatePreflight:       NewGetGlobalIssuerDuplicatePreflightEndpoint(s, a.APIKeyAuth),
+		ListGlobalIssuers:                       NewListGlobalIssuersEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuer:                         NewGetGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		UpdateGlobalIssuer:                      NewUpdateGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		DeleteGlobalIssuer:                      NewDeleteGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		FetchGlobalIssuerMetadata:               NewFetchGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
+		RefreshGlobalIssuerMetadata:             NewRefreshGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
+		ListGlobalIssuerConvergenceCandidates:   NewListGlobalIssuerConvergenceCandidatesEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuerMigratePreflight:         NewGetGlobalIssuerMigratePreflightEndpoint(s, a.APIKeyAuth),
+		MigrateToGlobalIssuer:                   NewMigrateToGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		UploadPlatformImage:                     NewUploadPlatformImageEndpoint(s, a.APIKeyAuth),
+		ServeImage:                              NewServeImageEndpoint(s),
+		StartTrial:                              NewStartTrialEndpoint(s, a.APIKeyAuth),
+		ChangeTrialEndDate:                      NewChangeTrialEndDateEndpoint(s, a.APIKeyAuth),
+		GetMeterUsage:                           NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
+		GetSpendBreakdown:                       NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
+		GetSupportMatrix:                        NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
+		UpdateSupportMatrix:                     NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
+		GetSupportCoverage:                      NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
+		DescribeMcpServerHealth:                 NewDescribeMcpServerHealthEndpoint(s, a.APIKeyAuth),
+		SetMcpServerScopePin:                    NewSetMcpServerScopePinEndpoint(s, a.APIKeyAuth),
+		GetMcpServerToolCalls:                   NewGetMcpServerToolCallsEndpoint(s, a.APIKeyAuth),
+		GetHookClients:                          NewGetHookClientsEndpoint(s, a.APIKeyAuth),
+		GetOrganizationHookFleet:                NewGetOrganizationHookFleetEndpoint(s, a.APIKeyAuth),
+		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesEndpoint(s, a.APIKeyAuth),
+		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateEndpoint(s, a.APIKeyAuth),
+		PromoteRegistryCandidate:                NewPromoteRegistryCandidateEndpoint(s, a.APIKeyAuth),
+		CurateRegistryPromotionCandidate:        NewCurateRegistryPromotionCandidateEndpoint(s, a.APIKeyAuth),
+		RetryRegistryPromotionDocs:              NewRetryRegistryPromotionDocsEndpoint(s, a.APIKeyAuth),
+		GetRegistryOktaCandidates:               NewGetRegistryOktaCandidatesEndpoint(s, a.APIKeyAuth),
+		ListRegistryOktaUnmapped:                NewListRegistryOktaUnmappedEndpoint(s, a.APIKeyAuth),
+		ListRegistryEntries:                     NewListRegistryEntriesEndpoint(s, a.APIKeyAuth),
+		GetRegistryEntry:                        NewGetRegistryEntryEndpoint(s, a.APIKeyAuth),
+		CreateRegistryEntry:                     NewCreateRegistryEntryEndpoint(s, a.APIKeyAuth),
+		SaveRegistryEntry:                       NewSaveRegistryEntryEndpoint(s, a.APIKeyAuth),
+		SetRegistryEntryPublished:               NewSetRegistryEntryPublishedEndpoint(s, a.APIKeyAuth),
+		ListOnboardingSteps:                     NewListOnboardingStepsEndpoint(s, a.APIKeyAuth),
+		GetOnboardingStackOptions:               NewGetOnboardingStackOptionsEndpoint(s, a.APIKeyAuth),
+		GetOrganizationOnboardingStack:          NewGetOrganizationOnboardingStackEndpoint(s, a.APIKeyAuth),
+		SetOrganizationOnboardingStack:          NewSetOrganizationOnboardingStackEndpoint(s, a.APIKeyAuth),
+		ListOnboardingUseCases:                  NewListOnboardingUseCasesEndpoint(s, a.APIKeyAuth),
+		CreateOnboardingUseCase:                 NewCreateOnboardingUseCaseEndpoint(s, a.APIKeyAuth),
+		UpdateOnboardingUseCase:                 NewUpdateOnboardingUseCaseEndpoint(s, a.APIKeyAuth),
+		DeleteOnboardingUseCase:                 NewDeleteOnboardingUseCaseEndpoint(s, a.APIKeyAuth),
+		ListOnboardingPlaybooks:                 NewListOnboardingPlaybooksEndpoint(s, a.APIKeyAuth),
+		CreateOnboardingPlaybook:                NewCreateOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		UpdateOnboardingPlaybook:                NewUpdateOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		DeleteOnboardingPlaybook:                NewDeleteOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		CloneOnboardingPlaybook:                 NewCloneOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		GetOrganizationOnboardingPlaybook:       NewGetOrganizationOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		AssignOrganizationOnboardingPlaybook:    NewAssignOrganizationOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		ListSignupOffers:                        NewListSignupOffersEndpoint(s, a.APIKeyAuth),
+		CreateSignupOffer:                       NewCreateSignupOfferEndpoint(s, a.APIKeyAuth),
+		UpdateSignupOffer:                       NewUpdateSignupOfferEndpoint(s, a.APIKeyAuth),
+		ListPlatformMcpFeedback:                 NewListPlatformMcpFeedbackEndpoint(s, a.APIKeyAuth),
+		GetStripeSubscriptionCandidate:          NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
+		SetStripeSubscription:                   NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		ListCustomerUsage:                       NewListCustomerUsageEndpoint(s, a.APIKeyAuth),
+		ListUpstreamOAuthMigrationOrganizations: NewListUpstreamOAuthMigrationOrganizationsEndpoint(s, a.APIKeyAuth),
+		GetUpstreamOAuthMigrationStatus:         NewGetUpstreamOAuthMigrationStatusEndpoint(s, a.APIKeyAuth),
+		RunUpstreamOAuthMigration:               NewRunUpstreamOAuthMigrationEndpoint(s, a.APIKeyAuth),
+		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
+		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
+		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsEndpoint(s, a.APIKeyAuth),
+		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsEndpoint(s, a.APIKeyAuth),
+		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewEndpoint(s, a.APIKeyAuth),
+		RedeployProject:                         NewRedeployProjectEndpoint(s, a.APIKeyAuth),
+		ListCustomDomains:                       NewListCustomDomainsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -158,6 +270,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Logout = m(e.Logout)
 	e.GetSession = m(e.GetSession)
 	e.GetOrganizationFeatures = m(e.GetOrganizationFeatures)
+	e.SetOrganizationProviderSetup = m(e.SetOrganizationProviderSetup)
 	e.SetOrganizationFeature = m(e.SetOrganizationFeature)
 	e.GetOrganizationChatAnalysisSettings = m(e.GetOrganizationChatAnalysisSettings)
 	e.SetOrganizationChatAnalysisSettings = m(e.SetOrganizationChatAnalysisSettings)
@@ -171,18 +284,23 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetOrganization = m(e.GetOrganization)
 	e.ListOrganizationMembers = m(e.ListOrganizationMembers)
 	e.ListOrganizationProjects = m(e.ListOrganizationProjects)
+	e.ListProjectMcpServers = m(e.ListProjectMcpServers)
 	e.ListOrganizationActivity = m(e.ListOrganizationActivity)
+	e.ListUsers = m(e.ListUsers)
+	e.ListUserOrganizations = m(e.ListUserOrganizations)
 	e.ListOrganizations = m(e.ListOrganizations)
 	e.ExtendTrial = m(e.ExtendTrial)
 	e.CreateOrganization = m(e.CreateOrganization)
 	e.RearmTrial = m(e.RearmTrial)
 	e.GetOrganizationStats = m(e.GetOrganizationStats)
+	e.RepairInferenceKey = m(e.RepairInferenceKey)
 	e.GetInferenceKeys = m(e.GetInferenceKeys)
 	e.SetInferenceKeyMonthlyLimit = m(e.SetInferenceKeyMonthlyLimit)
 	e.GetInferenceSpendHistory = m(e.GetInferenceSpendHistory)
 	e.GetPaygBillingSummary = m(e.GetPaygBillingSummary)
 	e.GetStripeCustomer = m(e.GetStripeCustomer)
 	e.SetStripeCustomer = m(e.SetStripeCustomer)
+	e.SetAdoptionDashboardURL = m(e.SetAdoptionDashboardURL)
 	e.GetStripeSubscription = m(e.GetStripeSubscription)
 	e.CancelStripeSubscription = m(e.CancelStripeSubscription)
 	e.ResumeStripeSubscription = m(e.ResumeStripeSubscription)
@@ -206,6 +324,56 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSpendBreakdown = m(e.GetSpendBreakdown)
 	e.GetSupportMatrix = m(e.GetSupportMatrix)
 	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
+	e.GetSupportCoverage = m(e.GetSupportCoverage)
+	e.DescribeMcpServerHealth = m(e.DescribeMcpServerHealth)
+	e.SetMcpServerScopePin = m(e.SetMcpServerScopePin)
+	e.GetMcpServerToolCalls = m(e.GetMcpServerToolCalls)
+	e.GetHookClients = m(e.GetHookClients)
+	e.GetOrganizationHookFleet = m(e.GetOrganizationHookFleet)
+	e.ListRegistryPromotionCandidates = m(e.ListRegistryPromotionCandidates)
+	e.GetRegistryPromotionCandidate = m(e.GetRegistryPromotionCandidate)
+	e.PromoteRegistryCandidate = m(e.PromoteRegistryCandidate)
+	e.CurateRegistryPromotionCandidate = m(e.CurateRegistryPromotionCandidate)
+	e.RetryRegistryPromotionDocs = m(e.RetryRegistryPromotionDocs)
+	e.GetRegistryOktaCandidates = m(e.GetRegistryOktaCandidates)
+	e.ListRegistryOktaUnmapped = m(e.ListRegistryOktaUnmapped)
+	e.ListRegistryEntries = m(e.ListRegistryEntries)
+	e.GetRegistryEntry = m(e.GetRegistryEntry)
+	e.CreateRegistryEntry = m(e.CreateRegistryEntry)
+	e.SaveRegistryEntry = m(e.SaveRegistryEntry)
+	e.SetRegistryEntryPublished = m(e.SetRegistryEntryPublished)
+	e.ListOnboardingSteps = m(e.ListOnboardingSteps)
+	e.GetOnboardingStackOptions = m(e.GetOnboardingStackOptions)
+	e.GetOrganizationOnboardingStack = m(e.GetOrganizationOnboardingStack)
+	e.SetOrganizationOnboardingStack = m(e.SetOrganizationOnboardingStack)
+	e.ListOnboardingUseCases = m(e.ListOnboardingUseCases)
+	e.CreateOnboardingUseCase = m(e.CreateOnboardingUseCase)
+	e.UpdateOnboardingUseCase = m(e.UpdateOnboardingUseCase)
+	e.DeleteOnboardingUseCase = m(e.DeleteOnboardingUseCase)
+	e.ListOnboardingPlaybooks = m(e.ListOnboardingPlaybooks)
+	e.CreateOnboardingPlaybook = m(e.CreateOnboardingPlaybook)
+	e.UpdateOnboardingPlaybook = m(e.UpdateOnboardingPlaybook)
+	e.DeleteOnboardingPlaybook = m(e.DeleteOnboardingPlaybook)
+	e.CloneOnboardingPlaybook = m(e.CloneOnboardingPlaybook)
+	e.GetOrganizationOnboardingPlaybook = m(e.GetOrganizationOnboardingPlaybook)
+	e.AssignOrganizationOnboardingPlaybook = m(e.AssignOrganizationOnboardingPlaybook)
+	e.ListSignupOffers = m(e.ListSignupOffers)
+	e.CreateSignupOffer = m(e.CreateSignupOffer)
+	e.UpdateSignupOffer = m(e.UpdateSignupOffer)
+	e.ListPlatformMcpFeedback = m(e.ListPlatformMcpFeedback)
+	e.GetStripeSubscriptionCandidate = m(e.GetStripeSubscriptionCandidate)
+	e.SetStripeSubscription = m(e.SetStripeSubscription)
+	e.ListCustomerUsage = m(e.ListCustomerUsage)
+	e.ListUpstreamOAuthMigrationOrganizations = m(e.ListUpstreamOAuthMigrationOrganizations)
+	e.GetUpstreamOAuthMigrationStatus = m(e.GetUpstreamOAuthMigrationStatus)
+	e.RunUpstreamOAuthMigration = m(e.RunUpstreamOAuthMigration)
+	e.EnableUpstreamAuthEnforcement = m(e.EnableUpstreamAuthEnforcement)
+	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
+	e.BackfillMcpAuthGrants = m(e.BackfillMcpAuthGrants)
+	e.BackfillMcpConnectGrants = m(e.BackfillMcpConnectGrants)
+	e.GetProjectRedeployPreview = m(e.GetProjectRedeployPreview)
+	e.RedeployProject = m(e.RedeployProject)
+	e.ListCustomDomains = m(e.ListCustomDomains)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -278,6 +446,34 @@ func NewGetOrganizationFeaturesEndpoint(s Service, authAPIKeyFn security.AuthAPI
 			return nil, err
 		}
 		res, err := s.GetOrganizationFeatures(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		vres := NewViewedProductFeatures(res, "default")
+		return vres, nil
+	}
+}
+
+// NewSetOrganizationProviderSetupEndpoint returns an endpoint function that
+// calls the method "setOrganizationProviderSetup" of service "admin".
+func NewSetOrganizationProviderSetupEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetOrganizationProviderSetupPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		res, err := s.SetOrganizationProviderSetup(ctx, p)
 		if err != nil {
 			return nil, err
 		}
@@ -592,6 +788,29 @@ func NewListOrganizationProjectsEndpoint(s Service, authAPIKeyFn security.AuthAP
 	}
 }
 
+// NewListProjectMcpServersEndpoint returns an endpoint function that calls the
+// method "listProjectMcpServers" of service "admin".
+func NewListProjectMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListProjectMcpServersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListProjectMcpServers(ctx, p)
+	}
+}
+
 // NewListOrganizationActivityEndpoint returns an endpoint function that calls
 // the method "listOrganizationActivity" of service "admin".
 func NewListOrganizationActivityEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -612,6 +831,52 @@ func NewListOrganizationActivityEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.ListOrganizationActivity(ctx, p)
+	}
+}
+
+// NewListUsersEndpoint returns an endpoint function that calls the method
+// "listUsers" of service "admin".
+func NewListUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListUsersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListUsers(ctx, p)
+	}
+}
+
+// NewListUserOrganizationsEndpoint returns an endpoint function that calls the
+// method "listUserOrganizations" of service "admin".
+func NewListUserOrganizationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListUserOrganizationsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListUserOrganizations(ctx, p)
 	}
 }
 
@@ -727,6 +992,29 @@ func NewGetOrganizationStatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.GetOrganizationStats(ctx, p)
+	}
+}
+
+// NewRepairInferenceKeyEndpoint returns an endpoint function that calls the
+// method "repairInferenceKey" of service "admin".
+func NewRepairInferenceKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RepairInferenceKeyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RepairInferenceKey(ctx, p)
 	}
 }
 
@@ -865,6 +1153,29 @@ func NewSetStripeCustomerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.SetStripeCustomer(ctx, p)
+	}
+}
+
+// NewSetAdoptionDashboardURLEndpoint returns an endpoint function that calls
+// the method "setAdoptionDashboardUrl" of service "admin".
+func NewSetAdoptionDashboardURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetAdoptionDashboardURLPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetAdoptionDashboardURL(ctx, p)
 	}
 }
 
@@ -1385,5 +1696,1157 @@ func NewUpdateSupportMatrixEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.UpdateSupportMatrix(ctx, p)
+	}
+}
+
+// NewGetSupportCoverageEndpoint returns an endpoint function that calls the
+// method "getSupportCoverage" of service "admin".
+func NewGetSupportCoverageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSupportCoveragePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSupportCoverage(ctx, p)
+	}
+}
+
+// NewDescribeMcpServerHealthEndpoint returns an endpoint function that calls
+// the method "describeMcpServerHealth" of service "admin".
+func NewDescribeMcpServerHealthEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DescribeMcpServerHealthPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DescribeMcpServerHealth(ctx, p)
+	}
+}
+
+// NewSetMcpServerScopePinEndpoint returns an endpoint function that calls the
+// method "setMcpServerScopePin" of service "admin".
+func NewSetMcpServerScopePinEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetMcpServerScopePinPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetMcpServerScopePin(ctx, p)
+	}
+}
+
+// NewGetMcpServerToolCallsEndpoint returns an endpoint function that calls the
+// method "getMcpServerToolCalls" of service "admin".
+func NewGetMcpServerToolCallsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetMcpServerToolCallsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetMcpServerToolCalls(ctx, p)
+	}
+}
+
+// NewGetHookClientsEndpoint returns an endpoint function that calls the method
+// "getHookClients" of service "admin".
+func NewGetHookClientsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetHookClientsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetHookClients(ctx, p)
+	}
+}
+
+// NewGetOrganizationHookFleetEndpoint returns an endpoint function that calls
+// the method "getOrganizationHookFleet" of service "admin".
+func NewGetOrganizationHookFleetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationHookFleetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationHookFleet(ctx, p)
+	}
+}
+
+// NewListRegistryPromotionCandidatesEndpoint returns an endpoint function that
+// calls the method "listRegistryPromotionCandidates" of service "admin".
+func NewListRegistryPromotionCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRegistryPromotionCandidatesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRegistryPromotionCandidates(ctx, p)
+	}
+}
+
+// NewGetRegistryPromotionCandidateEndpoint returns an endpoint function that
+// calls the method "getRegistryPromotionCandidate" of service "admin".
+func NewGetRegistryPromotionCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRegistryPromotionCandidatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRegistryPromotionCandidate(ctx, p)
+	}
+}
+
+// NewPromoteRegistryCandidateEndpoint returns an endpoint function that calls
+// the method "promoteRegistryCandidate" of service "admin".
+func NewPromoteRegistryCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*PromoteRegistryCandidatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.PromoteRegistryCandidate(ctx, p)
+	}
+}
+
+// NewCurateRegistryPromotionCandidateEndpoint returns an endpoint function
+// that calls the method "curateRegistryPromotionCandidate" of service "admin".
+func NewCurateRegistryPromotionCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CurateRegistryPromotionCandidatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CurateRegistryPromotionCandidate(ctx, p)
+	}
+}
+
+// NewRetryRegistryPromotionDocsEndpoint returns an endpoint function that
+// calls the method "retryRegistryPromotionDocs" of service "admin".
+func NewRetryRegistryPromotionDocsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RetryRegistryPromotionDocsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RetryRegistryPromotionDocs(ctx, p)
+	}
+}
+
+// NewGetRegistryOktaCandidatesEndpoint returns an endpoint function that calls
+// the method "getRegistryOktaCandidates" of service "admin".
+func NewGetRegistryOktaCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRegistryOktaCandidatesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRegistryOktaCandidates(ctx, p)
+	}
+}
+
+// NewListRegistryOktaUnmappedEndpoint returns an endpoint function that calls
+// the method "listRegistryOktaUnmapped" of service "admin".
+func NewListRegistryOktaUnmappedEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRegistryOktaUnmappedPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRegistryOktaUnmapped(ctx, p)
+	}
+}
+
+// NewListRegistryEntriesEndpoint returns an endpoint function that calls the
+// method "listRegistryEntries" of service "admin".
+func NewListRegistryEntriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRegistryEntriesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRegistryEntries(ctx, p)
+	}
+}
+
+// NewGetRegistryEntryEndpoint returns an endpoint function that calls the
+// method "getRegistryEntry" of service "admin".
+func NewGetRegistryEntryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRegistryEntryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRegistryEntry(ctx, p)
+	}
+}
+
+// NewCreateRegistryEntryEndpoint returns an endpoint function that calls the
+// method "createRegistryEntry" of service "admin".
+func NewCreateRegistryEntryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateRegistryEntryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateRegistryEntry(ctx, p)
+	}
+}
+
+// NewSaveRegistryEntryEndpoint returns an endpoint function that calls the
+// method "saveRegistryEntry" of service "admin".
+func NewSaveRegistryEntryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SaveRegistryEntryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SaveRegistryEntry(ctx, p)
+	}
+}
+
+// NewSetRegistryEntryPublishedEndpoint returns an endpoint function that calls
+// the method "setRegistryEntryPublished" of service "admin".
+func NewSetRegistryEntryPublishedEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetRegistryEntryPublishedPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetRegistryEntryPublished(ctx, p)
+	}
+}
+
+// NewListOnboardingStepsEndpoint returns an endpoint function that calls the
+// method "listOnboardingSteps" of service "admin".
+func NewListOnboardingStepsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListOnboardingStepsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListOnboardingSteps(ctx, p)
+	}
+}
+
+// NewGetOnboardingStackOptionsEndpoint returns an endpoint function that calls
+// the method "getOnboardingStackOptions" of service "admin".
+func NewGetOnboardingStackOptionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOnboardingStackOptionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOnboardingStackOptions(ctx, p)
+	}
+}
+
+// NewGetOrganizationOnboardingStackEndpoint returns an endpoint function that
+// calls the method "getOrganizationOnboardingStack" of service "admin".
+func NewGetOrganizationOnboardingStackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationOnboardingStackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationOnboardingStack(ctx, p)
+	}
+}
+
+// NewSetOrganizationOnboardingStackEndpoint returns an endpoint function that
+// calls the method "setOrganizationOnboardingStack" of service "admin".
+func NewSetOrganizationOnboardingStackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetOrganizationOnboardingStackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetOrganizationOnboardingStack(ctx, p)
+	}
+}
+
+// NewListOnboardingUseCasesEndpoint returns an endpoint function that calls
+// the method "listOnboardingUseCases" of service "admin".
+func NewListOnboardingUseCasesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListOnboardingUseCasesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListOnboardingUseCases(ctx, p)
+	}
+}
+
+// NewCreateOnboardingUseCaseEndpoint returns an endpoint function that calls
+// the method "createOnboardingUseCase" of service "admin".
+func NewCreateOnboardingUseCaseEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateOnboardingUseCasePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateOnboardingUseCase(ctx, p)
+	}
+}
+
+// NewUpdateOnboardingUseCaseEndpoint returns an endpoint function that calls
+// the method "updateOnboardingUseCase" of service "admin".
+func NewUpdateOnboardingUseCaseEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateOnboardingUseCasePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateOnboardingUseCase(ctx, p)
+	}
+}
+
+// NewDeleteOnboardingUseCaseEndpoint returns an endpoint function that calls
+// the method "deleteOnboardingUseCase" of service "admin".
+func NewDeleteOnboardingUseCaseEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteOnboardingUseCasePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DeleteOnboardingUseCase(ctx, p)
+	}
+}
+
+// NewListOnboardingPlaybooksEndpoint returns an endpoint function that calls
+// the method "listOnboardingPlaybooks" of service "admin".
+func NewListOnboardingPlaybooksEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListOnboardingPlaybooksPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListOnboardingPlaybooks(ctx, p)
+	}
+}
+
+// NewCreateOnboardingPlaybookEndpoint returns an endpoint function that calls
+// the method "createOnboardingPlaybook" of service "admin".
+func NewCreateOnboardingPlaybookEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateOnboardingPlaybookPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateOnboardingPlaybook(ctx, p)
+	}
+}
+
+// NewUpdateOnboardingPlaybookEndpoint returns an endpoint function that calls
+// the method "updateOnboardingPlaybook" of service "admin".
+func NewUpdateOnboardingPlaybookEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateOnboardingPlaybookPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateOnboardingPlaybook(ctx, p)
+	}
+}
+
+// NewDeleteOnboardingPlaybookEndpoint returns an endpoint function that calls
+// the method "deleteOnboardingPlaybook" of service "admin".
+func NewDeleteOnboardingPlaybookEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteOnboardingPlaybookPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DeleteOnboardingPlaybook(ctx, p)
+	}
+}
+
+// NewCloneOnboardingPlaybookEndpoint returns an endpoint function that calls
+// the method "cloneOnboardingPlaybook" of service "admin".
+func NewCloneOnboardingPlaybookEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CloneOnboardingPlaybookPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CloneOnboardingPlaybook(ctx, p)
+	}
+}
+
+// NewGetOrganizationOnboardingPlaybookEndpoint returns an endpoint function
+// that calls the method "getOrganizationOnboardingPlaybook" of service "admin".
+func NewGetOrganizationOnboardingPlaybookEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationOnboardingPlaybookPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationOnboardingPlaybook(ctx, p)
+	}
+}
+
+// NewAssignOrganizationOnboardingPlaybookEndpoint returns an endpoint function
+// that calls the method "assignOrganizationOnboardingPlaybook" of service
+// "admin".
+func NewAssignOrganizationOnboardingPlaybookEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*AssignOrganizationOnboardingPlaybookPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.AssignOrganizationOnboardingPlaybook(ctx, p)
+	}
+}
+
+// NewListSignupOffersEndpoint returns an endpoint function that calls the
+// method "listSignupOffers" of service "admin".
+func NewListSignupOffersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSignupOffersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSignupOffers(ctx, p)
+	}
+}
+
+// NewCreateSignupOfferEndpoint returns an endpoint function that calls the
+// method "createSignupOffer" of service "admin".
+func NewCreateSignupOfferEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateSignupOfferPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateSignupOffer(ctx, p)
+	}
+}
+
+// NewUpdateSignupOfferEndpoint returns an endpoint function that calls the
+// method "updateSignupOffer" of service "admin".
+func NewUpdateSignupOfferEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateSignupOfferPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateSignupOffer(ctx, p)
+	}
+}
+
+// NewListPlatformMcpFeedbackEndpoint returns an endpoint function that calls
+// the method "listPlatformMcpFeedback" of service "admin".
+func NewListPlatformMcpFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPlatformMcpFeedbackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPlatformMcpFeedback(ctx, p)
+	}
+}
+
+// NewGetStripeSubscriptionCandidateEndpoint returns an endpoint function that
+// calls the method "getStripeSubscriptionCandidate" of service "admin".
+func NewGetStripeSubscriptionCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetStripeSubscriptionCandidatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetStripeSubscriptionCandidate(ctx, p)
+	}
+}
+
+// NewSetStripeSubscriptionEndpoint returns an endpoint function that calls the
+// method "setStripeSubscription" of service "admin".
+func NewSetStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetStripeSubscriptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetStripeSubscription(ctx, p)
+	}
+}
+
+// NewListCustomerUsageEndpoint returns an endpoint function that calls the
+// method "listCustomerUsage" of service "admin".
+func NewListCustomerUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListCustomerUsagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListCustomerUsage(ctx, p)
+	}
+}
+
+// NewListUpstreamOAuthMigrationOrganizationsEndpoint returns an endpoint
+// function that calls the method "listUpstreamOAuthMigrationOrganizations" of
+// service "admin".
+func NewListUpstreamOAuthMigrationOrganizationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListUpstreamOAuthMigrationOrganizationsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListUpstreamOAuthMigrationOrganizations(ctx, p)
+	}
+}
+
+// NewGetUpstreamOAuthMigrationStatusEndpoint returns an endpoint function that
+// calls the method "getUpstreamOAuthMigrationStatus" of service "admin".
+func NewGetUpstreamOAuthMigrationStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetUpstreamOAuthMigrationStatusPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetUpstreamOAuthMigrationStatus(ctx, p)
+	}
+}
+
+// NewRunUpstreamOAuthMigrationEndpoint returns an endpoint function that calls
+// the method "runUpstreamOAuthMigration" of service "admin".
+func NewRunUpstreamOAuthMigrationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunUpstreamOAuthMigrationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunUpstreamOAuthMigration(ctx, p)
+	}
+}
+
+// NewEnableUpstreamAuthEnforcementEndpoint returns an endpoint function that
+// calls the method "enableUpstreamAuthEnforcement" of service "admin".
+func NewEnableUpstreamAuthEnforcementEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EnableUpstreamAuthEnforcementPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.EnableUpstreamAuthEnforcement(ctx, p)
+	}
+}
+
+// NewDisableUpstreamAuthEnforcementEndpoint returns an endpoint function that
+// calls the method "disableUpstreamAuthEnforcement" of service "admin".
+func NewDisableUpstreamAuthEnforcementEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DisableUpstreamAuthEnforcementPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DisableUpstreamAuthEnforcement(ctx, p)
+	}
+}
+
+// NewBackfillMcpAuthGrantsEndpoint returns an endpoint function that calls the
+// method "backfillMcpAuthGrants" of service "admin".
+func NewBackfillMcpAuthGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*BackfillMcpAuthGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.BackfillMcpAuthGrants(ctx, p)
+	}
+}
+
+// NewBackfillMcpConnectGrantsEndpoint returns an endpoint function that calls
+// the method "backfillMcpConnectGrants" of service "admin".
+func NewBackfillMcpConnectGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*BackfillMcpConnectGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.BackfillMcpConnectGrants(ctx, p)
+	}
+}
+
+// NewGetProjectRedeployPreviewEndpoint returns an endpoint function that calls
+// the method "getProjectRedeployPreview" of service "admin".
+func NewGetProjectRedeployPreviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetProjectRedeployPreviewPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetProjectRedeployPreview(ctx, p)
+	}
+}
+
+// NewRedeployProjectEndpoint returns an endpoint function that calls the
+// method "redeployProject" of service "admin".
+func NewRedeployProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RedeployProjectPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RedeployProject(ctx, p)
+	}
+}
+
+// NewListCustomDomainsEndpoint returns an endpoint function that calls the
+// method "listCustomDomains" of service "admin".
+func NewListCustomDomainsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListCustomDomainsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListCustomDomains(ctx, p)
 	}
 }

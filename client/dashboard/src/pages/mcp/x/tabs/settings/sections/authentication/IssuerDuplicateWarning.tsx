@@ -9,6 +9,9 @@ import { CodeBlock } from "@/components/code";
 import { Card } from "@/components/ui/Card";
 import { InfoIcon } from "lucide-react";
 
+const UNKNOWN_TIER_MESSAGE =
+  "An authorization server already exists for this issuer URL.";
+
 // What reusing the existing record gives the operator instead of adding their
 // own. Phrased as what they gain, because duplicating is a legitimate choice and
 // the warning is here to inform it rather than to scold.
@@ -22,7 +25,7 @@ function tierRationale(
   viewerScope: IssuerDuplicateScope,
 ): string {
   if (viewerScope === "platform") {
-    return "The catalog already covers this authorization server. A second entry gives every tenant two records for one provider with nothing to tell them apart.";
+    return "The catalog already covers this authorization server. A second entry gives every tenant two records for one authorization server with nothing to tell them apart.";
   }
 
   switch (match.tier) {
@@ -36,10 +39,11 @@ function tierRationale(
       // projectName is populated exactly when the caller might not be able to
       // place the match, so its presence is what distinguishes the two cases.
       if (match.projectName) {
-        return "Consolidating onto one record avoids each project maintaining its own metadata and documentation for the same provider.";
+        return "Consolidating onto one record avoids each project maintaining its own metadata and documentation for the same authorization server.";
       }
       return "It's already configured here, so a second record would double the metadata and documentation you maintain.";
   }
+  return UNKNOWN_TIER_MESSAGE;
 }
 
 // tierCopy explains where a matching issuer already exists. A project-specific
@@ -47,14 +51,15 @@ function tierRationale(
 function tierCopy(match: RemoteSessionIssuerDuplicateMatch): string {
   switch (match.tier) {
     case "platform-level":
-      return "Speakeasy already has an identity provider for this issuer URL.";
+      return "Speakeasy already has an authorization server for this issuer URL.";
     case "organization-level":
-      return "Your organization already has an identity provider for this issuer URL.";
+      return "Your organization already has an authorization server for this issuer URL.";
     case "project-specific":
       if (match.projectName)
-        return `Project "${match.projectName}" already has an identity provider for this issuer URL.`;
-      return `This project already has an identity provider for this issuer URL.`;
+        return `Project "${match.projectName}" already has an authorization server for this issuer URL.`;
+      return `This project already has an authorization server for this issuer URL.`;
   }
+  return UNKNOWN_TIER_MESSAGE;
 }
 
 function tierLabel(match: RemoteSessionIssuerDuplicateMatch): string {
@@ -68,6 +73,7 @@ function tierLabel(match: RemoteSessionIssuerDuplicateMatch): string {
         ? `Project ${match.projectName}`
         : "This project";
   }
+  return "Unknown tier";
 }
 
 // matchDisplayName mirrors how issuers are named everywhere else: the display
@@ -91,9 +97,9 @@ function otherMatchesSentence(
     .join(", ");
 
   if (others.length === 1) {
-    return `Another identity provider also uses it: ${named}.`;
+    return `Another authorization server also uses it: ${named}.`;
   }
-  return `Other identity providers also use it: ${named}.`;
+  return `Other authorization servers also use it: ${named}.`;
 }
 
 // IssuerDuplicateWarning tells an operator that something they can already see

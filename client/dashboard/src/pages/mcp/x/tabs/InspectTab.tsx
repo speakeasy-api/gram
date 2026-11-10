@@ -1,4 +1,8 @@
-import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import { mcpServerRouteParam } from "@/lib/sources";
+import {
+  platformEndpointSlug,
+  useResolvedMcpServerUrl,
+} from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -27,8 +31,8 @@ export function InspectTab({
 
   // Deep-link to the Authentication section under Settings so the tools view
   // can point users at auth setup when a server has none configured yet.
-  const authSettingsHref = `${routes.mcp.x.settings.href(
-    mcpServer.slug ?? mcpServer.id,
+  const authSettingsHref = `${routes.mcp.details.settings.href(
+    mcpServerRouteParam(mcpServer),
   )}#${MCP_AUTHENTICATION_SECTION_ID}`;
 
   return (
@@ -41,6 +45,9 @@ export function InspectTab({
         remoteMcpServerId={mcpServer.remoteMcpServerId ?? undefined}
         isDisabled={mcpServer.visibility === "disabled"}
         authSettingsHref={authSettingsHref}
+        platformSlug={platformEndpointSlug(endpoints)}
+        tunneledMcpServerId={mcpServer.tunneledMcpServerId}
+        visibility={mcpServer.visibility}
       />
     </div>
   );

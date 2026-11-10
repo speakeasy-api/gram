@@ -34,6 +34,25 @@ vi.mock("sonner", () => ({
   toast: { success: mocks.toastSuccess },
 }));
 
+// The stack form has its own suite and reads through the SDK, which this suite
+// leaves unstubbed: unmocked it reaches the real fetch and waits on a socket.
+vi.mock("@/pages/organization/OnboardingStack", () => ({
+  OnboardingStack: () => <p>Stack form</p>,
+}));
+vi.mock("@/pages/organization/OnboardingPlaybook", () => ({
+  OnboardingPlaybook: ({
+    organizationId,
+    idOrSlug,
+  }: {
+    organizationId: string;
+    idOrSlug?: string;
+  }) => (
+    <p data-organization-id={organizationId} data-id-or-slug={idOrSlug}>
+      Playbook view
+    </p>
+  ),
+}));
+
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
   return {
@@ -179,7 +198,181 @@ describe("Overview", () => {
     expect(
       screen.queryByRole("button", { name: "Copy Stripe subscription ID" }),
     ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Set subscription ID" }),
+    ).toBeNull();
   });
+
+  it("explains why a PAYG organization without a Stripe customer cannot record a subscription", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "payg",
+      trial_state: "converted",
+      trial_converted_at: "2026-03-08T12:34:56Z",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const note = await screen.findByText(
+      /Set a Stripe customer ID before recording a subscription/,
+    );
+    expect(valueBeside("Stripe subscription ID").contains(note)).toBe(true);
+    expect(
+      screen.queryByRole("button", { name: "Set subscription ID" }),
+    ).toBeNull();
+  });
+
+  it("lets a PAYG organization with a customer and no subscription record one", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "payg",
+      trial_state: "converted",
+      trial_converted_at: "2026-03-08T12:34:56Z",
+      stripe_customer_id: "cus_example",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Set subscription ID" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/Set a Stripe customer ID before recording/),
+    ).toBeNull();
+  });
+
+  it("links the WorkOS org ID to the WorkOS dashboard in a new tab", async () => {
+    const link =
+      "https://dashboard.workos.com/environment_placeholder/organizations/org_workos_placeholder";
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      workos_id: "org_workos_placeholder",
+      workos_dashboard_url: link,
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const open = await screen.findByRole("link", { name: "Open in WorkOS" });
+    expect(open.getAttribute("href")).toBe(link);
+    expect(open.getAttribute("target")).toBe("_blank");
+    expect(open.getAttribute("rel")).toBe("noopener noreferrer");
+    // Beside the copy control, in the WorkOS org ID row.
+    const row = valueBeside("WorkOS org ID");
+    expect(row.contains(open)).toBe(true);
+    expect(
+      within(row).getByRole("button", { name: "Copy WorkOS org ID" }),
+    ).toBeTruthy();
+  });
+
+  it("keeps the WorkOS org ID copyable without a WorkOS link", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      workos_id: "org_workos_placeholder",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("button", { name: "Copy WorkOS org ID" });
+    expect(screen.queryByRole("link", { name: "Open in WorkOS" })).toBeNull();
+  });
+
+  it("links the Stripe customer and subscription IDs to the Stripe dashboard in a new tab", async () => {
+    const customerLink =
+      "https://dashboard.stripe.com/test/customers/cus_placeholder";
+    const subscriptionLink =
+      "https://dashboard.stripe.com/test/subscriptions/sub_placeholder";
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "payg",
+      stripe_customer_id: "cus_placeholder",
+      stripe_subscription_id: "sub_placeholder",
+      stripe_customer_dashboard_url: customerLink,
+      stripe_subscription_dashboard_url: subscriptionLink,
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    for (const [rowLabel, linkName, href, copyName] of [
+      [
+        "Stripe customer ID",
+        "Open customer in Stripe",
+        customerLink,
+        "Copy Stripe customer ID",
+      ],
+      [
+        "Stripe subscription ID",
+        "Open subscription in Stripe",
+        subscriptionLink,
+        "Copy Stripe subscription ID",
+      ],
+    ] as const) {
+      const open = await screen.findByRole("link", { name: linkName });
+      expect(open.getAttribute("href")).toBe(href);
+      expect(open.getAttribute("target")).toBe("_blank");
+      expect(open.getAttribute("rel")).toBe("noopener noreferrer");
+      const row = valueBeside(rowLabel);
+      expect(row.contains(open)).toBe(true);
+      expect(within(row).getByRole("button", { name: copyName })).toBeTruthy();
+    }
+  });
+
+  it("keeps the Stripe IDs copyable without Stripe links", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "payg",
+      stripe_customer_id: "cus_placeholder",
+      stripe_subscription_id: "sub_placeholder",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("button", { name: "Copy Stripe customer ID" });
+    expect(
+      screen.getByRole("button", { name: "Copy Stripe subscription ID" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /in Stripe$/ })).toBeNull();
+  });
+
+  it("shows onboarding status in its own panel without the stack form", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Details" });
+    expect(
+      within(panelNamed("Onboarding")).getByText("Playbook view"),
+    ).toBeTruthy();
+    expect(
+      within(panelNamed("Onboarding")).getByText(/setup wizard cards/),
+    ).toBeTruthy();
+    expect(screen.queryByText("Stack form")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Stack" })).toBeNull();
+    const order = screen
+      .getAllByRole("heading", { level: 5 })
+      .map((heading) => heading.textContent)
+      .filter((name) =>
+        ["Details", "Onboarding", "Danger zone"].includes(name ?? ""),
+      );
+    expect(order).toEqual(["Details", "Onboarding", "Danger zone"]);
+  });
+
+  it.each([ORG.id, ORG.slug])(
+    "passes the canonical ID and visited %s to onboarding status",
+    async (idOrSlug) => {
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${idOrSlug}`,
+      });
+      const status = await screen.findByText("Playbook view");
+      expect(status.getAttribute("data-organization-id")).toBe(ORG.id);
+      expect(status.getAttribute("data-id-or-slug")).toBe(idOrSlug);
+    },
+  );
 
   it("marks an organization a platform admin created", async () => {
     mocks.getOrganization.mockResolvedValue({
@@ -1372,7 +1565,7 @@ describe("Overview", () => {
     [
       "enabled",
       ORG,
-      "Every member loses access to Gram until the organization is re-enabled.",
+      "Every member loses access to Speakeasy until the organization is re-enabled.",
       "Sessions end immediately; nothing is deleted.",
     ],
     [

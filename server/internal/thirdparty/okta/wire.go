@@ -53,14 +53,3 @@ type appGroupJSON struct {
 	Priority    int       `json:"priority"`
 	LastUpdated time.Time `json:"lastUpdated"`
 }
-
-type groupJSON struct {
-	ID          string    `json:"id"`
-	Type        string    `json:"type"`
-	Created     time.Time `json:"created"`
-	LastUpdated time.Time `json:"lastUpdated"`
-	Profile     struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	} `json:"profile"`
-}

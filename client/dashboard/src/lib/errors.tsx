@@ -2,6 +2,7 @@ import { Text } from "@/components/ui/Text";
 import { Stack } from "@/components/ui/Stack";
 import { toast } from "sonner";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { denialFromError, denialMessage } from "./denial";
 
 interface ErrorHandlerOptions {
   title?: string;
@@ -36,7 +37,15 @@ export function isNotFoundError(error: unknown): boolean {
   return "statusCode" in error && error.statusCode === 404;
 }
 
-function isExpectedAPIError(error: unknown): boolean {
+// isForbiddenError reports whether an SDK call failed with a 403.
+export function isForbiddenError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return "statusCode" in error && error.statusCode === 403;
+}
+
+// isExpectedAPIError reports whether the server refused a request (a 4xx), as
+// opposed to a network failure, a timeout or a server fault.
+export function isExpectedAPIError(error: unknown): boolean {
   return (
     error instanceof GramError &&
     error.statusCode >= 400 &&
@@ -48,15 +57,17 @@ export function handleError(
   error: unknown,
   options: ErrorHandlerOptions = {},
 ): void {
-  const {
-    title = "Error",
-    persist = false,
-    customAction,
-    silent = false,
-  } = options;
+  const { persist = false, customAction, silent = false } = options;
 
-  const errorMessage =
-    typeof error === "string" ? error : toError(error).message;
+  // A refusal the authz engine explained is shown as the permission that is
+  // missing, not as "permission denied".
+  const denial = denialFromError(error);
+  const errorMessage = denial
+    ? denialMessage(denial)
+    : typeof error === "string"
+      ? error
+      : toError(error).message;
+  const title = options.title ?? (denial ? "Permission needed" : "Error");
 
   // A 4xx from the API is the server answering a request it understood —
   // permission denied, not found, conflict — and the toast is the whole

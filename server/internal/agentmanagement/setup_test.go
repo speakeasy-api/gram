@@ -6,6 +6,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
@@ -33,6 +36,8 @@ func TestMain(m *testing.M) {
 		log.Fatalf("launch test postgres: %v", err)
 	}
 	cloneTestDatabase = cloneFunc
+	// Tests write upstream_client grants unless they turn the gate off.
+	authz.SetUpstreamSelectorWriteGate(func(context.Context, string) (bool, error) { return true, nil })
 	code := m.Run()
 	if err := container.Terminate(ctx); err != nil {
 		log.Fatalf("terminate test postgres: %v", err)
@@ -101,6 +106,44 @@ func agentWebhookOutboxActions(t *testing.T, conn *pgxpool.Pool, organizationID 
 		require.Equal(t, organizationID, payload.OrganizationID)
 		require.Equal(t, "agent", payload.SubjectType)
 		actions = append(actions, payload.Action)
+	}
+
+	return actions
+}
+
+// auditFeedPageSize is the page size of the ListAuditLogs feed query (its
+// LIMIT 51 in audit/queries.sql). A result this long may be truncated, so
+// auditLogs treats it as a failure.
+const auditFeedPageSize = 51
+
+// auditLogs returns every audit row for one subject in an organization, oldest
+// first. An empty subjectID lists the whole organization. A full feed page
+// fails rather than silently truncating.
+func auditLogs(t *testing.T, conn *pgxpool.Pool, organizationID, subjectID string) []auditrepo.ListAuditLogsRow {
+	t.Helper()
+
+	subject := conv.PtrToPGText(nil)
+	if subjectID != "" {
+		subject = conv.ToPGText(subjectID)
+	}
+	rows, err := auditrepo.New(conn).ListAuditLogs(t.Context(), auditrepo.ListAuditLogsParams{
+		OrganizationID: organizationID, SubjectID: subject, IncludeAssistantEvents: true,
+	})
+	require.NoError(t, err)
+	require.Less(t, len(rows), auditFeedPageSize, "audit rows exceed one feed page")
+	slices.Reverse(rows)
+
+	return rows
+}
+
+// auditActions returns the audit actions for one subject, oldest first.
+func auditActions(t *testing.T, conn *pgxpool.Pool, organizationID, subjectID string) []string {
+	t.Helper()
+
+	rows := auditLogs(t, conn, organizationID, subjectID)
+	actions := make([]string, 0, len(rows))
+	for _, row := range rows {
+		actions = append(actions, row.Action)
 	}
 
 	return actions

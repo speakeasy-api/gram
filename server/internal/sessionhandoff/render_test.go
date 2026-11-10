@@ -49,7 +49,7 @@ func TestRenderHandoffStructure(t *testing.T) {
 
 	for _, want := range []string{
 		"# Session handoff — quokka-ledger cutover",
-		"Recalled from claude-code · source session 0f4a3b2c-1111-4222-8333-444455556666 · gram chat b6c2f2b8-7777-4888-9999-aaaabbbbcccc · project: /tmp/quokka · last active 2026-08-01 10:01 UTC · via Gram",
+		"Recalled from claude-code · source session 0f4a3b2c-1111-4222-8333-444455556666 · gram chat b6c2f2b8-7777-4888-9999-aaaabbbbcccc · project: /tmp/quokka · last active 2026-08-01 10:01 UTC · via Speakeasy",
 		"## Original task",
 		"Map the banyan scheduler jobs blocking the quokka-ledger cutover.",
 		"## What has happened so far",
@@ -194,7 +194,7 @@ func TestRenderFidelitySeed(t *testing.T) {
 		"intermediate assistant messages within turns (capture records each turn's final message only)",
 	}, h.Fidelity.Missing)
 	require.Contains(t, h.Fidelity.Warnings,
-		"rendered from Gram's captured transcript, not the harness's native session file; lower fidelity than a device-local move")
+		"rendered from Speakeasy's captured transcript, not the harness's native session file; lower fidelity than a device-local move")
 
 	redacted := sessionhandoff.Render(sampleTranscript(), sessionhandoff.Options{Budget: 0, RedactToolPayloads: true})
 	require.Equal(t, []string{
@@ -212,7 +212,7 @@ func TestRenderBylineLineageMarkers(t *testing.T) {
 
 	require.Contains(t, md, "source session "+tr.Session.SessionID, "the lineage marker must ride in the byline verbatim")
 	require.Contains(t, md, "gram chat "+tr.Session.ChatID)
-	require.Contains(t, md, "· via Gram")
+	require.Contains(t, md, "· via Speakeasy")
 }
 
 func TestRenderWarnsWhenCwdMissing(t *testing.T) {

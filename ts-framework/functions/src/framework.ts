@@ -289,7 +289,7 @@ export interface TextResponse<T extends string> extends Response {
   text(): Promise<T>;
 }
 
-export class Gram<
+export class Functions<
   TTools extends {
     [k: string]: ToolDefinition<any, any, string, Response>;
   } = {},
@@ -337,8 +337,9 @@ export class Gram<
        */
       oauthVariable: keyof EnvSchema & string;
       /**
-       * When true, the authenticated Gram user's email will be available to
-       * the function as the GRAM_USER_EMAIL environment variable.
+       * When true, the authenticated user's email will be available to the
+       * function as the SPEAKEASY_AI_USER_EMAIL environment variable. The
+       * deprecated GRAM_USER_EMAIL variable carries the same value.
        */
       gramEmail?: boolean;
     };
@@ -378,7 +379,7 @@ export class Gram<
   }
 
   /**
-   * Registers a resource with the Gram instance.
+   * Registers a resource with the Functions instance.
    */
   resource(def: ResourceEntry): this {
     this.#resources.set(def.uri, def);
@@ -465,7 +466,7 @@ export class Gram<
   }
 
   /**
-   * Registers a tool with the Gram instance.
+   * Registers a tool with the Functions instance.
    */
   tool<
     TName extends string,
@@ -473,7 +474,7 @@ export class Gram<
     Res extends Response,
   >(
     definition: ToolDefinition<TName, TInputSchema, InferEnv<EnvSchema>, Res>,
-  ): Gram<
+  ): Functions<
     Prettify<
       TTools & {
         [k in TName]: ToolDefinition<
@@ -496,8 +497,8 @@ export class Gram<
   }
 
   /**
-   * Extends this Gram instance with another Gram instance's tools and environment schema.
-   * Similar to Hono's route groups. Returns a new Gram instance with merged
+   * Extends this Functions instance with another Functions instance's tools and environment schema.
+   * Similar to Hono's route groups. Returns a new Functions instance with merged
    * tools and environment schemas.
    */
   extend<
@@ -506,8 +507,11 @@ export class Gram<
     },
     OtherEnvSchema extends z.core.$ZodShape,
   >(
-    other: Gram<OtherTools, OtherEnvSchema>,
-  ): Gram<Prettify<TTools & OtherTools>, Prettify<EnvSchema & OtherEnvSchema>> {
+    other: Functions<OtherTools, OtherEnvSchema>,
+  ): Functions<
+    Prettify<TTools & OtherTools>,
+    Prettify<EnvSchema & OtherEnvSchema>
+  > {
     for (const [name, tool] of other.tools) {
       this.tools.set(name, tool);
     }
@@ -554,7 +558,10 @@ export class Gram<
       validatedInput = request.input as Record<string, unknown>;
     } else {
       ctx.fail(
-        { error: vres.error.message, issues: vres.error.issues },
+        {
+          error: summarizeIssues(vres.error.issues),
+          issues: vres.error.issues,
+        },
         { status: 400 },
       );
     }
@@ -660,6 +667,74 @@ export class Gram<
       ...(resources.length > 0 ? { resources } : {}),
     };
   }
+}
+
+/**
+ * @deprecated Use {@link Functions}. `Gram` is the same class under its old
+ * name and keeps working.
+ */
+export const Gram = Functions;
+/** @deprecated Use {@link Functions}. */
+export type Gram<
+  TTools extends {
+    [k: string]: ToolDefinition<any, any, string, Response>;
+  } = {},
+  EnvSchema extends z.core.$ZodShape = {
+    readonly [x: string]:
+      | z.core.$ZodString
+      | z.core.$ZodOptional<z.core.$ZodString>;
+  },
+> = Functions<TTools, EnvSchema>;
+
+const LINE_BREAKS = /[\r\n]+/g;
+const BARE_IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+
+/**
+ * Renders validation issues as one line, each issue prefixed by the input path
+ * it concerns, e.g. `org_id: Invalid input: expected string, received
+ * undefined`.
+ *
+ * The failure body carries the structured `issues` array as well, so the
+ * message only has to be readable. `ZodError.message` is that same array
+ * re-serialized as pretty-printed JSON, which reports the failure twice and
+ * spends an MCP client's context on the unreadable copy.
+ */
+function summarizeIssues(issues: readonly z.core.$ZodIssue[]): string {
+  const lines = issues.map((issue) => {
+    const path = formatIssuePath(issue.path ?? []);
+    const line = path === "" ? issue.message : `${path}: ${issue.message}`;
+
+    // A schema is free to carry a multi-line custom message. Flatten it so one
+    // issue stays one line; `issues` still carries the message verbatim.
+    return line.replace(LINE_BREAKS, " ").trim();
+  });
+
+  return lines.join("; ") || "invalid input";
+}
+
+/**
+ * Renders an issue path — object keys and array indices — the way it would be
+ * written in JavaScript, e.g. `filters[0].name`.
+ */
+function formatIssuePath(path: readonly PropertyKey[]): string {
+  let out = "";
+  for (const segment of path) {
+    if (typeof segment === "number") {
+      out += `[${segment}]`;
+      continue;
+    }
+
+    // A key that is not a bare identifier — `a.b`, `0`, the empty string —
+    // would be ambiguous or invisible joined with a dot.
+    const key = String(segment);
+    if (BARE_IDENTIFIER.test(key)) {
+      out += out === "" ? key : `.${key}`;
+    } else {
+      out += `[${JSON.stringify(key)}]`;
+    }
+  }
+
+  return out;
 }
 
 /**

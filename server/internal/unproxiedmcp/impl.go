@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -28,14 +27,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -45,7 +42,6 @@ type Service struct {
 	db     *pgxpool.Pool
 	auth   *auth.Auth
 	authz  *authz.Engine
-	policy *guardian.Policy
 	audit  *audit.Logger
 }
 
@@ -58,7 +54,6 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
-	policy *guardian.Policy,
 	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("unproxiedmcp"))
@@ -69,7 +64,6 @@ func NewService(
 		db:     db,
 		auth:   auth.New(logger, db, sessions, authzEngine),
 		authz:  authzEngine,
-		policy: policy,
 		audit:  auditLogger,
 	}
 }
@@ -104,8 +98,11 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, err
 	}
 
-	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid server url").LogWarn(ctx, logger)
+	// Clients reach an unproxied server directly and Speakeasy never does, so
+	// the URL only has to work from the client's network (a tailnet or VPN
+	// host included). Check its shape only; never resolve or dial it.
+	if !urls.IsAbsoluteHTTP(payload.URL) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "url must be an absolute http(s) URL with a host and no credentials").LogWarn(ctx, logger)
 	}
 
 	// Generate the server ID up front so the slug can include its suffix and
@@ -247,138 +244,6 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	}
 
 	return mv.BuildUnproxiedMcpServerView(server), nil
-}
-
-const (
-	// listToolsTimeout bounds the live MCP handshake + tools/list round trip so
-	// a slow or unresponsive vendor server can't hang the management API request.
-	listToolsTimeout = 10 * time.Second
-	// listToolsMaxResponseBytes bounds each untrusted initialize or tools/list
-	// response; exceeding it is reported as unavailable probe evidence.
-	listToolsMaxResponseBytes = 1 << 20
-)
-
-func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) (*gen.ListUnproxiedMcpServerToolsResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	serverID, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogError(ctx, s.logger)
-	}
-
-	server, err := repo.New(s.db).GetServerByID(ctx, repo.GetServerByIDParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "unproxied mcp server not found").LogError(ctx, s.logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server").LogError(ctx, s.logger)
-	}
-
-	// Detached from ctx and raced against its own deadline below: the MCP
-	// SDK's Connect can spend well past listToolsTimeout on its own
-	// synchronous cleanup after a context deadline trips (e.g. trying to
-	// notify the now-unreachable server that the request was cancelled), so
-	// bounding the probe's own context isn't enough to bound *this call's*
-	// latency. The goroutine keeps running to let that cleanup finish
-	// naturally; only the response to the caller is time-boxed.
-	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listToolsTimeout)
-	resultCh := make(chan *gen.ListUnproxiedMcpServerToolsResult, 1)
-	go func() {
-		defer cancel()
-		resultCh <- s.probeListTools(probeCtx, server.Url)
-	}()
-
-	select {
-	case result := <-resultCh:
-		return result, nil
-	case <-probeCtx.Done():
-		// select picks pseudo-randomly when both cases are ready, so a probe
-		// that finishes right at the deadline could otherwise lose the race
-		// and have its real result discarded here. Give resultCh one more
-		// non-blocking check before reporting a timeout.
-		select {
-		case result := <-resultCh:
-			return result, nil
-		default:
-			return &gen.ListUnproxiedMcpServerToolsResult{
-				Status:  "unreachable",
-				Tools:   []*gen.UnproxiedMcpServerTool{},
-				Message: conv.PtrEmpty("Could not connect to the server."),
-			}, nil
-		}
-	}
-}
-
-// probeListTools performs the live MCP handshake and tools/list round trip.
-// Always returns a populated result (auth_required/unreachable/error/success)
-// rather than an error, since ListTools reports live-probe failures as a
-// result status, not a request error.
-func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *gen.ListUnproxiedMcpServerToolsResult {
-	// DisableRetries: this is a one-shot bounded probe, not a resilient
-	// long-lived connection — retries would let an unreachable server take
-	// minutes to report as such instead of ~10s.
-	client, err := externalmcp.NewClient(probeCtx, s.logger, s.policy, serverURL, externalmcptypes.TransportTypeStreamableHTTP, &externalmcp.ClientOptions{
-		Metrics:          nil,
-		Authorization:    "",
-		Headers:          nil,
-		DisableRetries:   true,
-		MaxResponseBytes: listToolsMaxResponseBytes,
-	})
-	if err != nil {
-		if _, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
-			return &gen.ListUnproxiedMcpServerToolsResult{
-				Status:  "auth_required",
-				Tools:   []*gen.UnproxiedMcpServerTool{},
-				Message: conv.PtrEmpty("This server requires authentication Gram doesn't manage."),
-			}
-		}
-		return &gen.ListUnproxiedMcpServerToolsResult{
-			Status:  "unreachable",
-			Tools:   []*gen.UnproxiedMcpServerTool{},
-			Message: conv.PtrEmpty("Could not connect to the server."),
-		}
-	}
-	defer o11y.NoLogDefer(client.Close)
-
-	discovered, err := client.ListTools(probeCtx)
-	if err != nil {
-		if _, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
-			return &gen.ListUnproxiedMcpServerToolsResult{
-				Status:  "auth_required",
-				Tools:   []*gen.UnproxiedMcpServerTool{},
-				Message: conv.PtrEmpty("This server requires authentication Gram doesn't manage."),
-			}
-		}
-		return &gen.ListUnproxiedMcpServerToolsResult{
-			Status:  "error",
-			Tools:   []*gen.UnproxiedMcpServerTool{},
-			Message: conv.PtrEmpty("The server didn't respond with a valid tool list."),
-		}
-	}
-
-	tools := make([]*gen.UnproxiedMcpServerTool, 0, len(discovered))
-	for _, tool := range discovered {
-		tools = append(tools, &gen.UnproxiedMcpServerTool{
-			Name:        tool.Name,
-			Description: conv.PtrEmpty(tool.Description),
-		})
-	}
-
-	return &gen.ListUnproxiedMcpServerToolsResult{
-		Status:  "success",
-		Tools:   tools,
-		Message: nil,
-	}
 }
 
 func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPayload) error {

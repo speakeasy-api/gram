@@ -26,11 +26,11 @@ export type CreateGcpKmsKeyForm = {
    */
   algorithm: CreateGcpKmsKeyFormAlgorithm;
   /**
-   * Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+   * Optional. The Speakeasy identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
    */
   customerGrantReference?: string | undefined;
   /**
-   * The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+   * The external credential Speakeasy uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
    */
   externalCredentialId: string;
   /**

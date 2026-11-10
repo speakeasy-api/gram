@@ -18,12 +18,20 @@ import (
 
 // Server lists the remoteSessions service endpoint HTTP handlers.
 type Server struct {
-	Mounts              []*MountPoint
-	ListBindings        http.Handler
-	AttachBinding       http.Handler
-	DetachBinding       http.Handler
-	ListRemoteSessions  http.Handler
-	RevokeRemoteSession http.Handler
+	Mounts                            []*MountPoint
+	BeginBindingRefresh               http.Handler
+	CompleteBindingRefresh            http.Handler
+	ListBindings                      http.Handler
+	AttachBinding                     http.Handler
+	DetachBinding                     http.Handler
+	TestServerConnection              http.Handler
+	CommitServerIdentityConfiguration http.Handler
+	GetServerIdentityImpact           http.Handler
+	ListServerClientAssociations      http.Handler
+	DetachServerClientAssociation     http.Handler
+	ListRemoteSessions                http.Handler
+	CountRemoteSessions               http.Handler
+	RevokeRemoteSession               http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -53,17 +61,33 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"BeginBindingRefresh", "POST", "/rpc/remoteSessions.beginBindingRefresh"},
+			{"CompleteBindingRefresh", "POST", "/rpc/remoteSessions.completeBindingRefresh"},
 			{"ListBindings", "GET", "/rpc/remoteSessions.listBindings"},
 			{"AttachBinding", "POST", "/rpc/remoteSessions.attachBinding"},
 			{"DetachBinding", "POST", "/rpc/remoteSessions.detachBinding"},
+			{"TestServerConnection", "POST", "/rpc/remoteSessions.testServerConnection"},
+			{"CommitServerIdentityConfiguration", "POST", "/rpc/remoteSessions.commitServerIdentityConfiguration"},
+			{"GetServerIdentityImpact", "GET", "/rpc/remoteSessions.getServerIdentityImpact"},
+			{"ListServerClientAssociations", "GET", "/rpc/remoteSessions.listServerClientAssociations"},
+			{"DetachServerClientAssociation", "POST", "/rpc/remoteSessions.detachServerClientAssociation"},
 			{"ListRemoteSessions", "GET", "/rpc/remoteSessions.list"},
+			{"CountRemoteSessions", "GET", "/rpc/remoteSessions.count"},
 			{"RevokeRemoteSession", "POST", "/rpc/remoteSessions.revoke"},
 		},
-		ListBindings:        NewListBindingsHandler(e.ListBindings, mux, decoder, encoder, errhandler, formatter),
-		AttachBinding:       NewAttachBindingHandler(e.AttachBinding, mux, decoder, encoder, errhandler, formatter),
-		DetachBinding:       NewDetachBindingHandler(e.DetachBinding, mux, decoder, encoder, errhandler, formatter),
-		ListRemoteSessions:  NewListRemoteSessionsHandler(e.ListRemoteSessions, mux, decoder, encoder, errhandler, formatter),
-		RevokeRemoteSession: NewRevokeRemoteSessionHandler(e.RevokeRemoteSession, mux, decoder, encoder, errhandler, formatter),
+		BeginBindingRefresh:               NewBeginBindingRefreshHandler(e.BeginBindingRefresh, mux, decoder, encoder, errhandler, formatter),
+		CompleteBindingRefresh:            NewCompleteBindingRefreshHandler(e.CompleteBindingRefresh, mux, decoder, encoder, errhandler, formatter),
+		ListBindings:                      NewListBindingsHandler(e.ListBindings, mux, decoder, encoder, errhandler, formatter),
+		AttachBinding:                     NewAttachBindingHandler(e.AttachBinding, mux, decoder, encoder, errhandler, formatter),
+		DetachBinding:                     NewDetachBindingHandler(e.DetachBinding, mux, decoder, encoder, errhandler, formatter),
+		TestServerConnection:              NewTestServerConnectionHandler(e.TestServerConnection, mux, decoder, encoder, errhandler, formatter),
+		CommitServerIdentityConfiguration: NewCommitServerIdentityConfigurationHandler(e.CommitServerIdentityConfiguration, mux, decoder, encoder, errhandler, formatter),
+		GetServerIdentityImpact:           NewGetServerIdentityImpactHandler(e.GetServerIdentityImpact, mux, decoder, encoder, errhandler, formatter),
+		ListServerClientAssociations:      NewListServerClientAssociationsHandler(e.ListServerClientAssociations, mux, decoder, encoder, errhandler, formatter),
+		DetachServerClientAssociation:     NewDetachServerClientAssociationHandler(e.DetachServerClientAssociation, mux, decoder, encoder, errhandler, formatter),
+		ListRemoteSessions:                NewListRemoteSessionsHandler(e.ListRemoteSessions, mux, decoder, encoder, errhandler, formatter),
+		CountRemoteSessions:               NewCountRemoteSessionsHandler(e.CountRemoteSessions, mux, decoder, encoder, errhandler, formatter),
+		RevokeRemoteSession:               NewRevokeRemoteSessionHandler(e.RevokeRemoteSession, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -72,10 +96,18 @@ func (s *Server) Service() string { return "remoteSessions" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.BeginBindingRefresh = m(s.BeginBindingRefresh)
+	s.CompleteBindingRefresh = m(s.CompleteBindingRefresh)
 	s.ListBindings = m(s.ListBindings)
 	s.AttachBinding = m(s.AttachBinding)
 	s.DetachBinding = m(s.DetachBinding)
+	s.TestServerConnection = m(s.TestServerConnection)
+	s.CommitServerIdentityConfiguration = m(s.CommitServerIdentityConfiguration)
+	s.GetServerIdentityImpact = m(s.GetServerIdentityImpact)
+	s.ListServerClientAssociations = m(s.ListServerClientAssociations)
+	s.DetachServerClientAssociation = m(s.DetachServerClientAssociation)
 	s.ListRemoteSessions = m(s.ListRemoteSessions)
+	s.CountRemoteSessions = m(s.CountRemoteSessions)
 	s.RevokeRemoteSession = m(s.RevokeRemoteSession)
 }
 
@@ -84,16 +116,132 @@ func (s *Server) MethodNames() []string { return remotesessions.MethodNames[:] }
 
 // Mount configures the mux to serve the remoteSessions endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountBeginBindingRefreshHandler(mux, h.BeginBindingRefresh)
+	MountCompleteBindingRefreshHandler(mux, h.CompleteBindingRefresh)
 	MountListBindingsHandler(mux, h.ListBindings)
 	MountAttachBindingHandler(mux, h.AttachBinding)
 	MountDetachBindingHandler(mux, h.DetachBinding)
+	MountTestServerConnectionHandler(mux, h.TestServerConnection)
+	MountCommitServerIdentityConfigurationHandler(mux, h.CommitServerIdentityConfiguration)
+	MountGetServerIdentityImpactHandler(mux, h.GetServerIdentityImpact)
+	MountListServerClientAssociationsHandler(mux, h.ListServerClientAssociations)
+	MountDetachServerClientAssociationHandler(mux, h.DetachServerClientAssociation)
 	MountListRemoteSessionsHandler(mux, h.ListRemoteSessions)
+	MountCountRemoteSessionsHandler(mux, h.CountRemoteSessions)
 	MountRevokeRemoteSessionHandler(mux, h.RevokeRemoteSession)
 }
 
 // Mount configures the mux to serve the remoteSessions endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountBeginBindingRefreshHandler configures the mux to serve the
+// "remoteSessions" service "beginBindingRefresh" endpoint.
+func MountBeginBindingRefreshHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessions.beginBindingRefresh", f)
+}
+
+// NewBeginBindingRefreshHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteSessions" service "beginBindingRefresh"
+// endpoint.
+func NewBeginBindingRefreshHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeBeginBindingRefreshRequest(mux, decoder)
+		encodeResponse = EncodeBeginBindingRefreshResponse(encoder)
+		encodeError    = EncodeBeginBindingRefreshError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "beginBindingRefresh")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCompleteBindingRefreshHandler configures the mux to serve the
+// "remoteSessions" service "completeBindingRefresh" endpoint.
+func MountCompleteBindingRefreshHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessions.completeBindingRefresh", f)
+}
+
+// NewCompleteBindingRefreshHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteSessions" service "completeBindingRefresh"
+// endpoint.
+func NewCompleteBindingRefreshHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCompleteBindingRefreshRequest(mux, decoder)
+		encodeResponse = EncodeCompleteBindingRefreshResponse(encoder)
+		encodeError    = EncodeCompleteBindingRefreshError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "completeBindingRefresh")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountListBindingsHandler configures the mux to serve the "remoteSessions"
@@ -255,6 +403,276 @@ func NewDetachBindingHandler(
 	})
 }
 
+// MountTestServerConnectionHandler configures the mux to serve the
+// "remoteSessions" service "testServerConnection" endpoint.
+func MountTestServerConnectionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessions.testServerConnection", f)
+}
+
+// NewTestServerConnectionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteSessions" service "testServerConnection"
+// endpoint.
+func NewTestServerConnectionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeTestServerConnectionRequest(mux, decoder)
+		encodeResponse = EncodeTestServerConnectionResponse(encoder)
+		encodeError    = EncodeTestServerConnectionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "testServerConnection")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCommitServerIdentityConfigurationHandler configures the mux to serve
+// the "remoteSessions" service "commitServerIdentityConfiguration" endpoint.
+func MountCommitServerIdentityConfigurationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessions.commitServerIdentityConfiguration", f)
+}
+
+// NewCommitServerIdentityConfigurationHandler creates a HTTP handler which
+// loads the HTTP request and calls the "remoteSessions" service
+// "commitServerIdentityConfiguration" endpoint.
+func NewCommitServerIdentityConfigurationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCommitServerIdentityConfigurationRequest(mux, decoder)
+		encodeResponse = EncodeCommitServerIdentityConfigurationResponse(encoder)
+		encodeError    = EncodeCommitServerIdentityConfigurationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "commitServerIdentityConfiguration")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetServerIdentityImpactHandler configures the mux to serve the
+// "remoteSessions" service "getServerIdentityImpact" endpoint.
+func MountGetServerIdentityImpactHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/remoteSessions.getServerIdentityImpact", f)
+}
+
+// NewGetServerIdentityImpactHandler creates a HTTP handler which loads the
+// HTTP request and calls the "remoteSessions" service
+// "getServerIdentityImpact" endpoint.
+func NewGetServerIdentityImpactHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetServerIdentityImpactRequest(mux, decoder)
+		encodeResponse = EncodeGetServerIdentityImpactResponse(encoder)
+		encodeError    = EncodeGetServerIdentityImpactError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getServerIdentityImpact")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListServerClientAssociationsHandler configures the mux to serve the
+// "remoteSessions" service "listServerClientAssociations" endpoint.
+func MountListServerClientAssociationsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/remoteSessions.listServerClientAssociations", f)
+}
+
+// NewListServerClientAssociationsHandler creates a HTTP handler which loads
+// the HTTP request and calls the "remoteSessions" service
+// "listServerClientAssociations" endpoint.
+func NewListServerClientAssociationsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListServerClientAssociationsRequest(mux, decoder)
+		encodeResponse = EncodeListServerClientAssociationsResponse(encoder)
+		encodeError    = EncodeListServerClientAssociationsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listServerClientAssociations")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDetachServerClientAssociationHandler configures the mux to serve the
+// "remoteSessions" service "detachServerClientAssociation" endpoint.
+func MountDetachServerClientAssociationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessions.detachServerClientAssociation", f)
+}
+
+// NewDetachServerClientAssociationHandler creates a HTTP handler which loads
+// the HTTP request and calls the "remoteSessions" service
+// "detachServerClientAssociation" endpoint.
+func NewDetachServerClientAssociationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDetachServerClientAssociationRequest(mux, decoder)
+		encodeResponse = EncodeDetachServerClientAssociationResponse(encoder)
+		encodeError    = EncodeDetachServerClientAssociationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "detachServerClientAssociation")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountListRemoteSessionsHandler configures the mux to serve the
 // "remoteSessions" service "listRemoteSessions" endpoint.
 func MountListRemoteSessionsHandler(mux goahttp.Muxer, h http.Handler) {
@@ -285,6 +703,60 @@ func NewListRemoteSessionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listRemoteSessions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCountRemoteSessionsHandler configures the mux to serve the
+// "remoteSessions" service "countRemoteSessions" endpoint.
+func MountCountRemoteSessionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/remoteSessions.count", f)
+}
+
+// NewCountRemoteSessionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteSessions" service "countRemoteSessions"
+// endpoint.
+func NewCountRemoteSessionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCountRemoteSessionsRequest(mux, decoder)
+		encodeResponse = EncodeCountRemoteSessionsResponse(encoder)
+		encodeError    = EncodeCountRemoteSessionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "countRemoteSessions")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessions")
 		payload, err := decodeRequest(r)
 		if err != nil {

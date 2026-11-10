@@ -207,7 +207,7 @@ func TestToolsCallStripToolsetIDInterceptor_PropertyNameInsideValueNotRewritten(
 func TestToolsCallStripToolsetIDInterceptor_NestedPropertyNotRewritten(t *testing.T) {
 	t.Parallel()
 
-	// Only a top-level property is Gram's envelope. A nested occurrence
+	// Only a top-level property is Speakeasy's envelope. A nested occurrence
 	// belongs to the upstream tool's own argument shape and must survive
 	// untouched, without dirtying the request.
 	interceptor := remotemcp.NewToolsCallStripToolsetIDInterceptor(testenv.NewLogger(t))
@@ -225,7 +225,7 @@ func TestToolsCallStripToolsetIDInterceptor_MalformedObjectRejectsAsParseError(t
 
 	// Arguments that open with '{' but don't parse are the one surviving
 	// rejection. It must carry a parse-error code so the caller sees a
-	// client-side error rather than a Gram internal error.
+	// client-side error rather than a Speakeasy internal error.
 	interceptor := remotemcp.NewToolsCallStripToolsetIDInterceptor(testenv.NewLogger(t))
 
 	args := json.RawMessage(fmt.Sprintf(`{%q:"abc",`, shadowmcp.XGramToolsetIDField))
@@ -242,7 +242,7 @@ func TestToolsCallStripToolsetIDInterceptor_MalformedObjectWithoutPropertyPasses
 
 	// The byte-scan short-circuit runs before any parsing, so malformed
 	// arguments that never carried the property are forwarded untouched
-	// rather than being rejected on Gram's behalf.
+	// rather than being rejected on Speakeasy's behalf.
 	interceptor := remotemcp.NewToolsCallStripToolsetIDInterceptor(testenv.NewLogger(t))
 
 	call := newToolsCallRequestForSetArguments("tool_a", json.RawMessage(`{"location":`))

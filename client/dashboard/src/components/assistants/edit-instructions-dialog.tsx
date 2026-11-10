@@ -1,13 +1,12 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { TextArea } from "@/components/ui/Textarea";
 import { Text } from "@/components/ui/Text";
-import { useRBAC } from "@/hooks/useRBAC";
-import { Assistant } from "@gram/client/models/components/assistant.js";
+import type { Assistant } from "@gram/client/models/components/assistant.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -18,18 +17,18 @@ import { toast } from "sonner";
  */
 export function EditInstructionsDialog({
   assistant,
+  canWrite,
   open,
   onOpenChange,
   onUpdated,
 }: {
   assistant: Assistant;
+  canWrite: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdated?: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("project:write");
 
   const [draft, setDraft] = useState(assistant.instructions ?? "");
 
@@ -99,7 +98,7 @@ export function EditInstructionsDialog({
             disabled={!canWrite || !dirty || update.isPending}
           >
             {update.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="mr-0 h-4 w-4" label="Saving" />
             ) : (
               "Save"
             )}

@@ -115,7 +115,7 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 	{
 		err = json.Unmarshal([]byte(deploymentsCreateDeploymentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"external_url\": \"abc123\",\n      \"functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"memory_mib\": 1,\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"scale\": 1,\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"non_blocking\": false,\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"abc123\",\n      \"functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"memory_mib\": 1,\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"scale\": 1,\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"non_blocking\": false,\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }'")
 		}
 		for _, e := range body.Openapiv3Assets {
 			if e != nil {
@@ -127,13 +127,6 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 		for _, e := range body.Functions {
 			if e != nil {
 				if err2 := ValidateAddFunctionsFormRequestBody(e); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
-			}
-		}
-		for _, e := range body.ExternalMcps {
-			if e != nil {
-				if err2 := ValidateAddExternalMCPFormRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -202,16 +195,6 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 			v.Packages[i] = marshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackageForm(val)
 		}
 	}
-	if body.ExternalMcps != nil {
-		v.ExternalMcps = make([]*deployments.AddExternalMCPForm, len(body.ExternalMcps))
-		for i, val := range body.ExternalMcps {
-			if val == nil {
-				v.ExternalMcps[i] = nil
-				continue
-			}
-			v.ExternalMcps[i] = marshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm(val)
-		}
-	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -228,7 +211,7 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveApikeyTok
 	{
 		err = json.Unmarshal([]byte(deploymentsEvolveBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"abc123\",\n      \"exclude_external_mcps\": [\n         \"abc123\"\n      ],\n      \"exclude_functions\": [\n         \"abc123\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"abc123\"\n      ],\n      \"exclude_packages\": [\n         \"abc123\"\n      ],\n      \"non_blocking\": false,\n      \"upsert_external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"memory_mib\": 1,\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"scale\": 1,\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"abc123\",\n      \"exclude_external_mcps\": [\n         \"abc123\"\n      ],\n      \"exclude_functions\": [\n         \"abc123\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"abc123\"\n      ],\n      \"exclude_packages\": [\n         \"abc123\"\n      ],\n      \"non_blocking\": false,\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"memory_mib\": 1,\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"scale\": 1,\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -281,16 +264,6 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveApikeyTok
 				continue
 			}
 			v.UpsertFunctions[i] = marshalAddFunctionsFormRequestBodyToDeploymentsAddFunctionsForm(val)
-		}
-	}
-	if body.UpsertExternalMcps != nil {
-		v.UpsertExternalMcps = make([]*deployments.AddExternalMCPForm, len(body.UpsertExternalMcps))
-		for i, val := range body.UpsertExternalMcps {
-			if val == nil {
-				v.UpsertExternalMcps[i] = nil
-				continue
-			}
-			v.UpsertExternalMcps[i] = marshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm(val)
 		}
 	}
 	if body.ExcludeOpenapiv3Assets != nil {
@@ -433,6 +406,81 @@ func BuildGetDeploymentLogsPayload(deploymentsGetDeploymentLogsDeploymentID stri
 	v := &deployments.GetDeploymentLogsPayload{}
 	v.DeploymentID = deploymentID
 	v.Cursor = cursor
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildEvaluateOpenAPIv3Payload builds the payload for the deployments
+// evaluateOpenAPIv3 endpoint from CLI flags.
+func BuildEvaluateOpenAPIv3Payload(deploymentsEvaluateOpenAPIv3Body string, deploymentsEvaluateOpenAPIv3ApikeyToken string, deploymentsEvaluateOpenAPIv3SessionToken string, deploymentsEvaluateOpenAPIv3ProjectSlugInput string) (*deployments.EvaluateOpenAPIv3Payload, error) {
+	var err error
+	var body EvaluateOpenAPIv3RequestBody
+	{
+		err = json.Unmarshal([]byte(deploymentsEvaluateOpenAPIv3Body), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if deploymentsEvaluateOpenAPIv3ApikeyToken != "" {
+			apikeyToken = &deploymentsEvaluateOpenAPIv3ApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if deploymentsEvaluateOpenAPIv3SessionToken != "" {
+			sessionToken = &deploymentsEvaluateOpenAPIv3SessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if deploymentsEvaluateOpenAPIv3ProjectSlugInput != "" {
+			projectSlugInput = &deploymentsEvaluateOpenAPIv3ProjectSlugInput
+		}
+	}
+	v := &deployments.EvaluateOpenAPIv3Payload{
+		AssetID: body.AssetID,
+		Slug:    body.Slug,
+		Name:    body.Name,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetDeploymentEvaluationPayload builds the payload for the deployments
+// getDeploymentEvaluation endpoint from CLI flags.
+func BuildGetDeploymentEvaluationPayload(deploymentsGetDeploymentEvaluationDeploymentID string, deploymentsGetDeploymentEvaluationApikeyToken string, deploymentsGetDeploymentEvaluationSessionToken string, deploymentsGetDeploymentEvaluationProjectSlugInput string) (*deployments.GetDeploymentEvaluationPayload, error) {
+	var deploymentID string
+	{
+		deploymentID = deploymentsGetDeploymentEvaluationDeploymentID
+	}
+	var apikeyToken *string
+	{
+		if deploymentsGetDeploymentEvaluationApikeyToken != "" {
+			apikeyToken = &deploymentsGetDeploymentEvaluationApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if deploymentsGetDeploymentEvaluationSessionToken != "" {
+			sessionToken = &deploymentsGetDeploymentEvaluationSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if deploymentsGetDeploymentEvaluationProjectSlugInput != "" {
+			projectSlugInput = &deploymentsGetDeploymentEvaluationProjectSlugInput
+		}
+	}
+	v := &deployments.GetDeploymentEvaluationPayload{}
+	v.DeploymentID = deploymentID
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

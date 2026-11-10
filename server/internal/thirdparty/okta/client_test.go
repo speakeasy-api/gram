@@ -441,7 +441,7 @@ func TestClient_APIErrorPathIsEscaped(t *testing.T) {
 	require.ErrorAs(t, err, &apiErr)
 	require.Equal(t, "/api/v1/apps/0oa%201%3Fx", apiErr.Path)
 
-	fake := NewFake(Fixtures{Apps: nil, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: nil})
+	fake := NewFake(Fixtures{Apps: nil, AppUsers: nil, AppGroups: nil, GrantedScopes: nil})
 	_, err = fake.GetApp(t.Context(), "0oa 1?x")
 	require.ErrorAs(t, err, &apiErr)
 	require.Equal(t, "/api/v1/apps/0oa%201%3Fx", apiErr.Path)
@@ -513,22 +513,7 @@ func TestClient_NeverLogsOrTracesCredentials(t *testing.T) {
 	_, err := tc.client.GetApp(t.Context(), "missing")
 	require.True(t, IsNotFound(err))
 
-	spans := exporter.GetSpans()
-	require.NotEmpty(t, spans)
-	var dump strings.Builder
-	for _, span := range spans {
-		for _, kv := range span.Attributes {
-			fmt.Fprintf(&dump, "%s=%s\n", kv.Key, kv.Value.Emit())
-		}
-		for _, ev := range span.Events {
-			for _, kv := range ev.Attributes {
-				fmt.Fprintf(&dump, "%s=%s\n", kv.Key, kv.Value.Emit())
-			}
-		}
-	}
-	dump.WriteString(logs.String())
-	output := dump.String()
-	require.NotEmpty(t, logs.String())
+	output := telemetryDump(t, exporter, &logs)
 
 	for _, tok := range tc.stub.issuedTokens() {
 		require.NotContains(t, output, tok)
@@ -545,6 +530,27 @@ func TestClient_NeverLogsOrTracesCredentials(t *testing.T) {
 	require.NotContains(t, output, "dpop")
 	require.NotContains(t, output, "access_token")
 	require.NotContains(t, output, "client_assertion")
+}
+
+// telemetryDump renders every span attribute, span event attribute, and log line.
+func telemetryDump(t *testing.T, exporter *tracetest.InMemoryExporter, logs *bytes.Buffer) string {
+	t.Helper()
+	spans := exporter.GetSpans()
+	require.NotEmpty(t, spans)
+	require.NotEmpty(t, logs.String())
+	var dump strings.Builder
+	for _, span := range spans {
+		for _, kv := range span.Attributes {
+			fmt.Fprintf(&dump, "%s=%s\n", kv.Key, kv.Value.Emit())
+		}
+		for _, ev := range span.Events {
+			for _, kv := range ev.Attributes {
+				fmt.Fprintf(&dump, "%s=%s\n", kv.Key, kv.Value.Emit())
+			}
+		}
+	}
+	dump.WriteString(logs.String())
+	return dump.String()
 }
 
 func TestPartitionByHashedHost_NeverExposesHostname(t *testing.T) {
@@ -635,7 +641,7 @@ func TestClient_VerifyScopes_EvictsWhenGrantLacksDefaults(t *testing.T) {
 	listApps(t, tc)
 	require.Equal(t, 2, tc.stub.counts().tokenRequests)
 
-	tc.stub.setGrantedScopes([]string{"okta.users.read"})
+	tc.stub.setGrantedScopes([]string{"okta.apps.read", "okta.users.read"})
 	v, err := tc.client.VerifyScopes(t.Context(), []string{"okta.users.read"})
 	require.NoError(t, err)
 	require.True(t, v.OK())
@@ -645,7 +651,7 @@ func TestClient_VerifyScopes_EvictsWhenGrantLacksDefaults(t *testing.T) {
 	require.Equal(t, 4, tc.stub.counts().tokenRequests, "a partial grant must not serve the reads")
 }
 
-func TestClient_AssignmentsAndGroups(t *testing.T) {
+func TestClient_Assignments(t *testing.T) {
 	t.Parallel()
 	tc := newDefaultTestClient(t)
 	ts := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
@@ -654,10 +660,6 @@ func TestClient_AssignmentsAndGroups(t *testing.T) {
 	}{UserName: "ada@example.com"}}}
 	tc.stub.setAppUsers("0oa1", users)
 	tc.stub.setAppGroups("0oa1", []appGroupJSON{{ID: "00g1", Priority: 2, LastUpdated: ts}})
-	tc.stub.setGroups([]groupJSON{{ID: "00g1", Type: "OKTA_GROUP", Created: ts, LastUpdated: ts, Profile: struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	}{Name: "Engineering", Description: "eng"}}})
 
 	appUsers, err := tc.client.ListAppUsers(t.Context(), ListAppUsersRequest{AppID: "0oa1", Limit: 0})
 	require.NoError(t, err)
@@ -667,10 +669,6 @@ func TestClient_AssignmentsAndGroups(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []AppGroup{{ID: "00g1", Priority: 2, LastUpdated: ts}}, appGroups)
 
-	groups, err := tc.client.ListGroups(t.Context(), ListGroupsRequest{Search: "", Limit: 0})
-	require.NoError(t, err)
-	require.Equal(t, []Group{{ID: "00g1", Type: "OKTA_GROUP", Name: "Engineering", Description: "eng", Created: ts, LastUpdated: ts}}, groups)
-
 	_, err = tc.client.ListAppUsers(t.Context(), ListAppUsersRequest{AppID: "", Limit: 0})
 	require.Error(t, err)
 }
@@ -679,7 +677,7 @@ func TestNewClient_RequiresTokenEndpointAudienceFormat(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""})
+	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""}, &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
 
 	cfg := testConfig()
 	cfg.OrgURL = "https://example.okta.com"
@@ -708,7 +706,7 @@ func TestNewClient_OrgURLRequiresHTTPSExceptLoopback(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""})
+	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""}, &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
 
 	cfg := testConfig()
 	cfg.ClientID = stubClientID
@@ -762,9 +760,10 @@ func TestNewClient_OrgURLRequiresHTTPSExceptLoopback(t *testing.T) {
 	require.EqualError(t, err, `okta: org url "https://example.okta.com/oauth2" must be an origin without path, query, fragment, or userinfo`)
 }
 
-func TestClient_VerifyScopes_BearerTokenIsNotOK(t *testing.T) {
+func TestClient_VerifyScopes_PrivateKeyJWTRejectsBearerToken(t *testing.T) {
 	t.Parallel()
 	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
 	tc.stub.setTokenType("Bearer")
 
 	v, err := tc.client.VerifyScopes(t.Context(), []string{"okta.apps.read", "okta.groups.read"})
@@ -775,7 +774,25 @@ func TestClient_VerifyScopes_BearerTokenIsNotOK(t *testing.T) {
 	require.False(t, v.OK())
 
 	_, err = tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0})
-	require.EqualError(t, err, `okta token response type "Bearer" is not DPoP`)
+	require.EqualError(t, err, `okta token type "Bearer" is not accepted for private_key_jwt`)
+}
+
+func TestClient_VerifyScopes_ClientSecretBasicAcceptsBearerToken(t *testing.T) {
+	t.Parallel()
+	tc := newTestClient(t, testenv.NewTracerProvider(t), testenv.NewLogger(t), basicTestConfig("stub-secret"))
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setGrantedScopes(defaultScopes)
+	tc.stub.setTokenType("Bearer")
+
+	v, err := tc.client.VerifyScopes(t.Context(), defaultScopes)
+	require.NoError(t, err)
+	require.Empty(t, v.Missing)
+	require.False(t, v.DPoPBound)
+	require.False(t, v.OK())
+
+	requests := tc.stub.counts().tokenRequests
+	require.Len(t, listApps(t, tc), 1)
+	require.Equal(t, requests, tc.stub.counts().tokenRequests, "the verification token is cached and reused")
 }
 
 func TestClient_ResourceRedirectIsNotFollowed(t *testing.T) {
@@ -958,7 +975,7 @@ func TestNewClient_CanonicalOrgURLMatchesProofHTU(t *testing.T) {
 
 	cfg := tc.client.cfg
 	cfg.OrgURL = "https://Example.okta.com:443"
-	client, err := NewClient(testenv.NewLogger(t), tc.client.httpClient, tc.signer, cfg)
+	client, err := NewClient(testenv.NewLogger(t), tc.client.httpClient, tc.signer, tc.decrypter, cfg)
 	require.NoError(t, err)
 	impl, ok := client.(*httpClient)
 	require.True(t, ok)
@@ -1051,7 +1068,7 @@ func TestClient_WaitForSlowdownKeepsNewerDeadline(t *testing.T) {
 
 func TestFake_RequiresAppID(t *testing.T) {
 	t.Parallel()
-	fake := NewFake(Fixtures{Apps: nil, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: nil})
+	fake := NewFake(Fixtures{Apps: nil, AppUsers: nil, AppGroups: nil, GrantedScopes: nil})
 
 	_, err := fake.GetApp(t.Context(), "")
 	require.EqualError(t, err, "okta: app id is required")
@@ -1070,7 +1087,7 @@ func TestFake_ListAppsFiltersStatus(t *testing.T) {
 			{ID: "0oa1", Label: "Gram", Name: "oidc_client", SignOnMode: "OPENID_CONNECT", Status: "ACTIVE", Features: nil, Created: time.Time{}, LastUpdated: time.Time{}},
 			{ID: "0oa2", Label: "Old", Name: "oidc_client", SignOnMode: "OPENID_CONNECT", Status: "INACTIVE", Features: nil, Created: time.Time{}, LastUpdated: time.Time{}},
 		},
-		AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: nil,
+		AppUsers: nil, AppGroups: nil, GrantedScopes: nil,
 	})
 
 	apps, err := fake.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "INACTIVE", Limit: 0})
@@ -1127,7 +1144,7 @@ func TestClient_AppIDIsEscapedAndProofMatchesWirePath(t *testing.T) {
 
 func TestFake_VerifyScopesMirrorsOkta(t *testing.T) {
 	t.Parallel()
-	fake := NewFake(Fixtures{Apps: nil, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: []string{"okta.apps.read", "okta.groups.read"}})
+	fake := NewFake(Fixtures{Apps: nil, AppUsers: nil, AppGroups: nil, GrantedScopes: []string{"okta.apps.read", "okta.groups.read"}})
 
 	v, err := fake.VerifyScopes(t.Context(), []string{"okta.apps.read", "okta.users.read"})
 	require.NoError(t, err)
@@ -1163,7 +1180,6 @@ func TestFake_ClonesAppFeatures(t *testing.T) {
 		Apps:          []App{{ID: "0oa1", Label: "Gram", Name: "oidc_client", SignOnMode: "OPENID_CONNECT", Status: "ACTIVE", Features: []string{"PUSH_NEW_USERS"}, Created: time.Time{}, LastUpdated: time.Time{}}},
 		AppUsers:      nil,
 		AppGroups:     nil,
-		Groups:        nil,
 		GrantedScopes: nil,
 	})
 
@@ -1185,7 +1201,7 @@ func TestClientFactory_MemoizesAndForgets(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""})
+	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""}, &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
 
 	cfg := testConfig()
 	cfg.OrgURL = "https://example.okta.com"
@@ -1256,7 +1272,6 @@ func TestFake_Fixtures(t *testing.T) {
 		Apps:          []App{{ID: "0oa1", Label: "Gram", Name: "oidc_client", SignOnMode: "OPENID_CONNECT", Status: "ACTIVE", Features: nil, Created: time.Time{}, LastUpdated: time.Time{}}},
 		AppUsers:      map[string][]AppUser{"0oa1": {{ID: "00u1", Scope: "USER", Status: "PROVISIONED", UserName: "", Created: time.Time{}, LastUpdated: time.Time{}}}},
 		AppGroups:     nil,
-		Groups:        []Group{{ID: "00g1", Type: "OKTA_GROUP", Name: "Eng", Description: "", Created: time.Time{}, LastUpdated: time.Time{}}},
 		GrantedScopes: []string{"okta.apps.read"},
 	})
 
@@ -1275,21 +1290,17 @@ func TestFake_Fixtures(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"okta.groups.read"}, v.Missing)
 
-	groups, err := fake.ListGroups(t.Context(), ListGroupsRequest{Search: "en", Limit: 0})
-	require.NoError(t, err)
-	require.Len(t, groups, 1)
-
 	fake.SetError(errors.New("boom"))
-	_, err = fake.ListGroups(t.Context(), ListGroupsRequest{Search: "", Limit: 0})
+	_, err = fake.ListAppGroups(t.Context(), ListAppGroupsRequest{AppID: "0oa1", Limit: 0})
 	require.EqualError(t, err, "boom")
-	require.Equal(t, []string{"ListApps", "GetApp", "ListAppUsers", "VerifyScopes", "ListGroups", "ListGroups"}, fake.Calls())
+	require.Equal(t, []string{"ListApps", "GetApp", "ListAppUsers", "VerifyScopes", "ListAppGroups"}, fake.Calls())
 }
 
 func TestFakeFactory_KeyedByOrgURL(t *testing.T) {
 	t.Parallel()
 	factory := NewFakeFactory(map[string]Fixtures{
-		"https://a.okta.com": {Apps: []App{{ID: "0oaA", Label: "A", Name: "", SignOnMode: "", Status: "", Features: nil, Created: time.Time{}, LastUpdated: time.Time{}}}, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: nil},
-		"https://b.okta.com": {Apps: []App{{ID: "0oaB", Label: "B", Name: "", SignOnMode: "", Status: "", Features: nil, Created: time.Time{}, LastUpdated: time.Time{}}}, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: nil},
+		"https://a.okta.com": {Apps: []App{{ID: "0oaA", Label: "A", Name: "", SignOnMode: "", Status: "", Features: nil, Created: time.Time{}, LastUpdated: time.Time{}}}, AppUsers: nil, AppGroups: nil, GrantedScopes: nil},
+		"https://b.okta.com": {Apps: []App{{ID: "0oaB", Label: "B", Name: "", SignOnMode: "", Status: "", Features: nil, Created: time.Time{}, LastUpdated: time.Time{}}}, AppUsers: nil, AppGroups: nil, GrantedScopes: nil},
 	})
 
 	cfg := testConfig()
@@ -1311,51 +1322,6 @@ func TestFakeFactory_KeyedByOrgURL(t *testing.T) {
 	cfg.OrgURL = "https://c.okta.com"
 	_, err = factory.Client(cfg)
 	require.Error(t, err)
-}
-
-func TestClient_ListGroups_SearchPagination(t *testing.T) {
-	t.Parallel()
-	for _, prefix := range []string{"Eng", `Team "A"\B`, ""} {
-		t.Run(prefix, func(t *testing.T) {
-			t.Parallel()
-			tc := newDefaultTestClient(t)
-			for i, name := range []string{prefix + " one", "Other", prefix + " two", prefix + " three"} {
-				group := groupJSON{ID: fmt.Sprint(i)}
-				group.Profile.Name = name
-				tc.stub.groups = append(tc.stub.groups, group)
-			}
-			tc.stub.pageSize = 1
-			groups, err := tc.client.ListGroups(t.Context(), ListGroupsRequest{Search: prefix, Limit: 1})
-			require.NoError(t, err)
-			wantIDs := []string{"0", "2", "3"}
-			if prefix == "" {
-				wantIDs = []string{"0", "1", "2", "3"}
-			}
-			ids := make([]string, 0, len(groups))
-			for _, group := range groups {
-				ids = append(ids, group.ID)
-			}
-			require.Equal(t, wantIDs, ids)
-			tc.stub.mu.Lock()
-			defer tc.stub.mu.Unlock()
-			require.Len(t, tc.stub.groupsQueries, len(wantIDs))
-			for i, query := range tc.stub.groupsQueries {
-				require.False(t, query.Has("q"))
-				wantSearch := ""
-				switch prefix {
-				case "Eng":
-					wantSearch = `profile.name sw "Eng"`
-				case `Team "A"\B`:
-					wantSearch = `profile.name sw "Team \"A\"\\B"`
-				}
-				require.Equal(t, wantSearch, query.Get("search"))
-				require.Equal(t, "1", query.Get("limit"))
-				if i > 0 {
-					require.Equal(t, fmt.Sprint(i), query.Get("after"))
-				}
-			}
-		})
-	}
 }
 
 func TestClient_MintAdmissionCancellation(t *testing.T) {

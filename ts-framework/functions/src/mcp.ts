@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
-  Gram,
+  Functions,
   Manifest,
   ManifestResource,
   ManifestTool,
@@ -40,13 +40,13 @@ export interface WrappedMCPServer {
 }
 
 /**
- * Wraps an MCP server and exposes it as a Gram Function.
+ * Wraps an MCP server and exposes it as a function.
  */
-export async function withGram(
+export async function withFunctions(
   server: McpServer | Server,
   options?: {
     /**
-     * Lists the environment variables that can be be passed by Gram when
+     * Lists the environment variables that can be passed by the platform when
      * calling tools and resources from the provided server. These will be
      * presented on the dashboard to be filled in by users and presented in the
      * generated MCP bundles and installation instructions.
@@ -59,7 +59,10 @@ export async function withGram(
 
   await server.connect(serverTransport);
 
-  const client = new Client({ name: "gram-functions-mcp", version: "0.0.0" });
+  const client = new Client({
+    name: "speakeasy-functions-mcp",
+    version: "0.0.0",
+  });
   await client.connect(clientTransport);
 
   let tools = await collectTools(client, options?.variables);
@@ -114,6 +117,9 @@ export async function withGram(
     manifest,
   };
 }
+
+/** @deprecated Use {@link withFunctions}. */
+export const withGram: typeof withFunctions = withFunctions;
 
 async function collectTools(
   client: Client,
@@ -208,10 +214,10 @@ function normalizeClientInfo(value: unknown): MCPClientInfo | undefined {
 }
 
 /**
- * Creates a low-level MCP server from a Gram instance.
+ * Creates a low-level MCP server from a Functions instance.
  */
-export function fromGram(
-  g: Gram,
+export function fromFunctions(
+  g: Functions,
   options: { name: string; version: string },
 ): Server {
   const { name, version } = options;
@@ -221,7 +227,7 @@ export function fromGram(
   const imageLike = /^image\//i;
   const audioLike = /^audio\//i;
 
-  // fromGram snapshots the current manifest once; later Gram mutations are not
+  // fromFunctions snapshots the current manifest once; later mutations are not
   // reflected in the MCP server handlers created here.
   const manifest = g.manifest();
   const hasResources =
@@ -417,6 +423,9 @@ export function fromGram(
 
   return server;
 }
+
+/** @deprecated Use {@link fromFunctions}. */
+export const fromGram: typeof fromFunctions = fromFunctions;
 
 async function responseToBase64(resp: Response): Promise<string> {
   const blob = await resp.arrayBuffer();

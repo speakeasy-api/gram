@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -25,7 +26,7 @@ export const SetupTaskStatus = {
 /**
  * Effective task status.
  */
-export type SetupTaskStatus = ClosedEnum<typeof SetupTaskStatus>;
+export type SetupTaskStatus = OpenEnum<typeof SetupTaskStatus>;
 
 export type SetupTask = {
   assignee?: SetupTaskAssignee | undefined;
@@ -42,6 +43,10 @@ export type SetupTask = {
    */
   description: string;
   /**
+   * True for a group that nests cards. A group has no card of its own: it is hidden when every card under it is, done when every visible card is, and cannot be assigned or marked by hand.
+   */
+  group: boolean;
+  /**
    * Whether a platform administrator hid the task.
    */
   hidden: boolean;
@@ -49,6 +54,10 @@ export type SetupTask = {
    * Stable code-owned task key.
    */
   key: string;
+  /**
+   * Key of the group this card sits under. Absent for a top-level card or a group.
+   */
+  parentKey?: string | undefined;
   /**
    * Effective task status.
    */
@@ -60,9 +69,10 @@ export type SetupTask = {
 };
 
 /** @internal */
-export const SetupTaskStatus$inboundSchema: z.ZodMiniEnum<
-  typeof SetupTaskStatus
-> = z.enum(SetupTaskStatus);
+export const SetupTaskStatus$inboundSchema: z.ZodMiniType<
+  SetupTaskStatus,
+  unknown
+> = openEnums.inboundSchema(SetupTaskStatus);
 
 /** @internal */
 export const SetupTask$inboundSchema: z.ZodMiniType<SetupTask, unknown> = z
@@ -72,8 +82,10 @@ export const SetupTask$inboundSchema: z.ZodMiniType<SetupTask, unknown> = z
       blocked_by: z.array(z.string()),
       completed_by_fact: z.boolean(),
       description: z.string(),
+      group: z.boolean(),
       hidden: z.boolean(),
       key: z.string(),
+      parent_key: z.optional(z.string()),
       status: SetupTaskStatus$inboundSchema,
       title: z.string(),
     }),
@@ -81,6 +93,7 @@ export const SetupTask$inboundSchema: z.ZodMiniType<SetupTask, unknown> = z
       return remap$(v, {
         "blocked_by": "blockedBy",
         "completed_by_fact": "completedByFact",
+        "parent_key": "parentKey",
       });
     }),
   );

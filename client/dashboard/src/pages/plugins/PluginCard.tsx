@@ -1,5 +1,6 @@
 import { CardContextMenu } from "@/components/card-context-menu";
-import { Card } from "@/components/ui/Card";
+import { McpEntityCard } from "@/components/mcp/McpEntityCard";
+import { McpIconGroup } from "@/components/mcp/McpIconGroup";
 import type { Action } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -19,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
-import { ArrowRight, Puzzle, Server } from "lucide-react";
+import { ArrowRight, Network, PackageOpen, Server } from "lucide-react";
 import { Fragment, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
@@ -27,6 +28,7 @@ import { usePluginPackageDownload } from "./downloadPluginPackage";
 import { usePluginQueryScope } from "./usePluginQueryScope";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginInstallButton } from "./PluginInstallButton";
+import { pluginUpToDate } from "./plugin-sync-state";
 
 export function PluginCard({
   plugin,
@@ -39,6 +41,7 @@ export function PluginCard({
   const navigate = useNavigate();
   const client = useSdkClient();
   const scope = usePluginQueryScope();
+  const servers = plugin.servers ?? [];
   const detailHref = routes.plugins.detail.href(plugin.id);
   const serverCount = plugin.serverCount ?? 0;
   const skillCount = plugin.skillCount ?? 0;
@@ -124,17 +127,29 @@ export function PluginCard({
     },
   ];
 
+  let icon = <Network className="text-muted-foreground h-8 w-8" />;
+  if (servers.length > 0) {
+    icon = (
+      <McpIconGroup serverIds={servers.map((server) => server.mcpServerId)} />
+    );
+  } else if (serverCount === 0) {
+    icon = (
+      <PackageOpen
+        aria-hidden="true"
+        className="text-muted-foreground h-10 w-10 opacity-60"
+      />
+    );
+  }
+
   return (
     <CardContextMenu actions={actions}>
-      <div>
-        <Card.Entity
-          className="cursor-pointer max-sm:h-auto max-sm:[&>div:first-child]:w-24"
+      <div className="h-full">
+        <McpEntityCard
+          className="cursor-pointer max-sm:[&>div:first-child]:w-24"
           onClick={() => {
             void navigate(detailHref);
           }}
-          icon={
-            <Puzzle className="text-muted-foreground h-10 w-10 opacity-60" />
-          }
+          icon={icon}
         >
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
@@ -152,9 +167,14 @@ export function PluginCard({
                     <Badge.Text>Default</Badge.Text>
                   </Badge>
                 )}
-                {publishStatus?.upToDate === false && (
+                {pluginUpToDate(publishStatus, plugin.slug) === false && (
                   <Badge variant="warning">
                     <Badge.Text>Needs syncing</Badge.Text>
+                  </Badge>
+                )}
+                {plugin.autoSyncEnabled === false && (
+                  <Badge variant="neutral">
+                    <Badge.Text>Auto sync off</Badge.Text>
                   </Badge>
                 )}
               </div>
@@ -261,7 +281,7 @@ export function PluginCard({
               </Link>
             </div>
           </div>
-        </Card.Entity>
+        </McpEntityCard>
         {installTarget && (
           <div onClick={(e) => e.stopPropagation()}>
             <InstallInstructionsDialog

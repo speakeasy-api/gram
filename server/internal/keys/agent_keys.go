@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
@@ -21,8 +24,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -48,7 +52,7 @@ type preparedAgentKey struct {
 }
 
 func (s *Service) createAgentKey(ctx context.Context, payload *gen.CreateKeyPayload) (*gen.Key, error) {
-	if err := s.requireAgentCredentialsEnabled(ctx); err != nil {
+	if err := s.requireAgentCredentialsHuman(ctx); err != nil {
 		return nil, err
 	}
 	if payload.ProjectID != nil {
@@ -76,6 +80,9 @@ func (s *Service) createAgentKey(ctx context.Context, payload *gen.CreateKeyPayl
 	if err != nil {
 		return nil, err
 	}
+	if err := recordAgentKeyAuthClientChoices(ctx, tx, human, created.ID, payload.AuthClientChoices); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save agent API key").LogError(ctx, s.logger)
 	}
@@ -84,7 +91,7 @@ func (s *Service) createAgentKey(ctx context.Context, payload *gen.CreateKeyPayl
 }
 
 func (s *Service) listAgentKeys(ctx context.Context, agentIDRaw string) (*gen.ListKeysResult, error) {
-	if err := s.requireAgentCredentialsEnabled(ctx); err != nil {
+	if err := s.requireAgentCredentialsHuman(ctx); err != nil {
 		return nil, err
 	}
 	agentID, err := parseAgentID(agentIDRaw)
@@ -126,7 +133,7 @@ func (s *Service) listAgentKeys(ctx context.Context, agentIDRaw string) (*gen.Li
 }
 
 func (s *Service) RotateKey(ctx context.Context, payload *gen.RotateKeyPayload) (*gen.Key, error) {
-	if err := s.requireAgentCredentialsEnabled(ctx); err != nil {
+	if err := s.requireAgentCredentialsHuman(ctx); err != nil {
 		return nil, err
 	}
 	if len(payload.Scopes) != 0 {
@@ -185,6 +192,15 @@ func (s *Service) RotateKey(ctx context.Context, payload *gen.RotateKeyPayload) 
 	if err != nil {
 		return nil, err
 	}
+	// The replacement keeps the credentials the rotated key was set up with.
+	if _, err := upstreamclientsrepo.New(tx).CopyCredentialChoices(ctx, upstreamclientsrepo.CopyCredentialChoicesParams{
+		ToCredentialID:   created.ID,
+		CredentialKind:   upstreamclients.CredentialKindAPIKey,
+		FromCredentialID: oldKey.ID,
+		OrganizationID:   human.Auth.ActiveOrganizationID,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "copy agent API key credential choices").LogError(ctx, s.logger)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save agent API key rotation").LogError(ctx, s.logger)
 	}
@@ -222,7 +238,7 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 	if utf8.RuneCountInString(name) > maxAPIKeyNameRunes {
 		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, nil, "key name must not exceed %d characters", maxAPIKeyNameRunes)
 	}
-	if versionRaw < int(runtimepolicy.DelegatedPolicyVersion1) || versionRaw > int(runtimepolicy.CurrentDelegatedPolicyVersion) {
+	if versionRaw < int(runtimepolicy.DelegatedPolicyVersion1) || versionRaw > int(runtimepolicy.IssuedDelegatedPolicyVersion) {
 		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, runtimepolicy.ErrInvalidDelegatedPolicy, "unsupported delegated grants version")
 	}
 
@@ -241,6 +257,9 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 			return preparedAgentKey{}, oops.E(oops.CodeBadRequest, runtimepolicy.ErrInvalidDelegatedPolicy, "delegated grants must use allow effect")
 		}
 		requested = append(requested, authz.NewGrantWithSelector(authz.Scope(form.Scope), selectorFromForm(form.Selector)))
+	}
+	if !slices.ContainsFunc(requested, func(grant authz.Grant) bool { return !authz.IsBlocklistScope(grant.Scope) }) {
+		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, runtimepolicy.ErrInvalidDelegatedPolicy, "agent keys require at least one allowed grant")
 	}
 	version := runtimepolicy.DelegatedPolicyVersion(versionRaw)
 	policy, err := runtimepolicy.NewDelegatedPolicy(version, requested)
@@ -267,47 +286,80 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 }
 
 func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agentID uuid.UUID, policy runtimepolicy.DelegatedPolicy) (agentmanagement.HumanContext, error) {
+	bounds, err := s.loadAgentKeyBounds(ctx, tx, agentID)
+	if err != nil {
+		return agentmanagement.HumanContext{}, err
+	}
+	if err := s.requireWithinAgentKeyBounds(ctx, bounds, policy); err != nil {
+		return agentmanagement.HumanContext{}, err
+	}
+	return bounds.human, nil
+}
+
+// agentKeyBounds are the live policies an agent key's delegation must stay
+// inside: the agent's, its owner's and the caller's.
+type agentKeyBounds struct {
+	human      agentmanagement.HumanContext
+	agent      []authz.Grant
+	owner      []authz.Grant
+	authorizer []authz.Grant
+}
+
+func (s *Service) loadAgentKeyBounds(ctx context.Context, tx pgx.Tx, agentID uuid.UUID) (agentKeyBounds, error) {
 	human, agent, err := s.authorizer.RequireAgentOwnerForUpdate(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
 	if err != nil {
-		return agentmanagement.HumanContext{}, fmt.Errorf("authorize agent API key issuance: %w", err)
+		return agentKeyBounds{}, fmt.Errorf("authorize agent API key issuance: %w", err)
 	}
 	if agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
-		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
+		return agentKeyBounds{}, oops.C(oops.CodeForbidden)
 	}
 
 	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
 	agentPolicy, err := runtimepolicy.LoadAgentPolicy(ctx, tx, human.Auth.ActiveOrganizationID, agentPrincipal)
 	if err != nil {
-		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "load live agent policy").LogError(ctx, s.logger)
+		return agentKeyBounds{}, oops.E(oops.CodeUnexpected, err, "load live agent policy").LogError(ctx, s.logger)
 	}
 	ownerPrincipals, err := authz.ResolveUserPrincipals(ctx, tx, human.Auth.ActiveOrganizationID, agent.OwnerUserID)
 	if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
-		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
+		return agentKeyBounds{}, oops.C(oops.CodeForbidden)
 	}
 	if err != nil {
-		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "resolve live agent owner").LogError(ctx, s.logger)
+		return agentKeyBounds{}, oops.E(oops.CodeUnexpected, err, "resolve live agent owner").LogError(ctx, s.logger)
 	}
 	ownerPolicy, err := authz.LoadGrants(ctx, tx, human.Auth.ActiveOrganizationID, ownerPrincipals)
 	if err != nil {
-		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "load live agent owner policy").LogError(ctx, s.logger)
+		return agentKeyBounds{}, oops.E(oops.CodeUnexpected, err, "load live agent owner policy").LogError(ctx, s.logger)
 	}
 
 	// Reuse the live caller policy loaded by RequireAgentOwnerForUpdate in
 	// this transaction; management authority alone cannot delegate access.
-	authorizerPolicy := human.LiveGrants()
+	return agentKeyBounds{human: human, agent: agentPolicy, owner: ownerPolicy, authorizer: human.LiveGrants()}, nil
+}
 
+func (s *Service) requireWithinAgentKeyBounds(ctx context.Context, bounds agentKeyBounds, policy runtimepolicy.DelegatedPolicy) error {
 	// A broad selector must not hide a narrower exclusion in any parent policy.
-	contained, err := runtimepolicy.DelegationContained(policy, agentPolicy, ownerPolicy, authorizerPolicy)
+	// The key acts for the issuing user, so restrictions on other users'
+	// connections do not overlap it.
+	contained, err := runtimepolicy.DelegationContainedFor(bounds.human.Auth.UserID, policy, bounds.agent, bounds.owner, bounds.authorizer)
 	if err != nil {
-		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "check delegated policy containment").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "check delegated policy containment").LogError(ctx, s.logger)
 	}
 	if !contained {
-		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
+		return oops.C(oops.CodeForbidden)
 	}
-	return human, nil
+	return nil
 }
 
 func (s *Service) createPreparedAgentKey(ctx context.Context, tx pgx.Tx, human agentmanagement.HumanContext, prepared preparedAgentKey) (repo.ApiKey, error) {
+	// Issuance and rotation both copy the policy into the key, so both wait
+	// for the upstream_client write gate.
+	for _, grants := range [][]runtimepolicy.DelegatedPolicyGrant{prepared.policy.Requested, prepared.policy.Effective} {
+		for _, grant := range grants {
+			if err := authz.RequireUpstreamSelectorWrites(ctx, human.Auth.ActiveOrganizationID, grant.Selector); err != nil {
+				return repo.ApiKey{}, fmt.Errorf("check upstream_client write gate: %w", err)
+			}
+		}
+	}
 	created, err := repo.New(tx).CreateAgentAPIKey(ctx, repo.CreateAgentAPIKeyParams{
 		OrganizationID:         human.Auth.ActiveOrganizationID,
 		CreatedByUserID:        human.Auth.UserID,
@@ -320,6 +372,13 @@ func (s *Service) createPreparedAgentKey(ctx context.Context, tx pgx.Tx, human a
 		ExpiresAt:              pgtype.Timestamptz{Time: prepared.expiresAt, InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	if err != nil {
+		// A name already in use is the caller's to fix, and the only thing that
+		// tells them so is this message: an unexpected error here reads as a
+		// policy failure and sends them back through the whole wizard.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "api_keys_organization_id_name_key" {
+			return repo.ApiKey{}, oops.E(oops.CodeConflict, err, "An API key named %q already exists in this organization. Choose another name.", prepared.name)
+		}
 		return repo.ApiKey{}, oops.E(oops.CodeUnexpected, err, "create agent API key").LogError(ctx, s.logger)
 	}
 	expiresAt := prepared.expiresAt.Format(time.RFC3339Nano)
@@ -335,6 +394,7 @@ func (s *Service) createPreparedAgentKey(ctx context.Context, tx pgx.Tx, human a
 		AgentCredential: &audit.AgentKeyCredentialMetadata{
 			SubjectURN: prepared.subjectURN, DelegatedGrants: prepared.policyJSON, DelegatedGrantsVersion: int32(prepared.version), ExpiresAt: expiresAt,
 		},
+		PolicyGrants: nil,
 	}); err != nil {
 		return repo.ApiKey{}, oops.E(oops.CodeUnexpected, err, "add agent API key creation audit log").LogError(ctx, s.logger)
 	}
@@ -356,6 +416,7 @@ func (s *Service) logAgentKeyRevoke(ctx context.Context, tx pgx.Tx, human agentm
 		KeyName:          key.Name,
 		Scopes:           []string{},
 		AgentCredential:  metadata,
+		PolicyGrants:     nil,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "add agent API key revocation audit log").LogError(ctx, s.logger)
 	}
@@ -381,7 +442,7 @@ func agentKeyModel(key repo.ApiKey, secret *string) (*gen.Key, error) {
 	}
 	return &gen.Key{
 		ID: key.ID.String(), OrganizationID: key.OrganizationID, ProjectID: nil, CreatedByUserID: key.CreatedByUserID, Name: key.Name, KeyPrefix: key.KeyPrefix, Key: secret, Scopes: []string{},
-		SubjectUrn: &subjectURN, DelegatedGrants: delegatedPolicyModel(policy), DelegatedGrantsVersion: &versionValue, ExpiresAt: &expiresAt,
+		SubjectUrn: &subjectURN, DelegatedGrants: delegatedPolicyModel(policy), DelegatedGrantsVersion: &versionValue, ExpiresAt: &expiresAt, PolicyGrants: nil,
 		CreatedAt: key.CreatedAt.Time.Format(time.RFC3339Nano), UpdatedAt: key.UpdatedAt.Time.Format(time.RFC3339Nano), LastAccessedAt: lastAccessedAt,
 	}, nil
 }
@@ -414,6 +475,8 @@ func selectorFromForm(selector *gen.AgentPolicySelector) authz.Selector {
 	for key, value := range map[string]*string{
 		authz.SelectorKeyDisposition: selector.Disposition, authz.SelectorKeyTool: selector.Tool, authz.SelectorKeyProjectID: selector.ProjectID,
 		authz.SelectorKeyServerURL: selector.ServerURL, authz.SelectorKeyServerIdentity: selector.ServerIdentity,
+		authz.SelectorKeyClientType: selector.ClientType, authz.SelectorKeyConnectionOwner: selector.ConnectionOwner,
+		authz.SelectorKeyUpstreamClient: selector.UpstreamClient,
 	} {
 		if value != nil {
 			result[key] = *value
@@ -424,13 +487,16 @@ func selectorFromForm(selector *gen.AgentPolicySelector) authz.Selector {
 
 func selectorModel(selector authz.Selector) *gen.AgentPolicySelector {
 	model := &gen.AgentPolicySelector{
-		ResourceKind:   selector[authz.SelectorKeyResourceKind],
-		ResourceID:     selector[authz.SelectorKeyResourceID],
-		Disposition:    mapStringPtr(selector, authz.SelectorKeyDisposition),
-		Tool:           mapStringPtr(selector, authz.SelectorKeyTool),
-		ProjectID:      mapStringPtr(selector, authz.SelectorKeyProjectID),
-		ServerURL:      mapStringPtr(selector, authz.SelectorKeyServerURL),
-		ServerIdentity: mapStringPtr(selector, authz.SelectorKeyServerIdentity),
+		ResourceKind:    selector[authz.SelectorKeyResourceKind],
+		ResourceID:      selector[authz.SelectorKeyResourceID],
+		Disposition:     mapStringPtr(selector, authz.SelectorKeyDisposition),
+		Tool:            mapStringPtr(selector, authz.SelectorKeyTool),
+		ProjectID:       mapStringPtr(selector, authz.SelectorKeyProjectID),
+		ServerURL:       mapStringPtr(selector, authz.SelectorKeyServerURL),
+		ServerIdentity:  mapStringPtr(selector, authz.SelectorKeyServerIdentity),
+		ClientType:      mapStringPtr(selector, authz.SelectorKeyClientType),
+		ConnectionOwner: mapStringPtr(selector, authz.SelectorKeyConnectionOwner),
+		UpstreamClient:  mapStringPtr(selector, authz.SelectorKeyUpstreamClient),
 	}
 	return model
 }
@@ -488,14 +554,11 @@ func agentIDFromKey(key repo.ApiKey) (uuid.UUID, error) {
 	return agentID, nil
 }
 
-func (s *Service) requireAgentCredentialsEnabled(ctx context.Context) error {
-	human, err := s.authorizer.RequireHuman(ctx, s.db)
-	if err != nil {
+// requireAgentCredentialsHuman rejects every caller but an ordinary human
+// session before any key or agent row is read.
+func (s *Service) requireAgentCredentialsHuman(ctx context.Context) error {
+	if _, err := s.authorizer.RequireHuman(ctx, s.db); err != nil {
 		return fmt.Errorf("require human session for agent credentials: %w", err)
-	}
-	evaluation, _ := feature.EvaluateFlag(ctx, s.features, feature.FlagAgentIdentityCredentials, human.Auth.ActiveOrganizationID, feature.OrgProjectGroups(human.Auth.OrganizationSlug, ""))
-	if evaluation != feature.EvaluationEnabled {
-		return oops.C(oops.CodeNotFound)
 	}
 	return nil
 }

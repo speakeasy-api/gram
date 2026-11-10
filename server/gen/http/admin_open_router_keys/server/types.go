@@ -59,7 +59,7 @@ type DisableKeyResponseBody struct {
 	OrganizationName string `form:"organization_name" json:"organization_name" xml:"organization_name"`
 	// Slug of the owning organization.
 	OrganizationSlug string `form:"organization_slug" json:"organization_slug" xml:"organization_slug"`
-	// The organization's Gram account type (e.g. free, pro, enterprise).
+	// The organization's Speakeasy account type (e.g. free, pro, enterprise).
 	GramAccountType string `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
 	// Which upstream key this row provisions: 'chat' pays for customer-facing
 	// completions, 'internal' pays for platform-initiated LLM usage.
@@ -86,7 +86,7 @@ type EnableKeyResponseBody struct {
 	OrganizationName string `form:"organization_name" json:"organization_name" xml:"organization_name"`
 	// Slug of the owning organization.
 	OrganizationSlug string `form:"organization_slug" json:"organization_slug" xml:"organization_slug"`
-	// The organization's Gram account type (e.g. free, pro, enterprise).
+	// The organization's Speakeasy account type (e.g. free, pro, enterprise).
 	GramAccountType string `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
 	// Which upstream key this row provisions: 'chat' pays for customer-facing
 	// completions, 'internal' pays for platform-initiated LLM usage.
@@ -847,7 +847,7 @@ type AdminOpenRouterKeyResponseBody struct {
 	OrganizationName string `form:"organization_name" json:"organization_name" xml:"organization_name"`
 	// Slug of the owning organization.
 	OrganizationSlug string `form:"organization_slug" json:"organization_slug" xml:"organization_slug"`
-	// The organization's Gram account type (e.g. free, pro, enterprise).
+	// The organization's Speakeasy account type (e.g. free, pro, enterprise).
 	GramAccountType string `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
 	// Which upstream key this row provisions: 'chat' pays for customer-facing
 	// completions, 'internal' pays for platform-initiated LLM usage.

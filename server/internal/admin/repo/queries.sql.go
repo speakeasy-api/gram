@@ -10,7 +10,166 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+const adminAcquireStripeSubscriptionLock = `-- name: AdminAcquireStripeSubscriptionLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Serializes assignments of the same Stripe subscription across organizations.
+func (q *Queries) AdminAcquireStripeSubscriptionLock(ctx context.Context, stripeSubscriptionID string) error {
+	_, err := q.db.Exec(ctx, adminAcquireStripeSubscriptionLock, stripeSubscriptionID)
+	return err
+}
+
+const adminAuditProjectBelongsToOrganization = `-- name: AdminAuditProjectBelongsToOrganization :one
+SELECT EXISTS (
+    SELECT 1 FROM projects
+    WHERE id = $1 AND organization_id = $2
+)
+`
+
+type AdminAuditProjectBelongsToOrganizationParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Audit history remains readable after a project is soft-deleted.
+func (q *Queries) AdminAuditProjectBelongsToOrganization(ctx context.Context, arg AdminAuditProjectBelongsToOrganizationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, adminAuditProjectBelongsToOrganization, arg.ProjectID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const adminBackdateUserSessionFixture = `-- name: AdminBackdateUserSessionFixture :exec
+UPDATE user_sessions SET created_at = $1 WHERE id = $2
+`
+
+type AdminBackdateUserSessionFixtureParams struct {
+	CreatedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+// Test fixture: no writer backdates a session.
+func (q *Queries) AdminBackdateUserSessionFixture(ctx context.Context, arg AdminBackdateUserSessionFixtureParams) error {
+	_, err := q.db.Exec(ctx, adminBackdateUserSessionFixture, arg.CreatedAt, arg.ID)
+	return err
+}
+
+const adminBackfillMCPAuthFromConnect = `-- name: AdminBackfillMCPAuthFromConnect :execrows
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT DISTINCT g.organization_id, g.principal_urn, 'mcp:auth', '{"resource_kind":"mcp_auth_client","resource_id":"*"}'::jsonb
+FROM principal_grants AS g
+WHERE g.scope = 'mcp:connect'
+  AND g.expires_at IS NULL
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+// Grants unrestricted mcp:auth to every principal holding any mcp:connect
+// grant, whatever its selectors. Temporary grants are skipped: a permanent
+// grant must not be derived from access that ends.
+func (q *Queries) AdminBackfillMCPAuthFromConnect(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, adminBackfillMCPAuthFromConnect)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const adminBackfillMCPConnectFromReadWrite = `-- name: AdminBackfillMCPConnectFromReadWrite :one
+WITH locked AS (
+  SELECT g.organization_id, g.principal_urn, g.selectors, g.expires_at
+  FROM principal_grants AS g
+  WHERE g.scope IN ('mcp:read', 'mcp:write')
+    AND (g.expires_at IS NULL OR g.expires_at > clock_timestamp())
+    AND ($1::timestamptz IS NULL OR g.created_at < $1::timestamptz)
+  FOR SHARE
+),
+sources AS (
+  SELECT
+    l.organization_id,
+    l.principal_urn,
+    l.selectors,
+    CASE WHEN bool_or(l.expires_at IS NULL) THEN NULL ELSE max(l.expires_at) END AS expires_at
+  FROM locked AS l
+  GROUP BY l.organization_id, l.principal_urn, l.selectors
+),
+written AS (
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at)
+  SELECT s.organization_id, s.principal_urn, 'mcp:connect', s.selectors, s.expires_at
+  FROM sources AS s
+  ON CONFLICT (organization_id, principal_urn, scope, selectors) DO UPDATE
+  SET expires_at = EXCLUDED.expires_at, updated_at = clock_timestamp()
+  WHERE principal_grants.expires_at IS NOT NULL
+    AND (EXCLUDED.expires_at IS NULL OR EXCLUDED.expires_at > principal_grants.expires_at)
+  RETURNING (xmax = 0) AS inserted
+),
+taken_over AS (
+  UPDATE auth_permission_provisions AS p
+  SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+  FROM sources AS s
+  WHERE p.organization_id = s.organization_id
+    AND p.principal_urn = s.principal_urn
+    AND p.scope = 'mcp:connect'
+    AND p.selectors = s.selectors
+    AND p.taken_over_at IS NULL
+    AND (
+      s.expires_at IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM principal_grants AS c
+        WHERE c.organization_id = s.organization_id
+          AND c.principal_urn = s.principal_urn
+          AND c.scope = 'mcp:connect'
+          AND c.selectors = s.selectors
+          AND c.expires_at IS NULL
+      )
+    )
+  RETURNING p.id
+)
+SELECT
+  (SELECT count(*) FROM written WHERE inserted)::bigint AS inserted,
+  (SELECT count(*) FROM written WHERE NOT inserted)::bigint AS extended,
+  (SELECT count(*) FROM taken_over)::bigint AS taken_over
+`
+
+type AdminBackfillMCPConnectFromReadWriteRow struct {
+	Inserted  int64
+	Extended  int64
+	TakenOver int64
+}
+
+// Makes the connect access that mcp:read and mcp:write imply explicit, ahead
+// of removing that implication. Every unexpired mcp:read or mcp:write grant
+// gets an mcp:connect grant for the same principal and selectors, every
+// dimension included. Effect is ignored, as grant loading ignores it.
+//
+// The copy lasts as long as the access it mirrors: the latest expiry among the
+// grants it is copied from, or permanent when any of them is. An existing
+// connect grant on the same selectors is kept, and only extended when it would
+// otherwise end before the access it mirrors.
+//
+// A connect grant still provisioned by the default auth permission backfill is
+// inferred and never outranks an inherited block, while the read or write
+// grant it now stands in for does. Taking it over, as an explicit grant write
+// does, keeps that precedence. It is not taken over when a temporary grant
+// would make a permanent connect grant explicit for good.
+//
+// created_before, when set, limits the copy to grants written before it, so a
+// rerun after the implication is removed leaves view-only grants alone.
+// Writes nothing that is already in place, so it is safe to run again.
+//
+// The source rows are locked FOR SHARE, so a revocation racing the backfill
+// either commits first, and its grant is skipped, or waits until the backfill
+// commits, as if it had run after it. A revoked grant is never copied.
+func (q *Queries) AdminBackfillMCPConnectFromReadWrite(ctx context.Context, createdBefore pgtype.Timestamptz) (AdminBackfillMCPConnectFromReadWriteRow, error) {
+	row := q.db.QueryRow(ctx, adminBackfillMCPConnectFromReadWrite, createdBefore)
+	var i AdminBackfillMCPConnectFromReadWriteRow
+	err := row.Scan(&i.Inserted, &i.Extended, &i.TakenOver)
+	return i, err
+}
 
 const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
 UPDATE organization_metadata
@@ -142,6 +301,58 @@ func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrg
 	return column_1, err
 }
 
+const adminCountUserOrganizations = `-- name: AdminCountUserOrganizations :one
+SELECT (SELECT count(*) FROM organization_user_relationships m WHERE m.user_id = u.id AND m.deleted IS FALSE) AS total
+FROM users u WHERE u.id = $1::text AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+`
+
+func (q *Queries) AdminCountUserOrganizations(ctx context.Context, userID string) (int64, error) {
+	row := q.db.QueryRow(ctx, adminCountUserOrganizations, userID)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
+}
+
+const adminCountUsers = `-- name: AdminCountUsers :one
+SELECT count(*)
+FROM users u
+WHERE u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+AND NOT EXISTS (SELECT 1 FROM unnest($1::text[]) p(pattern) WHERE NOT (u.display_name ILIKE p.pattern))
+AND NOT EXISTS (SELECT 1 FROM unnest($2::text[]) p(pattern) WHERE NOT (u.email ILIKE p.pattern))
+AND (cardinality($3::text[]) = 0 OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE
+    AND NOT EXISTS (SELECT 1 FROM unnest($3::text[]) p(pattern) WHERE NOT (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern))
+))
+AND NOT EXISTS (
+    SELECT 1 FROM unnest($4::text[]) p(pattern)
+    WHERE NOT (u.display_name ILIKE p.pattern OR u.email ILIKE p.pattern OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE AND (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern)
+ ))
+)
+`
+
+type AdminCountUsersParams struct {
+	NamePatterns  []string
+	EmailPatterns []string
+	OrgPatterns   []string
+	AnyPatterns   []string
+}
+
+// Keep eligibility and search predicates identical to AdminListUsers.
+func (q *Queries) AdminCountUsers(ctx context.Context, arg AdminCountUsersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, adminCountUsers,
+		arg.NamePatterns,
+		arg.EmailPatterns,
+		arg.OrgPatterns,
+		arg.AnyPatterns,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const adminDisableOrganization = `-- name: AdminDisableOrganization :execrows
 UPDATE organization_metadata
 SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
@@ -149,7 +360,7 @@ SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
 WHERE id = $1
 `
 
-// Operator-initiated disable. Keyed on the Gram organization id rather than
+// Operator-initiated disable. Keyed on the Speakeasy organization id rather than
 // workos_id so an organization that was never linked to WorkOS can still be
 // disabled. Deliberately leaves workos_last_event_id alone: that column is the
 // WorkOS webhook cursor and this is not a WorkOS event, so stamping it would
@@ -181,13 +392,39 @@ func (q *Queries) AdminEnableOrganization(ctx context.Context, id string) (int64
 	return result.RowsAffected(), nil
 }
 
+const adminGetConnectGrantExpiryFixture = `-- name: AdminGetConnectGrantExpiryFixture :one
+SELECT expires_at
+FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = 'mcp:connect'
+  AND selectors = $3
+`
+
+type AdminGetConnectGrantExpiryFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Selectors      []byte
+}
+
+// Test fixture: reads the expiry of one principal's connect grant.
+func (q *Queries) AdminGetConnectGrantExpiryFixture(ctx context.Context, arg AdminGetConnectGrantExpiryFixtureParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, adminGetConnectGrantExpiryFixture, arg.OrganizationID, arg.PrincipalUrn, arg.Selectors)
+	var expires_at pgtype.Timestamptz
+	err := row.Scan(&expires_at)
+	return expires_at, err
+}
+
 const adminGetEnterpriseTrialRetryOperationIDs = `-- name: AdminGetEnterpriseTrialRetryOperationIDs :one
 WITH latest_arm AS (
     SELECT armed.id, armed.seq
     FROM audit_logs AS armed
     WHERE armed.organization_id = $1
       AND armed.project_id IS NULL
-      AND armed.action = 'organization:enterprise_trial_armed'
+      AND armed.action IN (
+          'organization:enterprise_trial_armed',
+          'organization:enterprise_trial_started'
+      )
       AND armed.subject_id = $1
       AND armed.subject_type = 'organization'
     ORDER BY armed.seq DESC, armed.id DESC
@@ -229,13 +466,124 @@ type AdminGetEnterpriseTrialRetryOperationIDsRow struct {
 	MatchingRearmCount  int64
 }
 
-// The arm audit id is the immutable generation token. Every production trial
-// creation writes exactly one arm audit in the creation transaction; extension
-// writes neither. seq orders generations; id breaks any equal-seq tie.
+// The creation audit id is the immutable generation token. Self-service trial
+// creation records an armed action, while an admin grant records a started
+// action. Extension writes neither. seq orders generations; id breaks any
+// equal-seq tie.
 func (q *Queries) AdminGetEnterpriseTrialRetryOperationIDs(ctx context.Context, targetOrganizationID string) (AdminGetEnterpriseTrialRetryOperationIDsRow, error) {
 	row := q.db.QueryRow(ctx, adminGetEnterpriseTrialRetryOperationIDs, targetOrganizationID)
 	var i AdminGetEnterpriseTrialRetryOperationIDsRow
 	err := row.Scan(&i.ArmOperationID, &i.RearmArmOperationID, &i.MatchingRearmCount)
+	return i, err
+}
+
+const adminGetIssuerFixture = `-- name: AdminGetIssuerFixture :one
+SELECT id, issuer
+FROM remote_session_issuers
+WHERE id = $1
+`
+
+type AdminGetIssuerFixtureRow struct {
+	ID     uuid.UUID
+	Issuer string
+}
+
+// Test fixture: an issuer row as the Okta connection references it.
+func (q *Queries) AdminGetIssuerFixture(ctx context.Context, id uuid.UUID) (AdminGetIssuerFixtureRow, error) {
+	row := q.db.QueryRow(ctx, adminGetIssuerFixture, id)
+	var i AdminGetIssuerFixtureRow
+	err := row.Scan(&i.ID, &i.Issuer)
+	return i, err
+}
+
+const adminGetMcpServerAuth = `-- name: AdminGetMcpServerAuth :one
+SELECT
+    m.id,
+    COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name,
+    m.toolset_id,
+    m.remote_mcp_server_id,
+    m.tunneled_mcp_server_id,
+    m.visibility,
+    m.created_at,
+    m.user_session_issuer_id,
+    t.external_oauth_server_id,
+    COALESCE((
+        SELECT e.slug FROM mcp_endpoints e
+        WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE AND e.is_domain_root IS NOT TRUE
+        ORDER BY (e.custom_domain_id IS NULL), e.created_at, e.id
+        LIMIT 1
+    ), m.slug, '')::text AS url_slug,
+    COALESCE(t.slug, '')::text AS toolset_slug,
+    w.wrapper_count AS toolset_wrapper_count
+FROM mcp_servers m
+LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+CROSS JOIN LATERAL (
+    SELECT CASE
+        WHEN m.id = m.toolset_id THEN 1
+        WHEN EXISTS (
+            SELECT 1 FROM mcp_servers c
+            WHERE c.id = m.toolset_id AND c.project_id = m.project_id AND c.deleted IS FALSE
+        ) THEN 2
+        ELSE (
+            SELECT count(*) FROM mcp_servers o
+            WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+        )
+    END::bigint AS wrapper_count
+) w
+WHERE m.id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+`
+
+type AdminGetMcpServerAuthParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type AdminGetMcpServerAuthRow struct {
+	ID                    uuid.UUID
+	Name                  string
+	ToolsetID             uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
+	TunneledMcpServerID   uuid.NullUUID
+	Visibility            string
+	CreatedAt             pgtype.Timestamptz
+	UserSessionIssuerID   uuid.NullUUID
+	ExternalOauthServerID uuid.NullUUID
+	UrlSlug               string
+	ToolsetSlug           string
+	ToolsetWrapperCount   int64
+}
+
+// The server describeMcpServerHealth reports on, keyed on the mcp_servers id.
+// A toolset-backed wrapper takes its
+// issuer from its own row, not its toolset's, matching how the MCP endpoint
+// resolves it; the legacy OAuth columns live on the toolset only.
+// toolset_wrapper_count counts the live wrappers competing for the toolset's
+// slug, so the caller can drop a toolset slug that would also select another
+// wrapper's calls. A live canonical wrapper (id = toolset id) owns the slug
+// outright: it counts as one, and any other wrapper of that toolset as two.
+// url_slug is the slug in the /mcp/<slug> path clients call: the primary live
+// endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
+// a domain root has no such path), else the server's own slug; the caller falls
+// back to the toolset's legacy alias when no other wrapper shares that toolset.
+func (q *Queries) AdminGetMcpServerAuth(ctx context.Context, arg AdminGetMcpServerAuthParams) (AdminGetMcpServerAuthRow, error) {
+	row := q.db.QueryRow(ctx, adminGetMcpServerAuth, arg.ID, arg.ProjectID)
+	var i AdminGetMcpServerAuthRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ToolsetID,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UserSessionIssuerID,
+		&i.ExternalOauthServerID,
+		&i.UrlSlug,
+		&i.ToolsetSlug,
+		&i.ToolsetWrapperCount,
+	)
 	return i, err
 }
 
@@ -264,6 +612,7 @@ SELECT
     t.converted_at AS trial_converted_at,
     t.demoted_at AS trial_demoted_at,
     om.creation_source,
+    om.adoption_dashboard_url,
     om.created_at,
     om.updated_at,
     (
@@ -302,6 +651,7 @@ type AdminGetOrganizationRow struct {
 	TrialConvertedAt     pgtype.Timestamptz
 	TrialDemotedAt       pgtype.Timestamptz
 	CreationSource       pgtype.Text
+	AdoptionDashboardUrl pgtype.Text
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 	MemberCount          int64
@@ -335,11 +685,34 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.TrialConvertedAt,
 		&i.TrialDemotedAt,
 		&i.CreationSource,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MemberCount,
 	)
 	return i, err
+}
+
+const adminGetOrganizationMemberCursor = `-- name: AdminGetOrganizationMemberCursor :one
+SELECT u.id
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id = $2
+`
+
+type AdminGetOrganizationMemberCursorParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) AdminGetOrganizationMemberCursor(ctx context.Context, arg AdminGetOrganizationMemberCursorParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminGetOrganizationMemberCursor, arg.OrganizationID, arg.UserID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
 
 const adminGetOrganizationStats = `-- name: AdminGetOrganizationStats :one
@@ -468,6 +841,511 @@ func (q *Queries) AdminGetProjectDetailByID(ctx context.Context, id uuid.UUID) (
 	return i, err
 }
 
+const adminGetUserSessionIssuer = `-- name: AdminGetUserSessionIssuer :one
+SELECT
+    i.id,
+    i.slug,
+    i.classification,
+    i.authn_challenge_mode,
+    (EXTRACT(EPOCH FROM i.session_duration) / 3600)::bigint AS session_duration_hours,
+    i.attachment_scope,
+    i.client_id_metadata_admission_mode,
+    i.use_authentication_host,
+    i.authorization_server_mode,
+    -- Matches authserver.IssuerURLPinned: a pin only counts in shared mode.
+    (i.authorization_server_mode = 'shared' AND i.pinned_issuer_url IS NOT NULL AND i.pinned_issuer_url <> '')::boolean AS issuer_url_pinned,
+    i.trusted_remote_session_issuer_id,
+    i.trusted_remote_session_client_id,
+    i.created_at
+FROM user_session_issuers i
+WHERE i.id = $1
+  AND i.deleted IS FALSE
+  AND (i.project_id = $2::uuid
+       OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $3::text)))
+`
+
+type AdminGetUserSessionIssuerParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type AdminGetUserSessionIssuerRow struct {
+	ID                            uuid.UUID
+	Slug                          string
+	Classification                string
+	AuthnChallengeMode            string
+	SessionDurationHours          int64
+	AttachmentScope               pgtype.Text
+	ClientIDMetadataAdmissionMode pgtype.Text
+	UseAuthenticationHost         bool
+	AuthorizationServerMode       string
+	IssuerUrlPinned               bool
+	TrustedRemoteSessionIssuerID  uuid.NullUUID
+	TrustedRemoteSessionClientID  uuid.NullUUID
+	CreatedAt                     pgtype.Timestamptz
+}
+
+// The issuer a server in the project points at. It may be attached to the
+// project, the organization or the platform; one attached anywhere else is not
+// visible to the project and reads as absent.
+func (q *Queries) AdminGetUserSessionIssuer(ctx context.Context, arg AdminGetUserSessionIssuerParams) (AdminGetUserSessionIssuerRow, error) {
+	row := q.db.QueryRow(ctx, adminGetUserSessionIssuer, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i AdminGetUserSessionIssuerRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Classification,
+		&i.AuthnChallengeMode,
+		&i.SessionDurationHours,
+		&i.AttachmentScope,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.UseAuthenticationHost,
+		&i.AuthorizationServerMode,
+		&i.IssuerUrlPinned,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const adminInsertAuthPermissionProvisionFixture = `-- name: AdminInsertAuthPermissionProvisionFixture :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES ($1, $2, $3, $4, 'attachment')
+`
+
+type AdminInsertAuthPermissionProvisionFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+}
+
+// Test fixture: records a grant as provisioned by the default auth
+// permission backfill.
+func (q *Queries) AdminInsertAuthPermissionProvisionFixture(ctx context.Context, arg AdminInsertAuthPermissionProvisionFixtureParams) error {
+	_, err := q.db.Exec(ctx, adminInsertAuthPermissionProvisionFixture,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	return err
+}
+
+const adminInsertPlatformMCPFeedbackFixture = `-- name: AdminInsertPlatformMCPFeedbackFixture :exec
+INSERT INTO platform_mcp_feedback (organization_id, subject_urn, category, rating, tool_name, note, idempotency_key, input_hash, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'fixture', $8, $9)
+`
+
+type AdminInsertPlatformMCPFeedbackFixtureParams struct {
+	OrganizationID string
+	SubjectUrn     string
+	Category       string
+	Rating         pgtype.Int4
+	ToolName       pgtype.Text
+	Note           pgtype.Text
+	IdempotencyKey string
+	CreatedAt      pgtype.Timestamptz
+	ExpiresAt      pgtype.Timestamptz
+}
+
+// Test fixture: the Platform MCP writer sets its own timestamps and rate limits.
+func (q *Queries) AdminInsertPlatformMCPFeedbackFixture(ctx context.Context, arg AdminInsertPlatformMCPFeedbackFixtureParams) error {
+	_, err := q.db.Exec(ctx, adminInsertPlatformMCPFeedbackFixture,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.Category,
+		arg.Rating,
+		arg.ToolName,
+		arg.Note,
+		arg.IdempotencyKey,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const adminInsertPrincipalGrantFixture = `-- name: AdminInsertPrincipalGrantFixture :exec
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors, expires_at, created_at)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4::text,
+  $5,
+  $6::timestamptz,
+  COALESCE($7::timestamptz, clock_timestamp())
+)
+`
+
+type AdminInsertPrincipalGrantFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Effect         pgtype.Text
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+}
+
+// Test fixture: writes a grant row as stored, including temporary, expired,
+// deny-effect and backdated rows no single writer produces together.
+func (q *Queries) AdminInsertPrincipalGrantFixture(ctx context.Context, arg AdminInsertPrincipalGrantFixtureParams) error {
+	_, err := q.db.Exec(ctx, adminInsertPrincipalGrantFixture,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Effect,
+		arg.Selectors,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const adminListCustomDomains = `-- name: AdminListCustomDomains :many
+SELECT
+    d.id,
+    d.organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    d.domain,
+    d.verified,
+    d.activated,
+    d.dns_target_token,
+    d.dns_routing_method,
+    d.dns_configuration_status,
+    d.dns_checked_at,
+    d.health_status,
+    d.health_issue,
+    d.health_checked_at,
+    d.created_at
+FROM custom_domains d
+JOIN organization_metadata om ON om.id = d.organization_id
+WHERE d.deleted IS FALSE
+  AND ($1::text IS NULL OR d.organization_id = $1::text)
+  AND (
+    $2::text IS NULL
+    OR COALESCE(d.dns_routing_method, 'unknown') = $2::text
+  )
+ORDER BY d.domain, d.id
+`
+
+type AdminListCustomDomainsParams struct {
+	OrganizationID   pgtype.Text
+	DnsRoutingMethod pgtype.Text
+}
+
+type AdminListCustomDomainsRow struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	OrganizationName       string
+	OrganizationSlug       string
+	Domain                 string
+	Verified               bool
+	Activated              bool
+	DnsTargetToken         pgtype.Text
+	DnsRoutingMethod       pgtype.Text
+	DnsConfigurationStatus pgtype.Text
+	DnsCheckedAt           pgtype.Timestamptz
+	HealthStatus           pgtype.Text
+	HealthIssue            pgtype.Text
+	HealthCheckedAt        pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+}
+
+// Staff-wide read across organizations. A domain with no observed routing
+// method matches the unknown filter, since no supported method was observed.
+func (q *Queries) AdminListCustomDomains(ctx context.Context, arg AdminListCustomDomainsParams) ([]AdminListCustomDomainsRow, error) {
+	rows, err := q.db.Query(ctx, adminListCustomDomains, arg.OrganizationID, arg.DnsRoutingMethod)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListCustomDomainsRow
+	for rows.Next() {
+		var i AdminListCustomDomainsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationSlug,
+			&i.Domain,
+			&i.Verified,
+			&i.Activated,
+			&i.DnsTargetToken,
+			&i.DnsRoutingMethod,
+			&i.DnsConfigurationStatus,
+			&i.DnsCheckedAt,
+			&i.HealthStatus,
+			&i.HealthIssue,
+			&i.HealthCheckedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListCustomerUsageOrganizations = `-- name: AdminListCustomerUsageOrganizations :many
+WITH organizations AS (
+    SELECT
+        om.id,
+        om.name,
+        om.slug,
+        om.gram_account_type AS account_type,
+        -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
+        CASE
+            WHEN t.organization_id IS NULL THEN 'none'
+            WHEN t.converted_at IS NOT NULL THEN 'converted'
+            WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+            WHEN t.ends_at <= now() THEN 'expired'
+            WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+            ELSE 'running'
+        END::text AS trial_state,
+        coalesce(bm.billing_cycle_anchor_day, 1)::int AS billing_cycle_anchor_day,
+        om.created_at
+    FROM organization_metadata om
+    LEFT JOIN trials t ON t.organization_id = om.id
+    LEFT JOIN billing_metadata bm ON bm.organization_id = om.id
+    WHERE om.disabled_at IS NULL
+      AND om.gram_account_type IN ('enterprise', 'pro', 'payg')
+)
+SELECT id, name, slug, account_type, trial_state, billing_cycle_anchor_day, created_at
+FROM organizations
+WHERE (account_type = 'enterprise' AND trial_state NOT IN ('running', 'ending_soon'))
+   OR (account_type IN ('pro', 'payg') AND trial_state = 'none')
+ORDER BY lower(name) ASC, id ASC
+`
+
+type AdminListCustomerUsageOrganizationsRow struct {
+	ID                    string
+	Name                  string
+	Slug                  string
+	AccountType           string
+	TrialState            string
+	BillingCycleAnchorDay int32
+	CreatedAt             pgtype.Timestamptz
+}
+
+// The paying organizations the customer usage page reports on: active
+// enterprise organizations not on a running or ending trial, and active pro or
+// payg organizations that never trialled. A missing billing_metadata row means
+// calendar-month cycles, the same fallback the per-organization page applies.
+func (q *Queries) AdminListCustomerUsageOrganizations(ctx context.Context) ([]AdminListCustomerUsageOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListCustomerUsageOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListCustomerUsageOrganizationsRow
+	for rows.Next() {
+		var i AdminListCustomerUsageOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.AccountType,
+			&i.TrialState,
+			&i.BillingCycleAnchorDay,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListIssuerRemoteSessionClients = `-- name: AdminListIssuerRemoteSessionClients :many
+SELECT
+    c.id,
+    (c.client_id_metadata_uri IS NOT NULL)::boolean AS is_cimd,
+    (c.client_id_issued_at IS NOT NULL)::boolean AS is_dcr,
+    c.token_endpoint_auth_method,
+    c.scope,
+    c.grant_types,
+    (c.identity_provider_connection_id IS NOT NULL)::boolean AS has_identity_provider_connection,
+    c.attachment_scope,
+    c.upstream_rejected_at,
+    r.id AS issuer_id,
+    r.slug AS issuer_slug,
+    r.name AS issuer_name,
+    r.issuer AS issuer_url,
+    r.attachment_scope AS issuer_attachment_scope,
+    (r.tunneled_mcp_server_id IS NOT NULL)::boolean AS issuer_tunneled,
+    r.oidc AS issuer_oidc,
+    r.passthrough AS issuer_passthrough,
+    r.code_challenge_methods_supported AS issuer_code_challenge_methods_supported,
+    r.client_id_metadata_document_supported AS issuer_cimd_supported,
+    r.scope_override AS issuer_scope_override,
+    r.omit_scope_fallback AS issuer_omit_scope_fallback,
+    r.metadata_fetched_at AS issuer_metadata_fetched_at,
+    r.metadata_last_error_at AS issuer_metadata_last_error_at,
+    r.jwks_last_error_at AS issuer_jwks_last_error_at
+FROM remote_session_client_user_session_issuers a
+JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+JOIN remote_session_issuers r ON r.id = c.remote_session_issuer_id AND r.deleted IS FALSE
+WHERE a.user_session_issuer_id = $1
+ORDER BY c.created_at, c.id
+`
+
+type AdminListIssuerRemoteSessionClientsRow struct {
+	ID                                  uuid.UUID
+	IsCimd                              bool
+	IsDcr                               bool
+	TokenEndpointAuthMethod             pgtype.Text
+	Scope                               []string
+	GrantTypes                          []string
+	HasIdentityProviderConnection       bool
+	AttachmentScope                     pgtype.Text
+	UpstreamRejectedAt                  pgtype.Timestamptz
+	IssuerID                            uuid.UUID
+	IssuerSlug                          string
+	IssuerName                          pgtype.Text
+	IssuerUrl                           string
+	IssuerAttachmentScope               pgtype.Text
+	IssuerTunneled                      bool
+	IssuerOidc                          bool
+	IssuerPassthrough                   bool
+	IssuerCodeChallengeMethodsSupported []string
+	IssuerCimdSupported                 bool
+	IssuerScopeOverride                 []string
+	IssuerOmitScopeFallback             pgtype.Bool
+	IssuerMetadataFetchedAt             pgtype.Timestamptz
+	IssuerMetadataLastErrorAt           pgtype.Timestamptz
+	IssuerJwksLastErrorAt               pgtype.Timestamptz
+}
+
+// Live remote session clients attached to the issuer, with their upstream
+// issuer. Only the columns the health report exposes: no secrets, JWKS bodies
+// or error text.
+func (q *Queries) AdminListIssuerRemoteSessionClients(ctx context.Context, userSessionIssuerID uuid.UUID) ([]AdminListIssuerRemoteSessionClientsRow, error) {
+	rows, err := q.db.Query(ctx, adminListIssuerRemoteSessionClients, userSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListIssuerRemoteSessionClientsRow
+	for rows.Next() {
+		var i AdminListIssuerRemoteSessionClientsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.IsCimd,
+			&i.IsDcr,
+			&i.TokenEndpointAuthMethod,
+			&i.Scope,
+			&i.GrantTypes,
+			&i.HasIdentityProviderConnection,
+			&i.AttachmentScope,
+			&i.UpstreamRejectedAt,
+			&i.IssuerID,
+			&i.IssuerSlug,
+			&i.IssuerName,
+			&i.IssuerUrl,
+			&i.IssuerAttachmentScope,
+			&i.IssuerTunneled,
+			&i.IssuerOidc,
+			&i.IssuerPassthrough,
+			&i.IssuerCodeChallengeMethodsSupported,
+			&i.IssuerCimdSupported,
+			&i.IssuerScopeOverride,
+			&i.IssuerOmitScopeFallback,
+			&i.IssuerMetadataFetchedAt,
+			&i.IssuerMetadataLastErrorAt,
+			&i.IssuerJwksLastErrorAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListObservedOktaApplicationNames = `-- name: AdminListObservedOktaApplicationNames :many
+WITH live AS (
+    SELECT a.organization_id, a.name, a.label, a.sign_on_mode
+    FROM okta_applications AS a
+    WHERE a.removed_at IS NULL
+      AND a.status = 'ACTIVE'
+      AND EXISTS (
+        SELECT 1 FROM okta_application_assignments AS s
+        WHERE s.organization_id = a.organization_id
+          AND s.identity_provider_connection_id = a.identity_provider_connection_id
+          AND s.okta_app_id = a.okta_app_id
+          AND s.removed_at IS NULL
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM ROWS FROM (unnest($1::text[]), unnest($2::text[])) AS i(name, mode)
+        WHERE i.name = a.name AND i.mode = a.sign_on_mode
+      )
+)
+SELECT
+    l.name,
+    COUNT(DISTINCT l.organization_id)::integer AS organizations,
+    (ARRAY(SELECT DISTINCT x.label FROM live AS x WHERE x.name = l.name ORDER BY x.label LIMIT 8))::text[] AS labels,
+    (ARRAY(SELECT DISTINCT x.sign_on_mode FROM live AS x WHERE x.name = l.name ORDER BY x.sign_on_mode))::text[] AS sign_on_modes
+FROM live AS l
+GROUP BY l.name
+ORDER BY organizations DESC, l.name
+`
+
+type AdminListObservedOktaApplicationNamesParams struct {
+	InternalNames []string
+	InternalModes []string
+}
+
+type AdminListObservedOktaApplicationNamesRow struct {
+	Name          string
+	Organizations int32
+	Labels        []string
+	SignOnModes   []string
+}
+
+// Staff-only, deliberately cross-tenant: the OIN key is public catalog data
+// and only counts and labels leave here, never organization ids. Only active
+// applications with a live assignment count, as suggestions do; Okta's own
+// applications are excluded by (name, sign-on mode) as the sync defines them.
+// Labels are admin-editable per tenant and are used for matching, capped.
+func (q *Queries) AdminListObservedOktaApplicationNames(ctx context.Context, arg AdminListObservedOktaApplicationNamesParams) ([]AdminListObservedOktaApplicationNamesRow, error) {
+	rows, err := q.db.Query(ctx, adminListObservedOktaApplicationNames, arg.InternalNames, arg.InternalModes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListObservedOktaApplicationNamesRow
+	for rows.Next() {
+		var i AdminListObservedOktaApplicationNamesRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.Organizations,
+			&i.Labels,
+			&i.SignOnModes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListOrganizationMembers = `-- name: AdminListOrganizationMembers :many
 SELECT
     u.id,
@@ -520,6 +1398,99 @@ func (q *Queries) AdminListOrganizationMembers(ctx context.Context, organization
 	return items, nil
 }
 
+const adminListOrganizationMembersPage = `-- name: AdminListOrganizationMembersPage :many
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.last_login,
+    u.created_at,
+    u.updated_at
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id > $2::text
+ORDER BY u.id ASC
+LIMIT $3
+`
+
+type AdminListOrganizationMembersPageParams struct {
+	OrganizationID string
+	AfterUserID    string
+	PageLimit      int32
+}
+
+type AdminListOrganizationMembersPageRow struct {
+	ID          string
+	Email       string
+	DisplayName string
+	LastLogin   pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListOrganizationMembersPage(ctx context.Context, arg AdminListOrganizationMembersPageParams) ([]AdminListOrganizationMembersPageRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationMembersPage, arg.OrganizationID, arg.AfterUserID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationMembersPageRow
+	for rows.Next() {
+		var i AdminListOrganizationMembersPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.LastLogin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListOrganizationNamesByIDs = `-- name: AdminListOrganizationNamesByIDs :many
+SELECT id, name, slug
+FROM organization_metadata
+WHERE id = ANY($1::text[])
+`
+
+type AdminListOrganizationNamesByIDsRow struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// Labels the hook client grids, whose rows carry only organization ids.
+func (q *Queries) AdminListOrganizationNamesByIDs(ctx context.Context, ids []string) ([]AdminListOrganizationNamesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationNamesByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationNamesByIDsRow
+	for rows.Next() {
+		var i AdminListOrganizationNamesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListOrganizations = `-- name: AdminListOrganizations :many
 WITH search AS (
     -- Escaped once here rather than per arm so the name and the slug arm cannot
@@ -537,6 +1508,9 @@ filtered AS (
         om.name,
         om.slug,
         om.gram_account_type AS account_type,
+        -- Ranks by what the account pays rather than by how its type is spelled:
+        -- enterprise, then pro and payg, then free, then any type off the list.
+        CASE om.gram_account_type WHEN 'enterprise' THEN 0 WHEN 'pro' THEN 1 WHEN 'payg' THEN 1 WHEN 'free' THEN 2 ELSE 3 END AS account_tier,
         om.workos_id,
         bm.stripe_customer_id,
         bm.stripe_subscription_id,
@@ -610,7 +1584,7 @@ filtered AS (
         )
 ),
 paged AS MATERIALIZED (
-SELECT id, name, slug, account_type, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
+SELECT id, name, slug, account_type, account_tier, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
 WHERE coalesce(cardinality($11::text[]), 0) = 0 OR trial_state = ANY($11::text[])
 ORDER BY
     CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
@@ -619,6 +1593,8 @@ ORDER BY
     CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'asc' THEN account_tier END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'desc' THEN account_tier END DESC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
@@ -650,6 +1626,8 @@ ORDER BY
     CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'asc' THEN account_tier END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'desc' THEN account_tier END DESC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
@@ -755,6 +1733,219 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 	return items, nil
 }
 
+const adminListOtherServersUsingIssuer = `-- name: AdminListOtherServersUsingIssuer :many
+SELECT m.id, COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name
+FROM mcp_servers m
+LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+WHERE m.project_id = $1
+  AND m.user_session_issuer_id = $2::uuid
+  AND m.id <> $3
+  AND m.deleted IS FALSE
+ORDER BY 2, 1
+`
+
+type AdminListOtherServersUsingIssuerParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	ExcludeID           uuid.UUID
+}
+
+type AdminListOtherServersUsingIssuerRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Live servers in the project, other than the one described, that share the
+// issuer.
+func (q *Queries) AdminListOtherServersUsingIssuer(ctx context.Context, arg AdminListOtherServersUsingIssuerParams) ([]AdminListOtherServersUsingIssuerRow, error) {
+	rows, err := q.db.Query(ctx, adminListOtherServersUsingIssuer, arg.ProjectID, arg.UserSessionIssuerID, arg.ExcludeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOtherServersUsingIssuerRow
+	for rows.Next() {
+		var i AdminListOtherServersUsingIssuerRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListPlatformMCPFeedback = `-- name: AdminListPlatformMCPFeedback :many
+SELECT
+    f.id,
+    f.organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    f.subject_urn,
+    u.email AS user_email,
+    f.category,
+    f.rating,
+    f.success,
+    f.tool_name,
+    f.failure_category,
+    f.note,
+    f.delivery_state,
+    f.created_at,
+    f.expires_at
+FROM platform_mcp_feedback AS f
+LEFT JOIN organization_metadata AS om ON om.id = f.organization_id
+LEFT JOIN users AS u ON 'user:' || u.id = f.subject_urn
+    AND u.deleted_at IS NULL
+    AND u.workos_deleted_at IS NULL
+WHERE f.expires_at > clock_timestamp()
+ORDER BY f.created_at DESC, f.id DESC
+LIMIT $1
+`
+
+type AdminListPlatformMCPFeedbackRow struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	OrganizationName pgtype.Text
+	OrganizationSlug pgtype.Text
+	SubjectUrn       string
+	UserEmail        pgtype.Text
+	Category         string
+	Rating           pgtype.Int4
+	Success          pgtype.Bool
+	ToolName         pgtype.Text
+	FailureCategory  pgtype.Text
+	Note             pgtype.Text
+	DeliveryState    string
+	CreatedAt        pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+}
+
+// Expired rows wait for the next submission in their organization to delete
+// them, so this read hides them itself.
+func (q *Queries) AdminListPlatformMCPFeedback(ctx context.Context, rowLimit int32) ([]AdminListPlatformMCPFeedbackRow, error) {
+	rows, err := q.db.Query(ctx, adminListPlatformMCPFeedback, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListPlatformMCPFeedbackRow
+	for rows.Next() {
+		var i AdminListPlatformMCPFeedbackRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationSlug,
+			&i.SubjectUrn,
+			&i.UserEmail,
+			&i.Category,
+			&i.Rating,
+			&i.Success,
+			&i.ToolName,
+			&i.FailureCategory,
+			&i.Note,
+			&i.DeliveryState,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListProjectMcpServerRows = `-- name: AdminListProjectMcpServerRows :many
+SELECT
+    m.id,
+    m.name,
+    m.slug,
+    t.name AS toolset_name,
+    m.visibility,
+    m.toolset_id,
+    m.remote_mcp_server_id,
+    m.tunneled_mcp_server_id,
+    e.id AS endpoint_id,
+    e.slug AS endpoint_slug,
+    e.custom_domain_id AS endpoint_custom_domain_id,
+    e.is_domain_root AS endpoint_is_domain_root,
+    e.created_at AS endpoint_created_at,
+    d.domain AS custom_domain,
+    m.created_at
+FROM mcp_servers m
+JOIN projects p ON p.id = m.project_id
+LEFT JOIN toolsets t ON t.id = m.toolset_id
+LEFT JOIN mcp_endpoints e ON e.mcp_server_id = m.id AND e.deleted IS FALSE
+LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.deleted IS FALSE
+    AND d.organization_id = p.organization_id
+    AND d.verified IS TRUE AND d.activated IS TRUE
+WHERE m.project_id = $1
+  AND m.deleted IS FALSE
+ORDER BY m.created_at, m.id
+`
+
+type AdminListProjectMcpServerRowsRow struct {
+	ID                     uuid.UUID
+	Name                   pgtype.Text
+	Slug                   pgtype.Text
+	ToolsetName            pgtype.Text
+	Visibility             string
+	ToolsetID              uuid.NullUUID
+	RemoteMcpServerID      uuid.NullUUID
+	TunneledMcpServerID    uuid.NullUUID
+	EndpointID             uuid.NullUUID
+	EndpointSlug           pgtype.Text
+	EndpointCustomDomainID uuid.NullUUID
+	EndpointIsDomainRoot   pgtype.Bool
+	EndpointCreatedAt      pgtype.Timestamptz
+	CustomDomain           pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+}
+
+// One row per live endpoint, and one with no endpoint columns for a server that
+// has none. custom_domain is null for an endpoint whose domain cannot serve it;
+// the caller skips those and picks the address with endpointaddr.PrimaryEndpoint.
+func (q *Queries) AdminListProjectMcpServerRows(ctx context.Context, projectID uuid.UUID) ([]AdminListProjectMcpServerRowsRow, error) {
+	rows, err := q.db.Query(ctx, adminListProjectMcpServerRows, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListProjectMcpServerRowsRow
+	for rows.Next() {
+		var i AdminListProjectMcpServerRowsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.ToolsetName,
+			&i.Visibility,
+			&i.ToolsetID,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+			&i.EndpointID,
+			&i.EndpointSlug,
+			&i.EndpointCustomDomainID,
+			&i.EndpointIsDomainRoot,
+			&i.EndpointCreatedAt,
+			&i.CustomDomain,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListProjectsForOrganization = `-- name: AdminListProjectsForOrganization :many
 SELECT
     p.id,
@@ -762,12 +1953,8 @@ SELECT
     p.name,
     p.created_at,
     p.updated_at,
-    ((SELECT count(*) FROM toolsets t
-        WHERE t.project_id = p.id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
-          AND NOT EXISTS (SELECT 1 FROM mcp_servers m2
-                           WHERE m2.toolset_id = t.id AND m2.deleted IS FALSE))
-     + (SELECT count(*) FROM mcp_servers m
-          WHERE m.project_id = p.id AND m.deleted IS FALSE))::bigint AS mcp_server_count
+    (SELECT count(*) FROM mcp_servers m
+       WHERE m.project_id = p.id AND m.deleted IS FALSE)::bigint AS mcp_server_count
 FROM projects p
 WHERE p.organization_id = $1
   AND p.deleted IS FALSE
@@ -784,10 +1971,6 @@ type AdminListProjectsForOrganizationRow struct {
 	McpServerCount int64
 }
 
-// Not a plain sum: once AGE-1880 copies legacy servers into mcp_servers, a
-// toolset and its mcp_servers row would each be counted. The anti join on the
-// legacy half gives the same answer before and after that copy, and it is the
-// direction that plans as an index anti join rather than a seq scan of toolsets.
 func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organizationID string) ([]AdminListProjectsForOrganizationRow, error) {
 	rows, err := q.db.Query(ctx, adminListProjectsForOrganization, organizationID)
 	if err != nil {
@@ -805,6 +1988,443 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 			&i.UpdatedAt,
 			&i.McpServerCount,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListRegistryEntryFacts = `-- name: AdminListRegistryEntryFacts :many
+SELECT
+    id AS registry_entry_id,
+    data
+FROM mcp_registry_entries
+ORDER BY (data #>> '{server,name}') COLLATE "C"
+`
+
+type AdminListRegistryEntryFactsRow struct {
+	RegistryEntryID uuid.UUID
+	Data            []byte
+}
+
+// The fields the Okta matcher reads, for every entry.
+func (q *Queries) AdminListRegistryEntryFacts(ctx context.Context) ([]AdminListRegistryEntryFactsRow, error) {
+	rows, err := q.db.Query(ctx, adminListRegistryEntryFacts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListRegistryEntryFactsRow
+	for rows.Next() {
+		var i AdminListRegistryEntryFactsRow
+		if err := rows.Scan(&i.RegistryEntryID, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListRegistryOktaMappings = `-- name: AdminListRegistryOktaMappings :many
+SELECT
+    e.id AS registry_entry_id,
+    (e.data #>> '{server,name}')::text AS entry_name,
+    (n.value #>> '{}')::text AS oin_name
+FROM mcp_registry_entries AS e
+CROSS JOIN LATERAL jsonb_array_elements(
+    CASE WHEN jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
+        THEN e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}'
+        ELSE '[]'::jsonb
+    END
+) AS n(value)
+WHERE jsonb_typeof(n.value) = 'string'
+`
+
+type AdminListRegistryOktaMappingsRow struct {
+	RegistryEntryID uuid.UUID
+	EntryName       string
+	OinName         string
+}
+
+// Every OIN name a catalog entry claims, published or not, so a candidate
+// already taken can say by whom.
+func (q *Queries) AdminListRegistryOktaMappings(ctx context.Context) ([]AdminListRegistryOktaMappingsRow, error) {
+	rows, err := q.db.Query(ctx, adminListRegistryOktaMappings)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListRegistryOktaMappingsRow
+	for rows.Next() {
+		var i AdminListRegistryOktaMappingsRow
+		if err := rows.Scan(&i.RegistryEntryID, &i.EntryName, &i.OinName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListUpstreamOAuthMigrationOrganizations = `-- name: AdminListUpstreamOAuthMigrationOrganizations :many
+WITH reached AS (
+    SELECT p.organization_id, s.id AS server_id
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.deleted IS FALSE
+    JOIN user_session_issuers AS usi
+      ON usi.id = s.user_session_issuer_id
+     AND usi.deleted IS FALSE
+     AND (usi.project_id = p.id
+          OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+    WHERE s.deleted IS FALSE
+    UNION
+    SELECT g.organization_id, m.mcp_server_id AS server_id
+    FROM meta_mcp_servers AS g
+    JOIN projects AS gp
+      ON gp.id = g.project_id
+     AND gp.deleted IS FALSE
+    JOIN user_session_issuers AS usi
+      ON usi.id = g.user_session_issuer_id
+     AND usi.deleted IS FALSE
+    JOIN meta_mcp_server_members AS m
+      ON m.meta_mcp_server_id = g.id
+     AND m.project_id = g.project_id
+     AND m.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.id = m.mcp_server_id
+     AND s.deleted IS FALSE
+     AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+    WHERE g.deleted IS FALSE
+    UNION
+    SELECT oi.organization_id, s.id AS server_id
+    FROM user_session_issuers AS oi
+    JOIN projects AS p
+      ON p.organization_id = oi.organization_id
+     AND p.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.project_id = p.id
+     AND s.deleted IS FALSE
+     AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+    WHERE oi.project_id IS NULL
+      AND oi.deleted IS FALSE
+)
+SELECT
+    om.id,
+    om.name,
+    om.slug,
+    count(DISTINCT reached.server_id)::bigint AS servers
+FROM organization_metadata AS om
+JOIN reached
+  ON reached.organization_id = om.id
+GROUP BY om.id, om.name, om.slug
+ORDER BY om.name, om.id
+`
+
+type AdminListUpstreamOAuthMigrationOrganizationsRow struct {
+	ID      string
+	Name    string
+	Slug    string
+	Servers int64
+}
+
+// The organizations the upstream OAuth migration writes for: those with a
+// live MCP server on a live user session issuer of its own tenant, or a live
+// proxied server fronted by a gateway issuer. servers counts those servers.
+func (q *Queries) AdminListUpstreamOAuthMigrationOrganizations(ctx context.Context) ([]AdminListUpstreamOAuthMigrationOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListUpstreamOAuthMigrationOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUpstreamOAuthMigrationOrganizationsRow
+	for rows.Next() {
+		var i AdminListUpstreamOAuthMigrationOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Servers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListUserOrganizations = `-- name: AdminListUserOrganizations :many
+SELECT o.id, o.name, o.slug, o.disabled_at
+FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+WHERE m.user_id = $1::text AND m.deleted IS FALSE
+ORDER BY lower(o.name), o.slug, o.id LIMIT $3::int OFFSET $2::int
+`
+
+type AdminListUserOrganizationsParams struct {
+	UserID     string
+	PageOffset int32
+	PageLimit  int32
+}
+
+type AdminListUserOrganizationsRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListUserOrganizations(ctx context.Context, arg AdminListUserOrganizationsParams) ([]AdminListUserOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListUserOrganizations, arg.UserID, arg.PageOffset, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUserOrganizationsRow
+	for rows.Next() {
+		var i AdminListUserOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.DisabledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListUsers = `-- name: AdminListUsers :many
+SELECT u.id, u.email, u.display_name, u.last_login
+FROM users u
+WHERE u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+AND NOT EXISTS (SELECT 1 FROM unnest($1::text[]) p(pattern) WHERE NOT (u.display_name ILIKE p.pattern))
+AND NOT EXISTS (SELECT 1 FROM unnest($2::text[]) p(pattern) WHERE NOT (u.email ILIKE p.pattern))
+AND (cardinality($3::text[]) = 0 OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE
+    AND NOT EXISTS (SELECT 1 FROM unnest($3::text[]) p(pattern) WHERE NOT (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern))
+))
+AND NOT EXISTS (
+    SELECT 1 FROM unnest($4::text[]) p(pattern)
+    WHERE NOT (u.display_name ILIKE p.pattern OR u.email ILIKE p.pattern OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE AND (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern)
+ ))
+)
+ORDER BY lower(u.email), u.id LIMIT $6::int OFFSET $5::int
+`
+
+type AdminListUsersParams struct {
+	NamePatterns  []string
+	EmailPatterns []string
+	OrgPatterns   []string
+	AnyPatterns   []string
+	PageOffset    int32
+	PageLimit     int32
+}
+
+type AdminListUsersRow struct {
+	ID          string
+	Email       string
+	DisplayName string
+	LastLogin   pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListUsers(ctx context.Context, arg AdminListUsersParams) ([]AdminListUsersRow, error) {
+	rows, err := q.db.Query(ctx, adminListUsers,
+		arg.NamePatterns,
+		arg.EmailPatterns,
+		arg.OrgPatterns,
+		arg.AnyPatterns,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUsersRow
+	for rows.Next() {
+		var i AdminListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.LastLogin,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListUsersOrganizationPreviews = `-- name: AdminListUsersOrganizationPreviews :many
+WITH ranked AS (
+    SELECT m.user_id, o.id, o.name, o.slug, o.disabled_at,
+    count(*) OVER (PARTITION BY m.user_id) AS organization_count,
+    row_number() OVER (PARTITION BY m.user_id ORDER BY lower(o.name), o.slug, o.id) AS position
+    FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = ANY($1::text[]) AND m.deleted IS FALSE
+)
+SELECT user_id, id, name, slug, disabled_at, organization_count FROM ranked WHERE position <= 3
+ORDER BY user_id, position
+`
+
+type AdminListUsersOrganizationPreviewsRow struct {
+	UserID            pgtype.Text
+	ID                string
+	Name              string
+	Slug              string
+	DisabledAt        pgtype.Timestamptz
+	OrganizationCount int64
+}
+
+func (q *Queries) AdminListUsersOrganizationPreviews(ctx context.Context, userIds []string) ([]AdminListUsersOrganizationPreviewsRow, error) {
+	rows, err := q.db.Query(ctx, adminListUsersOrganizationPreviews, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUsersOrganizationPreviewsRow
+	for rows.Next() {
+		var i AdminListUsersOrganizationPreviewsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.DisabledAt,
+			&i.OrganizationCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminProjectBelongsToOrganization = `-- name: AdminProjectBelongsToOrganization :one
+SELECT EXISTS (
+    SELECT 1 FROM projects
+    WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE
+)
+`
+
+type AdminProjectBelongsToOrganizationParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) AdminProjectBelongsToOrganization(ctx context.Context, arg AdminProjectBelongsToOrganizationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, adminProjectBelongsToOrganization, arg.ProjectID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const adminRemoteSessionStats = `-- name: AdminRemoteSessionStats :many
+SELECT
+    remote_session_client_id,
+    count(DISTINCT subject_urn) FILTER (WHERE deleted IS FALSE)::bigint AS linked_subjects,
+    COALESCE(sum(grant_generation - 1), 0)::bigint AS reauthorizations,
+    min(created_at)::timestamptz AS first_linked_at
+FROM remote_sessions
+WHERE remote_session_client_id = ANY($1::uuid[])
+GROUP BY remote_session_client_id
+`
+
+type AdminRemoteSessionStatsRow struct {
+	RemoteSessionClientID uuid.UUID
+	LinkedSubjects        int64
+	Reauthorizations      int64
+	FirstLinkedAt         pgtype.Timestamptz
+}
+
+// Per client: distinct users with a live upstream session, fresh
+// authorizations beyond each session's first, and the first link. Keyed on
+// the client alone: a session is one per (subject, client), and its
+// user_session_issuer_id records only which issuer first linked it.
+func (q *Queries) AdminRemoteSessionStats(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]AdminRemoteSessionStatsRow, error) {
+	rows, err := q.db.Query(ctx, adminRemoteSessionStats, remoteSessionClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminRemoteSessionStatsRow
+	for rows.Next() {
+		var i AdminRemoteSessionStatsRow
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.LinkedSubjects,
+			&i.Reauthorizations,
+			&i.FirstLinkedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminRemoteSessionValidationCounts = `-- name: AdminRemoteSessionValidationCounts :many
+SELECT
+    remote_session_client_id,
+    validation_status::text AS validation_status,
+    count(*)::bigint AS sessions
+FROM remote_sessions
+WHERE remote_session_client_id = ANY($1::uuid[])
+  AND deleted IS FALSE
+  AND validation_status IS NOT NULL
+GROUP BY remote_session_client_id, validation_status
+`
+
+type AdminRemoteSessionValidationCountsRow struct {
+	RemoteSessionClientID uuid.UUID
+	ValidationStatus      string
+	Sessions              int64
+}
+
+// Live sessions per client and last validation status. Sessions never
+// validated have a NULL status and are left out. Keyed on the client alone,
+// as AdminRemoteSessionStats is.
+func (q *Queries) AdminRemoteSessionValidationCounts(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]AdminRemoteSessionValidationCountsRow, error) {
+	rows, err := q.db.Query(ctx, adminRemoteSessionValidationCounts, remoteSessionClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminRemoteSessionValidationCountsRow
+	for rows.Next() {
+		var i AdminRemoteSessionValidationCountsRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.ValidationStatus, &i.Sessions); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -886,6 +2506,28 @@ func (q *Queries) AdminResolveProjectIDBySlugInOrganization(ctx context.Context,
 	return id, err
 }
 
+const adminSetOrganizationAdoptionDashboardURL = `-- name: AdminSetOrganizationAdoptionDashboardURL :one
+UPDATE organization_metadata
+SET
+    adoption_dashboard_url = $1::text,
+    updated_at = clock_timestamp()
+WHERE id = $2::text
+RETURNING id
+`
+
+type AdminSetOrganizationAdoptionDashboardURLParams struct {
+	AdoptionDashboardUrl pgtype.Text
+	ID                   string
+}
+
+// NULL clears the link. Keyed on id alone, like every other admin write.
+func (q *Queries) AdminSetOrganizationAdoptionDashboardURL(ctx context.Context, arg AdminSetOrganizationAdoptionDashboardURLParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminSetOrganizationAdoptionDashboardURL, arg.AdoptionDashboardUrl, arg.ID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const adminSetStripeCustomer = `-- name: AdminSetStripeCustomer :one
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES ($1::text, $2::text)
@@ -905,6 +2547,55 @@ type AdminSetStripeCustomerParams struct {
 
 func (q *Queries) AdminSetStripeCustomer(ctx context.Context, arg AdminSetStripeCustomerParams) (string, error) {
 	row := q.db.QueryRow(ctx, adminSetStripeCustomer, arg.OrganizationID, arg.StripeCustomerID)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
+}
+
+const adminSetStripeSubscription = `-- name: AdminSetStripeSubscription :one
+UPDATE billing_metadata
+SET
+    stripe_subscription_id = $1::text,
+    stripe_billing_cycle_anchor = $2::timestamptz,
+    billing_cycle_anchor_day = $3::integer,
+    updated_at = clock_timestamp()
+FROM organization_metadata
+WHERE billing_metadata.organization_id = organization_metadata.id
+  AND billing_metadata.organization_id = $4::text
+  AND billing_metadata.stripe_customer_id = $5::text
+  AND billing_metadata.stripe_subscription_id IS NULL
+  AND organization_metadata.gram_account_type = 'payg'
+  -- A redeemed partner's retained anchor is immutable accounting provenance.
+  AND NOT EXISTS (
+    SELECT 1 FROM organization_promotion_applications application
+    WHERE application.organization_id = billing_metadata.organization_id
+      AND application.redeemed_at IS NOT NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM billing_metadata AS other
+    WHERE other.stripe_subscription_id = $1::text
+      AND other.organization_id <> billing_metadata.organization_id
+  )
+RETURNING billing_metadata.organization_id
+`
+
+type AdminSetStripeSubscriptionParams struct {
+	StripeSubscriptionID     string
+	StripeBillingCycleAnchor pgtype.Timestamptz
+	BillingCycleAnchorDay    int32
+	OrganizationID           string
+	StripeCustomerID         string
+}
+
+func (q *Queries) AdminSetStripeSubscription(ctx context.Context, arg AdminSetStripeSubscriptionParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminSetStripeSubscription,
+		arg.StripeSubscriptionID,
+		arg.StripeBillingCycleAnchor,
+		arg.BillingCycleAnchorDay,
+		arg.OrganizationID,
+		arg.StripeCustomerID,
+	)
 	var organization_id string
 	err := row.Scan(&organization_id)
 	return organization_id, err
@@ -930,6 +2621,72 @@ type AdminUpdateOrganizationParams struct {
 func (q *Queries) AdminUpdateOrganization(ctx context.Context, arg AdminUpdateOrganizationParams) error {
 	_, err := q.db.Exec(ctx, adminUpdateOrganization, arg.AccountType, arg.Whitelisted, arg.ID)
 	return err
+}
+
+const adminUserSessionStats = `-- name: AdminUserSessionStats :one
+SELECT
+    count(DISTINCT subject_urn) FILTER (WHERE subject_urn LIKE 'user:%')::bigint AS distinct_subjects_ever,
+    count(DISTINCT subject_urn) FILTER (WHERE subject_urn LIKE 'user:%' AND created_at >= $1)::bigint AS distinct_subjects_in_window,
+    min(created_at)::timestamptz AS first_issued_at,
+    max(created_at)::timestamptz AS last_issued_at,
+    count(*) FILTER (WHERE deleted IS FALSE AND refresh_expires_at > clock_timestamp())::bigint AS live
+FROM user_sessions
+WHERE user_session_issuer_id = $2
+`
+
+type AdminUserSessionStatsParams struct {
+	WindowStart         pgtype.Timestamptz
+	UserSessionIssuerID uuid.UUID
+}
+
+type AdminUserSessionStatsRow struct {
+	DistinctSubjectsEver     int64
+	DistinctSubjectsInWindow int64
+	FirstIssuedAt            pgtype.Timestamptz
+	LastIssuedAt             pgtype.Timestamptz
+	Live                     int64
+}
+
+// A refresh soft-deletes a session row and inserts a new one, so
+// last_issued_at includes refreshes.
+func (q *Queries) AdminUserSessionStats(ctx context.Context, arg AdminUserSessionStatsParams) (AdminUserSessionStatsRow, error) {
+	row := q.db.QueryRow(ctx, adminUserSessionStats, arg.WindowStart, arg.UserSessionIssuerID)
+	var i AdminUserSessionStatsRow
+	err := row.Scan(
+		&i.DistinctSubjectsEver,
+		&i.DistinctSubjectsInWindow,
+		&i.FirstIssuedAt,
+		&i.LastIssuedAt,
+		&i.Live,
+	)
+	return i, err
+}
+
+const createSignupOffer = `-- name: CreateSignupOffer :one
+INSERT INTO signup_offers (name, stripe_promotion_code_id, signup_flow)
+VALUES ($1, $2, $3)
+RETURNING created_at, updated_at, name, stripe_promotion_code_id, signup_flow, id, enabled
+`
+
+type CreateSignupOfferParams struct {
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
+}
+
+func (q *Queries) CreateSignupOffer(ctx context.Context, arg CreateSignupOfferParams) (SignupOffer, error) {
+	row := q.db.QueryRow(ctx, createSignupOffer, arg.Name, arg.StripePromotionCodeID, arg.SignupFlow)
+	var i SignupOffer
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.StripePromotionCodeID,
+		&i.SignupFlow,
+		&i.ID,
+		&i.Enabled,
+	)
+	return i, err
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
@@ -970,6 +2727,38 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (GetProject
 	return i, err
 }
 
+const listSignupOffers = `-- name: ListSignupOffers :many
+SELECT created_at, updated_at, name, stripe_promotion_code_id, signup_flow, id, enabled FROM signup_offers ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListSignupOffers(ctx context.Context) ([]SignupOffer, error) {
+	rows, err := q.db.Query(ctx, listSignupOffers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SignupOffer
+	for rows.Next() {
+		var i SignupOffer
+		if err := rows.Scan(
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Name,
+			&i.StripePromotionCodeID,
+			&i.SignupFlow,
+			&i.ID,
+			&i.Enabled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockEnterpriseTrialInOrganizations = `-- name: LockEnterpriseTrialInOrganizations :one
 SELECT organization_id
 FROM trials
@@ -987,6 +2776,33 @@ func (q *Queries) LockEnterpriseTrialInOrganizations(ctx context.Context, ids []
 	return organization_id, err
 }
 
+const lockOrganizationAccess = `-- name: LockOrganizationAccess :one
+SELECT id, name, slug, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+type LockOrganizationAccessRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt pgtype.Timestamptz
+}
+
+// Pin canonical identity and current access state before a guarded transition.
+func (q *Queries) LockOrganizationAccess(ctx context.Context, id string) (LockOrganizationAccessRow, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationAccess, id)
+	var i LockOrganizationAccessRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const lockOrganizationMetadata = `-- name: LockOrganizationMetadata :one
 SELECT id
 FROM organization_metadata
@@ -1001,6 +2817,39 @@ func (q *Queries) LockOrganizationMetadata(ctx context.Context, id string) (stri
 	var id_2 string
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const lockOrganizationWhitelist = `-- name: LockOrganizationWhitelist :one
+SELECT id, name, slug, whitelisted, gram_account_type, disabled_at, updated_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+type LockOrganizationWhitelistRow struct {
+	ID              string
+	Name            string
+	Slug            string
+	Whitelisted     bool
+	GramAccountType string
+	DisabledAt      pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+// Pin the exact target and account context shown by whitelist approval.
+func (q *Queries) LockOrganizationWhitelist(ctx context.Context, id string) (LockOrganizationWhitelistRow, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationWhitelist, id)
+	var i LockOrganizationWhitelistRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Whitelisted,
+		&i.GramAccountType,
+		&i.DisabledAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const lockSupportMatrix = `-- name: LockSupportMatrix :exec
@@ -1048,6 +2897,32 @@ func (q *Queries) ReadSupportMatrix(ctx context.Context) ([]byte, error) {
 	return snapshot, err
 }
 
+const rejectOrganizationEntitlementsFixture = `-- name: RejectOrganizationEntitlementsFixture :exec
+ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK (false) NOT VALID
+`
+
+func (q *Queries) RejectOrganizationEntitlementsFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rejectOrganizationEntitlementsFixture)
+	return err
+}
+
+const retireSupportPlans = `-- name: RetireSupportPlans :exec
+UPDATE support_matrix_plans
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE deleted_at IS NULL
+  AND slug NOT IN (
+    SELECT value->>'id'
+    FROM jsonb_array_elements($1::jsonb->'plans')
+  )
+`
+
+// An organization that declared a retired plan keeps its vendor and loses the
+// plan: the stack reads plans through deleted_at IS NULL.
+func (q *Queries) RetireSupportPlans(ctx context.Context, catalog []byte) error {
+	_, err := q.db.Exec(ctx, retireSupportPlans, catalog)
+	return err
+}
+
 const seedSupportCapabilities = `-- name: SeedSupportCapabilities :exec
 INSERT INTO support_matrix_capabilities (slug, name, category, sort_order)
 SELECT value->>'id', value->>'name', value->>'group', ordinality::integer
@@ -1072,13 +2947,50 @@ func (q *Queries) SeedSupportMethods(ctx context.Context, catalog []byte) error 
 	return err
 }
 
+const seedSupportPlans = `-- name: SeedSupportPlans :exec
+INSERT INTO support_matrix_plans (slug, vendor, name, sort_order)
+SELECT value->>'id', value->>'vendor', value->>'name', ordinality::integer
+FROM jsonb_array_elements($1::jsonb->'plans') WITH ORDINALITY
+ON CONFLICT (slug) DO UPDATE SET
+    vendor = EXCLUDED.vendor,
+    name = EXCLUDED.name,
+    sort_order = EXCLUDED.sort_order,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE support_matrix_plans.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_plans.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_plans.sort_order IS DISTINCT FROM EXCLUDED.sort_order
+   OR support_matrix_plans.deleted_at IS NOT NULL
+`
+
+// The catalog owns plans outright: a plan it names is (re)instated with the
+// catalog's vendor, name and order, and RetireSupportPlans below soft-deletes
+// the ones it no longer names.
+func (q *Queries) SeedSupportPlans(ctx context.Context, catalog []byte) error {
+	_, err := q.db.Exec(ctx, seedSupportPlans, catalog)
+	return err
+}
+
 const seedSupportPlatforms = `-- name: SeedSupportPlatforms :exec
 INSERT INTO support_matrix_platforms (slug, name, vendor, family, surface, sort_order)
 SELECT value->>'id', value->>'name', value->>'vendor', value->>'family', value->>'surface', ordinality::integer
 FROM jsonb_array_elements($1::jsonb->'products') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    family = EXCLUDED.family,
+    surface = EXCLUDED.surface,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp()
+WHERE support_matrix_platforms.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_platforms.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_platforms.family IS DISTINCT FROM EXCLUDED.family
+   OR support_matrix_platforms.surface IS DISTINCT FROM EXCLUDED.surface
+   OR support_matrix_platforms.sort_order IS DISTINCT FROM EXCLUDED.sort_order
 `
 
+// The catalog owns a platform's name, vendor, family, surface and order, so
+// those follow the file on every start; staff edit facts, not platforms.
 func (q *Queries) SeedSupportPlatforms(ctx context.Context, catalog []byte) error {
 	_, err := q.db.Exec(ctx, seedSupportPlatforms, catalog)
 	return err
@@ -1097,6 +3009,103 @@ ON CONFLICT (integration_method_id, capability_id) DO NOTHING
 func (q *Queries) SeedSupportReferences(ctx context.Context, catalog []byte) error {
 	_, err := q.db.Exec(ctx, seedSupportReferences, catalog)
 	return err
+}
+
+const setOrganizationAccess = `-- name: SetOrganizationAccess :one
+UPDATE organization_metadata
+SET disabled_at = CASE
+        WHEN $1::boolean THEN NULL
+        ELSE COALESCE(disabled_at, clock_timestamp())
+    END,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND disabled_at IS NOT DISTINCT FROM $3::timestamptz
+RETURNING id, name, slug, disabled_at
+`
+
+type SetOrganizationAccessParams struct {
+	Enabled            bool
+	ID                 string
+	ExpectedDisabledAt pgtype.Timestamptz
+}
+
+type SetOrganizationAccessRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt pgtype.Timestamptz
+}
+
+// Caller holds the metadata lock. Preserve disable timestamp semantics and the
+// WorkOS webhook cursor while checking that the expected state still matches.
+func (q *Queries) SetOrganizationAccess(ctx context.Context, arg SetOrganizationAccessParams) (SetOrganizationAccessRow, error) {
+	row := q.db.QueryRow(ctx, setOrganizationAccess, arg.Enabled, arg.ID, arg.ExpectedDisabledAt)
+	var i SetOrganizationAccessRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const setOrganizationWhitelist = `-- name: SetOrganizationWhitelist :one
+UPDATE organization_metadata
+SET whitelisted = $1::boolean,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND whitelisted = $3::boolean
+RETURNING whitelisted
+`
+
+type SetOrganizationWhitelistParams struct {
+	Whitelisted         bool
+	ID                  string
+	ExpectedWhitelisted bool
+}
+
+// Only the demo-access gate changes; other account and lifecycle fields survive.
+func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizationWhitelistParams) (bool, error) {
+	row := q.db.QueryRow(ctx, setOrganizationWhitelist, arg.Whitelisted, arg.ID, arg.ExpectedWhitelisted)
+	var whitelisted bool
+	err := row.Scan(&whitelisted)
+	return whitelisted, err
+}
+
+const updateSignupOffer = `-- name: UpdateSignupOffer :one
+UPDATE signup_offers SET name = $1, stripe_promotion_code_id = $2,
+ signup_flow = $3, enabled = $4, updated_at = clock_timestamp()
+WHERE id = $5 RETURNING created_at, updated_at, name, stripe_promotion_code_id, signup_flow, id, enabled
+`
+
+type UpdateSignupOfferParams struct {
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
+	Enabled               bool
+	ID                    uuid.UUID
+}
+
+func (q *Queries) UpdateSignupOffer(ctx context.Context, arg UpdateSignupOfferParams) (SignupOffer, error) {
+	row := q.db.QueryRow(ctx, updateSignupOffer,
+		arg.Name,
+		arg.StripePromotionCodeID,
+		arg.SignupFlow,
+		arg.Enabled,
+		arg.ID,
+	)
+	var i SignupOffer
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.StripePromotionCodeID,
+		&i.SignupFlow,
+		&i.ID,
+		&i.Enabled,
+	)
+	return i, err
 }
 
 const upsertSupportCoverage = `-- name: UpsertSupportCoverage :exec

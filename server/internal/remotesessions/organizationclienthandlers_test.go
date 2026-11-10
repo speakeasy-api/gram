@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -153,6 +154,33 @@ func TestDeleteClient(t *testing.T) {
 		ApikeyToken:  nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+
+	bindings, err := testrepo.New(ti.conn).CountRemoteSessionClientBindingsFixture(ctx, uuid.MustParse(clientID))
+	require.NoError(t, err)
+	require.Zero(t, bindings, "a deleted client keeps no user session issuer binding")
+}
+
+// A server that took its upstream issuer from the deleted client no longer
+// names it once the delete commits.
+func TestDeleteClient_RederivesServersOnItsIssuers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-derive-issuer", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-derive-usi")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "admin-derive-server")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-derive-client")
+	stampIssuer(t, ctx, ti.conn, projectID, serverID, uuid.MustParse(issuerID))
+
+	require.NoError(t, ti.service.DeleteClient(ctx, &orgclientsgen.DeleteClientPayload{
+		ID:           clientID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	}))
+
+	require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 }
 
 // TestDeleteClient_RBACForbidden proves a write requires org:admin; org:read
@@ -229,6 +257,68 @@ func TestUpdateClient(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Nil(t, recleared.Audience)
+}
+
+func TestUpdateClient_ForwardClientName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-forward-name-issuer", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-forward-name-usi")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-forward-name-client")
+
+	on, off := true, false
+	updated, err := ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: clientID, ForwardClientName: &on})
+	require.NoError(t, err)
+	require.True(t, updated.ForwardClientName)
+
+	updated, err = ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: clientID})
+	require.NoError(t, err)
+	require.True(t, updated.ForwardClientName, "omitted leaves it unchanged")
+
+	updated, err = ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: clientID, ForwardClientName: &off})
+	require.NoError(t, err)
+	require.False(t, updated.ForwardClientName)
+}
+
+func TestUpdateClient_LegacyCallbackURLRequiresPlatformAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-legacycb-issuer", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-legacycb-usi")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-legacycb-client")
+
+	legacy := func(enabled bool) *orgclientsgen.UpdateClientPayload {
+		return &orgclientsgen.UpdateClientPayload{
+			SessionToken:      nil,
+			ApikeyToken:       nil,
+			ID:                clientID,
+			LegacyCallbackURL: &enabled,
+		}
+	}
+
+	_, err := ti.service.UpdateClient(ctx, legacy(true))
+	requireOopsCode(t, err, oops.CodeForbidden)
+	unchanged, err := ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{SessionToken: nil, ApikeyToken: nil, ID: clientID})
+	require.NoError(t, err)
+	require.False(t, unchanged.LegacyCallbackURL, "a refused update must not change the flag")
+
+	adminCtx := withAdmin(t, ctx)
+	enabled, err := ti.service.UpdateClient(adminCtx, legacy(true))
+	require.NoError(t, err)
+	require.True(t, enabled.LegacyCallbackURL)
+
+	// An update that omits the field leaves compatibility mode alone.
+	audience := "https://api.example.com"
+	kept, err := ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{SessionToken: nil, ApikeyToken: nil, ID: clientID, Audience: &audience})
+	require.NoError(t, err)
+	require.True(t, kept.LegacyCallbackURL)
+
+	migrated, err := ti.service.UpdateClient(adminCtx, legacy(false))
+	require.NoError(t, err)
+	require.False(t, migrated.LegacyCallbackURL)
 }
 
 func TestUpdateClientRejectsInvalidIdentityProviderConfiguration(t *testing.T) {
@@ -412,6 +502,30 @@ func TestRemoveClientFromMcpServer_NotAttached(t *testing.T) {
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// A server that took its upstream issuer from the removed binding no longer
+// names it once the removal commits.
+func TestRemoveClientFromMcpServer_RederivesServersOnTheIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-detach-derive-issuer", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-detach-derive-usi")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "admin-detach-derive-server")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-detach-derive-client")
+	stampIssuer(t, ctx, ti.conn, projectID, serverID, uuid.MustParse(issuerID))
+
+	require.NoError(t, ti.service.RemoveClientFromMcpServer(ctx, &orgclientsgen.RemoveClientFromMcpServerPayload{
+		ClientID:     clientID,
+		McpServerID:  serverID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	}))
+
+	require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 }
 
 // TestRemoveClientFromMcpServer_CrossOrgNotFound proves an MCP server owned by
@@ -722,4 +836,73 @@ func TestOrgAdmin_ManagesTenantClientOnPlatformIssuer(t *testing.T) {
 		ApikeyToken:  nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// TestDeleteClient_StopsItsServersOfferingIt proves the two models move
+// together: removing the registration a server reached also stops the server
+// offering the client derived from it.
+func TestDeleteClient_StopsItsServersOfferingIt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-typed-issuer", "")
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "admin-typed-usi")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-typed-client")
+	parsedClientID, err := uuid.Parse(clientID)
+	require.NoError(t, err)
+
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "admin-typed-server")
+	associate(t, ctx, ti.conn, orgID, projectID, serverID, parsedClientID)
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"the association must be offered through a link to retire")
+
+	require.NoError(t, ti.service.DeleteClient(ctx, &orgclientsgen.DeleteClientPayload{
+		ID:           clientID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	}))
+
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"deleting the registration stops the server offering it")
+}
+
+// TestRemoveClientFromMcpServer_StopsServerOfferingIt proves the same for the
+// per-server removal on the organization's provider page.
+func TestRemoveClientFromMcpServer_StopsServerOfferingIt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-remove-issuer", "")
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "admin-remove-usi")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-remove-client")
+	parsedClientID, err := uuid.Parse(clientID)
+	require.NoError(t, err)
+
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "admin-remove-server")
+	associate(t, ctx, ti.conn, orgID, projectID, serverID, parsedClientID)
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, serverID))
+
+	require.NoError(t, ti.service.RemoveClientFromMcpServer(ctx, &orgclientsgen.RemoveClientFromMcpServerPayload{
+		ClientID:     clientID,
+		McpServerID:  serverID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	}))
+
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"removing the client from the server retires the link derived from it")
 }

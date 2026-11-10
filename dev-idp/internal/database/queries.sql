@@ -66,7 +66,7 @@ RETURNING *;
 
 -- GetOrganizationByWorkosID looks up an organization by its workos_id
 -- text field. Used by mock-workos handlers to resolve external org IDs
--- (e.g. Gram KSUIDs like "org_01KMD...") to the internal dev-idp org.
+-- (e.g. Speakeasy KSUIDs like "org_01KMD...") to the internal dev-idp org.
 -- name: GetOrganizationByWorkosID :one
 SELECT * FROM organizations WHERE workos_id = @workos_id;
 
@@ -106,7 +106,7 @@ LIMIT @max_rows;
 
 -- ListMembershipsWithOrgName joins memberships with organizations so the
 -- WorkOS-shaped response can include `organization_name` and the external
--- `workos_id` (the WorkOS-style org ID that Gram stores in
+-- `workos_id` (the WorkOS-style org ID that Speakeasy stores in
 -- organization_metadata.workos_id).
 -- name: ListMembershipsWithOrgName :many
 SELECT
@@ -237,6 +237,73 @@ RETURNING *;
 -- name: DeleteOrganizationRole :exec
 DELETE FROM organization_roles
 WHERE organization_id = @organization_id AND slug = @slug;
+
+-- =============================================================================
+-- WorkOS emulation: directory sync
+-- =============================================================================
+
+-- name: CountDirectoryGroups :one
+SELECT COUNT(*) FROM directory_groups WHERE organization_id = @organization_id;
+
+-- name: InsertDirectoryGroup :exec
+INSERT OR IGNORE INTO directory_groups (id, organization_id, name)
+VALUES (@id, @organization_id, @name);
+
+-- name: InsertDirectoryUser :exec
+INSERT OR IGNORE INTO directory_users (
+  id, organization_id, email, first_name, last_name, job_title, custom_attributes
+) VALUES (
+  @id, @organization_id, @email, @first_name, @last_name, @job_title, @custom_attributes
+);
+
+-- InsertDirectoryGroupMember only links a group and a user that both belong
+-- to the given org, so a membership can never span two orgs.
+-- name: InsertDirectoryGroupMember :exec
+INSERT OR IGNORE INTO directory_group_members (group_id, user_id)
+SELECT g.id, u.id
+FROM directory_groups g
+JOIN directory_users u ON u.organization_id = g.organization_id
+WHERE g.id = @group_id
+  AND u.id = @user_id
+  AND g.organization_id = @organization_id;
+
+-- name: GetDirectoryGroup :one
+SELECT * FROM directory_groups WHERE id = @id;
+
+-- name: GetDirectoryUser :one
+SELECT * FROM directory_users WHERE id = @id;
+
+-- ListDirectoryGroups keyset-paginates an org's groups, optionally narrowed
+-- to the groups a directory user belongs to.
+-- name: ListDirectoryGroups :many
+SELECT g.* FROM directory_groups g
+WHERE g.organization_id = @organization_id
+  AND g.id > @after
+  AND (
+    sqlc.narg('user_id') IS NULL
+    OR EXISTS (
+      SELECT 1 FROM directory_group_members m
+      WHERE m.group_id = g.id AND m.user_id = sqlc.narg('user_id')
+    )
+  )
+ORDER BY g.id ASC
+LIMIT @max_rows;
+
+-- ListDirectoryUsers keyset-paginates an org's directory users, optionally
+-- narrowed to the members of one group.
+-- name: ListDirectoryUsers :many
+SELECT u.* FROM directory_users u
+WHERE u.organization_id = @organization_id
+  AND u.id > @after
+  AND (
+    sqlc.narg('group_id') IS NULL
+    OR EXISTS (
+      SELECT 1 FROM directory_group_members m
+      WHERE m.user_id = u.id AND m.group_id = sqlc.narg('group_id')
+    )
+  )
+ORDER BY u.id ASC
+LIMIT @max_rows;
 
 -- =============================================================================
 -- users

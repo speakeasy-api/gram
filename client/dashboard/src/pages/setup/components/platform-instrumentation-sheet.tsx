@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Ban, ChevronRight } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
-import { AGENT_PLATFORMS } from "../setup-data";
+import { getAgentPlatforms, platformSteps } from "../setup-data";
 import type { AgentPlatform } from "../types";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
 import { usePlatformApiKeys } from "./platform-setup-values";
@@ -18,15 +18,23 @@ import { usePlatformApiKeys } from "./platform-setup-values";
 interface PlatformInstrumentationSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The platforms to offer; the setup platforms when omitted. */
+  platforms?: AgentPlatform[];
+  /** Opens straight on this platform's steps instead of the picker. */
+  initialPlatformId?: string | null;
 }
 
-// Instrumentation instructions for one agent platform at a time, opened from
-// a surface that has no platform in hand — so the sheet's first step is always
+// Instructions for one agent platform at a time. Step 1 is the picker: a
+// surface with no platform in hand opens there, and one that already has the
+// reader's pick (the Organization Gateway's agent list) passes
+// initialPlatformId to open on that platform's steps, with Back returning to
 // the picker. The setup card sections instead lay a single platform's steps
 // out inline with PlatformSetupFlow.
 export function PlatformInstrumentationSheet({
   open,
   onOpenChange,
+  platforms,
+  initialPlatformId = null,
 }: PlatformInstrumentationSheetProps): JSX.Element {
   const [pickedPlatformId, setPickedPlatformId] = useState<string | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState<
@@ -35,18 +43,32 @@ export function PlatformInstrumentationSheet({
   const [eligibility, setEligibility] = useState<Record<string, boolean>>({});
   const apiKeys = usePlatformApiKeys();
 
+  const agentPlatforms = useMemo(
+    () => platforms ?? getAgentPlatforms(),
+    [platforms],
+  );
   const activePlatform =
-    AGENT_PLATFORMS.find((p) => p.id === pickedPlatformId) ?? null;
-  const availablePlatforms = AGENT_PLATFORMS.filter(
+    agentPlatforms.find((p) => p.id === pickedPlatformId) ?? null;
+  const availablePlatforms = agentPlatforms.filter(
     (p) => p.available !== false,
   );
 
   const gate = activePlatform?.setupSteps[0]?.eligibility;
-  const gated = !!gate && eligibility[activePlatform!.id] !== true;
+  const gated = !!gate && eligibility[activePlatform!.id] === undefined;
+  // "No" to the plan check swaps in the per-user steps for personal plans.
+  const steps = activePlatform
+    ? platformSteps(activePlatform, eligibility[activePlatform.id])
+    : [];
 
   // Mint the key the snippets need as soon as a platform is picked, unless its
   // first step still has to establish the org qualifies. Guarded by a ref so a
   // failed mint isn't retried on every render.
+  // Opened from a platform the reader already picked on the page. A layout
+  // effect, so the picker never paints first.
+  useLayoutEffect(() => {
+    if (open && initialPlatformId) setPickedPlatformId(initialPlatformId);
+  }, [open, initialPlatformId]);
+
   const { ensure } = apiKeys;
   const initializedPlatform = useRef<string | null>(null);
   useEffect(() => {
@@ -69,7 +91,7 @@ export function PlatformInstrumentationSheet({
 
   const advanceStep = (platform: AgentPlatform) => {
     const currentIdx = activeStepIndex[platform.id] ?? 0;
-    if (currentIdx < platform.setupSteps.length - 1) {
+    if (currentIdx < steps.length - 1) {
       setActiveStepIndex((prev) => ({
         ...prev,
         [platform.id]: currentIdx + 1,
@@ -97,8 +119,7 @@ export function PlatformInstrumentationSheet({
   const currentStepIdx = activePlatform
     ? (activeStepIndex[activePlatform.id] ?? 0)
     : 0;
-  const totalSteps =
-    PICKER_OFFSET + Math.max(activePlatform?.setupSteps.length ?? 0, 1);
+  const totalSteps = PICKER_OFFSET + Math.max(steps.length, 1);
   const overallStepIndex = !activePlatform ? 0 : PICKER_OFFSET + currentStepIdx;
 
   const goToDot = (idx: number) => {
@@ -165,40 +186,8 @@ export function PlatformInstrumentationSheet({
   const renderPlatformSteps = () => {
     if (!activePlatform) return null;
 
-    const blocked = eligibility[activePlatform.id] === false ? gate : undefined;
-    if (blocked) {
-      return (
-        <>
-          <SheetHeader className="sr-only">
-            <SheetTitle>Set up {activePlatform.name}</SheetTitle>
-            <SheetDescription>{activePlatform.description}</SheetDescription>
-          </SheetHeader>
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 pb-6 text-center">
-            <div className="bg-destructive/10 text-destructive flex h-12 w-12 items-center justify-center rounded-full">
-              <Ban className="h-6 w-6" />
-            </div>
-            <h4 className="text-foreground text-base font-medium">
-              {blocked.blockedTitle}
-            </h4>
-            <p className="text-muted-foreground max-w-sm text-sm leading-relaxed">
-              {blocked.blockedDescription}
-            </p>
-          </div>
-          <div className="border-border flex items-center justify-end border-t px-6 py-4">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => onOpenChange(false)}
-            >
-              <Button.Text>Close</Button.Text>
-            </Button>
-          </div>
-        </>
-      );
-    }
-
-    const stepCount = activePlatform.setupSteps.length;
-    const currentStep = activePlatform.setupSteps[currentStepIdx];
+    const stepCount = steps.length;
+    const currentStep = steps[currentStepIdx];
     const isLastStep = currentStepIdx === stepCount - 1;
 
     return (
@@ -213,7 +202,7 @@ export function PlatformInstrumentationSheet({
             className="flex h-full transition-transform duration-300 ease-in-out"
             style={{ transform: `translateX(-${currentStepIdx * 100}%)` }}
           >
-            {activePlatform.setupSteps.map((step, idx) => (
+            {steps.map((step, idx) => (
               <div
                 key={step.title}
                 className="w-full shrink-0 overflow-y-auto px-6 pb-4"
@@ -225,15 +214,19 @@ export function PlatformInstrumentationSheet({
                   apiKeyPending={apiKeys.pending[activePlatform.id]}
                   apiKeyError={apiKeys.errors[activePlatform.id]}
                   onRetryApiKey={() => ensure(activePlatform)}
+                  eligibleAnswer={eligibility[activePlatform.id]}
                   onEligibilityAnswer={(answer) => {
                     setEligibility((prev) => ({
                       ...prev,
                       [activePlatform.id]: answer,
                     }));
-                    if (answer) {
-                      ensure(activePlatform);
-                      advanceStep(activePlatform);
-                    }
+                    // Set the index directly: advanceStep would read the steps
+                    // from before this answer swapped them.
+                    ensure(activePlatform);
+                    setActiveStepIndex((prev) => ({
+                      ...prev,
+                      [activePlatform.id]: 1,
+                    }));
                   }}
                 />
               </div>

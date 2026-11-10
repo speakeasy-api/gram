@@ -26,3 +26,6 @@ jspm_packages/
 *.tsbuildinfo
 dist
 !/src/bin
+
+# Copied from cli/internal/functions/templates at build time
+/templates

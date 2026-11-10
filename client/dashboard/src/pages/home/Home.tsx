@@ -36,21 +36,27 @@ export default function Home(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope="project:read" level="page">
+        <RequireScope scope="project:read" resourceId={projectId} level="page">
           {/* Full content width so the widget lines up with the dashboard
               below (the /chat page centers it; the home page does not). The
               compact variant drops pinned/recents — history lives on /chat. */}
-          <div className="w-full pt-2 pb-6">
-            <div
-              className={cn(
-                BRAND_MESH_SURFACE_CLASS,
-                "border-border z-10 border p-8",
-              )}
-            >
-              <BrandMeshLayers />
-              <ChatLanding compact />
+          <RequireScope
+            scope="assistant:read"
+            projectId={projectId}
+            level="section"
+          >
+            <div className="w-full pt-2 pb-6">
+              <div
+                className={cn(
+                  BRAND_MESH_SURFACE_CLASS,
+                  "border-border z-10 border p-8",
+                )}
+              >
+                <BrandMeshLayers />
+                <ChatLanding compact />
+              </div>
             </div>
-          </div>
+          </RequireScope>
           <ProjectDashboard />
         </RequireScope>
       </Page.Body>

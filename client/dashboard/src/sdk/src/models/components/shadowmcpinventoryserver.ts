@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -33,7 +34,7 @@ export const Access = {
 /**
  * Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.
  */
-export type Access = ClosedEnum<typeof Access>;
+export type Access = OpenEnum<typeof Access>;
 
 /**
  * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
@@ -45,7 +46,7 @@ export const TargetKind = {
 /**
  * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
  */
-export type TargetKind = ClosedEnum<typeof TargetKind>;
+export type TargetKind = OpenEnum<typeof TargetKind>;
 
 export type ShadowMCPInventoryServer = {
   /**
@@ -90,13 +91,12 @@ export type ShadowMCPInventoryServer = {
 };
 
 /** @internal */
-export const Access$inboundSchema: z.ZodMiniEnum<typeof Access> = z.enum(
-  Access,
-);
+export const Access$inboundSchema: z.ZodMiniType<Access, unknown> = openEnums
+  .inboundSchema(Access);
 
 /** @internal */
-export const TargetKind$inboundSchema: z.ZodMiniEnum<typeof TargetKind> = z
-  .enum(TargetKind);
+export const TargetKind$inboundSchema: z.ZodMiniType<TargetKind, unknown> =
+  openEnums.inboundSchema(TargetKind);
 
 /** @internal */
 export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<

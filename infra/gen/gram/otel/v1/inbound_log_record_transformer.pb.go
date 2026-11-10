@@ -70,11 +70,10 @@ var File_gram_otel_v1_inbound_log_record_transformer_proto protoreflect.FileDesc
 
 const file_gram_otel_v1_inbound_log_record_transformer_proto_rawDesc = "" +
 	"\n" +
-	"1gram/otel/v1/inbound_log_record_transformer.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\\\n" +
-	"\x1bInboundLogRecordTransformer:=\x92\xb5\x189\x12\x04\b\x80\xf5$\x18\x00\"\x02\b<2\b\n" +
+	"1gram/otel/v1/inbound_log_record_transformer.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"X\n" +
+	"\x1bInboundLogRecordTransformer:9\x92\xb5\x185\x12\x04\b\x80\xf5$\x18\x00\"\x02\b<2\b\n" +
 	"\x02\b\n" +
-	"\x12\x02\b<J\x02\x10\n" +
-	"R\x1dgram.otel.v1.InboundLogRecordB=Z;github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1b\beditionsp\xe9\a"
+	"\x12\x02\b<R\x1dgram.otel.v1.InboundLogRecordB=Z;github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1b\beditionsp\xe9\a"
 
 var file_gram_otel_v1_inbound_log_record_transformer_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_otel_v1_inbound_log_record_transformer_proto_goTypes = []any{

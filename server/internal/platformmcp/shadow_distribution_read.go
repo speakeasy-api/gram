@@ -28,7 +28,6 @@ const (
 
 type DistributionAdmission struct {
 	State                 string                          `json:"state"`
-	Mode                  string                          `json:"mode,omitempty"`
 	MissingAudienceCounts admission.MissingAudienceCounts `json:"missing_audience_counts"`
 	CheckedAt             string                          `json:"checked_at"`
 	Complete              bool                            `json:"complete"`
@@ -46,19 +45,17 @@ type distributionAdmissionReader interface {
 }
 
 type ShadowDistributionReadService struct {
-	logger        *slog.Logger
-	db            *pgxpool.Pool
-	guard         *admission.Guard
-	organizations OrganizationSlugResolver
-	now           func() time.Time
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	now    func() time.Time
 }
 
-func NewShadowDistributionReadService(logger *slog.Logger, db *pgxpool.Pool, guard *admission.Guard, organizations OrganizationSlugResolver) *ShadowDistributionReadService {
-	return &ShadowDistributionReadService{logger: logger, db: db, guard: guard, organizations: organizations, now: time.Now}
+func NewShadowDistributionReadService(logger *slog.Logger, db *pgxpool.Pool) *ShadowDistributionReadService {
+	return &ShadowDistributionReadService{logger: logger, db: db, now: time.Now}
 }
 
 func (s *ShadowDistributionReadService) valid() bool {
-	return s != nil && s.logger != nil && s.db != nil && s.guard != nil && s.organizations != nil && s.now != nil
+	return s != nil && s.logger != nil && s.db != nil && s.now != nil
 }
 
 func (s *ShadowDistributionReadService) ForPlugin(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) DistributionAdmission {
@@ -92,6 +89,10 @@ func (s *ShadowDistributionReadService) NotApplicable(ctx context.Context, organ
 	})
 }
 
+// targetCandidatePageSize is how many direct-remote candidates ForTarget reads
+// per query.
+const targetCandidatePageSize = 100
+
 func (s *ShadowDistributionReadService) ForTarget(ctx context.Context, organizationID string, projectID uuid.UUID, targetURL string) DistributionAdmission {
 	canonical, ok := shadowmcp.CanonicalizeInventoryURL(targetURL)
 	if !ok {
@@ -99,12 +100,18 @@ func (s *ShadowDistributionReadService) ForTarget(ctx context.Context, organizat
 	}
 	return s.read(ctx, organizationID, projectID, DistributionAdmissionNotDistributed, func(ctx context.Context, tx pgx.Tx) ([]distributionAdmissionTarget, error) {
 		q := platformrepo.New(tx)
-		candidates, err := q.ListDirectRemoteAdmissionTargetCandidates(ctx, platformrepo.ListDirectRemoteAdmissionTargetCandidatesParams{OrganizationID: organizationID, ProjectID: projectID})
-		if err != nil {
-			return nil, fmt.Errorf("list target distribution candidates: %w", err)
-		}
-		if len(candidates) > 100 {
-			return nil, fmt.Errorf("target distribution candidates are incomplete")
+		var candidates []platformrepo.ListDirectRemoteAdmissionTargetCandidatesRow
+		after := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		for {
+			page, err := q.ListDirectRemoteAdmissionTargetCandidates(ctx, platformrepo.ListDirectRemoteAdmissionTargetCandidatesParams{OrganizationID: organizationID, ProjectID: projectID, AfterMcpServerID: after, PageLimit: targetCandidatePageSize})
+			if err != nil {
+				return nil, fmt.Errorf("list target distribution candidates: %w", err)
+			}
+			candidates = append(candidates, page...)
+			if len(page) < targetCandidatePageSize {
+				break
+			}
+			after = uuid.NullUUID{UUID: page[len(page)-1].McpServerID, Valid: true}
 		}
 
 		result := make([]distributionAdmissionTarget, 0, len(candidates))
@@ -145,17 +152,6 @@ func (s *ShadowDistributionReadService) read(ctx context.Context, organizationID
 	if !s.valid() || organizationID == "" || projectID == uuid.Nil {
 		return result
 	}
-	organizationSlug, err := s.organizations.OrganizationSlug(ctx, organizationID)
-	if err != nil || organizationSlug == "" {
-		s.warn(ctx, "resolve organization slug", err)
-		return result
-	}
-	rollout, err := s.guard.ResolveProject(ctx, s.db, organizationID, organizationSlug, projectID)
-	if err != nil {
-		s.warn(ctx, "resolve rollout mode", err)
-		return result
-	}
-	result.Mode = string(rollout.Mode)
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		s.warn(ctx, "begin snapshot", err)
@@ -229,7 +225,7 @@ func unavailableDistributionAdmission(now func() time.Time) DistributionAdmissio
 	if now != nil {
 		checkedAt = now().UTC().Format(time.RFC3339Nano)
 	}
-	return DistributionAdmission{State: DistributionAdmissionUnavailable, Mode: "", MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: checkedAt, Complete: false}
+	return DistributionAdmission{State: DistributionAdmissionUnavailable, MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: checkedAt, Complete: false}
 }
 
 func aggregateAdmissionState(current, next admission.State) admission.State {

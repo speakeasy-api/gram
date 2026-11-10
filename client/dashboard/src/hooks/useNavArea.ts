@@ -7,16 +7,15 @@ export type NavArea =
   | "Security and Policy"
   | "Organization";
 
-// First path segment after /projects/:slug/ → sidebar area. Kept as a plain
-// slug map (rather than deriving from useRoutes) so consumers stay light —
-// routes.tsx imports every page component, which drags the whole app graph
-// into any test that renders a component using this hook.
+// First path segment after /projects/:slug/ → sidebar area.
 const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   // Observability
   costs: "Observability",
   explore: "Observability",
+  dashboards: "Observability",
   insights: "Observability",
   "agent-sessions": "Observability",
+  "signals-intelligence": "Observability",
   "org-memory": "Observability",
   logs: "Observability",
   // Identity
@@ -26,7 +25,6 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "remote-identity-providers": "Identity",
   // Security and Policy
   watchdog: "Security and Policy",
-  "risk-overview": "Security and Policy",
   "risk-policies": "Security and Policy",
   "risk-events": "Security and Policy",
   "shadow-mcp": "Security and Policy",

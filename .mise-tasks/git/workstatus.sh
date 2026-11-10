@@ -58,6 +58,15 @@ boot_state() {
     fi
 }
 
+# `wt list` builds its URL from the per-branch `siteport` var, which a plain
+# `git checkout` inside the worktree leaves behind (falling back to :5173). The
+# port belongs to the worktree: `zero:remap-ports` writes it to mise.local.toml
+# and the parker listens on it. Echoes the port, or nothing.
+site_port() {
+    sed -n 's/^[[:space:]]*GRAM_SITE_PORT[[:space:]]*=[[:space:]]*"\{0,1\}\([0-9][0-9]*\).*/\1/p' \
+        "$1/mise.local.toml" 2>/dev/null | head -n 1
+}
+
 width=$(printf '%s\n' "$rows" | cut -f2 | awk '{ if (length($0) > m) m = length($0) } END { print m }')
 
 printf '  \033[1m%-*s  %-9s %s\033[0m\n' "$width" "Branch" "State" "URL"
@@ -67,6 +76,12 @@ failures=0
 # Here-string, not a pipe: a piped `while` runs in a subshell and the failure
 # count wouldn't survive it.
 while IFS=$'\t' read -r marker branch active url path; do
+    port=$(site_port "$path")
+    if [ -n "$port" ] && [ "$url" != "https://localhost:$port" ]; then
+        url="https://localhost:$port"
+        active=false
+        if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then active=true; fi
+    fi
     # A listening port is the weakest signal here, so the markers outrank it.
     # `zero` runs `mise run start` before `mise run seed`, so the dashboard
     # answers while the org is still on the unseeded demo gate: port open plus a

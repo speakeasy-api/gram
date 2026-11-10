@@ -181,7 +181,7 @@ func TestListUserSessionsReturnsUpstreamsForOrgLevelClient(t *testing.T) {
 
 // seedUpstream builds one outbound leg: the remote issuer, a client registered
 // against it, the attachment binding that client to the user-session issuer,
-// and the session Gram holds for the subject. Returns the client id so a test
+// and the session Speakeasy holds for the subject. Returns the client id so a test
 // can bind the same client to additional user-session issuers.
 // clientProject is a NullUUID because the client and issuer it registers can be
 // project-scoped, organization-level, or global; the invalid case is what the
@@ -323,7 +323,7 @@ func TestListUserSessionsReturnsUpstreamsMintedThroughSiblingIssuer(t *testing.T
 }
 
 // A client detached from the issuer that minted the grant keeps live upstream
-// tokens, and revoking the Gram session still destroys them. The page has to
+// tokens, and revoking the Speakeasy session still destroys them. The page has to
 // keep listing them or an admin reads an empty page as "nothing to revoke".
 func TestListUserSessionsReturnsUpstreamsOnDetachedClient(t *testing.T) {
 	t.Parallel()
@@ -350,7 +350,7 @@ func TestListUserSessionsReturnsUpstreamsOnDetachedClient(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), issuerID, subject, "mcp.detached.example")
-	detached, err := remotesessions_repo.New(ti.conn).DetachRemoteSessionClientFromUserSessionIssuer(ctx, remotesessions_repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+	detached, err := testrepo.New(ti.conn).DetachRemoteSessionClientFromUserSessionIssuer(ctx, testrepo.DetachRemoteSessionClientFromUserSessionIssuerParams{
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   issuerID,
 	})
@@ -409,13 +409,13 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 			}
 			return rows, nil
 		}, humanRemains: true},
-		{name: "superseded grant generation", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+		{name: "reauthenticated same session", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
 			rows, err := q.MutateAttachmentSupersededGrantGenerationFixture(ctx, args.Source)
 			if err != nil {
 				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
 			}
 			return rows, nil
-		}, humanRemains: true},
+		}, wantAttached: true, humanRemains: true},
 		{name: "deleted source", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
 			rows, err := q.MutateAttachmentDeletedSourceFixture(ctx, args.Source)
 			if err != nil {

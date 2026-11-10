@@ -59,7 +59,7 @@ export type ListAgentDelegableGrantsQueryError =
  * listDelegableGrants agents
  *
  * @remarks
- * List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
+ * List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.
  */
 export function useListAgentDelegableGrants(
   request: ListAgentDelegableGrantsRequest,
@@ -88,7 +88,7 @@ export function useListAgentDelegableGrants(
  * listDelegableGrants agents
  *
  * @remarks
- * List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
+ * List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.
  */
 export function useListAgentDelegableGrantsSuspense(
   request: ListAgentDelegableGrantsRequest,
@@ -119,6 +119,8 @@ export function setListAgentDelegableGrantsData(
     parameters: {
       agentId: string;
       toolsetId?: string | undefined;
+      toolsetIds?: Array<string> | undefined;
+      carryExclusions?: boolean | undefined;
       gramSession?: string | undefined;
     },
   ],
@@ -135,6 +137,8 @@ export function invalidateListAgentDelegableGrants(
     [parameters: {
       agentId: string;
       toolsetId?: string | undefined;
+      toolsetIds?: Array<string> | undefined;
+      carryExclusions?: boolean | undefined;
       gramSession?: string | undefined;
     }]
   >,

@@ -24,7 +24,10 @@ func BuildCreateUserSessionIssuerPayload(userSessionIssuersCreateUserSessionIssu
 	{
 		err = json.Unmarshal([]byte(userSessionIssuersCreateUserSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"authorization_server_mode\": \"shared\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\"\n   }'")
+		}
+		if !(body.AuthorizationServerMode == "endpoint" || body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", body.AuthorizationServerMode, []any{"endpoint", "shared"}))
 		}
 		if !(body.AuthnChallengeMode == "chain" || body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", body.AuthnChallengeMode, []any{"chain", "interactive"}))
@@ -58,9 +61,16 @@ func BuildCreateUserSessionIssuerPayload(userSessionIssuersCreateUserSessionIssu
 		}
 	}
 	v := &usersessionissuers.CreateUserSessionIssuerPayload{
-		Slug:                 body.Slug,
-		AuthnChallengeMode:   body.AuthnChallengeMode,
-		SessionDurationHours: body.SessionDurationHours,
+		AuthorizationServerMode: body.AuthorizationServerMode,
+		Slug:                    body.Slug,
+		AuthnChallengeMode:      body.AuthnChallengeMode,
+		SessionDurationHours:    body.SessionDurationHours,
+	}
+	{
+		var zero string
+		if v.AuthorizationServerMode == zero {
+			v.AuthorizationServerMode = "endpoint"
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -242,6 +252,80 @@ func BuildGetUserSessionIssuerPayload(userSessionIssuersGetUserSessionIssuerID s
 	v := &usersessionissuers.GetUserSessionIssuerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetAttachImpactPayload builds the payload for the userSessionIssuers
+// getAttachImpact endpoint from CLI flags.
+func BuildGetAttachImpactPayload(userSessionIssuersGetAttachImpactMcpServerID string, userSessionIssuersGetAttachImpactToolsetID string, userSessionIssuersGetAttachImpactMetaMcpServerID string, userSessionIssuersGetAttachImpactUserSessionIssuerID string, userSessionIssuersGetAttachImpactSessionToken string, userSessionIssuersGetAttachImpactApikeyToken string, userSessionIssuersGetAttachImpactProjectSlugInput string) (*usersessionissuers.GetAttachImpactPayload, error) {
+	var err error
+	var mcpServerID *string
+	{
+		if userSessionIssuersGetAttachImpactMcpServerID != "" {
+			mcpServerID = &userSessionIssuersGetAttachImpactMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var toolsetID *string
+	{
+		if userSessionIssuersGetAttachImpactToolsetID != "" {
+			toolsetID = &userSessionIssuersGetAttachImpactToolsetID
+			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", *toolsetID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var metaMcpServerID *string
+	{
+		if userSessionIssuersGetAttachImpactMetaMcpServerID != "" {
+			metaMcpServerID = &userSessionIssuersGetAttachImpactMetaMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", *metaMcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var userSessionIssuerID *string
+	{
+		if userSessionIssuersGetAttachImpactUserSessionIssuerID != "" {
+			userSessionIssuerID = &userSessionIssuersGetAttachImpactUserSessionIssuerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", *userSessionIssuerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if userSessionIssuersGetAttachImpactSessionToken != "" {
+			sessionToken = &userSessionIssuersGetAttachImpactSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if userSessionIssuersGetAttachImpactApikeyToken != "" {
+			apikeyToken = &userSessionIssuersGetAttachImpactApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionIssuersGetAttachImpactProjectSlugInput != "" {
+			projectSlugInput = &userSessionIssuersGetAttachImpactProjectSlugInput
+		}
+	}
+	v := &usersessionissuers.GetAttachImpactPayload{}
+	v.McpServerID = mcpServerID
+	v.ToolsetID = toolsetID
+	v.MetaMcpServerID = metaMcpServerID
+	v.UserSessionIssuerID = userSessionIssuerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

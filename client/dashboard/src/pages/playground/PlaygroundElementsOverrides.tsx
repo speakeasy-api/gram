@@ -10,7 +10,7 @@ import { AlertCircle } from "lucide-react";
 import type { FC } from "react";
 
 /**
- * Custom ThreadWelcome component using Gram design system.
+ * Custom ThreadWelcome component using Speakeasy design system.
  * Displays centered empty state with title, subtitle, and optional suggestions.
  */
 export const GramThreadWelcome: FC = () => {

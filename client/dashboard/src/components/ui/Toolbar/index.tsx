@@ -1,5 +1,11 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
-import React, { Fragment, useEffect, useState, type ReactNode } from "react";
+import React, {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -100,7 +106,11 @@ function ToolbarClusters({ children }: { children: ReactNode }): JSX.Element {
   return (
     <>
       {hasLeft && (
-        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
+        // grow, not flex-1: the cluster takes the bar's free space so a search
+        // told to be w-full can fill it, but keeps its content width as its
+        // basis, so a narrow bar still wraps the right cluster onto its own
+        // line instead of squeezing both onto one.
+        <div className="flex min-w-0 max-w-full grow flex-wrap items-center gap-3">
           {search}
           {search != null && filters != null && (
             <div className="bg-border h-6 w-px shrink-0" />
@@ -203,13 +213,27 @@ function ToolbarSearch({
   className,
 }: ToolbarSearchProps): JSX.Element {
   const [local, setLocal] = useState(value);
+  // Values sent this burst that the parent hasn't rendered; their echoes are stale.
+  const sent = useRef<string[]>([]);
 
   // Sync when value changes externally (back/forward, clear-all).
-  useEffect(() => setLocal(value), [value]);
+  useEffect(() => {
+    const i = sent.current.lastIndexOf(value);
+    if (i === -1) {
+      sent.current = [];
+      setLocal(value);
+    } else {
+      sent.current =
+        i === sent.current.length - 1 ? [] : sent.current.slice(i + 1);
+    }
+  }, [value]);
 
   useEffect(() => {
-    if (local === value) return;
-    const timer = setTimeout(() => onChange(local), debounceMs);
+    if (local === (sent.current.at(-1) ?? value)) return;
+    const timer = setTimeout(() => {
+      sent.current = local === value ? [] : [...sent.current, local];
+      onChange(local);
+    }, debounceMs);
     return () => clearTimeout(timer);
   }, [local, value, debounceMs, onChange]);
 

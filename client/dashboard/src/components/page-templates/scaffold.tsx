@@ -47,6 +47,7 @@ export function TemplateFrame({
   scopeAll,
   resourceId,
   breadcrumbSubstitutions,
+  breadcrumbUrlSubstitutions,
   fullWidth,
   fullHeight,
   noPadding,
@@ -55,6 +56,12 @@ export function TemplateFrame({
   fullWidthBreadcrumbs,
   children,
 }: TemplateFrameProps & {
+  /**
+   * Where a crumb points, when its own path is not a page. Not on
+   * `TemplateFrameProps`: only FormPage passes it on, and a prop every
+   * template accepts and all but one drops is a type that lies.
+   */
+  breadcrumbUrlSubstitutions?: Record<string, string>;
   fullWidth?: boolean;
   fullHeight?: boolean;
   noPadding?: boolean;
@@ -83,6 +90,7 @@ export function TemplateFrame({
         <Page.Header.Breadcrumbs
           fullWidth={fullWidthBreadcrumbs}
           substitutions={breadcrumbSubstitutions}
+          urlSubstitutions={breadcrumbUrlSubstitutions}
         />
       </Page.Header>
       <Page.Body

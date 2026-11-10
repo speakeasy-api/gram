@@ -109,7 +109,7 @@ export type {
 export { MODELS } from "./lib/models";
 
 // Chat-message conversion — for consumers building a custom transport against
-// the Gram chat service (e.g. the dashboard's server-assistant transport).
+// the Speakeasy chat service (e.g. the dashboard's server-assistant transport).
 export {
   convertGramMessagesToUIMessages,
   convertGramMessagesToExported,

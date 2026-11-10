@@ -78,3 +78,22 @@ func (c *TemporalRiskPolicyResultsCleaner) Clean(ctx context.Context, projectID,
 	)
 	return nil
 }
+
+// CleanAll starts results cleanup for policies a committed transaction
+// deleted. It logs failures instead of returning them because the delete has
+// already committed. A nil TemporalEnv, as in services built without Temporal,
+// skips the cleanup.
+func (c *TemporalRiskPolicyResultsCleaner) CleanAll(ctx context.Context, projectID uuid.UUID, policyIDs []uuid.UUID) {
+	if c.TemporalEnv == nil {
+		return
+	}
+	for _, policyID := range policyIDs {
+		if err := c.Clean(ctx, projectID, policyID); err != nil {
+			c.Logger.ErrorContext(ctx, "trigger risk policy results cleanup",
+				attr.SlogProjectID(projectID.String()),
+				attr.SlogRiskPolicyID(policyID.String()),
+				attr.SlogError(err),
+			)
+		}
+	}
+}

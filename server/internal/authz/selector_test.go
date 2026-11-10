@@ -79,6 +79,30 @@ func TestSelector_ResourceID_absent(t *testing.T) {
 	require.Equal(t, "*", Selector(nil).ResourceID())
 }
 
+func TestSelector_CoversEveryResource(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		selector Selector
+		covers   bool
+	}{
+		{name: "nil", selector: nil, covers: true},
+		{name: "pure wildcard", selector: Selector{"resource_kind": "*", "resource_id": "*"}, covers: true},
+		{name: "stored unrestricted grant", selector: NewSelector(ScopeLogRead, WildcardResource), covers: true},
+		{name: "one resource", selector: NewSelector(ScopeLogRead, "project-1"), covers: false},
+		{name: "one project of a kind", selector: Selector{"resource_kind": "mcp", "resource_id": "*", "project_id": "p1"}, covers: false},
+		{name: "one tool", selector: Selector{"resource_kind": "mcp", "resource_id": "*", "tool": "search"}, covers: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.covers, tt.selector.CoversEveryResource())
+		})
+	}
+}
+
 func TestSelector_IsRestricted(t *testing.T) {
 	t.Parallel()
 
@@ -258,6 +282,26 @@ func TestValidateSelector_agentRequiresAgentResourceKind(t *testing.T) {
 		SelectorKeyResourceKind: ResourceKindProject,
 		SelectorKeyResourceID:   "0196cbd1-9328-74e7-b7bb-6e5357565573",
 	}), `requires resource_kind="agent"`)
+}
+
+func TestResourceKindForScope_assistantScopes(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantRead))
+	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantBlockedRead))
+	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantWrite))
+	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantBlockedWrite))
+}
+
+func TestValidateSelector_assistantUsesProjectIDWithAssistantResourceKind(t *testing.T) {
+	t.Parallel()
+
+	projectID := "0196cbd1-9328-74e7-b7bb-6e5357565573"
+	selector := NewSelector(ScopeAssistantRead, projectID)
+	require.Equal(t, ResourceKindAssistant, selector[SelectorKeyResourceKind])
+	require.Equal(t, projectID, selector[SelectorKeyResourceID])
+	require.NoError(t, ValidateSelector(ScopeAssistantRead, selector))
+	require.ErrorContains(t, ValidateSelector(ScopeAssistantWrite, NewSelector(ScopeProjectWrite, projectID)), `requires resource_kind="assistant"`)
 }
 
 func TestValidateSelector_skillRequiresSkillResourceKind(t *testing.T) {
@@ -440,4 +484,30 @@ func TestSelector_Matches_dispositionGrantDeniesWrongDisposition(t *testing.T) {
 	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "disposition": "read_only"}
 	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "disposition": "read_only"}))
 	require.False(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "disposition": "destructive"}))
+}
+
+func TestValidateSelector_ProjectBoundsHooksIngestOnly(t *testing.T) {
+	t.Parallel()
+
+	bounded := func(scope Scope) Selector {
+		selector := NewSelector(scope, "org-123")
+		selector[SelectorKeyProjectID] = "project-1"
+		return selector
+	}
+	require.NoError(t, ValidateSelector(ScopeOrgHooksIngest, bounded(ScopeOrgHooksIngest)))
+	require.Error(t, ValidateSelector(ScopeOrgDeviceAgentSync, bounded(ScopeOrgDeviceAgentSync)), "project_id must not read as a restriction on scopes not checked by project")
+	require.Error(t, ValidateSelector(ScopeOrgRead, bounded(ScopeOrgRead)))
+}
+
+func TestHooksIngestCheck_MatchesOnlyItsProjectBound(t *testing.T) {
+	t.Parallel()
+
+	selector := NewSelector(ScopeOrgHooksIngest, "org-123")
+	selector[SelectorKeyProjectID] = "project-1"
+	bounded := []Grant{NewGrantWithSelector(ScopeOrgHooksIngest, selector)}
+	unbounded := []Grant{NewGrant(ScopeOrgHooksIngest, "org-123")}
+
+	require.True(t, GrantsSatisfy(bounded, HooksIngestCheck("org-123", "project-1")))
+	require.False(t, GrantsSatisfy(bounded, HooksIngestCheck("org-123", "project-2")))
+	require.True(t, GrantsSatisfy(unbounded, HooksIngestCheck("org-123", "project-2")), "a grant naming no project covers every project")
 }

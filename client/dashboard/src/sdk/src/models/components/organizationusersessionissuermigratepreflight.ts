@@ -29,7 +29,7 @@ export type OrganizationUserSessionIssuerMigratePreflight = {
    */
   clientCount: number;
   /**
-   * Active OAuth client ids already present on both issuers. Non-empty blocks migration.
+   * Active OAuth client ids present on both issuers that cannot be merged. Non-empty blocks migration. A client resolved from the same Client ID Metadata Document on both issuers is not listed: it merges onto the target's client, keeping its sessions and consents, unless an issuance selection profile pins the source client to the source issuer.
    */
   conflictingClientIds: Array<string>;
   /**
@@ -57,7 +57,7 @@ export type OrganizationUserSessionIssuerMigratePreflight = {
    */
   sessionCount: number;
   /**
-   * Configuration differences that do not block the migration. The target's values become authoritative for future authorization; existing sessions and refresh tokens are unaffected.
+   * Configuration differences that do not block the migration. The target's values become authoritative for future authorization; existing sessions and refresh tokens are unaffected. Besides the issuer settings, this reports authorization_server_mode, use_authentication_host, and issuer_url (the shared authorization server's issuer identifier, empty when not served) whenever they differ: repointed MCP servers then direct clients to a different authorization server, so anything configured with the source's values, such as an identity provider or a federated platform, must be updated.
    */
   warnings: Array<UserSessionIssuerFieldMismatch>;
   /**

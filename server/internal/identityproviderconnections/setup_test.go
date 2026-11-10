@@ -91,21 +91,61 @@ type hookedKMSClients struct {
 	inner *provisiontest.KMSClients
 
 	mu            sync.Mutex
+	opened        int
 	created       []string
 	disabled      []string
 	revokedGrants []string
 
 	// afterCreate runs once the key exists and before provisioning continues.
 	afterCreate func(created *gcpkms.CreatedSigningKey)
+	// disableErr, when set, fails every DisableKeyVersion.
+	disableErr error
+	// createErr, when set, fails every CreateSigningKey.
+	createErr error
+	// stallDisable, when it names a version, holds its disable until the
+	// caller's deadline.
+	stallDisable string
+	// onDisable runs at the start of every DisableKeyVersion.
+	onDisable func()
+	// stallOpen holds every client construction until the caller's deadline.
+	stallOpen bool
+}
+
+func (c *hookedKMSClients) failDisable(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.disableErr = err
+}
+
+func (c *hookedKMSClients) failCreate(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.createErr = err
 }
 
 func (c *hookedKMSClients) Factory(ctx context.Context, tokenSource oauth2.TokenSource) (gcpkms.ProvisioningClient, error) {
+	c.mu.Lock()
+	c.opened++
+	stall := c.stallOpen
+	c.mu.Unlock()
+	if stall {
+		<-ctx.Done()
+		return nil, fmt.Errorf("stalled fixture kms client: %w", ctx.Err())
+	}
+
 	client, err := c.inner.Factory(ctx, tokenSource)
 	if err != nil {
 		return nil, fmt.Errorf("build fixture kms client: %w", err)
 	}
 
 	return &hookedProvisioningClient{ProvisioningClient: client, hooks: c}, nil
+}
+
+// Opened counts KMS client constructions.
+func (c *hookedKMSClients) Opened() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.opened
 }
 
 func (c *hookedKMSClients) Created() []string {
@@ -134,6 +174,12 @@ type hookedProvisioningClient struct {
 }
 
 func (c *hookedProvisioningClient) CreateSigningKey(ctx context.Context, params gcpkms.CreateSigningKeyParams) (*gcpkms.CreatedSigningKey, error) {
+	c.hooks.mu.Lock()
+	failure := c.hooks.createErr
+	c.hooks.mu.Unlock()
+	if failure != nil {
+		return nil, failure
+	}
 	created, err := c.ProvisioningClient.CreateSigningKey(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("create hooked signing key: %w", err)
@@ -153,8 +199,24 @@ func (c *hookedProvisioningClient) CreateSigningKey(ctx context.Context, params 
 
 func (c *hookedProvisioningClient) DisableKeyVersion(ctx context.Context, versionName string) error {
 	c.hooks.mu.Lock()
-	c.hooks.disabled = append(c.hooks.disabled, versionName)
+	stall, onDisable := c.hooks.stallDisable, c.hooks.onDisable
 	c.hooks.mu.Unlock()
+	if onDisable != nil {
+		onDisable()
+	}
+	if stall == versionName {
+		<-ctx.Done()
+		return fmt.Errorf("disable stalled key version: %w", ctx.Err())
+	}
+	c.hooks.mu.Lock()
+	failure := c.hooks.disableErr
+	if failure == nil {
+		c.hooks.disabled = append(c.hooks.disabled, versionName)
+	}
+	c.hooks.mu.Unlock()
+	if failure != nil {
+		return failure
+	}
 
 	if err := c.ProvisioningClient.DisableKeyVersion(ctx, versionName); err != nil {
 		return fmt.Errorf("disable hooked key version: %w", err)

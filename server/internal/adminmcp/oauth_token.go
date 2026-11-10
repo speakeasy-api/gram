@@ -1,0 +1,289 @@
+package adminmcp
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"goa.design/goa/v3/security"
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
+)
+
+const staffAccessLifetime = time.Hour
+
+// StaffOAuthTokens exchanges one-use codes and rotates refresh tokens. No HTTP
+// handler in this package accepts an admin browser cookie as a token credential.
+type StaffOAuthTokens struct {
+	clients  staffClientStore
+	store    staffGrantStore
+	verifier adminSessionVerifier
+	cipher   *encryption.Client
+	signer   *sessiontokens.Signer
+	issuer   string
+	resource string
+}
+
+func NewStaffOAuthTokens(clients staffClientStore, store staffGrantStore, verifier adminSessionVerifier, cipher *encryption.Client, signer *sessiontokens.Signer, issuer, resource string) *StaffOAuthTokens {
+	return &StaffOAuthTokens{clients: clients, store: store, verifier: verifier, cipher: cipher, signer: signer, issuer: issuer, resource: resource}
+}
+
+func (s *StaffOAuthTokens) TokenHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Pragma", "no-cache")
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if s == nil || s.clients == nil || s.store == nil || s.verifier == nil || s.cipher == nil || s.signer == nil || s.issuer == "" || s.resource == "" {
+			staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "token endpoint unavailable")
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+		if err := r.ParseForm(); err != nil {
+			staffOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse token request")
+			return
+		}
+		if r.PostForm.Get(oauthwire.ParamGrantType) == "" {
+			staffOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
+			return
+		}
+		presented, credentialError := staffClientCredentials(r)
+		if credentialError != "" {
+			status := http.StatusBadRequest
+			if credentialError == oautherr.CodeInvalidClient {
+				var challenge string
+				status, challenge = oauthwire.InvalidClientResponse(r.Header)
+				if challenge != "" {
+					w.Header().Set("WWW-Authenticate", challenge)
+				}
+			}
+			staffOAuthError(w, status, credentialError, "client authentication method is invalid")
+			return
+		}
+		client, err := s.authenticateClient(r.Context(), presented)
+		if err != nil {
+			if !errors.Is(err, errStaffGrant) {
+				staffOAuthError(w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "client authentication is temporarily unavailable")
+				return
+			}
+			status, challenge := oauthwire.InvalidClientResponse(r.Header)
+			if challenge != "" {
+				w.Header().Set("WWW-Authenticate", challenge)
+			}
+			staffOAuthError(w, status, oautherr.CodeInvalidClient, "client authentication failed")
+			return
+		}
+		switch r.PostForm.Get("grant_type") {
+		case oauthwire.GrantTypeAuthorizationCode:
+			request := usersessions.AuthCodeTokenRequestFromForm(r.PostForm)
+			if err := request.Validate(); err != nil {
+				staffRequestError(w, err)
+				return
+			}
+			if err := oauthwire.ValidateResourceIndicators(request.Resources, s.resource); err != nil {
+				staffRequestError(w, err)
+				return
+			}
+			s.exchangeCode(w, r.Context(), client.ID, request)
+		case oauthwire.GrantTypeRefreshToken:
+			request := usersessions.RefreshTokenRequestFromForm(r.PostForm)
+			if err := request.Validate(); err != nil {
+				staffRequestError(w, err)
+				return
+			}
+			if err := oauthwire.ValidateResourceIndicators(request.Resources, s.resource); err != nil {
+				staffRequestError(w, err)
+				return
+			}
+			s.refresh(w, r.Context(), client.ID, request)
+		default:
+			staffOAuthError(w, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
+		}
+	})
+}
+
+type staffPresentedClient struct {
+	ID     string
+	Secret string
+	Public bool
+}
+
+// staffClientCredentials accepts HTTP Basic for confidential clients or a
+// single form client_id for public clients. Basic may include a matching form
+// client_id; empty parameters are treated as omitted. Nonempty body credentials
+// and other Authorization schemes are unsupported. Shared validation rejects
+// duplicate credentials, conflicting identifiers, and mixed methods first.
+func staffClientCredentials(r *http.Request) (staffPresentedClient, string) {
+	if code := oauthwire.ClientAuthenticationError(r); code != "" {
+		return staffPresentedClient{ID: "", Secret: "", Public: false}, code
+	}
+	if r.PostForm.Get(oauthwire.ParamClientSecret) != "" || r.PostForm.Get(oauthwire.ParamClientAssertion) != "" || r.PostForm.Get(oauthwire.ParamClientAssertionType) != "" {
+		return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidClient
+	}
+	if id, secret, basic := r.BasicAuth(); basic {
+		if id == "" {
+			return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidClient
+		}
+		return staffPresentedClient{ID: id, Secret: secret, Public: false}, ""
+	}
+	id := r.PostForm.Get(oauthwire.ParamClientID)
+	if id == "" {
+		return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidClient
+	}
+	return staffPresentedClient{ID: id, Secret: "", Public: true}, ""
+}
+
+// authenticateClient enforces the method implied by the stored client: a
+// client registered with a secret must present it via Basic, and a public
+// client must present no credentials at all.
+func (s *StaffOAuthTokens) authenticateClient(ctx context.Context, presented staffPresentedClient) (staffOAuthClient, error) {
+	client, err := s.clients.GetClient(ctx, presented.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return staffOAuthClient{}, errStaffGrant
+		}
+		return staffOAuthClient{}, fmt.Errorf("lookup staff OAuth client: %w", err)
+	}
+	if client.SecretExpiresAt != nil && !time.Now().Before(*client.SecretExpiresAt) {
+		return staffOAuthClient{}, errStaffGrant
+	}
+	if presented.Public {
+		if client.SecretHash != "" {
+			return staffOAuthClient{}, errStaffGrant
+		}
+		return client, nil
+	}
+	if client.SecretHash == "" || bcrypt.CompareHashAndPassword([]byte(client.SecretHash), []byte(presented.Secret)) != nil {
+		return staffOAuthClient{}, errStaffGrant
+	}
+	return client, nil
+}
+
+func (s *StaffOAuthTokens) exchangeCode(w http.ResponseWriter, ctx context.Context, clientID string, request *usersessions.AuthCodeTokenRequest) {
+	now := time.Now()
+	codeHash := staffTokenHash(request.Code)
+	connection, err := s.store.ValidateGrant(ctx, codeHash, clientID, request.RedirectURI, request.CodeVerifier, now)
+	if err != nil {
+		staffTokenError(w, err)
+		return
+	}
+	if err := s.verifyConnection(ctx, connection); err != nil {
+		staffTokenError(w, err)
+		return
+	}
+	access, refresh, session, err := s.mintPair(connection, clientID, now)
+	if err != nil {
+		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint staff token")
+		return
+	}
+	if err := s.store.ExchangeGrant(ctx, codeHash, clientID, request.RedirectURI, request.CodeVerifier, session, now); err != nil {
+		staffTokenError(w, err)
+		return
+	}
+	staffJSON(w, http.StatusOK, map[string]any{"access_token": access, "refresh_token": refresh, "token_type": "Bearer", "expires_in": int64(session.ExpiresAt.Sub(now).Seconds()), "scope": strings.Join(connection.Scopes, " ")})
+}
+
+func (s *StaffOAuthTokens) refresh(w http.ResponseWriter, ctx context.Context, clientID string, request *usersessions.RefreshTokenRequest) {
+	now := time.Now()
+	hash := staffTokenHash(request.RefreshToken)
+	connection, err := s.store.PrepareRefresh(ctx, hash, clientID, now)
+	if err != nil {
+		staffTokenError(w, err)
+		return
+	}
+	if err := s.verifyConnection(ctx, connection); err != nil {
+		staffTokenError(w, err)
+		return
+	}
+	connection.AuthorizedTil = now.Add(staffInactivityTimeout)
+	access, refresh, session, err := s.mintPair(connection, clientID, now)
+	if err != nil {
+		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint staff token")
+		return
+	}
+	if err := s.store.RotateRefresh(ctx, hash, clientID, connection, session, now); err != nil {
+		staffTokenError(w, err)
+		return
+	}
+	staffJSON(w, http.StatusOK, map[string]any{"access_token": access, "refresh_token": refresh, "token_type": "Bearer", "expires_in": int64(session.ExpiresAt.Sub(now).Seconds()), "scope": strings.Join(connection.Scopes, " ")})
+}
+
+func (s *StaffOAuthTokens) verifyConnection(ctx context.Context, connection staffTokenConnection) error {
+	if connection.ResourceURI != s.resource || connection.SessionEnc == "" || !hasReadScope(connection.Scopes) || !time.Now().Before(connection.AuthorizedTil) {
+		return errStaffGrant
+	}
+	subject, err := urn.ParseSessionSubject(connection.Subject)
+	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
+		return errStaffGrant
+	}
+	sessionID, err := s.cipher.Decrypt(connection.SessionEnc)
+	if err != nil || sessionID == "" {
+		return errStaffGrant
+	}
+	verified, err := s.verifier.Authorize(ctx, sessionID, &security.APIKeyScheme{Name: constants.AdminAuthSecurityScheme}) //nolint:exhaustruct // Only name is used.
+	if err != nil {
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeUnauthorized || shareable.Code == oops.CodeForbidden) {
+			return errStaffGrant
+		}
+		return ErrAuthUnavailable
+	}
+	staff, ok := contextvalues.GetAdminAuthContext(verified)
+	if !ok || staff == nil || staff.SessionID != sessionID || staff.OIDCSubject != subject.ID || staff.Email == "" {
+		return errStaffGrant
+	}
+	return nil
+}
+
+func (s *StaffOAuthTokens) mintPair(connection staffTokenConnection, clientID string, now time.Time) (string, string, staffIssuedSession, error) {
+	subject, err := urn.ParseSessionSubject(connection.Subject)
+	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
+		return "", "", staffIssuedSession{}, errStaffGrant
+	}
+	jti, err := staffOpaqueToken()
+	if err != nil {
+		return "", "", staffIssuedSession{}, err
+	}
+	refresh, err := staffOpaqueToken()
+	if err != nil {
+		return "", "", staffIssuedSession{}, err
+	}
+	accessExpiry := minStaffTime(now.Add(staffAccessLifetime), connection.AuthorizedTil)
+	refreshExpiry := connection.AuthorizedTil
+	access, _, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.resource, Issuer: s.issuer, Lifetime: 0, ExpiresAt: &accessExpiry, ClientID: clientID, JTI: jti})
+	if err != nil {
+		return "", "", staffIssuedSession{}, fmt.Errorf("mint staff access token: %w", err)
+	}
+	return access, refresh, staffIssuedSession{ID: uuid.New(), JTI: jti, RefreshHash: staffTokenHash(refresh), ExpiresAt: accessExpiry, RefreshTil: refreshExpiry}, nil
+}
+
+func minStaffTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}
+
+func staffTokenError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errStaffGrant) || errors.Is(err, errStaffRefreshReuse) {
+		staffOAuthError(w, http.StatusBadRequest, "invalid_grant", "staff authorization is invalid or expired")
+	} else {
+		staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "staff authorization state is unavailable")
+	}
+}

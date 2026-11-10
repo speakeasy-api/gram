@@ -1,10 +1,10 @@
 sequenceDiagram
-    participant Admin as Gram Admin (Dashboard)
-    participant API as Gram Server
+    participant Admin as Speakeasy Admin (Dashboard)
+    participant API as Speakeasy Server
     participant DB as Database
     participant Slack as Slack API
 
-    Note over Admin,Slack: Phase 1: Create App in Gram
+    Note over Admin,Slack: Phase 1: Create App in Speakeasy
     Admin->>API: POST /rpc/slack-apps.create<br/>(name, toolsets, icon, system_prompt)
     API->>DB: INSERT slack_apps (status='unconfigured')
     API->>DB: INSERT slack_app_toolsets
@@ -15,7 +15,7 @@ sequenceDiagram
     Admin->>Slack: Create app via Slack UI with manifest
     Note right of Slack: Manifest includes:<br/>- OAuth redirect → /rpc/slack-apps/{id}/oauth/callback<br/>- Events URL → /rpc/slack-apps/{id}/events<br/>- Bot scopes & event subscriptions
 
-    Note over Admin,Slack: Phase 3: Configure Credentials in Gram
+    Note over Admin,Slack: Phase 3: Configure Credentials in Speakeasy
     Admin->>Slack: Copy client_id, client_secret, signing_secret
     Admin->>API: POST /rpc/slack-apps.configure<br/>(client_id, client_secret, signing_secret)
     API->>DB: UPDATE slack_apps SET encrypted secrets,<br/>status='active'

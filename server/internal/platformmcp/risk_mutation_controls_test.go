@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -148,6 +147,9 @@ func TestRiskMutationAdmissionConnectionlessAssistantUsesOrganizationBudget(t *t
 
 	require.NoError(t, err)
 	require.Equal(t, project, resolved)
+	require.Empty(t, organization.keys, "admission alone never charges: a replay must stay free")
+
+	require.NoError(t, controls.Charge(principal)(t.Context()))
 	require.Equal(t, []string{"organization"}, organization.keys)
 }
 
@@ -252,13 +254,6 @@ func TestRiskVersionTokensAreOpaqueAndStateSensitive(t *testing.T) {
 	require.Equal(t, token, canonical, "canonical ordering must include the complete detection scope state")
 	require.NotContains(t, token, prompt)
 	require.True(t, codec.ValidPolicyVersion(state, token))
-	pending, total := int64(3), int64(10)
-	progressOnly := state
-	progressOnly.Policy.PendingMessages = &pending
-	progressOnly.Policy.TotalMessages = &total
-	progressToken, err := codec.PolicyVersion(progressOnly)
-	require.NoError(t, err)
-	require.Equal(t, token, progressToken, "read-time analysis progress is not policy concurrency state")
 	policy.Enabled = true
 	require.False(t, codec.ValidPolicyVersion(RiskPolicyVersionState{Policy: policy, AnalyzerConfig: state.AnalyzerConfig, AllowedURLGrants: state.AllowedURLGrants, BlockedURLGrants: state.BlockedURLGrants, StandingDecisionState: state.StandingDecisionState}, token))
 	grantChanged := state
@@ -441,18 +436,21 @@ func TestRiskMutationHandlerSelectionDefaultsEveryWriteToStableRefusal(t *testin
 	registrar := newRegistrar(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerRiskMutationHandlers(registrar, catalog, true, &RiskMutationHandlers{})
-	for _, name := range []string{operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion} {
+	for _, name := range []string{operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion, operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive} {
 		require.Contains(t, descriptorByName(t, registrar, name).Description, "not enabled")
 	}
 	arguments := map[string]json.RawMessage{
-		"create_risk_policy":    json.RawMessage(`{"project_slug":"default","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`),
-		"update_risk_policy":    json.RawMessage(`{"project_slug":"default","policy_id":"11111111-1111-4111-8111-111111111111","expected_version":"version","idempotency_key":"key","patch":{"enabled":true}}`),
-		"create_risk_exclusion": json.RawMessage(`{"project_slug":"default","match_type":"source","match_value":"gitleaks","enabled":true,"idempotency_key":"key"}`),
-		"update_risk_exclusion": json.RawMessage(`{"project_slug":"default","exclusion_id":"11111111-1111-4111-8111-111111111111","enabled":true,"expected_version":"version","idempotency_key":"key"}`),
+		"create_risk_policy":                     json.RawMessage(`{"project_slug":"default","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`),
+		"update_risk_policy":                     json.RawMessage(`{"project_slug":"default","policy_id":"11111111-1111-4111-8111-111111111111","expected_version":"version","idempotency_key":"key","patch":{"enabled":true}}`),
+		"create_risk_exclusion":                  json.RawMessage(`{"project_slug":"default","match_type":"source","match_value":"gitleaks","enabled":true,"idempotency_key":"key"}`),
+		"update_risk_exclusion":                  json.RawMessage(`{"project_slug":"default","exclusion_id":"11111111-1111-4111-8111-111111111111","enabled":true,"expected_version":"version","idempotency_key":"key"}`),
+		operationMarkRiskFindingsFalsePositive:   json.RawMessage(`{"project_slug":"default","finding_ids":["11111111-1111-4111-8111-111111111111"],"confirmed":true,"idempotency_key":"key"}`),
+		operationUnmarkRiskFindingsFalsePositive: json.RawMessage(`{"project_slug":"default","finding_ids":["11111111-1111-4111-8111-111111111111"],"confirmed":true,"idempotency_key":"key"}`),
 	}
+	require.Len(t, arguments, 6, "every risk write must be exercised against its stub")
 	for _, descriptor := range registrar.Descriptors() {
 		input, ok := arguments[descriptor.Name]
-		if !ok || (!strings.HasPrefix(descriptor.Name, "create_risk_") && !strings.HasPrefix(descriptor.Name, "update_risk_")) {
+		if !ok {
 			continue
 		}
 		_, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), input)

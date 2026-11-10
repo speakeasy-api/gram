@@ -1,3 +1,4 @@
+import { ClaudeCodeSettingsInstall } from "@/components/claude-code-settings-install";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { InstallSteps, type InstallStep } from "@/components/install-steps";
@@ -202,7 +203,10 @@ function manualSteps(client: ClientFamily, mcpUrl: string): InstallStep[] {
   }
 }
 
-function marketplaceSteps(client: ClientFamily): InstallStep[] {
+function marketplaceSteps(
+  client: ClientFamily,
+  onCopy?: () => void,
+): InstallStep[] {
   const marketplaceURL = platformMCPMarketplaceRepoURL();
 
   if (client === "claude_cowork") {
@@ -303,21 +307,33 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
 
   return [
     {
-      title: "Add the marketplace to your Claude Code install",
-      description:
-        "Run this command in the Claude Code environment where you want to use Platform MCP. It registers the Speakeasy marketplace for your local Claude Code profile.",
+      title: "Add the Speakeasy marketplace",
+      description: "Run this in Claude Code.",
       code: `/plugin marketplace add ${marketplaceURL}`,
     },
     {
-      title: "Install Platform MCP for your profile",
-      description:
-        "Install only the Platform MCP package into your Claude Code profile. This does not install it for other organization members.",
+      title: "Install Platform MCP",
       code: `/plugin install ${PLATFORM_MCP_PLUGIN_NAME}@${PUBLIC_MARKETPLACE_NAME}`,
     },
     {
-      title: "Connect Platform MCP and complete sign-in",
+      title: "Sign in",
       description:
-        "Open /mcp in Claude Code, select Platform MCP, and choose Authenticate. Restarting Claude Code alone may not open the sign-in page.",
+        "Open /mcp, select Platform MCP, and choose Authenticate. Restarting alone may not open the sign-in page.",
+    },
+    {
+      title: "Keep Platform MCP up to date",
+      description:
+        "/plugin marketplace add leaves auto-update off, so Platform MCP stays on the version you installed. To turn it on for yourself, run /plugin, open Marketplaces, select speakeasy, and choose Enable auto-update. To turn it on for everyone in your organization, add these settings to managed settings, then restart Claude Code.",
+      children: (
+        <ClaudeCodeSettingsInstall
+          title={null}
+          marketplaceName={PUBLIC_MARKETPLACE_NAME}
+          marketplaceUrl={marketplaceURL}
+          plugins={[PLATFORM_MCP_PLUGIN_NAME]}
+          onCopy={onCopy}
+          nextStep={null}
+        />
+      ),
     },
   ];
 }
@@ -360,10 +376,10 @@ export function PlatformMCPInstallWalkthrough({
 
   const steps = useMemo(() => {
     if (method === "marketplace") {
-      return marketplaceSteps(client);
+      return marketplaceSteps(client, onInstructionIntent);
     }
     return manualSteps(client, mcpUrl);
-  }, [client, mcpUrl, method]);
+  }, [client, mcpUrl, method, onInstructionIntent]);
 
   return (
     <div className="space-y-5">

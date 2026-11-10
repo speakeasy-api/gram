@@ -208,7 +208,7 @@ func TestListChallenges_EnrichesWithUserData(t *testing.T) {
 
 // TestListChallenges_SuppressesUsersOutsideOrg proves the suppression boundary:
 // challenges from active org members and from unknown/external principals (no
-// Gram user identity, e.g. api keys) are still returned, while challenges from
+// Speakeasy user identity, e.g. api keys) are still returned, while challenges from
 // Gram users who are NOT members of the org (e.g. Speakeasy staff impersonating
 // a customer org) are suppressed.
 func TestListChallenges_SuppressesUsersOutsideOrg(t *testing.T) {
@@ -222,7 +222,7 @@ func TestListChallenges_SuppressesUsersOutsideOrg(t *testing.T) {
 	memberChallenge := uuid.NewString()
 	insertCHChallengeWithUser(t, ti, orgID, memberChallenge, "deny", "user:"+memberID, "org:read", &memberID, nil)
 
-	// 2. Unknown principal with no Gram user identity (api key / external
+	// 2. Unknown principal with no Speakeasy user identity (api key / external
 	//    end-user) — kept; user_id is NULL.
 	unknownChallenge := uuid.NewString()
 	insertCHChallengeWithUser(t, ti, orgID, unknownChallenge, "deny", "api_key:ext", "org:read", nil, nil)
@@ -282,6 +282,61 @@ func TestListChallenges_FilterByOutcome(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Challenges, 1)
 	require.Equal(t, denyID, result.Challenges[0].ID)
+}
+
+// An agent records one org:hooks_ingest check per hook event, which buried
+// every other check on its identity page. Leaving a scope out must drop it
+// from the rows and from the total alike, so a page of 25 says "25 of 2" for
+// nothing.
+func TestListChallenges_ExcludeScopes(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
+
+	connectID := uuid.NewString()
+	deniedID := uuid.NewString()
+	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, connectID, "allow", "agent:a1", "mcp:connect")
+	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, deniedID, "deny", "agent:a1", "mcp:connect")
+	for range 3 {
+		insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, uuid.NewString(), "allow", "agent:a1", "org:hooks_ingest")
+	}
+
+	principal := "agent:a1"
+	list := func(exclude []string, limit int) *gen.ListChallengesResult {
+		t.Helper()
+		result, err := ti.service.ListChallenges(ctx, &gen.ListChallengesPayload{
+			Outcome:       nil,
+			PrincipalUrn:  &principal,
+			Scope:         nil,
+			ExcludeScopes: exclude,
+			ProjectID:     nil,
+			Resolved:      nil,
+			Limit:         limit,
+			Offset:        0,
+			ApikeyToken:   nil,
+			SessionToken:  nil,
+		})
+		require.NoError(t, err)
+		return result
+	}
+
+	all := list(nil, 20)
+	require.Equal(t, 5, all.Total, "no exclusion lists every scope")
+
+	result := list([]string{"org:hooks_ingest"}, 20)
+	require.Equal(t, 2, result.Total)
+	ids := make([]string, 0, len(result.Challenges))
+	for _, c := range result.Challenges {
+		require.Equal(t, "mcp:connect", c.Scope)
+		ids = append(ids, c.ID)
+	}
+	require.ElementsMatch(t, []string{connectID, deniedID}, ids)
+
+	// The total is counted with the same filter, not read off the page.
+	page := list([]string{"org:hooks_ingest"}, 1)
+	require.Len(t, page.Challenges, 1)
+	require.Equal(t, 2, page.Total)
 }
 
 func TestListChallenges_FilterByResolved(t *testing.T) {
@@ -424,7 +479,7 @@ func newChallengeTestService(t *testing.T) (context.Context, *testInstance) {
 	return ctx, ti
 }
 
-// seedOrgMember creates a Gram user and makes them an active member of the org,
+// seedOrgMember creates a Speakeasy user and makes them an active member of the org,
 // returning the user ID.
 func seedOrgMember(t *testing.T, ctx context.Context, ti *testInstance, orgID, email string) string {
 	t.Helper()

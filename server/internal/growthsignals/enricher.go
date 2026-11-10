@@ -14,7 +14,7 @@ import (
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-// DatabaseEnricher resolves ids against Gram's own tables, behind a per-id TTL
+// DatabaseEnricher resolves ids against Speakeasy's own tables, behind a per-id TTL
 // cache.
 //
 // The events this serves arrive in bursts — one organization's audit log is

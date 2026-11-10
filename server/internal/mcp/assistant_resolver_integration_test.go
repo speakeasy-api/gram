@@ -7,9 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
-	"net/http/httputil"
-	"net/url"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -26,10 +23,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -43,30 +39,10 @@ func TestServePublic_AssistantTokenResolvesOwnerRemoteSessionToUpstream(t *testi
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	mockTools := []testmcp.Tool{{
-		Name:        "ping",
-		Description: "Returns pong",
-		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
-		Response: testmcp.ToolResponse{
-			Content: []map[string]any{{"type": "text", "text": "pong"}},
-		},
-	}}
-	mockServer := newMockExternalMCPServer(t, externalmcp_types.TransportTypeStreamableHTTP, mockTools)
-	t.Cleanup(mockServer.Close)
-
 	var capturedAuth atomic.Value
-	target, err := url.Parse(mockServer.URL)
-	require.NoError(t, err)
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if auth := r.Header.Get("Authorization"); auth != "" {
-			capturedAuth.Store(auth)
-		}
-		proxy.ServeHTTP(w, r)
-	}))
-	t.Cleanup(recorder.Close)
+	recorder := newAuthorizationRecorder(t, &capturedAuth)
 
-	fixture := createIssuerGatedExternalMCPFixture(t, ctx, ti, authCtx, "assistant-resolver", recorder.URL)
+	fixture := createIssuerGatedHTTPToolFixture(t, ctx, ti, authCtx, "assistant-resolver", recorder.URL)
 
 	ownerSubject := urn.NewUserSubject(authCtx.UserID)
 	insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, ownerSubject, "valid-upstream-token", time.Now().Add(time.Hour))
@@ -128,8 +104,8 @@ func TestServePublic_AssistantTokenResolvesOwnerRemoteSessionToUpstream(t *testi
 	require.Equal(t, int64(1), coveragePoints[attribute.NewSet(
 		attr.McpKillswitchSurface(mcpmetrics.KillswitchSurfaceHosted),
 		attr.McpKillswitchIdentityClass(mcpmetrics.KillswitchIdentityAssistant),
-		attr.McpKillswitchResourceClass(mcpmetrics.KillswitchResourceLegacyNoServer),
-	)], "production legacy tools/call dispatch must report low coverage and assistant provenance without inferring an acting user")
+		attr.McpKillswitchResourceClass(mcpmetrics.KillswitchResourceCanonicalServer),
+	)], "production legacy tools/call dispatch must report the canonical server and assistant provenance without inferring an acting user")
 }
 
 func TestServePublic_AssistantTokenWithoutRemoteSessionChallenges(t *testing.T) {
@@ -145,10 +121,11 @@ func TestServePublic_AssistantTokenWithoutRemoteSessionChallenges(t *testing.T) 
 
 	assistantToken := mintAssistantBearerForOwner(t, ti, authCtx)
 	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), assistantToken, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unauthorized")
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
 		"assistant-token fallback must still 401 when the owner has no remote_session for the issuer")
+	require.NotContains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`,
+		"an assistant-runtime token cannot be replaced by reauthorizing, so it must not be told to drop it")
 }
 
 func TestServePublic_AssistantTokenFromForeignProjectChallenges(t *testing.T) {
@@ -207,7 +184,7 @@ func mintAssistantBearerForOwner(
 	})
 	require.NoError(t, err)
 
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   *authCtx.ProjectID,
 		UserID:      authCtx.UserID,

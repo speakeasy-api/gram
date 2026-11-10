@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -33,7 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 var infra *testenv.Environment
@@ -57,6 +57,7 @@ type instance struct {
 	q            *repo.Queries
 	orgID        string
 	connectionID uuid.UUID
+	oktaIssuerID uuid.UUID
 	flags        *feature.InMemory
 	authCtx      *contextvalues.AuthContext
 }
@@ -101,7 +102,7 @@ func newTestService(t *testing.T) (context.Context, *instance) {
 	svc := oktaresourceconnections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), flags)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, orgID), authz.NewGrant(authz.ScopeMCPRead, authz.WildcardResource))
 
-	si := &instance{svc: svc, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, flags: flags, authCtx: authCtx}
+	si := &instance{svc: svc, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, oktaIssuerID: uuid.Nil, flags: flags, authCtx: authCtx}
 	si.connectionID = createConnection(t, ctx, si)
 	return ctx, si
 }
@@ -110,6 +111,7 @@ func createConnection(t *testing.T, ctx context.Context, si *instance) uuid.UUID
 	t.Helper()
 	connectionID := provisiontest.CreateConnection(t, ctx, si.conn, si.orgID, identityproviderconnections.ProviderOkta)
 	issuerID := provisiontest.CreateIssuer(t, ctx, si.conn, si.orgID, uuid.NullUUID{}, "https://tenant.okta.com/oauth2/v1/token")
+	si.oktaIssuerID = issuerID
 	issuer, err := si.q.GetIssuerFixture(ctx, issuerID)
 	require.NoError(t, err)
 	clientID, err := si.q.CreateIssuerClientFixture(ctx, repo.CreateIssuerClientFixtureParams{
@@ -182,6 +184,12 @@ func createResourceIssuer(t *testing.T, ctx context.Context, si *instance, orgID
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
+	if capable {
+		// Confirming with the shared audience then reads as connected, not a mismatch.
+		n, err = si.q.SetIssuerURLFixture(ctx, repo.SetIssuerURLFixtureParams{Issuer: audience, ID: issuerID, OrganizationID: conv.ToPGText(orgID), ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+	}
 	return issuerID
 }
 
@@ -213,7 +221,33 @@ func createServerWithBackend(t *testing.T, ctx context.Context, si *instance, pr
 		Visibility:            "private",
 	})
 	require.NoError(t, err)
+	associateServerIssuer(t, ctx, si, projectID, id, issuerID)
 	return id, backendID
+}
+
+// associateServerIssuer makes issuerID the server's provider through a live
+// client association, reusing a client the server's project can see so that
+// tests counting the issuer's clients keep their expected number.
+func associateServerIssuer(t *testing.T, ctx context.Context, si *instance, projectID, serverID, issuerID uuid.UUID) {
+	t.Helper()
+	clients, err := si.q.ListIssuerClients(ctx, repo.ListIssuerClientsParams{OrganizationID: si.orgID, IssuerIds: []uuid.UUID{issuerID}})
+	require.NoError(t, err)
+	clientID := uuid.Nil
+	for _, c := range clients {
+		if !c.ProjectID.Valid || c.ProjectID.UUID == projectID {
+			clientID = c.ID
+			break
+		}
+	}
+	if clientID == uuid.Nil {
+		clientID = addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "0oaassociated"+uuid.NewString()[:8])
+	}
+	require.NoError(t, testrepo.New(si.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		ProjectID:             projectID,
+		OrganizationID:        si.orgID,
+		McpServerID:           serverID,
+		RemoteSessionClientID: clientID,
+	}))
 }
 
 func createUserSessionIssuer(t *testing.T, ctx context.Context, si *instance) uuid.UUID {

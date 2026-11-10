@@ -16,14 +16,16 @@ import (
 
 // Endpoints wraps the "identityProviderConnections" service endpoints.
 type Endpoints struct {
-	Create           goa.Endpoint
-	SubmitClientID   goa.Endpoint
-	Verify           goa.Endpoint
-	Get              goa.Endpoint
-	RecordAgent      goa.Endpoint
-	Revoke           goa.Endpoint
-	SyncApplications goa.Endpoint
-	ListApplications goa.Endpoint
+	Create              goa.Endpoint
+	SubmitClientID      goa.Endpoint
+	ReplaceClientSecret goa.Endpoint
+	SetSetupMethod      goa.Endpoint
+	Verify              goa.Endpoint
+	Get                 goa.Endpoint
+	RecordAgent         goa.Endpoint
+	Revoke              goa.Endpoint
+	SyncApplications    goa.Endpoint
+	ListApplications    goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "identityProviderConnections" service
@@ -32,14 +34,16 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Create:           NewCreateEndpoint(s, a.APIKeyAuth),
-		SubmitClientID:   NewSubmitClientIDEndpoint(s, a.APIKeyAuth),
-		Verify:           NewVerifyEndpoint(s, a.APIKeyAuth),
-		Get:              NewGetEndpoint(s, a.APIKeyAuth),
-		RecordAgent:      NewRecordAgentEndpoint(s, a.APIKeyAuth),
-		Revoke:           NewRevokeEndpoint(s, a.APIKeyAuth),
-		SyncApplications: NewSyncApplicationsEndpoint(s, a.APIKeyAuth),
-		ListApplications: NewListApplicationsEndpoint(s, a.APIKeyAuth),
+		Create:              NewCreateEndpoint(s, a.APIKeyAuth),
+		SubmitClientID:      NewSubmitClientIDEndpoint(s, a.APIKeyAuth),
+		ReplaceClientSecret: NewReplaceClientSecretEndpoint(s, a.APIKeyAuth),
+		SetSetupMethod:      NewSetSetupMethodEndpoint(s, a.APIKeyAuth),
+		Verify:              NewVerifyEndpoint(s, a.APIKeyAuth),
+		Get:                 NewGetEndpoint(s, a.APIKeyAuth),
+		RecordAgent:         NewRecordAgentEndpoint(s, a.APIKeyAuth),
+		Revoke:              NewRevokeEndpoint(s, a.APIKeyAuth),
+		SyncApplications:    NewSyncApplicationsEndpoint(s, a.APIKeyAuth),
+		ListApplications:    NewListApplicationsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -48,6 +52,8 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Create = m(e.Create)
 	e.SubmitClientID = m(e.SubmitClientID)
+	e.ReplaceClientSecret = m(e.ReplaceClientSecret)
+	e.SetSetupMethod = m(e.SetSetupMethod)
 	e.Verify = m(e.Verify)
 	e.Get = m(e.Get)
 	e.RecordAgent = m(e.RecordAgent)
@@ -99,6 +105,52 @@ func NewSubmitClientIDEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.SubmitClientID(ctx, p)
+	}
+}
+
+// NewReplaceClientSecretEndpoint returns an endpoint function that calls the
+// method "replaceClientSecret" of service "identityProviderConnections".
+func NewReplaceClientSecretEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReplaceClientSecretPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ReplaceClientSecret(ctx, p)
+	}
+}
+
+// NewSetSetupMethodEndpoint returns an endpoint function that calls the method
+// "setSetupMethod" of service "identityProviderConnections".
+func NewSetSetupMethodEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetSetupMethodPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetSetupMethod(ctx, p)
 	}
 }
 

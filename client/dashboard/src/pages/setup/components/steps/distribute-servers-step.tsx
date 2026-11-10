@@ -1,15 +1,13 @@
+import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertCircle,
-  Boxes,
-  Check,
-  Loader2,
-  Server as ServerIcon,
-} from "lucide-react";
+import { AlertCircle, Check, Server as ServerIcon } from "lucide-react";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { StepContainer } from "../step-container";
-import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
+import { supportsAutomaticOAuth } from "@/pages/catalog/hooks/serverMetadata";
+import { type CatalogServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
   filterToHttpRemotes,
   normalizeRemoteUrl,
@@ -30,10 +28,10 @@ import {
   invalidateAllPlugin,
   usePlugin,
 } from "@gram/client/react-query/plugin";
+import { ClaudeCodeSettingsInstall } from "@/components/claude-code-settings-install";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { CopyButton } from "@/components/ui/CopyButton";
 import {
   Sheet,
   SheetContent,
@@ -56,7 +54,7 @@ interface DistributeServersStepProps {
 }
 
 /** Stable selection key for a catalog server, matching the catalog page convention. */
-function serverKey(server: PulseMCPServer): string {
+function serverKey(server: CatalogServer): string {
   return `${server.registryId}-${server.registrySpecifier}`;
 }
 
@@ -111,7 +109,7 @@ export function DistributeServersStep({
   const [drawerStep, setDrawerStep] = useState<DrawerStep>("adding");
   const [drawerError, setDrawerError] = useState<string | null>(null);
   // Servers handed to the release workflow once the user hits Distribute.
-  const [serversToDeploy, setServersToDeploy] = useState<PulseMCPServer[]>([]);
+  const [serversToDeploy, setServersToDeploy] = useState<CatalogServer[]>([]);
   // Slug of the Default plugin found/created during this run — captured so
   // the install-instructions step below can address it precisely.
   const [distributedPluginSlug, setDistributedPluginSlug] = useState<
@@ -173,7 +171,7 @@ export function DistributeServersStep({
   ]);
 
   const isDistributed = useCallback(
-    (server: PulseMCPServer) =>
+    (server: CatalogServer) =>
       (server.remotes ?? []).some((remote) =>
         distributedUrls.has(normalizeRemoteUrl(remote.url)),
       ),
@@ -184,17 +182,13 @@ export function DistributeServersStep({
   const catalogInitialLoadFailed = catalogLoadFailed && !catalogHasData;
   const catalogRefetchFailed = catalogLoadFailed && catalogHasData;
   const servers = useMemo(
-    () => (data?.servers as PulseMCPServer[]) ?? [],
+    () => (data?.servers as CatalogServer[]) ?? [],
     [data],
   );
-  // Onboarding only surfaces servers Speakeasy can fully auto-configure: those whose
-  // OAuth authorization server advertises a dynamic client registration
-  // endpoint (DCR), reported live by the catalog's `supports_dcr` flag.
-  // Everything else would dead-end on "OAuth setup required" or a missing API
-  // key, so we steer the user to the full catalog for those (see note below the
-  // list).
+  // Onboarding offers advertised automatic OAuth setup; installation still
+  // checks live readiness. Unconfirmed or manual setup stays in the full catalog.
   const autoConfigurableServers = useMemo(
-    () => servers.filter((s) => s.supportsDcr),
+    () => servers.filter(supportsAutomaticOAuth),
     [servers],
   );
 
@@ -390,9 +384,6 @@ export function DistributeServersStep({
 
   const isAdding = drawerStep === "adding" && !drawerError;
   const drawerIdx = drawerStep === "done" ? 1 : 0;
-  const marketplaceCommand = publishStatus?.marketplaceUrl
-    ? `/plugin marketplace add ${publishStatus.marketplaceUrl}`
-    : null;
   // Gate the action on actually-deployable servers, not the raw selection:
   // already-distributed picks are filtered out of selectedServerObjects, so
   // counting selected.size could enable a Continue that deploys nothing.
@@ -404,11 +395,6 @@ export function DistributeServersStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <Boxes className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Distribute MCP servers"
       description="Choose some MCP Servers to distribute to your organization. Selected servers are deployed to your project, bundled into your Default plugin, and published to your marketplace so your team can install them."
       onContinue={handleDistribute}
@@ -461,8 +447,14 @@ export function DistributeServersStep({
               )}
 
               {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+                <div
+                  role="status"
+                  aria-label="Loading MCP servers"
+                  className="mt-3 grid grid-cols-2 gap-3"
+                >
+                  {Array.from({ length: 4 }, (_, i) => (
+                    <Skeleton key={i} className="h-[118px] w-full" />
+                  ))}
                 </div>
               ) : catalogInitialLoadFailed ? (
                 <CatalogErrorBanner
@@ -499,16 +491,14 @@ export function DistributeServersStep({
                             : "border-border bg-card hover:border-foreground/30",
                         )}
                       >
-                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden bg-white">
-                          {server.iconUrl ? (
-                            <img
-                              src={server.iconUrl}
-                              alt=""
-                              className="h-6 w-6"
-                            />
-                          ) : (
-                            <ServerIcon className="h-5 w-5 text-neutral-600" />
-                          )}
+                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden bg-card">
+                          <CatalogLogo
+                            server={server}
+                            className="h-6 w-6"
+                            fallback={
+                              <ServerIcon className="h-5 w-5 text-neutral-600" />
+                            }
+                          />
                         </div>
                         <div className="min-w-0 flex-1">
                           <span className="text-foreground block truncate text-sm font-medium">
@@ -633,7 +623,7 @@ export function DistributeServersStep({
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-3 py-12">
-                    <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
+                    <Spinner className="text-muted-foreground mr-0 h-8 w-8" />
                     <p className="text-muted-foreground text-sm">
                       Adding to your Default plugin…
                     </p>
@@ -654,32 +644,20 @@ export function DistributeServersStep({
                   to your marketplace. Share these instructions so your
                   organization can install them.
                 </p>
-                {marketplaceCommand && (
-                  <div className="space-y-2">
-                    <p className="text-foreground text-sm font-medium">
-                      Install for yourself in Claude Code
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      Registers the marketplace for your own account.
-                    </p>
-                    <div className="bg-muted/50 flex items-center justify-between gap-2 border p-3">
-                      <code className="text-foreground truncate text-xs">
-                        {marketplaceCommand}
-                      </code>
-                      <CopyButton text={marketplaceCommand} />
-                    </div>
-                  </div>
+                {publishStatus?.marketplaceUrl && (
+                  <ClaudeCodeSettingsInstall
+                    marketplaceUrl={publishStatus.marketplaceUrl}
+                    plugins={[distributedPluginSlug ?? DEFAULT_PLUGIN_SLUG]}
+                    secretUrl
+                  />
                 )}
                 {publishStatus?.repoOwner && publishStatus?.repoName && (
                   <div className="space-y-2">
                     <p className="text-foreground text-sm font-medium">
-                      Roll out to your whole organization
+                      All agents
                     </p>
                     <p className="text-muted-foreground text-xs leading-relaxed">
-                      Push the marketplace to every developer through Claude
-                      Code Managed Settings — no per-user install command
-                      required. The full guide also covers the other supported
-                      platforms.
+                      Install instructions for every supported agent.
                     </p>
                     <InstallInstructionsButton
                       repoOwner={publishStatus.repoOwner}

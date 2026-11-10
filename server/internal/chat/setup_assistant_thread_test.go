@@ -212,6 +212,19 @@ func TestListChats_SourceKindFilter(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Eager runtime provisioning creates a blank "New Chat" with source_kind
+	// warmup, not setup. It is infrastructure, never an assistant session.
+	warmupChatID := seedChat(t, ctx, ti, authCtx.UserID, "", "New Chat")
+	_, err = ar.UpsertAssistantThread(ctx, assistantsrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistantID,
+		ProjectID:     ti.projectID,
+		CorrelationID: "runtime-warmup",
+		ChatID:        warmupChatID,
+		SourceKind:    "warmup",
+		SourceRefJson: []byte("{}"),
+	})
+	require.NoError(t, err)
+
 	assistantIDStr := assistantID.String()
 
 	// No source_kind filter: both threads are listed under the assistant.
@@ -241,6 +254,29 @@ func TestListChats_SourceKindFilter(t *testing.T) {
 	require.Equal(t, 1, result.Total)
 	require.Len(t, result.Chats, 1)
 	require.Equal(t, runtimeChatID.String(), result.Chats[0].ID, "exclude_source_kind=setup drops the setup thread")
+
+	// The ordinary chat list has no assistant filter. Warmup must be excluded
+	// before both counting and pagination, without dropping unlinked chats.
+	unlinkedChatID := seedChat(t, ctx, ti, authCtx.UserID, "", "Unlinked Chat")
+	var listedIDs []string
+	for offset := range 3 {
+		page := defaultPayload()
+		page.Limit = 1
+		page.Offset = offset
+		result, err := ti.service.ListChats(ctx, page)
+		require.NoError(t, err)
+		require.Equal(t, 3, result.Total, "unscoped count excludes warmup")
+		require.Len(t, result.Chats, 1)
+		listedIDs = append(listedIDs, result.Chats[0].ID)
+	}
+	require.ElementsMatch(t, []string{setupChatID.String(), runtimeChatID.String(), unlinkedChatID.String()}, listedIDs)
+	lastPage := defaultPayload()
+	lastPage.Limit = 1
+	lastPage.Offset = 3
+	result, err = ti.service.ListChats(ctx, lastPage)
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total)
+	require.Empty(t, result.Chats)
 }
 
 // TestLinkSetupAssistantThread_ForeignProjectAssistant_NoOps verifies the

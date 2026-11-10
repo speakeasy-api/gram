@@ -28,7 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
 )
 
-// Re-exported from devidentity, which the Gram server's local seed also
+// Re-exported from devidentity, which the Speakeasy server's local seed also
 // imports so both sides agree on who you are and which org you land in.
 const (
 	DefaultOrgName     = devidentity.DefaultOrgName
@@ -114,7 +114,7 @@ func BootstrapLocalUser(ctx context.Context, db *sql.DB, mode string) (uuid.UUID
 		return uuid.Nil, fmt.Errorf("upsert default organization: %w", err)
 	}
 
-	// Stamp a WorkOS-style org ID so the Gram-side identity resolver
+	// Stamp a WorkOS-style org ID so the Speakeasy-side identity resolver
 	// sees a production-shaped workos_id in organization_metadata.
 	if !org.WorkosID.Valid {
 		org, err = queries.UpdateOrganization(ctx, repo.UpdateOrganizationParams{

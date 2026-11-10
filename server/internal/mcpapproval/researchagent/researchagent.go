@@ -246,9 +246,10 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 
 	messages := []or.ChatMessages{
 		or.CreateChatMessagesSystem(or.ChatSystemMessage{
-			Role:    or.ChatSystemMessageRoleSystem,
-			Content: or.CreateChatSystemMessageContentStr(systemPrompt),
-			Name:    nil,
+			ConfigurationUpdate: nil,
+			Role:                or.ChatSystemMessageRoleSystem,
+			Content:             or.CreateChatSystemMessageContentStr(systemPrompt),
+			Name:                nil,
 		}),
 		or.CreateChatMessagesUser(or.ChatUserMessage{
 			Role:    or.ChatUserMessageRoleUser,
@@ -299,6 +300,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 
 		compactToolHistory(messages)
 		response, err := r.completions.GetCompletion(ctx, openrouter.CompletionRequest{
+			MaxTokens:      nil,
 			OrgID:          input.OrgID,
 			ProjectID:      input.ProjectID.String(),
 			Messages:       messages,
@@ -554,7 +556,6 @@ func (r *Runner) executeTool(ctx context.Context, reportID uuid.UUID, call openr
 		env := toolconfig.ToolCallEnv{
 			SystemEnv:  nil,
 			UserConfig: nil,
-			OAuthToken: "",
 			GramEmail:  "",
 			// The report id keys the fetch tool's per-run budget.
 			GramChatID: reportID.String(),
@@ -706,6 +707,7 @@ func (r *Runner) extract(ctx context.Context, input RunInput, transcript string,
 	strict := true
 	temperature := 0.0
 	response, err := r.completions.GetObjectCompletion(ctx, openrouter.ObjectCompletionRequest{
+		MaxTokens:    nil,
 		OrgID:        input.OrgID,
 		ProjectID:    input.ProjectID.String(),
 		Model:        extractionModel,
@@ -787,6 +789,7 @@ func assistantToolCallMessage(response *openrouter.CompletionResponse) or.ChatMe
 	}
 
 	message := or.ChatAssistantMessage{
+		Model:            nil,
 		Role:             or.ChatAssistantMessageRoleAssistant,
 		Content:          nil,
 		Name:             nil,

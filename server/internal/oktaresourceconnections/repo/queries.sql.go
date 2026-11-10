@@ -12,9 +12,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearIssuerDiscoveryFixture = `-- name: ClearIssuerDiscoveryFixture :execrows
+UPDATE remote_session_issuers
+SET metadata_fetched_at = NULL
+WHERE id = $1
+  AND organization_id = $2
+`
+
+type ClearIssuerDiscoveryFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Test fixture: an issuer whose advertised capabilities have no discovery recorded.
+func (q *Queries) ClearIssuerDiscoveryFixture(ctx context.Context, arg ClearIssuerDiscoveryFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearIssuerDiscoveryFixture, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createEligibleMCPServerFixture = `-- name: CreateEligibleMCPServerFixture :one
-INSERT INTO mcp_servers (project_id, name, slug, remote_mcp_server_id, remote_session_issuer_id, user_session_issuer_id, visibility)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO mcp_servers (project_id, name, slug, remote_mcp_server_id, unproxied_mcp_server_id, remote_session_issuer_id, user_session_issuer_id, visibility)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id
 `
 
@@ -23,6 +44,7 @@ type CreateEligibleMCPServerFixtureParams struct {
 	Name                  pgtype.Text
 	Slug                  pgtype.Text
 	RemoteMcpServerID     uuid.NullUUID
+	UnproxiedMcpServerID  uuid.NullUUID
 	RemoteSessionIssuerID uuid.NullUUID
 	UserSessionIssuerID   uuid.NullUUID
 	Visibility            string
@@ -34,6 +56,7 @@ func (q *Queries) CreateEligibleMCPServerFixture(ctx context.Context, arg Create
 		arg.Name,
 		arg.Slug,
 		arg.RemoteMcpServerID,
+		arg.UnproxiedMcpServerID,
 		arg.RemoteSessionIssuerID,
 		arg.UserSessionIssuerID,
 		arg.Visibility,
@@ -215,7 +238,7 @@ WHERE organization_id = $1
   AND identity_provider_connection_id = $2
   AND remote_session_issuer_id = $3
   AND resource = $4
-RETURNING id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, created_at, updated_at
+RETURNING id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
 `
 
 type DeleteResourceConnectionParams struct {
@@ -243,6 +266,8 @@ func (q *Queries) DeleteResourceConnection(ctx context.Context, arg DeleteResour
 		&i.Resource,
 		&i.Audience,
 		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -278,6 +303,25 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , ($1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL))::boolean AS typed_auth_enforced
+  , ARRAY(
+      SELECT oc.id
+      FROM mcp_server_auth_clients AS ol
+      JOIN mcp_auth_clients AS oa
+        ON oa.id = ol.auth_client_id
+       AND oa.organization_id = ol.organization_id
+       AND oa.deleted IS FALSE
+       AND oa.enabled
+       AND oa.client_type IN ('ema', 'remote_session')
+      JOIN remote_session_clients AS oc
+        ON oc.id = oa.remote_session_client_id
+       AND oc.deleted IS FALSE
+      WHERE ol.mcp_server_id = ms.id
+        AND ol.project_id = ms.project_id
+        AND ol.deleted IS FALSE
+      ORDER BY oc.id
+    )::uuid[] AS offered_client_ids
+  , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
   , i.authorization_grant_profiles_supported
@@ -287,14 +331,43 @@ SELECT
 FROM mcp_servers AS ms
 JOIN projects AS p
   ON p.id = ms.project_id
- AND p.organization_id = $1
+ AND p.organization_id = $2
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = ms.remote_session_issuer_id
+  ON i.id = CASE WHEN $1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
+       SELECT oc.remote_session_issuer_id
+       FROM mcp_server_auth_clients AS ol
+       JOIN mcp_auth_clients AS oa
+         ON oa.id = ol.auth_client_id
+        AND oa.organization_id = ol.organization_id
+        AND oa.deleted IS FALSE
+        AND oa.enabled
+        AND oa.client_type IN ('ema', 'remote_session')
+       JOIN remote_session_clients AS oc
+         ON oc.id = oa.remote_session_client_id
+        AND oc.deleted IS FALSE
+       WHERE ol.mcp_server_id = ms.id
+         AND ol.project_id = ms.project_id
+         AND ol.deleted IS FALSE
+       ORDER BY (oa.client_type = 'ema') DESC, oc.id
+       LIMIT 1
+     ) ELSE (
+       SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                   THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
+       FROM mcp_server_remote_session_clients AS a
+       JOIN remote_session_clients AS c
+         ON c.id = a.remote_session_client_id
+        AND c.deleted IS FALSE
+       JOIN remote_session_issuers AS provider
+         ON provider.id = c.remote_session_issuer_id
+        AND provider.deleted IS FALSE
+       WHERE a.mcp_server_id = ms.id
+         AND a.deleted IS FALSE
+     ) END
  AND i.deleted IS FALSE
  AND (
    i.project_id = ms.project_id
-   OR (i.project_id IS NULL AND i.organization_id = $1)
+   OR (i.project_id IS NULL AND i.organization_id = $2)
    OR (i.project_id IS NULL AND i.organization_id IS NULL)
  )
 LEFT JOIN user_session_issuers AS usi
@@ -302,7 +375,7 @@ LEFT JOIN user_session_issuers AS usi
  AND usi.deleted IS FALSE
  AND (
    usi.project_id = ms.project_id
-   OR (usi.project_id IS NULL AND usi.organization_id = $1)
+   OR (usi.project_id IS NULL AND usi.organization_id = $2)
    OR (usi.project_id IS NULL AND usi.organization_id IS NULL)
  )
 LEFT JOIN tunneled_mcp_servers AS t
@@ -318,7 +391,7 @@ LEFT JOIN unproxied_mcp_servers AS u
   ON u.id = ms.unproxied_mcp_server_id
  AND u.project_id = ms.project_id
  AND u.deleted IS FALSE
-WHERE ms.id = $2
+WHERE ms.id = $3
   AND ms.deleted IS FALSE
   AND ms.visibility <> 'disabled'
   AND ms.toolset_id IS NULL
@@ -327,8 +400,9 @@ WHERE ms.id = $2
 `
 
 type GetEligibleServerParams struct {
-	OrganizationID string
-	McpServerID    uuid.UUID
+	TypedAuthEnforced bool
+	OrganizationID    string
+	McpServerID       uuid.UUID
 }
 
 type GetEligibleServerRow struct {
@@ -339,6 +413,9 @@ type GetEligibleServerRow struct {
 	Name                                pgtype.Text
 	Slug                                pgtype.Text
 	IssuerID                            uuid.UUID
+	TypedAuthEnforced                   bool
+	OfferedClientIds                    []uuid.UUID
+	Issuer                              string
 	MetadataFetchedAt                   pgtype.Timestamptz
 	GrantTypesSupported                 []string
 	AuthorizationGrantProfilesSupported []string
@@ -350,7 +427,7 @@ type GetEligibleServerRow struct {
 // One eligible, discovered server by id, re-read inside the write
 // transaction; ids outside the organization do not resolve.
 func (q *Queries) GetEligibleServer(ctx context.Context, arg GetEligibleServerParams) (GetEligibleServerRow, error) {
-	row := q.db.QueryRow(ctx, getEligibleServer, arg.OrganizationID, arg.McpServerID)
+	row := q.db.QueryRow(ctx, getEligibleServer, arg.TypedAuthEnforced, arg.OrganizationID, arg.McpServerID)
 	var i GetEligibleServerRow
 	err := row.Scan(
 		&i.ID,
@@ -360,6 +437,9 @@ func (q *Queries) GetEligibleServer(ctx context.Context, arg GetEligibleServerPa
 		&i.Name,
 		&i.Slug,
 		&i.IssuerID,
+		&i.TypedAuthEnforced,
+		&i.OfferedClientIds,
+		&i.Issuer,
 		&i.MetadataFetchedAt,
 		&i.GrantTypesSupported,
 		&i.AuthorizationGrantProfilesSupported,
@@ -396,6 +476,7 @@ SELECT
   , o.org_url
   , o.agent_id
   , o.agent_app_id
+  , o.remote_session_issuer_id
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -407,11 +488,12 @@ WHERE c.organization_id = $1
 `
 
 type GetLiveConnectionRow struct {
-	ID         uuid.UUID
-	Status     string
-	OrgUrl     string
-	AgentID    pgtype.Text
-	AgentAppID pgtype.Text
+	ID                    uuid.UUID
+	Status                string
+	OrgUrl                string
+	AgentID               pgtype.Text
+	AgentAppID            pgtype.Text
+	RemoteSessionIssuerID uuid.UUID
 }
 
 // The organization's live Okta connection with the display fields readiness
@@ -425,6 +507,7 @@ func (q *Queries) GetLiveConnection(ctx context.Context, organizationID string) 
 		&i.OrgUrl,
 		&i.AgentID,
 		&i.AgentAppID,
+		&i.RemoteSessionIssuerID,
 	)
 	return i, err
 }
@@ -451,8 +534,84 @@ func (q *Queries) GetOktaApplicationLabel(ctx context.Context, arg GetOktaApplic
 	return label, err
 }
 
+const getResourceConnection = `-- name: GetResourceConnection :one
+SELECT id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
+FROM okta_resource_connections
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+  AND remote_session_issuer_id = $3
+  AND resource = $4
+`
+
+type GetResourceConnectionParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	RemoteSessionIssuerID        uuid.UUID
+	Resource                     string
+}
+
+// The observer's unlocked first read rejects stale attempts without taking a lock.
+// Concurrently locked rows are skipped by GetResourceConnectionForObservation.
+func (q *Queries) GetResourceConnection(ctx context.Context, arg GetResourceConnectionParams) (OktaResourceConnection, error) {
+	row := q.db.QueryRow(ctx, getResourceConnection,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+		arg.RemoteSessionIssuerID,
+		arg.Resource,
+	)
+	var i OktaResourceConnection
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.IdentityProviderConnectionID,
+		&i.RemoteSessionIssuerID,
+		&i.Resource,
+		&i.Audience,
+		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getResourceConnectionForObservation = `-- name: GetResourceConnectionForObservation :one
+SELECT id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
+FROM okta_resource_connections
+WHERE id = $1
+  AND organization_id = $2
+FOR UPDATE SKIP LOCKED
+`
+
+type GetResourceConnectionForObservationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Skips a row another observer or a confirmation holds, so the proxied
+// request never waits on readiness bookkeeping.
+func (q *Queries) GetResourceConnectionForObservation(ctx context.Context, arg GetResourceConnectionForObservationParams) (OktaResourceConnection, error) {
+	row := q.db.QueryRow(ctx, getResourceConnectionForObservation, arg.ID, arg.OrganizationID)
+	var i OktaResourceConnection
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.IdentityProviderConnectionID,
+		&i.RemoteSessionIssuerID,
+		&i.Resource,
+		&i.Audience,
+		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getResourceConnectionForUpdate = `-- name: GetResourceConnectionForUpdate :one
-SELECT id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, created_at, updated_at
+SELECT id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
 FROM okta_resource_connections
 WHERE organization_id = $1
   AND identity_provider_connection_id = $2
@@ -484,6 +643,8 @@ func (q *Queries) GetResourceConnectionForUpdate(ctx context.Context, arg GetRes
 		&i.Resource,
 		&i.Audience,
 		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -576,6 +737,25 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , ($1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL))::boolean AS typed_auth_enforced
+  , ARRAY(
+      SELECT oc.id
+      FROM mcp_server_auth_clients AS ol
+      JOIN mcp_auth_clients AS oa
+        ON oa.id = ol.auth_client_id
+       AND oa.organization_id = ol.organization_id
+       AND oa.deleted IS FALSE
+       AND oa.enabled
+       AND oa.client_type IN ('ema', 'remote_session')
+      JOIN remote_session_clients AS oc
+        ON oc.id = oa.remote_session_client_id
+       AND oc.deleted IS FALSE
+      WHERE ol.mcp_server_id = ms.id
+        AND ol.project_id = ms.project_id
+        AND ol.deleted IS FALSE
+      ORDER BY oc.id
+    )::uuid[] AS offered_client_ids
+  , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
   , i.authorization_grant_profiles_supported
@@ -585,14 +765,43 @@ SELECT
 FROM mcp_servers AS ms
 JOIN projects AS p
   ON p.id = ms.project_id
- AND p.organization_id = $1
+ AND p.organization_id = $2
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = ms.remote_session_issuer_id
+  ON i.id = CASE WHEN $1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
+       SELECT oc.remote_session_issuer_id
+       FROM mcp_server_auth_clients AS ol
+       JOIN mcp_auth_clients AS oa
+         ON oa.id = ol.auth_client_id
+        AND oa.organization_id = ol.organization_id
+        AND oa.deleted IS FALSE
+        AND oa.enabled
+        AND oa.client_type IN ('ema', 'remote_session')
+       JOIN remote_session_clients AS oc
+         ON oc.id = oa.remote_session_client_id
+        AND oc.deleted IS FALSE
+       WHERE ol.mcp_server_id = ms.id
+         AND ol.project_id = ms.project_id
+         AND ol.deleted IS FALSE
+       ORDER BY (oa.client_type = 'ema') DESC, oc.id
+       LIMIT 1
+     ) ELSE (
+       SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                   THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
+       FROM mcp_server_remote_session_clients AS a
+       JOIN remote_session_clients AS c
+         ON c.id = a.remote_session_client_id
+        AND c.deleted IS FALSE
+       JOIN remote_session_issuers AS provider
+         ON provider.id = c.remote_session_issuer_id
+        AND provider.deleted IS FALSE
+       WHERE a.mcp_server_id = ms.id
+         AND a.deleted IS FALSE
+     ) END
  AND i.deleted IS FALSE
  AND (
    i.project_id = ms.project_id
-   OR (i.project_id IS NULL AND i.organization_id = $1)
+   OR (i.project_id IS NULL AND i.organization_id = $2)
    OR (i.project_id IS NULL AND i.organization_id IS NULL)
  )
 LEFT JOIN user_session_issuers AS usi
@@ -600,7 +809,7 @@ LEFT JOIN user_session_issuers AS usi
  AND usi.deleted IS FALSE
  AND (
    usi.project_id = ms.project_id
-   OR (usi.project_id IS NULL AND usi.organization_id = $1)
+   OR (usi.project_id IS NULL AND usi.organization_id = $2)
    OR (usi.project_id IS NULL AND usi.organization_id IS NULL)
  )
 LEFT JOIN tunneled_mcp_servers AS t
@@ -623,6 +832,11 @@ WHERE ms.deleted IS FALSE
 ORDER BY ms.name ASC NULLS LAST, ms.id ASC
 `
 
+type ListEligibleServersParams struct {
+	TypedAuthEnforced bool
+	OrganizationID    string
+}
+
 type ListEligibleServersRow struct {
 	ID                                  uuid.UUID
 	ProjectID                           uuid.UUID
@@ -631,6 +845,9 @@ type ListEligibleServersRow struct {
 	Name                                pgtype.Text
 	Slug                                pgtype.Text
 	IssuerID                            uuid.UUID
+	TypedAuthEnforced                   bool
+	OfferedClientIds                    []uuid.UUID
+	Issuer                              string
 	MetadataFetchedAt                   pgtype.Timestamptz
 	GrantTypesSupported                 []string
 	AuthorizationGrantProfilesSupported []string
@@ -641,12 +858,23 @@ type ListEligibleServersRow struct {
 
 // Servers the organization owns (tenancy through projects, since mcp_servers
 // has no organization column) with a live backend and an authorization server
-// the organization can see. Whether Speakeasy fronts the user login does not
-// matter: readiness is about the upstream authorization server. Undiscovered
-// issuers are returned so the list can count them; whether the issuer
-// advertises ID-JAG is decided in Go so the derivation stays pure.
-func (q *Queries) ListEligibleServers(ctx context.Context, organizationID string) ([]ListEligibleServersRow, error) {
-	rows, err := q.db.Query(ctx, listEligibleServers, organizationID)
+// the organization can see. The authorization server comes from the server's
+// live client associations; a server with none or several is left out. Whether
+// Speakeasy fronts the user login does not matter: readiness is about the
+// upstream authorization server. Undiscovered issuers are returned so the list
+// can count them; whether the issuer advertises ID-JAG is decided in Go so the
+// derivation stays pure.
+// Typed auth clients choose upstream authentication only for proxied servers.
+// Unproxied servers have no typed offers and retain their derived issuer and clients.
+// The enforced-and-proxied predicate appears four times in this file, twice per
+// query, and changes with them and with Go code that gates typed auth clients on
+// remote or tunneled backends.
+// Where typed auth clients apply (typed_auth_enforced),
+// a server's authorization server is the one its personal or identity-provider
+// auth clients offer: an identity-provider client's if it offers one, else the
+// first by id. Elsewhere it is the one its live client associations name.
+func (q *Queries) ListEligibleServers(ctx context.Context, arg ListEligibleServersParams) ([]ListEligibleServersRow, error) {
+	rows, err := q.db.Query(ctx, listEligibleServers, arg.TypedAuthEnforced, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -662,6 +890,9 @@ func (q *Queries) ListEligibleServers(ctx context.Context, organizationID string
 			&i.Name,
 			&i.Slug,
 			&i.IssuerID,
+			&i.TypedAuthEnforced,
+			&i.OfferedClientIds,
+			&i.Issuer,
 			&i.MetadataFetchedAt,
 			&i.GrantTypesSupported,
 			&i.AuthorizationGrantProfilesSupported,
@@ -689,6 +920,7 @@ SELECT
   , c.resource_identifier
   , i.scope_override AS issuer_scope_override
   , i.scopes_supported AS issuer_scopes_supported
+  , i.omit_scope_fallback AS issuer_omit_scope_fallback
   , (
       SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
       FROM remote_session_client_user_session_issuers AS link
@@ -722,15 +954,16 @@ type ListIssuerClientsParams struct {
 }
 
 type ListIssuerClientsRow struct {
-	ID                    uuid.UUID
-	RemoteSessionIssuerID uuid.UUID
-	ProjectID             uuid.NullUUID
-	ClientID              string
-	Scope                 []string
-	ResourceIdentifier    pgtype.Text
-	IssuerScopeOverride   []string
-	IssuerScopesSupported []string
-	UserSessionIssuerIds  []uuid.UUID
+	ID                      uuid.UUID
+	RemoteSessionIssuerID   uuid.UUID
+	ProjectID               uuid.NullUUID
+	ClientID                string
+	Scope                   []string
+	ResourceIdentifier      pgtype.Text
+	IssuerScopeOverride     []string
+	IssuerScopesSupported   []string
+	IssuerOmitScopeFallback pgtype.Bool
+	UserSessionIssuerIds    []uuid.UUID
 }
 
 // Clients the organization holds on the given issuers: project-owned ones in
@@ -753,7 +986,73 @@ func (q *Queries) ListIssuerClients(ctx context.Context, arg ListIssuerClientsPa
 			&i.ResourceIdentifier,
 			&i.IssuerScopeOverride,
 			&i.IssuerScopesSupported,
+			&i.IssuerOmitScopeFallback,
 			&i.UserSessionIssuerIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteProtectedResourceScopes = `-- name: ListRemoteProtectedResourceScopes :many
+SELECT
+    rpr.project_id
+  , rpr.resource_identifier
+  , rpr.scope_override
+  , rpr.challenge_scopes
+  , rpr.scopes_supported
+  , rpr.metadata_fetched_at
+  , COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
+FROM remote_protected_resources AS rpr
+JOIN projects AS p
+  ON p.id = rpr.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE rpr.project_id = ANY ($2::uuid[])
+  AND rpr.resource_identifier = ANY ($3::text[])
+  AND rpr.deleted IS FALSE
+`
+
+type ListRemoteProtectedResourceScopesParams struct {
+	OrganizationID      string
+	ProjectIds          []uuid.UUID
+	ResourceIdentifiers []string
+}
+
+type ListRemoteProtectedResourceScopesRow struct {
+	ProjectID          uuid.UUID
+	ResourceIdentifier string
+	ScopeOverride      []string
+	ChallengeScopes    []string
+	ScopesSupported    []string
+	MetadataFetchedAt  pgtype.Timestamptz
+	DocumentResource   string
+}
+
+// What the cached protected resource rows say about scopes, for any of the
+// given projects and upstream URLs; callers match rows back to servers.
+func (q *Queries) ListRemoteProtectedResourceScopes(ctx context.Context, arg ListRemoteProtectedResourceScopesParams) ([]ListRemoteProtectedResourceScopesRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteProtectedResourceScopes, arg.OrganizationID, arg.ProjectIds, arg.ResourceIdentifiers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteProtectedResourceScopesRow
+	for rows.Next() {
+		var i ListRemoteProtectedResourceScopesRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ResourceIdentifier,
+			&i.ScopeOverride,
+			&i.ChallengeScopes,
+			&i.ScopesSupported,
+			&i.MetadataFetchedAt,
+			&i.DocumentResource,
 		); err != nil {
 			return nil, err
 		}
@@ -767,7 +1066,7 @@ func (q *Queries) ListIssuerClients(ctx context.Context, arg ListIssuerClientsPa
 
 const listResourceConnections = `-- name: ListResourceConnections :many
 SELECT
-    r.id, r.organization_id, r.identity_provider_connection_id, r.remote_session_issuer_id, r.resource, r.audience, r.okta_application_id, r.created_at, r.updated_at
+    r.id, r.organization_id, r.identity_provider_connection_id, r.remote_session_issuer_id, r.resource, r.audience, r.okta_application_id, r.observed_result, r.observed_at, r.created_at, r.updated_at
   , a.label AS okta_application_label
 FROM okta_resource_connections AS r
 LEFT JOIN okta_applications AS a
@@ -809,6 +1108,8 @@ func (q *Queries) ListResourceConnections(ctx context.Context, arg ListResourceC
 			&i.OktaResourceConnection.Resource,
 			&i.OktaResourceConnection.Audience,
 			&i.OktaResourceConnection.OktaApplicationID,
+			&i.OktaResourceConnection.ObservedResult,
+			&i.OktaResourceConnection.ObservedAt,
 			&i.OktaResourceConnection.CreatedAt,
 			&i.OktaResourceConnection.UpdatedAt,
 			&i.OktaApplicationLabel,
@@ -857,6 +1158,39 @@ func (q *Queries) LockLiveConnection(ctx context.Context, arg LockLiveConnection
 	return i, err
 }
 
+const recordObservation = `-- name: RecordObservation :execrows
+UPDATE okta_resource_connections
+SET observed_result = $1,
+    observed_at = $2
+WHERE id = $3
+  AND organization_id = $4
+  AND updated_at < $2
+  AND (observed_at IS NULL OR observed_at < $2)
+`
+
+type RecordObservationParams struct {
+	ObservedResult pgtype.Text
+	ObservedAt     pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Records an exchange observation. updated_at stays the confirmation time,
+// so an attempt that started before the latest confirmation or observation
+// never lands.
+func (q *Queries) RecordObservation(ctx context.Context, arg RecordObservationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordObservation,
+		arg.ObservedResult,
+		arg.ObservedAt,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setIssuerGrantCapabilitiesFixture = `-- name: SetIssuerGrantCapabilitiesFixture :execrows
 UPDATE remote_session_issuers
 SET grant_types_supported = $1::text[],
@@ -875,6 +1209,35 @@ type SetIssuerGrantCapabilitiesFixtureParams struct {
 // profile and jwt-bearer.
 func (q *Queries) SetIssuerGrantCapabilitiesFixture(ctx context.Context, arg SetIssuerGrantCapabilitiesFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setIssuerGrantCapabilitiesFixture, arg.GrantTypesSupported, arg.AuthorizationGrantProfilesSupported, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setIssuerURLFixture = `-- name: SetIssuerURLFixture :execrows
+UPDATE remote_session_issuers
+SET issuer = $1
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id = $4
+`
+
+type SetIssuerURLFixtureParams struct {
+	Issuer         string
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+}
+
+// Test fixture: an issuer identifier, e.g. to match a confirmed audience.
+func (q *Queries) SetIssuerURLFixture(ctx context.Context, arg SetIssuerURLFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setIssuerURLFixture,
+		arg.Issuer,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -962,8 +1325,10 @@ INSERT INTO okta_resource_connections (
 ON CONFLICT (organization_id, identity_provider_connection_id, remote_session_issuer_id, resource) DO UPDATE
 SET audience = EXCLUDED.audience,
     okta_application_id = COALESCE(EXCLUDED.okta_application_id, okta_resource_connections.okta_application_id),
+    observed_result = NULL,
+    observed_at = NULL,
     updated_at = clock_timestamp()
-RETURNING id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, created_at, updated_at
+RETURNING id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
 `
 
 type UpsertResourceConnectionParams struct {
@@ -975,8 +1340,9 @@ type UpsertResourceConnectionParams struct {
 	OktaApplicationID            pgtype.Text
 }
 
-// A row is the confirmation. Repeating it updates the audience and keeps the
-// recorded app instance unless a new one is given.
+// A row is the confirmation. Repeating it updates the audience, keeps the
+// recorded app instance unless a new one is given, and clears the observed
+// result so a stale failure does not outlive the fix it was confirmed for.
 func (q *Queries) UpsertResourceConnection(ctx context.Context, arg UpsertResourceConnectionParams) (OktaResourceConnection, error) {
 	row := q.db.QueryRow(ctx, upsertResourceConnection,
 		arg.OrganizationID,
@@ -995,6 +1361,8 @@ func (q *Queries) UpsertResourceConnection(ctx context.Context, arg UpsertResour
 		&i.Resource,
 		&i.Audience,
 		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

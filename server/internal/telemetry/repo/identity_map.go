@@ -53,7 +53,9 @@ func (q *Queries) ReplaceIdentityMap(ctx context.Context, entries []IdentityMapE
 			args = append(args, entry.OrgID, entry.EmailLower, entry.CanonicalUserID, entry.CanonicalEmail)
 		}
 		query := "INSERT INTO identity_map_staging (org_id, email_lower, canonical_user_id, canonical_email) VALUES " + strings.Join(values, ", ")
-		if err := q.conn.Exec(ctx, query, args...); err != nil {
+		// Acknowledged, so the EXCHANGE below never publishes a staging table
+		// still missing buffered chunks.
+		if err := q.conn.Exec(acknowledgedInsertContext(ctx), query, args...); err != nil {
 			return fmt.Errorf("insert identity_map_staging chunk: %w", err)
 		}
 	}

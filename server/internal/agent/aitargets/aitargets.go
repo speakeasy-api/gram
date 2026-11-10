@@ -23,7 +23,7 @@ const (
 	CategoryHarness Category = "harness"
 
 	// CategoryAssistant is a general-purpose AI assistant or agent. Like a
-	// harness it speaks MCP to Gram, so a decision about one is enforceable;
+	// harness it speaks MCP to Speakeasy, so a decision about one is enforceable;
 	// unlike a harness it is not a coding tool.
 	CategoryAssistant Category = "assistant"
 
@@ -39,7 +39,7 @@ func KnownCategories() []Category {
 	return []Category{CategoryHarness, CategoryAssistant, CategoryLocalModel}
 }
 
-// CallsGateway reports whether a target of this category ever reaches Gram's
+// CallsGateway reports whether a target of this category ever reaches Speakeasy's
 // MCP gateway, and so whether naming a caller for it is meaningful. It is the
 // one place that distinction is written down: a category that never connects
 // cannot carry matchers and cannot be the subject of an access decision.

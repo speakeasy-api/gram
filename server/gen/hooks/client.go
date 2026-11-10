@@ -23,10 +23,11 @@ type Client struct {
 	SkillFeedbackEndpoint      goa.Endpoint
 	LogsEndpoint               goa.Endpoint
 	MetricsEndpoint            goa.Endpoint
+	GetStatusEndpoint          goa.Endpoint
 }
 
 // NewClient initializes a "hooks" service client given the endpoints.
-func NewClient(claude, cursor, codex, ingest, uploadSkillContent, skillFeedback, logs, metrics goa.Endpoint) *Client {
+func NewClient(claude, cursor, codex, ingest, uploadSkillContent, skillFeedback, logs, metrics, getStatus goa.Endpoint) *Client {
 	return &Client{
 		ClaudeEndpoint:             claude,
 		CursorEndpoint:             cursor,
@@ -36,6 +37,7 @@ func NewClient(claude, cursor, codex, ingest, uploadSkillContent, skillFeedback,
 		SkillFeedbackEndpoint:      skillFeedback,
 		LogsEndpoint:               logs,
 		MetricsEndpoint:            metrics,
+		GetStatusEndpoint:          getStatus,
 	}
 }
 
@@ -198,4 +200,26 @@ func (c *Client) Logs(ctx context.Context, p *LogsPayload) (err error) {
 func (c *Client) Metrics(ctx context.Context, p *MetricsPayload) (err error) {
 	_, err = c.MetricsEndpoint(ctx, p)
 	return
+}
+
+// GetStatus calls the "getStatus" endpoint of the "hooks" service.
+// GetStatus may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetStatus(ctx context.Context, p *GetStatusPayload) (res *HooksStatus, err error) {
+	var ires any
+	ires, err = c.GetStatusEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*HooksStatus), nil
 }

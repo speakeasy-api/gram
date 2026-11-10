@@ -8,12 +8,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/directory"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -23,20 +27,33 @@ var (
 )
 
 type Input struct {
-	OrganizationID   string
-	ProjectID        uuid.UUID
-	PluginID         uuid.UUID
-	PrincipalURNs    []string
+	OrganizationID string
+	ProjectID      uuid.UUID
+	PluginID       uuid.UUID
+	PrincipalURNs  []string
+
+	// InstallModes maps a principal URN in PrincipalURNs to its install mode.
+	// A principal missing from the map keeps its current mode, or gets
+	// installmode.Default when it is newly assigned.
+	InstallModes     map[string]string
 	Actor            urn.Principal
 	ActorDisplayName *string
 	ActorSlug        *string
 }
 
 type Result struct {
+	ContentChanged     bool
 	Plugin             pluginsrepo.Plugin
 	Assignments        []pluginsrepo.PluginAssignment
 	PrincipalURNs      []string
 	PreviousPrincipals []string
+
+	// InstallModes is the stored install mode of each principal in PrincipalURNs.
+	InstallModes map[string]installmode.Mode
+
+	// PreviousInstallModes is the install mode of each principal in
+	// PreviousPrincipals before the replacement.
+	PreviousInstallModes map[string]installmode.Mode
 }
 
 // Lock selects one exact live plugin under FOR UPDATE. The same lock is used by
@@ -46,34 +63,28 @@ func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, plug
 	if tx == nil || organizationID == "" || projectID == uuid.Nil || pluginID == uuid.Nil {
 		return pluginsrepo.Plugin{}, ErrInvalid
 	}
-	var plugin pluginsrepo.Plugin
-	err := tx.QueryRow(ctx, `
-SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
-FROM plugins
-WHERE id = $1
-  AND organization_id = $2
-  AND project_id = $3
-  AND deleted IS FALSE
-FOR UPDATE`, pluginID, organizationID, projectID).Scan(
-		&plugin.ID,
-		&plugin.OrganizationID,
-		&plugin.ProjectID,
-		&plugin.Name,
-		&plugin.Slug,
-		&plugin.Description,
-		&plugin.IsDefault,
-		&plugin.CreatedAt,
-		&plugin.UpdatedAt,
-		&plugin.DeletedAt,
-		&plugin.Deleted,
-	)
+	row, err := pluginsrepo.New(tx).LockPluginForAssignments(ctx, pluginsrepo.LockPluginForAssignmentsParams{ID: pluginID, OrganizationID: organizationID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return pluginsrepo.Plugin{}, ErrNotFound
 	}
 	if err != nil {
 		return pluginsrepo.Plugin{}, fmt.Errorf("lock plugin assignment target: %w", err)
 	}
-	return plugin, nil
+	return pluginsrepo.Plugin{
+		ID:              row.ID,
+		OrganizationID:  row.OrganizationID,
+		ProjectID:       row.ProjectID,
+		Name:            row.Name,
+		Slug:            row.Slug,
+		Description:     row.Description,
+		IsDefault:       row.IsDefault,
+		AutoCreated:     row.AutoCreated,
+		AutoSyncEnabled: pgtype.Bool{Bool: false, Valid: false},
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
+		DeletedAt:       row.DeletedAt,
+		Deleted:         row.Deleted,
+	}, nil
 }
 
 // IsSubset compares canonical assignment sets without inferring group membership.
@@ -101,9 +112,11 @@ type Guard func(ctx context.Context, tx pgx.Tx, plugin pluginsrepo.Plugin, curre
 
 // BeforeReplace remains separate from authorization. Platform MCP uses it for
 // optimistic concurrency after the guard has accepted the desired audience.
-type BeforeReplace func(ctx context.Context, plugin pluginsrepo.Plugin, current, desired []string) error
+// currentModes holds the stored install mode of each principal in current.
+type BeforeReplace func(ctx context.Context, plugin pluginsrepo.Plugin, current, desired []string, currentModes map[string]installmode.Mode) error
 
 type Dependencies struct {
+	DeliveryGuard *admission.Guard
 	Guard         Guard
 	BeforeReplace BeforeReplace
 }
@@ -137,10 +150,16 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 	}
 	current := make([]string, 0, len(existing))
 	existingCanonical := make(map[string]struct{}, len(existing))
+	previousModes := make(map[string]installmode.Mode, len(existing))
 	for _, assignment := range existing {
 		canonical := canonicalPrincipal(assignment.PrincipalUrn)
 		current = append(current, canonical)
 		existingCanonical[canonical] = struct{}{}
+		previousModes[canonical] = installmode.FromStored(assignment.InstallMode)
+	}
+	modes, err := resolveInstallModes(ctx, tx, input.OrganizationID, principals, input.InstallModes, previousModes)
+	if err != nil {
+		return Result{}, err
 	}
 
 	directoryService := directory.NewService(tx)
@@ -186,7 +205,7 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 		return Result{}, err
 	}
 	if dependencies.BeforeReplace != nil {
-		if err := dependencies.BeforeReplace(ctx, plugin, current, desired); err != nil {
+		if err := dependencies.BeforeReplace(ctx, plugin, current, desired, previousModes); err != nil {
 			return Result{}, err
 		}
 	}
@@ -204,6 +223,7 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 			PluginID:       input.PluginID,
 			OrganizationID: input.OrganizationID,
 			PrincipalUrn:   principal.URN,
+			InstallMode:    string(modes[principal.URN]),
 		})
 		if err != nil {
 			return Result{}, fmt.Errorf("add plugin assignment: %w", err)
@@ -220,10 +240,59 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 		PluginName:       plugin.Name,
 		PluginSlug:       plugin.Slug,
 		PrincipalURNs:    desired,
+		InstallModes:     auditInstallModes(modes),
 	}); err != nil {
 		return Result{}, fmt.Errorf("audit plugin assignments set: %w", err)
 	}
-	return Result{Plugin: plugin, Assignments: created, PrincipalURNs: desired, PreviousPrincipals: current}, nil
+	changed, err := roledelivery.AudienceChanged(ctx, tx, input.OrganizationID, input.ProjectID, plugin.ID, current, desired, dependencies.DeliveryGuard)
+	if err != nil {
+		return Result{}, fmt.Errorf("deliver role audience servers: %w", err)
+	}
+	return Result{ContentChanged: changed, Plugin: plugin, Assignments: created, PrincipalURNs: desired, PreviousPrincipals: current, InstallModes: modes, PreviousInstallModes: previousModes}, nil
+}
+
+// resolveInstallModes picks each desired principal's install mode: the
+// requested one, else its current one, else installmode.Default. A requested
+// mode must name a principal that is being assigned.
+func resolveInstallModes(ctx context.Context, db pluginsrepo.DBTX, organizationID string, principals []normalizedPrincipal, requested map[string]string, previous map[string]installmode.Mode) (map[string]installmode.Mode, error) {
+	modes := make(map[string]installmode.Mode, len(principals))
+	for _, principal := range principals {
+		mode, ok := previous[principal.URN]
+		if !ok {
+			mode = installmode.Default
+		}
+		modes[principal.URN] = mode
+	}
+	// Keys that normalize to the same principal must agree, or the stored mode
+	// would depend on map iteration order.
+	chosen := make(map[string]installmode.Mode, len(requested))
+	for raw, value := range requested {
+		principal, err := normalizePrincipal(ctx, db, organizationID, raw)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := modes[principal.URN]; !ok {
+			return nil, fmt.Errorf("%w: install mode for a principal that is not assigned", ErrInvalid)
+		}
+		mode, err := installmode.Parse(value)
+		if err != nil {
+			return nil, fmt.Errorf("%w: install mode", ErrInvalid)
+		}
+		if previous, ok := chosen[principal.URN]; ok && previous != mode {
+			return nil, fmt.Errorf("%w: conflicting install modes for one principal", ErrInvalid)
+		}
+		chosen[principal.URN] = mode
+		modes[principal.URN] = mode
+	}
+	return modes, nil
+}
+
+func auditInstallModes(modes map[string]installmode.Mode) map[string]string {
+	out := make(map[string]string, len(modes))
+	for principal, mode := range modes {
+		out[principal] = string(mode)
+	}
+	return out
 }
 
 type principalKind uint8
@@ -289,6 +358,9 @@ func normalizePrincipal(ctx context.Context, db pluginsrepo.DBTX, organizationID
 		}
 		if principal.Type == urn.PrincipalTypeWorkload {
 			return normalizedPrincipal{}, fmt.Errorf("%w: workload principals are not assignable", ErrInvalid)
+		}
+		if principal.Type == urn.PrincipalTypeAPIKey {
+			return normalizedPrincipal{}, fmt.Errorf("%w: api key principals are not assignable", ErrInvalid)
 		}
 		if principal.Type == urn.PrincipalTypeRole {
 			if err := authz.ValidatePrincipal(ctx, db, organizationID, principal); err != nil {

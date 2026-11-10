@@ -38,11 +38,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
@@ -71,6 +73,9 @@ type Service struct {
 	// is a no-op then.
 	publisher PluginPublishSignaler
 	siteURL   *url.URL
+	// flags gates the skill link methods behind the skills-over-mcp rollout.
+	// Nil refuses them; see WithFeatureProvider.
+	flags feature.Provider
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -101,6 +106,7 @@ func NewService(
 		signaler:  signaler,
 		publisher: publisher,
 		siteURL:   siteURL,
+		flags:     nil,
 	}
 }
 
@@ -135,7 +141,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	// and tenant resolution, without also demanding unrelated project:read.
 	switch ctx.Value(goa.MethodKey) {
 	case "list", "listTags", "listSuggestions", "listFeedback", "listSuggestionFeedback",
-		"get", "listUnknownActivations", "listVersions", "distribute", "undistribute", "listDistributions":
+		"get", "listUnknownActivations", "listVersions", "distribute", "undistribute", "listDistributions",
+		"link", "unlink", "listLinks":
 		return s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
 	default:
 		return s.auth.Authorize(ctx, key, schema)
@@ -419,14 +426,70 @@ func parseDistributionTarget(pluginID, assistantID *string) (distributionTarget,
 }
 
 // signalPluginPublish republishes the project's marketplace packages after a
-// plugin-channel distribution changed. The publisher is nil when GitHub
-// publishing is not configured, so a deployment without it enqueues nothing
-// rather than filling Temporal with runs that can only fail. Best-effort: a failed enqueue is logged
-// and never fails the request, since the rollout sweep still picks the project
-// up on its next tick. Must only be called after the triggering transaction
-// has committed — the publish reads live state a rollback would take back.
+// plugin-channel distribution changed.
 func (s *Service) signalPluginPublish(ctx context.Context, target distributionTarget, authCtx *contextvalues.AuthContext) {
-	if s.publisher == nil || target.channel != "plugin" {
+	if target.channel != "plugin" {
+		return
+	}
+	s.publishPluginPackages(ctx, authCtx)
+}
+
+// signalPluginPublishForSkills republishes the project's marketplace packages
+// after a committed write changed what one or more skills put into a package,
+// but only when a plugin in a project with a marketplace connection carries at
+// least one of them. latestOnly limits the check to distributions that follow
+// the latest valid version, the only ones a new or restored version moves. A
+// batch costs one query and at most one signal. Best-effort: a failed check is
+// logged and skipped, since the rollout sweep still picks the project up.
+func (s *Service) signalPluginPublishForSkills(ctx context.Context, authCtx *contextvalues.AuthContext, skillIDs []uuid.UUID, latestOnly bool) {
+	if s.publisher == nil || len(skillIDs) == 0 {
+		return
+	}
+	// The write has committed, so a client disconnect must not skip the check.
+	published, err := repo.New(s.db).HasPublishedPluginDistributionForSkills(context.WithoutCancel(ctx), repo.HasPublishedPluginDistributionForSkillsParams{
+		ProjectID:  *authCtx.ProjectID,
+		SkillIds:   skillIDs,
+		LatestOnly: latestOnly,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "check plugin distribution after skill change",
+			attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogError(err))
+		return
+	}
+	if published {
+		s.publishPluginPackages(ctx, authCtx)
+	}
+}
+
+// publishPluginPackagesIfConnected republishes the project's marketplace
+// packages when the project has a marketplace connection, for a committed write
+// that already knows a plugin carried the change. Best-effort: a failed check is
+// logged and skipped, since the rollout sweep still picks the project up.
+func (s *Service) publishPluginPackagesIfConnected(ctx context.Context, authCtx *contextvalues.AuthContext) {
+	if s.publisher == nil {
+		return
+	}
+	connected, err := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(context.WithoutCancel(ctx), *authCtx.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "check marketplace connection after skill change",
+			attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogError(err))
+		return
+	}
+	if connected {
+		s.publishPluginPackages(ctx, authCtx)
+	}
+}
+
+// publishPluginPackages enqueues the debounced republish of the project's
+// marketplace packages. The publisher is nil when GitHub publishing is not
+// configured, so a deployment without it enqueues nothing rather than filling
+// Temporal with runs that can only fail. Best-effort: a failed enqueue is
+// logged and never fails the request, since the rollout sweep still picks the
+// project up on its next tick. Must only be called after the triggering
+// transaction has committed — the publish reads live state a rollback would
+// take back.
+func (s *Service) publishPluginPackages(ctx context.Context, authCtx *contextvalues.AuthContext) {
+	if s.publisher == nil {
 		return
 	}
 
@@ -437,6 +500,11 @@ func (s *Service) signalPluginPublish(ctx context.Context, target distributionTa
 	}
 }
 
+// recordVersion stores parsed as the skill's newest version inside dbtx. The
+// boolean reports whether the write can change what a plugin tracking the
+// skill's latest version packages: true for a new version, and for a replay
+// that promotes an existing captured version to manual, since captured
+// versions rank below manual ones when a distribution resolves its content.
 func (s *Service) recordVersion(
 	ctx context.Context,
 	dbtx pgx.Tx,
@@ -448,21 +516,21 @@ func (s *Service) recordVersion(
 	createdSkill bool,
 	createAudit bool,
 	derivedFromVersionID uuid.NullUUID,
-) (*gen.RecordSkillResult, error) {
+) (*gen.RecordSkillResult, bool, error) {
 	metadataJSON, err := json.Marshal(parsed.Metadata)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "encode skill metadata").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "encode skill metadata").LogError(ctx, logger)
 	}
 	validationErrorsJSON, err := json.Marshal(parsed.ValidationErrors)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "encode skill validation errors").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "encode skill validation errors").LogError(ctx, logger)
 	}
 
 	var beforeSnapshot *audit.SkillSnapshot
 	if !createdSkill {
 		stateBefore, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
+			return nil, false, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
 		}
 		if err == nil {
 			beforeSnapshot = buildSkillAuditSnapshot(skill, stateBefore.LatestVersionID, stateBefore.VersionCount)
@@ -488,45 +556,54 @@ func (s *Service) recordVersion(
 			CanonicalSha256: parsed.CanonicalSHA256,
 		})
 		if getErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, getErr, "resolve existing skill version after insert no-op").LogError(ctx, logger)
+			return nil, false, oops.E(oops.CodeUnexpected, getErr, "resolve existing skill version after insert no-op").LogError(ctx, logger)
 		}
+		origin, originErr := queries.GetSkillVersionOrigin(ctx, repo.GetSkillVersionOriginParams{
+			ProjectID:      *authCtx.ProjectID,
+			SkillID:        skill.ID,
+			SkillVersionID: matched.ID,
+		})
+		if originErr != nil && !errors.Is(originErr, pgx.ErrNoRows) {
+			return nil, false, oops.E(oops.CodeUnexpected, originErr, "resolve existing skill version origin").LogError(ctx, logger)
+		}
+		promotedCaptured := originErr == nil && origin.Origin == "captured"
 		if deleteErr := queries.DeleteSkillVersionOrigin(ctx, repo.DeleteSkillVersionOriginParams{
 			ProjectID:      *authCtx.ProjectID,
 			SkillID:        skill.ID,
 			SkillVersionID: matched.ID,
 		}); deleteErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, deleteErr, "promote captured skill version to manual").LogError(ctx, logger)
+			return nil, false, oops.E(oops.CodeUnexpected, deleteErr, "promote captured skill version to manual").LogError(ctx, logger)
 		}
 		if replayErr := ReplayOpenSuggestionOntoBase(ctx, queries, *authCtx.ProjectID, skill.ID); replayErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, replayErr, "replay open skill suggestion").LogError(ctx, logger)
+			return nil, false, oops.E(oops.CodeUnexpected, replayErr, "replay open skill suggestion").LogError(ctx, logger)
 		}
 
 		state, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 		if stateErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, stateErr, "load current skill state after version no-op").LogError(ctx, logger)
+			return nil, false, oops.E(oops.CodeUnexpected, stateErr, "load current skill state after version no-op").LogError(ctx, logger)
 		}
 		matchedDetails, getErr := queries.GetSkillVersionDetails(ctx, repo.GetSkillVersionDetailsParams{
 			ProjectID: *authCtx.ProjectID, SkillID: skill.ID, SkillVersionID: matched.ID,
 		})
 		if getErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, getErr, "load existing skill version details").LogError(ctx, logger)
+			return nil, false, oops.E(oops.CodeUnexpected, getErr, "load existing skill version details").LogError(ctx, logger)
 		}
 		matchedView, viewErr := mv.BuildSkillVersionView(matchedDetails.SkillVersion, matchedDetails.DerivedFromVersionID, manifestFrontmatter(matchedDetails.SkillVersion.Content), mv.SkillVersionSightingStats{
 			FirstSeenAt: matchedDetails.FirstSeenAt, LastSeenAt: matchedDetails.LastSeenAt, SeenCount: matchedDetails.SeenCount,
 		})
 		if viewErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, viewErr, "build existing skill version").LogError(ctx, logger)
+			return nil, false, oops.E(oops.CodeUnexpected, viewErr, "build existing skill version").LogError(ctx, logger)
 		}
 
 		return &gen.RecordSkillResult{
-			Skill:          mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}),
+			Skill:          mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}),
 			Version:        matchedView,
 			CreatedSkill:   false,
 			CreatedVersion: false,
-		}, nil
+		}, promotedCaptured, nil
 	}
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create skill version").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "create skill version").LogError(ctx, logger)
 	}
 	if derivedFromVersionID.Valid {
 		if err := queries.CreateSkillVersionLineage(ctx, repo.CreateSkillVersionLineageParams{
@@ -535,7 +612,7 @@ func (s *Service) recordVersion(
 			SkillVersionID:       version.ID,
 			DerivedFromVersionID: derivedFromVersionID.UUID,
 		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "create skill version lineage").LogError(ctx, logger)
+			return nil, false, oops.E(oops.CodeUnexpected, err, "create skill version lineage").LogError(ctx, logger)
 		}
 	}
 
@@ -547,24 +624,24 @@ func (s *Service) recordVersion(
 		Summary:   conv.PtrToPGText(parsed.Description),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update skill after adding version").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "update skill after adding version").LogError(ctx, logger)
 	}
 	if err := ReplayOpenSuggestionOntoBase(ctx, queries, *authCtx.ProjectID, skill.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "replay open skill suggestion").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "replay open skill suggestion").LogError(ctx, logger)
 	}
 
 	state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load skill state after adding version").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "load skill state after adding version").LogError(ctx, logger)
 	}
-	afterView := mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false})
+	afterView := mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false})
 	versionView, err := mv.BuildSkillVersionView(version, derivedFromVersionID, manifestFrontmatter(version.Content), mv.SkillVersionSightingStats{
 		FirstSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		LastSeenAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		SeenCount:   0,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build created skill version").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "build created skill version").LogError(ctx, logger)
 	}
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
@@ -595,7 +672,7 @@ func (s *Service) recordVersion(
 		})
 	}
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log skill version mutation").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "log skill version mutation").LogError(ctx, logger)
 	}
 
 	return &gen.RecordSkillResult{
@@ -603,7 +680,7 @@ func (s *Service) recordVersion(
 		Version:        versionView,
 		CreatedSkill:   createdSkill,
 		CreatedVersion: true,
-	}, nil
+	}, true, nil
 }
 
 func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.RecordSkillResult, error) {
@@ -674,12 +751,22 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		}
 	}
 
-	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, createdSkill, createAudit, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	result, contentChanged, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, createdSkill, createAudit, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	if err != nil {
 		return nil, err
 	}
+	if contentChanged && !createdSkill {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit create skill transaction").LogError(ctx, logger)
+	}
+
+	// A skill created by this call has no distributions yet.
+	if contentChanged && !createdSkill {
+		s.signalPluginPublishForSkills(ctx, authCtx, []uuid.UUID{skill.ID}, true)
 	}
 
 	return result, nil
@@ -766,12 +853,21 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 		}
 	}
 
-	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false, false, derivedFromVersionID)
+	result, contentChanged, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false, false, derivedFromVersionID)
 	if err != nil {
 		return nil, err
 	}
+	if contentChanged {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit add skill version transaction").LogError(ctx, logger)
+	}
+
+	if contentChanged {
+		s.signalPluginPublishForSkills(ctx, authCtx, []uuid.UUID{skill.ID}, true)
 	}
 
 	return result, nil
@@ -865,11 +961,19 @@ func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersio
 			return nil, oops.E(oops.CodeUnexpected, err, "log skill version restore").LogError(ctx, logger)
 		}
 	}
+	if restoring {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit restore skill version transaction").LogError(ctx, logger)
 	}
+	if restoring {
+		s.signalPluginPublishForSkills(ctx, authCtx, []uuid.UUID{skill.ID}, true)
+	}
 	return &gen.RecordSkillResult{
-		Skill:   mv.BuildSkillView(skill, stateAfter.LatestVersionID, stateAfter.VersionCount, stateAfter.HasValidVersion, pgtype.Text{String: "", Valid: false}),
+		Skill:   mv.BuildSkillView(skill, stateAfter.LatestVersionID, stateAfter.VersionCount, stateAfter.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}),
 		Version: versionView, CreatedSkill: false, CreatedVersion: false,
 	}, nil
 }
@@ -938,7 +1042,7 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		}
 		// Returned before the write so a replay neither advances updated_at nor
 		// records a second update event for an edit that already happened.
-		return mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+		return mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}), nil
 	}
 
 	updated, err := queries.UpdateSkillDetails(ctx, repo.UpdateSkillDetailsParams{
@@ -971,11 +1075,21 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log skill update").LogError(ctx, logger)
 	}
+	if updated.Name != skill.Name {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit update skill transaction").LogError(ctx, logger)
 	}
+	// The name is the skill's directory in every package that carries it, pinned
+	// or not; the other metadata never reaches a package.
+	if updated.Name != skill.Name {
+		s.signalPluginPublishForSkills(ctx, authCtx, []uuid.UUID{skill.ID}, false)
+	}
 
-	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}), nil
 }
 
 // skillMetadataMatches reports whether a skill already carries exactly the
@@ -1403,7 +1517,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	return &gen.GetSkillResult{
-		Skill:                   mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken),
+		Skill:                   mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken, details.LastLoadedOverMcpAt),
 		LatestVersion:           latestView,
 		AssistantCount:          details.AssistantCount,
 		PromptInjectionFindings: promptInjectionFindings,
@@ -1625,6 +1739,11 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		resolvedVersionID = version
 	}
 
+	lastLoadedOverMCPAt, err := queries.GetSkillLastLoadedOverMCPAt(ctx, repo.GetSkillLastLoadedOverMCPAtParams{ProjectID: *authCtx.ProjectID, SkillID: skill.ID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve last skill load over mcp").LogError(ctx, logger)
+	}
+
 	existing, err := queries.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{
 		ProjectID: *authCtx.ProjectID, SkillID: skill.ID, PluginID: target.pluginID,
 		AssistantID: target.assistantID, Channel: target.channel,
@@ -1635,7 +1754,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 			if err := dbtx.Commit(ctx); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "commit unchanged skill distribution transaction").LogError(ctx, logger)
 			}
-			return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
+			return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID, lastLoadedOverMCPAt), nil
 		}
 
 		beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution, existing.ResolvedVersionID)
@@ -1664,13 +1783,18 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log skill distribution update").LogError(ctx, logger)
 		}
+		if target.channel == "plugin" {
+			if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+			}
+		}
 		if err := dbtx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "commit skill distribution update transaction").LogError(ctx, logger)
 		}
 
 		s.signalPluginPublish(ctx, target, authCtx)
 
-		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
+		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID, lastLoadedOverMCPAt), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "get active skill distribution").LogError(ctx, logger)
@@ -1701,13 +1825,18 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log skill distribution create").LogError(ctx, logger)
 	}
+	if target.channel == "plugin" {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit distribute skill transaction").LogError(ctx, logger)
 	}
 
 	s.signalPluginPublish(ctx, target, authCtx)
 
-	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
+	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID, lastLoadedOverMCPAt), nil
 }
 
 func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePayload) error {
@@ -1785,6 +1914,11 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 		DistributionSnapshotAfter:  buildSkillDistributionAuditSnapshot(revoked, existing.ResolvedVersionID),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log skill undistribution").LogError(ctx, logger)
+	}
+	if target.channel == "plugin" {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit undistribute skill transaction").LogError(ctx, logger)
@@ -2109,7 +2243,11 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "revoke skill distributions during archive").LogError(ctx, logger)
 	}
+	revokedPluginDistribution := false
 	for _, revoked := range revokedDistributions {
+		if revoked.SkillDistribution.Channel == "plugin" {
+			revokedPluginDistribution = true
+		}
 		beforeDistribution := buildSkillDistributionAuditSnapshot(revoked.SkillDistribution, revoked.ResolvedVersionID)
 		beforeDistribution.RevokedAt = nil
 		beforeDistribution.UpdatedAt = conv.FromPGTimestamptz(revoked.PreviousUpdatedAt)
@@ -2175,8 +2313,17 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log skill archive").LogError(ctx, logger)
 	}
+	if revokedPluginDistribution {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit archive skill transaction").LogError(ctx, logger)
+	}
+
+	if revokedPluginDistribution {
+		s.publishPluginPackagesIfConnected(ctx, authCtx)
 	}
 
 	return nil

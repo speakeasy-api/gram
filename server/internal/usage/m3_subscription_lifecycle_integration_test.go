@@ -50,12 +50,16 @@ func (*m3StripeWebhookClient) CreateCheckoutSession(context.Context, stripeclien
 	return nil, errors.New("not implemented")
 }
 
+func (*m3StripeWebhookClient) PublishableKey() string {
+	return ""
+}
+
 func (c *m3StripeWebhookClient) GetCheckoutSession(context.Context, string) (*stripeclient.CheckoutSessionState, error) {
 	state := c.checkout
 	return &state, nil
 }
 
-func (*m3StripeWebhookClient) GetSubscription(context.Context, string) (*stripeclient.SubscriptionState, error) {
+func (*m3StripeWebhookClient) GetSubscription(context.Context, string, ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -147,8 +151,10 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 			SubscriptionID: subscriptionID,
 		}
 		stripe.checkout = stripeclient.CheckoutSessionState{
+			Partner:                nil,
 			ID:                     stripe.event.ObjectID,
 			Status:                 "complete",
+			PaymentStatus:          "paid",
 			CustomerID:             m3CustomerID,
 			SubscriptionID:         subscriptionID,
 			SubscriptionCustomerID: m3CustomerID,
@@ -221,4 +227,8 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	deactivations, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationPaygDeactivated)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deactivations)
+}
+
+func (*m3StripeWebhookClient) ResolveGatewayPromotionCode(context.Context, string) (string, error) {
+	return "", errors.New("promotion resolution is not used by billing")
 }

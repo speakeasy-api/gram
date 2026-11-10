@@ -25,6 +25,9 @@ const (
 	ActionSkillShareLinkRevoke    Action = "skill:share_link_revoke"
 	ActionSkillSuggestionApprove  Action = "skill:suggestion_approve"
 	ActionSkillSuggestionDismiss  Action = "skill:suggestion_dismiss"
+	ActionSkillLink               Action = "skill:link"
+	ActionSkillUpdateLink         Action = "skill:update_link"
+	ActionSkillUnlink             Action = "skill:unlink"
 )
 
 // SkillSnapshot captures content-free parent state for skill audit events. It
@@ -61,6 +64,22 @@ type SkillDistributionSnapshot struct {
 	UpdatedAt         string
 }
 
+// SkillLinkSnapshot captures a skill's link to the MCP surface that serves
+// it. Like SkillDistributionSnapshot it excludes all manifest-derived content.
+type SkillLinkSnapshot struct {
+	ID              string
+	ProjectID       string
+	SkillID         string
+	TargetKind      string
+	MCPServerID     *string
+	MetaMCPServerID *string
+	PinnedVersionID *string
+	CreatedByUserID string
+	CreatedAt       string
+	UpdatedAt       string
+	DeletedAt       *string
+}
+
 type LogSkillCreateEvent struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
@@ -76,6 +95,7 @@ type LogSkillCreateEvent struct {
 
 func (l *Logger) LogSkillCreate(ctx context.Context, dbtx repo.DBTX, event LogSkillCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -128,6 +148,7 @@ func (l *Logger) LogSkillAddVersion(ctx context.Context, dbtx repo.DBTX, event L
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -187,6 +208,7 @@ func (l *Logger) logSkillSuggestion(ctx context.Context, dbtx repo.DBTX, action 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,
@@ -240,6 +262,7 @@ func (l *Logger) logSkillUpdate(ctx context.Context, dbtx repo.DBTX, action Acti
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,
@@ -311,6 +334,7 @@ func (l *Logger) LogSkillArchive(ctx context.Context, dbtx repo.DBTX, event LogS
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -360,6 +384,7 @@ func (l *Logger) logSkillDistribution(ctx context.Context, dbtx repo.DBTX, actio
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,
@@ -452,6 +477,7 @@ func (l *Logger) logSkillShareLink(ctx context.Context, dbtx repo.DBTX, action A
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,
@@ -524,4 +550,121 @@ type LogSkillUndistributeEvent struct {
 
 func (l *Logger) LogSkillUndistribute(ctx context.Context, dbtx repo.DBTX, event LogSkillUndistributeEvent) error {
 	return l.logSkillDistribution(ctx, dbtx, ActionSkillUndistribute, skillDistributionEvent(event))
+}
+
+type skillLinkEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SkillURN           urn.Skill
+	SkillName          string
+	SkillDisplayName   string
+	LinkSnapshotBefore *SkillLinkSnapshot
+	LinkSnapshotAfter  *SkillLinkSnapshot
+}
+
+func (l *Logger) logSkillLink(ctx context.Context, dbtx repo.DBTX, action Action, event skillLinkEvent) error {
+	beforeSnapshot, err := marshalAuditPayload(event.LinkSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.LinkSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
+		OrganizationID:     event.OrganizationID,
+		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+		ActorID:            event.Actor.ID,
+		ActorType:          string(event.Actor.Type),
+		ActorDisplayName:   conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:          conv.PtrToPGTextEmpty(event.ActorSlug),
+		Action:             string(action),
+		SubjectID:          event.SkillURN.ID.String(),
+		SubjectType:        string(subjectTypeSkill),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.SkillDisplayName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.SkillName),
+		BeforeSnapshot:     beforeSnapshot,
+		AfterSnapshot:      afterSnapshot,
+		Metadata:           nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.SkillV1})
+}
+
+type LogSkillLinkEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SkillURN          urn.Skill
+	SkillName         string
+	SkillDisplayName  string
+	LinkSnapshotAfter *SkillLinkSnapshot
+}
+
+// LogSkillLink records a skill newly linked to an MCP surface.
+func (l *Logger) LogSkillLink(ctx context.Context, dbtx repo.DBTX, event LogSkillLinkEvent) error {
+	return l.logSkillLink(ctx, dbtx, ActionSkillLink, skillLinkEvent{
+		OrganizationID:     event.OrganizationID,
+		ProjectID:          event.ProjectID,
+		Actor:              event.Actor,
+		ActorDisplayName:   event.ActorDisplayName,
+		ActorSlug:          event.ActorSlug,
+		SkillURN:           event.SkillURN,
+		SkillName:          event.SkillName,
+		SkillDisplayName:   event.SkillDisplayName,
+		LinkSnapshotBefore: nil,
+		LinkSnapshotAfter:  event.LinkSnapshotAfter,
+	})
+}
+
+type LogSkillUpdateLinkEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SkillURN           urn.Skill
+	SkillName          string
+	SkillDisplayName   string
+	LinkSnapshotBefore *SkillLinkSnapshot
+	LinkSnapshotAfter  *SkillLinkSnapshot
+}
+
+// LogSkillUpdateLink records a change to the version pin of a live link.
+func (l *Logger) LogSkillUpdateLink(ctx context.Context, dbtx repo.DBTX, event LogSkillUpdateLinkEvent) error {
+	return l.logSkillLink(ctx, dbtx, ActionSkillUpdateLink, skillLinkEvent(event))
+}
+
+type LogSkillUnlinkEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SkillURN           urn.Skill
+	SkillName          string
+	SkillDisplayName   string
+	LinkSnapshotBefore *SkillLinkSnapshot
+	LinkSnapshotAfter  *SkillLinkSnapshot
+}
+
+// LogSkillUnlink records a link removed from the MCP surface that served the
+// skill through it.
+func (l *Logger) LogSkillUnlink(ctx context.Context, dbtx repo.DBTX, event LogSkillUnlinkEvent) error {
+	return l.logSkillLink(ctx, dbtx, ActionSkillUnlink, skillLinkEvent(event))
 }

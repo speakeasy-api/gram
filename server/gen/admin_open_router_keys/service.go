@@ -61,7 +61,7 @@ type AdminOpenRouterKey struct {
 	OrganizationName string
 	// Slug of the owning organization.
 	OrganizationSlug string
-	// The organization's Gram account type (e.g. free, pro, enterprise).
+	// The organization's Speakeasy account type (e.g. free, pro, enterprise).
 	GramAccountType string
 	// Which upstream key this row provisions: 'chat' pays for customer-facing
 	// completions, 'internal' pays for platform-initiated LLM usage.

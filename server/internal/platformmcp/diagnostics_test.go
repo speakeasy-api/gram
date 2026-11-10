@@ -45,15 +45,17 @@ func TestDelegatedDiagnosticsToolsRequireProjectReadDiscovery(t *testing.T) {
 	t.Parallel()
 
 	registrars := []*Registrar{}
-	_, unavailable := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, unavailable := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	registrars = append(registrars, unavailable)
 	live := newRegistrar(newTestMCPServer())
 	registerDiagnosticsTools(live, nil)
+	registerToolUsageSummaryTool(live, nil)
 	registerRecentToolCallTools(live, nil)
+	registerToolCallSearchTools(live, nil)
 	registrars = append(registrars, live)
 
 	for _, registrar := range registrars {
-		for _, name := range []string{"get_project_overview", "get_mcp_diagnostics", "list_recent_tool_calls"} {
+		for _, name := range []string{"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_attribute_keys"} {
 			descriptor := descriptorByName(t, registrar, name)
 			require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
 			require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
@@ -61,6 +63,14 @@ func TestDelegatedDiagnosticsToolsRequireProjectReadDiscovery(t *testing.T) {
 			require.NotNil(t, descriptor.Annotations)
 			require.True(t, descriptor.Annotations.ReadOnlyHint)
 		}
+
+		// Individual calls are the Tool Logs list, so they need log:read.
+		recent := descriptorByName(t, registrar, "list_recent_tool_calls")
+		require.Equal(t, ExternalAuthorizationMember, recent.Meta.Authorization)
+		require.Equal(t, ProjectScopeExplicit, recent.Meta.ProjectScope)
+		require.Equal(t, discoveryLogRead, recent.Meta.DiscoveryScopes)
+		require.NotNil(t, recent.Annotations)
+		require.True(t, recent.Annotations.ReadOnlyHint)
 	}
 }
 
@@ -83,7 +93,7 @@ func TestGetProjectOverviewOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		FailedToolCalls: 4,
 		ActiveServers:   3,
 		ActiveUsers:     NewSubjectCount(11),
-		TopServers:      []ProjectOverviewServer{{Name: "billing", ToolCalls: 40}},
+		TopServers:      []ProjectOverviewServer{{Name: "billing", MCPID: "00000000-0000-0000-0000-000000000002", ToolCalls: 40}},
 	}
 
 	require.ElementsMatch(t, []string{
@@ -91,7 +101,7 @@ func TestGetProjectOverviewOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
 		"metrics_mode",
 		"tool_calls", "failed_tool_calls", "active_servers", "active_users",
-		"top_servers", "name", "tool_calls",
+		"top_servers", "name", "mcp_id", "tool_calls",
 	}, decodeKeys(t, output))
 }
 
@@ -160,6 +170,10 @@ func (diagnosticsProjectReader) GetMCP(context.Context, Principal, GetMCPInput) 
 }
 
 func (diagnosticsProjectReader) ResolveProjectRead(context.Context, Principal, FindMCPInput) (ResolvedProject, error) {
+	return ResolvedProject{}, nil
+}
+
+func (diagnosticsProjectReader) ResolveProjectLogRead(context.Context, Principal, FindMCPInput) (ResolvedProject, error) {
 	return ResolvedProject{}, nil
 }
 

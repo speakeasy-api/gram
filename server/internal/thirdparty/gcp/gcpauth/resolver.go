@@ -71,7 +71,7 @@ func (r *DefaultResolver) ResolvePrincipal(ctx context.Context, cred Credential)
 	}
 }
 
-// resolveAmbient resolves Gram's own attached identity and proves it is usable.
+// resolveAmbient resolves Speakeasy's own attached identity and proves it is usable.
 func resolveAmbient(ctx context.Context) (Principal, error) {
 	// Prove the identity is usable by minting a token from Application Default
 	// Credentials. ADC reads the metadata server in-cluster and the local
@@ -124,7 +124,7 @@ func (r *DefaultResolver) TokenSource(ctx context.Context, cred Credential) (oau
 	}
 }
 
-// ambientCredentials loads Gram's own Application Default Credentials, which
+// ambientCredentials loads Speakeasy's own Application Default Credentials, which
 // read the metadata server in-cluster and local credentials off-GCP.
 //
 // Both the principal probe and the token source go through it. ResolvePrincipal
@@ -140,9 +140,9 @@ func ambientCredentials(ctx context.Context) (*google.Credentials, error) {
 	return creds, nil
 }
 
-// resolveImpersonated proves Gram's own identity can impersonate the target
+// resolveImpersonated proves Speakeasy's own identity can impersonate the target
 // service account by minting a token as it. Unlike the ambient probe this is a
-// real authorization check: it only succeeds when Gram's identity holds
+// real authorization check: it only succeeds when Speakeasy's identity holds
 // roles/iam.serviceAccountTokenCreator on the target. The effective principal is
 // the target service account itself.
 func resolveImpersonated(ctx context.Context, targetServiceAccount string) (Principal, error) {
@@ -157,7 +157,7 @@ func resolveImpersonated(ctx context.Context, targetServiceAccount string) (Prin
 }
 
 // impersonatedTokenSource builds a token source that mints tokens as the target
-// service account, using Gram's own identity (Application Default Credentials)
+// service account, using Speakeasy's own identity (Application Default Credentials)
 // as the base. The returned source caches and refreshes tokens internally, so
 // callers should retain it rather than rebuilding it per call.
 func impersonatedTokenSource(ctx context.Context, targetServiceAccount string) (oauth2.TokenSource, error) {

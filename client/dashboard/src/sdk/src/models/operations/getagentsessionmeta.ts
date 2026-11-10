@@ -11,7 +11,7 @@ export type GetAgentSessionMetaSecurity = {
 
 export type GetAgentSessionMetaRequest = {
   /**
-   * Native harness session identifiers (e.g. Claude Code session UUIDs, Codex rollout ids) to resolve. Gram derives its chat ids from these the same way hook ingest does.
+   * Native harness session identifiers (e.g. Claude Code session UUIDs, Codex rollout ids) to resolve. Speakeasy derives its chat ids from these the same way hook ingest does.
    */
   sessionIds: Array<string>;
   /**

@@ -13,20 +13,20 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 )
 
-// gramHostedMCPHosts are the built-in hosts for Gram-managed MCP servers.
+// gramHostedMCPHosts are the built-in hosts for Speakeasy-managed MCP servers.
 // Exact host matching keeps third-party subdomains from being treated as
-// trusted Gram-hosted MCP servers.
+// trusted Speakeasy-hosted MCP servers.
 var gramHostedMCPHosts = []string{
 	"app.getgram.ai",
 	"chat.speakeasy.com",
 }
 
-// IsGramHostedMCPURL reports whether rawURL points at a Gram-managed MCP
+// IsGramHostedMCPURL reports whether rawURL points at a Speakeasy-managed MCP
 // server. Checks the canonical hosts plus any additional trusted hosts.
 // Exact host match, case-insensitive.
 //
 // Matching is on the host, never on the path: a path-shaped check would
-// classify https://evil.example.com/mcp/<known-slug> as Gram-hosted.
+// classify https://evil.example.com/mcp/<known-slug> as Speakeasy-hosted.
 func IsGramHostedMCPURL(rawURL string, additionalTrustedHosts ...string) bool {
 	if rawURL == "" {
 		return false
@@ -67,7 +67,7 @@ func trustedGramHostedMCPHostMatches(u *url.URL, trustedHost string) bool {
 	return strings.EqualFold(u.Hostname(), trustedHost)
 }
 
-// TrustedMCPHostsForOrg returns the hosts that count as Gram-hosted for an
+// TrustedMCPHostsForOrg returns the hosts that count as Speakeasy-hosted for an
 // organization on top of the built-in ones: the deployment's own host and the
 // org's verified, activated custom domain.
 //
@@ -104,11 +104,11 @@ func (c *Client) TrustedMCPHostsForOrg(ctx context.Context, orgID string) ([]str
 	return append(hosts, customDomain.Domain), nil
 }
 
-// IsGramHostedMCPURLForOrg reports whether rawURL is a Gram-managed MCP server
+// IsGramHostedMCPURLForOrg reports whether rawURL is a Speakeasy-managed MCP server
 // for the given organization. It checks the canonical and configured hosts
 // first (no DB hit), then falls back to the org's verified custom domain.
 //
-// This is the definition of "Gram-hosted" shared by the realtime hook guard
+// This is the definition of "Speakeasy-hosted" shared by the realtime hook guard
 // and the offline batch scanner, so a call the hook allows is not flagged by
 // the scanner on host grounds alone. Use it for one-off classifications; for
 // many URLs under one organization, see [Client.TrustedMCPHostsForOrg].
@@ -132,7 +132,7 @@ func (c *Client) IsGramHostedMCPURLForOrg(ctx context.Context, rawURL, orgID str
 
 	hosts, err := c.TrustedMCPHostsForOrg(ctx, orgID)
 	if err != nil {
-		c.logger.ErrorContext(ctx, "resolve organization trusted MCP hosts; treating URL as not Gram-hosted",
+		c.logger.ErrorContext(ctx, "resolve organization trusted MCP hosts; treating URL as not Speakeasy-hosted",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
 		)

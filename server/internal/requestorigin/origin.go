@@ -20,7 +20,7 @@ const (
 )
 
 // NetworkIdentity is advisory identity supplied by a private-network provider.
-// It is not a Gram principal or an authorization grant.
+// It is not a Speakeasy principal or an authorization grant.
 type NetworkIdentity struct {
 	Login string
 	Name  string
@@ -50,6 +50,24 @@ func BaseURL(ctx context.Context, fallback string) string {
 		return origin.BaseURL
 	}
 	return fallback
+}
+
+// PlatformHostBaseURL returns the base URL of the extra platform host (see
+// GRAM_PLATFORM_HOSTS) the request arrived on, and fallback for every other
+// request. Session cookies are host-only, so browser redirects must stay on
+// the platform host the user is signed in to. Only requests the custom-domains
+// middleware classified as platform qualify, never the raw Host header, and a
+// request on serverURL itself gets fallback so its behaviour, including local
+// site URL overrides, is unchanged.
+func PlatformHostBaseURL(ctx context.Context, serverURL, fallback string) string {
+	origin, ok := FromContext(ctx)
+	if !ok || origin.Surface != SurfacePlatform || origin.BaseURL == "" {
+		return fallback
+	}
+	if strings.TrimRight(origin.BaseURL, "/") == strings.TrimRight(serverURL, "/") {
+		return fallback
+	}
+	return origin.BaseURL
 }
 
 // HTTPSBaseURL returns a canonical externally visible HTTPS origin for a host
@@ -101,4 +119,23 @@ func CanonicalHost(raw string) (string, error) {
 		}
 	}
 	return host, nil
+}
+
+// URLOrigin is the lowercased scheme://host[:port] of raw, with the scheme's
+// default port dropped, or "" when raw is not an absolute URL or carries
+// userinfo.
+func URLOrigin(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" || u.User != nil {
+		return ""
+	}
+	scheme := strings.ToLower(u.Scheme)
+	host := strings.ToLower(u.Hostname())
+	if port := u.Port(); port != "" && (scheme != "https" || port != "443") && (scheme != "http" || port != "80") {
+		return scheme + "://" + net.JoinHostPort(host, port)
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	return scheme + "://" + host
 }

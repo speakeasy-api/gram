@@ -68,12 +68,11 @@ var File_gram_networkingress_v1_reconciler_proto protoreflect.FileDescriptor
 
 const file_gram_networkingress_v1_reconciler_proto_rawDesc = "" +
 	"\n" +
-	"'gram/networkingress/v1/reconciler.proto\x12\x16gram.networkingress.v1\x1a\x1bgcp/pubsub/v1/options.proto\"V\n" +
+	"'gram/networkingress/v1/reconciler.proto\x12\x16gram.networkingress.v1\x1a\x1bgcp/pubsub/v1/options.proto\"R\n" +
 	"\n" +
-	"Reconciler:H\x92\xb5\x18D\x12\x04\b\x80\xf5$\"\x02\b<2\t\n" +
+	"Reconciler:D\x92\xb5\x18@\x12\x04\b\x80\xf5$\"\x02\b<2\t\n" +
 	"\x02\b\n" +
-	"\x12\x03\b\xd8\x04J\x02\x10\n" +
-	"R)gram.networkingress.v1.ReconcileRequestedBQZOgithub.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1;networkingressv1b\beditionsp\xe9\a"
+	"\x12\x03\b\xd8\x04R)gram.networkingress.v1.ReconcileRequestedBQZOgithub.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1;networkingressv1b\beditionsp\xe9\a"
 
 var file_gram_networkingress_v1_reconciler_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_networkingress_v1_reconciler_proto_goTypes = []any{

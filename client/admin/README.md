@@ -1,9 +1,10 @@
 # Admin SDK usage
 
 The Admin application uses the private, same-origin clients in
-[`src/lib/gramAdminClient.ts`](src/lib/gramAdminClient.ts). Keep generated SDK
-imports and request options inside that boundary rather than exposing them to
-page components.
+[`src/lib/gramAdminClient.ts`](src/lib/gramAdminClient.ts). Keep SDK client instances and request options inside that boundary rather than
+exposing them to page components. Generated request and response models may be
+used directly by pages and API types; do not add view adapters solely to rename
+or duplicate generated models.
 
 ## Organization meter usage
 

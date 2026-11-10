@@ -19,7 +19,7 @@ const (
 	// network-mode enforcement contract. Rollout tooling must verify every
 	// serving pod reports at least this version before admitting non-public
 	// writes, preventing mixed-version fail-open rollouts.
-	ServingPolicyVersion       = 1
+	ServingPolicyVersion       = 2
 	ServingPolicyVersionHeader = "X-Gram-Network-Serving-Policy-Version"
 )
 

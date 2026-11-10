@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const AwsIamCredentialProvider = {
 /**
  * The cloud provider of the credential.
  */
-export type AwsIamCredentialProvider = ClosedEnum<
+export type AwsIamCredentialProvider = OpenEnum<
   typeof AwsIamCredentialProvider
 >;
 
@@ -28,7 +29,7 @@ export type AwsIamCredentialProvider = ClosedEnum<
  */
 export type AwsIamCredential = {
   /**
-   * The customer IAM role ARN Gram assumes.
+   * The customer IAM role ARN Speakeasy assumes.
    */
   assumeRoleArn?: string | undefined;
   /**
@@ -36,7 +37,7 @@ export type AwsIamCredential = {
    */
   createdAt: Date;
   /**
-   * The Gram-generated ExternalId the customer must require in their role trust policy. Present when Gram assumes the role with an ExternalId.
+   * The Speakeasy-generated ExternalId the customer must require in their role trust policy. Present when Speakeasy assumes the role with an ExternalId.
    */
   externalId?: string | undefined;
   /**
@@ -48,7 +49,7 @@ export type AwsIamCredential = {
    */
   name: string;
   /**
-   * The OIDC audience. Present when Gram assumes the role with a web identity.
+   * The OIDC audience. Present when Speakeasy assumes the role with a web identity.
    */
   oidcAudience?: string | undefined;
   /**
@@ -74,9 +75,10 @@ export type AwsIamCredential = {
 };
 
 /** @internal */
-export const AwsIamCredentialProvider$inboundSchema: z.ZodMiniEnum<
-  typeof AwsIamCredentialProvider
-> = z.enum(AwsIamCredentialProvider);
+export const AwsIamCredentialProvider$inboundSchema: z.ZodMiniType<
+  AwsIamCredentialProvider,
+  unknown
+> = openEnums.inboundSchema(AwsIamCredentialProvider);
 
 /** @internal */
 export const AwsIamCredential$inboundSchema: z.ZodMiniType<

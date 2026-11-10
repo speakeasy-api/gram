@@ -1,0 +1,253 @@
+// Proxy handling for the upstream credential a self remote session client
+// holds for itself: one retry with a replacement when the upstream rejects
+// it, and an answer naming the administrator when the rejection survives.
+
+package mcp
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"slices"
+	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+)
+
+// clientCredentialRenewal records, for one proxied request, why replacing a
+// rejected self client credential failed, so the final answer names that
+// remedy.
+type clientCredentialRenewal struct {
+	// err is the classified replacement failure; nil when none was attempted
+	// or it succeeded.
+	err error
+}
+
+// preserveFailure carries a failed renewal through the member transport. A
+// surviving 401 alone cannot distinguish a token endpoint outage from a
+// credential that an administrator must repair.
+func (r *clientCredentialRenewal) preserveFailure(p *proxy.Proxy) {
+	if r == nil {
+		return
+	}
+
+	intercept := p.UpstreamResponseInterceptor
+	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
+		if intercept != nil {
+			if err := intercept(ctx, resp); err != nil {
+				return err
+			}
+		}
+		if r.err != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+			return fmt.Errorf("renew member client credential: %w", r.err)
+		}
+		return nil
+	}
+}
+
+// renewClientCredentialOnRejection lets p, which presents upstream as its
+// bearer, resend a request once with a replacement credential when the
+// upstream answers 401. The upstream refused the request before acting on
+// it, so a replay is safe for every method. It runs after any retryer p
+// already has, such as a tunnel's route retry, and does nothing for a
+// subject's credential, returning nil.
+func (s *Service) renewClientCredentialOnRejection(p *proxy.Proxy, logger *slog.Logger, upstream remotesessions.UpstreamToken) *clientCredentialRenewal {
+	if upstream.CredentialOwner != remotesessions.CredentialOwnerSelf || upstream.Token == "" {
+		return nil
+	}
+
+	renewal := &clientCredentialRenewal{err: nil}
+
+	renew := func(ctx context.Context, resp *http.Response) (*proxy.UpstreamResponseRetry, error) {
+		if resp.StatusCode != http.StatusUnauthorized {
+			return nil, nil
+		}
+
+		renewed, ok, err := s.remoteChallengeMgr.RenewClientCredential(ctx, upstream)
+		switch {
+		case err != nil:
+			// The rejection stands, answered with the replacement's remedy.
+			renewal.err = err
+			logger.WarnContext(ctx, "replace upstream client credential after rejection",
+				attr.SlogRemoteSessionClientID(upstream.RemoteSessionClientID.String()),
+				attr.SlogError(err),
+			)
+			return nil, nil
+		case !ok:
+			return nil, nil
+		}
+
+		logger.InfoContext(ctx, "upstream rejected the client credential; retrying once with a replacement",
+			attr.SlogRemoteSessionClientID(upstream.RemoteSessionClientID.String()),
+		)
+
+		return &proxy.UpstreamResponseRetry{RemoteURL: "", Headers: nil, AuthorizationOverride: renewed.Token}, nil
+	}
+
+	p.UpstreamResponseRetryer = proxy.ChainUpstreamResponseRetryers(p.UpstreamResponseRetryer, renew)
+
+	return renewal
+}
+
+// rejectSurvivingClientCredentialRejection answers an upstream 401 or 403 to
+// p's self client credential, after any replacement, instead of relaying it.
+// A relayed rejection would carry a challenge for the caller to reauthorize,
+// and nothing the caller authorizes repairs a credential the MCP server holds
+// for itself. The answer names the administrator, or asks for a retry when
+// renewal shows the replacement failed for a reason that clears on its own.
+// It does nothing for a subject's credential.
+func rejectSurvivingClientCredentialRejection(w http.ResponseWriter, p *proxy.Proxy, logger *slog.Logger, upstream remotesessions.UpstreamToken, renewal *clientCredentialRenewal) {
+	if upstream.CredentialOwner != remotesessions.CredentialOwnerSelf || upstream.Token == "" {
+		return
+	}
+
+	intercept := p.UpstreamResponseInterceptor
+	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
+		if intercept != nil {
+			if err := intercept(ctx, resp); err != nil {
+				return err
+			}
+		}
+
+		if resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden {
+			return nil
+		}
+
+		logger.WarnContext(ctx, "upstream rejected the MCP server's client credential",
+			attr.SlogRemoteSessionClientID(upstream.RemoteSessionClientID.String()),
+			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
+		)
+
+		if renewal != nil && renewal.err != nil {
+			return clientCredentialRoutingError(w, renewal.err)
+		}
+		return clientCredentialMisconfiguredError(fmt.Errorf("upstream rejected the client credential with status %d", resp.StatusCode))
+	}
+}
+
+// clientCredentialRoutingError answers routing that selected a self client
+// whose credential could not be obtained, with the remedy its classification
+// names: retry an outage, or contact the administrator.
+func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
+	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
+		return remoteSessionUnavailableError(w, err)
+	}
+
+	return clientCredentialMisconfiguredError(err)
+}
+
+// metaMemberClientCredentialError is the member-scoped answer for a gateway
+// member whose credential could not be obtained. An outage is a discovery
+// failure that is not retryable: a request resolves its token map once, so an
+// outage read from that map is the same on every describe attempt. Only an
+// outage recorded by an exchange the attempt itself made can clear on a retry,
+// and the caller that observed that exchange marks it retryable.
+func metaMemberClientCredentialError(member metaMember, err error) error {
+	if errors.Is(err, remotesessions.ErrStoredSignInUnreadable) {
+		return newMemberSignInUnreadableError(member, reconnectAskWhoeverConnected, err)
+	}
+	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
+		if _, session := errors.AsType[*remotesessions.SessionOutageError](err); session {
+			return linkedMemberOutage(member, err, "")
+		}
+		if remotesessions.TokenEndpointCausedOutage(err) {
+			return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential because its provider isn't available right now. Retry shortly. If it keeps happening, ask your administrator", member.slug), nil)
+		}
+		return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential right now. Retry shortly. If it keeps happening, ask your administrator to check its sign-in provider, then contact Speakeasy support", member.slug), nil)
+	}
+
+	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected. Ask an admin of the server's project to fix the server's credential, then retry", member.slug)}
+}
+
+// memberSignInUnreadableError is a member whose saved sign-in can't be read; cause names the remote session.
+type memberSignInUnreadableError struct {
+	memberConnectionError
+
+	// cause is the resolution failure, which carries the remote session.
+	cause error
+}
+
+func (e memberSignInUnreadableError) Unwrap() []error {
+	return []error{e.memberConnectionError, e.cause}
+}
+
+// reconnectAskWhoeverConnected asks for a reconnect when no page to do it on is known.
+const reconnectAskWhoeverConnected = "Ask whoever connected it to reconnect it, then retry"
+
+// reconnectAskUser asks the user to reconnect a member on its connect page.
+func reconnectAskUser(connectURL string) string {
+	return fmt.Sprintf("Ask the user to open %s to reconnect it, then retry", connectURL)
+}
+
+// memberReconnectAsk is who reconnects member and where, in the gateway's own terms.
+func (g metaGateContext) memberReconnectAsk(member metaMember) string {
+	if fix := g.memberFix(member); fix.agent && fix.url != "" {
+		return fix.askEditorToReconnect()
+	}
+	if url := g.memberCallerURL(member); url != "" {
+		return reconnectAskUser(url)
+	}
+	return reconnectAskWhoeverConnected
+}
+
+// newMemberSignInUnreadableError asks for a new sign-in: nothing stored for the member can be read.
+func newMemberSignInUnreadableError(member metaMember, ask string, cause error) error {
+	message := fmt.Sprintf("server %q can't use its saved sign-in anymore. %s", member.slug, ask)
+	return memberSignInUnreadableError{memberConnectionError: memberConnectionError{memberCredentialError{&metaMemberError{message: message}}, mcpconnectionattempts.CodeStoredSignInUnreadable}, cause: cause}
+}
+
+// outageWaitWords is when to retry, in words: a provider can ask for minutes.
+func outageWaitWords(wait time.Duration) string {
+	switch {
+	case wait >= 90*time.Second:
+		return fmt.Sprintf("in about %d minutes", int(wait.Round(time.Minute).Minutes()))
+	case wait.Round(time.Second) >= 2*time.Second:
+		return fmt.Sprintf("in about %d seconds", int(wait.Round(time.Second).Seconds()))
+	}
+	return "shortly"
+}
+
+// linkedMemberOutage offers reconnecting only when the connect page has a Reconnect button for it.
+func linkedMemberOutage(member metaMember, err error, connectURL string) error {
+	retry := "Retry " + outageWaitWords(remotesessions.RetryAfter(err)) + "."
+	switch remotesessions.OutageKindOf(err) {
+	case remotesessions.RefreshOutageTunnel:
+		return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in right now. %s If it keeps happening, ask your administrator to check that the server and its sign-in provider are running", member.slug, retry), err)
+	case remotesessions.RefreshOutageProvider:
+		fallback := "If it keeps happening, ask your administrator"
+		if connectURL != "" {
+			fallback = "If it keeps happening, reconnect at " + connectURL
+		}
+		return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in because its provider isn't available right now. %s %s", member.slug, retry, fallback), err)
+	case remotesessions.RefreshOutageNone:
+	}
+	return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in right now. %s If it keeps happening, ask your administrator to contact Speakeasy support", member.slug, retry), err)
+}
+
+// withMemberConnectLink adds the member's connect page to a connection outage.
+func withMemberConnectLink(err error, member metaMember, connectURL string) error {
+	if unreadable, ok := errors.AsType[memberSignInUnreadableError](err); ok && connectURL != "" {
+		return newMemberSignInUnreadableError(member, reconnectAskUser(connectURL), unreadable.cause)
+	}
+	if outage, ok := errors.AsType[memberUnavailableError](err); ok && outage.session != nil && connectURL != "" {
+		return linkedMemberOutage(member, outage.session, connectURL)
+	}
+	return err
+}
+
+// subjectConnectedClients returns the clients that do not hold their upstream
+// credential for themselves, leaving clients untouched. The consent and
+// connect flows show, connect, verify and refresh a subject's own
+// connections, and nobody connects a self client: its credential is presented
+// for every caller without one. A self client still claims its upstream, so
+// resource derivation weighs every bound client.
+func subjectConnectedClients(clients []remotesessions.Client) []remotesessions.Client {
+	return slices.DeleteFunc(slices.Clone(clients), func(c remotesessions.Client) bool {
+		return c.CredentialOwner == remotesessions.CredentialOwnerSelf
+	})
+}

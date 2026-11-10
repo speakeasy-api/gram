@@ -1,7 +1,7 @@
 package email
 
 // EnterpriseAdminOnboarding is sent to a prospective enterprise admin to walk
-// them through the Gram setup wizard. The single variable is the absolute URL
+// them through the Speakeasy setup wizard. The single variable is the absolute URL
 // of the wizard entry point for their organization.
 type EnterpriseAdminOnboarding struct {
 	// SetupLink is the absolute URL the recipient clicks to begin the

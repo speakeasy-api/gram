@@ -199,6 +199,9 @@ func TestPrivateRouteCensus(t *testing.T) {
 		{http.MethodPost, "/mcp/server"},
 		{http.MethodGet, "/mcp/server"},
 		{http.MethodDelete, "/mcp/server"},
+		{http.MethodPost, "/mcp/server/"},
+		{http.MethodGet, "/mcp/server/"},
+		{http.MethodDelete, "/mcp/server/"},
 		{http.MethodGet, "/mcp/server/install"},
 		{http.MethodPost, "/mcp/server/register"},
 		{http.MethodGet, "/mcp/server/authorize"},
@@ -210,9 +213,8 @@ func TestPrivateRouteCensus(t *testing.T) {
 		{http.MethodGet, "/mcp/server/connect/first-party"},
 		{http.MethodPost, "/mcp/server/token"},
 		{http.MethodPost, "/mcp/server/revoke"},
-		{http.MethodPost, "/x/mcp/server"},
 		{http.MethodGet, "/.well-known/oauth-protected-resource/mcp/server"},
-		{http.MethodGet, "/.well-known/oauth-authorization-server/x/mcp/server"},
+		{http.MethodGet, "/.well-known/oauth-authorization-server/mcp/server"},
 		{http.MethodGet, "/mcp/install-page-deadbeef.js"},
 		{http.MethodGet, "/mcp/consent-page-deadbeef.js"},
 		{http.MethodGet, "/mcp/consent-tools-deadbeef.js"},
@@ -237,10 +239,15 @@ func TestPrivateRouteCensus(t *testing.T) {
 		{http.MethodGet, "/marketplace/repository"},
 		{http.MethodGet, "/mcp/idp_callback"},
 		{http.MethodGet, "/mcp/remote_login_callback"},
+		{http.MethodGet, "/mcp/remote_login_bind"},
 		{http.MethodGet, "/x/mcp/idp_callback"},
 		{http.MethodGet, "/x/mcp/remote_login_callback"},
+		{http.MethodGet, "/mcp/idp_callback/0190a6f8-5b2c-7d3e-8f41-2a6b9c0d1e2f"},
 		{http.MethodPost, "/mcp/idp_callback/"},
 		{http.MethodGet, "/x/mcp/idp_callback/"},
+		{http.MethodPost, "/x/mcp/server"},
+		{http.MethodGet, "/.well-known/oauth-authorization-server/x/mcp/server"},
+		{http.MethodGet, "/.well-known/oauth-protected-resource/x/mcp/server"},
 		{http.MethodGet, "/mcp/remote_login_callback/"},
 		{http.MethodDelete, "/mcp/install-page-deadbeef.js/"},
 		{http.MethodGet, "/oauth/callback"},
@@ -251,6 +258,25 @@ func TestPrivateRouteCensus(t *testing.T) {
 		{http.MethodGet, "/mcp/server/install/extra"},
 		{http.MethodGet, "/mcp//install"},
 		{http.MethodGet, "/mcp/install-page-.js"},
+		{http.MethodPut, "/mcp/server/"},
+		{http.MethodHead, "/mcp/server/"},
+		{http.MethodPost, "/mcp/"},
+		{http.MethodPost, "/mcp/server//"},
+		{http.MethodPost, "/mcp//server/"},
+		{http.MethodPost, "/mcp/./"},
+		{http.MethodPost, "/mcp/../"},
+		{http.MethodPost, "/mcp/server/token/"},
+		{http.MethodGet, "/mcp/server/install/"},
+		{http.MethodGet, "/.well-known/oauth-protected-resource/mcp/server/"},
+		{http.MethodGet, "/.well-known/oauth-authorization-server/mcp/server/"},
+		{http.MethodPost, "/agent-mcp/agent/"},
+		{http.MethodPost, "/agent-mcp/"},
+		{http.MethodGet, "/.well-known/oauth-protected-resource/mcp/"},
+		{http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"},
+		{http.MethodGet, "/mcp/idp_callback/"},
+		{http.MethodPost, "/mcp/remote_login_bind/"},
+		{http.MethodGet, "/mcp/install-page-deadbeef.js/"},
+		{http.MethodGet, "/mcp/consent-page-deadbeef.js/"},
 	}
 	for _, route := range blocked {
 		require.False(t, IsPrivateRoute(route.method, route.path), "%s %s", route.method, route.path)
@@ -322,4 +348,51 @@ func newTestAttestor(t *testing.T, upstream *httptest.Server, tokenPath string) 
 	})
 	require.NoError(t, err)
 	return handler
+}
+
+func TestAttestorHandlerForwardsRuntimeTrailingSlash(t *testing.T) {
+	t.Parallel()
+
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+
+			tokenPath := filepath.Join(t.TempDir(), "token")
+			require.NoError(t, os.WriteFile(tokenPath, []byte("token"), 0o600))
+
+			type upstreamRequest struct {
+				method, path, query, session, body string
+				err                                error
+			}
+			seen := make(chan upstreamRequest, 1)
+			upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				seen <- upstreamRequest{
+					method:  r.Method,
+					path:    r.URL.Path,
+					query:   r.URL.RawQuery,
+					session: r.Header.Get("Mcp-Session-Id"),
+					body:    string(body),
+					err:     err,
+				}
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			t.Cleanup(upstream.Close)
+
+			req := httptest.NewRequest(method, "https://private.example.ts.net/mcp/server/?tag=one", strings.NewReader(`{"jsonrpc":"2.0","method":"ping","id":1}`))
+			req.Header.Set("Mcp-Session-Id", "session-one")
+			rr := httptest.NewRecorder()
+			newTestAttestor(t, upstream, tokenPath).ServeHTTP(rr, req)
+			require.Equal(t, http.StatusNoContent, rr.Code)
+			require.Empty(t, rr.Header().Get("Location"))
+
+			forwarded := <-seen
+			require.NoError(t, forwarded.err)
+			require.Equal(t, method, forwarded.method)
+			require.Equal(t, "/mcp/server/", forwarded.path)
+			require.Equal(t, "tag=one", forwarded.query)
+			require.Equal(t, "session-one", forwarded.session)
+			require.JSONEq(t, `{"jsonrpc":"2.0","method":"ping","id":1}`, forwarded.body)
+		})
+	}
 }

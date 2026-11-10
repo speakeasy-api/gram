@@ -1,5 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { Switch } from "@/components/ui/Switch";
+import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
 import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -11,10 +13,7 @@ import type {
   McpServerVisibility,
 } from "@gram/client/models/components/mcpserver.js";
 import { useDeleteMcpServerMutation } from "@gram/client/react-query/deleteMcpServer.js";
-import {
-  buildGetMcpServerQuery,
-  invalidateAllGetMcpServer,
-} from "@gram/client/react-query/getMcpServer.js";
+import { buildGetMcpServerQuery } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import {
   invalidateAllMcpServers,
@@ -26,11 +25,16 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { DangerSettingsSection } from "@/components/detail/settings-section";
+import {
+  invalidateMcpServerQueries,
+  mcpServerVisibilityToast,
+  mcpServerVisibilityUpdateForm,
+} from "@/lib/mcp-server-visibility";
 import { DeleteSourceBackedServerDialogContent } from "./DeleteSourceBackedServerDialogContent";
 import {
   linkedMcpServersFilter,
@@ -38,36 +42,14 @@ import {
   type SourceBackedDeleteTarget,
 } from "./sourceDelete";
 import { invalidateWrapperDeleteAuthViews } from "./sourceInvalidation";
-
-function mcpServerVisibilityUpdateForm(
-  mcpServer: McpServer,
-  visibility: McpServerVisibility,
-) {
-  return {
-    id: mcpServer.id,
-    name: mcpServer.name ?? undefined,
-    remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-    tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
-    toolsetId: mcpServer.toolsetId ?? undefined,
-    unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
-    environmentId: mcpServer.environmentId ?? undefined,
-    toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-    visibility,
-  };
-}
-
-function mcpServerVisibilityToast(visibility: McpServerVisibility) {
-  switch (visibility) {
-    case "disabled":
-      return "MCP server disabled";
-    case "private":
-      return "MCP server enabled";
-    case "public":
-      return "MCP server set to public";
-    default:
-      return "MCP server updated";
-  }
-}
+import {
+  isCanonicalHostedWrapper,
+  standsInForToolset,
+} from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { DeleteHostedServerButton } from "@/pages/mcp/x/hosted/DeleteHostedServerButton";
+import { ServerUsageConfirmation } from "@/components/mcp-server-usage/ServerUsageConfirmation";
+import { useServerUsageConfirmation } from "@/components/mcp-server-usage/useServerUsageConfirmation";
+import type { Toolset } from "@/lib/toolTypes";
 
 function ServerControlRow({
   title,
@@ -138,9 +120,12 @@ export function DangerZoneSection({
   endpoints,
   deleteTarget,
   sourceUnavailable = false,
+  hostedToolset,
 }: {
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
+  /** A canonical hosted server's toolset; deleting the server deletes it. */
+  hostedToolset?: Toolset;
   /**
    * The source row behind a remote/tunneled/unproxied server, once loaded.
    * Deleting such a server must delete its source too, so the button waits
@@ -191,12 +176,11 @@ export function DangerZoneSection({
       error instanceof Error ? error.message : "Failed to update MCP server",
     );
   };
+  const followRenamedServer = useFollowRenamedServer();
   const updateVisibility = useUpdateMcpServerMutation({
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-      ]);
+    onSuccess: async (updated, variables) => {
+      followRenamedServer(updated);
+      await invalidateMcpServerQueries(queryClient);
       const next = variables.request.updateMcpServerForm.visibility;
       toast.success(mcpServerVisibilityToast(next));
     },
@@ -242,6 +226,7 @@ export function DangerZoneSection({
   };
 
   const enabled = mcpServer.visibility !== "disabled";
+  const hostedWrapper = isCanonicalHostedWrapper(mcpServer);
 
   return (
     <>
@@ -273,35 +258,55 @@ export function DangerZoneSection({
                 >
                   <Switch
                     checked={enabled}
-                    disabled={isUpdatingVisibility}
+                    // Hosted servers change availability through the visibility dropdown's confirmations.
+                    disabled={
+                      isUpdatingVisibility || standsInForToolset(mcpServer)
+                    }
                     aria-label="Enable MCP server"
                     onCheckedChange={requestAvailabilityChange}
                   />
                 </RequireScope>
               </ServerControlRow>
 
-              <ServerControlRow
-                title={deleteRow.title}
-                description={deleteRow.description}
-              >
-                <RequireScope
-                  scope="mcp:write"
-                  resourceId={mcpServer.projectId}
-                  level="component"
-                >
-                  <Button
-                    variant="destructive-primary"
-                    size="md"
-                    disabled={!deleteReady}
-                    onClick={() => setDeleteDialogOpen(true)}
+              {hostedWrapper ? (
+                hostedToolset && (
+                  <ServerControlRow
+                    title="Delete MCP server"
+                    description="Permanently delete this MCP server and its toolset. This action cannot be undone."
                   >
-                    <Button.LeftIcon>
-                      <Trash2 className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>Delete MCP server</Button.Text>
-                  </Button>
-                </RequireScope>
-              </ServerControlRow>
+                    <RequireScope
+                      scope="mcp:write"
+                      resourceId={hostedToolset.id}
+                      level="component"
+                    >
+                      <DeleteHostedServerButton toolset={hostedToolset} />
+                    </RequireScope>
+                  </ServerControlRow>
+                )
+              ) : (
+                <ServerControlRow
+                  title={deleteRow.title}
+                  description={deleteRow.description}
+                >
+                  <RequireScope
+                    scope="mcp:write"
+                    resourceId={mcpServer.projectId}
+                    level="component"
+                  >
+                    <Button
+                      variant="destructive-primary"
+                      size="md"
+                      disabled={!deleteReady}
+                      onClick={() => setDeleteDialogOpen(true)}
+                    >
+                      <Button.LeftIcon>
+                        <Trash2 className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Delete MCP server</Button.Text>
+                    </Button>
+                  </RequireScope>
+                </ServerControlRow>
+              )}
             </div>
             {linkedQuery.isError && (
               // The delete stays disabled until the sibling list loads, since
@@ -360,6 +365,7 @@ export function DangerZoneSection({
         </Dialog.Content>
       </Dialog>
       <ServerAvailabilityDialog
+        mcpServer={mcpServer}
         targetVisibility={pendingAvailability}
         isLoading={isUpdatingVisibility}
         onClose={() => setPendingAvailability(null)}
@@ -370,18 +376,32 @@ export function DangerZoneSection({
 }
 
 function ServerAvailabilityDialog({
+  mcpServer,
   targetVisibility,
   isLoading,
   onClose,
   onConfirm,
 }: {
+  mcpServer: McpServer;
   targetVisibility: McpServerVisibility | null;
   isLoading: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }) {
   const isOpen = targetVisibility != null;
-  const enabling = targetVisibility !== "disabled";
+  // Keep the last target through the close animation so the dialog doesn't
+  // switch to its enable layout while it fades out.
+  const [lastTarget, setLastTarget] = useState(targetVisibility);
+  if (targetVisibility != null && targetVisibility !== lastTarget) {
+    setLastTarget(targetVisibility);
+  }
+  const enabling = (targetVisibility ?? lastTarget) !== "disabled";
+  // Only disabling cuts clients off; enabling needs no usage check.
+  const usage = useServerUsageConfirmation({
+    mcpServerId: mcpServer.id,
+    serverName: mcpServer.name,
+    open: isOpen && !enabling,
+  });
   let title = "Disable MCP server?";
   let message =
     "You are about to disable this MCP server. Users will no longer be able to connect to it. Continue?";
@@ -394,23 +414,26 @@ function ServerAvailabilityDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-w-md">
+      <Dialog.Content className={enabling ? "max-w-md" : "max-w-2xl!"}>
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>{message}</Dialog.Description>
         </Dialog.Header>
+        {!enabling && (
+          <ServerUsageConfirmation state={usage} disabled={isLoading} />
+        )}
         <Dialog.Footer>
           <Button variant="secondary" disabled={isLoading} onClick={onClose}>
             <Button.Text>Cancel</Button.Text>
           </Button>
           <Button
             variant={enabling ? "primary" : "destructive-primary"}
-            disabled={isLoading}
+            disabled={isLoading || (!enabling && !usage.canConfirm)}
             onClick={onConfirm}
           >
             {isLoading && (
               <Button.LeftIcon>
-                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                <Spinner className="mr-0" />
               </Button.LeftIcon>
             )}
             <Button.Text>{isLoading ? "Saving" : "Continue"}</Button.Text>
@@ -450,7 +473,14 @@ function DeleteMcpServerDialogContent({
     },
   });
 
+  const usage = useServerUsageConfirmation({
+    mcpServerId: mcpServer.id,
+    serverName: mcpServer.name,
+    open: true,
+  });
+
   const handleConfirm = () => {
+    if (!usage.canConfirm) return;
     remove.mutate({ request: { id: mcpServer.id } });
   };
 
@@ -459,7 +489,7 @@ function DeleteMcpServerDialogContent({
     deleteButtonContent = (
       <>
         <Button.LeftIcon>
-          <Loader2 className="size-4 animate-spin" />
+          <Spinner className="mr-0" />
         </Button.LeftIcon>
         <Button.Text>Deleting</Button.Text>
       </>
@@ -494,6 +524,7 @@ function DeleteMcpServerDialogContent({
             No endpoints are currently associated with this MCP server.
           </Text>
         )}
+        <ServerUsageConfirmation state={usage} disabled={remove.isPending} />
         {remove.isError && (
           <Alert variant="error" dismissible={false}>
             {remove.error.message}
@@ -502,7 +533,7 @@ function DeleteMcpServerDialogContent({
         <Stack direction="horizontal" gap={2}>
           <Button
             variant="destructive-primary"
-            disabled={remove.isPending}
+            disabled={remove.isPending || !usage.canConfirm}
             onClick={handleConfirm}
           >
             {deleteButtonContent}

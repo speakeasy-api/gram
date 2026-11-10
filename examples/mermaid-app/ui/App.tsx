@@ -10,10 +10,10 @@ const DEMO: Payload = {
   title: "Demo — dev preview",
   diagram: `sequenceDiagram
     participant User
-    participant Gram
+    participant Speakeasy
     participant Widget
-    User->>Gram: render_diagram(source)
-    Gram->>Widget: tool-result
+    User->>Speakeasy: render_diagram(source)
+    Speakeasy->>Widget: tool-result
     Widget-->>User: rendered SVG`,
 };
 
@@ -45,7 +45,7 @@ function extractResult(params: unknown): Payload | null {
   if (isPayload(p.structuredContent)) return p.structuredContent;
   if (isPayload(p)) return p;
 
-  // Gram serializes tool JSON responses as CallToolResult.content[0].text
+  // Speakeasy serializes tool JSON responses as CallToolResult.content[0].text
   // (see server/internal/mcp/rpc_tools_call.go:formatResult). Parse it.
   const content = p.content;
   if (Array.isArray(content)) {

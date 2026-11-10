@@ -79,16 +79,33 @@ func TestSignalTopUsersByRule_SkipsUnattributed(t *testing.T) {
 		{RuleID: "r1", UserID: "", ExternalUserID: "", Email: "", Team: "", Findings: 3},
 		// Stamped email without ids: skipped too, the predicate is id-based.
 		{RuleID: "r1", UserID: "", ExternalUserID: "", Email: "ghost@example.com", Team: "", Findings: 2},
-		{RuleID: "r1", UserID: "u1", ExternalUserID: "", Email: "alice@example.com", Team: "", Findings: 1},
+		{RuleID: "r1", UserID: "u1", ExternalUserID: "", Email: "alice@example.com", Team: "", MCPFinding: true, Findings: 1},
 	}
 
-	out := signalTopUsersByRule(rows)
+	out := signalTopUsersByRule(rows, map[string]string{"u1": "current-alice@example.test"})
 	require.Len(t, out["r1"], 1)
-	require.Equal(t, "alice@example.com", out["r1"][0].Email)
+	require.Equal(t, "current-alice@example.test", out["r1"][0].Email)
 
 	// A rule with only unattributed findings yields no top users at all.
 	onlyUnattributed := signalTopUsersByRule([]chrepo.RiskSignalUserCount{
 		{RuleID: "r2", UserID: "", ExternalUserID: "", Email: "", Team: "", Findings: 2},
-	})
+	}, map[string]string{})
 	require.Empty(t, onlyUnattributed["r2"])
+}
+
+func TestSignalTopUsersByRule_PreservesChatIdentity(t *testing.T) {
+	t.Parallel()
+
+	rows := []chrepo.RiskSignalUserCount{
+		{RuleID: "r1", UserID: "chat-user", Email: "stamped-chat@example.test", MCPFinding: false, Findings: 2},
+		{RuleID: "r1", UserID: "mcp-user", Email: "stamped-mcp@example.test", MCPFinding: true, Findings: 1},
+	}
+	out := signalTopUsersByRule(rows, map[string]string{
+		"chat-user": "current-chat@example.test",
+		"mcp-user":  "current-mcp@example.test",
+	})
+
+	require.Len(t, out["r1"], 2)
+	require.Equal(t, "stamped-chat@example.test", out["r1"][0].Email)
+	require.Equal(t, "current-mcp@example.test", out["r1"][1].Email)
 }

@@ -30,12 +30,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -54,6 +57,7 @@ type Service struct {
 	temporalEnv           *tenv.Environment
 	pluginsGitHubEnabled  bool
 	distributionAdmission *admission.Guard
+	publicationRequests   plugins.PublicationRequests
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -80,8 +84,14 @@ func NewService(
 		audit:                 auditLogger,
 		temporalEnv:           temporalEnv,
 		pluginsGitHubEnabled:  pluginsGitHubEnabled,
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: admission.NewGuard(),
+		publicationRequests:   plugins.PublicationRequests{Enabled: false},
 	}
+}
+
+func (s *Service) WithPublicationRequests(enabled bool) *Service {
+	s.publicationRequests.Enabled = enabled
+	return s
 }
 
 func (s *Service) WithDistributionAdmission(guard *admission.Guard) *Service {
@@ -111,10 +121,6 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	customDomainID, err := conv.PtrToNullUUID(payload.CustomDomainID)
@@ -127,13 +133,16 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, err
 	}
 
+	// Like updates, a hosted endpoint create checks mcp:write on its server instead of the project.
+	authorizedHosted, err := s.requireEndpointCreateWrite(ctx, logger, authCtx, mcpServerID)
+	if err != nil {
+		return nil, err
+	}
+
 	slug := string(payload.Slug)
 	if err := validateSlugPrefix(slug, customDomainID, authCtx.OrganizationSlug); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid slug").LogError(ctx, logger)
 	}
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	rollout, rolloutErr = s.distributionAdmission.ResolveProject(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -142,8 +151,13 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
-	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
+	if err := lockEndpointMutationScope(ctx, dbtx, authCtx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
+	}
+	if mcpServerID.Valid {
+		if err := lockHostedToolset(ctx, dbtx, *authCtx.ProjectID, mcpServerID.UUID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock hosted toolset").LogError(ctx, logger)
+		}
 	}
 
 	// Match the deletion and update paths' lock order — custom domains before
@@ -181,6 +195,15 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 
 	if err := verifyEndpointReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, mcpServerID, metaMcpServerID, customDomainID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
+	}
+	hosted := mcpServerID.Valid && isCanonicalHosted(mcpServer)
+	if hosted != authorizedHosted {
+		return nil, oops.E(oops.CodeConflict, nil, "mcp server changed while creating its endpoint").LogWarn(ctx, logger)
+	}
+	if hosted {
+		if err := checkHostedNewAddress(ctx, dbtx, logger, authCtx, mcpServer, slug, customDomainID); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := LockSlugScope(ctx, dbtx, customDomainID, slug); err != nil {
@@ -229,28 +252,45 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation").LogError(ctx, logger)
 	}
+	if hosted {
+		if err := legacyalias.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.ID); err != nil {
+			return nil, err //nolint:wrapcheck // oops errors pass through.
+		}
+	}
 
 	// Meta-MCP-backed endpoints never participate in default-plugin attachment
 	// or marketplace publishing; that flow is exclusive to generic MCP servers.
 	attached, pluginCreated := false, false
 	if mcpServerID.Valid && mcpServer.Visibility != mcpservers.VisibilityDisabled {
-		if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServerID.UUID); err != nil {
-			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+		admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authz, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnavailable, err, "distribution approval could not be verified safely").LogError(ctx, logger)
+		}
+		if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(admissionCtx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServerID.UUID); err != nil {
+			if errors.Is(err, admission.ErrApprovalRequired) {
 				return nil, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, logger)
 		}
-		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, mcpServer)
+		// Role plugins are checked by the same guard inside the attachment, so
+		// the administrator's write must be marked there too.
+		attached, pluginCreated, err = s.attachToDefaultPlugin(admissionCtx, dbtx, authCtx, mcpServer)
 		if err != nil {
 			return nil, err
 		}
 	}
 
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{mcpServerID}, metaMcpServerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	s.triggerPluginPublish(ctx, authCtx, attached, pluginCreated)
+	if !attached {
+		s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{mcpServerID}, metaMcpServerID)
+	}
 
 	return mv.BuildMcpEndpointView(created), nil
 }
@@ -266,18 +306,18 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 // own transaction commits, since this runs pre-commit and the DB writes
 // could still roll back.
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer) (bool, bool, error) {
-	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
+	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
 		DisplayName:    mcpservers.ServerDisplayName(server),
-	})
+	}, s.distributionAdmission)
 	if err != nil {
 		return false, false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
 	}
 
-	return true, pluginCreated, nil
+	return outcome.Attached, outcome.PluginCreated, nil
 }
 
 // triggerPluginPublish enqueues the marketplace publish for the project whose
@@ -424,11 +464,10 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+	requireProjectWrite := func() error {
+		return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+	}
 
 	endpointID, err := uuid.Parse(payload.ID)
 	if err != nil {
@@ -456,9 +495,25 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			if authErr := requireProjectWrite(); authErr != nil {
+				return nil, authErr
+			}
 			return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp endpoint").LogError(ctx, logger)
+	}
+	// A hosted endpoint update checks mcp:write on its server instead of the project.
+	if preexisting.McpServerID.Valid {
+		server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: preexisting.McpServerID.UUID, ProjectID: *authCtx.ProjectID})
+		switch {
+		case err == nil && server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID && mcpServerID.Valid && mcpServerID.UUID == server.ID:
+			return s.updateHostedEndpoint(ctx, logger, authCtx, preexisting, customDomainID, slug)
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeUnexpected, err, "get endpoint backing server").LogError(ctx, logger)
+		}
+	}
+	if err := requireProjectWrite(); err != nil {
+		return nil, err
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -468,6 +523,9 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := lockEndpointMutationScope(ctx, dbtx, authCtx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
+	}
 
 	domainIDs := uniqueIDs(preexisting.CustomDomainID, customDomainID)
 	if err := lockCustomDomains(ctx, dbtx, domainIDs); err != nil {
@@ -512,7 +570,16 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	if mcpServerID.Valid && targetServer == nil {
 		return nil, oops.E(oops.CodeInvalid, nil, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
 	}
-
+	// A hosted server's endpoints stay its own: create or delete them instead of moving them between backends.
+	if serverIDs := uniqueIDs(existing.McpServerID, mcpServerID); len(serverIDs) > 0 && (existing.McpServerID != mcpServerID || metaMcpServerID.Valid) {
+		lockedServers, err := mcpserversrepo.New(dbtx).LockMCPServersByIDs(ctx, mcpserversrepo.LockMCPServersByIDsParams{ProjectID: *authCtx.ProjectID, Ids: serverIDs})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp servers").LogError(ctx, logger)
+		}
+		if slices.ContainsFunc(lockedServers, isCanonicalHosted) {
+			return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server's endpoints cannot move to or from another backend; create or delete endpoints instead").LogWarn(ctx, logger)
+		}
+	}
 	if err := s.lockMetaMcpServers(ctx, dbtx, authCtx, uniqueIDs(existing.MetaMcpServerID, metaMcpServerID), metaMcpServerID); err != nil {
 		return nil, err
 	}
@@ -595,9 +662,13 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		}
 	}
 
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID, updated.McpServerID}, existing.MetaMcpServerID, updated.MetaMcpServerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+	s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID, updated.McpServerID}, existing.MetaMcpServerID, updated.MetaMcpServerID)
 
 	if wasRoot && existing.CustomDomainID.Valid {
 		if err := s.reconcileCustomDomains(ctx, []uuid.UUID{existing.CustomDomainID.UUID}); err != nil {
@@ -625,6 +696,21 @@ func (s *Service) CheckMcpEndpointSlugAvailability(ctx context.Context, payload 
 		return false, oops.E(oops.CodeBadRequest, err, "invalid custom_domain_id").LogError(ctx, logger)
 	}
 
+	mcpServerID, err := conv.PtrToNullUUID(payload.McpServerID)
+	if err != nil {
+		return false, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogError(ctx, logger)
+	}
+	if mcpServerID.Valid {
+		// Only a server in this project may discount its own addresses.
+		_, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServerID.UUID, ProjectID: *authCtx.ProjectID})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return false, oops.E(oops.CodeInvalid, err, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
+		case err != nil:
+			return false, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, logger)
+		}
+	}
+
 	// A foreign or unknown domain reads as "unavailable" so slugs can't be
 	// probed under domains the caller doesn't own.
 	available, err := CheckSlugAvailable(ctx, s.db, SlugAvailabilityCheck{
@@ -632,7 +718,7 @@ func (s *Service) CheckMcpEndpointSlugAvailability(ctx context.Context, payload 
 		CustomDomainID:           customDomainID,
 		OrganizationID:           authCtx.ActiveOrganizationID,
 		ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExcludeMcpServerID:       mcpServerID,
 		SkipDomainOwnershipCheck: false,
 	})
 	if err != nil {
@@ -677,6 +763,14 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := lockEndpointMutationScope(ctx, dbtx, authCtx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
+	}
+	if preexisting.McpServerID.Valid {
+		if err := lockHostedToolset(ctx, dbtx, *authCtx.ProjectID, preexisting.McpServerID.UUID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock hosted toolset").LogError(ctx, logger)
+		}
+	}
 
 	if err := lockCustomDomains(ctx, dbtx, uniqueIDs(preexisting.CustomDomainID)); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
@@ -694,7 +788,21 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	if existing.CustomDomainID != preexisting.CustomDomainID {
 		return oops.E(oops.CodeConflict, nil, "mcp endpoint changed concurrently; retry the request").LogError(ctx, logger)
 	}
-
+	hostedServerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if existing.McpServerID.Valid {
+		server, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ID: existing.McpServerID.UUID, ProjectID: *authCtx.ProjectID})
+		switch {
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+			return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
+		case err == nil:
+			if isCanonicalHosted(server) {
+				hostedServerID = uuid.NullUUID{UUID: server.ID, Valid: true}
+			}
+			if err := rejectLastHostedAddress(ctx, dbtx, logger, authCtx, server, existing.ID); err != nil {
+				return err
+			}
+		}
+	}
 	deleted, err := txRepo.DeleteMCPEndpoint(ctx, repo.DeleteMCPEndpointParams{
 		ID:        endpointID,
 		ProjectID: *authCtx.ProjectID,
@@ -704,6 +812,11 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 			return oops.E(oops.CodeNotFound, err, "mcp endpoint not found").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete mcp endpoint").LogError(ctx, logger)
+	}
+	if hostedServerID.Valid {
+		if err := legacyalias.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, hostedServerID.UUID); err != nil {
+			return err //nolint:wrapcheck // oops errors pass through.
+		}
 	}
 
 	if err := s.audit.LogMcpEndpointDelete(ctx, dbtx, audit.LogMcpEndpointDeleteEvent{
@@ -725,9 +838,13 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		}
 	}
 
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID}, existing.MetaMcpServerID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+	s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID}, existing.MetaMcpServerID)
 
 	if wasRoot {
 		if err := s.reconcileCustomDomains(ctx, []uuid.UUID{existing.CustomDomainID.UUID}); err != nil {
@@ -799,6 +916,22 @@ func uniqueIDs(ids ...uuid.NullUUID) []uuid.UUID {
 		return strings.Compare(a.String(), b.String())
 	})
 	return result
+}
+
+func lockEndpointMutationScope(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext) error {
+	if tx == nil || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
+		return fmt.Errorf("invalid MCP endpoint mutation scope")
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return fmt.Errorf("lock endpoint EMA scope: %w", err)
+	}
+	if err := networkingressrepo.New(tx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return fmt.Errorf("lock network ingress lifecycle: %w", err)
+	}
+	if err := admission.LockProject(ctx, tx, *authCtx.ProjectID); err != nil {
+		return fmt.Errorf("lock distribution admission: %w", err)
+	}
+	return nil
 }
 
 func lockCustomDomains(ctx context.Context, dbtx pgx.Tx, domainIDs []uuid.UUID) error {

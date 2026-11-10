@@ -48,7 +48,7 @@ export default function IdentityConnections(): JSX.Element {
     new URLSearchParams(location.search),
   );
 
-  // Telemetry keys the graph on the Gram user id or on the id an agent
+  // Telemetry keys the graph on the Speakeasy user id or on the id an agent
   // reported, the same way the metric panels do, so an identity with no
   // directory row still resolves — but it has to be sent under the field that
   // names which one it is.
@@ -87,6 +87,7 @@ export default function IdentityConnections(): JSX.Element {
   return (
     <IdentitySection
       title="Connections"
+      timeRange
       meta={sectionMeta([
         { count: graph?.nodes.length ?? 0, singular: "node" },
         { count: sessions.length, singular: "live connection" },

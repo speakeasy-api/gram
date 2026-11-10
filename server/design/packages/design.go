@@ -9,7 +9,7 @@ import (
 )
 
 var _ = Service("packages", func() {
-	Description("Manages packages in Gram.")
+	Description("Manages packages in Speakeasy.")
 	shared.DeclareErrorResponses()
 
 	Security(security.ByKey, security.ProjectSlug, func() {

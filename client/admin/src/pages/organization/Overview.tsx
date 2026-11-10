@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
+import { ExternalLinkButton } from "@/components/ExternalLinkButton";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,10 +16,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AdoptionDashboardLink } from "@/pages/organization/AdoptionDashboardLink";
+import { OnboardingPlaybook } from "@/pages/organization/OnboardingPlaybook";
 import { TrialFacts, TrialSummary } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 import { canStartTrial } from "@/pages/organizations/rowActions";
 import { SetStripeCustomer } from "@/pages/organization/SetStripeCustomer";
+import { SetStripeSubscription } from "@/pages/organization/SetStripeSubscription";
 import {
   Select,
   SelectContent,
@@ -148,14 +152,20 @@ export function OverviewRoute(): JSX.Element | null {
   // record they were started on. `RecordLayout` keys this whole subtree the
   // same way, which is what actually enforces it today; this one holds if the
   // view is ever mounted somewhere that does not.
-  return <Overview key={data.id} org={data} />;
+  return <Overview key={data.id} org={data} idOrSlug={idOrSlug} />;
 }
 
 // One field per write. The endpoint takes both as optional, and a type that
 // allows both would let a write carry a field the operator never touched.
 type FactChange = { account_type: string } | { whitelisted: boolean };
 
-export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
+export function Overview({
+  org,
+  idOrSlug,
+}: {
+  org: AdminOrganization;
+  idOrSlug?: string;
+}): JSX.Element {
   const qc = useQueryClient();
   const [confirm, confirmDialog] = useConfirmDialog();
   const { announce, showFailure } = useWriteReport();
@@ -385,11 +395,20 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           </Row>
           <Row label="WorkOS org ID">
             {org.workos_id ? (
-              <CopyValue
-                label="WorkOS org ID"
-                value={org.workos_id}
-                className="text-sm"
-              />
+              <span className="flex min-w-0 items-center gap-1">
+                <CopyValue
+                  label="WorkOS org ID"
+                  value={org.workos_id}
+                  className="text-sm"
+                />
+                {/* Absent when the deployment has no WorkOS environment set. */}
+                {org.workos_dashboard_url ? (
+                  <ExternalLinkButton
+                    href={org.workos_dashboard_url}
+                    label="Open in WorkOS"
+                  />
+                ) : null}
+              </span>
             ) : (
               <span className="text-muted-foreground text-sm">-</span>
             )}
@@ -402,15 +421,11 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
             />
           </Row>
           <Row label="Stripe subscription ID">
-            {org.stripe_subscription_id ? (
-              <CopyValue
-                label="Stripe subscription ID"
-                value={org.stripe_subscription_id}
-                className="text-sm"
-              />
-            ) : (
-              <span className="text-muted-foreground text-sm">-</span>
-            )}
+            <SetStripeSubscription
+              key={org.id}
+              org={org}
+              focusFallbackRef={detailsHeading}
+            />
           </Row>
           <Row label="Account type">
             <Select
@@ -465,7 +480,18 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               </span>
             </div>
           </Row>
+          <Row label="Adoption Dashboard Link">
+            <AdoptionDashboardLink key={org.id} org={org} />
+          </Row>
           <TrialFacts org={org} />
+        </Panel>
+
+        <Panel title="Onboarding">
+          <p className="text-muted-foreground text-sm">
+            Configure the setup wizard cards this organization sees, including
+            its playbook, step order, and stack context.
+          </p>
+          <OnboardingPlaybook organizationId={org.id} idOrSlug={idOrSlug} />
         </Panel>
 
         <Panel
@@ -482,7 +508,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               <p className="text-muted-foreground mt-0.5 text-sm">
                 {org.disabled_at
                   ? `Disabled ${fmtDateShort(org.disabled_at)}. Re-enabling restores organization access for every member and takes effect at once. Model provider keys with admin, billing, or unknown disable causes remain disabled.`
-                  : "Every member loses access to Gram until the organization is re-enabled. Sessions end immediately; nothing is deleted."}
+                  : "Every member loses access to Speakeasy until the organization is re-enabled. Sessions end immediately; nothing is deleted."}
               </p>
             </div>
             <OrganizationActions

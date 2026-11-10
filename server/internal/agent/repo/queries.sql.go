@@ -83,7 +83,7 @@ const deleteAIScanTarget = `-- name: DeleteAIScanTarget :one
 DELETE FROM ai_scan_targets
 WHERE organization_id = $1
   AND id = $2
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+RETURNING organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 `
 
 type DeleteAIScanTargetParams struct {
@@ -97,6 +97,7 @@ func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTarget
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.ID,
+		&i.AiProductID,
 		&i.DisplayName,
 		&i.Category,
 		&i.BundleIds,
@@ -115,8 +116,37 @@ func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTarget
 	return i, err
 }
 
+const deviceAgentStateReportExists = `-- name: DeviceAgentStateReportExists :one
+SELECT EXISTS (
+  SELECT 1
+  FROM device_agent_state_reports
+  WHERE organization_id = $1
+    AND LOWER(email) = LOWER($2)
+    AND (
+      ($3::text IS NULL AND serial_number IS NULL)
+      OR LOWER(serial_number) = LOWER($3::text)
+    )
+)::boolean AS found
+`
+
+type DeviceAgentStateReportExistsParams struct {
+	OrganizationID string
+	Email          string
+	SerialNumber   pgtype.Text
+}
+
+// Whether a report from this user on this machine is already stored, matching
+// the upsert's dedup key, so only a report that would add a row is charged to
+// the organization's new-device budget.
+func (q *Queries) DeviceAgentStateReportExists(ctx context.Context, arg DeviceAgentStateReportExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, deviceAgentStateReportExists, arg.OrganizationID, arg.Email, arg.SerialNumber)
+	var found bool
+	err := row.Scan(&found)
+	return found, err
+}
+
 const getAIScanTargetForUpdate = `-- name: GetAIScanTargetForUpdate :one
-SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+SELECT organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 FROM ai_scan_targets
 WHERE organization_id = $1
   AND id = $2
@@ -134,6 +164,7 @@ func (q *Queries) GetAIScanTargetForUpdate(ctx context.Context, arg GetAIScanTar
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.ID,
+		&i.AiProductID,
 		&i.DisplayName,
 		&i.Category,
 		&i.BundleIds,
@@ -162,7 +193,9 @@ SELECT
   pgc.updated_at AS marketplace_updated_at,
   -- The hooks subtree may be pinned by the rollout gate under a pre-rename org
   -- name; the view derives the observability slug from this snapshot so devices
-  -- install the plugin that actually exists in the published repo.
+  -- install the plugin that actually exists in the published repo. The snapshot
+  -- also records the marketplace name the repo was published under, which the
+  -- view emits so the name stays frozen.
   pgc.published_hooks_config,
   pms.marketplace_name AS marketplace_name_override,
   -- NULL (no settings row, or the column unset) means enabled: observability
@@ -188,7 +221,25 @@ SELECT
   )) AS is_default_project,
   p.id AS plugin_id,
   p.slug AS plugin_slug,
-  p.updated_at AS plugin_updated_at
+  p.name AS plugin_name,
+  p.description AS plugin_description,
+  p.updated_at AS plugin_updated_at,
+  -- When several of the caller's assignments match one plugin, the strictest
+  -- install mode wins: required, then default, then available. An unrecognized
+  -- stored value ranks as default. Empty when no plugin matched.
+  COALESCE((
+    SELECT (ARRAY['required', 'default', 'available'])[MIN(
+      CASE pa.install_mode
+        WHEN 'required' THEN 1
+        WHEN 'available' THEN 3
+        ELSE 2
+      END
+    )]
+    FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = $1
+      AND pa.principal_urn = ANY($2::text[])
+  ), '')::text AS plugin_install_mode
 FROM plugin_github_connections pgc
 JOIN projects pr
   ON pr.id = pgc.project_id
@@ -247,7 +298,10 @@ type GetAgentPluginSetRow struct {
 	IsDefaultProject        bool
 	PluginID                uuid.NullUUID
 	PluginSlug              pgtype.Text
+	PluginName              pgtype.Text
+	PluginDescription       pgtype.Text
 	PluginUpdatedAt         pgtype.Timestamptz
+	PluginInstallMode       string
 }
 
 // Returns the device agent's full plugin set for an org, marketplace-first.
@@ -264,9 +318,11 @@ type GetAgentPluginSetRow struct {
 //
 // Each project resolves to a marketplace name the way the publish path does:
 // the per-project override (project_marketplace_settings.marketplace_name) when
-// set, else the org-derived default (computed in the view). Projects with
-// distinct names surface as distinct marketplaces; projects that share a name
-// (e.g. several on the org default) still collapse to one in the view.
+// set, else the name it last published under (recorded in
+// published_hooks_config), else the org-derived default (computed in the view).
+// Projects with distinct names surface as distinct marketplaces; projects that
+// share a name (e.g. several on the org default) still collapse to one in the
+// view.
 //
 // Rows put the org's default project first, then use creation order and id for
 // deterministic grouping. When projects share a name and the view collapses
@@ -294,7 +350,10 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetPa
 			&i.IsDefaultProject,
 			&i.PluginID,
 			&i.PluginSlug,
+			&i.PluginName,
+			&i.PluginDescription,
 			&i.PluginUpdatedAt,
+			&i.PluginInstallMode,
 		); err != nil {
 			return nil, err
 		}
@@ -478,7 +537,7 @@ func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessio
 
 const listAIScanTargets = `-- name: ListAIScanTargets :many
 
-SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+SELECT organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 FROM ai_scan_targets
 WHERE organization_id = $1
 ORDER BY id
@@ -499,6 +558,7 @@ func (q *Queries) ListAIScanTargets(ctx context.Context, organizationID string) 
 		if err := rows.Scan(
 			&i.OrganizationID,
 			&i.ID,
+			&i.AiProductID,
 			&i.DisplayName,
 			&i.Category,
 			&i.BundleIds,
@@ -513,6 +573,98 @@ func (q *Queries) ListAIScanTargets(ctx context.Context, organizationID string) 
 			&i.Rationale,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentPluginServers = `-- name: ListAgentPluginServers :many
+SELECT
+  ps.plugin_id,
+  ps.display_name,
+  om.slug AS organization_slug,
+  om.default_host AS organization_default_host,
+  pr.id AS project_id,
+  pr.slug AS project_slug,
+  m.id AS mcp_server_id,
+  m.slug AS mcp_server_slug,
+  m.toolset_id AS mcp_server_toolset_id,
+  g.id AS gateway_id
+FROM plugin_servers ps
+JOIN plugins p
+  ON p.id = ps.plugin_id
+  AND p.deleted IS FALSE
+JOIN projects pr
+  ON pr.id = p.project_id
+  AND pr.deleted IS FALSE
+JOIN organization_metadata om
+  ON om.id = p.organization_id
+LEFT JOIN mcp_servers m
+  ON m.id = ps.mcp_server_id
+  AND m.project_id = p.project_id
+  AND m.deleted IS FALSE
+  AND m.visibility <> 'disabled'
+LEFT JOIN meta_mcp_servers g
+  ON g.id = ps.meta_mcp_server_id
+  AND g.project_id = p.project_id
+  AND g.deleted IS FALSE
+  AND g.visibility <> 'disabled'
+WHERE p.organization_id = $1
+  AND ps.plugin_id = ANY($2::uuid[])
+  AND ps.deleted IS FALSE
+  AND (m.id IS NOT NULL OR g.id IS NOT NULL)
+ORDER BY ps.plugin_id, ps.sort_order ASC, ps.created_at ASC, ps.id ASC
+`
+
+type ListAgentPluginServersParams struct {
+	OrganizationID string
+	PluginIds      []uuid.UUID
+}
+
+type ListAgentPluginServersRow struct {
+	PluginID                uuid.UUID
+	DisplayName             string
+	OrganizationSlug        string
+	OrganizationDefaultHost pgtype.Text
+	ProjectID               uuid.UUID
+	ProjectSlug             string
+	McpServerID             uuid.NullUUID
+	McpServerSlug           pgtype.Text
+	McpServerToolsetID      uuid.NullUUID
+	GatewayID               uuid.NullUUID
+}
+
+// Lists the live MCP servers inside the given plugins for the device agent's
+// menu bar, in each plugin's display order. A membership whose backend is
+// deleted or turned off is skipped, since the plugin no longer delivers it.
+// Exactly one of mcp_server_id and gateway_id is non-null per row; the handler builds the
+// dashboard link and the mcp:read check from whichever it is.
+func (q *Queries) ListAgentPluginServers(ctx context.Context, arg ListAgentPluginServersParams) ([]ListAgentPluginServersRow, error) {
+	rows, err := q.db.Query(ctx, listAgentPluginServers, arg.OrganizationID, arg.PluginIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentPluginServersRow
+	for rows.Next() {
+		var i ListAgentPluginServersRow
+		if err := rows.Scan(
+			&i.PluginID,
+			&i.DisplayName,
+			&i.OrganizationSlug,
+			&i.OrganizationDefaultHost,
+			&i.ProjectID,
+			&i.ProjectSlug,
+			&i.McpServerID,
+			&i.McpServerSlug,
+			&i.McpServerToolsetID,
+			&i.GatewayID,
 		); err != nil {
 			return nil, err
 		}
@@ -670,6 +822,32 @@ func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedCha
 	return items, nil
 }
 
+const recordDeviceAgentServedEtag = `-- name: RecordDeviceAgentServedEtag :exec
+UPDATE device_agent_syncs
+SET served_etag            = $1
+  , served_etag_changed_at = clock_timestamp()
+  , updated_at             = clock_timestamp()
+WHERE organization_id = $2
+  AND email = $3
+  AND served_etag IS DISTINCT FROM $1
+`
+
+type RecordDeviceAgentServedEtagParams struct {
+	ServedEtag     pgtype.Text
+	OrganizationID string
+	Email          string
+}
+
+// Records the getPlugins etag just served to @email, which device
+// attestation compares an agent's reported applied etag against. Separate
+// from UpsertDeviceAgentSync because the etag is only known once the plugin
+// set resolves, and that heartbeat must land even when resolving fails.
+// Writes only on change, so the steady-state poll costs no write.
+func (q *Queries) RecordDeviceAgentServedEtag(ctx context.Context, arg RecordDeviceAgentServedEtagParams) error {
+	_, err := q.db.Exec(ctx, recordDeviceAgentServedEtag, arg.ServedEtag, arg.OrganizationID, arg.Email)
+	return err
+}
+
 const setAIScanTargetStatus = `-- name: SetAIScanTargetStatus :one
 INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
 VALUES ($1, $2, $3, $4)
@@ -677,7 +855,7 @@ ON CONFLICT (organization_id, id) DO UPDATE
 SET status = EXCLUDED.status
   , rationale = EXCLUDED.rationale
   , updated_at = clock_timestamp()
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+RETURNING organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 `
 
 type SetAIScanTargetStatusParams struct {
@@ -698,6 +876,7 @@ func (q *Queries) SetAIScanTargetStatus(ctx context.Context, arg SetAIScanTarget
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.ID,
+		&i.AiProductID,
 		&i.DisplayName,
 		&i.Category,
 		&i.BundleIds,
@@ -758,7 +937,7 @@ SET display_name = EXCLUDED.display_name
   , oauth_client_ids = EXCLUDED.oauth_client_ids
   , client_info_names = EXCLUDED.client_info_names
   , updated_at = clock_timestamp()
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+RETURNING organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 `
 
 type UpsertAIScanTargetParams struct {
@@ -799,6 +978,7 @@ func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTarget
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.ID,
+		&i.AiProductID,
 		&i.DisplayName,
 		&i.Category,
 		&i.BundleIds,
@@ -948,6 +1128,171 @@ func (q *Queries) UpsertDeviceAgentEnvironmentSync(ctx context.Context, arg Upse
 		arg.Hostname,
 	)
 	return err
+}
+
+const upsertDeviceAgentStateReport = `-- name: UpsertDeviceAgentStateReport :one
+INSERT INTO device_agent_state_reports (
+    organization_id
+  , email
+  , serial_number
+  , hostname
+  , schema_version
+  , generated_at
+  , applied_etag
+  , applied_at
+  , enforcement_halted
+  , remote_config_etag
+  , remote_config_failed
+  , withheld_plugins
+  , tools
+  , degraded_tool_count
+  , drift_counting_since
+  , speakeasyd_version
+  , speakeasy_version
+  , speakeasy_ui_version
+  , os
+  , arch
+  , auto_update
+  , update_channel
+  , pinned_target
+  , current_blocked
+  , last_rollback_at
+  , last_rollback_from
+  , last_rollback_to
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+  , $13
+  , $14
+  , $15
+  , $16
+  , $17
+  , $18
+  , $19
+  , $20
+  , $21
+  , $22
+  , $23
+  , $24
+  , $25
+  , $26
+  , $27
+)
+ON CONFLICT (organization_id, LOWER(serial_number), LOWER(email)) DO UPDATE
+SET email                = EXCLUDED.email
+  , serial_number        = EXCLUDED.serial_number
+    -- A report without a hostname must not blank a known one.
+  , hostname             = COALESCE(EXCLUDED.hostname, device_agent_state_reports.hostname)
+  , schema_version       = EXCLUDED.schema_version
+  , generated_at         = EXCLUDED.generated_at
+  , reported_at          = clock_timestamp()
+  , applied_etag         = EXCLUDED.applied_etag
+  , applied_at           = EXCLUDED.applied_at
+  , enforcement_halted   = EXCLUDED.enforcement_halted
+  , remote_config_etag   = EXCLUDED.remote_config_etag
+  , remote_config_failed = EXCLUDED.remote_config_failed
+  , withheld_plugins     = EXCLUDED.withheld_plugins
+  , tools                = EXCLUDED.tools
+  , degraded_tool_count  = EXCLUDED.degraded_tool_count
+  , drift_counting_since = EXCLUDED.drift_counting_since
+  , speakeasyd_version   = EXCLUDED.speakeasyd_version
+  , speakeasy_version    = EXCLUDED.speakeasy_version
+  , speakeasy_ui_version = EXCLUDED.speakeasy_ui_version
+  , os                   = EXCLUDED.os
+  , arch                 = EXCLUDED.arch
+  , auto_update          = EXCLUDED.auto_update
+  , update_channel       = EXCLUDED.update_channel
+  , pinned_target        = EXCLUDED.pinned_target
+  , current_blocked      = EXCLUDED.current_blocked
+  , last_rollback_at     = EXCLUDED.last_rollback_at
+  , last_rollback_from   = EXCLUDED.last_rollback_from
+  , last_rollback_to     = EXCLUDED.last_rollback_to
+  , updated_at           = clock_timestamp()
+RETURNING applied_etag, reported_at
+`
+
+type UpsertDeviceAgentStateReportParams struct {
+	OrganizationID     string
+	Email              string
+	SerialNumber       pgtype.Text
+	Hostname           pgtype.Text
+	SchemaVersion      int32
+	GeneratedAt        pgtype.Timestamptz
+	AppliedEtag        pgtype.Text
+	AppliedAt          pgtype.Timestamptz
+	EnforcementHalted  bool
+	RemoteConfigEtag   pgtype.Text
+	RemoteConfigFailed bool
+	WithheldPlugins    []byte
+	Tools              []byte
+	DegradedToolCount  int32
+	DriftCountingSince pgtype.Timestamptz
+	SpeakeasydVersion  pgtype.Text
+	SpeakeasyVersion   pgtype.Text
+	SpeakeasyUiVersion pgtype.Text
+	Os                 pgtype.Text
+	Arch               pgtype.Text
+	AutoUpdate         pgtype.Text
+	UpdateChannel      pgtype.Text
+	PinnedTarget       pgtype.Text
+	CurrentBlocked     bool
+	LastRollbackAt     pgtype.Timestamptz
+	LastRollbackFrom   pgtype.Text
+	LastRollbackTo     pgtype.Text
+}
+
+type UpsertDeviceAgentStateReportRow struct {
+	AppliedEtag pgtype.Text
+	ReportedAt  pgtype.Timestamptz
+}
+
+// Replaces the latest state report for one enrolled user on one machine
+// (serial NULL when the machine cannot read one). Infers
+// device_agent_state_reports_org_lower_serial_lower_email_key.
+func (q *Queries) UpsertDeviceAgentStateReport(ctx context.Context, arg UpsertDeviceAgentStateReportParams) (UpsertDeviceAgentStateReportRow, error) {
+	row := q.db.QueryRow(ctx, upsertDeviceAgentStateReport,
+		arg.OrganizationID,
+		arg.Email,
+		arg.SerialNumber,
+		arg.Hostname,
+		arg.SchemaVersion,
+		arg.GeneratedAt,
+		arg.AppliedEtag,
+		arg.AppliedAt,
+		arg.EnforcementHalted,
+		arg.RemoteConfigEtag,
+		arg.RemoteConfigFailed,
+		arg.WithheldPlugins,
+		arg.Tools,
+		arg.DegradedToolCount,
+		arg.DriftCountingSince,
+		arg.SpeakeasydVersion,
+		arg.SpeakeasyVersion,
+		arg.SpeakeasyUiVersion,
+		arg.Os,
+		arg.Arch,
+		arg.AutoUpdate,
+		arg.UpdateChannel,
+		arg.PinnedTarget,
+		arg.CurrentBlocked,
+		arg.LastRollbackAt,
+		arg.LastRollbackFrom,
+		arg.LastRollbackTo,
+	)
+	var i UpsertDeviceAgentStateReportRow
+	err := row.Scan(&i.AppliedEtag, &i.ReportedAt)
+	return i, err
 }
 
 const upsertDeviceAgentSync = `-- name: UpsertDeviceAgentSync :exec

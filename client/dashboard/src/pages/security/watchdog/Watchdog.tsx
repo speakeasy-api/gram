@@ -1,3 +1,4 @@
+import { RiskSetupEmptyState } from "@/components/setup-empty-state";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import {
   StatTile,
@@ -5,7 +6,11 @@ import {
   StatTileSkeleton,
 } from "@/components/chart/stat-tile";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { defineFilters, useFilterState } from "@/components/filters";
+import {
+  defineFilters,
+  useFilterState,
+  type FilterValue,
+} from "@/components/filters";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -20,29 +25,29 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
-import { Loader2 } from "lucide-react";
-import { type DateRangePreset } from "@/elements";
+import { Spinner } from "@/components/ui/Spinner";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRiskCreateExclusionMutation } from "@gram/client/react-query/riskCreateExclusion.js";
+import { useRiskMcpServerCounts } from "@gram/client/react-query/riskMcpServerCounts.js";
 import { useRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
+import { Navigate, Outlet, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import {
-  getRuleTitleFallback,
-  hasJudgeSource,
-  scoreToRating,
-} from "../risk-utils";
+import { useRoutes } from "@/routes";
+import { getRuleTitleFallback, hasJudgeSource } from "../risk-utils";
 import { invalidateExclusionSurfaces } from "../exclusion-invalidation";
 import { useDismissFinding } from "../useDismissFinding";
 import {
   SEVERITY_ACCENT,
   SEVERITY_ORDER,
+  riskScoreTone,
   filterSignalsByCategory,
   filterSignalsBySeverity,
   groupSignals,
@@ -50,16 +55,20 @@ import {
   type SignalGroupMode,
   type SignalSeverity,
 } from "./signals-helpers";
+import { mcpServerDisplayName } from "../risk-outcome";
 import { AnalysisStatusBadge } from "./AnalysisStatusBadge";
 import { collectFindingsForRules } from "./collect-findings";
 import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
 import { SuppressMenu } from "./SuppressMenu";
 import { ExposureBar } from "./ExposureBar";
-import { SignalDrawer } from "./SignalDrawer";
 import { SignalsList } from "./SignalsList";
 import { SuppressedFindings } from "./SuppressedFindings";
-
-const WATCHDOG_PRESETS: DateRangePreset[] = ["1d", "7d", "30d"];
+import { UndecidedToolsTile } from "./UndecidedToolsTile";
+import {
+  useMCPFindingNames,
+  WATCHDOG_PRESETS,
+  WATCHDOG_SERVER_FILTERS,
+} from "./watchdog-shared";
 
 const WATCHDOG_FILTERS = defineFilters([
   { id: "severity", label: "Severity", kind: "multiselect", pinned: true },
@@ -74,9 +83,20 @@ const GROUP_OPTIONS: { value: SignalGroupMode; label: string }[] = [
   { value: "principal", label: "User" },
 ];
 
+const SERVER_GROUP_OPTION: { value: SignalGroupMode; label: string } = {
+  value: "server",
+  label: "Server",
+};
+
 const GROUP_MODES = new Set<SignalGroupMode>(
-  GROUP_OPTIONS.map((option) => option.value),
+  [...GROUP_OPTIONS, SERVER_GROUP_OPTION].map((option) => option.value),
 );
+
+// Layout route wrapper: the signal list and a signal's detail page render
+// through this Outlet (see route-pages.tsx watchdog).
+export function WatchdogRoot(): JSX.Element {
+  return <Outlet />;
+}
 
 export default function Watchdog(): JSX.Element {
   return (
@@ -95,6 +115,7 @@ export default function Watchdog(): JSX.Element {
 
 function WatchdogContent(): JSX.Element {
   const organization = useOrganization();
+  const { names: mcpFindingNames, mcpServers } = useMCPFindingNames();
   const featuresQuery = useProductFeatures({
     organizationId: organization.id,
   });
@@ -103,13 +124,21 @@ function WatchdogContent(): JSX.Element {
     !featuresQuery.isError &&
     featuresQuery.data?.logsEnabled === false;
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedSignalKey = searchParams.get("signal");
+  // Signals used to open in a sheet keyed by `?signal=rule:<id>`; old links
+  // land on the signal's own page instead.
+  const legacySignalKey = searchParams.get("signal");
   const groupModeParam = searchParams.get("group");
-  const groupMode: SignalGroupMode = GROUP_MODES.has(
-    groupModeParam as SignalGroupMode,
-  )
-    ? (groupModeParam as SignalGroupMode)
-    : "severity";
+  const mcpScopedFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
+  const mcpScoped = mcpScopedFlag.status === "enabled";
+  const requestedGroupMode = groupModeParam as SignalGroupMode;
+  const groupMode: SignalGroupMode =
+    GROUP_MODES.has(requestedGroupMode) &&
+    (mcpScoped || requestedGroupMode !== "server")
+      ? requestedGroupMode
+      : "severity";
+  const groupOptions = mcpScoped
+    ? [...GROUP_OPTIONS, SERVER_GROUP_OPTION]
+    : GROUP_OPTIONS;
 
   const {
     dateRange,
@@ -149,8 +178,59 @@ function WatchdogContent(): JSX.Element {
     [values.category],
   );
 
-  const signalsQuery = useRiskSignals(
+  const {
+    values: serverValues,
+    setValue: setServerValue,
+    clearValue: clearServerValue,
+    clearAll: clearServerFilters,
+  } = useFilterState(WATCHDOG_SERVER_FILTERS);
+  const mcpServerId = mcpScoped ? (serverValues.mcp_server_id ?? "") : "";
+
+  const { data: serverCountsData } = useRiskMcpServerCounts(
     { from: window.from, to: window.to },
+    undefined,
+    { throwOnError: false, enabled: mcpScoped },
+  );
+  const serverNames = useMemo(
+    () =>
+      mcpScoped
+        ? new Map(
+            (mcpServers ?? []).map((server) => [
+              server.id,
+              mcpServerDisplayName(server),
+            ]),
+          )
+        : null,
+    [mcpScoped, mcpServers],
+  );
+  const serverFilterOptions = useMemo(() => {
+    const findings = new Map(
+      (serverCountsData?.servers ?? []).map((row) => [
+        row.mcpServerId,
+        row.findings,
+      ]),
+    );
+    return {
+      mcp_server_id: (mcpServers ?? []).map((server) => {
+        const count = findings.get(server.id);
+        const name = mcpServerDisplayName(server);
+        return {
+          label:
+            count != null
+              ? `${name} · ${count.toLocaleString()} findings`
+              : name,
+          value: server.id,
+        };
+      }),
+    };
+  }, [mcpServers, serverCountsData?.servers]);
+
+  const signalsQuery = useRiskSignals(
+    {
+      from: window.from,
+      to: window.to,
+      mcpServerId: mcpServerId || undefined,
+    },
     undefined,
     { placeholderData: keepPreviousData, throwOnError: false },
   );
@@ -168,11 +248,22 @@ function WatchdogContent(): JSX.Element {
     () => groupSignals(visibleSignals, groupMode),
     [visibleSignals, groupMode],
   );
-  const selectedSignal = useMemo(
-    () =>
-      (data?.signals ?? []).find((s) => s.key === selectedSignalKey) ?? null,
-    [data?.signals, selectedSignalKey],
-  );
+  const routes = useRoutes();
+  const navigate = useNavigate();
+  // The detail page reads the same window and server params, so carrying the
+  // whole query string keeps its numbers identical to the row the user
+  // clicked, and its back link restores the list's filters.
+  const signalSearch = (() => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("signal");
+    const query = next.toString();
+    return query ? `?${query}` : "";
+  })();
+  const openSignal = (signal: RiskSignal) => {
+    void navigate(
+      `${routes.watchdog.signal.href(signal.ruleId)}${signalSearch}`,
+    );
+  };
 
   // Bulk selection across signal rows, mirroring the Risk Events pattern:
   // checkboxes + a floating BulkActionBar with the same two batch actions.
@@ -207,7 +298,11 @@ function WatchdogContent(): JSX.Element {
       const results = await collectFindingsForRules(
         client,
         selected.map((signal) => signal.ruleId),
-        { from: undefined, to: undefined },
+        {
+          from: undefined,
+          to: undefined,
+          mcpServerId: mcpServerId || undefined,
+        },
       );
       if (results.length === 0) {
         // dismiss() ignores empty batches — fail loudly instead.
@@ -308,6 +403,15 @@ function WatchdogContent(): JSX.Element {
     ? `${data.openSignals} open · ${criticalCount} critical`
     : undefined;
 
+  if (legacySignalKey?.startsWith("rule:")) {
+    return (
+      <Navigate
+        replace
+        to={`${routes.watchdog.signal.href(legacySignalKey.slice("rule:".length))}${signalSearch}`}
+      />
+    );
+  }
+
   if (isLoggingDisabled) {
     return (
       <Page.Section>
@@ -356,6 +460,20 @@ function WatchdogContent(): JSX.Element {
             <WatchdogError message={signalsQuery.error.message} />
           ) : (
             <>
+              {mcpScoped ? (
+                <Page.Toolbar>
+                  <Page.Toolbar.Filters
+                    schema={WATCHDOG_SERVER_FILTERS}
+                    values={serverValues}
+                    optionsById={serverFilterOptions}
+                    onChange={
+                      setServerValue as (id: string, value: FilterValue) => void
+                    }
+                    onClear={clearServerValue as (id: string) => void}
+                    onClearAll={clearServerFilters}
+                  />
+                </Page.Toolbar>
+              ) : null}
               <KPIRow data={data} isLoading={signalsQuery.isLoading} />
               {/* The exposure bar doubles as the category filter control, so
                   it hides with the other filter controls while a selection is
@@ -424,7 +542,7 @@ function WatchdogContent(): JSX.Element {
                       onChange={(mode) =>
                         setUrlParam("group", mode === "severity" ? null : mode)
                       }
-                      options={GROUP_OPTIONS}
+                      options={groupOptions}
                     />
                     <div className="flex items-center gap-2">
                       {SEVERITY_ORDER.map((severity) => (
@@ -449,13 +567,18 @@ function WatchdogContent(): JSX.Element {
               </div>
               <SignalsBody
                 isLoading={signalsQuery.isLoading}
+                filtered={
+                  severityFilter.length > 0 ||
+                  categoryFilter.length > 0 ||
+                  !!mcpServerId ||
+                  ["15m", "1h", "4h"].includes(dateRange) ||
+                  !!customRange
+                }
                 groups={groups}
                 groupMode={groupMode}
-                selectedSignalKey={selectedSignalKey}
+                serverNames={serverNames}
                 selection={selection}
-                onSelect={(signal: RiskSignal) =>
-                  setUrlParam("signal", signal.key)
-                }
+                onSelect={openSignal}
               />
             </>
           )}
@@ -465,14 +588,7 @@ function WatchdogContent(): JSX.Element {
               signals branch on purpose too, since it reads a different endpoint
               and has its own loading, error, and empty handling. A failed
               signals query must not take the audit trail down with it. */}
-          <SuppressedFindings />
-          {/* Inside Body on purpose: Page.Section slot-extracts only its known
-              child components and silently drops anything else, so the drawer
-              must live under a slot to render at all. */}
-          <SignalDrawer
-            signal={selectedSignal}
-            onClose={() => setUrlParam("signal", null)}
-          />
+          <SuppressedFindings mcpFindingNames={mcpFindingNames} />
           <SuppressFindingsDialog
             results={pendingDismiss?.results ?? null}
             subject={
@@ -536,21 +652,6 @@ function SeverityChip({
 const ORG_RISK_SCORE_TOOLTIP =
   "Each signal's score is inherited from its policy. The overall score is not a plain average: it weights the most severe signal, the average of the top signals, and the total number of findings.";
 
-/** StatTile tone for the org risk score, mirroring the signal table's
- * severity coding: red for high/critical bands, amber for medium, plain
- * ink for low. */
-function riskScoreTone(score: number): "destructive" | "warning" | "neutral" {
-  switch (scoreToRating(score)) {
-    case "critical":
-    case "high":
-      return "destructive";
-    case "medium":
-      return "warning";
-    case "low":
-      return "neutral";
-  }
-}
-
 function exclusionsDialogDescription(count: number): string {
   if (count === 1) {
     return "Creates a global exclusion rule for the selected signal, suppressing its findings retroactively and going forward.";
@@ -607,7 +708,7 @@ function CreateExclusionsDialog({
           <Button variant="primary" disabled={creating} onClick={onConfirm}>
             {creating && (
               <Button.LeftIcon>
-                <Loader2 className="size-4 animate-spin" />
+                <Spinner className="mr-0" />
               </Button.LeftIcon>
             )}
             <Button.Text>Create exclusions</Button.Text>
@@ -644,6 +745,7 @@ function KPIRow({
   if (!data && isLoading) {
     return (
       <StatTileGroup>
+        <StatTileSkeleton />
         <StatTileSkeleton />
         <StatTileSkeleton />
         <StatTileSkeleton />
@@ -698,24 +800,27 @@ function KPIRow({
         icon="users"
         comparisonLabel="vs previous period"
       />
+      <UndecidedToolsTile />
     </StatTileGroup>
   );
 }
 
 function SignalsBody({
   isLoading,
+  filtered,
   groups,
   groupMode,
-  selectedSignalKey,
   selection,
   onSelect,
+  serverNames,
 }: {
   isLoading: boolean;
+  filtered: boolean;
   groups: ReturnType<typeof groupSignals>;
   groupMode: SignalGroupMode;
-  selectedSignalKey: string | null;
   selection: RowSelection<RiskSignal>;
   onSelect: (signal: RiskSignal) => void;
+  serverNames: ReadonlyMap<string, string> | null;
 }): JSX.Element {
   if (isLoading && groups.length === 0) {
     return (
@@ -728,22 +833,16 @@ function SignalsBody({
   }
   if (groups.length === 0) {
     return (
-      <div className="bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed px-8 py-16 text-center">
-        <Text className="font-medium">No open signals</Text>
-        <Text small muted className="mt-1 max-w-md">
-          No live findings match this window and filter. Widen the time range or
-          clear the severity filter.
-        </Text>
-      </div>
+      <RiskSetupEmptyState heading="No open signals" filtered={filtered} />
     );
   }
   return (
     <SignalsList
       groups={groups}
       mode={groupMode}
-      selectedKey={selectedSignalKey}
       selection={selection}
       onSelect={onSelect}
+      serverNames={serverNames}
     />
   );
 }

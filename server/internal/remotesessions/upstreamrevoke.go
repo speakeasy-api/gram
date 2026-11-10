@@ -1,17 +1,17 @@
-// upstreamrevoke.go is the client side of RFC 7009. Gram already implements the
+// upstreamrevoke.go is the client side of RFC 7009. Speakeasy already implements the
 // *server* side — internal/mcp/authnchallenge_revoke.go answers /revoke for the
-// MCP clients Gram issues tokens to. This file is the mirror image: telling the
+// MCP clients Speakeasy issues tokens to. This file is the mirror image: telling the
 // upstream authorization server that a Remote Session's credentials are dead.
 //
 // Without it, revoking a Remote Session is local-only. The row is soft-deleted
-// and Gram stops presenting the token, but the upstream still holds a live
+// and Speakeasy stops presenting the token, but the upstream still holds a live
 // access/refresh pair that keeps working anywhere else it is presented until it
 // expires on its own clock — which, for a refresh token, can be months.
 //
 // Everything here is best-effort by construction. The local revoke is the
 // security control the caller asked for and it has already committed by the
 // time any of this runs; the upstream call is an improvement on top of it, made
-// against a third party Gram does not own and cannot make promises about. A
+// against a third party Speakeasy does not own and cannot make promises about. A
 // revoke that reports failure because someone else's server was slow would be
 // both wrong and unactionable, so failures are logged and metered, never
 // returned.
@@ -65,11 +65,11 @@ const (
 
 	// bulkRevokeConcurrency caps in-flight POSTs within one batch. A batch can
 	// span several clients' upstream hosts, but an unbounded fan-out would
-	// still read as a burst from Gram against a customer's identity provider.
+	// still read as a burst from Speakeasy against a customer's identity provider.
 	bulkRevokeConcurrency = 8
 )
 
-// UpstreamRevoker pushes RFC 7009 revocations to the issuers Gram holds Remote
+// UpstreamRevoker pushes RFC 7009 revocations to the issuers Speakeasy holds Remote
 // Session tokens against.
 //
 // It is a separate type from Service rather than a set of methods on it so the
@@ -188,7 +188,7 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 // key: scope comes from the requesting issuer's tenant-scoped client
 // bindings, so a grant minted through a different (even since-soft-deleted)
 // issuer on a bound client is still tombstoned. Grants on clients bound only
-// to sibling issuers are deliberately left alone — those issuers' Gram
+// to sibling issuers are deliberately left alone — those issuers' Speakeasy
 // sessions are still live and revoke through their own bindings.
 //
 // Split in two on purpose. The tombstone belongs in the caller's transaction so
@@ -357,7 +357,7 @@ func (r *UpstreamRevoker) DetachOrganizationUserSessionIssuerFromClients(ctx con
 //
 //   - The POST is a network round trip to a third party. Running it inside the
 //     transaction would hold a pooled connection open for its duration, and a
-//     rollback would then leave a live local session whose upstream token Gram
+//     rollback would then leave a live local session whose upstream token Speakeasy
 //     had already asked to have destroyed.
 //   - The row is already committed as deleted, so a caller that disconnects
 //     between the commit and this call must not take the revocation with it.
@@ -366,17 +366,17 @@ func (r *UpstreamRevoker) DetachOrganizationUserSessionIssuerFromClients(ctx con
 //
 // Same shape as the post-commit jti push in internal/usersessions, with one
 // deliberate difference: that one returns an error when the push fails, because
-// a still-valid Gram-issued JWT is Gram's own security control failing. Here the
+// a still-valid Speakeasy-issued JWT is Speakeasy's own security control failing. Here the
 // dependency is someone else's authorization server, so the result is recorded
 // and the caller is told nothing.
 func (r *UpstreamRevoker) RevokeDetached(ctx context.Context, cred RevokedCredentials) {
 	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamRevokeTimeout)
 	defer cancel()
 
-	r.revoke(revokeCtx, cred.RemoteSessionClientID, cred.tokens())
+	r.revoke(revokeCtx, cred.RemoteSessionClientID, nil, cred.tokens())
 }
 
-// RevokeUnstoredDetached is RevokeDetached for a pair Gram exchanged upstream
+// RevokeUnstoredDetached is RevokeDetached for a pair Speakeasy exchanged upstream
 // and never stored, so it is handed the plaintext directly rather than reading
 // ciphertext back out of a row.
 //
@@ -390,7 +390,7 @@ func (r *UpstreamRevoker) RevokeUnstoredDetached(ctx context.Context, clientID u
 	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamRevokeTimeout)
 	defer cancel()
 
-	r.revoke(revokeCtx, clientID, revocationTokens{access: accessToken, refresh: refreshToken, encrypted: false})
+	r.revoke(revokeCtx, clientID, nil, revocationTokens{access: accessToken, refresh: refreshToken, encrypted: false})
 }
 
 // RevokeAllDetached runs upstream revocations for a batch of sessions that have
@@ -414,6 +414,38 @@ func (r *UpstreamRevoker) RevokeUnstoredDetached(ctx context.Context, clientID u
 // local revoke is complete either way, but an operator reading "revoked" should
 // not have to guess whether the upstream heard about it.
 func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []RevokedCredentials) {
+	r.revokeAll(ctx, creds, nil)
+}
+
+// IssuingClientAuth is how a client authenticated before an edit replaced it.
+// Revocation has to authenticate as the client the tokens were issued to, and
+// by the time it runs post-commit the row already holds the new values.
+type IssuingClientAuth struct {
+	ClientID                        string
+	ClientSecretEncrypted           pgtype.Text
+	TokenEndpointAuthMethod         pgtype.Text
+	TokenEndpointAuthAudienceFormat pgtype.Text
+	JsonWebKeySetID                 uuid.NullUUID
+}
+
+func issuingClientAuth(client repo.RemoteSessionClient) IssuingClientAuth {
+	return IssuingClientAuth{
+		ClientID:                        client.ClientID,
+		ClientSecretEncrypted:           client.ClientSecretEncrypted,
+		TokenEndpointAuthMethod:         client.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: client.TokenEndpointAuthAudienceFormat,
+		JsonWebKeySetID:                 client.JsonWebKeySetID,
+	}
+}
+
+// RevokeAllIssuedToDetached is RevokeAllDetached for sessions whose client was
+// edited in the same transaction that tombstoned them: it authenticates with
+// the client's configuration from before the edit.
+func (r *UpstreamRevoker) RevokeAllIssuedToDetached(ctx context.Context, creds []RevokedCredentials, issuedTo IssuingClientAuth) {
+	r.revokeAll(ctx, creds, &issuedTo)
+}
+
+func (r *UpstreamRevoker) revokeAll(ctx context.Context, creds []RevokedCredentials, issuedTo *IssuingClientAuth) {
 	if len(creds) == 0 {
 		return
 	}
@@ -447,7 +479,7 @@ func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []Revoked
 			revokeCtx, cancelOne := context.WithTimeout(batchCtx, upstreamRevokeTimeout)
 			defer cancelOne()
 
-			r.revoke(revokeCtx, cred.RemoteSessionClientID, cred.tokens())
+			r.revoke(revokeCtx, cred.RemoteSessionClientID, issuedTo, cred.tokens())
 			return nil
 		})
 	}
@@ -472,11 +504,11 @@ func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []Revoked
 // revoke performs the whole sequence for one session and reports exactly one
 // outcome, on both a span and the metric. Split from RevokeDetached so the bulk
 // path can drive it directly under the batch's own budget and concurrency limit.
-func (r *UpstreamRevoker) revoke(ctx context.Context, clientID uuid.UUID, tokens revocationTokens) {
+func (r *UpstreamRevoker) revoke(ctx context.Context, clientID uuid.UUID, issuedTo *IssuingClientAuth, tokens revocationTokens) {
 	ctx, span := r.tracer.Start(ctx, "remote_session.upstream_revoke")
 	defer span.End()
 
-	issuerURL, outcome := r.revokeOnce(ctx, clientID, tokens)
+	issuerURL, outcome := r.revokeOnce(ctx, clientID, issuedTo, tokens)
 
 	// Reported in one place so the span and the metric can never disagree about
 	// how a revocation ended. Without a span the revocation is only visible in a
@@ -489,7 +521,7 @@ func (r *UpstreamRevoker) revoke(ctx context.Context, clientID uuid.UUID, tokens
 // revokeOnce runs the sequence and reports where it stopped. The returned
 // issuer URL attributes the outcome, and is empty when the revocation failed
 // before any issuer could be identified.
-func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, tokens revocationTokens) (issuerURL string, outcome remotesessionmetrics.RevokeOutcome) {
+func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, issuedTo *IssuingClientAuth, tokens revocationTokens) (issuerURL string, outcome remotesessionmetrics.RevokeOutcome) {
 	logger := r.logger.With(
 		attr.SlogRemoteSessionClientID(clientID.String()),
 	)
@@ -504,6 +536,14 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 		}
 		logger.WarnContext(ctx, "upstream revoke: could not load client", attr.SlogError(err))
 		return "", remotesessionmetrics.RevokeOutcomeInternal
+	}
+
+	if issuedTo != nil {
+		client.ExternalClientID = issuedTo.ClientID
+		client.ClientSecretEncrypted = issuedTo.ClientSecretEncrypted
+		client.TokenEndpointAuthMethod = issuedTo.TokenEndpointAuthMethod
+		client.TokenEndpointAuthAudienceFormat = issuedTo.TokenEndpointAuthAudienceFormat
+		client.JsonWebKeySetID = issuedTo.JsonWebKeySetID
 	}
 
 	logger = logger.With(
@@ -568,7 +608,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 	form.Set("token", token)
 	form.Set("token_type_hint", hint)
 
-	req, err := newTokenEndpointRequest(ctx, endpoint, form, tokenEndpointClientAuth{
+	req, err := NewTokenEndpointRequest(ctx, endpoint, form, TokenEndpointClientAuth{
 		Method:                authMethod,
 		RemoteSessionClientID: clientID,
 		OrganizationID:        client.ClientOrganizationID.String,
@@ -600,7 +640,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	// Drained and discarded. RFC 7009 §2.2 specifies an empty body on success,
-	// and an error body has no field Gram acts on — but the read still has to
+	// and an error body has no field Speakeasy acts on — but the read still has to
 	// happen for the connection to return to the pool.
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
 
@@ -608,7 +648,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 		// Not escalated beyond a warning even for a 5xx. RFC 7009 §2.2.1 suggests
 		// a client SHOULD retry a 503, but there is no durable retry here by
 		// design (see the file comment), and paging on another operator's
-		// authorization server having a bad minute is not actionable for Gram.
+		// authorization server having a bad minute is not actionable for Speakeasy.
 		logger.WarnContext(ctx, "upstream revoke: identity provider rejected the revocation",
 			attr.SlogOAuthGrant(hint),
 			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
@@ -616,7 +656,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeRejected
 	}
 
-	// Info rather than Debug: "Gram asked a provider to destroy a token" is a
+	// Info rather than Debug: "Speakeasy asked a provider to destroy a token" is a
 	// security-relevant event, and it is the only durable record that a
 	// revocation reached the upstream. Every other outcome is either a warning
 	// or a metric, so a silent success would leave the path with no evidence at

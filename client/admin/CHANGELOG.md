@@ -1,5 +1,175 @@
 # admin
 
+## 0.12.0
+
+### Minor Changes
+
+- fe756cd: Staff can redeploy a project's active deployment from the organization's Projects page and through Admin MCP.
+- 954c4a9: Staff can now view and set an MCP server's pinned login scopes from the admin dashboard's MCP server page, and `describe_mcp_server_health` reports them. Customer Identity settings no longer show pinned or requested scopes.
+
+### Patch Changes
+
+- 846b422: Staff Admin MCP write tools now apply changes directly instead of through stored proposals and browser approval. Each tool is named after its operation, for example `set_organization_feature`. The server instructions and tool descriptions require agents to get explicit user confirmation before every change, and the staff event trail now records each write's operation and target.
+- 3041d9b: The setup wizard has a new Set up Claude Desktop group with two cards.
+  
+  - **Register Speakeasy's plugins in Claude** walks syncing the plugin marketplace in Claude.ai, marking the observability plugin Required, choosing how MCP plugins install, and allowing Speakeasy in Claude's network egress settings. Claude Desktop runs only plugins registered on the Claude organization, not a copy the device agent installs.
+  - **Add Claude organization instructions** gives the organization instruction that moves every conversation in Claude's unified view into Cowork, where the observability plugin captures it, and explains how to check it. It shows only for Claude Team: Enterprise captures Claude sessions through the Compliance API and inference hooks.
+  
+  Both cards complete on their own once the first Cowork transcript arrives. Set up Anthropic admin controls now covers Claude Code server-managed settings, Cowork native monitoring and the Organization Gateway, and its traffic check points Cowork to Agent Sessions. Setup cards can now name the plans they need, so a card shows only when the organization's recorded stack has one of them. The support matrix gains a Cowork organization instructions method, and the Anthropic Enterprise Rollout preset includes the new group.
+- e613d5a: The setup wizard no longer has a separate Create marketplace card or a Distribute MCP servers group. Distribute MCP servers is now a single card that publishes the plugin marketplace and lets you choose the servers to distribute, as every card that needs the marketplace already does. Saved onboarding playbooks that listed the group or the old card move to Distribute MCP servers when the server starts, and older setup links to either one open Distribute MCP servers. The Managed MCP Distribution preset lists the card instead of the group.
+
+## 0.11.0
+
+### Minor Changes
+
+- ccfb531: Add an MCP Gateway column to the observed coverage matrix on each organization's record in the staff admin app.
+  
+  Every other column is an agent surface folded from a `hook_source`. The gateway is Speakeasy itself, so its evidence is read from the traffic it served rather than from what an agent reported: session activity counts non-hook `trace_summaries` traces carrying a toolset slug or a meta MCP server id, matching how the tool-usage reads classify hosted and gateway MCP servers; identity counts the calls bound to a person, stating calls bound only to a managed agent separately; policy enforcement counts distinct mediated executions a risk policy stopped, read from `risk_findings` rows with a non-empty `mediation_surface`.
+  
+  Two cells can never report for the gateway — it brokers tool calls rather than model calls, and shadow servers are by definition reached around it — so cells carry a new `na` status that reads as inapplicable rather than as a gap an integration could close. Cells also carry a `unit`, letting a column name what it counts when the capability's own unit does not fit: the gateway is measured in tool calls where an agent surface is measured in sessions.
+
+### Patch Changes
+
+- 8caefb9: Catalogue promotion no longer files a setup-guide request when the guide repository already has a guide for the promoted slug, or an open pull request changing it. Staff see "Guide already exists" or "Guide in review" with a link in the admin dashboard and Admin MCP. An open guide pull request is rechecked daily and flagged for staff after 14 days.
+- 81c7576: The catalogue promotion review form now warns when the setup guide slug already belongs to a published guide, and suggests the existing guide's slug when the server's endpoint matches one. The Admin MCP promotion preview shows the same check. Publishing is unchanged.
+- dbddb5a: The External MCP migration page and its admin API are gone from the admin dashboard now that the migration is finished. Past migrations still show correctly in audit logs, and deleting a toolset whose server was migrated still leaves that server working.
+- 5aa992b: Make onboarding customization accessible from each organization's sidebar and Overview. Configure wizard steps and apply shared templates in a tenant-scoped workspace, with explicit save behavior and a separate recorded stack section.
+  
+  Allow organization-scoped updates only for the owning organization. Deploy the API before the Admin SPA. Do not roll back the server alone while the newer SPA is served.
+
+## 0.10.0
+
+### Minor Changes
+
+- 8b2d0e2: Staff can store an Adoption Dashboard Link on an organization's overview in the admin dashboard. The link must be https, is cleared by saving an empty value, and is returned by the organization record and the staff Admin MCP organization summary.
+- e94ce5d: Add Code Mode discovery for MCP gateways. A single execute tool runs ephemeral Python with tool search, schema descriptions and live authorized calls to hosted, remote and tunneled tools. All tools (frozen) and Specific tools reuse the catalogue fixed at consent from a fast cache; All tools (live) refreshes only approved members. Adding a member requires new consent. Settings, consent and Inspect support connection overrides, execution results and nested-call outcomes.
+  
+  Organization gateway connections can choose Code Mode on the consent page too, searching and calling approved tools across projects the person can reach.
+  
+  Code Mode is off by default and rolled out per organization: Speakeasy staff enable it from the admin dashboard's organization Features page. New selections also require a configured code runtime.
+  
+  Assistant runtime discovery skips terminating sandbox pods when selecting a running pod.
+
+### Patch Changes
+
+- 4ee1ad2: Browse and search the enabled staff Admin MCP tools on the setup page before connecting a client, with descriptions and access labels for reads, approval flows, and direct writes.
+- 0908c44: Organizations can now be granted the default auth permissions the mandatory auth client check needs: everyone's and each agent's use of their own personal connections, shared clients for whoever can connect to a server using them, and a policy for each legacy API key that has none. An offline backfill grants them for every organization and records each grant it writes, so a rerun never restores one an admin removed; the upstream OAuth migration grants them for the clients it records, and new organizations start with the personal default. Role permission counts no longer include these provisioned permissions.
+- c7d8212: Assistant turns now bind a versioned execution-selection profile that records, for each MCP server the assistant reaches, which typed auth client its turns use, kept separately for turns run for an identified user and turns run as the trigger's workload. A server several clients could serve, or only a personal connection could serve on a turn with no user, is reported instead of guessed. The upstream OAuth migration records profiles for every assistant trigger and reports what still needs configuring. How turns authenticate upstream does not change yet.
+- 2ec5a32: Staff can now turn on upstream auth enforcement per organization from the upstream OAuth migration page, and only once its auth clients, credential choices and assistant profiles are recorded. Under enforcement each request is served with the auth client its credential chose, assistant turns with the one their profile names, and using that client requires permission; a credential with no usable choice is asked to reconnect rather than served with another client. Valid credentials from another organization are refused on an organization's public servers instead of being served anonymously. Turning enforcement off returns the organization to the previous behavior within a minute.
+- c1a55fb: The upstream OAuth migration now names, on every live credential's choice for a server, the one typed auth client that serves it, and reports coverage by credential class (interactive, ID-JAG, dashboard-minted, workload and agent sessions). A choice that several auth clients could serve is listed for an administrator to resolve instead of being guessed, and choices whose client is gone or no longer fits the server are listed as needing a reconnect.
+- 05e84c0: Allow staff to explicitly promote remote MCP servers despite health eligibility criteria through the admin dashboard and Admin MCP, recording the override in the audit log. Run automatic eligibility reviews weekly while keeping setup-docs delivery hourly. Exclude matching catalogue URLs from discovery and the default promotion queue and notify staff after rejection, archival, and restoration.
+- dba7b6a: Validate catalogue promotion titles and descriptions against the 100-character catalogue limit. Show field-specific guidance without discarding reviewed input, and return actionable length errors through the admin API and Admin MCP.
+- 4a3531f: The server no longer reads the retired OAuth proxy link on toolsets. A hosted MCP server that still carries the link can now change its visibility, it is no longer reported as requiring OAuth unless it has a sign-in provider or an external OAuth server, admin server health no longer reports `oauth_proxy` as its legacy authentication, external MCP migration no longer warns about the link, and deployment evaluation counts only an external OAuth server as configured OAuth.
+
+## 0.9.5
+
+### Patch Changes
+
+- 414c2d2: MCP tool calls that answer HTTP 200 with a result carrying `isError: true` now count as `failed` in MCP server health, Platform MCP diagnostics and drill-down, and per-user error flags. Before this change they counted as successes. `failed` is the same class hook-observed tool errors already use.
+  
+  Remote MCP proxy and playground tool-call rows now record the tool's verdict, and the proxy logs in-band tool errors at warn level, without the result body. When a server's only failures are tool errors, fault attribution reports `tool_error_dominant`; tool errors no longer dilute status-based majorities.
+  
+  Hosted calls are reclassified back to 2026-10-15, when their rows began recording the verdict. Older hosted rows, and remote rows from before this deploy, still count as successes. The dashboard charts, project overview, tool usage summaries and tool-call search still classify by HTTP status only.
+
+## 0.9.4
+
+### Patch Changes
+
+- e2ab479: The typed auth client backfill now also records static credential and pass-through clients from a source's credential headers, copies credential headers onto upstream OAuth clients, and records EMA clients from ready identity chaining bindings. It keeps copies and scopes in sync, retires what the configuration no longer yields, runs each phase independently under a per-organization lock, and reports per-kind counts and why anything is unresolved.
+- 03b4725: Record a typed auth client for every upstream OAuth client an MCP server uses, as a separate step of the admin upstream OAuth migration, retire backfilled records whose association or client is gone, and mark servers that offer one as needing upstream authentication where that is still undecided. Nothing reads these records yet.
+
+## 0.9.3
+
+### Patch Changes
+
+- 23b1010: Add a guarded staff Admin MCP proposal for adding a new MCP server to the registry, with schema validation, a full-record approval preview, duplicate-name checks at prepare, approval and execution, and a receipt that commits with the entry. Drop the outdated note that customer catalog reads still use Pulse from the admin registry pages.
+- 27d5b6c: The MCP server health page's copied investigation prompt now tells ForgeBot to use the Speakeasy Admin MCP server.
+- 56ac009: Add "Open in Stripe" links beside the Stripe customer ID and Stripe subscription ID on the admin organization record. They point at the live or test Stripe dashboard to match the admin API's Stripe key, and are hidden when no Stripe key is configured.
+
+## 0.9.2
+
+### Patch Changes
+
+- 4c811b0: The admin command palette lists enterprise organizations first, then pro and pay-as-you-go, then free, then any other account type. The organization list and the staff Admin MCP `find_organizations` tool accept the same `account_tier` sort.
+
+## 0.9.1
+
+### Patch Changes
+
+- 4470b2a: Global identity providers created or rediscovered in the admin app keep the authorization grant profiles their discovery document advertises (including the ID-JAG profile), so identity chaining no longer reports them as unsupported. Providers entered by hand omit the field, so the server does not treat them as discovered. Saving a global provider with a changed issuer URL and no rediscovery sends an empty grant profile list.
+
+## 0.9.0
+
+### Minor Changes
+
+- 31aacf8: Staff can see every paying customer's estimated usage on one admin page. Customer usage, under Platform management, shows each customer's estimated cost over time in a grid of cards, bucketed by that customer's own billing cycle, with this cycle's spend, the change against the same point last cycle, and the product breakdown. Search, plan filter, sort, product selection, interval, and the cumulative toggle apply to every card and are kept in the URL.
+
+### Patch Changes
+
+- 3ee542c: Organization admins can set a remote identity provider to send no scope instead of its whole supported list when a sign-in has no other scope source. The provider's Overview, Settings and the admin issuer and server health views show the setting. The issuer scope override is now chosen from a picker of the provider's supported scopes.
+- 35b67b5: User-facing text now names the product Speakeasy instead of Gram across the dashboard, admin dashboard, CLI help and output, server error messages, consent pages, MCP server info, and API descriptions. HTTP header names, environment variables, package names, and code identifiers are unchanged.
+
+## 0.8.0
+
+### Minor Changes
+
+- 1da2e80: Add a health page for each MCP server in an organization's MCP servers list, showing its authentication setup, sign-ins, linked upstream accounts, tool call outcomes per day, a Platform MCP investigation prompt and Datadog log links.
+
+## 0.7.0
+
+### Minor Changes
+
+- dfe104d: Onboarding use cases and playbooks in the admin dashboard. Staff create use cases and playbooks on a new Use Cases & Playbooks page: a playbook is ordered top-level steps that belong to a use case, shared and possibly its default, or to one customer, never both, and every playbook is checked for prerequisites. An organization's Overview page shows its assigned playbook and links to the page scoped to that organization, where staff write it a playbook of its own or assign it a shared one, refused when the recorded stack does not support a step. A shared playbook is a template: assigning it gives the organization a copy of its own, so later edits to the shared playbook never reach an organization already on it. The onboarding survey assigns a use case's default playbook and the customer setup wizard walks the assigned one. The preset selection editor and its Admin API are gone, the Admin MCP diagnostics tool reports the assigned playbook instead, and the Admin MCP's onboarding write proposal assigns a playbook, by ID or by use case, in place of setting task visibility. Enable it with the `assign_organization_onboarding_playbook` write operation.
+- a49b065: Onboarding stack and step catalog in the admin dashboard. Staff record an organization's stack, meaning the vendors it uses with the organizational plan it is on for each and its device management, on the organization's Overview page; the vendor, plan and product lists come from the support matrix catalog, which now carries plans and files every product under its real vendor. Setup steps can nest one level under a group, whose status follows its cards: observability in other platforms and MCP distribution become groups over their cards. The catalog is mirrored into the database at start-up and shown read-only on a new Steps page, where a prerequisite links to its own row.
+
+### Patch Changes
+
+- b177711: Staff can map Okta Integration Network applications to Gram-owned MCP catalog entries through the `com.speakeasy.ai/okta` metadata namespace. The registry validates the mapping, keeps each OIN application name on at most one entry, and returns the mapping to registry consumers as public catalog data.
+- b34e9dc: The staff registry editor proposes Okta application names for a catalog entry from the names observed across synced tenants, matched by vendor domain, title or tenant label, and lists observed names no entry claims yet. Proposals are confirmed by hand; nothing is applied automatically.
+- 52bb406: Add a temporary staff-only control for enabling role-based plugin distribution per organization, with audited Admin MCP approval.
+
+## 0.6.2
+
+### Patch Changes
+
+- 27e22f1: Staff can record a Stripe subscription ID for a PAYG organization that does not have one yet. The admin API checks that the subscription belongs to the organization's Stripe customer, and stores the billing-cycle anchor Stripe returns, before saving it.
+
+## 0.6.1
+
+### Patch Changes
+
+- d0945f1: Add a Demo organization link to the admin sidebar that opens the explore demo org in a new tab.
+- d24e7a1: Add an "Open in WorkOS" link beside the WorkOS org ID on the admin organization record. It appears when the organization is linked to WorkOS and the admin API has `WORKOS_ENVIRONMENT_ID` set.
+
+## 0.6.0
+
+### Minor Changes
+
+- f480067: Add an MCP Servers view to the admin organization navigator that lists a project's MCP servers with their URL, visibility, source and creation date, and copies a server's URL in one click.
+- f01aad0: Add an observed support coverage matrix to the staff admin app, on each organization's record.
+  
+  A new `admin.getSupportCoverage` endpoint reports, per consuming surface, evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure. Policy enforcement joins `tool_call_blocks` to session summaries via `chat_id`; identity counts sessions bound to a named user separately from those bound only to a device hostname; shadow exposure is derived from `trace_summaries`, which already carries the MCP server URL and hook_source on the same trace.
+  
+  Every `(capability, surface)` pair is returned with an explicit status so evidence found and evidence absent stay distinct, and hook sources the fold does not recognize are reported rather than dropped. Folding a raw `hook_source` onto a surface now happens server-side in `internal/agentsurface`.
+  
+  The integration cards beside the matrix read from the operator-editable support matrix catalog, ranked by how much of that organization's missing coverage each method would close.
+
+### Patch Changes
+
+- 35060d1: Protect active identity-chaining bindings during issuer lifecycle changes. Block unsafe issuer deletion and consolidation, and show binding counts and explicit unlinking guidance in the dashboard and admin migration review.
+
+## 0.5.2
+
+### Patch Changes
+
+- 718a2e9: Add staff controls for onboarding presets and explicit task selection, with confirmation before replacing a draft. Seed a customized Security selection for the demo organization.
+
+## 0.5.1
+
+### Patch Changes
+
+- aa2f201: Records the flow that created an organization and shows it as "Created via" on the admin organization record, marking organizations created through the platform-admin prospect flow. Organizations with no recorded source read as "Not recorded".
+
 ## 0.5.0
 
 ### Minor Changes

@@ -22,10 +22,10 @@ import {
   ChevronUp,
   Ellipsis,
   GitBranch,
-  Loader2,
   Paperclip,
 } from "lucide-react";
 import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   MessageContent,
   type SectionMatch,
@@ -40,6 +40,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/Popover";
+import { useStalePendingRerender } from "@/lib/toolCallStatus";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import {
@@ -67,7 +68,10 @@ import {
   type MessageRow,
   type PromptAttachment,
   type SearchFieldKey,
+  type ToolResultStatus,
   type ToolRow,
+  toolResultStatus,
+  pendingSinceMs,
   type TranscriptRow,
   type TurnAuthor,
 } from "./transcript";
@@ -85,6 +89,7 @@ import {
   useRowReveal,
 } from "./chatHelpers";
 import { QueryHighlight } from "./QueryHighlight";
+import { parseOpenClawContext } from "@/lib/openclawContext";
 import { CreateExclusionContext } from "./exclusionContext";
 import { toolSectionRiskMatches, type ToolRiskField } from "./toolRisk";
 import { useDismissFinding } from "@/pages/security/useDismissFinding";
@@ -118,6 +123,10 @@ interface RowContext {
    * userId is a display label as often as an id (userLabelOverride replaces
    * it wholesale), so it cannot be keyed on. */
   ownerIdentifier?: IdentityRef | null;
+  /** True when OpenClaw captured the session. Only then is a user turn's
+   * OpenClaw context wrapper unfolded, so the same text pasted into another
+   * session stays as typed. */
+  openClawSession?: boolean;
 }
 
 type ResolvedRowContext = Required<
@@ -368,10 +377,12 @@ function TurnHeader({
 // that spoofs an envelope is exactly the kind of thing they are looking for.
 function HarnessContextDisclosure({
   envelope,
+  label = "Harness context",
   results,
   revealed,
 }: {
   envelope: string;
+  label?: string;
   results: RiskResult[] | undefined;
   revealed?: boolean;
 }) {
@@ -394,7 +405,7 @@ function HarnessContextDisclosure({
         ) : (
           <ChevronDown className="size-3" />
         )}
-        Harness context
+        {label}
       </CollapsibleTrigger>
       <CollapsibleContent className="text-muted-foreground mt-1 border-l-2 pl-2 font-mono text-xs whitespace-pre-wrap">
         {envelopeResults.length > 0 ? (
@@ -439,8 +450,26 @@ function UserMessageRow({
     results = [...(messageResults ?? []), ...attachmentResults];
   }
   const usage = ctx.claudeUsageByMessage.get(message.id);
-  const text = messageText(message.content);
-  const envelope = messageEnvelope(message.content);
+  const rawText = messageText(message.content);
+  const harnessEnvelope = messageEnvelope(message.content);
+  // OpenClaw wraps the request in its requester profile and a replay of the
+  // earlier conversation; show the request and fold the rest away. Search
+  // matches the full stored text, so a searched row keeps it whole.
+  const openClaw =
+    ctx.openClawSession && !ctx.searchQuery
+      ? parseOpenClawContext(rawText)
+      : null;
+  const text = openClaw?.request ?? rawText;
+  let envelope = harnessEnvelope;
+  if (openClaw) {
+    envelope = [
+      harnessEnvelope,
+      openClaw.metadata,
+      openClaw.conversationContext,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
   const flagged =
     (!!results && results.length > 0) ||
     row.attachments.some((attachment) => attachment.isRisk);
@@ -465,6 +494,7 @@ function UserMessageRow({
         {envelope && (
           <HarnessContextDisclosure
             envelope={envelope}
+            label={openClaw ? "OpenClaw context" : undefined}
             results={messageResults}
             revealed={messageSensitive ? revealed : undefined}
           />
@@ -806,6 +836,15 @@ function toSectionRisk(
   return { matches, results: [...matchingResults.values()] };
 }
 
+// Spell out the statuses whose icon alone could be mistaken for another: a
+// dashed circle for a call with no result yet, a question mark for one that
+// ended without a result, and a red cross for a failure.
+const TOOL_STATUS_LABELS: Partial<Record<ToolResultStatus, string>> = {
+  error: "Failed",
+  pending: "Pending",
+  unknown: "Unknown",
+};
+
 function ToolRowView({
   row,
   ctx,
@@ -839,6 +878,10 @@ function ToolRowView({
   const result = row.resultMessage
     ? messageText(row.resultMessage.content)
     : undefined;
+  // A call with no result turns Unknown after a while; re-render then so the
+  // label does not wait for an unrelated update.
+  useStalePendingRerender(pendingSinceMs(row));
+  const status = toolResultStatus(row);
 
   const { callResults, resultResults } = toolResults(row, ctx);
   const flagged =
@@ -926,7 +969,8 @@ function ToolRowView({
         name={name}
         request={request}
         result={result}
-        status="complete"
+        status={status}
+        statusLabel={TOOL_STATUS_LABELS[status]}
         defaultExpanded={flagged || toolActive}
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
@@ -977,6 +1021,27 @@ const ToolGroupView = memo(function ToolGroupView({
     () => group.rows.filter((r) => toolRowFlagged(r, ctx)).length,
     [group.rows, ctx],
   );
+  // The group reads pending until its last unanswered call turns unknown.
+  const pendingSince = group.rows
+    .map(pendingSinceMs)
+    .filter((ms): ms is number => ms !== undefined);
+  useStalePendingRerender(
+    pendingSince.length > 0 ? Math.max(...pendingSince) : undefined,
+  );
+  const statuses = group.rows.map((row) => toolResultStatus(row));
+  const failedCount = statuses.filter((status) => status === "error").length;
+  // Failure takes precedence, but a successful result must not hide active
+  // work or a call whose outcome is unknown.
+  const status =
+    failedCount > 0
+      ? "error"
+      : statuses.includes("running")
+        ? "running"
+        : statuses.includes("pending")
+          ? "pending"
+          : statuses.includes("unknown")
+            ? "unknown"
+            : "complete";
   const forceOpen = flaggedCount > 0 || activeRowId != null;
   const count = group.rows.length;
   const title =
@@ -993,7 +1058,8 @@ const ToolGroupView = memo(function ToolGroupView({
     >
       <ToolUIGroup
         key={forceOpen ? "pinned-open" : "collapsible"}
-        title={title}
+        title={failedCount > 0 ? `${title} · ${failedCount} failed` : title}
+        status={status}
         defaultExpanded={forceOpen}
       >
         <div className="divide-border divide-y">
@@ -1097,7 +1163,7 @@ function LoadDivider({
         className="bg-background text-foreground hover:bg-muted inline-flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-60"
       >
         {loading ? (
-          <Loader2 className="size-3.5 animate-spin" />
+          <Spinner className="mr-0 size-3.5" />
         ) : (
           <Glyph className="size-3.5" />
         )}
@@ -1188,16 +1254,24 @@ function DisplayItemView({
       return (
         <TurnHeader
           author={item.author}
-          userId={ctx.userLabelOverride ?? item.userId}
+          userId={
+            item.participant
+              ? item.userId
+              : (ctx.userLabelOverride ?? item.userId)
+          }
           userLabel={ctx.userLabel}
           // The header links whatever name it shows. On a session run from a
           // personal AI account the override is that account's address, which
           // is a different subject from the chat's attributed owner, so the
           // link follows the address rather than the owner.
           ownerIdentifier={
-            ctx.userLabelOverride && isEmailAddress(ctx.userLabelOverride)
-              ? { email: ctx.userLabelOverride }
-              : ctx.ownerIdentifier
+            item.participant
+              ? item.participant.userId
+                ? { userId: item.participant.userId }
+                : null
+              : ctx.userLabelOverride && isEmailAddress(ctx.userLabelOverride)
+                ? { email: ctx.userLabelOverride }
+                : ctx.ownerIdentifier
           }
           createdAt={item.createdAt}
           results={item.messageIds.flatMap(
@@ -1442,7 +1516,10 @@ export function ChatTranscript({
                 ref={virtualizer.measureElement}
                 className={cn(
                   "absolute top-0 left-0 w-full transition-colors",
-                  focused && "bg-warning/10 ring-warning/40 ring-1 ring-inset",
+                  // `bg-warning` is near-white in light mode, so a 10% wash of it
+                  // rendered as no highlight at all.
+                  focused &&
+                    "bg-warning-softest ring-1 ring-[var(--border-warning-softest)] ring-inset",
                 )}
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >

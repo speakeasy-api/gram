@@ -41,7 +41,7 @@ export const CODE_SAMPLES = {
 import { VercelAdapter } from "@gram-ai/sdk/vercel";
 import { createOpenAI } from "@ai-sdk/openai";
 
-const key = "<GRAM_API_KEY>";
+const key = "<SPEAKEASY_AI_API_KEY>";
 const vercelAdapter = new VercelAdapter({apiKey: key});
 
 const openai = createOpenAI({
@@ -72,7 +72,7 @@ import { createOpenAIFunctionsAgent, AgentExecutor } from "langchain/agents";
 import { pull } from "langchain/hub";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 
-const key = "<GRAM_API_KEY>";
+const key = "<SPEAKEASY_AI_API_KEY>";
 const langchainAdapter = new LangchainAdapter({apiKey: key});
 
 const llm = new ChatOpenAI({
@@ -114,7 +114,7 @@ console.log(result.output);`,
       environment: string,
     ) => `import { FunctionCallingAdapter } from "@gram-ai/sdk/functioncalling";
 
-const key = process.env.GRAM_API_KEY ?? "";
+const key = process.env.SPEAKEASY_AI_API_KEY ?? "";
 
 // vanilla client that matches the function calling interface for direct use with model provider APIs
 const functionCallingAdapter = new FunctionCallingAdapter({apiKey: key});
@@ -180,7 +180,7 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_openai_functions_agent
 from gram_ai.langchain import GramLangchain
 
-key = "<GRAM_API_KEY>"
+key = "<SPEAKEASY_AI_API_KEY>"
 
 gram = GramLangchain(api_key=key)
 
@@ -217,7 +217,7 @@ if __name__ == "__main__":
     ) => `import os
 from gram_ai.function_calling import GramFunctionCalling
 
-key = "<GRAM_API_KEY>"
+key = "<SPEAKEASY_AI_API_KEY>"
 
 # vanilla client that matches the function calling interface for direct use with model provider APIs
 gram = GramFunctionCalling(api_key=key)

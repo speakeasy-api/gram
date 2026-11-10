@@ -21,10 +21,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// SvixRelay delivers webhook events to Svix. Retry and dead-lettering live here
-// rather than in application code: a transient Svix failure nacks the message
-// and the retry policy backs it off, and a message that fails
-// max_delivery_attempts times lands in the DLQ topic.
+// SvixRelay delivers webhook events to Svix. Retry lives here rather than in
+// application code: a transient Svix failure nacks the message and the retry
+// policy backs it off until the message is acked or retention expires.
 //
 // ack_deadline must stay comfortably above p99 Svix latency plus the org gate
 // lookup, otherwise messages redeliver while the first attempt is still in
@@ -76,11 +75,10 @@ var File_gram_webhooks_v1_svix_relay_proto protoreflect.FileDescriptor
 
 const file_gram_webhooks_v1_svix_relay_proto_rawDesc = "" +
 	"\n" +
-	"!gram/webhooks/v1/svix_relay.proto\x12\x10gram.webhooks.v1\x1a\x1bgcp/pubsub/v1/options.proto\"D\n" +
-	"\tSvixRelay:7\x92\xb5\x183\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\t\n" +
+	"!gram/webhooks/v1/svix_relay.proto\x12\x10gram.webhooks.v1\x1a\x1bgcp/pubsub/v1/options.proto\"@\n" +
+	"\tSvixRelay:3\x92\xb5\x18/\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\t\n" +
 	"\x02\b\n" +
-	"\x12\x03\b\xd8\x04J\x02\x10\n" +
-	"R\x16gram.webhooks.v1.EventBEZCgithub.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1;webhooksv1b\beditionsp\xe9\a"
+	"\x12\x03\b\xd8\x04R\x16gram.webhooks.v1.EventBEZCgithub.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1;webhooksv1b\beditionsp\xe9\a"
 
 var file_gram_webhooks_v1_svix_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_webhooks_v1_svix_relay_proto_goTypes = []any{

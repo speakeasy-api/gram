@@ -1,6 +1,6 @@
 # Transactional email templates
 
-This directory is the source of truth for Gram transactional email content.
+This directory is the source of truth for Speakeasy transactional email content.
 Every application template has:
 
 - a stable logical key in `server/internal/email/templates.go`;
@@ -44,7 +44,7 @@ the Speakeasy lockup header, uppercase gray eyebrow, RGB gradient line under
 the headline, square black action, neutral outlined details, and a plain gray
 footer reason — no closing brand banner. The full spec, including the
 Loops-hosted asset URLs and the theme that supplies Helvetica, lives in the
-`craft-transactional-emails` skill (`.agents/skills/craft-transactional-emails/`).
+`transactional-email` skill (`.agents/skills/transactional-email/`).
 
 `transactional_base.lmx` is the production translation. It references the
 team's "Speakeasy Trial" Loops theme for the Helvetica body font (the LMX API

@@ -2,13 +2,53 @@
 
 # Config docs: https://pitchfork.jdx.dev/reference/configuration.html
 
+[settings.logs]
+time_retention = "5d"
+line_retention = 10000
+
 # Lifecycle operations and the parked page are explicitly started, never part
 # of application startup. Bulk stop still includes them for worktree removal.
 [groups.application]
-daemons = ["dev-idp", "dev-idp-dashboard", "admin", "admin-dashboard", "mock-oidc", "server", "worker", "streams", "pystreams-multi", "dashboard", "assistant-runtime", "tunnel-gateway"]
+daemons = [
+  "dev-idp",
+  "dev-idp-dashboard",
+  "admin",
+  "admin-dashboard",
+  "mock-oidc",
+  "server",
+  "worker",
+  "streams",
+  "pystreams-multi",
+  "dashboard",
+  "assistant-runtime",
+  "assistant-relay",
+  "tunnel-gateway",
+  "code-runtime",
+]
 
 [groups.default]
-daemons = ["dev-idp", "dev-idp-dashboard", "admin", "admin-dashboard", "mock-oidc", "server", "worker", "streams", "pystreams-multi", "dashboard", "assistant-runtime", "tunnel-gateway", "idle-pause"]
+daemons = [
+  "dev-idp",
+  "dev-idp-dashboard",
+  "admin",
+  "admin-dashboard",
+  "mock-oidc",
+  "server",
+  "worker",
+  "streams",
+  "pystreams-multi",
+  "dashboard",
+  "assistant-runtime",
+  "assistant-relay",
+  "tunnel-gateway",
+  "idle-pause",
+]
+
+# Opt-in only: intentionally excluded from the default/application groups.
+[daemons.agentation]
+run = "mise run start:agentation-server"
+ready_output = "Agentation server listening on"
+retry = 0
 
 [daemons.park]
 run = "mise run park"
@@ -58,10 +98,12 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 [daemons.server]
 run = "mise run start:server"
 ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["assistant-relay"]
 
 [daemons.worker]
 run = "mise run start:worker"
 ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["assistant-relay"]
 
 [daemons.streams]
 run = "mise run start:streams"
@@ -86,9 +128,19 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 run = "mise run start:assistant-runtime"
 ready_cmd = "mise run check:daemon --name {{name}}"
 
+[daemons.assistant-relay]
+run = "mise run start:assistant-relay"
+ready_output = "Assistant relay ready:"
+
 [daemons.tunnel-gateway]
 run = "mise run start:tunnel-gateway"
 ready_cmd = "mise run check:daemon --name {{name}}"
+
+# Started by start only when the local code provider is configured.
+[daemons.code-runtime]
+run = "exec mise run start:code-runtime"
+ready_output = "gram-code-runner protocol 2 listening on"
+retry = 0
 
 # Not a service: a cron that checks, every five minutes, whether this
 # worktree's stack has gone unused, and pauses it if so (see
@@ -102,3 +154,10 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 run = "mise run idle-pause"
 env = { COMPOSE_PROJECT_NAME = "gram" }
 cron = "0 */5 * * * *"
+
+# Not a service: renews this worktree's Tailscale HTTPS certificate daily and
+# restarts the daemons that serve it when it changes. Started by start only when
+# GRAM_TLS_PROVIDER=tailscale, and stopped with the stack like idle-pause.
+[daemons.tailscale-cert]
+run = "mise run tls:tailscale --restart"
+cron = "0 17 4 * * *"

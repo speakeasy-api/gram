@@ -7,7 +7,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
@@ -32,6 +31,9 @@ type ToolsCallUsageLimitsInterceptor struct {
 	logger  *slog.Logger
 }
 
+// ErrToolUsageLimitReached marks a tool call refused by the free-tier cap.
+var ErrToolUsageLimitReached = errors.New("tool usage limit reached")
+
 var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallUsageLimitsInterceptor)(nil)
 
 // NewToolsCallUsageLimitsInterceptor constructs an interceptor bound to the given
@@ -49,28 +51,28 @@ func (i *ToolsCallUsageLimitsInterceptor) Name() string {
 }
 
 // InterceptToolsCallRequest implements [proxy.ToolsCallRequestInterceptor].
-// It reads the organization and account type from the request's auth
+// It reads the organization and account type from the server's
 // context, consults cached billing usage, and returns a forbidden error when
 // the org has exceeded its hard cap.
 func (i *ToolsCallUsageLimitsInterceptor) InterceptToolsCallRequest(ctx context.Context, _ *proxy.ToolsCallRequest) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		// No auth context means the runtime handler did not install one —
-		// fail open rather than guess at an identity to rate-limit against.
+	serverCtx, ok := GetServerContext(ctx)
+	if !ok || serverCtx.OrganizationID == "" {
+		// No server context means the runtime handler did not install one —
+		// fail open rather than guess at an organization to rate-limit against.
 		return nil
 	}
 
-	if authCtx.AccountType != string(billing.TierBase) {
+	if serverCtx.AccountType != string(billing.TierBase) {
 		return nil
 	}
 
 	// Hot-path: only read cached usage. A miss here is treated as a
 	// best-effort skip so billing cache issues never break tool invocation.
-	periodUsage, err := i.billing.GetStoredPeriodUsage(ctx, authCtx.ActiveOrganizationID)
+	periodUsage, err := i.billing.GetStoredPeriodUsage(ctx, serverCtx.OrganizationID)
 	if err != nil {
 		i.logger.ErrorContext(ctx, "failed to get stored period usage",
 			attr.SlogError(err),
-			attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+			attr.SlogOrganizationID(serverCtx.OrganizationID))
 		return nil
 	}
 
@@ -84,7 +86,7 @@ func (i *ToolsCallUsageLimitsInterceptor) InterceptToolsCallRequest(ctx context.
 	}
 
 	if periodUsage.ToolCalls >= hardToolCallsLimit {
-		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").LogError(ctx, i.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeForbidden, ErrToolUsageLimitReached, "tool usage limit reached").LogWarn(ctx, i.logger, attr.SlogOrganizationID(serverCtx.OrganizationID))
 	}
 
 	return nil

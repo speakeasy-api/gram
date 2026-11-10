@@ -25,6 +25,8 @@ type Service interface {
 	GetServer(context.Context, *GetServerPayload) (res *types.TunneledMcpServer, err error)
 	// List live tunnel connections for a tunneled MCP server
 	ListServerConnections(context.Context, *ListServerConnectionsPayload) (res *types.TunneledMcpServerConnections, err error)
+	// Read seven-day payload-free tunnel activity aggregates
+	GetServerMetrics(context.Context, *GetServerMetricsPayload) (res *types.TunnelMetrics, err error)
 	// Update a tunneled MCP server source
 	UpdateServer(context.Context, *UpdateServerPayload) (res *types.TunneledMcpServer, err error)
 	// Rotate a tunneled MCP server source key. Returns the new tunnel key once.
@@ -53,7 +55,7 @@ const ServiceName = "tunneledMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"createServer", "listServers", "getServer", "listServerConnections", "updateServer", "rotateServerKey", "deleteServer"}
+var MethodNames = [8]string{"createServer", "listServers", "getServer", "listServerConnections", "getServerMetrics", "updateServer", "rotateServerKey", "deleteServer"}
 
 // CreateServerPayload is the payload type of the tunneledMcp service
 // createServer method.
@@ -63,8 +65,10 @@ type CreateServerPayload struct {
 	ProjectSlugInput *string
 	// Human-readable display name for the tunneled MCP server
 	Name string
-	// RFC 9728 protected resource identifier of the tunneled server, used only for
-	// exact-match credential routing and never dialed by Gram. Omit unless the
+	// RFC 9728 protected resource identifier of the tunneled server, used for
+	// credential routing and as the signed caller assertion audience; never dialed
+	// by Speakeasy. The exact identifier is preserved, including trailing slashes.
+	// When unset, caller assertions use tunneled-mcp-server:<ID>. Omit unless the
 	// identifier is already known; it is usually recorded later, once the tunnel
 	// is up.
 	ResourceIdentifier *string
@@ -83,6 +87,16 @@ type CreateTunneledMcpServerResult struct {
 type DeleteServerPayload struct {
 	// The ID of the tunneled MCP server to delete
 	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// GetServerMetricsPayload is the payload type of the tunneledMcp service
+// getServerMetrics method.
+type GetServerMetricsPayload struct {
+	ID               string
+	Window           string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -154,8 +168,10 @@ type UpdateServerPayload struct {
 	// Consent to serve this source through a public, anonymous MCP endpoint.
 	// Disabling revokes all live anonymous sessions. Omit to leave unchanged.
 	AllowPublic *bool
-	// RFC 9728 protected resource identifier of the tunneled server, used only for
-	// exact-match credential routing and never dialed by Gram. Pass an empty
+	// RFC 9728 protected resource identifier of the tunneled server, used for
+	// credential routing and as the signed caller assertion audience; never dialed
+	// by Speakeasy. The exact identifier is preserved, including trailing slashes.
+	// When unset, caller assertions use tunneled-mcp-server:<ID>. Pass an empty
 	// string to clear. Omit to leave unchanged.
 	ResourceIdentifier *string
 	// Sustained anonymous MCP requests per second admitted when this source is

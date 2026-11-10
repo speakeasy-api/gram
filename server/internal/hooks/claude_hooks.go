@@ -18,10 +18,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -39,6 +41,47 @@ import (
 // logged, so we don't dump megabytes of OTLP into the logs on every bad
 // payload.
 const decodeBodySampleLimit = 1024
+
+// maxHooksRequestBodyBytes bounds both the wire and the decompressed size of
+// every hooks request body. Hooks are reachable before authentication, so a
+// small gzip body must not be able to expand without limit in memory. It
+// matches the OTLP export limit of the otel ingest service, since the hooks
+// logs and metrics routes carry the same payloads.
+const maxHooksRequestBodyBytes = 20 * constants.MiB
+
+var errHooksRequestBodyTooLarge = errors.New("hooks request body too large")
+
+// readAtMost reads r fully but never buffers more than limit+1 bytes,
+// returning errHooksRequestBodyTooLarge when r holds more than limit bytes.
+func readAtMost(r io.Reader, limit int64) ([]byte, error) {
+	b, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+	if int64(len(b)) > limit {
+		return nil, errHooksRequestBodyTooLarge
+	}
+	return b, nil
+}
+
+// hooksErrorFormatter keeps Goa's default error body but answers
+// request_too_large with 413. The hooks design does not declare that error,
+// so Goa would otherwise encode it as 400.
+func hooksErrorFormatter(ctx context.Context, err error) goahttp.Statuser {
+	resp := goahttp.NewErrorResponse(ctx, err)
+	if se, ok := errors.AsType[*goa.ServiceError](err); ok && se.Name == string(oops.CodeRequestTooLarge) {
+		if er, ok := resp.(*goahttp.ErrorResponse); ok {
+			return &requestTooLargeResponse{ErrorResponse: er}
+		}
+	}
+	return resp
+}
+
+type requestTooLargeResponse struct {
+	*goahttp.ErrorResponse
+}
+
+func (*requestTooLargeResponse) StatusCode() int { return http.StatusRequestEntityTooLarge }
 
 const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call. Try restarting Claude, or running /reload-plugins."
 
@@ -62,6 +105,8 @@ type decoderFunc func(v any) error
 func (f decoderFunc) Decode(v any) error { return f(v) }
 
 // newHooksRequestDecoder returns a Goa request decoder factory that:
+//   - rejects bodies over the route's byte limit, on the wire and after
+//     decompression, without buffering more than the limit,
 //   - transparently decompresses gzip-encoded request bodies (the OTel
 //     Collector otlphttp exporter defaults to compression: gzip),
 //   - dispatches to formDecoder for x-www-form-urlencoded bodies,
@@ -74,18 +119,33 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 		contentType := r.Header.Get("Content-Type")
 		contentEncoding := r.Header.Get("Content-Encoding")
 		skillUpload := r.URL.Path == "/rpc/hooks.uploadSkillContent"
+		limit := int64(maxHooksRequestBodyBytes)
+		if skillUpload {
+			limit = maxSkillUploadRequestBodyBytes
+		}
 		logBody := func(body []byte) []byte {
 			if skillUpload {
 				return nil
 			}
 			return body
 		}
-		if skillUpload && r.Body != nil {
-			r.Body = http.MaxBytesReader(nil, r.Body, maxSkillUploadRequestBodyBytes)
+		tooLarge := func(what string) goahttp.Decoder {
+			err := oops.E(oops.CodeRequestTooLarge, errHooksRequestBodyTooLarge, "hooks request %s exceeds %d bytes", what, limit).AsGoa(ctx)
+			return decoderFunc(func(_ any) error {
+				logDecodeFailure(ctx, logger, err, nil, contentType, contentEncoding)
+				return err //nolint:wrapcheck // Goa keeps the 413 status only for an unwrapped service error.
+			})
 		}
 
-		raw, err := io.ReadAll(r.Body)
+		if r.ContentLength > limit {
+			_ = r.Body.Close()
+			return tooLarge("body")
+		}
+		raw, err := readAtMost(r.Body, limit)
 		_ = r.Body.Close()
+		if errors.Is(err, errHooksRequestBodyTooLarge) {
+			return tooLarge("body")
+		}
 		if err != nil {
 			wrapped := fmt.Errorf("read hooks request body: %w", err)
 			return decoderFunc(func(_ any) error {
@@ -104,23 +164,15 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 					return wrapped
 				})
 			}
-			var reader io.Reader = gz
-			if skillUpload {
-				reader = io.LimitReader(gz, maxSkillUploadRequestBodyBytes+1)
-			}
-			decompressed, gerr := io.ReadAll(reader)
+			decompressed, gerr := readAtMost(gz, limit)
 			_ = gz.Close()
+			if errors.Is(gerr, errHooksRequestBodyTooLarge) {
+				return tooLarge("decompressed body")
+			}
 			if gerr != nil {
 				wrapped := fmt.Errorf("decompress gzip hooks request body: %w", gerr)
 				return decoderFunc(func(_ any) error {
 					logDecodeFailure(ctx, logger, wrapped, logBody(raw), contentType, contentEncoding)
-					return wrapped
-				})
-			}
-			if skillUpload && len(decompressed) > maxSkillUploadRequestBodyBytes {
-				wrapped := fmt.Errorf("decompressed skill content upload exceeds %d bytes", maxSkillUploadRequestBodyBytes)
-				return decoderFunc(func(_ any) error {
-					logDecodeFailure(ctx, logger, wrapped, nil, contentType, contentEncoding)
 					return wrapped
 				})
 			}
@@ -241,10 +293,25 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
-	if hasPluginAuth {
+	if token := pluginDeviceAgentToken(payload.DeviceAgentToken); token != "" {
+		// A headless device is never downgraded to the OTEL-buffered path: its
+		// events have no human session to be attributed to, and its relay
+		// handles a refusal (exchange again, or apply its fail policy).
+		authedCtx, err := s.authorizeWorkloadPluginRequest(ctx, token, projectSlugHint)
+		if err != nil {
+			outcome = hookMetricOutcomeUnauthorized
+			authLogger.WarnContext(ctx, "device-agent token refused on claude hook",
+				attr.SlogEvent("claude_hook_workload_denied"),
+				attr.SlogError(err),
+			)
+			return nil, workloadHookAuthError(err)
+		}
+		ctx = authedCtx
+		logger = s.withAuthContext(ctx, logger)
+	} else if hasPluginAuth {
 		// Auth is optional. Returning a 401 on failure deadlocks the client:
 		// send_hook.sh maps any non-2xx to "block all tool calls", but
 		// recovering (e.g. `gram login`) requires Bash, which the hook just
@@ -323,35 +390,41 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		return makeHookResult(payload.HookEventName), nil
 	}
 
-	// Route to appropriate handler based on hook type
-	var (
-		result *gen.ClaudeHookResult
-	)
+	result, postureOutcome, err := s.decideClaudeHookWithinBudget(ctx, logger, start, hookEvent, payload.HookEventName)
+	if postureOutcome != "" {
+		outcome = postureOutcome
+	}
+	return result, err
+}
+
+// dispatchClaudeHookEvent routes a normalized Claude hook event to its handler.
+// It runs off the request goroutine, so it recovers a handler panic and
+// returns errHandlerPanicked.
+func (s *Service) dispatchClaudeHookEvent(ctx context.Context, logger *slog.Logger, hookEvent any, hookEventName string) (res *gen.ClaudeHookResult, err error) {
+	defer recoverDetachedPanic(ctx, logger, &err)
 	switch ev := hookEvent.(type) {
 	case *hookevents.SessionStart:
-		result, err = s.handleSessionStart(ctx, ev)
+		return s.handleSessionStart(ctx, ev)
 	case *hookevents.ConfigChange:
-		result, err = s.handleConfigChange(ctx, ev)
+		return s.handleConfigChange(ctx, ev)
 	case *hookevents.BeforeToolUse:
-		result, err = s.handlePreToolUse(ctx, ev)
+		return s.handlePreToolUse(ctx, ev)
 	case *hookevents.AfterToolUse:
-		result, err = s.handlePostToolUse(ctx, ev)
+		return s.handlePostToolUse(ctx, ev)
 	case *hookevents.AfterToolUseFailure:
-		result, err = s.handlePostToolUseFailure(ctx, ev)
+		return s.handlePostToolUseFailure(ctx, ev)
 	case *hookevents.UserPromptSubmit:
-		result, err = s.handleUserPromptSubmit(ctx, ev)
+		return s.handleUserPromptSubmit(ctx, ev)
 	case *hookevents.Stop:
-		result, err = s.handleStop(ctx, ev)
+		return s.handleStop(ctx, ev)
 	case *hookevents.SessionEnd:
-		result, err = s.handleSessionEnd(ctx, ev)
+		return s.handleSessionEnd(ctx, ev)
 	case *hookevents.Notification:
-		result, err = s.handleNotification(ctx, ev)
+		return s.handleNotification(ctx, ev)
 	default:
-		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
-		result = makeHookResult(payload.HookEventName)
+		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", hookEventName))
+		return makeHookResult(hookEventName), nil
 	}
-
-	return result, err
 }
 
 func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (any, error) {
@@ -686,15 +759,12 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 		}
 		return ctx, fmt.Errorf("authorize hook api key: %w", err)
 	}
-	if err := s.requireAgentHooksIngest(ctx); err != nil {
-		return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
-	}
 	projectScheme := &security.APIKeyScheme{
 		Name:           constants.ProjectSlugSecuritySchema,
 		Scopes:         []string{},
 		RequiredScopes: []string{"hooks"},
 	}
-	ctx, err = s.auth.Authorize(ctx, projectSlug, projectScheme)
+	ctx, err = s.authorizeHooksProject(ctx, projectSlug, projectScheme)
 	if err != nil {
 		if isAgentActor(ctx) {
 			return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
@@ -702,6 +772,49 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 		return ctx, fmt.Errorf("authorize hook project slug: %w", err)
 	}
 	return ctx, nil
+}
+
+// pluginDeviceAgentToken returns the device-agent token a plugin-driven request
+// presented as `Authorization: Bearer`, or "" when it presented none.
+func pluginDeviceAgentToken(authorization *string) string {
+	scheme, token, ok := strings.Cut(strings.TrimSpace(conv.PtrValOr(authorization, "")), " ")
+	token = strings.TrimSpace(token)
+	if !ok || !strings.EqualFold(scheme, "Bearer") || !deviceagenttoken.IsToken(token) {
+		return ""
+	}
+	return token
+}
+
+// authorizeWorkloadPluginRequest admits a device-agent token on the claude and
+// ingest endpoints and binds the request's Gram-Project, like the other hooks
+// methods. Admission refusals are CodeUnauthorized, grant refusals CodeForbidden.
+func (s *Service) authorizeWorkloadPluginRequest(ctx context.Context, token, projectSlug string) (context.Context, error) {
+	if s.deviceAgentTokens == nil {
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
+	}
+	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	if err != nil {
+		return ctx, fmt.Errorf("admit device-agent token: %w", err)
+	}
+	projectScheme := &security.APIKeyScheme{
+		Name:           constants.ProjectSlugSecuritySchema,
+		Scopes:         []string{},
+		RequiredScopes: []string{"hooks"},
+	}
+	authorized, err := s.authorizeWorkloadProject(admitted, projectSlug, projectScheme)
+	if err != nil {
+		return ctx, err
+	}
+	return authorized, nil
+}
+
+// workloadHookAuthError keeps a workload refusal's own code (401 to exchange
+// again, 403 for a grant the device lacks), and treats anything else as 401.
+func workloadHookAuthError(err error) error {
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+		return oops.E(shareable.Code, err, "device-agent token refused")
+	}
+	return oops.E(oops.CodeUnauthorized, err, "device-agent token refused")
 }
 
 func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
@@ -900,11 +1013,11 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 
 	if isConversationEvent(payload.HookEventName) {
 		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "conversation event", err)
 		}
 	} else {
 		if err := s.persistToolCallEvent(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist tool call event", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "tool call event", err)
 		}
 	}
 }
@@ -975,7 +1088,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			}
 		}
 		if blockID, err := uuid.NewV7(); err == nil && !s.isHookDuplicate(ctx) && s.repo != nil && strings.TrimSpace(ev.Context.OrganizationID) != "" && ev.Context.ProjectID != uuid.Nil {
-			userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+			userReason = appendBlockURL(userReason, s.blockViewURL(ctx, ev.Context.OrganizationID, blockID))
 			userID := ev.Context.User.ID
 			userEmail := ev.Context.User.Email
 			asyncCtx := context.WithoutCancel(ctx)
@@ -1034,7 +1147,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
 			if blockID, err := uuid.NewV7(); err == nil {
-				userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+				userReason = appendBlockURL(userReason, s.blockViewURL(ctx, ev.Context.OrganizationID, blockID))
 				// Prefer the email from the session metadata fetched above,
 				// falling back to the raw payload when it wasn't cached.
 				userEmail := conv.PtrValOr(payload.UserEmail, "")
@@ -1186,7 +1299,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		// Permit-by-default: only a blocked-list URL match denies. Servers
 		// missing from the inventory, local stdio servers, and unrecognizable
 		// entries are all allowed — the fail-closed reasons below are
-		// block_all concepts. Gram-hosted URLs stay allowed even if listed.
+		// block_all concepts. Speakeasy-hosted URLs stay allowed even if listed.
 		if matched != nil && matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID) {
 			if blockedURL, blocked := shadowmcp.BlockedURLMatch(policy.BlockedURLs, matched.URL); blocked {
 				detail = fmt.Sprintf("MCP server %q is blocked by policy (URL: %s)", serverPrefix, blockedURL)
@@ -1197,9 +1310,9 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		case matched == nil:
 			detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
 		case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
-			detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
+			detail = fmt.Sprintf("MCP server %q is not Speakeasy-hosted (URL: %s)", serverPrefix, matched.URL)
 		case matched.URL == "" && matched.Command != "":
-			// Local stdio servers have no URL, so the Gram-hosted check above
+			// Local stdio servers have no URL, so the Speakeasy-hosted check above
 			// can't apply. Treat them as shadow MCPs until explicitly approved
 			// by command.
 			detail = fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", serverPrefix, matched.Command)
@@ -1318,7 +1431,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		s.logger.WarnContext(ctx, "tool call block: invalid project id; skipping durable block link",
 			attr.SlogEvent("claude_hook_block_invalid_project"), attr.SlogError(parseErr))
 	} else if blockID, err := uuid.NewV7(); err == nil {
-		userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+		userReason = appendBlockURL(userReason, s.blockViewURL(ctx, metadata.GramOrgID, blockID))
 		asyncCtx := context.WithoutCancel(ctx)
 		metaCopy := metadata
 		go func() {
@@ -1406,7 +1519,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	serverPrefix string,
 	detail string,
 ) (uuid.UUID, uuid.UUID, bool) {
-	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
+	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) || isVerdictSuperseded(ctx) {
 		return uuid.Nil, uuid.Nil, false
 	}
 
@@ -1466,11 +1579,8 @@ func (s *Service) recordShadowMCPBlockFinding(
 	}
 
 	// Use UUIDv7 so the row sorts in insertion order alongside scanner
-	// findings: ListRiskResultsByProjectFound paginates with ORDER BY id
-	// DESC, which only behaves as "most recent first" when every inserted
-	// id is time-ordered. uuid.New() (v4) is random and would interleave
-	// hook-time block rows at arbitrary positions in the Recent Findings
-	// table.
+	// findings: finding listings break ties on id DESC, which only reads as
+	// "most recent first" when every inserted id is time-ordered.
 	resultID, err := uuid.NewV7()
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",
@@ -1505,7 +1615,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 // gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
 // trace will surface as blocked regardless of which row arrives first.
 func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
-	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) {
+	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) || isVerdictSuperseded(ctx) {
 		return
 	}
 

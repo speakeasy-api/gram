@@ -37,11 +37,12 @@ func TestDistributionPluginProjection(t *testing.T) {
 			require.NoError(t, err)
 			var fields map[string]any
 			require.NoError(t, json.Unmarshal(data, &fields))
-			require.Len(t, fields, 4)
+			require.Len(t, fields, 5)
 			require.Equal(t, plugin.ID, fields["ID"])
 			require.Equal(t, "Distribution target", fields["Name"])
 			require.Equal(t, "Safe description", fields["Description"])
 			require.Equal(t, false, fields["IsDefault"])
+			require.Equal(t, false, fields["AutoCreated"])
 			_, err = ti.service.ListPlugins(readCtx, &gen.ListPluginsPayload{})
 			requireProjectionOopsCode(t, err, oops.CodeForbidden)
 			_, err = ti.service.GetPlugin(readCtx, &gen.GetPluginPayload{ID: plugin.ID})
@@ -126,4 +127,31 @@ func requireProjectionOopsCode(t *testing.T, err error, code oops.Code) {
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, code, shareable.Code)
+}
+
+func TestDistributionPluginProjection_AutoCreated(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestPluginsService(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	role := roleSetupFixture(t, ctx, ti, "Distribution target")
+	require.Equal(t, 1, runRoleSetup(t, ctx, ti, role))
+	skill, err := skillsrepo.New(ti.conn).CreateSkill(ctx, skillsrepo.CreateSkillParams{ProjectID: *ac.ProjectID, Name: "marker-skill", DisplayName: "Marker skill"})
+	require.NoError(t, err)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillRead, skill.ID.String()))
+	result, err := ti.service.ListDistributionPlugins(ctx, &gen.ListDistributionPluginsPayload{SkillID: skill.ID.String()})
+	require.NoError(t, err)
+	var target *gen.DistributionPlugin
+	for _, plugin := range result.Plugins {
+		if plugin.Name == "Distribution target" {
+			target = plugin
+		} else {
+			require.False(t, plugin.AutoCreated)
+		}
+	}
+	require.NotNil(t, target)
+	require.True(t, target.AutoCreated)
+	detail, err := ti.service.GetDistributionPlugin(ctx, &gen.GetDistributionPluginPayload{SkillID: skill.ID.String(), ID: target.ID})
+	require.NoError(t, err)
+	require.True(t, detail.AutoCreated)
 }

@@ -93,7 +93,7 @@ export type ListChatsRequest = {
    */
   externalUserId?: string | undefined;
   /**
-   * Filter by Gram user ID
+   * Filter by Speakeasy user ID
    */
   userId?: string | undefined;
   /**
@@ -104,6 +104,10 @@ export type ListChatsRequest = {
    * Filter to chats produced by this assistant
    */
   assistantId?: string | undefined;
+  /**
+   * Filter to chats produced by this agent (the agent principal recorded on the session at capture)
+   */
+  agentId?: string | undefined;
   /**
    * When set with assistant_id, list only that assistant's threads whose source_kind matches this value (e.g. 'setup' for onboarding threads). Empty for no filter.
    */
@@ -152,6 +156,10 @@ export type ListChatsRequest = {
    * Sort order
    */
   sortOrder?: SortOrder | undefined;
+  /**
+   * List pinned chats before unpinned ones, then apply sort_by and sort_order within each group
+   */
+  pinnedFirst?: boolean | undefined;
   /**
    * Session header
    */
@@ -288,6 +296,7 @@ export type ListChatsRequest$Outbound = {
   user_id?: string | undefined;
   source?: string | undefined;
   assistant_id?: string | undefined;
+  agent_id?: string | undefined;
   source_kind?: string | undefined;
   exclude_source_kind?: string | undefined;
   has_risk?: string | undefined;
@@ -300,6 +309,7 @@ export type ListChatsRequest$Outbound = {
   offset: number;
   sort_by: string;
   sort_order: string;
+  pinned_first: boolean;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
@@ -316,6 +326,7 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
     userId: z.optional(z.string()),
     source: z.optional(z.string()),
     assistantId: z.optional(z.string()),
+    agentId: z.optional(z.string()),
     sourceKind: z.optional(z.string()),
     excludeSourceKind: z.optional(z.string()),
     hasRisk: z.optional(HasRisk$outboundSchema),
@@ -328,6 +339,7 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
     offset: z._default(z.int(), 0),
     sortBy: z._default(SortBy$outboundSchema, "last_message_timestamp"),
     sortOrder: z._default(SortOrder$outboundSchema, "desc"),
+    pinnedFirst: z._default(z.boolean(), false),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
@@ -337,6 +349,7 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
       externalUserId: "external_user_id",
       userId: "user_id",
       assistantId: "assistant_id",
+      agentId: "agent_id",
       sourceKind: "source_kind",
       excludeSourceKind: "exclude_source_kind",
       hasRisk: "has_risk",
@@ -344,6 +357,7 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
       minRiskScore: "min_risk_score",
       sortBy: "sort_by",
       sortOrder: "sort_order",
+      pinnedFirst: "pinned_first",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
       gramChatSession: "Gram-Chat-Session",

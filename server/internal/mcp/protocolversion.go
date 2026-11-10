@@ -26,7 +26,7 @@ import (
 // This stamps whichever span is current. On the /mcp and /platform/mcp paths
 // that is the otelhttp server span; the remote MCP proxy sets its own
 // attributes on its per-request child span instead, so a downgrade there is
-// attributed to the upstream leg rather than to Gram.
+// attributed to the upstream leg rather than to Speakeasy.
 func recordMCPProtocolVersionSpan(ctx context.Context, requested, negotiated string) {
 	span := trace.SpanFromContext(ctx)
 	if !span.IsRecording() {

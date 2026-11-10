@@ -8,7 +8,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// LoadGrants loads and normalizes grants for the given organization and principals.
+// LoadGrants loads and normalizes grants for the given organization and
+// principals. The result is exactly the stored grant set: no defaults are
+// synthesized, so a role edit that removes a grant takes effect immediately.
 func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, principals []urn.Principal) ([]Grant, error) {
 	if organizationID == "" {
 		return nil, fmt.Errorf("organization id is required")
@@ -37,6 +39,7 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
 			Selector:     selectors,
+			Inferred:     row.Inferred,
 		})
 	}
 

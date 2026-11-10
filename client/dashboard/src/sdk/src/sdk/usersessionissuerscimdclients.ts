@@ -124,7 +124,7 @@ export class UserSessionIssuersCimdClients extends ClientSDK {
    * listPresets userSessionIssuersCimdClients
    *
    * @remarks
-   * List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.
+   * List Speakeasy's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.
    */
   async listPresets(
     request?: ListCimdClientPresetsRequest | undefined,
@@ -143,7 +143,7 @@ export class UserSessionIssuersCimdClients extends ClientSDK {
    * verifyURL userSessionIssuersCimdClients
    *
    * @remarks
-   * Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.
+   * Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Speakeasy fetch a caller-chosen URL.
    */
   async verifyURL(
     request: VerifyUserSessionIssuerCimdClientURLRequest,

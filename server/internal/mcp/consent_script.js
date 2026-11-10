@@ -2,13 +2,14 @@
 // inline scripts. Loaded by consent_template.html via a content-hashed
 // <script src>.
 //
-// Two jobs:
+// Main jobs:
 //
 //   1. Neutralise double-clicks on the consent controls. A second activation
 //      while the first request is still pending sends the user to an authn
 //      challenge that has already been consumed, producing "authn challenge
 //      state not found or expired" (AIS-103).
 //   2. Fan the page-level auto-refresh choice out to every card.
+//   3. Check identity-chained cards' exchanges in the background.
 //
 // Connect deliberately stays a full-page form POST. Running it in a popup kept
 // the page's state through the provider round trip, but handed the provider a
@@ -41,6 +42,125 @@
     }, 2000);
   }
 
+  // A gateway's server list keeps the open state the person left it in, so
+  // a Connect from the list, which leaves for the provider and comes back,
+  // returns to the list rather than to its collapsed summary.
+  var gatewayList = document.querySelector("details[data-gateway-list]");
+  if (gatewayList) {
+    var listKey =
+      "consent-gateway-list:" + gatewayList.getAttribute("data-state");
+    try {
+      var remembered = window.sessionStorage.getItem(listKey);
+      if (remembered === "open") {
+        gatewayList.open = true;
+      } else if (remembered === "closed") {
+        gatewayList.open = false;
+      }
+    } catch (_) {
+      // Storage can be unavailable; the server's default stands.
+    }
+    gatewayList.addEventListener("toggle", function () {
+      try {
+        window.sessionStorage.setItem(
+          listKey,
+          gatewayList.open ? "open" : "closed",
+        );
+      } catch (_) {
+        // Storage can be unavailable; nothing to remember then.
+      }
+    });
+  }
+
+  // Hide and Show update in place; without the script the forms post and redirect.
+  var visibleServers = document.querySelector("[data-gateway-visible-list]");
+  var hiddenServers = document.querySelector("[data-gateway-hidden-list]");
+  if (visibleServers && hiddenServers) {
+    var hiddenSection = document.querySelector("[data-gateway-hidden-section]");
+    var allHidden = document.querySelector("[data-gateway-all-hidden]");
+    var gatewaySummary = document.querySelector("[data-gateway-summary]");
+    var hiddenCount = document.querySelector("[data-gateway-hidden-count]");
+    var visibilityError = document.querySelector(
+      "[data-gateway-visibility-error]",
+    );
+
+    var refreshGatewayCounts = function () {
+      var visibleRows = visibleServers.querySelectorAll(
+        "[data-gateway-server]",
+      );
+      var hiddenRows = hiddenServers.querySelectorAll("[data-gateway-server]");
+      var ready = Array.prototype.filter.call(visibleRows, function (row) {
+        return row.getAttribute("data-gateway-server-ready") === "true";
+      }).length;
+      var summary =
+        ready +
+        " of " +
+        visibleRows.length +
+        (visibleRows.length === 1 ? " server" : " servers") +
+        " connected";
+      if (hiddenRows.length) summary += " · " + hiddenRows.length + " hidden";
+      gatewaySummary.textContent = summary;
+      hiddenCount.textContent = String(hiddenRows.length);
+      visibleServers.hidden = visibleRows.length === 0;
+      allHidden.hidden = visibleRows.length !== 0;
+      hiddenSection.hidden = hiddenRows.length === 0;
+    };
+
+    var moveGatewayRow = function (row, hide) {
+      Array.prototype.forEach.call(
+        row.querySelectorAll(
+          "[data-gateway-server-status], [data-gateway-server-actions]",
+        ),
+        function (el) {
+          el.hidden = hide;
+        },
+      );
+      // The row attribute swaps the hide icon for the Show label (see the
+      // gatewayServerRow template).
+      row.toggleAttribute("data-gateway-server-hidden", hide);
+      var toggle = row.querySelector("[data-gateway-visibility-toggle]");
+      toggle.value = hide ? "show_server" : "hide_server";
+      toggle.title = hide
+        ? "Make this server available to your tools again"
+        : "Hide this server, preventing your agent from attempting to access it.";
+      (hide ? hiddenServers : visibleServers).appendChild(row);
+    };
+
+    document.addEventListener("submit", async function (event) {
+      var visibilityForm = event.target;
+      if (!visibilityForm.matches("[data-gateway-visibility-form]")) return;
+      event.preventDefault();
+      var toggle = visibilityForm.querySelector(
+        "[data-gateway-visibility-toggle]",
+      );
+      if (toggle.disabled) return;
+      var hide = toggle.value === "hide_server";
+      var body = new URLSearchParams(new FormData(visibilityForm));
+      body.set("action", toggle.value);
+      toggle.disabled = true;
+      visibilityError.hidden = true;
+      var moved = false;
+      try {
+        var response = await fetch(visibilityForm.getAttribute("action"), {
+          method: "POST",
+          credentials: "same-origin",
+          body: body,
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error(String(response.status));
+        moveGatewayRow(visibilityForm.closest("[data-gateway-server]"), hide);
+        moved = true;
+        refreshGatewayCounts();
+      } catch (_) {
+        visibilityError.textContent =
+          "Couldn't update that server. Reload the page and try again.";
+        visibilityError.hidden = false;
+      } finally {
+        toggle.disabled = false;
+        if (moved) toggle.focus();
+      }
+    });
+  }
+
   // Replace an element's contents with a spinner + label.
   function showPending(el, label) {
     el.textContent = "";
@@ -59,6 +179,18 @@
     var button = form.querySelector('button[type="submit"]');
     var submitted = false;
     var agentInputs = document.querySelectorAll("input[data-agent-select]");
+    var agentModes = document.querySelectorAll("input[data-agent-mode]");
+    var agentMode = document.querySelector(
+      'input[data-agent-mode][value="agent"]',
+    );
+    var selfMode = document.querySelector(
+      'input[data-agent-mode][value="self"]',
+    );
+    var selfAgentInput = document.querySelector("[data-agent-self]");
+    var agentPicker = document.querySelector("[data-agent-picker]");
+    var agentSetup = document.querySelector("[data-agent-setup]");
+    var agentSearch = document.querySelector("[data-agent-search]");
+    var agentEmpty = document.querySelector("[data-agent-empty]");
     var agentPolicy = document.querySelector("[data-agent-policy]");
     var agentPolicyName = document.querySelector("[data-agent-policy-name]");
     var subjectDisplay = document.querySelector(
@@ -70,13 +202,42 @@
     var connectionRevision = 0;
     var activeConnectionAgent = "";
     var savedAgentKey = "gram-consent-agent-v1:" + form.elements.state.value;
+    var discoverySelect = document.querySelector(
+      'select[name="discovery_mode"]',
+    );
+    var discoveryKey = "gram-consent-discovery-v1:" + form.elements.state.value;
+    if (discoverySelect) {
+      try {
+        var savedMode = sessionStorage.getItem(discoveryKey);
+        if (
+          savedMode === "" ||
+          savedMode === "direct" ||
+          savedMode === "progressive" ||
+          (savedMode === "code_mode" &&
+            discoverySelect.querySelector('option[value="code_mode"]'))
+        ) {
+          discoverySelect.value = savedMode;
+        }
+      } catch (_) {
+        /* Storage can be unavailable. */
+      }
+      discoverySelect.addEventListener("change", function () {
+        try {
+          sessionStorage.setItem(discoveryKey, discoverySelect.value);
+        } catch (_) {
+          /* The current form still submits the selected mode. */
+        }
+      });
+    }
     // This is UI state only. The server reauthorizes every selection and write.
     // sessionStorage survives a full-page upstream OAuth round trip in this tab.
     try {
       var savedAgent = sessionStorage.getItem(savedAgentKey);
       Array.prototype.forEach.call(agentInputs, function (input) {
-        if (savedAgent !== null && input.value === savedAgent)
+        if (savedAgent !== null && input.value === savedAgent) {
           input.checked = true;
+          if (agentMode) agentMode.checked = true;
+        }
       });
     } catch (_) {
       /* Storage may be disabled; normal selection still works. */
@@ -147,12 +308,12 @@
             " Connection state is unknown. Retry to reload the current state.";
           access.appendChild(message);
           if (error.status === 401 || error.status === 403) {
-            var login = document.createElement("p");
-            login.setAttribute("data-agent-access-login", "");
-            login.className = "text-muted-foreground text-xs";
-            login.textContent =
-              "Sign in to Gram as the authorizing user in this organization, then retry.";
-            access.appendChild(login);
+            var unavailable = document.createElement("p");
+            unavailable.setAttribute("data-agent-access-unavailable", "");
+            unavailable.className = "text-muted-foreground text-xs";
+            unavailable.textContent =
+              "This agent is not available for authorization by the signed-in user. Select another identity or restart authorization.";
+            access.appendChild(unavailable);
           }
           var retry = document.createElement("button");
           retry.type = "button";
@@ -184,6 +345,19 @@
           // after commit. A fresh read reconciles state when the user retries.
           showError(error);
         }
+      }
+      function connectionUsable(session) {
+        if (!session) return false;
+        if (
+          session.HasRefreshToken &&
+          (!session.RefreshExpiresAt ||
+            new Date(session.RefreshExpiresAt).getTime() > Date.now())
+        )
+          return true;
+        return (
+          !session.AccessExpiresAt ||
+          new Date(session.AccessExpiresAt).getTime() > Date.now()
+        );
       }
       function accountLabel(session) {
         return (
@@ -219,10 +393,7 @@
               return (
                 binding.RemoteSessionClientID ===
                   provider.getAttribute("data-remote-client") &&
-                binding.RemoteSession &&
-                (data.candidates || []).some(function (session) {
-                  return session.ID === binding.RemoteSessionID;
-                })
+                connectionUsable(binding.RemoteSession)
               );
             });
           });
@@ -239,11 +410,7 @@
             var attached = document.createElement("span");
             attached.className = "text-muted-foreground text-xs";
             var account = binding.RemoteSession;
-            var eligible =
-              account &&
-              (data.candidates || []).some(function (candidate) {
-                return candidate.ID === binding.RemoteSessionID;
-              });
+            var eligible = connectionUsable(account);
             var connectedAs = provider.getAttribute("data-connected-as");
             var sameAccount =
               account &&
@@ -256,6 +423,13 @@
                 (sameAccount ? "" : " · " + accountLabel(account))
               : "Agent access unavailable. Detach it before choosing an account. Your service connection has not been changed.";
             row.appendChild(attached);
+            if (!data.canManageConnections) {
+              var readonly = document.createElement("span");
+              readonly.textContent =
+                "Only agent editors can change this assignment.";
+              row.appendChild(readonly);
+              return;
+            }
             var detach = document.createElement("button");
             detach.type = "button";
             detach.className =
@@ -266,6 +440,10 @@
             });
             row.appendChild(detach);
           } else {
+            if (!data.canManageConnections) {
+              row.textContent = "Ask an agent editor to assign a connection.";
+              return;
+            }
             var candidates = (data.candidates || []).filter(function (item) {
               return item.RemoteSessionClientID === clientId;
             });
@@ -327,18 +505,22 @@
     }
     if (agentInputs.length > 0) {
       var syncAgentSelection = function () {
-        var selected = null;
+        var authorizingAgent = Boolean(agentMode && agentMode.checked);
+        var selected = authorizingAgent ? null : selfMode;
         Array.prototype.forEach.call(agentInputs, function (input) {
-          if (input.checked) {
-            selected = input;
-          }
+          input.disabled = !authorizingAgent;
+          input.required = authorizingAgent;
+          if (!authorizingAgent) input.checked = false;
+          if (input.checked) selected = input;
         });
-        var authorizingAgent = Boolean(selected && selected.value !== "");
+        if (selfAgentInput) selfAgentInput.disabled = authorizingAgent;
+        if (agentPicker) agentPicker.hidden = !authorizingAgent;
+        if (agentSetup) agentSetup.hidden = !authorizingAgent;
         var selectedDisplay = selected
           ? selected.getAttribute("data-subject-display") || ""
           : "";
         if (agentPolicy) {
-          agentPolicy.hidden = !authorizingAgent;
+          agentPolicy.hidden = !authorizingAgent || !selected;
         }
         if (agentPolicyName) {
           agentPolicyName.textContent = authorizingAgent ? selectedDisplay : "";
@@ -346,8 +528,14 @@
         Array.prototype.forEach.call(selfOnlySections, function (section) {
           section.hidden = authorizingAgent;
         });
-        if (subjectDisplay && selected) {
-          subjectDisplay.textContent = selectedDisplay;
+        var discoveryMode = document.querySelector(
+          'select[name="discovery_mode"]',
+        );
+        if (discoveryMode) {
+          discoveryMode.disabled = authorizingAgent;
+        }
+        if (subjectDisplay) {
+          subjectDisplay.textContent = selectedDisplay || "Choose an agent";
         }
         if (subjectMode) {
           subjectMode.textContent = authorizingAgent
@@ -367,7 +555,7 @@
             ? true
             : button.getAttribute("data-consent-self-ready") !== "true";
         }
-        var selectedID = authorizingAgent ? selected.value : "";
+        var selectedID = authorizingAgent && selected ? selected.value : "";
         try {
           sessionStorage.setItem(savedAgentKey, selectedID);
         } catch (_) {}
@@ -376,11 +564,41 @@
       Array.prototype.forEach.call(agentInputs, function (input) {
         input.addEventListener("change", syncAgentSelection);
       });
+      Array.prototype.forEach.call(agentModes, function (input) {
+        input.addEventListener("change", syncAgentSelection);
+      });
+      if (agentSearch) {
+        agentSearch.addEventListener("input", function () {
+          var query = agentSearch.value.trim().toLowerCase();
+          var matches = 0;
+          Array.prototype.forEach.call(agentInputs, function (input) {
+            var matchesName = (input.getAttribute("data-subject-display") || "")
+              .toLowerCase()
+              .includes(query);
+            input.closest("[data-agent-option]").hidden = !matchesName;
+            if (matchesName) matches++;
+          });
+          if (agentEmpty) agentEmpty.hidden = matches !== 0;
+        });
+      }
       syncAgentSelection();
+      // Agent mode requires these handlers; leave it unavailable if the script
+      // cannot load or initialize rather than silently approving as Myself.
+      if (agentMode) agentMode.disabled = false;
     }
 
     form.addEventListener("submit", function (event) {
-      if (submitted) {
+      // Guard implicit/programmatic submissions too: an empty Agent choice
+      // must never fall through to self authorization.
+      if (
+        submitted ||
+        (button && button.disabled) ||
+        (agentMode &&
+          agentMode.checked &&
+          !Array.prototype.some.call(agentInputs, function (input) {
+            return input.checked && !input.disabled;
+          }))
+      ) {
         event.preventDefault();
         return;
       }
@@ -421,6 +639,102 @@
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
   guardActionButtons("button[data-validate-link]", "Checking…");
 
+  // Identity-chained cards render neutral, so they read right without script.
+  // Check each exchange in the background and settle the card in place; any
+  // failure keeps the neutral copy and the separate sign-in fallback.
+  var connectedSummary = document.querySelector("[data-connected-summary]");
+  var chainActionURL = (function () {
+    var services = document.querySelector("[data-service-connections]");
+    return services ? services.getAttribute("data-action-url") : "";
+  })();
+
+  function settleChainCheck(status, card, result) {
+    var state = result ? result.status : "";
+    if (state !== "connected" && state !== "rejected") {
+      state = "unknown";
+    }
+    status.setAttribute("data-chain-check", state);
+    if (state === "connected") {
+      status.className = "text-xs text-default-success";
+      status.textContent = "Service connected through your identity provider";
+      if (connectedSummary) {
+        var count =
+          Number(connectedSummary.getAttribute("data-connected-count")) + 1;
+        connectedSummary.setAttribute("data-connected-count", String(count));
+        connectedSummary.textContent =
+          count +
+          " of " +
+          connectedSummary.getAttribute("data-connected-total") +
+          " connected";
+      }
+      return;
+    }
+    if (state === "rejected") {
+      status.className = "text-xs text-default-warning";
+      status.textContent =
+        result.message ||
+        "Your identity provider sign-in wasn't accepted. Use a separate sign-in.";
+      var fallback = card.querySelector("button[data-connect-fallback]");
+      if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
+        fallback.className =
+          "bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm";
+        fallback.removeAttribute("data-connect-fallback");
+        fallback.textContent = "Connect";
+      }
+      signalChainRejected();
+      return;
+    }
+    status.className = "text-xs text-muted-foreground";
+    status.textContent = "Managed by your identity provider";
+  }
+
+  // Tells the tool access island that a chained service was refused. The
+  // island defers its inventory only when every service is chain-only, and
+  // on such a page each chained card serves the upstream the inventory
+  // needs, so one refusal means the tools can't load after approval either.
+  // Signing in separately reloads the page with that service connected,
+  // which the server no longer renders as deferred.
+  function signalChainRejected() {
+    document.documentElement.setAttribute(
+      "data-consent-chain-rejected",
+      "true",
+    );
+    document.dispatchEvent(new CustomEvent("gram:consent-chain-rejected"));
+  }
+
+  var chainChecks = document.querySelectorAll('[data-chain-check="pending"]');
+  Array.prototype.forEach.call(chainChecks, function (status) {
+    var card = status.closest("[data-remote-client]");
+    var state = card && card.querySelector('input[name="state"]');
+    var csrf = card && card.querySelector('input[name="csrf_token"]');
+    if (!chainActionURL || !state || !csrf) {
+      return;
+    }
+    showPending(status, "Connecting through your identity provider…");
+    fetch(chainActionURL, {
+      method: "POST",
+      credentials: "same-origin",
+      body: new URLSearchParams({
+        state: state.value,
+        csrf_token: csrf.value,
+        action: "identity_chaining_check",
+        client_id: card.getAttribute("data-remote-client"),
+      }),
+      headers: { Accept: "application/json" },
+    })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(
+        function (result) {
+          settleChainCheck(status, card, result);
+        },
+        function () {
+          settleChainCheck(status, card, null);
+        },
+      );
+  });
+
   // Session length is stated on the summary line so it is visible without
   // opening the configuration disclosure; keep the two in step when the
   // control inside the disclosure changes.
@@ -459,6 +773,21 @@
       ) {
         refreshForm.submit();
       }
+    });
+  }
+
+  // A gateway server's credential decides which of its tools can be
+  // approved, so changing it reloads the page with every server's pick.
+  // Unsaved session length, agent selection, and tool toggles reset on this
+  // reload: approval must be reviewed against the newly selected credentials,
+  // rather than carrying a stale authorization selection into the new page.
+  var gatewayAuthForm = document.querySelector("#gateway-auth-form");
+  if (gatewayAuthForm) {
+    var authSelects = document.querySelectorAll("select[data-auto-submit]");
+    Array.prototype.forEach.call(authSelects, function (select) {
+      select.addEventListener("change", function () {
+        gatewayAuthForm.submit();
+      });
     });
   }
 })();

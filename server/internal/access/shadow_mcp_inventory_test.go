@@ -139,8 +139,6 @@ func TestService_ListShadowMCPInventory_ComposesInventoryUsageAndPolicyState(t *
 		RequestedAt:    now.Add(-4 * time.Minute),
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
 		ProjectID: projectID,
 		Limit:     10,
@@ -194,7 +192,6 @@ func TestService_ListShadowMCPInventory_DelegatesToReadSeam(t *testing.T) {
 	authCtx := testAccessAuthContext(t, ctx)
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Parity MCP")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	handlerResult, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
 		ProjectID: authCtx.ProjectID.String(),
@@ -239,8 +236,6 @@ func TestService_ListShadowMCPInventory_CursorPagination(t *testing.T) {
 		}))
 	}
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	firstPage, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
 		ProjectID: projectID,
 		Limit:     2,
@@ -280,8 +275,6 @@ func TestService_ListShadowMCPInventory_ServerNameIsOptional(t *testing.T) {
 			UpdatedAt:          now,
 		},
 	}))
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
 		ProjectID: projectID,
@@ -329,8 +322,6 @@ func TestService_GetShadowMCPInventoryServer_ComposesOneURL(t *testing.T) {
 	})
 	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://detail.example.com/mcp")
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	server, err := ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
 		ProjectID:  projectID,
 		ServerSlug: "detail-example-com-mcp-30d7c46c",
@@ -363,7 +354,6 @@ func TestService_ReadShadowMCPInventoryTarget_ObservedURL(t *testing.T) {
 		UserEmail:  "reader@example.com",
 		ObservedAt: time.Now().UTC(),
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -445,7 +435,6 @@ func TestService_UpdateShadowMCPInventoryServerName_TrimsAndSavesOverride(t *tes
 		Name:      "  Engineering GitHub  ",
 	})
 	require.NoError(t, err)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	server, err := ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
 		ProjectID:  projectID,
@@ -483,7 +472,6 @@ func TestService_UpdateShadowMCPInventoryServerName_PreservesOverrideAfterLaterO
 		LastSeen:           now,
 		UpdatedAt:          now,
 	}}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	row, err := telemetryRepo.New(ti.chConn).GetShadowMCPInventoryURL(ctx, telemetryRepo.GetShadowMCPInventoryURLParams{
 		GramProjectID:      projectID,
 		CanonicalServerURL: "https://github.example.com/mcp",
@@ -528,14 +516,12 @@ func TestService_UpdateShadowMCPInventoryServerName_ClearsOverrideAndFallsBackTo
 		LastSeen:           now,
 		UpdatedAt:          now,
 	}}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	err = ti.service.UpdateShadowMCPInventoryServerName(ctx, &gen.UpdateShadowMCPInventoryServerNamePayload{
 		ProjectID: projectID,
 		ServerURL: "https://github.example.com/mcp",
 		Name:      "   ",
 	})
 	require.NoError(t, err)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	server, err := ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
 		ProjectID:  projectID,
@@ -641,7 +627,6 @@ func TestService_GetShadowMCPInventoryServer_RejectsMismatchedReadableSlug(t *te
 			SeenAt:             seenAt,
 		},
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	_, err := ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
 		ProjectID:  projectID,
@@ -752,8 +737,6 @@ func TestService_ListShadowMCPInventoryUsers_ReturnsPaginatedUsersForCanonicalUR
 		HookSource: "cursor",
 		ObservedAt: now.Add(-15 * time.Minute),
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	firstPage, err := ti.service.ListShadowMCPInventoryUsers(ctx, &gen.ListShadowMCPInventoryUsersPayload{
 		ProjectID: projectID,
@@ -914,26 +897,19 @@ func TestService_ResolveShadowMCPInventoryRequest_WaitsForShadowAdmissionLock(t 
 
 	lockTx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, shadowadmission.LockProject(ctx, lockTx, *authCtx.ProjectID))
-	type resolution struct {
-		result *gen.ShadowMCPInventoryURLState
-		err    error
+	// probeTimeout bounds acquisition of the held admission lock.
+	const probeTimeout = 100 * time.Millisecond
+	ti.service.db = testenv.NewLockTimeoutPool(t, ti.conn, probeTimeout)
+	payload := &gen.ResolveShadowMCPInventoryRequestPayload{
+		ProjectID: projectID, ServerURL: "https://mcp.example.com/locked",
+		Decision: "allow", PolicyIds: []string{policy.ID.String()},
 	}
-	completed := make(chan resolution, 1)
-	go func() {
-		result, resolveErr := ti.service.ResolveShadowMCPInventoryRequest(ctx, &gen.ResolveShadowMCPInventoryRequestPayload{
-			ProjectID: projectID,
-			ServerURL: "https://mcp.example.com/locked",
-			Decision:  "allow",
-			PolicyIds: []string{policy.ID.String()},
-		})
-		completed <- resolution{result: result, err: resolveErr}
-	}()
-	require.Never(t, func() bool { return len(completed) > 0 }, 100*time.Millisecond, 10*time.Millisecond)
+	_, err := ti.service.ResolveShadowMCPInventoryRequest(ctx, payload)
+	testenv.RequireLockNotAvailable(t, err)
 	require.NoError(t, lockTx.Rollback(ctx))
-	require.Eventually(t, func() bool { return len(completed) > 0 }, 10*time.Second, 10*time.Millisecond)
-	got := <-completed
-	require.NoError(t, got.err)
-	require.Equal(t, shadowMCPInventoryAccessAllowed, got.result.Access)
+	resolved, err := ti.service.ResolveShadowMCPInventoryRequest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, resolved.Access)
 }
 
 func TestService_ResolveShadowMCPInventoryRequest_DeniesURLAndResolvesPendingRequests(t *testing.T) {
@@ -1227,7 +1203,6 @@ func seedShadowMCPInventoryServer(t *testing.T, ctx context.Context, ti *testIns
 		LastSeen:           now,
 		UpdatedAt:          now,
 	}}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 }
 
 func shadowMCPInventoryServerByURL(servers []*gen.ShadowMCPInventoryServer, canonicalURL string) *gen.ShadowMCPInventoryServer {
@@ -1280,8 +1255,6 @@ func TestService_ListShadowMCPInventory_AllowAllDispositionUsesBlockedList(t *te
 		Disposition:    "allow_all",
 		BlockedURLs:    []string{"https://sketchy.example.com/mcp"},
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
 		ProjectID: projectID,
@@ -1337,8 +1310,6 @@ func TestService_ListShadowMCPInventory_TargetedBlockAllPolicyIsRestricted(t *te
 		Disposition:    "block_all",
 		AudienceType:   "targeted",
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
 		ProjectID: projectID,
@@ -1399,8 +1370,6 @@ func TestService_ListShadowMCPInventory_ScopedApprovalIsRestricted(t *testing.T)
 	// grant on the second URL is the everyone-approval and stays allowed.
 	grantShadowMCPInventoryBypassForPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://scoped-allow.example.com/mcp", urn.NewPrincipal(urn.PrincipalTypeUser, "user_scoped_approval"))
 	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://everyone-allow.example.com/mcp")
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
 		ProjectID: projectID,
@@ -1468,8 +1437,6 @@ func TestService_ListShadowMCPInventory_TargetedPolicyFullAudienceGrantIsAllowed
 	engineering := urn.NewPrincipal(urn.PrincipalTypeRole, "engineering")
 	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), engineering)
 	grantShadowMCPInventoryBypassForPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://audience-covered.example.com/mcp", engineering)
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
 		ProjectID: projectID,
@@ -1661,8 +1628,6 @@ func TestService_ShadowMCPInventory_JoinsApprovalRequestState(t *testing.T) {
 
 	request := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://tracked.example.com/mcp", "requested", 2)
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
 		ProjectID: projectID,
 		Limit:     10,
@@ -1787,8 +1752,6 @@ func TestService_ListShadowMCPInventory_UnionsRequestOnlyTargets(t *testing.T) {
 	urlOnly := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://asked-only.example.com/mcp", "denied", 1)
 	// Stdio commands are known only through their reviews.
 	stdio := seedShadowMCPStdioApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "npx -y example-package", "requested")
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
 		ProjectID: projectID,

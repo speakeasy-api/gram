@@ -10,6 +10,9 @@ import (
 type Feature string
 
 const (
+	// FeatureProviderSetup is the temporary staff-managed rollout for provider setup.
+	// It defaults off and is never included in signup, trial, or demo bundles.
+	FeatureProviderSetup  Feature = "provider_setup"
 	FeatureLogs           Feature = "logs"
 	FeatureToolIOLogs     Feature = "tool_io_logs"
 	FeatureSessionCapture Feature = "session_capture"
@@ -33,7 +36,7 @@ const (
 	FeaturePlatformMCP Feature = "platform_mcp"
 
 	// FeatureCustomerManagedEncryptionKeys gates the organization's ability to bring its
-	// own cloud KMS keys: the external credentials Gram uses to reach them and,
+	// own cloud KMS keys: the external credentials Speakeasy uses to reach them and,
 	// later, the keys themselves. Distinct from FeatureCustomModelKeys, which
 	// covers model provider API keys.
 	FeatureCustomerManagedEncryptionKeys Feature = "customer_managed_encryption_keys"
@@ -46,21 +49,35 @@ const (
 	// FeatureRemoteSessionAutoRefresh, which only governs whether the opt-in
 	// control is visible and leaves the choice to each user.
 	FeatureRemoteSessionAutoRefreshEnforced Feature = "remote_session_auto_refresh_enforced"
-	// FeatureConsentToolFiltering lets organization admins turn on the
-	// consent-screen tool picker for their organization. Enforcement of stored
-	// selections is always on; this only governs whether new approvals can
-	// author one.
-	FeatureConsentToolFiltering Feature = "consent_tool_filtering"
 	// FeatureNetworkIngress is the durable staff-managed entitlement for private
 	// network ingress. It is never included in default bundles or demo seed data.
 	FeatureNetworkIngress Feature = "network_ingress"
+	// FeatureSignalsIntelligence gates signals intelligence configuration access.
+	FeatureSignalsIntelligence Feature = "signals_intelligence"
+	// FeatureOrganizationGatewayDisabled turns the organization gateway off:
+	// while set, every gateway route answers 404. Unconfigured organizations
+	// also default off; a soft-deleted flag records explicit opt-in.
+	FeatureOrganizationGatewayDisabled Feature = "organization_gateway_disabled"
+	// FeatureCodeMode is the staff-managed entitlement for gateway Code Mode.
+	// Code Mode runs customer Python on Speakeasy-operated runners, so it is
+	// enabled per organization rather than for every organization on a
+	// deployment with the runtime configured. Without it, Code Mode gateways
+	// serve Progressive discovery.
+	FeatureCodeMode Feature = "code_mode"
+	// FeatureUpstreamAuthEnforced serves the organization's direct proxied
+	// servers through the typed auth client resolver and requires mcp:auth on
+	// the chosen auth client. Staff turn it on through the admin enforcement
+	// endpoint once the organization's readiness checks pass, so it is left out
+	// of the productFeatures.set enum and cannot be toggled there.
+	FeatureUpstreamAuthEnforced Feature = "upstream_auth_enforced"
 )
 
 // RequiresPlatformAdmin reports whether toggling f through productFeatures.set
 // requires a platform admin in addition to org:admin on the target
 // organization. The org-settable cases are the toggles organization admins
 // manage themselves through the dashboard's organization settings (Logs,
-// Skills content upload, consent tool filtering, Platform MCP access); every
+// Skills content upload, Platform MCP access, the
+// organization gateway); every
 // other settable feature is a staff-managed entitlement, and features missing
 // a case fail closed so a new feature cannot silently become self-serve.
 func (f Feature) RequiresPlatformAdmin() bool {
@@ -71,8 +88,8 @@ func (f Feature) RequiresPlatformAdmin() bool {
 		FeatureHooksBrowserLogin,
 		FeatureHooksFailOpen,
 		FeatureSkillCaptureMetadataOnly,
-		FeatureConsentToolFiltering,
-		FeaturePlatformMCP:
+		FeaturePlatformMCP,
+		FeatureOrganizationGatewayDisabled:
 		return false
 	default:
 		return true
@@ -92,6 +109,9 @@ func (f FeatureCache) CacheKey() string {
 }
 
 func FeatureCacheKey(organizationID string, feature Feature) string {
+	if feature == FeatureOrganizationGatewayDisabled {
+		return fmt.Sprintf("feature:v2:%s:%s", organizationID, string(feature))
+	}
 	return fmt.Sprintf("feature:%s:%s", organizationID, string(feature))
 }
 

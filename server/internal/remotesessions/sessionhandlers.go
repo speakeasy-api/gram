@@ -35,7 +35,7 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 			return nil, oops.E(oops.CodeBadRequest, nil, "principal_id and user_session_issuer_id must be supplied together")
 		}
 		var err error
-		op, err = s.beginBindingOperation(ctx, *payload.PrincipalID, *payload.UserSessionIssuerID)
+		op, err = s.beginBindingOperation(ctx, *payload.PrincipalID, *payload.UserSessionIssuerID, false)
 		if err != nil {
 			return nil, err
 		}
@@ -102,6 +102,35 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 		Items:      items,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+func (s *Service) CountRemoteSessions(ctx context.Context, payload *gen.CountRemoteSessionsPayload) (*gen.CountRemoteSessionsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	clientID, err := uuid.Parse(payload.RemoteSessionClientID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client_id").LogError(ctx, logger)
+	}
+
+	subjects, err := repo.New(s.db).CountRemoteSessionSubjectsByClientID(ctx, repo.CountRemoteSessionSubjectsByClientIDParams{
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		RemoteSessionClientID: clientID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count remote sessions").LogError(ctx, logger)
+	}
+
+	return &gen.CountRemoteSessionsResult{Subjects: subjects}, nil
 }
 
 func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRemoteSessionPayload) error {

@@ -1,10 +1,15 @@
 import { useProject } from "@/contexts/Auth";
 import { analyticsDimensionValues } from "@gram/client/funcs/analyticsDimensionValues.js";
 import type { AnalyticsDimensionValuesResult } from "@gram/client/models/components/analyticsdimensionvaluesresult.js";
+import type { AnalyticsSignalScope } from "@gram/client/models/components/analyticssignalscope.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp.js";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { windowRange, type WindowPreset } from "./exploreModel";
+import {
+  useQuery,
+  type UseQueryOptions,
+  type UseQueryResult,
+} from "@tanstack/react-query";
+import { specRange, type ExploreSpec } from "./exploreModel";
 
 const DIMENSION_VALUES_KEY = "explore-dimension-values";
 
@@ -12,11 +17,11 @@ const DIMENSION_VALUES_KEY = "explore-dimension-values";
 export const DIMENSION_VALUES_LIMIT = 200;
 
 /**
- * The values a dimension holds inside the builder's window, most frequent
- * first, for a filter's picker. Fetched only while the picker is open, and
- * keyed by project, dataset, dimension and window, so a picker reopened on
- * the same question is served from cache and a different dimension never
- * sees another's values.
+ * The values a dimension holds inside what the builder asks over — its
+ * window, or the range replacing it — most frequent first, for a filter's
+ * picker. Fetched only while the picker is open, and keyed by project,
+ * dataset, dimension and span, so a picker reopened on the same question is
+ * served from cache and a different dimension never sees another's values.
  *
  * The generated hook keys its cache on the session alone and ignores the
  * body, which is why this drives useQuery directly, as the query runner does.
@@ -24,22 +29,53 @@ export const DIMENSION_VALUES_LIMIT = 200;
 export function useDimensionValues(
   dataset: string,
   dimension: string,
-  window: WindowPreset,
+  span: Pick<ExploreSpec, "window" | "range">,
   enabled: boolean,
 ): UseQueryResult<AnalyticsDimensionValuesResult, Error> {
   const client = useGramContext();
   const project = useProject();
-  const { from, to } = windowRange(window);
-  return useQuery({
+  const { from, to } = specRange(span);
+  return useQuery(
+    dimensionValuesQuery(
+      client,
+      project.id,
+      dataset,
+      dimension,
+      from,
+      to,
+      enabled,
+    ),
+  );
+}
+
+/**
+ * The query behind useDimensionValues, for callers that ask about several
+ * dimensions at once or over an absolute range.
+ */
+export function dimensionValuesQuery(
+  client: ReturnType<typeof useGramContext>,
+  projectId: string,
+  dataset: string,
+  dimension: string,
+  from: Date,
+  to: Date,
+  enabled: boolean,
+  signalScope?: AnalyticsSignalScope,
+): UseQueryOptions<AnalyticsDimensionValuesResult, Error> {
+  return {
     queryKey: [
       DIMENSION_VALUES_KEY,
-      project.id,
+      projectId,
       dataset,
       dimension,
       from.toISOString(),
       to.toISOString(),
+      ...(signalScope ? [signalScope] : []),
     ],
     enabled: enabled && dataset !== "" && dimension !== "",
+    // A failed list leaves its picker empty; thrown, one filter's values
+    // would take the whole dashboard down with it.
+    throwOnError: false,
     retry: false,
     staleTime: 60_000,
     queryFn: ({ signal }) =>
@@ -53,11 +89,12 @@ export function useDimensionValues(
               from,
               to,
               limit: DIMENSION_VALUES_LIMIT,
+              signalScope,
             },
           },
           undefined,
           { fetchOptions: { signal } },
         ),
       ),
-  });
+  };
 }

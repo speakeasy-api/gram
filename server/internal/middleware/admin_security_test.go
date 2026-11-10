@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -134,6 +135,65 @@ func TestAdminOriginCheck_FallsBackToReferer(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	require.True(t, called)
+}
+
+func TestAdminOriginCheck_NativeMCPWithoutOriginOnly(t *testing.T) {
+	t.Parallel()
+	handler := AdminOriginCheck(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	for _, path := range []string{"/admin-mcp", "/admin-mcp/token", "/admin-mcp/register"} {
+		req := httptest.NewRequest(http.MethodPost, "https://staff.example.test"+path, nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusNoContent, rec.Code, path)
+	}
+	for _, path := range []string{"/admin-mcp/connect", "/admin-mcp/authorize", "/admin-mcp/unknown", "/admin/organization.create"} {
+		req := httptest.NewRequest(http.MethodPost, "https://staff.example.test"+path, nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusForbidden, rec.Code, path)
+	}
+	req := httptest.NewRequest(http.MethodPost, "https://staff.example.test/admin-mcp/token", nil)
+	req.Header.Set("Origin", "https://other.example.test")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	for _, path := range []string{"/admin-mcp/token", "/admin-mcp/register"} {
+		req := httptest.NewRequest(http.MethodPost, "https://staff.example.test"+path, nil)
+		req.Header.Set("Origin", "null")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusForbidden, rec.Code, path)
+	}
+	req.Header.Del("Origin")
+	req.Header.Set("Referer", "https://other.example.test/authorization")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestAdminOriginCheck_ImageUploadWithoutOriginOnly(t *testing.T) {
+	t.Parallel()
+	handler := AdminOriginCheck(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodPut, "https://staff.example.test/admin/assets.uploadImage", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusNoContent, rec.Code, "a shell upload sends neither Origin nor Referer")
+
+	for _, method := range []string{http.MethodPost, http.MethodDelete} {
+		req := httptest.NewRequest(method, "https://staff.example.test/admin/assets.uploadImage", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusForbidden, rec.Code, method)
+	}
+	req = httptest.NewRequest(http.MethodPut, "https://staff.example.test/admin/assets.uploadImage", nil)
+	req.Header.Set("Origin", "https://other.example.test")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusForbidden, rec.Code, "a browser request from another site is still refused")
 }
 
 func TestAdminOriginCheck_RejectsMissingOriginAndReferer(t *testing.T) {
@@ -362,4 +422,22 @@ func TestRewriteAdminCookie_AddsSecureWhenMissing(t *testing.T) {
 	require.Contains(t, out, "Secure")
 	require.Contains(t, out, "SameSite=None")
 	require.Contains(t, out, "Domain=.speakeasy.com")
+}
+
+func TestAdminOriginCheckBrowserErrorPages(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"/admin-mcp/connect"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			handler := AdminOriginCheck(nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				t.Fatal("rejected origin must not reach the handler")
+			}))
+			request := httptest.NewRequest(http.MethodPost, "https://staff.example"+path, nil)
+			request.Header.Set("Origin", "https://foreign.example")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusForbidden)
+			require.Equal(t, "forbidden: origin not allowed", body.Description)
+		})
+	}
 }

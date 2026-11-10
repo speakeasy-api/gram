@@ -2,6 +2,7 @@ package remotesessions
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -282,4 +283,36 @@ func TestRegisterDynamicClientAcceptsDuplicateClientIDs(t *testing.T) {
 	require.Equal(t, "same-client-id", first.ClientID)
 	require.Equal(t, first.ClientID, second.ClientID)
 	require.Empty(t, recorder.failures, "a provider reissuing one client_id is not a registration failure")
+}
+
+func TestRegisterDynamicClientCanonicalRedirectURI(t *testing.T) {
+	t.Parallel()
+
+	const callback = "https://gram.example.com/mcp/remote_login_callback"
+	registration := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request DCRRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		// Model an upstream that allowlists only the canonical callback.
+		if len(request.RedirectURIs) != 1 || request.RedirectURIs[0] != callback {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid_redirect_uri"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"client_id":"canonical-client"}`))
+	}))
+	t.Cleanup(registration.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	serverURL, err := url.Parse("https://gram.example.com")
+	require.NoError(t, err)
+
+	registered, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL}, nil)
+	require.NoError(t, err)
+	require.Equal(t, "canonical-client", registered.ClientID)
 }

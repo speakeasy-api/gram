@@ -1,15 +1,53 @@
 package mcp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 )
+
+func TestIssuerGateCheckUnavailable(t *testing.T) {
+	t.Parallel()
+
+	cause := &pgconn.PgError{Code: "57P01"}
+	broken := &pgconn.PgError{Code: "42P01"}
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "revocation store down", err: fmt.Errorf("%w: %w", sessiontokens.ErrRevocationUnavailable, errors.New("dial")), want: true},
+		{name: "organization lookup", err: fmt.Errorf("%w: %w", errIssuerGateOrgLookup, cause), want: true},
+		{name: "issuer lookup", err: fmt.Errorf("%w: %w", errIssuerGateIssuerLookup, cause), want: true},
+		{name: "caller profile", err: fmt.Errorf("%w: %w", errIssuerGateCallerProfile, cause), want: true},
+		{name: "policy store down", err: fmt.Errorf("%w: %w", errToolSelectionLoad, cause), want: true},
+		{name: "agent session load", err: fmt.Errorf("%w: %w", errAgentSessionCredentialLoad, cause), want: true},
+		{name: "workload session load", err: fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, cause), want: true},
+		{name: "workload admission load", err: fmt.Errorf("%w: %w", errWorkloadSessionAdmissionLoad, cause), want: true},
+		{name: "broken query", err: fmt.Errorf("%w: %w", errToolSelectionLoad, broken), want: false},
+		{name: "malformed stored policy", err: fmt.Errorf("%w: %w", errToolSelectionLoad, errors.New("bad document")), want: false},
+		{name: "selection for another endpoint", err: errToolSelectionResourceMismatch, want: false},
+		{name: "missing profile row", err: fmt.Errorf("%w: %w", errIssuerGateCallerProfile, pgx.ErrNoRows), want: false},
+		{name: "profile for another subject", err: fmt.Errorf("%w: %w", errCredentialRejected, errIssuerGateCallerProfile), want: false},
+		{name: "revoked token", err: fmt.Errorf("%w: %w", errCredentialRejected, sessiontokens.ErrTokenRevoked), want: false},
+		{name: "bad token", err: errors.New("validate token: bad signature"), want: false},
+		{name: "no credentials", err: nil, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, issuerGateCheckUnavailable(t.Context(), tc.err))
+		})
+	}
+}
 
 func TestIssuerGateFailureReason_ToolSelectionLoad(t *testing.T) {
 	t.Parallel()
@@ -38,18 +76,8 @@ func TestIssuerGateFailureReason_RevocationUnavailable(t *testing.T) {
 	require.NotErrorIs(t, err, errCredentialRejected)
 }
 
-// The rollout gate hides the endpoint from a workload whose token is fine, so a
-// fresh grant would meet the same gate.
-func TestIssuerGateFailureReason_WorkloadRolloutDisabled(t *testing.T) {
-	t.Parallel()
-
-	err := fmt.Errorf("%w: %w", errWorkloadRolloutDisabled, oops.C(oops.CodeNotFound))
-	require.Equal(t, "workload_rollout_disabled", issuerGateFailureReason(err))
-	require.NotErrorIs(t, err, errCredentialRejected)
-}
-
-// The admission-load failure keeps its own label and, like the two above, stays
-// off the invalid_token path.
+// The admission-load failure keeps its own label and, like the revocation
+// outage above, stays off the invalid_token path.
 func TestIssuerGateFailureReason_WorkloadAdmissionLoadIsNotACredentialRejection(t *testing.T) {
 	t.Parallel()
 
@@ -67,16 +95,6 @@ func TestIssuerGateFailureReason_WithdrawnAdmissionIsACredentialRejection(t *tes
 	require.Equal(t, issuerGateReasonInvalidBearerToken, issuerGateFailureReason(err))
 }
 
-// A rollout state that could not be read is not a rollout decision, and neither
-// outcome is the credential's fault.
-func TestIssuerGateFailureReason_WorkloadRolloutUnavailable(t *testing.T) {
-	t.Parallel()
-
-	err := fmt.Errorf("%w: %w", errWorkloadRolloutUnavailable, oops.C(oops.CodeNotFound))
-	require.Equal(t, "workload_rollout_unavailable", issuerGateFailureReason(err))
-	require.NotErrorIs(t, err, errCredentialRejected)
-}
-
 // An engine that answers CodeUnexpected has judged nothing, so the workload
 // keeps its token even though the error is shareable.
 func TestIsCredentialDenial_OnlyDurableDenialCodes(t *testing.T) {
@@ -88,4 +106,35 @@ func TestIsCredentialDenial_OnlyDurableDenialCodes(t *testing.T) {
 	require.False(t, isCredentialDenial(fmt.Errorf("wrapped: %w", oops.C(oops.CodeUnexpected))))
 	require.False(t, isCredentialDenial(errors.New("plain")))
 	require.True(t, isCredentialDenial(fmt.Errorf("wrapped: %w", oops.C(oops.CodeForbidden))))
+}
+
+func TestCredentialCheckFault(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, credentialCheckFault(&pgconn.PgError{Code: "42P01"}))
+	require.True(t, credentialCheckFault(fmt.Errorf("wrapped: %w", oops.E(oops.CodeUnexpected, nil, "engine fault"))))
+	require.True(t, credentialCheckFault(fmt.Errorf("%w: %w", errWorkloadSessionAdmissionLoad, errors.New("plain"))))
+	require.Equal(t, "credential_check_failed", issuerGateFailureReason(&pgconn.PgError{Code: "42P01"}))
+
+	require.False(t, credentialCheckFault(nil))
+	require.False(t, credentialCheckFault(oops.C(oops.CodeForbidden)))
+	require.False(t, credentialCheckFault(pgx.ErrNoRows))
+	require.False(t, credentialCheckFault(fmt.Errorf("%w: %w", errCredentialRejected, oops.C(oops.CodeUnauthorized))))
+
+	require.NotErrorIs(t, markCredentialDenial(&pgconn.PgError{Code: "57P01"}), errCredentialRejected)
+	require.ErrorIs(t, markCredentialDenial(oops.C(oops.CodeForbidden)), errCredentialRejected)
+}
+
+func TestCallerDeadlineIsNotAnOutage(t *testing.T) {
+	t.Parallel()
+
+	expired, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	deadline := fmt.Errorf("load: %w", context.DeadlineExceeded)
+
+	require.True(t, verifyHitStoreOutage(t.Context(), deadline))
+	require.False(t, verifyHitStoreOutage(expired, deadline))
+	require.True(t, issuerGateCheckUnavailable(t.Context(), deadline))
+	require.False(t, issuerGateCheckUnavailable(expired, deadline))
+	require.True(t, issuerGateCheckUnavailable(expired, fmt.Errorf("%w: %w", sessiontokens.ErrRevocationUnavailable, deadline)), "the revocation store still judged nothing")
 }

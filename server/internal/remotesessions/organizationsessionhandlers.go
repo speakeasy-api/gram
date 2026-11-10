@@ -3,7 +3,10 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/sessionlist"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -15,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -24,25 +28,66 @@ import (
 )
 
 // clientUpstreamResource derives the RFC 8707 resource for a client's
-// sessions from its attached MCP servers. Exactly one distinct upstream URL
-// binds the audience; zero or multiple return "" so the parameter is omitted
-// (matching pre-resource behavior — an ambiguous multi-upstream client can't
-// be bound to a single audience). Url is empty for every non-remote backend,
-// tunneled included: those route by their own issuer identity instead, so an
+// sessions from the resources of its MCP servers. Exactly one distinct
+// upstream binds the audience; zero or multiple return "" so the parameter is
+// omitted (matching pre-resource behavior — an ambiguous multi-upstream client
+// can't be bound to a single audience). An empty resource is skipped: a
+// server that has none routes by its own issuer identity instead, so an
 // identifier here would only risk making a mixed issuer read as ambiguous.
-func clientUpstreamResource(rows []repo.ListOrganizationMcpServersForClientRow) string {
+//
+// The result is sent upstream, so it is the registered URL as stored:
+// providers may match the indicator exactly against their RFC 9728 resource,
+// where https://host and https://host/ differ. Trailing slashes are ignored
+// only when deciding whether resources name the same upstream. Resources that
+// differ only in trailing slashes resolve to the shortest spelling, so the result
+// does not depend on row order.
+func clientUpstreamResource(resources []string) string {
 	resource := ""
-	for _, row := range rows {
-		url := strings.TrimRight(row.Url, "/")
-		if url == "" {
+	for _, candidate := range resources {
+		if strings.TrimRight(candidate, "/") == "" {
 			continue
 		}
-		if resource != "" && resource != url {
+		switch {
+		case resource == "":
+			resource = candidate
+		case !sameUpstream(resource, candidate):
 			return ""
+		case len(candidate) < len(resource):
+			resource = candidate
 		}
-		resource = url
 	}
 	return resource
+}
+
+// claimableUpstream qualifies a client's grant for the upstream the user is
+// connecting through. A client that derives a resource of its own keeps it
+// (claimable false). A client whose derivation is ambiguous may claim upstream
+// when it is attached to it — the caller must still check that no sibling
+// bound to the same endpoint serves it: an endpoint's own server sits in every
+// bound client's rows, so a looser rule would let a second client record the
+// same resource and fail routing closed as a duplicate. A claimed upstream is
+// returned verbatim, because it is sent upstream as the resource.
+func claimableUpstream(own []string, upstream string) (resource string, claimable bool) {
+	derived := clientUpstreamResource(own)
+	if strings.TrimRight(upstream, "/") == "" || derived != "" || !resourcesServeUpstream(own, upstream) {
+		return derived, false
+	}
+	return upstream, true
+}
+
+func resourcesServeUpstream(resources []string, upstream string) bool {
+	for _, resource := range resources {
+		if sameUpstream(resource, upstream) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameUpstream reports whether two upstream URLs name the same destination,
+// ignoring trailing slashes as credential routing does.
+func sameUpstream(a, b string) bool {
+	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
 }
 
 // ListClientSessions lists the sessions minted against a client in the
@@ -65,30 +110,83 @@ func (s *Service) ListClientSessions(ctx context.Context, payload *orgsessionsge
 	}
 
 	limit := pageLimit(payload.Limit)
-	cursor, err := parseCursor(payload.Cursor)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, logger)
+	sort := conv.PtrValOr(payload.Sort, "id")
+	status := conv.PtrValOr(payload.Status, "all")
+	search := strings.TrimSpace(conv.PtrValOr(payload.Search, ""))
+	switch sort {
+	case "id", "newest", "oldest", "last_used", "expiry":
+	default:
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid session ordering")
 	}
-
+	switch status {
+	case "active", "expired", "all":
+	default:
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid session status")
+	}
+	after, err := sessionlist.Date(payload.CreatedAfter)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid created_after")
+	}
+	before, err := sessionlist.Date(payload.CreatedBefore)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid created_before")
+	}
+	if after.Valid && before.Valid && !after.Time.Before(before.Time) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "created_after must precede created_before")
+	}
+	fingerprint := sessionlist.Fingerprint(authCtx.ActiveOrganizationID, payload.ClientID, search, status, sort, conv.PtrValOr(payload.CreatedAfter, ""), conv.PtrValOr(payload.CreatedBefore, ""))
+	cursorTime := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false}
+	cursorID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	cursor := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if sort == "id" {
+		cursor, err = parseCursor(payload.Cursor)
+	} else {
+		cursorTime, cursorID, err = sessionlist.Decode(payload.Cursor, fingerprint)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
+	}
 	rows, err := repo.New(s.db).ListOrganizationRemoteSessionsByClientID(ctx, repo.ListOrganizationRemoteSessionsByClientIDParams{
-		RemoteSessionClientID: clientID,
-		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
-		Cursor:                cursor,
-		LimitValue:            limit,
+		RemoteSessionClientID: clientID, OrganizationID: authCtx.ActiveOrganizationID,
+		Cursor: cursor, CursorID: cursorID, CursorTime: cursorTime, LimitValue: limit + 1,
+		Search: search, Status: status, Sort: sort, CreatedAfter: after, CreatedBefore: before,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization admin remote sessions").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization remote sessions").LogError(ctx, logger)
+	}
+	var nextCursor *string
+	if len(rows) > int(limit) {
+		rows = rows[:limit]
+		last := rows[len(rows)-1].RemoteSession
+		if sort == "id" {
+			nextCursor = new(last.ID.String())
+		} else {
+			at := last.CreatedAt.Time
+			switch sort {
+			case "last_used":
+				at = time.Time{}
+				if last.LastUsedAt.Valid {
+					at = last.LastUsedAt.Time
+				}
+			case "expiry":
+				at = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
+				grantExpiry := last.AccessExpiresAt
+				if last.RefreshTokenEncrypted.Valid {
+					grantExpiry = last.RefreshExpiresAt
+				}
+				for _, deadline := range []pgtype.Timestamptz{last.AuthorizationExpiresAt, grantExpiry} {
+					if deadline.Valid && deadline.Time.Before(at) {
+						at = deadline.Time
+					}
+				}
+			}
+			nextCursor = new(sessionlist.Encode(at, last.ID, fingerprint))
+		}
 	}
 
 	items := make([]*types.RemoteSession, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, mv.BuildRemoteSessionView(row.RemoteSession, conv.FromPGText[string](row.SubjectDisplayName), conv.FromPGText[string](row.SubjectEmail)))
-	}
-
-	var nextCursor *string
-	if len(rows) >= int(limit) {
-		c := rows[len(rows)-1].RemoteSession.ID.String()
-		nextCursor = &c
 	}
 
 	return &orgsessionsgen.ListOrganizationRemoteSessionsResult{
@@ -209,7 +307,7 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 	// are adopted instead of double-POSTing, and a definitive upstream
 	// invalid_grant clears only the dead refresh grant so a still-working
 	// access token remains connected.
-	result, err := s.refresher.RefreshNow(ctx, row.RemoteSession, "", remotesessionmetrics.RefreshTriggerManual)
+	result, err := s.refresher.RefreshNow(ctx, row.RemoteSession, "", remotesessionmetrics.RefreshTriggerManual, RefreshIn(mcpconnectionattempts.ProviderSessionScope(authCtx.ActiveOrganizationID, row.ClientProjectID.UUID, mcpconnectionattempts.AppFirstParty)))
 	if err != nil {
 		// Operator-actionable failures carry a public-safe reason; surface it so
 		// the admin sees why the refresh failed instead of a generic error.
@@ -223,13 +321,17 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 	}
 	updated := result.Session
 
-	dbtx, err := s.db.Begin(ctx)
+	// The refresh happened whether or not the admin is still waiting, so record it.
+	auditCtx, cancelAudit := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancelAudit()
+
+	dbtx, err := s.db.Begin(auditCtx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(auditCtx) })
 
-	if err := s.auditLogger.LogRemoteSessionRefresh(ctx, dbtx, audit.LogRemoteSessionRefreshEvent{
+	if err := s.auditLogger.LogRemoteSessionRefresh(auditCtx, dbtx, audit.LogRemoteSessionRefreshEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        orgProjectID(row.ClientProjectID),
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -241,7 +343,7 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 		return nil, oops.E(oops.CodeUnexpected, err, "log organization admin remote session refresh").LogError(ctx, logger)
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
+	if err := dbtx.Commit(auditCtx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 

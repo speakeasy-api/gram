@@ -192,7 +192,12 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 			waitFor = max(warmUntil.Sub(workflow.Now(ctx).UTC()), 0)
 		}
 
-		v := workflow.GetVersion(ctx, "expire-toctou-revert", workflow.DefaultVersion, 2)
+		// Versions 1 and 3 expire the runtime once the warm window lapses;
+		// ExpireAssistantThreadRuntime reports stopped straight away for
+		// backends that keep idle runtimes. Version 2 runs only for histories
+		// recorded under it: it waits out the window and exits, and the
+		// reaper's idle sweep expires what it leaves behind.
+		v := workflow.GetVersion(ctx, "expire-toctou-revert", workflow.DefaultVersion, 3)
 		if v == workflow.DefaultVersion {
 			expired := false
 			selector := workflow.NewSelector(ctx)
@@ -224,7 +229,7 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 			return nil
 		}
 
-		if v == 1 {
+		if v == 1 || v == 3 {
 			runtimeStopped := false
 			for {
 				timerFired := false

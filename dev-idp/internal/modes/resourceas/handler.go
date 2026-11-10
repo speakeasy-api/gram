@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -65,6 +66,8 @@ type Config struct {
 	// trailing slash and no prefix. Each resource's issuer identifier is
 	// derived from it and the resource slug.
 	ExternalURL string
+	// AudienceAliases maps a resource slug to extra accepted ID-JAG audiences.
+	AudienceAliases map[string][]string
 }
 
 // Handler serves every resource authorization server; which one a request
@@ -89,8 +92,8 @@ func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerPr
 		logger:     logger.With(slog.String("component", "devidp.resource-as")),
 		db:         db,
 		keystore:   ks,
-		httpClient: &http.Client{Timeout: 5 * time.Second},
-		cimd:       cimd.NewResolver(&http.Client{Timeout: 5 * time.Second}, cimdCacheTTL),
+		httpClient: &http.Client{Timeout: 5 * time.Second, CheckRedirect: refuseDowngrade},
+		cimd:       cimd.NewResolver(&http.Client{Timeout: 5 * time.Second, CheckRedirect: refuseDowngrade}, cimdCacheTTL),
 	}
 }
 
@@ -119,6 +122,18 @@ func (h *Handler) Handler() http.Handler {
 func (h *Handler) RegisterRootRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server"+Prefix+"/{slug}", h.handleASMetadata)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource"+Prefix+"/{slug}", h.handleProtectedResourceMetadata)
+}
+
+// refuseDowngrade stops a metadata or JWKS fetch from following https to http.
+func refuseDowngrade(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	prev := via[len(via)-1].URL
+	if prev.Scheme == "https" && req.URL.Scheme != "https" {
+		return fmt.Errorf("refusing redirect from %s to non-https %s", prev, req.URL)
+	}
+	return nil
 }
 
 // issuer is the absolute URL identifying one resource's authorization server.
@@ -364,7 +379,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) verifyIDJAG(ctx context.Context, resource *repo.EmaResource, assertion string) (ema.Claims, error) {
 	// Parse unverified first: the issuer decides which key verifies the
 	// signature, and the issuer is inside the token.
-	var claims ema.Claims
+	var claims idJAGClaims
 	unverified, _, err := jwt.NewParser().ParseUnverified(assertion, &claims)
 	if err != nil {
 		return ema.Claims{}, fmt.Errorf("assertion is not a JWT: %w", err)
@@ -378,8 +393,13 @@ func (h *Handler) verifyIDJAG(ctx context.Context, resource *repo.EmaResource, a
 	}
 
 	issuerURL := h.issuer(resource.Slug)
-	if !slices.Contains(claims.Audience, issuerURL) {
-		return ema.Claims{}, fmt.Errorf("assertion aud %v does not name this authorization server (%s)", claims.Audience, issuerURL)
+	if len(claims.Audience) != 1 {
+		return ema.Claims{}, fmt.Errorf("assertion aud %v must name exactly one audience", claims.Audience)
+	}
+	matched, viaAlias := h.audienceMatch(resource.Slug, claims.Issuer, claims.Audience[0])
+	if !matched {
+		accepted := append([]string{issuerURL}, h.aliasesFor(resource.Slug, claims.Issuer)...)
+		return ema.Claims{}, fmt.Errorf("assertion aud %q does not name this authorization server (accepted: %s)", claims.Audience[0], strings.Join(accepted, ", "))
 	}
 
 	if claims.ID == "" {
@@ -412,25 +432,55 @@ func (h *Handler) verifyIDJAG(ctx context.Context, resource *repo.EmaResource, a
 		return ema.Claims{}, fmt.Errorf("resolve signing key for issuer %q: %w", claims.Issuer, err)
 	}
 
-	var verified ema.Claims
+	var verified idJAGClaims
 	parser := jwt.NewParser(
 		jwt.WithValidMethods([]string{"RS256"}),
 		jwt.WithIssuer(claims.Issuer),
 		jwt.WithExpirationRequired(),
+		jwt.WithIssuedAt(),
 		jwt.WithLeeway(idJAGClockSkew),
 	)
 	if _, err := parser.ParseWithClaims(assertion, &verified, func(*jwt.Token) (any, error) { return key, nil }); err != nil {
 		return ema.Claims{}, fmt.Errorf("assertion did not verify: %w", err)
 	}
+	if verified.IssuedAt == nil {
+		return ema.Claims{}, errors.New("assertion has no iat")
+	}
+	if strings.TrimSpace(verified.Subject) == "" {
+		return ema.Claims{}, errors.New("assertion has no sub")
+	}
 
 	if strings.TrimSpace(resource.ResourceIdentifier) == "" {
 		return ema.Claims{}, errors.New("resource authorization server has no resource identifier configured")
 	}
-	if verified.Resource != resource.ResourceIdentifier {
-		return ema.Claims{}, fmt.Errorf("assertion resource %q is not the resource behind this authorization server (%s)", verified.Resource, resource.ResourceIdentifier)
+	// Dev policy, stricter than the draft: resource may be omitted only on an aliased audience (Okta omits it).
+	if (verified.Resource.present || !viaAlias) && !slices.Equal(verified.Resource.values, jwt.ClaimStrings{resource.ResourceIdentifier}) {
+		return ema.Claims{}, fmt.Errorf("assertion resource %v is not the resource behind this authorization server (%s)", []string(verified.Resource.values), resource.ResourceIdentifier)
 	}
 
-	return verified, nil
+	out := verified.Claims
+	out.Resource = resource.ResourceIdentifier
+	return out, nil
+}
+
+// idJAGClaims decodes resource as a string or an array, as the draft allows.
+type idJAGClaims struct {
+	ema.Claims
+	Resource resourceClaim `json:"resource"`
+}
+
+// resourceClaim tells an absent resource from a present but empty one.
+type resourceClaim struct {
+	present bool
+	values  jwt.ClaimStrings
+}
+
+func (r *resourceClaim) UnmarshalJSON(data []byte) error {
+	r.present = true
+	if err := r.values.UnmarshalJSON(data); err != nil {
+		return fmt.Errorf("decode resource claim: %w", err)
+	}
+	return nil
 }
 
 // allowedByTrustRule checks a client id against a rule's allowlist. An empty
@@ -450,21 +500,22 @@ func allowedByTrustRule(rule repo.EmaTrustRule, clientID string) error {
 	return nil
 }
 
-// verificationKey resolves the RSA public key that should have signed an
-// assertion from `issuer`.
-//
-// When the issuer is this dev-idp's own oauth2-1 server the key is taken
-// straight from the keystore -- the alternative would be the process making
-// an HTTP request to itself. Any other issuer is resolved the way a real
-// server would: RFC 8414 metadata, then the jwks_uri it names, then the key
-// matching the assertion's kid. Nothing is cached, because a dev-idp sees a
-// handful of redemptions and a stale key is a worse failure than a slow one.
 // isLocalIssuer reports whether an ID-JAG came from this dev-idp's own IdP
 // rather than a foreign trust domain.
 func (h *Handler) isLocalIssuer(issuer string) bool {
 	return issuer == strings.TrimRight(h.cfg.ExternalURL, "/")+"/oauth2-1"
 }
 
+// verificationKey resolves the RSA public key that should have signed an
+// assertion from `issuer`.
+//
+// When the issuer is this dev-idp's own oauth2-1 server the key is taken
+// straight from the keystore -- the alternative would be the process making
+// an HTTP request to itself. Any other issuer is resolved the way a real
+// server would: RFC 8414 metadata (falling back to OpenID configuration),
+// then the jwks_uri it names, then the key matching the assertion's kid.
+// Nothing is cached, because a dev-idp sees a handful of redemptions and a
+// stale key is a worse failure than a slow one.
 func (h *Handler) verificationKey(ctx context.Context, issuer string, token *jwt.Token) (*rsa.PublicKey, error) {
 	if h.isLocalIssuer(issuer) {
 		return h.keystore.PublicKey(), nil
@@ -483,18 +534,37 @@ func (h *Handler) discoverJWKSURI(ctx context.Context, issuer string) (string, e
 	if err != nil {
 		return "", fmt.Errorf("validate issuer: %w", err)
 	}
-	metadataURL := parsed.Scheme + "://" + parsed.Host + "/.well-known/oauth-authorization-server" + parsed.Path
-
-	var doc struct {
-		JwksURI string `json:"jwks_uri"`
+	// Okta's org authorization server lists jwks_uri only in its OpenID metadata.
+	metadataURLs := []string{
+		parsed.Scheme + "://" + parsed.Host + "/.well-known/oauth-authorization-server" + strings.TrimRight(parsed.Path, "/"),
+		strings.TrimRight(issuer, "/") + "/.well-known/openid-configuration",
 	}
-	if err := h.getJSON(ctx, metadataURL, &doc); err != nil {
-		return "", fmt.Errorf("fetch authorization server metadata: %w", err)
+	var errs []error
+	for _, metadataURL := range metadataURLs {
+		var doc struct {
+			Issuer  string `json:"issuer"`
+			JwksURI string `json:"jwks_uri"`
+		}
+		if err := h.getJSON(ctx, metadataURL, &doc); err != nil {
+			errs = append(errs, fmt.Errorf("fetch authorization server metadata: %w", err))
+			continue
+		}
+		if doc.Issuer != issuer {
+			errs = append(errs, fmt.Errorf("issuer metadata at %s names issuer %q, want %q", metadataURL, doc.Issuer, issuer))
+			continue
+		}
+		if doc.JwksURI == "" {
+			errs = append(errs, fmt.Errorf("issuer metadata at %s declares no jwks_uri", metadataURL))
+			continue
+		}
+		jwksURL, err := url.Parse(doc.JwksURI)
+		if err != nil || jwksURL.Host == "" || (jwksURL.Scheme != "https" && (parsed.Scheme == "https" || jwksURL.Scheme != "http")) {
+			errs = append(errs, fmt.Errorf("issuer metadata at %s names an unusable jwks_uri %q", metadataURL, doc.JwksURI))
+			continue
+		}
+		return doc.JwksURI, nil
 	}
-	if doc.JwksURI == "" {
-		return "", fmt.Errorf("issuer metadata at %s declares no jwks_uri", metadataURL)
-	}
-	return doc.JwksURI, nil
+	return "", errors.Join(errs...)
 }
 
 func (h *Handler) fetchJWKSKey(ctx context.Context, jwksURI, kid string) (*rsa.PublicKey, error) {
@@ -711,4 +781,52 @@ func oauthError(w http.ResponseWriter, status int, code, description string) {
 		"error":             code,
 		"error_description": description,
 	})
+}
+
+// audienceMatch reports whether aud is this resource's issuer or, for a foreign issuer, one of its aliases.
+func (h *Handler) audienceMatch(slug, issuer, aud string) (matched, viaAlias bool) {
+	if aud == h.issuer(slug) {
+		return true, false
+	}
+	if slices.Contains(h.aliasesFor(slug, issuer), aud) {
+		return true, true
+	}
+	return false, false
+}
+
+// aliasesFor returns the audience aliases honoured for an assertion from issuer.
+func (h *Handler) aliasesFor(slug, issuer string) []string {
+	if h.isLocalIssuer(issuer) {
+		return nil
+	}
+	return h.cfg.AudienceAliases[slug]
+}
+
+// ParseAudienceAliases reads "slug=aud[,slug=aud...]" from GRAM_DEVIDP_EMA_AUDIENCE_ALIASES.
+// An audience may alias only one slug, so an aliased assertion names exactly one resource.
+func ParseAudienceAliases(externalURL, raw string) (map[string][]string, error) {
+	out := map[string][]string{}
+	owner := map[string]string{}
+	for pair := range strings.SplitSeq(raw, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		slug, aud, ok := strings.Cut(pair, "=")
+		slug, aud = strings.TrimSpace(slug), strings.TrimSpace(aud)
+		if !ok || slug == "" || aud == "" {
+			return nil, fmt.Errorf("ema audience alias %q is not slug=audience", pair)
+		}
+		if _, isResource := ema.ResourceSlugFromIssuer(externalURL, aud); isResource {
+			return nil, fmt.Errorf("ema audience alias %q is a dev-idp resource issuer", aud)
+		}
+		if prev, dup := owner[aud]; dup && prev != slug {
+			return nil, fmt.Errorf("ema audience %q aliases both %q and %q", aud, prev, slug)
+		}
+		owner[aud] = slug
+		if !slices.Contains(out[slug], aud) {
+			out[slug] = append(out[slug], aud)
+		}
+	}
+	return out, nil
 }

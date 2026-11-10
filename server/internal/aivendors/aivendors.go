@@ -1,4 +1,4 @@
-// Package aivendors is the single declaration of the AI tools Gram knows: what
+// Package aivendors is the single declaration of the AI tools Speakeasy knows: what
 // each looks like on a laptop, and which client ID metadata documents it
 // publishes. The CIMD admission catalog and the Shadow AI scan catalog are both
 // projections of it, so a product becomes admissible and blockable in one edit.
@@ -59,7 +59,7 @@ type Signatures struct {
 	ProcessNames []string
 }
 
-// IsZero marks a product Gram knows as an OAuth client but never scans for.
+// IsZero marks a product Speakeasy knows as an OAuth client but never scans for.
 func (s Signatures) IsZero() bool {
 	return len(s.BundleIDs)+len(s.Binaries)+len(s.ConfigDirs)+len(s.ProcessNames) == 0
 }
@@ -81,7 +81,7 @@ type Product struct {
 	// Category is required when Signatures are set.
 	Category Category
 
-	// Signatures are the on-device footprints, empty for a product Gram knows
+	// Signatures are the on-device footprints, empty for a product Speakeasy knows
 	// only as an OAuth client.
 	Signatures Signatures
 
@@ -153,7 +153,7 @@ type ProductDocument struct {
 	Document Document
 }
 
-// GatewayMatchers is how a product is recognized at Gram's MCP gateway: what
+// GatewayMatchers is how a product is recognized at Speakeasy's MCP gateway: what
 // the server verified, never what a client reported about itself.
 type GatewayMatchers struct {
 	// VendorKeys is set only when the vendor publishes exactly one product.

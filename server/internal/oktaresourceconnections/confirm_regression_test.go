@@ -15,6 +15,7 @@ import (
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 //nolint:paralleltest,tparallel // subtests share one service and assert on its row and audit counts
@@ -29,6 +30,7 @@ func TestConfirm_SharedResourceBatch(t *testing.T) {
 		RemoteMcpServerID: uuid.NullUUID{UUID: backend, Valid: true}, RemoteSessionIssuerID: uuid.NullUUID{UUID: f.issuerID, Valid: true}, Visibility: "private",
 	})
 	require.NoError(t, err)
+	associateServerIssuer(t, ctx, si, f.projectID, second, f.issuerID)
 	for _, tc := range []struct {
 		name          string
 		id            uuid.UUID
@@ -81,10 +83,8 @@ func TestConfirm_AgentChangesWhileWaitingForConnectionLock(t *testing.T) {
 			ctx, si := newTestService(t)
 			recordAgent(t, ctx, si, "wlp1")
 			f := capableServer(t, ctx, si, "Concurrent")
-			tx, err := si.conn.Begin(ctx) //nolint:glint // runs only SQLc-generated queries; it exists to hold the connection lock Confirm must wait on
-			require.NoError(t, err)
-			defer func() { _ = tx.Rollback(ctx) }()
-			_, err = repo.New(tx).LockLiveConnection(ctx, repo.LockLiveConnectionParams{ID: si.connectionID, OrganizationID: si.orgID})
+			tx := testenv.BeginTx(t, ctx, si.conn)
+			_, err := repo.New(tx).LockLiveConnection(ctx, repo.LockLiveConnectionParams{ID: si.connectionID, OrganizationID: si.orgID})
 			require.NoError(t, err)
 			done := make(chan error, 1)
 			go func() {
@@ -92,12 +92,7 @@ func TestConfirm_AgentChangesWhileWaitingForConnectionLock(t *testing.T) {
 				done <- err
 			}()
 			// Wait until Confirm has read its snapshot and is blocked on our lock.
-			require.Eventually(t, func() bool {
-				var waiting bool
-				//nolint:glint // sqlc cannot analyse pg_stat_activity; this only observes that Confirm is blocked on our lock
-				err := si.conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND $1 = ANY(pg_blocking_pids(pid)))", int32(tx.Conn().PgConn().PID())).Scan(&waiting)
-				return err == nil && waiting
-			}, 5*time.Second, 10*time.Millisecond)
+			testenv.WaitForBackendsBlockedBy(t, ctx, si.conn, testenv.BackendPID(tx), 1)
 			_, err = idprepo.New(tx).UpdateOktaIdentityProviderConnectionAgent(ctx, idprepo.UpdateOktaIdentityProviderConnectionAgentParams{
 				OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID, AgentID: conv.ToPGTextEmpty(tc.agentID), AgentAppID: conv.ToPGTextEmpty(tc.agentAppID),
 			})
@@ -141,4 +136,20 @@ func TestReset_RequiresRolloutEnabled(t *testing.T) {
 	count, err := audittest.AuditLogCountByAction(ctx, si.conn, audit.ActionOktaResourceConnectionReset)
 	require.NoError(t, err)
 	require.Zero(t, count)
+}
+
+func TestConfirm_RequiresDiscoveredAdvertisement(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	recordAgent(t, ctx, si, "wlp1")
+	f := capableServer(t, ctx, si, "Declared")
+	n, err := si.q.ClearIssuerDiscoveryFixture(ctx, repo.ClearIssuerDiscoveryFixtureParams{ID: f.issuerID, OrganizationID: conv.ToPGText(si.orgID)})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	_, err = confirm(t, ctx, si, audience, nil, f.serverID)
+	requireOopsCode(t, err, oops.CodeNotFound)
+	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }

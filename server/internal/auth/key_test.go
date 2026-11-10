@@ -79,6 +79,33 @@ func TestClassifyPrincipalAPIKeyUsesOnlyCompleteLoadedProfile(t *testing.T) {
 	}
 }
 
+// A scoped key may carry an expiry too -- an observability credential rotation
+// gives the previous hooks key a grace window -- so an expiry alone must not
+// route the key through agent-principal validation, which would reject it.
+func TestClassifyPrincipalAPIKeyIgnoresExpiryOnScopedKeys(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+
+	graced := keysrepo.GetAPIKeyByKeyHashRow{
+		CreatedByUserID: "user_authorizer",
+		Scopes:          []string{APIKeyScopeHooks.String()},
+		ExpiresAt:       pgtype.Timestamptz{Time: now.Add(7 * 24 * time.Hour), Valid: true},
+		CreatedAt:       pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
+	}
+
+	_, _, principal, err := classifyPrincipalAPIKey(graced, now)
+	require.NoError(t, err)
+	require.False(t, principal, "a scoped key with a grace expiry keeps its scopes")
+
+	// Expiry itself is enforced by GetAPIKeyByKeyHash, which never loads an
+	// expired row, so classification does not re-check it for scoped keys.
+	expired := graced
+	expired.ExpiresAt.Time = now.Add(-time.Second)
+	_, _, principal, err = classifyPrincipalAPIKey(expired, now)
+	require.NoError(t, err)
+	require.False(t, principal)
+}
+
 func TestPrincipalAPIKeySupportsOnlyPrincipalSafeTransportRoutes(t *testing.T) {
 	t.Parallel()
 	require.False(t, principalAPIKeySupportsTransportScopes(nil))
@@ -220,6 +247,7 @@ func TestIsOrgWidePluginHooksAPIKey(t *testing.T) {
 		{testName: "fractional seconds", keyName: "plugins-hooks-20260713-104500.5-abcdef", want: false},
 		{testName: "invalid timestamp", keyName: "plugins-hooks-20261340-256199-abcdef", want: false},
 		{testName: "mcp purpose", keyName: "plugins-mcp-20260713-104500-abcdef", want: false},
+		{testName: "member claude web hooks key", keyName: "plugins-claude-web-hooks-20261102-120102-abc123", key: "gram_live_abc123abcdef", keyPrefix: "gram_live_abc12", want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.testName, func(t *testing.T) {

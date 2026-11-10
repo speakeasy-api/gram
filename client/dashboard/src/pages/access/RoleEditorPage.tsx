@@ -3,25 +3,53 @@ import { RequireScope } from "@/components/require-scope";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
+import type { Role } from "@gram/client/models/components/role.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { type JSX } from "react";
-import { useNavigate, useParams } from "react-router";
+import { type JSX, useRef } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router";
+import {
+  completeCreateRoleFlow,
+  isCreateRoleFlow,
+  suggestedRoleName,
+} from "../org/identity-provider/directoryMappingFlow";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 
 /**
  * Create or edit one role on its own page. The same editor still opens as a
  * sheet from other surfaces; only the chrome differs, so the two cannot drift.
+ *
+ * Opened from a directory role mapping, it hides member and agent assignment
+ * (the mapping grants the role) and returns to the mapping with the new role.
  */
 export function RoleEditorPage(): JSX.Element {
   const { roleId } = useParams();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
   const orgRoutes = useOrgRoutes();
   const { data, isLoading } = useRoles();
 
+  const fromMapping = !roleId && isCreateRoleFlow(params);
+  // Creating a role also closes the editor; the close must not undo the
+  // navigation to the new role's page, or back to the mapping.
+  const created = useRef(false);
+
   const role = roleId
     ? (data?.roles ?? []).find((candidate) => candidate.id === roleId)
     : undefined;
-  const backToRoles = () => void navigate(orgRoutes.access.roles.href());
+  const leave = () => {
+    if (fromMapping) void navigate(orgRoutes.identity.href());
+    else void navigate(orgRoutes.access.roles.href());
+  };
+  const onRoleCreated = (createdRole: Role) => {
+    created.current = true;
+    if (!fromMapping) {
+      // Stay with the new role rather than drop back to the list.
+      void navigate(`${orgRoutes.access.roles.href()}/${createdRole.id}/edit`);
+      return;
+    }
+    const back = completeCreateRoleFlow(params, createdRole.principalUrn);
+    void navigate(`${orgRoutes.identity.href()}?${back.toString()}`);
+  };
 
   return (
     <Page>
@@ -53,10 +81,19 @@ export function RoleEditorPage(): JSX.Element {
                   open
                   presentation="page"
                   editingRole={role ?? null}
+                  hideAssignments={fromMapping}
+                  defaultName={fromMapping ? suggestedRoleName(params) : ""}
                   onOpenChange={(open) => {
-                    if (!open) backToRoles();
+                    if (open) return;
+                    // The close that follows a create is the editor resetting
+                    // for the new role's page, not the user leaving.
+                    if (created.current) {
+                      created.current = false;
+                      return;
+                    }
+                    leave();
                   }}
-                  onRoleCreated={backToRoles}
+                  onRoleCreated={onRoleCreated}
                 />
               )}
             </Page.Section.Body>

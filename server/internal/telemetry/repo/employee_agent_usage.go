@@ -26,7 +26,7 @@ type SearchEmployeeAgentUsageParams struct {
 // accept:
 //
 //   - Scope is canonical observed agent usage only — Claude Code, Codex, Cursor,
-//     Claude Chat, and LiteLLM — matching the costs/billing pages. Gram-hosted chat
+//     Claude Chat, and LiteLLM — matching the costs/billing pages. Speakeasy-hosted chat
 //     completions and duplicate usage-metric rows are excluded.
 //   - Users are keyed by email. Identities that never carry an email in the
 //     window are absent here; surface them via ListEmaillessIdentities.
@@ -76,7 +76,7 @@ func (q *Queries) SearchEmployeeAgentUsage(ctx context.Context, arg SearchEmploy
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd).
 		// Email-keyed rows only; the empty-email bucket is handled by
 		// ListEmaillessIdentities so it isn't shown as one synthetic user.
-		Where("user_email != ''"). //nolint:glint // fold-neutral emptiness check - the fold never maps empty to non-empty or back
+		Where("user_email != ''"). //nolint:glint // norawuseremailfilter: fold-neutral emptiness check - the fold never maps empty to non-empty or back
 		GroupBy(emailKey).
 		// Order by the group expression, not the alias: the user_email alias
 		// shadows the base column and ClickHouse resolves ORDER BY identifiers
@@ -116,7 +116,7 @@ type ListEmaillessIdentitiesParams struct {
 	TimeStart     int64 // inclusive window start, unix nanoseconds
 	TimeEnd       int64 // inclusive window end, unix nanoseconds
 	Limit         int
-	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// ExcludedHookSources drops rows whose hook_source names a Speakeasy-hosted
 	// completion surface, so a platform-side completion carrying a user_id
 	// but no email cannot surface a phantom identity in the enrollment
 	// directory. Never include the empty string here.
@@ -157,7 +157,7 @@ func (q *Queries) ListEmaillessIdentities(ctx context.Context, arg ListEmailless
 	sb = sb.GroupBy("user_id").
 		// Keep only user_ids that never co-occur with an email in the window;
 		// those that do are folded into an email key by SearchEmployeeAgentUsage.
-		Having("max(user_email != '') = 0"). //nolint:glint // fold-neutral emptiness check partitioning email-less identities
+		Having("max(user_email != '') = 0"). //nolint:glint // norawuseremailfilter: fold-neutral emptiness check partitioning email-less identities
 		OrderBy("last_seen_unix_nano DESC", "user_id DESC").
 		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
 

@@ -34,11 +34,20 @@ func hooksReleaseTargets(version string, sha256s map[string]string) map[string]h
 
 // hooksBinaryTargets is the UPSTREAM artifact set: the GitHub release URLs the
 // server itself fetches from (see HooksArtifactServer). Bootstrap scripts never
-// see these URLs — they download from the org's Gram server domain via
+// see these URLs — they download from the org's Speakeasy server domain via
 // hooksServedTargets, because customer environments (notably Claude Cowork's
-// sandbox) often cannot reach GitHub while the Gram domain is already
+// sandbox) often cannot reach GitHub while the Speakeasy domain is already
 // allowlisted for ingest.
 var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, hooksBinarySHA256s)
+
+// Values of GenerateConfig.InstallRoute. The speakeasy-hooks binary's own
+// install command writes "hooks_install".
+const (
+	InstallRouteMarketplace  = "marketplace"
+	InstallRouteDownload     = "download"
+	InstallRouteAgentInstall = "agent_install"
+	InstallRouteDogfood      = "dogfood"
+)
 
 func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 	b, err := json.MarshalIndent(relay.FileConfig{
@@ -50,11 +59,13 @@ func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 		Project:      cfg.ProjectSlug,
 		Org:          cfg.OrgID,
 		HooksAPIKey:  cfg.HooksAPIKey,
+		AgentKey:     cfg.HooksKeyIsAgent,
 		BrowserLogin: cfg.BrowserLogin,
 		// Legacy observability-mode flag; new plugins never set it. Outage
 		// tolerance flows to the binary at run time via ingest effects
 		// (hooks_fail_open), not through baked configuration.
-		Nonblocking: false,
+		Nonblocking:  false,
+		InstallRoute: cfg.InstallRoute,
 	}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal speakeasy.json: %w", err)
@@ -63,7 +74,7 @@ func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 }
 
 // hooksServedTargets derives the download URLs baked into bootstrap scripts:
-// the pinned artifacts as served by the org's own Gram server (see
+// the pinned artifacts as served by the org's own Speakeasy server (see
 // HooksArtifactServer), keeping the checksums from the upstream pin.
 func hooksServedTargets(serverURL string) map[string]hooksBinaryTarget {
 	base := strings.TrimRight(serverURL, "/")
@@ -86,6 +97,9 @@ func hooksDownloadHost(serverURL string) string {
 	}
 	return serverURL
 }
+
+// LatestHooksVersion is the hooks release new installs get.
+func LatestHooksVersion() string { return hooksBinaryVersion }
 
 func renderHooksBootstrap(cfg GenerateConfig) []byte {
 	return renderHooksBootstrapForRelease(hooksBinaryVersion, hooksServedTargets(cfg.ServerURL), cfg.InstallFailOpen, hooksDownloadHost(cfg.ServerURL))
@@ -119,7 +133,7 @@ install_failure_exit=%d
 
 install_failure() {
   printf 'speakeasy-hooks: %%s\n' "$1" >&2
-  printf 'speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)\n' >&2
+  printf 'speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (SPEAKEASY_AI_HOOKS_HOME overrides the cache location)\n' >&2
   exit "$install_failure_exit"
 }
 
@@ -261,7 +275,10 @@ case "$target" in
 %s  *) install_failure "unsupported target ${target}" ;;
 esac
 
-if [ -n "${GRAM_HOOKS_HOME:-}" ]; then
+if [ -n "${SPEAKEASY_AI_HOOKS_HOME:-}" ]; then
+  cache_root=$SPEAKEASY_AI_HOOKS_HOME
+elif [ -n "${GRAM_HOOKS_HOME:-}" ]; then
+  # Deprecated name of SPEAKEASY_AI_HOOKS_HOME.
   cache_root=$GRAM_HOOKS_HOME
 elif [ "$os" = darwin ]; then
   cache_root="${HOME}/Library/Caches/Speakeasy/hooks"
@@ -381,8 +398,43 @@ if ! cache_valid; then
     unzip -p "$archive" "$binary_name" > "$extracted" || install_failure 'archive extraction failed'
   elif command -v busybox >/dev/null 2>&1; then
     busybox unzip -p "$archive" "$binary_name" > "$extracted" || install_failure 'archive extraction failed'
+  elif command -v python3 >/dev/null 2>&1; then
+    # Slim container images, the official OpenClaw image among them, ship
+    # neither unzip nor busybox but do carry python3 and its zipfile module.
+    python3 -c $'import sys, zipfile\ndata = zipfile.ZipFile(sys.argv[1]).read(sys.argv[2])\nwith open(sys.argv[3], "wb") as out: out.write(data)' "$archive" "$binary_name" "$extracted" || install_failure 'archive extraction failed'
+  elif command -v bsdtar >/dev/null 2>&1; then
+    bsdtar -xOf "$archive" "$binary_name" > "$extracted" || install_failure 'archive extraction failed'
+  elif command -v node >/dev/null 2>&1; then
+    # Images built to run Node apps, OpenClaw's among them, always carry node.
+    # Node has no unzip API, so this reads the central directory by hand and
+    # inflates the one entry. ZIP64, a missing entry, or a method other than
+    # store or deflate exits non-zero.
+    node -e '
+      const fs = require("fs");
+      const zlib = require("zlib");
+      const [, archive, name, out] = process.argv;
+      const zip = fs.readFileSync(archive);
+      const end = zip.lastIndexOf("PK\x05\x06");
+      if (end < 0) process.exit(1);
+      let entry = zip.readUInt32LE(end + 16);
+      if (entry === 0xffffffff) process.exit(1);
+      while (zip.readUInt32LE(entry) === 0x02014b50) {
+        const nameEnd = entry + 46 + zip.readUInt16LE(entry + 28);
+        if (zip.toString("utf8", entry + 46, nameEnd) === name) break;
+        entry = nameEnd + zip.readUInt16LE(entry + 30) + zip.readUInt16LE(entry + 32);
+      }
+      if (zip.readUInt32LE(entry) !== 0x02014b50) process.exit(1);
+      const method = zip.readUInt16LE(entry + 10);
+      const size = zip.readUInt32LE(entry + 20);
+      const local = zip.readUInt32LE(entry + 42);
+      if (method !== 0 && method !== 8) process.exit(1);
+      if (size === 0xffffffff || local === 0xffffffff || zip.readUInt32LE(local) !== 0x04034b50) process.exit(1);
+      const start = local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28);
+      const data = zip.subarray(start, start + size);
+      fs.writeFileSync(out, method === 8 ? zlib.inflateRawSync(data) : data);
+    ' "$archive" "$binary_name" "$extracted" || install_failure 'archive extraction failed'
   else
-    install_failure 'unzip is required for first install'
+    install_failure 'unzip, busybox, python3, bsdtar or node is required for first install'
   fi
   chmod 755 "$extracted" || install_failure 'could not mark the binary executable'
   mkdir -p "$install_dir" || install_failure 'could not create the install directory'
@@ -418,7 +470,7 @@ $InstallFailureExit = %d
 
 function Exit-InstallFailure([string]$Message) {
     [Console]::Error.WriteLine("speakeasy-hooks: $Message")
-    [Console]::Error.WriteLine("speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)")
+    [Console]::Error.WriteLine("speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (SPEAKEASY_AI_HOOKS_HOME overrides the cache location)")
     exit $InstallFailureExit
 }
 
@@ -601,7 +653,10 @@ if (-not $Arch) { Exit-InstallFailure "unsupported architecture" }
 switch ($Arch) {
 %s}
 
-if ($env:GRAM_HOOKS_HOME) {
+if ($env:SPEAKEASY_AI_HOOKS_HOME) {
+    $CacheRoot = $env:SPEAKEASY_AI_HOOKS_HOME
+} elseif ($env:GRAM_HOOKS_HOME) {
+    # Deprecated name of SPEAKEASY_AI_HOOKS_HOME.
     $CacheRoot = $env:GRAM_HOOKS_HOME
 } else {
     $CacheRoot = Join-Path $env:LOCALAPPDATA "Speakeasy/hooks"

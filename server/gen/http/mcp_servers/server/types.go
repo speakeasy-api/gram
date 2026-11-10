@@ -66,6 +66,9 @@ type UpdateMcpServerRequestBody struct {
 	// The ID of an existing project- or organization-owned user session issuer to
 	// attach. Omit to preserve the current issuer.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// Detach the current user session issuer, so the server no longer requires
+	// user sessions. Must not be true when user_session_issuer_id is set.
+	ClearUserSessionIssuer *bool `form:"clear_user_session_issuer,omitempty" json:"clear_user_session_issuer,omitempty" xml:"clear_user_session_issuer,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The allowed network surfaces. Omit to preserve the stored mode.
@@ -123,6 +126,14 @@ type CreateMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
+	// The slug of an older Speakeasy-hosted address of this hosted server: its
+	// legacy custom-domain address, which the Speakeasy domain also answers under
+	// the same access rules. Absent when a platform endpoint or another alias
+	// holds that slug.
+	LegacyPlatformSlug *string `form:"legacy_platform_slug,omitempty" json:"legacy_platform_slug,omitempty" xml:"legacy_platform_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -135,7 +146,7 @@ type CreateMcpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
@@ -144,6 +155,20 @@ type CreateMcpServerResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -161,6 +186,14 @@ type GetMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
+	// The slug of an older Speakeasy-hosted address of this hosted server: its
+	// legacy custom-domain address, which the Speakeasy domain also answers under
+	// the same access rules. Absent when a platform endpoint or another alias
+	// holds that slug.
+	LegacyPlatformSlug *string `form:"legacy_platform_slug,omitempty" json:"legacy_platform_slug,omitempty" xml:"legacy_platform_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -173,7 +206,7 @@ type GetMcpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
@@ -182,6 +215,20 @@ type GetMcpServerResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -211,6 +258,14 @@ type UpdateMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
+	// The slug of an older Speakeasy-hosted address of this hosted server: its
+	// legacy custom-domain address, which the Speakeasy domain also answers under
+	// the same access rules. Absent when a platform endpoint or another alias
+	// holds that slug.
+	LegacyPlatformSlug *string `form:"legacy_platform_slug,omitempty" json:"legacy_platform_slug,omitempty" xml:"legacy_platform_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -223,7 +278,7 @@ type UpdateMcpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
@@ -232,6 +287,20 @@ type UpdateMcpServerResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -307,6 +376,35 @@ type SetToolMetadataResponseBody struct {
 	// When the tool metadata entry was deleted. Only present on deleted entries
 	// returned by listToolMetadata with include_deleted.
 	DeletedAt *string `form:"deleted_at,omitempty" json:"deleted_at,omitempty" xml:"deleted_at,omitempty"`
+}
+
+// GetMcpServerUsageImpactResponseBody is the type of the "mcpServers" service
+// "getMcpServerUsageImpact" endpoint HTTP response body.
+type GetMcpServerUsageImpactResponseBody struct {
+	// The server's display name, which confirmations ask the operator to type.
+	ServerName string `form:"server_name" json:"server_name" xml:"server_name"`
+	// Whether the server has a user session issuer. When false nothing is counted:
+	// callers are not signed in, so their usage is unknown.
+	SignInRequired bool `form:"sign_in_required" json:"sign_in_required" xml:"sign_in_required"`
+	// Whether the server's user session issuer also serves other MCP servers or
+	// gateways. Connections not bound to this server's address may then be using
+	// one of those instead.
+	SharedSignIn bool `form:"shared_sign_in" json:"shared_sign_in" xml:"shared_sign_in"`
+	// Unexpired, unrevoked sessions that can reach this server.
+	ActiveConnectionCount int `form:"active_connection_count" json:"active_connection_count" xml:"active_connection_count"`
+	// Distinct subjects (people, API keys, agents, workloads, anonymous callers)
+	// holding those sessions.
+	ActiveSubjectCount int `form:"active_subject_count" json:"active_subject_count" xml:"active_subject_count"`
+	// Of active_connection_count, the sessions issued for the whole shared sign-in
+	// rather than this server's address. Always zero when shared_sign_in is false.
+	SharedConnectionCount int `form:"shared_connection_count" json:"shared_connection_count" xml:"shared_connection_count"`
+	// Most recent use across all those sessions, accurate to within five minutes.
+	// Absent when none has a recorded use.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	// Subjects holding active sessions, most recently used first.
+	Subjects []*McpServerUsageSubjectResponseBody `form:"subjects" json:"subjects" xml:"subjects"`
+	// Whether more subjects exist than are listed.
+	SubjectsTruncated bool `form:"subjects_truncated" json:"subjects_truncated" xml:"subjects_truncated"`
 }
 
 // CreateMcpServerUnauthorizedResponseBody is the type of the "mcpServers"
@@ -2779,6 +2877,249 @@ type DeleteMcpServerUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetMcpServerUsageImpactUnauthorizedResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetMcpServerUsageImpactUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactForbiddenResponseBody is the type of the "mcpServers"
+// service "getMcpServerUsageImpact" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMcpServerUsageImpactForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactBadRequestResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "bad_request" error.
+type GetMcpServerUsageImpactBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactNotFoundResponseBody is the type of the "mcpServers"
+// service "getMcpServerUsageImpact" endpoint HTTP response body for the
+// "not_found" error.
+type GetMcpServerUsageImpactNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactConflictResponseBody is the type of the "mcpServers"
+// service "getMcpServerUsageImpact" endpoint HTTP response body for the
+// "conflict" error.
+type GetMcpServerUsageImpactConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactUnsupportedMediaResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetMcpServerUsageImpactUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactInvalidResponseBody is the type of the "mcpServers"
+// service "getMcpServerUsageImpact" endpoint HTTP response body for the
+// "invalid" error.
+type GetMcpServerUsageImpactInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactInvariantViolationResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetMcpServerUsageImpactInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactUnexpectedResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "unexpected" error.
+type GetMcpServerUsageImpactUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactGatewayErrorResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetMcpServerUsageImpactGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactUnavailableResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "unavailable" error.
+type GetMcpServerUsageImpactUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// McpServerToolsetSummaryResponseBody is used to define fields on response
+// body types.
+type McpServerToolsetSummaryResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The toolset's description, if any
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Number of tools the toolset serves: deployment-backed tools (HTTP, function,
+	// external MCP) that resolve in the project's latest completed deployment,
+	// plus its prompt templates and registered platform tools. External MCP proxy
+	// tools are excluded.
+	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
+	// The toolset's tool selection mode
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The distinct slugs of the external MCP sources the toolset's configured
+	// tools come from, sorted
+	ExternalMcpSlugs []string `form:"external_mcp_slugs" json:"external_mcp_slugs" xml:"external_mcp_slugs"`
+	// Whether every configured tool is an external MCP proxy tool, so the real
+	// tool count is unknown until a user signs in
+	ExternalMcpProxyOnly bool `form:"external_mcp_proxy_only" json:"external_mcp_proxy_only" xml:"external_mcp_proxy_only"`
+	// The ID of the external OAuth server attached to the toolset, if any
+	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
+	// The registry specifier the toolset originated from, if any
+	RegistrySpecifier *string `form:"registry_specifier,omitempty" json:"registry_specifier,omitempty" xml:"registry_specifier,omitempty"`
+	// The ID of the MCP server that stands in for the toolset: its canonical
+	// server, whose ID is the toolset's, or when it has none, its oldest live
+	// server with a live endpoint. Absent when it has neither.
+	HostingMcpServerID *string `form:"hosting_mcp_server_id,omitempty" json:"hosting_mcp_server_id,omitempty" xml:"hosting_mcp_server_id,omitempty"`
+}
+
 // McpServerResponseBody is used to define fields on response body types.
 type McpServerResponseBody struct {
 	// The ID of the MCP server
@@ -2789,6 +3130,14 @@ type McpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
+	// The slug of an older Speakeasy-hosted address of this hosted server: its
+	// legacy custom-domain address, which the Speakeasy domain also answers under
+	// the same access rules. Absent when a platform endpoint or another alias
+	// holds that slug.
+	LegacyPlatformSlug *string `form:"legacy_platform_slug,omitempty" json:"legacy_platform_slug,omitempty" xml:"legacy_platform_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -2801,7 +3150,7 @@ type McpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
@@ -2810,6 +3159,20 @@ type McpServerResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -2861,6 +3224,33 @@ type ToolMetadataResponseBody struct {
 	DeletedAt *string `form:"deleted_at,omitempty" json:"deleted_at,omitempty" xml:"deleted_at,omitempty"`
 }
 
+// McpServerUsageSubjectResponseBody is used to define fields on response body
+// types.
+type McpServerUsageSubjectResponseBody struct {
+	// The subject URN (user:<id> | apikey:<uuid> | agent:<uuid> | anonymous:<id> |
+	// workload:<issuer-id>:<external-subject>).
+	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
+	// Subject kind: 'user', 'apikey', 'agent', 'anonymous', or 'workload'.
+	SubjectType string `form:"subject_type" json:"subject_type" xml:"subject_type"`
+	// Resolved human-readable name of the subject, if known.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Email of the subject when it is a Speakeasy user.
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	// Avatar URL of the subject when it is a Speakeasy user with one.
+	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
+	// Active sessions this subject holds.
+	ConnectionCount int `form:"connection_count" json:"connection_count" xml:"connection_count"`
+	// Most recent use across this subject's sessions, accurate to within five
+	// minutes. Absent when unknown.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	// Self-reported names of the MCP clients behind the sessions. Unverified.
+	ClientNames []string `form:"client_names" json:"client_names" xml:"client_names"`
+	// Whether every one of this subject's sessions was issued for the whole shared
+	// sign-in rather than this server, so the subject may be using another server
+	// instead.
+	SharedSignIn bool `form:"shared_sign_in" json:"shared_sign_in" xml:"shared_sign_in"`
+}
+
 // ToolMetadataFormRequestBody is used to define fields on request body types.
 type ToolMetadataFormRequestBody struct {
 	// The name of the tool
@@ -2886,6 +3276,8 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 		ProjectID:             res.ProjectID,
 		Name:                  res.Name,
 		Slug:                  res.Slug,
+		PlatformEndpointSlug:  res.PlatformEndpointSlug,
+		LegacyPlatformSlug:    res.LegacyPlatformSlug,
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
@@ -2895,8 +3287,14 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		Visibility:            string(res.Visibility),
 		NetworkAccessMode:     string(res.NetworkAccessMode),
+		PrimaryEndpointID:     res.PrimaryEndpointID,
+		PrimaryEndpointURL:    res.PrimaryEndpointURL,
+		HasEndpoint:           res.HasEndpoint,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.Toolset != nil {
+		body.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.Toolset)
 	}
 	return body
 }
@@ -2909,6 +3307,8 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 		ProjectID:             res.ProjectID,
 		Name:                  res.Name,
 		Slug:                  res.Slug,
+		PlatformEndpointSlug:  res.PlatformEndpointSlug,
+		LegacyPlatformSlug:    res.LegacyPlatformSlug,
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
@@ -2918,8 +3318,14 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		Visibility:            string(res.Visibility),
 		NetworkAccessMode:     string(res.NetworkAccessMode),
+		PrimaryEndpointID:     res.PrimaryEndpointID,
+		PrimaryEndpointURL:    res.PrimaryEndpointURL,
+		HasEndpoint:           res.HasEndpoint,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.Toolset != nil {
+		body.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.Toolset)
 	}
 	return body
 }
@@ -2970,6 +3376,8 @@ func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerRespon
 		ProjectID:             res.ProjectID,
 		Name:                  res.Name,
 		Slug:                  res.Slug,
+		PlatformEndpointSlug:  res.PlatformEndpointSlug,
+		LegacyPlatformSlug:    res.LegacyPlatformSlug,
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
@@ -2979,8 +3387,14 @@ func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerRespon
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		Visibility:            string(res.Visibility),
 		NetworkAccessMode:     string(res.NetworkAccessMode),
+		PrimaryEndpointID:     res.PrimaryEndpointID,
+		PrimaryEndpointURL:    res.PrimaryEndpointURL,
+		HasEndpoint:           res.HasEndpoint,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.Toolset != nil {
+		body.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.Toolset)
 	}
 	return body
 }
@@ -3093,6 +3507,35 @@ func NewSetToolMetadataResponseBody(res *types.ToolMetadata) *SetToolMetadataRes
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
 		DeletedAt:       res.DeletedAt,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactResponseBody builds the HTTP response body from
+// the result of the "getMcpServerUsageImpact" endpoint of the "mcpServers"
+// service.
+func NewGetMcpServerUsageImpactResponseBody(res *types.McpServerUsageImpact) *GetMcpServerUsageImpactResponseBody {
+	body := &GetMcpServerUsageImpactResponseBody{
+		ServerName:            res.ServerName,
+		SignInRequired:        res.SignInRequired,
+		SharedSignIn:          res.SharedSignIn,
+		ActiveConnectionCount: res.ActiveConnectionCount,
+		ActiveSubjectCount:    res.ActiveSubjectCount,
+		SharedConnectionCount: res.SharedConnectionCount,
+		LastUsedAt:            res.LastUsedAt,
+		SubjectsTruncated:     res.SubjectsTruncated,
+	}
+	if res.Subjects != nil {
+		body.Subjects = make([]*McpServerUsageSubjectResponseBody, len(res.Subjects))
+		for i, val := range res.Subjects {
+			if val == nil {
+				body.Subjects[i] = nil
+				continue
+			}
+			body.Subjects[i] = marshalTypesMcpServerUsageSubjectToMcpServerUsageSubjectResponseBody(val)
+		}
+	} else {
+		body.Subjects = []*McpServerUsageSubjectResponseBody{}
 	}
 	return body
 }
@@ -5012,6 +5455,171 @@ func NewDeleteMcpServerUnavailableResponseBody(res *goa.ServiceError) *DeleteMcp
 	return body
 }
 
+// NewGetMcpServerUsageImpactUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactUnauthorizedResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactUnauthorizedResponseBody {
+	body := &GetMcpServerUsageImpactUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactForbiddenResponseBody builds the HTTP response
+// body from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactForbiddenResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactForbiddenResponseBody {
+	body := &GetMcpServerUsageImpactForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactBadRequestResponseBody builds the HTTP response
+// body from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactBadRequestResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactBadRequestResponseBody {
+	body := &GetMcpServerUsageImpactBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactNotFoundResponseBody builds the HTTP response body
+// from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactNotFoundResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactNotFoundResponseBody {
+	body := &GetMcpServerUsageImpactNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactConflictResponseBody builds the HTTP response body
+// from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactConflictResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactConflictResponseBody {
+	body := &GetMcpServerUsageImpactConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getMcpServerUsageImpact" endpoint of
+// the "mcpServers" service.
+func NewGetMcpServerUsageImpactUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactUnsupportedMediaResponseBody {
+	body := &GetMcpServerUsageImpactUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactInvalidResponseBody builds the HTTP response body
+// from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactInvalidResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactInvalidResponseBody {
+	body := &GetMcpServerUsageImpactInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getMcpServerUsageImpact" endpoint of
+// the "mcpServers" service.
+func NewGetMcpServerUsageImpactInvariantViolationResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactInvariantViolationResponseBody {
+	body := &GetMcpServerUsageImpactInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactUnexpectedResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactUnexpectedResponseBody {
+	body := &GetMcpServerUsageImpactUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactGatewayErrorResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactGatewayErrorResponseBody {
+	body := &GetMcpServerUsageImpactGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactUnavailableResponseBody builds the HTTP response
+// body from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactUnavailableResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactUnavailableResponseBody {
+	body := &GetMcpServerUsageImpactUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateMcpServerPayload builds a mcpServers service createMcpServer
 // endpoint payload.
 func NewCreateMcpServerPayload(body *CreateMcpServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.CreateMcpServerPayload {
@@ -5039,10 +5647,11 @@ func NewCreateMcpServerPayload(body *CreateMcpServerRequestBody, sessionToken *s
 
 // NewGetMcpServerPayload builds a mcpServers service getMcpServer endpoint
 // payload.
-func NewGetMcpServerPayload(id *string, slug *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetMcpServerPayload {
+func NewGetMcpServerPayload(id *string, slug *string, toolsetID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetMcpServerPayload {
 	v := &mcpservers.GetMcpServerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -5078,16 +5687,17 @@ func NewListMcpServersForOrgPayload(sessionToken *string) *mcpservers.ListMcpSer
 // endpoint payload.
 func NewUpdateMcpServerPayload(body *UpdateMcpServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.UpdateMcpServerPayload {
 	v := &mcpservers.UpdateMcpServerPayload{
-		ID:                    *body.ID,
-		Name:                  body.Name,
-		EnvironmentID:         body.EnvironmentID,
-		RemoteMcpServerID:     body.RemoteMcpServerID,
-		TunneledMcpServerID:   body.TunneledMcpServerID,
-		ToolsetID:             body.ToolsetID,
-		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
-		ToolVariationsGroupID: body.ToolVariationsGroupID,
-		UserSessionIssuerID:   body.UserSessionIssuerID,
-		Visibility:            types.McpServerVisibility(*body.Visibility),
+		ID:                     *body.ID,
+		Name:                   body.Name,
+		EnvironmentID:          body.EnvironmentID,
+		RemoteMcpServerID:      body.RemoteMcpServerID,
+		TunneledMcpServerID:    body.TunneledMcpServerID,
+		ToolsetID:              body.ToolsetID,
+		UnproxiedMcpServerID:   body.UnproxiedMcpServerID,
+		ToolVariationsGroupID:  body.ToolVariationsGroupID,
+		UserSessionIssuerID:    body.UserSessionIssuerID,
+		ClearUserSessionIssuer: body.ClearUserSessionIssuer,
+		Visibility:             types.McpServerVisibility(*body.Visibility),
 	}
 	if body.NetworkAccessMode != nil {
 		networkAccessMode := types.NetworkAccessMode(*body.NetworkAccessMode)
@@ -5204,6 +5814,18 @@ func NewDeleteToolMetadataPayload(mcpServerID string, toolName string, sessionTo
 // endpoint payload.
 func NewDeleteMcpServerPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.DeleteMcpServerPayload {
 	v := &mcpservers.DeleteMcpServerPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetMcpServerUsageImpactPayload builds a mcpServers service
+// getMcpServerUsageImpact endpoint payload.
+func NewGetMcpServerUsageImpactPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetMcpServerUsageImpactPayload {
+	v := &mcpservers.GetMcpServerUsageImpactPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // validationError pairs a validation rejection with the machine-readable

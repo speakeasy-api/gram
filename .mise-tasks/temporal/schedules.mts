@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Pause or resume this worktree's recurring Temporal schedules"
 //MISE dir="{{ config_root }}"
@@ -11,6 +11,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { $, sleep } from "zx";
+import {
+  ownerFromIdentity,
+  readLink,
+  reapStaleLock,
+  releaseLock as releaseOwnedLock,
+  tryCreateLock,
+} from "../_stack-lock.mts";
 
 type ScheduleState = "pause" | "unpause";
 
@@ -64,71 +71,16 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-function ownerFromIdentity(identity: string | null): string | null {
-  if (!identity) return null;
-  const owner = identity.split(":", 1)[0];
-  return owner || null;
-}
-
 function stateFromIdentity(identity: string | null): string | null {
   if (!identity) return null;
   const separator = identity.indexOf(":");
   return separator === -1 ? null : identity.slice(separator + 1);
 }
 
-async function readLink(link: string): Promise<string | null> {
-  try {
-    return await fs.readlink(link);
-  } catch (error) {
-    if (errno(error, "ENOENT")) return null;
-    throw error;
-  }
-}
-
-async function processIsAlive(pid: string): Promise<boolean> {
-  if (!/^\d+$/.test(pid)) return false;
-  try {
-    process.kill(Number(pid), 0);
-    return true;
-  } catch (error) {
-    if (errno(error, "ESRCH")) return false;
-    if (errno(error, "EPERM")) return true;
-    throw error;
-  }
-}
-
 async function tryAcquireLock(lock: LockContext): Promise<boolean> {
-  try {
-    await fs.symlink(lock.identity, lock.path);
-    lock.owns = true;
-    return true;
-  } catch (error) {
-    if (errno(error, "EEXIST")) return false;
-    throw error;
-  }
-}
-
-async function reapStaleLock(lock: LockContext): Promise<void> {
-  const reapPath = `${lock.path}.reap`;
-  try {
-    await fs.symlink(String(process.pid), reapPath);
-  } catch (error) {
-    if (errno(error, "EEXIST")) return;
-    throw error;
-  }
-
-  try {
-    const identity = await readLink(lock.path);
-    const owner = ownerFromIdentity(identity);
-    if (owner && !(await processIsAlive(owner))) {
-      console.error(
-        `Clearing a stack lock left behind by a dead process (${owner}).`,
-      );
-      await fs.rm(lock.path, { force: true });
-    }
-  } finally {
-    await fs.rm(reapPath, { force: true });
-  }
+  if (!(await tryCreateLock(lock.path, lock.identity))) return false;
+  lock.owns = true;
+  return true;
 }
 
 async function acquireLock(
@@ -148,7 +100,7 @@ async function acquireLock(
 
   for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
     if (await tryAcquireLock(lock)) return true;
-    await reapStaleLock(lock);
+    await reapStaleLock(lock.path);
     if (await tryAcquireLock(lock)) return true;
 
     const currentIdentity = await readLink(lock.path);
@@ -167,9 +119,7 @@ async function acquireLock(
 }
 
 async function releaseLock(lock: LockContext): Promise<void> {
-  if (lock.owns && (await readLink(lock.path)) === lock.identity) {
-    await fs.rm(lock.path, { force: true });
-  }
+  if (lock.owns) await releaseOwnedLock(lock.path, lock.identity);
 }
 
 function parseSchedules(raw: string): Schedule[] {

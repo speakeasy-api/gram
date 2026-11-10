@@ -2,9 +2,11 @@
 package platformmcp
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"net/url"
 	"sort"
 	"strings"
@@ -41,8 +43,20 @@ type CatalogCandidate struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Version     string `json:"version"`
-	ToolCount   int    `json:"tool_count"`
+	// ToolCount is left out when the catalogue does not know the tool count, so
+	// it never reads as a server with no tools.
+	ToolCount   *int   `json:"tool_count,omitempty" jsonschema:"number of tools the server offers; absent when not known"`
 	SetupIntent string `json:"setup_intent"`
+	// SupportsDCR is advertised dynamic client registration support.
+	SupportsDCR bool `json:"supports_dcr"`
+	// SupportsCIMD is advertised compatible client metadata document support.
+	SupportsCIMD bool `json:"supports_cimd"`
+	// AuthSetup distinguishes unknown capability evidence from required manual setup.
+	AuthSetup string `json:"auth_setup" jsonschema:"how the server signs users in: none means no sign-in; dcr or cimd means OAuth whose client is set up automatically, so only the user signs in; manual means an administrator registers an OAuth client or adds a credential by hand; unknown means not yet determined, so check the setup guide with search_speakeasy_docs before saying how it signs in"`
+
+	// iconURL is the registry's icon for the server. It is fetched only to
+	// draw a result card and is never part of the tool output.
+	iconURL string
 }
 
 type CatalogConfigurationField struct {
@@ -59,7 +73,7 @@ type CatalogConfigurationField struct {
 type CatalogDetails struct {
 	CatalogCandidate
 	Transport              string                      `json:"transport"`
-	ToolNames              []string                    `json:"tool_names"`
+	ToolNames              []string                    `json:"tool_names,omitempty"`
 	Configuration          []CatalogConfigurationField `json:"configuration"`
 	RequiresDashboardSetup bool                        `json:"requires_dashboard_setup"`
 
@@ -99,6 +113,7 @@ type CatalogDescriptorLoader func(ctx context.Context) ([]CatalogDescriptor, err
 type RegistryCatalogSourceLoader func(ctx context.Context) ([]RegistryCatalogSource, error)
 
 type DynamicRegistryCatalog struct {
+	identity    *externalmcp.CatalogService
 	client      *externalmcp.RegistryClient
 	load        CatalogDescriptorLoader
 	loadSources RegistryCatalogSourceLoader
@@ -265,30 +280,29 @@ func (c *RegistryCatalog) Inspect(ctx context.Context, providerKey, catalogRef s
 	if err != nil {
 		return CatalogDetails{}, fmt.Errorf("inspect platform mcp catalog candidate: %w", err)
 	}
-	if details.RemoteURL == "" || !validCatalogRemoteTemplate(details.RemoteURL) || details.TransportType != externalmcptypes.TransportTypeStreamableHTTP || !containsString(allowedURLs, details.RemoteURL) {
+	if !containsString(allowedURLs, details.RemoteURL) {
 		return CatalogDetails{}, ErrCatalogRejected
 	}
 
-	toolNames := make([]string, 0, len(details.Tools))
-	for _, tool := range details.Tools {
-		if tool.Name != "" {
-			toolNames = append(toolNames, tool.Name)
-		}
+	return projectCatalogDetails(descriptor, catalogRef, details)
+}
+
+func projectCatalogDetails(descriptor CatalogDescriptor, catalogRef string, details *externalmcp.ServerDetails) (CatalogDetails, error) {
+	if details.RemoteURL == "" || !validCatalogRemoteTemplate(details.RemoteURL) || details.TransportType != externalmcptypes.TransportTypeStreamableHTTP {
+		return CatalogDetails{}, ErrCatalogRejected
 	}
-	sort.Strings(toolNames)
 	configuration := catalogConfiguration(details.Headers, details.Variables)
 	return CatalogDetails{
 		CatalogCandidate: CatalogCandidate{
-			ProviderKey: providerKey,
+			ProviderKey: descriptor.ProviderKey,
 			CatalogRef:  catalogRef,
-			Name:        details.Name,
+			Name:        cmp.Or(strings.TrimSpace(details.Title), details.Name),
 			Description: details.Description,
 			Version:     details.Version,
-			ToolCount:   len(toolNames),
+			SupportsDCR: details.SupportsDCR, SupportsCIMD: details.SupportsCIMD, AuthSetup: details.AuthSetup,
 			SetupIntent: descriptor.SetupIntent,
 		},
 		Transport:              string(details.TransportType),
-		ToolNames:              toolNames,
 		Configuration:          configuration,
 		RequiresDashboardSetup: catalogRequiresDashboardSetup(configuration),
 		remoteURLTemplate:      details.RemoteURL,
@@ -403,17 +417,51 @@ func stringValue(value *string) string {
 }
 
 func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.ExternalMCPServerEntry) CatalogCandidate {
-	name := entry.RegistrySpecifier
-	if entry.Title != nil && *entry.Title != "" {
-		name = *entry.Title
-	}
+	name := cmp.Or(strings.TrimSpace(conv.PtrValOr(entry.Title, "")), entry.RegistrySpecifier)
 	return CatalogCandidate{
 		ProviderKey: descriptor.ProviderKey,
 		CatalogRef:  entry.RegistrySpecifier,
 		Name:        name,
 		Description: entry.Description,
 		Version:     entry.Version,
-		ToolCount:   entry.ToolCount,
+		SupportsDCR: entry.SupportsDcr, SupportsCIMD: conv.PtrValOr(entry.SupportsCimd, false), AuthSetup: conv.PtrValOr(entry.AuthSetup, "unknown"),
 		SetupIntent: descriptor.SetupIntent,
+		iconURL:     strings.TrimSpace(conv.PtrValOr(entry.IconURL, "")),
 	}
+}
+
+// WithIdentityService keeps continuation independent of the currently selected
+// source. Only callers with an authorized receipt or registration use this path.
+func (c *DynamicRegistryCatalog) WithIdentityService(service *externalmcp.CatalogService) *DynamicRegistryCatalog {
+	c.identity = service
+	return c
+}
+
+func (c *DynamicRegistryCatalog) InspectIdentity(ctx context.Context, providerKey, catalogRef string) (CatalogDetails, error) {
+	if c.identity == nil {
+		return c.Inspect(ctx, providerKey, catalogRef)
+	}
+	idText, ok := strings.CutPrefix(providerKey, "browser-catalog-registry-")
+	if !ok || catalogRef == "" {
+		return CatalogDetails{}, ErrCatalogRejected
+	}
+	id, err := uuid.Parse(idText)
+	if err != nil {
+		return CatalogDetails{}, ErrCatalogRejected
+	}
+	source, err := c.identity.IdentitySource(ctx, id)
+	if err != nil {
+		return CatalogDetails{}, fmt.Errorf("resolve retained catalog source: %w", err)
+	}
+	reader, err := c.identity.ReaderFor(source)
+	if err != nil {
+		return CatalogDetails{}, fmt.Errorf("resolve retained catalog reader: %w", err)
+	}
+	// Persistence authorized this exact identity before entry lookup. Published
+	// discovery membership is required only for new inspection/admission.
+	details, err := reader.GetServerDetails(ctx, source.Registry, catalogRef, nil)
+	if err != nil {
+		return CatalogDetails{}, fmt.Errorf("inspect retained platform mcp catalog candidate: %w", err)
+	}
+	return projectCatalogDetails(BrowserCatalogDescriptor(source.Registry), catalogRef, details)
 }

@@ -11,7 +11,7 @@ import (
 var ErrUnsupportedProvider = errors.New("unsupported network ingress provider")
 
 // NetworkIdentityParser normalizes advisory provider identity into the shared
-// request-origin shape. It does not authenticate a Gram principal or grant
+// request-origin shape. It does not authenticate a Speakeasy principal or grant
 // authorization.
 type NetworkIdentityParser interface {
 	ParseIdentity(http.Header) (*requestorigin.NetworkIdentity, error)

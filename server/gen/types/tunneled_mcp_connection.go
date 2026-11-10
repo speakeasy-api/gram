@@ -8,6 +8,11 @@
 package types
 
 type TunneledMcpConnection struct {
+	// Agent target scheme, hostname and port. The path, credentials, query and
+	// fragment are never shown, because some MCP servers put secrets in the path.
+	TargetDisplay *string
+	// Optional agent diagnostics, absent for legacy agents
+	Diagnostics *TunnelDiagnostics
 	// Gateway session ID for a live tunnel connection
 	GatewaySessionID string
 	// Customer-declared version of the MCP service behind this tunnel connection

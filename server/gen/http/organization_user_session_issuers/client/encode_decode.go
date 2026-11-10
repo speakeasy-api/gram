@@ -290,6 +290,9 @@ func EncodeListIssuersRequest(encoder func(*http.Request) goahttp.Encoder) func(
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
+		if p.Tier != nil {
+			values.Add("tier", *p.Tier)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -959,6 +962,719 @@ func DecodeUpdateIssuerResponse(decoder func(*http.Response) goahttp.Decoder, re
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "updateIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListMcpServersRequest instantiates a HTTP request object with method
+// and path set to call the "organizationUserSessionIssuers" service
+// "listMcpServers" endpoint
+func (c *Client) BuildListMcpServersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListMcpServersOrganizationUserSessionIssuersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationUserSessionIssuers", "listMcpServers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListMcpServersRequest returns an encoder for requests sent to the
+// organizationUserSessionIssuers listMcpServers server.
+func EncodeListMcpServersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationusersessionissuers.ListMcpServersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationUserSessionIssuers", "listMcpServers", "*organizationusersessionissuers.ListMcpServersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("user_session_issuer_id", p.UserSessionIssuerID)
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListMcpServersResponse returns a decoder for responses returned by the
+// organizationUserSessionIssuers listMcpServers endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListMcpServersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListMcpServersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListMcpServersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			err = ValidateListMcpServersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			res := NewListMcpServersListUserSessionIssuerMcpServersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListMcpServersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			err = ValidateListMcpServersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			return nil, NewListMcpServersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListMcpServersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			err = ValidateListMcpServersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			return nil, NewListMcpServersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListMcpServersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			err = ValidateListMcpServersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			return nil, NewListMcpServersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListMcpServersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			err = ValidateListMcpServersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			return nil, NewListMcpServersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListMcpServersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			err = ValidateListMcpServersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			return nil, NewListMcpServersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListMcpServersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			err = ValidateListMcpServersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			return nil, NewListMcpServersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListMcpServersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			err = ValidateListMcpServersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			return nil, NewListMcpServersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListMcpServersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listMcpServers", err)
+				}
+				err = ValidateListMcpServersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listMcpServers", err)
+				}
+				return nil, NewListMcpServersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListMcpServersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listMcpServers", err)
+				}
+				err = ValidateListMcpServersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listMcpServers", err)
+				}
+				return nil, NewListMcpServersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "listMcpServers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListMcpServersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			err = ValidateListMcpServersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listMcpServers", err)
+			}
+			return nil, NewListMcpServersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "listMcpServers", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetAuthenticationHostImpactRequest instantiates a HTTP request object
+// with method and path set to call the "organizationUserSessionIssuers"
+// service "getAuthenticationHostImpact" endpoint
+func (c *Client) BuildGetAuthenticationHostImpactRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetAuthenticationHostImpactOrganizationUserSessionIssuersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationUserSessionIssuers", "getAuthenticationHostImpact", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetAuthenticationHostImpactRequest returns an encoder for requests
+// sent to the organizationUserSessionIssuers getAuthenticationHostImpact
+// server.
+func EncodeGetAuthenticationHostImpactRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationusersessionissuers.GetAuthenticationHostImpactPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationUserSessionIssuers", "getAuthenticationHostImpact", "*organizationusersessionissuers.GetAuthenticationHostImpactPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		values.Add("use_authentication_host", fmt.Sprintf("%v", p.UseAuthenticationHost))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetAuthenticationHostImpactResponse returns a decoder for responses
+// returned by the organizationUserSessionIssuers getAuthenticationHostImpact
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeGetAuthenticationHostImpactResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetAuthenticationHostImpactResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetAuthenticationHostImpactResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			err = ValidateGetAuthenticationHostImpactResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			res := NewGetAuthenticationHostImpactUserSessionIssuerAuthenticationHostImpactOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetAuthenticationHostImpactUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			err = ValidateGetAuthenticationHostImpactUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			return nil, NewGetAuthenticationHostImpactUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetAuthenticationHostImpactForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			err = ValidateGetAuthenticationHostImpactForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			return nil, NewGetAuthenticationHostImpactForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetAuthenticationHostImpactBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			err = ValidateGetAuthenticationHostImpactBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			return nil, NewGetAuthenticationHostImpactBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetAuthenticationHostImpactNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			err = ValidateGetAuthenticationHostImpactNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			return nil, NewGetAuthenticationHostImpactNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetAuthenticationHostImpactConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			err = ValidateGetAuthenticationHostImpactConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			return nil, NewGetAuthenticationHostImpactConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetAuthenticationHostImpactUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			err = ValidateGetAuthenticationHostImpactUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			return nil, NewGetAuthenticationHostImpactUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetAuthenticationHostImpactInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			err = ValidateGetAuthenticationHostImpactInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			return nil, NewGetAuthenticationHostImpactInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetAuthenticationHostImpactInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+				}
+				err = ValidateGetAuthenticationHostImpactInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+				}
+				return nil, NewGetAuthenticationHostImpactInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetAuthenticationHostImpactUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+				}
+				err = ValidateGetAuthenticationHostImpactUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+				}
+				return nil, NewGetAuthenticationHostImpactUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "getAuthenticationHostImpact", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetAuthenticationHostImpactGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			err = ValidateGetAuthenticationHostImpactGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+			}
+			return nil, NewGetAuthenticationHostImpactGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "getAuthenticationHostImpact", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetAuthenticationHostRequest instantiates a HTTP request object with
+// method and path set to call the "organizationUserSessionIssuers" service
+// "setAuthenticationHost" endpoint
+func (c *Client) BuildSetAuthenticationHostRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetAuthenticationHostOrganizationUserSessionIssuersPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationUserSessionIssuers", "setAuthenticationHost", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetAuthenticationHostRequest returns an encoder for requests sent to
+// the organizationUserSessionIssuers setAuthenticationHost server.
+func EncodeSetAuthenticationHostRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationusersessionissuers.SetAuthenticationHostPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationUserSessionIssuers", "setAuthenticationHost", "*organizationusersessionissuers.SetAuthenticationHostPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetAuthenticationHostRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetAuthenticationHostResponse returns a decoder for responses returned
+// by the organizationUserSessionIssuers setAuthenticationHost endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeSetAuthenticationHostResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetAuthenticationHostResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetAuthenticationHostResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			err = ValidateSetAuthenticationHostResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			res := NewSetAuthenticationHostUserSessionIssuerOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetAuthenticationHostUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			err = ValidateSetAuthenticationHostUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			return nil, NewSetAuthenticationHostUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetAuthenticationHostForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			err = ValidateSetAuthenticationHostForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			return nil, NewSetAuthenticationHostForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetAuthenticationHostBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			err = ValidateSetAuthenticationHostBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			return nil, NewSetAuthenticationHostBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetAuthenticationHostNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			err = ValidateSetAuthenticationHostNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			return nil, NewSetAuthenticationHostNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetAuthenticationHostConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			err = ValidateSetAuthenticationHostConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			return nil, NewSetAuthenticationHostConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetAuthenticationHostUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			err = ValidateSetAuthenticationHostUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			return nil, NewSetAuthenticationHostUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetAuthenticationHostInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			err = ValidateSetAuthenticationHostInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			return nil, NewSetAuthenticationHostInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetAuthenticationHostInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+				}
+				err = ValidateSetAuthenticationHostInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+				}
+				return nil, NewSetAuthenticationHostInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetAuthenticationHostUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+				}
+				err = ValidateSetAuthenticationHostUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+				}
+				return nil, NewSetAuthenticationHostUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "setAuthenticationHost", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetAuthenticationHostGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			err = ValidateSetAuthenticationHostGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "setAuthenticationHost", err)
+			}
+			return nil, NewSetAuthenticationHostGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "setAuthenticationHost", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -3060,17 +3776,42 @@ func DecodeDeleteCimdClientResponse(decoder func(*http.Response) goahttp.Decoder
 // *UserSessionIssuerResponseBody.
 func unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(v *UserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	res := &types.UserSessionIssuer{
-		ID:                            *v.ID,
-		ProjectID:                     *v.ProjectID,
-		OrganizationID:                *v.OrganizationID,
-		Slug:                          *v.Slug,
-		AuthnChallengeMode:            *v.AuthnChallengeMode,
-		SessionDurationHours:          *v.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: *v.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  v.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  v.TrustedRemoteSessionClientID,
-		CreatedAt:                     *v.CreatedAt,
-		UpdatedAt:                     *v.UpdatedAt,
+		ID:                                   *v.ID,
+		ProjectID:                            *v.ProjectID,
+		OrganizationID:                       *v.OrganizationID,
+		Slug:                                 *v.Slug,
+		AuthnChallengeMode:                   *v.AuthnChallengeMode,
+		SessionDurationHours:                 *v.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        *v.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         v.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         v.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              *v.AuthorizationServerMode,
+		UseAuthenticationHost:                *v.UseAuthenticationHost,
+		IssuerURLPinned:                      *v.IssuerURLPinned,
+		IssuerURL:                            v.IssuerURL,
+		TokenEndpoint:                        v.TokenEndpoint,
+		AuthorizationServerUnavailableReason: v.AuthorizationServerUnavailableReason,
+		ProjectName:                          v.ProjectName,
+		AuthenticationHostAvailable:          v.AuthenticationHostAvailable,
+		CreatedAt:                            *v.CreatedAt,
+		UpdatedAt:                            *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalUserSessionIssuerMcpServerResponseBodyToOrganizationusersessionissuersUserSessionIssuerMcpServer
+// builds a value of type
+// *organizationusersessionissuers.UserSessionIssuerMcpServer from a value of
+// type *UserSessionIssuerMcpServerResponseBody.
+func unmarshalUserSessionIssuerMcpServerResponseBodyToOrganizationusersessionissuersUserSessionIssuerMcpServer(v *UserSessionIssuerMcpServerResponseBody) *organizationusersessionissuers.UserSessionIssuerMcpServer {
+	res := &organizationusersessionissuers.UserSessionIssuerMcpServer{
+		Kind:        *v.Kind,
+		ID:          *v.ID,
+		Name:        *v.Name,
+		Slug:        v.Slug,
+		ProjectID:   *v.ProjectID,
+		ProjectName: *v.ProjectName,
 	}
 
 	return res

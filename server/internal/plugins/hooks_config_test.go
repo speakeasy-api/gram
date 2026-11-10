@@ -14,8 +14,9 @@ import (
 )
 
 // marketplaceRenameFixture publishes a project once (non-phased, so it lands on
-// the current hooks version + config) and returns the org id used for key counts.
-func marketplaceRenameFixture(t *testing.T, ctx context.Context, ti *testInstance, name string) string {
+// the current hooks version + config) and returns the org id used for key counts
+// and the id of the plugin it published.
+func marketplaceRenameFixture(t *testing.T, ctx context.Context, ti *testInstance, name string) (orgID, pluginID string) {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -35,7 +36,7 @@ func marketplaceRenameFixture(t *testing.T, ctx context.Context, ti *testInstanc
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	return authCtx.ActiveOrganizationID
+	return authCtx.ActiveOrganizationID, plugin.ID
 }
 
 // A marketplace rename changes the hook-output config (the resolved name), so an
@@ -48,7 +49,7 @@ func TestPluginsService_UpdateMarketplaceSettings_RenameRegeneratesHooksWhenElig
 	features := &feature.InMemory{}
 	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
 
-	orgID := marketplaceRenameFixture(t, ctx, ti, "Rename Eligible")
+	orgID, _ := marketplaceRenameFixture(t, ctx, ti, "Rename Eligible")
 
 	// Clear the org for the current hooks version (pin above any real version).
 	features.SetFlagPayload(feature.FlagHooksRollout, orgID, []byte(`{"version": 9999}`))
@@ -74,7 +75,7 @@ func TestPluginsService_UpdateMarketplaceSettings_RenameDefersHooksWhenNotEligib
 	// Empty provider → no clearance payload, and the test org is not a canary.
 	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, &feature.InMemory{})
 
-	orgID := marketplaceRenameFixture(t, ctx, ti, "Rename Deferred")
+	orgID, _ := marketplaceRenameFixture(t, ctx, ti, "Rename Deferred")
 	hooksKeysBefore := countPluginHooksKeys(t, ctx, ti.conn, orgID)
 
 	// Keep lastPushedFiles so GetRepoFiles returns the baseline (carrying hooks
@@ -101,4 +102,35 @@ func TestPluginsService_UpdateMarketplaceSettings_RenameDefersHooksWhenNotEligib
 	// But the hooks subtree is carried verbatim: no fresh hooks key.
 	require.Equal(t, hooksKeysBefore, countPluginHooksKeys(t, ctx, ti.conn, orgID),
 		"a deferred rename must not regenerate the hooks subtree or mint a hooks key")
+}
+
+// After an org rename, an org held on its published hooks keeps the hooks
+// subtree under the old name's directories, and the shared manifests keep
+// pointing there. Automatic publishes must fingerprint the manifests the same
+// way, or each one would read them as changed and regenerate the MCP packages.
+func TestPluginsService_OrgRenameWithCarriedHooksStopsRepublishing(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	// Empty provider: the org is not cleared for a newer hooks version, so
+	// its published hooks subtree is carried rather than regenerated.
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, &feature.InMemory{})
+	f := newAutoSyncFixtureFor(t, ctx, ti, mock)
+
+	orgID, _ := marketplaceRenameFixture(t, ctx, ti, "Carried Hooks Rename")
+	oldClaudeObservability, _ := orgObservabilitySlugs(t, ctx, ti)
+	oldHooksDir := oldClaudeObservability + "/"
+	require.NotEmpty(t, filesWithPrefix(mock.lastPushedFiles, oldHooksDir))
+	renameOrganization(t, ctx, ti.conn, orgID, "Carried Hooks Renamed")
+	newClaudeObservability, _ := orgObservabilitySlugs(t, ctx, ti)
+	newHooksDir := newClaudeObservability + "/"
+
+	f.automaticPublish(t, ctx)
+	require.NotEmpty(t, filesWithPrefix(mock.lastPushedFiles, oldHooksDir), "the hooks subtree stays under the old name")
+	require.Empty(t, filesWithPrefix(mock.lastPushedFiles, newHooksDir))
+
+	mock.pushFilesCalled = false
+	again := f.automaticPublish(t, ctx)
+	require.True(t, again.Skipped, "nothing changed since the last automatic publish")
+	require.False(t, mock.pushFilesCalled)
 }

@@ -295,11 +295,17 @@ func TestMigratePreflight_CanMigrate(t *testing.T) {
 	clean := migratePreflight{warnings: []issuerFieldMismatch{{field: "oidc", sourceValue: nil, targetValue: nil, sourceValues: nil, targetValues: nil}}}
 	require.True(t, clean.canMigrate(), "warnings alone must not block a migration")
 
+	bound := migratePreflight{emaBindingCount: 1}
+	require.False(t, bound.canMigrate(), "active identity-chaining bindings require explicit unlinking")
+
 	mismatched := migratePreflight{endpointMismatches: []issuerFieldMismatch{{field: "issuer", sourceValue: nil, targetValue: nil, sourceValues: nil, targetValues: nil}}}
 	require.False(t, mismatched.canMigrate())
 
 	conflicted := migratePreflight{conflictingMcpServerNames: []string{"Acme"}}
 	require.False(t, conflicted.canMigrate())
+
+	trustedClient := migratePreflight{trustedClientCount: 1}
+	require.False(t, trustedClient.canMigrate(), "a trusted sign-in client cannot change issuer")
 }
 
 // TestIssuerURLsCanonicallyEqual_CollapsesEquivalentSpellings covers the axes

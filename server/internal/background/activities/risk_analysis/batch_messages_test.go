@@ -2,8 +2,8 @@ package risk_analysis
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,7 +18,9 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
+	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -45,14 +47,65 @@ func TestScanSurfaceIncludesToolRequestArgs(t *testing.T) {
 	require.Equal(t, "content", user.scanSurface())
 }
 
-func TestMessageContentsUsesScanSurface(t *testing.T) {
+func TestNewBatchMessageBoundsScanText(t *testing.T) {
 	t.Parallel()
 
-	contents := messageContents([]batchMessage{msg(message.ToolResponse), toolReq("Bash")})
-	require.Equal(t, []string{"content", `{"command":"rm -rf /tmp/data"}`}, contents)
+	small, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "user", "hello", nil)
+	require.True(t, ok)
+	require.False(t, small.Truncated)
+	require.Equal(t, "hello", small.Content)
+
+	// A multibyte rune straddles the bound, so the cut must walk back.
+	oversized := strings.Repeat("a", batchScanMaxContentBytes-1) + "€" + strings.Repeat("b", 1024)
+	user, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "user", oversized, nil)
+	require.True(t, ok)
+	require.True(t, user.Truncated)
+	require.Equal(t, strings.Repeat("a", batchScanMaxContentBytes-1), user.Content)
+
+	args := strings.Repeat("x", batchScanMaxContentBytes)
+	raw := []byte(fmt.Sprintf(`[{"id":"1","function":{"name":"Write","arguments":%q}},{"id":"2","function":{"name":"Bash","arguments":%q}}]`, args, args))
+	req, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "assistant", "running", raw)
+	require.True(t, ok)
+	require.True(t, req.Truncated)
+	require.Equal(t, "running", req.Content)
+	// Calls past the text budget keep their identity with empty arguments.
+	require.Len(t, req.ToolCalls, 2)
+	require.Equal(t, "Bash", req.ToolCalls[1].Function.Name)
+	require.Len(t, req.ToolCalls[0].Function.Arguments, batchScanMaxContentBytes-len("running"))
+	require.Empty(t, req.ToolCalls[1].Function.Arguments)
+	require.Len(t, req.RawToolCalls, batchScanMaxContentBytes)
+
+	// Escapes inflate only the raw JSON; the parsed call fits, so nothing scanned was cut.
+	escaped := strings.Repeat("\n", batchScanMaxContentBytes*2/3)
+	escapedRaw := []byte(fmt.Sprintf(`[{"id":"1","function":{"name":"Write","arguments":%q}}]`, escaped))
+	escapedReq, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "assistant", "", escapedRaw)
+	require.True(t, ok)
+	require.Len(t, escapedReq.RawToolCalls, batchScanMaxContentBytes)
+	require.Len(t, escapedReq.ToolCalls, 1)
+	require.False(t, escapedReq.Truncated)
+
+	longName := strings.Repeat("n", batchToolIdentityMaxBytes+1)
+	longID := strings.Repeat("i", batchToolIdentityMaxBytes+1)
+	many := make([]string, 0, batchMaxToolCalls+1)
+	for range batchMaxToolCalls + 1 {
+		many = append(many, fmt.Sprintf(`{"id":%q,"function":{"name":%q,"arguments":""}}`, longID, longName))
+	}
+	capped, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "assistant", "", []byte("["+strings.Join(many, ",")+"]"))
+	require.True(t, ok)
+	require.True(t, capped.Truncated)
+	require.Len(t, capped.ToolCalls, batchMaxToolCalls)
+	require.Len(t, capped.ToolCalls[0].Function.Name, batchToolIdentityMaxBytes)
+	require.Len(t, capped.ToolCalls[0].ID, batchToolIdentityMaxBytes)
+
+	// Blank calls fall back to the raw JSON, so cutting it counts.
+	blankRaw := []byte(fmt.Sprintf(`[{"id":"1","function":{"name":"","arguments":""},"pad":%q}]`, strings.Repeat("p", batchScanMaxContentBytes)))
+	blank, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "assistant", "", blankRaw)
+	require.True(t, ok)
+	require.Len(t, blank.ToolCalls, 1)
+	require.True(t, blank.Truncated)
 }
 
-func TestBatchScanRequestIDPreservesLegacyBatchCorrelation(t *testing.T) {
+func TestBatchScanRequestIDIgnoresBatchComposition(t *testing.T) {
 	t.Parallel()
 
 	policyID := uuid.MustParse("00000000-0000-0000-0000-000000000101")
@@ -73,17 +126,20 @@ func TestBatchScanRequestIDPreservesLegacyBatchCorrelation(t *testing.T) {
 		PresidioScoreThreshold: 0,
 		CustomRuleIds:          nil,
 		ApprovedEmailDomains:   nil,
-		BuiltinPresetsEnabled:  false,
 		DetectionScopes:        nil,
 	}
 	rebatched := first
 	rebatched.MessageIDs = []uuid.UUID{otherID, anchorID}
+	bumped := first
+	bumped.PolicyVersion = 8
 
-	require.Equal(t, uuid.MustParse("6b619ca7-c2cd-54d9-b921-59e8765bc41a"), batchScanRequestID(first, "standard"))
-	require.NotEqual(t, batchScanRequestID(first, "standard"), batchScanRequestID(rebatched, "standard"))
-	require.NotEqual(t, batchScanRequestID(first, "standard"), batchScanRequestID(first, "prompt_policy"))
-	require.Equal(t, batchOperationID(first, message, inlineBatchExecutionPath), batchOperationID(rebatched, message, inlineBatchExecutionPath))
-	require.NotEqual(t, batchOperationID(first, message, inlineBatchExecutionPath), batchOperationID(first, message, shadowStreamExecutionPath))
+	require.Equal(t, messageScanRequestID(first, scanLaneStandard, message), messageScanRequestID(rebatched, scanLaneStandard, message))
+	require.NotEqual(t, messageScanRequestID(first, scanLaneStandard, message), messageScanRequestID(first, scanLanePromptPolicy, message))
+	require.NotEqual(t, messageScanRequestID(first, scanLaneStandard, message), messageScanRequestID(bumped, scanLaneStandard, message))
+	require.NotEqual(t, batchScanRequestID(first, scanLaneStandard, false, anchorID), batchScanRequestID(first, scanLaneStandard, true, anchorID))
+	require.NotEqual(t, batchScanRequestID(first, scanLaneStandard, false, anchorID), batchScanRequestID(first, scanLaneStandard, false, otherID))
+	require.Equal(t, batchOperationID(first, message, shadowStreamExecutionPath), batchOperationID(rebatched, message, shadowStreamExecutionPath))
+	require.NotEqual(t, batchOperationID(first, message, shadowStreamExecutionPath), batchOperationID(first, message, judgeHandlerStreamExecutionPath))
 }
 
 func TestContentPartProvenanceUsesRealParentMessage(t *testing.T) {
@@ -119,11 +175,10 @@ func TestContentPartProvenanceUsesRealParentMessage(t *testing.T) {
 		PresidioScoreThreshold: 0,
 		CustomRuleIds:          nil,
 		ApprovedEmailDomains:   nil,
-		BuiltinPresetsEnabled:  false,
 		DetectionScopes:        nil,
 	}
 
-	provenance := batchRiskProvenance(args, msg, inlineBatchExecutionPath, "request")
+	provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, "request")
 	require.Equal(t, chatID, provenance.ChatID)
 	require.Equal(t, parentID, provenance.ChatMessageID)
 	require.Equal(t, partID, provenance.ContentPartID)
@@ -131,51 +186,33 @@ func TestContentPartProvenanceUsesRealParentMessage(t *testing.T) {
 	require.Empty(t, provenance.PolicyLinkReason)
 
 	msg.ParentChatMessageID = uuid.Nil
-	unlinked := batchRiskProvenance(args, msg, inlineBatchExecutionPath, "request")
+	unlinked := batchRiskProvenance(args, msg, shadowStreamExecutionPath, "request")
 	require.Equal(t, uuid.Nil, unlinked.ChatMessageID)
 	require.Equal(t, "content_part_unlinked", unlinked.MessageLinkReason)
 }
 
-func TestRecordBatchResultsContinuesAfterPublishFailure(t *testing.T) {
+func TestPublishPresidioScanRequestsCarriesMeterReading(t *testing.T) {
 	t.Parallel()
 
-	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
-	publisher.On("Publish", mock.Anything, mock.Anything).
-		Return(gcp.NewErrPublishResult(errors.New("meter transport unavailable"))).Once()
-	var published []*meteringv1.MeterReading
-	publisher.On("Publish", mock.Anything, mock.Anything).
-		Return(gcp.NewSuccessPublishResult()).Once().
-		Run(func(args mock.Arguments) {
-			reading, ok := args.Get(1).(*meteringv1.MeterReading)
-			require.True(t, ok)
-			published = append(published, reading)
-		})
 	analyzer := &AnalyzeBatch{
-		logger:                 testenv.NewLogger(t),
-		tracer:                 nil,
-		metrics:                nil,
-		db:                     nil,
-		assetStorage:           nil,
-		gitleaksScanner:        nil,
-		stokenCodec:            stokens.NewCodec(),
-		piiScanner:             nil,
-		promptInjectionScanner: nil,
-		shadowMCPScanner:       nil,
-		judge:                  nil,
-		flags:                  nil,
-		presidioPub:            nil,
-		gitleaksPub:            nil,
-		promptInjectionPub:     nil,
-		promptPolicyPub:        nil,
-		customRulesPub:         nil,
-		findingsPub:            nil,
-		riskRecorder:           metering.NewRiskRecorder(publisher),
-		customRuleScanner:      nil,
-		cliDestructiveScanner:  nil,
-		destructiveToolScanner: nil,
-		celEng:                 nil,
-		builtinPresets:         nil,
-		recommended:            RecommendedSet{},
+		logger:             testenv.NewLogger(t),
+		tracer:             nil,
+		metrics:            nil,
+		db:                 nil,
+		assetStorage:       nil,
+		stokenCodec:        stokens.NewCodec(),
+		flags:              nil,
+		presidioPub:        nil,
+		gitleaksPub:        nil,
+		promptInjectionPub: nil,
+		promptPolicyPub:    nil,
+		customRulesPub:     nil,
+		llmPub:             nil,
+		toolCallPub:        nil,
+		accountIdentityPub: nil,
+		llmAnalyzerEnabled: false,
+		celEng:             nil,
+		recommended:        RecommendedSet{},
 	}
 	chatID := uuid.MustParse("00000000-0000-0000-0000-000000000601")
 	messages := []batchMessage{msg(message.User), toolReq("Bash"), msg(message.User), msg(message.Assistant)}
@@ -195,22 +232,8 @@ func TestRecordBatchResultsContinuesAfterPublishFailure(t *testing.T) {
 		PresidioScoreThreshold: 0,
 		CustomRuleIds:          nil,
 		ApprovedEmailDomains:   nil,
-		BuiltinPresetsEnabled:  false,
 		DetectionScopes:        nil,
 	}
-	results := []scanners.Result{
-		{Findings: []scanners.Finding{}, STokens: 17, Completed: false},
-		{Findings: []scanners.Finding{}, STokens: 5, Completed: true},
-		{Findings: []scanners.Finding{}, STokens: 7, Completed: true},
-		{Findings: []scanners.Finding{}, STokens: 0, Completed: true},
-	}
-
-	analyzer.recordBatchResults(t.Context(), metering.RiskGitleaks(), args, messages, results, time.Now())
-	require.Len(t, published, 1)
-	require.Equal(t, int64(7), published[0].GetValue())
-	require.Equal(t, messages[2].ID.String(), published[0].GetAttributes()[metering.AttributeChatMessageID])
-	publisher.AssertExpectations(t)
-
 	presidioPublisher := gcp.NewMockPublisher[*riskv1.PresidioAnalysis]()
 	var request *riskv1.PresidioAnalysis
 	presidioPublisher.On("Publish", mock.Anything, mock.Anything).
@@ -232,7 +255,7 @@ func TestRecordBatchResultsContinuesAfterPublishFailure(t *testing.T) {
 	require.NotNil(t, request)
 	require.Equal(t, messages[1].scanSurface(), request.GetContent())
 	require.Equal(t, "scan_surface", request.GetFindingSurface())
-	require.Equal(t, batchScanRequestID(args, "standard").String(), request.GetRequestId())
+	require.Equal(t, messageScanRequestID(args, scanLaneStandard, messages[1]), request.GetRequestId())
 	require.Equal(t, messages[1].ChatID.String(), request.GetChatId())
 	require.Equal(t, messages[1].UserID, request.GetUserId())
 	require.Equal(t, shadowStreamExecutionPath, request.GetExecutionPath())
@@ -245,5 +268,71 @@ func TestRecordBatchResultsContinuesAfterPublishFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(expected), envelope.GetValue())
 	require.Equal(t, request.GetChatMessageId(), envelope.GetAttributes()[metering.AttributeChatMessageID])
-	require.Equal(t, inlineBatchExecutionPath, published[0].GetAttributes()[metering.AttributeScanExecutionPath])
+}
+
+func TestBatchJudgeParentlessPartHasNoLiveHistory(t *testing.T) {
+	t.Parallel()
+	var msg batchMessage
+	msg.ContentPart = true
+	msg.ChatID = uuid.New()
+	msg.Content = "persisted part"
+	target := batchJudgeMessage(msg)
+	require.Equal(t, uuid.Nil, target.AnchorID)
+	require.Equal(t, uuid.Nil, target.ChatID)
+	msg.ParentChatMessageID = uuid.New()
+	target = batchJudgeMessage(msg)
+	require.Equal(t, msg.ParentChatMessageID, target.AnchorID)
+	require.Equal(t, msg.ChatID, target.ChatID)
+}
+
+func TestPublishToolCallScanRequestsAppliesCategoryScopes(t *testing.T) {
+	t.Parallel()
+
+	pub := gcp.NewMockPublisher[*riskv1.ToolCallAnalysis]()
+	var published []*riskv1.ToolCallAnalysis
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			request, ok := args.Get(1).(*riskv1.ToolCallAnalysis)
+			require.True(t, ok)
+			published = append(published, request)
+		})
+	analyzer := &AnalyzeBatch{toolCallPub: pub}
+	message := toolReq("mcp__rogue__delete")
+	args := AnalyzeBatchArgs{
+		ProjectID:              uuid.MustParse("00000000-0000-0000-0000-000000000601"),
+		OrganizationID:         "org",
+		RiskPolicyID:           uuid.MustParse("00000000-0000-0000-0000-000000000602"),
+		PolicyVersion:          2,
+		MessageIDs:             []uuid.UUID{message.ID},
+		ContentPartIDs:         nil,
+		Sources:                nil,
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: 0,
+		CustomRuleIds:          nil,
+		ApprovedEmailDomains:   nil,
+		DetectionScopes:        nil,
+	}
+	categoryOut := make(map[categories.Category][]bool)
+	categoryOut[categories.CategoryCLIDestructive] = []bool{true}
+	masks := CategoryScopeMasks{categoryOut: categoryOut}
+
+	publish := func(ctx context.Context) error {
+		return analyzer.publishToolCallScanRequests(
+			ctx,
+			args,
+			[]batchMessage{message},
+			newSourceSet([]string{shadowmcp.SourceShadowMCP, clidestructive.Source}),
+			masks,
+			true,
+			true,
+		)
+	}
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(publish)
+	_, err := env.ExecuteActivity(publish)
+	require.NoError(t, err)
+	require.Len(t, published, 1)
+	require.Equal(t, []string{shadowmcp.SourceShadowMCP}, published[0].GetSources())
 }

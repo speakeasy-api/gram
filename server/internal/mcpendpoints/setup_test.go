@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/externalmcptest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functionstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -122,7 +121,7 @@ func (fakeGitHubPublisher) HasDirectCollaborator(ctx context.Context, installati
 	return false, nil
 }
 
-func (fakeGitHubPublisher) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+func (fakeGitHubPublisher) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string, include func(path string) bool) (map[string][]byte, error) {
 	return nil, ghclient.ErrRepoNotFound
 }
 
@@ -152,7 +151,6 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 	assetStorage := assetstest.NewTestBlobStore(t)
 	enc := testenv.NewEncryptionClient(t)
 	funcs := functionstest.NewOrchestrator(t, assetStorage)
-	mcpRegistryClient := externalmcptest.NewRegistryClient(t, logger, tracerProvider)
 	temporalEnv, _ := infra.NewTemporalEnv(t)
 	auditLogger := audit.NewLogger()
 	f := &feature.InMemory{}
@@ -165,7 +163,7 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f)
 
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
-		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger),
+		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, auditLogger),
 		&background.WorkerOptions{PluginPublisher: pluginPublisher},
 	)
 	t.Cleanup(func() {
@@ -206,11 +204,7 @@ func seedBlockedDirectRemoteDistribution(t *testing.T, ctx context.Context, ti *
 		Status: "registered", McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
 	})
 	require.NoError(t, err)
-	flags := new(feature.InMemory)
-	flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, true)
-	flags.SetFlagPayload(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, []byte(`{"mode":"enforce"}`))
-	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, authCtx.ActiveOrganizationID, true)
-	ti.service.WithDistributionAdmission(admission.NewGuard(flags, nil))
+	ti.service.WithDistributionAdmission(admission.NewGuard())
 }
 
 func withExactAuthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {

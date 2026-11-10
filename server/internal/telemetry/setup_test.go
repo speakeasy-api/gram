@@ -52,6 +52,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	coverage           *telemetry.SupportCoverage
 	telemLogger        *telemetry.Logger
 	service            *telemetry.Service
 	logger             *slog.Logger
@@ -89,7 +90,7 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -100,6 +101,10 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok, "auth context should be set")
+
+	// log:read is held by no system role, so the admin fixture is granted it on
+	// its project explicitly, as an administrator would through a custom role.
+	ctx = authztest.WithAdminGrants(ctx, authz.NewGrant(authz.ScopeLogRead, authCtx.ProjectID.String()))
 
 	disabledLogsOrgID := uuid.New().String()
 	logsEnabled := func(_ context.Context, orgID string) (bool, error) {
@@ -127,10 +132,12 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	featureFlags := &feature.InMemory{}
+	coverage := telemetry.NewSupportCoverage(conn, chConn)
 	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
 
 	return ctx, &testInstance{
 		service:            svc,
+		coverage:           coverage,
 		telemLogger:        telemLogger,
 		logger:             logger,
 		conn:               conn,

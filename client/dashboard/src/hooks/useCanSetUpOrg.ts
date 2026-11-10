@@ -1,3 +1,4 @@
+import { useOrganization } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useRBAC } from "@/hooks/useRBAC";
 
@@ -7,11 +8,12 @@ import { useRBAC } from "@/hooks/useRBAC";
  * and the org home card so the two surfaces appear and disappear together.
  */
 export function useCanSetUpOrg(): boolean {
+  const organization = useOrganization();
   const { hasScope } = useRBAC();
   const productTier = useProductTier();
 
   return (
-    hasScope("org:admin") &&
+    hasScope("org:admin", organization.id) &&
     (productTier === "enterprise" || productTier === "payg")
   );
 }

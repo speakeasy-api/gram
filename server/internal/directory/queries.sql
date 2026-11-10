@@ -2,6 +2,7 @@
 INSERT INTO directory_groups (
   organization_id,
   workos_directory_group_id,
+  directory_id,
   name,
   attributes,
   deleted_at,
@@ -13,6 +14,7 @@ INSERT INTO directory_groups (
 VALUES (
   @organization_id,
   @workos_directory_group_id,
+  sqlc.narg(directory_id),
   @name,
   @attributes,
   NULL,
@@ -22,7 +24,7 @@ VALUES (
   @workos_last_event_id
 )
 ON CONFLICT (workos_directory_group_id) DO UPDATE SET
-  organization_id = EXCLUDED.organization_id,
+  directory_id = COALESCE(EXCLUDED.directory_id, directory_groups.directory_id),
   name = EXCLUDED.name,
   attributes = EXCLUDED.attributes,
   deleted_at = NULL,
@@ -31,10 +33,11 @@ ON CONFLICT (workos_directory_group_id) DO UPDATE SET
   workos_deleted_at = NULL,
   workos_last_event_id = EXCLUDED.workos_last_event_id,
   updated_at = clock_timestamp()
+WHERE directory_groups.organization_id = EXCLUDED.organization_id
 RETURNING id;
 
 -- name: GetDirectoryGroupSyncStateByWorkOSID :one
-SELECT id, workos_updated_at, workos_last_event_id
+SELECT id, organization_id, workos_updated_at, workos_last_event_id
 FROM directory_groups
 WHERE workos_directory_group_id = @workos_directory_group_id;
 
@@ -58,19 +61,24 @@ WHERE workos_directory_group_id = @workos_directory_group_id;
 
 -- name: DeleteDirectoryGroupByWorkOSID :execrows
 UPDATE directory_groups
-SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
+SET directory_id = COALESCE(sqlc.narg(directory_id), directory_id),
+  deleted_at = COALESCE(deleted_at, clock_timestamp()),
   workos_deleted_at = @workos_deleted_at,
   workos_updated_at = @workos_deleted_at,
   workos_last_event_id = @workos_last_event_id,
   updated_at = clock_timestamp()
-WHERE workos_directory_group_id = @workos_directory_group_id;
+WHERE workos_directory_group_id = @workos_directory_group_id
+  AND organization_id = @organization_id;
 
 -- name: UpsertDirectoryUser :one
 INSERT INTO directory_users (
   organization_id,
   user_id,
   workos_directory_user_id,
+  directory_id,
   email,
+  first_name,
+  last_name,
   attributes,
   deleted_at,
   workos_created_at,
@@ -82,7 +90,10 @@ VALUES (
   @organization_id,
   @user_id,
   @workos_directory_user_id,
+  sqlc.narg(directory_id),
   @email,
+  sqlc.narg(first_name),
+  sqlc.narg(last_name),
   @attributes,
   NULL,
   @workos_created_at,
@@ -91,9 +102,13 @@ VALUES (
   @workos_last_event_id
 )
 ON CONFLICT (workos_directory_user_id) DO UPDATE SET
-  organization_id = EXCLUDED.organization_id,
+  directory_id = COALESCE(EXCLUDED.directory_id, directory_users.directory_id),
   user_id = COALESCE(EXCLUDED.user_id, directory_users.user_id),
   email = EXCLUDED.email,
+  -- The event is the newest word on the profile, so its names replace the
+  -- stored ones, including clearing a name the directory no longer reports.
+  first_name = EXCLUDED.first_name,
+  last_name = EXCLUDED.last_name,
   attributes = EXCLUDED.attributes,
   -- Only an event that explicitly reports the directory user as active may
   -- resurrect a soft-deleted row. Events without a state keep the existing
@@ -104,12 +119,13 @@ ON CONFLICT (workos_directory_user_id) DO UPDATE SET
   workos_deleted_at = CASE WHEN @restore_deleted::boolean THEN NULL ELSE directory_users.workos_deleted_at END,
   workos_last_event_id = EXCLUDED.workos_last_event_id,
   updated_at = clock_timestamp()
+WHERE directory_users.organization_id = EXCLUDED.organization_id
 RETURNING id;
 
 -- name: GetDirectoryUserSyncStateByWorkOSID :one
 -- Includes soft-deleted rows so snapshot reconciliation can read the cursor
 -- and stored user linkage even after a deactivation soft-deleted the row.
-SELECT user_id, workos_updated_at, workos_last_event_id
+SELECT organization_id, user_id, workos_updated_at, workos_last_event_id
 FROM directory_users
 WHERE workos_directory_user_id = @workos_directory_user_id;
 
@@ -140,12 +156,14 @@ WHERE relationship.organization_id = directory_user.organization_id
 
 -- name: DeleteDirectoryUserByWorkOSID :execrows
 UPDATE directory_users
-SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
+SET directory_id = COALESCE(sqlc.narg(directory_id), directory_id),
+  deleted_at = COALESCE(deleted_at, clock_timestamp()),
   workos_deleted_at = @workos_deleted_at,
   workos_updated_at = @workos_deleted_at,
   workos_last_event_id = @workos_last_event_id,
   updated_at = clock_timestamp()
-WHERE workos_directory_user_id = @workos_directory_user_id;
+WHERE workos_directory_user_id = @workos_directory_user_id
+  AND organization_id = @organization_id;
 
 -- name: OpenDirectoryUserGroupMembership :one
 INSERT INTO directory_user_group_memberships (
@@ -293,7 +311,7 @@ ORDER BY email, attribute.key, attribute.value;
 -- name: ResolveIDJAGUsersByEmail :many
 -- The directory row is the provisioning gate. A stored user_id wins; only a
 -- NULL link falls back to live email matching. Both paths require an active
--- Gram user and active membership in the same organization. Two distinct
+-- Speakeasy user and active membership in the same organization. Two distinct
 -- matches are returned so the caller can fail closed on ambiguity.
 SELECT DISTINCT candidate.id AS user_id
 FROM directory_users AS du
@@ -312,6 +330,27 @@ WHERE du.organization_id = @organization_id
   AND candidate.workos_deleted_at IS NULL
 ORDER BY candidate.id
 LIMIT 2;
+
+-- name: CountIDJAGResolvableDirectoryUsers :one
+-- Directory users an ID-JAG can resolve to, under ResolveIDJAGUsersByEmail's
+-- predicate: an active directory row linked, or matched by email, to an active
+-- user with live membership in the same organization. Zero means every ID-JAG
+-- exchange is refused.
+SELECT count(DISTINCT du.id)
+FROM directory_users AS du
+JOIN users AS candidate
+  ON (du.user_id IS NOT NULL AND candidate.id = du.user_id)
+  OR (du.user_id IS NULL AND LOWER(candidate.email) = LOWER(du.email))
+JOIN organization_user_relationships AS membership
+  ON membership.user_id = candidate.id
+  AND membership.organization_id = du.organization_id
+  AND membership.deleted_at IS NULL
+WHERE du.organization_id = @organization_id
+  AND du.email IS NOT NULL
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND candidate.deleted_at IS NULL
+  AND candidate.workos_deleted_at IS NULL;
 
 -- name: DirectoryAttributeValueExists :one
 SELECT EXISTS(
@@ -353,6 +392,126 @@ WHERE dg.organization_id = @organization_id
 GROUP BY dg.id, dg.name
 ORDER BY dg.name, dg.id;
 
+-- name: ListDirectoryPeople :many
+-- Every live directory profile in the organization with its groups, name and
+-- exactly one state. A profile linked to an account uses that account. An
+-- unlinked profile (or one linked to a deleted account) falls back to email,
+-- but only when exactly one live account and no other live profile share the
+-- address; otherwise it is ambiguous and never matched. State counts cover the
+-- whole organization, not just the page, so a caller can read them with a
+-- page of one.
+WITH profiles AS (
+  SELECT
+    d.id,
+    d.organization_id,
+    d.email,
+    d.first_name,
+    d.last_name,
+    linked.id AS linked_user_id,
+    email_accounts.account_count,
+    email_accounts.user_id AS email_user_id,
+    other_profiles.profile_count AS other_profile_count
+  FROM directory_users AS d
+  LEFT JOIN users AS linked
+    ON linked.id = d.user_id
+    AND linked.deleted_at IS NULL
+    AND linked.workos_deleted_at IS NULL
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*)::bigint AS account_count, MIN(u.id) AS user_id
+    FROM users AS u
+    WHERE linked.id IS NULL
+      AND NULLIF(TRIM(d.email), '') IS NOT NULL
+      AND LOWER(u.email) = LOWER(d.email)
+      AND u.deleted_at IS NULL
+      AND u.workos_deleted_at IS NULL
+  ) AS email_accounts ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*)::bigint AS profile_count
+    FROM directory_users AS o
+    WHERE linked.id IS NULL
+      AND NULLIF(TRIM(d.email), '') IS NOT NULL
+      AND o.organization_id = d.organization_id
+      AND o.deleted IS FALSE
+      AND o.workos_deleted IS FALSE
+      AND LOWER(o.email) = LOWER(d.email)
+      AND o.id <> d.id
+  ) AS other_profiles ON TRUE
+  WHERE d.organization_id = @organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+),
+resolved AS (
+  SELECT
+    p.*,
+    (linked_user_id IS NULL AND (account_count > 1 OR other_profile_count > 0)) AS ambiguous,
+    CASE
+      WHEN linked_user_id IS NOT NULL THEN linked_user_id
+      WHEN account_count = 1 AND other_profile_count = 0 THEN email_user_id
+    END AS account_user_id
+  FROM profiles AS p
+),
+people AS (
+  SELECT
+    r.id,
+    r.email,
+    r.first_name,
+    r.last_name,
+    r.account_user_id,
+    CASE
+      WHEN r.ambiguous THEN 'ambiguous_email'
+      WHEN r.account_user_id IS NULL THEN 'not_signed_in'
+      WHEN EXISTS (
+        SELECT 1
+        FROM organization_user_relationships AS our
+        WHERE our.organization_id = r.organization_id
+          AND our.user_id = r.account_user_id
+          AND our.deleted IS FALSE
+      ) THEN 'member'
+      ELSE 'account_not_member'
+    END::text AS state
+  FROM resolved AS r
+),
+totals AS (
+  SELECT
+    COUNT(*) FILTER (WHERE state = 'member')::bigint AS member_count,
+    COUNT(*) FILTER (WHERE state = 'account_not_member')::bigint AS account_not_member_count,
+    COUNT(*) FILTER (WHERE state = 'not_signed_in')::bigint AS not_signed_in_count,
+    COUNT(*) FILTER (WHERE state = 'ambiguous_email')::bigint AS ambiguous_email_count
+  FROM people
+)
+SELECT
+  people.id,
+  people.email,
+  people.first_name,
+  people.last_name,
+  -- Only a resolved account is returned; an ambiguous profile never names one.
+  COALESCE(people.account_user_id, '')::text AS account_user_id,
+  people.state,
+  COALESCE(groups.group_ids, '{}'::uuid[])::uuid[] AS group_ids,
+  COALESCE(groups.group_names, '{}'::text[])::text[] AS group_names,
+  totals.member_count,
+  totals.account_not_member_count,
+  totals.not_signed_in_count,
+  totals.ambiguous_email_count
+FROM people
+CROSS JOIN totals
+LEFT JOIN LATERAL (
+  SELECT
+    ARRAY_AGG(dg.id ORDER BY dg.name, dg.id) AS group_ids,
+    ARRAY_AGG(dg.name ORDER BY dg.name, dg.id) AS group_names
+  FROM directory_user_group_memberships AS m
+  JOIN directory_groups AS dg
+    ON dg.id = m.directory_group_id
+    AND dg.organization_id = @organization_id
+    AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
+  WHERE m.directory_user_id = people.id
+    AND m.deleted IS FALSE
+) AS groups ON TRUE
+WHERE sqlc.narg(cursor)::uuid IS NULL OR people.id > sqlc.narg(cursor)::uuid
+ORDER BY people.id
+LIMIT @limit_value;
+
 -- name: ListActiveDirectoryGroupMemberEmails :many
 SELECT DISTINCT LOWER(du.email) AS email
 FROM directory_users AS du
@@ -391,8 +550,56 @@ WHERE du.organization_id = @organization_id
 GROUP BY attribute.key, attribute.value
 ORDER BY attribute.key, attribute.value;
 
+-- name: ListMappableDirectoryAttributeValues :many
+-- Attribute values an admin can map to a role. Keys with more than
+-- @max_values_per_key distinct values are left out: those hold per-person
+-- data (emails, employee ids) that is no use as a mapping source.
+SELECT attribute_key, attribute_value, member_count
+FROM (
+  SELECT
+    attribute.key::text AS attribute_key,
+    attribute.value::text AS attribute_value,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint AS member_count,
+    COUNT(*) OVER (PARTITION BY attribute.key) AS values_per_key
+  FROM directory_users AS du
+  CROSS JOIN LATERAL jsonb_each_text(
+    CASE jsonb_typeof(du.attributes)
+      WHEN 'object' THEN du.attributes
+      ELSE '{}'::jsonb
+    END
+  ) AS attribute(key, value)
+  WHERE du.organization_id = @organization_id
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+    AND attribute.value IS NOT NULL
+  GROUP BY attribute.key, attribute.value
+) AS attribute_values
+WHERE values_per_key <= sqlc.arg(max_values_per_key)::bigint
+ORDER BY attribute_key, attribute_value;
+
+-- name: ListUnmappableDirectoryAttributeKeys :many
+-- The attribute keys ListMappableDirectoryAttributeValues leaves out, with
+-- how many distinct values each has, so bulk setup can say what it hid.
+SELECT
+  attribute.key::text AS attribute_key,
+  COUNT(DISTINCT attribute.value)::bigint AS value_count
+FROM directory_users AS du
+CROSS JOIN LATERAL jsonb_each_text(
+  CASE jsonb_typeof(du.attributes)
+    WHEN 'object' THEN du.attributes
+    ELSE '{}'::jsonb
+  END
+) AS attribute(key, value)
+WHERE du.organization_id = @organization_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND attribute.value IS NOT NULL
+GROUP BY attribute.key
+HAVING COUNT(DISTINCT attribute.value) > sqlc.arg(max_values_per_key)::bigint
+ORDER BY attribute_key;
+
 -- name: ClearOrganizationDirectoryUserLinksFixture :exec
--- Test fixture: exercise email fallback without a direct Gram user link.
+-- Test fixture: exercise email fallback without a direct Speakeasy user link.
 UPDATE directory_users SET user_id = NULL WHERE organization_id = @organization_id;
 
 -- name: SetOrganizationDirectoryUserDeletionFixture :exec
@@ -404,3 +611,170 @@ WHERE organization_id = @organization_id;
 
 -- name: DeleteOrganizationDirectoryUsersFixture :exec
 DELETE FROM directory_users WHERE organization_id = @organization_id;
+
+-- name: UpsertListedDirectoryGroup :execrows
+-- Saves a group read from a live WorkOS listing. Events stay the source of
+-- truth: this never restores a group an event deleted, never overwrites a row
+-- with an older snapshot, and leaves the event cursor untouched.
+INSERT INTO directory_groups (
+  organization_id,
+  workos_directory_group_id,
+  directory_id,
+  name,
+  attributes,
+  workos_created_at,
+  workos_updated_at
+)
+VALUES (
+  @organization_id,
+  @workos_directory_group_id,
+  sqlc.narg(directory_id),
+  @name,
+  @attributes,
+  @workos_created_at,
+  @workos_updated_at
+)
+ON CONFLICT (workos_directory_group_id) DO UPDATE SET
+  directory_id = CASE WHEN directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+    THEN COALESCE(EXCLUDED.directory_id, directory_groups.directory_id)
+    ELSE COALESCE(directory_groups.directory_id, EXCLUDED.directory_id) END,
+  name = CASE WHEN directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+    THEN EXCLUDED.name ELSE directory_groups.name END,
+  attributes = CASE WHEN directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+    THEN EXCLUDED.attributes ELSE directory_groups.attributes END,
+  workos_updated_at = GREATEST(directory_groups.workos_updated_at, EXCLUDED.workos_updated_at),
+  updated_at = clock_timestamp()
+WHERE directory_groups.organization_id = EXCLUDED.organization_id
+  AND directory_groups.deleted IS FALSE
+  AND directory_groups.workos_deleted IS FALSE
+  AND (directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+    OR (directory_groups.directory_id IS NULL AND EXCLUDED.directory_id IS NOT NULL));
+
+-- name: DeleteDirectoryUsersByDirectoryID :execrows
+UPDATE directory_users
+SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
+  workos_deleted_at = @workos_deleted_at,
+  workos_updated_at = @workos_deleted_at,
+  workos_last_event_id = @workos_last_event_id,
+  updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND directory_id = @directory_id::text
+  AND CASE WHEN COALESCE(workos_last_event_id, '') <> ''
+    THEN workos_last_event_id < @workos_last_event_id
+    ELSE workos_updated_at IS NULL OR workos_updated_at <= @workos_deleted_at END;
+
+-- name: DeleteDirectoryGroupsByDirectoryID :execrows
+UPDATE directory_groups
+SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
+  workos_deleted_at = @workos_deleted_at,
+  workos_updated_at = @workos_deleted_at,
+  workos_last_event_id = @workos_last_event_id,
+  updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND directory_id = @directory_id::text
+  AND CASE WHEN COALESCE(workos_last_event_id, '') <> ''
+    THEN workos_last_event_id < @workos_last_event_id
+    ELSE workos_updated_at IS NULL OR workos_updated_at <= @workos_deleted_at END;
+
+-- name: AttributeDirectoryUsers :execrows
+UPDATE directory_users
+SET directory_id = @directory_id::text, updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workos_directory_user_id = ANY(@workos_directory_user_ids::text[])
+  AND directory_id IS NULL;
+
+-- name: AttributeDirectoryGroups :execrows
+UPDATE directory_groups
+SET directory_id = @directory_id::text, updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workos_directory_group_id = ANY(@workos_directory_group_ids::text[])
+  AND directory_id IS NULL;
+
+-- name: ListUnattributedDirectorySources :many
+SELECT 'user'::text AS kind, du.workos_directory_user_id AS workos_id
+FROM directory_users du
+WHERE du.organization_id = @organization_id AND du.directory_id IS NULL
+UNION ALL
+SELECT 'group'::text AS kind, dg.workos_directory_group_id AS workos_id
+FROM directory_groups dg
+WHERE dg.organization_id = @organization_id AND dg.directory_id IS NULL
+ORDER BY kind, workos_id;
+
+-- name: InsertListedDirectoryUser :exec
+-- Saves a directory user read from a live WorkOS listing when no row exists
+-- for it yet. Events stay the source of truth: an existing row, live or
+-- deleted, is left as it is. The listing names the user's directory, so the
+-- row is attributed from the start.
+INSERT INTO directory_users (
+  organization_id,
+  user_id,
+  workos_directory_user_id,
+  directory_id,
+  email,
+  first_name,
+  last_name,
+  attributes,
+  workos_created_at,
+  workos_updated_at
+)
+VALUES (
+  @organization_id,
+  @user_id,
+  @workos_directory_user_id,
+  sqlc.narg(directory_id),
+  @email,
+  sqlc.narg(first_name),
+  sqlc.narg(last_name),
+  @attributes,
+  @workos_created_at,
+  @workos_updated_at
+)
+ON CONFLICT (workos_directory_user_id) DO NOTHING;
+
+-- name: FillDirectoryUserNames :execrows
+-- Fills names from a live WorkOS listing on live rows that have none yet.
+-- Events stay the source of truth: a row with either name set is left alone,
+-- tombstoned rows are skipped, and the event cursor, timestamps and deletion
+-- markers are never touched.
+WITH listed AS (
+  SELECT unnest(@workos_directory_user_ids::text[]) AS workos_directory_user_id,
+    unnest(@first_names::text[]) AS first_name,
+    unnest(@last_names::text[]) AS last_name
+)
+UPDATE directory_users AS du
+SET first_name = NULLIF(listed.first_name, ''),
+  last_name = NULLIF(listed.last_name, '')
+FROM listed
+WHERE du.organization_id = @organization_id
+  AND du.workos_directory_user_id = listed.workos_directory_user_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND du.first_name IS NULL
+  AND du.last_name IS NULL
+  AND (listed.first_name <> '' OR listed.last_name <> '');
+
+-- name: LockOrganizationDirectoryGroupByWorkOSID :one
+SELECT id
+FROM directory_groups
+WHERE organization_id = @organization_id
+  AND workos_directory_group_id = @workos_directory_group_id
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+FOR UPDATE;
+
+-- name: GetOrganizationDirectoryUserIDByWorkOSID :one
+SELECT id
+FROM directory_users
+WHERE organization_id = @organization_id
+  AND workos_directory_user_id = @workos_directory_user_id
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE;
+
+-- name: ListOpenOrganizationDirectoryGroupMemberships :many
+SELECT m.workos_directory_user_id, m.workos_created_at
+FROM directory_user_group_memberships AS m
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+WHERE dg.organization_id = @organization_id
+  AND m.directory_group_id = @directory_group_id
+  AND m.deleted IS FALSE;

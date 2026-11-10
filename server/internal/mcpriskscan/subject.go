@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 
 	"github.com/google/uuid"
+	gentypes "github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 )
 
@@ -74,17 +75,19 @@ func BorrowPayload(data []byte) Payload {
 // synchronous payload. MetaServerID is route attribution; it never replaces the
 // concrete ServerID or changes Surface.
 type Event struct {
-	Surface         string
-	Method          string
-	OrganizationID  string
-	ProjectID       string
-	ServerID        string
-	MetaServerID    string
-	ToolsetID       string
-	ToolName        string
-	ResourceURI     string
-	PromptName      string
-	ChatID          string
+	Surface        string
+	Method         string
+	OrganizationID string
+	ProjectID      string
+	ServerID       string
+	MetaServerID   string
+	ToolsetID      string
+	ToolName       string
+	ResourceURI    string
+	PromptName     string
+	ChatID         string
+	// ToolAnnotations contains trusted annotations from a code-owned tool descriptor.
+	ToolAnnotations *gentypes.ToolAnnotations
 	phase           string
 	executionID     string
 	principal       mcpidentity.Identity

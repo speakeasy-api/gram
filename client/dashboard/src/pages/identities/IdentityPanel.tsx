@@ -51,7 +51,7 @@ export function IdentityPanel({
    *
    * A failed read leaves the same empty data a quiet window does, and every
    * panel here words that emptiness as a finding — "no roles assigned", "no
-   * managed device assigned", "not enrolled". Rendering those off a request
+   * managed device assigned", "not seen". Rendering those off a request
    * that never landed states something about the person that we do not know,
    * so a failure gets said outright instead.
    */

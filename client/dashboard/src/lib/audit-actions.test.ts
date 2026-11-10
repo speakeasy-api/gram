@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -41,6 +42,42 @@ function goAuditActions(): string[] {
 }
 
 describe("AUDIT_ACTIONS", () => {
+  it.each([
+    ["catalog-promotion:reject", "rejected catalog promotion candidate"],
+    ["catalog-promotion:archive", "archived catalog promotion candidate"],
+    ["catalog-promotion:restore", "restored catalog promotion candidate"],
+  ] as const)("describes candidate curation action %s", (action, phrase) => {
+    expect(isAuditAction(action)).toBe(true);
+    expect(staticActionPhrase(action)).toBe(phrase);
+  });
+  it("describes catalogue publication and setup documentation retries", () => {
+    expect(isAuditAction("mcp-server:promote-catalogue")).toBe(true);
+    expect(isAuditAction("catalog-promotion:retry-docs")).toBe(true);
+    expect(staticActionPhrase("mcp-server:promote-catalogue")).toBe(
+      "published to the MCP catalog",
+    );
+    expect(staticActionPhrase("catalog-promotion:retry-docs")).toBe(
+      "retried setup documentation for",
+    );
+  });
+  it("describes organization access changes", () => {
+    expect(isAuditAction("organization:enabled")).toBe(true);
+    expect(isAuditAction("organization:disabled")).toBe(true);
+    expect(staticActionPhrase("organization:enabled")).toBe(
+      "enabled organization access for",
+    );
+    expect(staticActionPhrase("organization:disabled")).toBe(
+      "disabled organization access for",
+    );
+  });
+
+  it("distinguishes demo-access whitelisting from disabling an organisation", () => {
+    expect(isAuditAction("organization:whitelist_updated")).toBe(true);
+    expect(staticActionPhrase("organization:whitelist_updated")).toBe(
+      "changed demo-access whitelisting for",
+    );
+  });
+
   it("describes changed trial end dates", () => {
     expect(
       staticActionPhrase("organization:enterprise_trial_end_changed"),
@@ -86,6 +123,8 @@ describe("AUDIT_ACTIONS", () => {
           "data_export_route:create",
           "data_export_route:update",
           "data_export_route:delete",
+          "data_export_route:pause",
+          "data_export_route:resume",
           "otel_destination:create",
           "otel_destination:update",
           "otel_destination:delete",
@@ -95,6 +134,8 @@ describe("AUDIT_ACTIONS", () => {
       "created data export route",
       "updated data export route",
       "deleted data export route",
+      "paused data export route",
+      "resumed data export route",
       "created OpenTelemetry destination",
       "updated OpenTelemetry destination",
       "deleted OpenTelemetry destination",
@@ -107,6 +148,8 @@ describe("AUDIT_ACTIONS", () => {
         [
           "identity-provider-connection:create",
           "identity-provider-connection:submit-client-id",
+          "identity-provider-connection:replace-client-secret",
+          "identity-provider-connection:set-setup-method",
           "identity-provider-connection:verify",
           "identity-provider-connection:record-agent",
           "identity-provider-connection:revoke",
@@ -115,10 +158,18 @@ describe("AUDIT_ACTIONS", () => {
     ).toEqual([
       "connected identity provider okta",
       "submitted client ID for identity provider okta",
+      "replaced client secret for identity provider okta",
+      "changed setup method for identity provider okta",
       "verified identity provider connection to okta",
       "recorded agent for identity provider okta",
       "revoked identity provider connection to okta",
     ]);
+  });
+
+  it("names the scope pin the way the dashboard does", () => {
+    expect(staticActionPhrase("mcp-server:update-scope-pin")).toBe(
+      "updated pinned scopes on MCP server",
+    );
   });
 
   it("rejects actions it doesn't know", () => {

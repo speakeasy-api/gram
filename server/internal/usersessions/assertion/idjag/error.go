@@ -20,9 +20,12 @@ func (e *Error) Unwrap() error { return e.Err }
 func reject(reason Reason, err error) error { return &Error{Reason: reason, Err: err} }
 
 // ErrNotProvisioned is returned by a subject store when no active directory
-// identity maps to an active Gram member in the same organization.
+// identity maps to an active Speakeasy member in the same organization.
 var ErrNotProvisioned = errors.New("enterprise identity is not provisioned")
 
 // ErrNoTrustedIssuer is returned when the user session issuer has no active,
 // organization-accessible trusted issuer.
 var ErrNoTrustedIssuer = errors.New("user session issuer has no trusted remote issuer")
+
+// ErrTrustedIssuerHasNoJWKS is returned when the linked trusted issuer has no jwks_uri.
+var ErrTrustedIssuerHasNoJWKS = errors.New("linked remote issuer has no jwks_uri")

@@ -81,6 +81,12 @@ export function ShadowMCPInventoryReviewCell({
   // An unreviewed dossier holds evidence but is not a review state: nobody
   // asked and nothing was decided, so it reads the same as no review.
   if (!request || request.status === "unreviewed") {
+    // A legacy policy-bypass request is a pending ask with no dossier yet;
+    // the row sorts and filters as awaiting a decision, so the cell says so.
+    // The server cell carries the count.
+    if (server.requestCount > 0) {
+      return <StatusBadge status="requested" />;
+    }
     return (
       <Text muted small>
         —

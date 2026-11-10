@@ -1,0 +1,40 @@
+name: "Go module cache"
+description: "Restore the Go module cache saved by the go-module-cache job in pr.yaml. Requires Go on PATH."
+
+# Compiled output is cached by Blacksmith's Go build caching (GOCACHEPROG),
+# so only modules are cached here.
+#
+# Restore only: the go-module-cache job is the single writer. Without an exact
+# match, the newest entry is restored and the job downloads the difference.
+
+inputs:
+  lookup-only:
+    description: "Only check whether the exact entry exists, without downloading it"
+    default: "false"
+
+outputs:
+  cache-hit:
+    description: "Whether the exact entry exists"
+    value: ${{ steps.restore.outputs.cache-hit }}
+  key:
+    description: "Exact cache key, for actions/cache/save"
+    value: ${{ steps.restore.outputs.cache-primary-key }}
+  path:
+    description: "Module cache path, for actions/cache/save"
+    value: ${{ steps.path.outputs.path }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: path
+      shell: bash
+      run: echo "path=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
+    # .custom-gcl.yml pins golangci-lint, whose dependencies are cached too.
+    - id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.path.outputs.path }}
+        key: go-mod-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum', 'glint/go.mod', 'glint/go.sum', 'server/.custom-gcl.yml') }}
+        restore-keys: go-mod-${{ runner.os }}-
+        lookup-only: ${{ inputs.lookup-only }}

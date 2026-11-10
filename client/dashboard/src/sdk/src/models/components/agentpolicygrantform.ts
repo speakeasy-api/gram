@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -17,19 +18,21 @@ import {
 /**
  * Grant effect; direct agent policy is allow-only
  */
-export const Effect = {
+export const AgentPolicyGrantFormEffect = {
   Allow: "allow",
 } as const;
 /**
  * Grant effect; direct agent policy is allow-only
  */
-export type Effect = ClosedEnum<typeof Effect>;
+export type AgentPolicyGrantFormEffect = OpenEnum<
+  typeof AgentPolicyGrantFormEffect
+>;
 
 export type AgentPolicyGrantForm = {
   /**
    * Grant effect; direct agent policy is allow-only
    */
-  effect: Effect;
+  effect: AgentPolicyGrantFormEffect;
   /**
    * Agent-runtime-safe scope to grant
    */
@@ -41,19 +44,22 @@ export type AgentPolicyGrantForm = {
 };
 
 /** @internal */
-export const Effect$inboundSchema: z.ZodMiniEnum<typeof Effect> = z.enum(
-  Effect,
-);
+export const AgentPolicyGrantFormEffect$inboundSchema: z.ZodMiniType<
+  AgentPolicyGrantFormEffect,
+  unknown
+> = openEnums.inboundSchema(AgentPolicyGrantFormEffect);
 /** @internal */
-export const Effect$outboundSchema: z.ZodMiniEnum<typeof Effect> =
-  Effect$inboundSchema;
+export const AgentPolicyGrantFormEffect$outboundSchema: z.ZodMiniType<
+  string,
+  AgentPolicyGrantFormEffect
+> = openEnums.outboundSchema(AgentPolicyGrantFormEffect);
 
 /** @internal */
 export const AgentPolicyGrantForm$inboundSchema: z.ZodMiniType<
   AgentPolicyGrantForm,
   unknown
 > = z.object({
-  effect: Effect$inboundSchema,
+  effect: AgentPolicyGrantFormEffect$inboundSchema,
   scope: z.string(),
   selector: AgentPolicySelector$inboundSchema,
 });
@@ -69,7 +75,7 @@ export const AgentPolicyGrantForm$outboundSchema: z.ZodMiniType<
   AgentPolicyGrantForm$Outbound,
   AgentPolicyGrantForm
 > = z.object({
-  effect: Effect$outboundSchema,
+  effect: AgentPolicyGrantFormEffect$outboundSchema,
   scope: z.string(),
   selector: AgentPolicySelector$outboundSchema,
 });

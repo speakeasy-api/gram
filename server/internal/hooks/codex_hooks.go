@@ -11,7 +11,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -35,7 +35,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, codexHookDecision(res), orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, codexHookDecision(res), orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
 	// APIKeyAuth already put the actor on ctx: scope the session id first.
@@ -60,7 +60,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 		)
 		return &gen.CodexHookResult{
 			Decision: new("deny"),
-			Reason:   new("Speakeasy hooks: unauthorized — check your Gram API key and project slug."),
+			Reason:   new("Speakeasy hooks: unauthorized — check your Speakeasy API key and project slug."),
 		}, nil
 	}
 
@@ -157,7 +157,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 					// unmatched server is simply allowed here.
 					detail, denied = s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy, toolName, evidence)
 				case isCodexMetaTool:
-					// Codex's built-in MCP resource tools are not Gram
+					// Codex's built-in MCP resource tools are not Speakeasy
 					// toolset calls, so they never carry x-gram-toolset-id.
 					// Enforce them from the inventory target instead.
 					if codexMetaServer == "" {
@@ -180,7 +180,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 				// blocked-list check above is the whole gate.
 				if !policy.IsAllowAll() && !denied && !isCodexMetaTool {
 					// The inventory snapshot pins where the call actually
-					// routes: deny when it points at a non-Gram target, or
+					// routes: deny when it points at a non-Speakeasy target, or
 					// when the active inventory cannot uniquely prove the
 					// target.
 					inventoryDetail := s.codexInventoryProvenanceDetail(ctx, matched, orgID)
@@ -334,19 +334,19 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 	switch payload.HookEventName {
 	case "PreToolUse":
 		if err := s.writeCodexToolCallRequestToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex tool call request", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Codex tool call request", err)
 		}
 	case "PostToolUse":
 		if err := s.writeCodexToolCallResultToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex tool call result", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Codex tool call result", err)
 		}
 	case "UserPromptSubmit":
 		if err := s.writeCodexUserPromptToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex user prompt", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Codex user prompt", err)
 		}
 	case "Stop":
 		if err := s.writeCodexAssistantResponseToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex assistant response", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Codex assistant response", err)
 		}
 	}
 }
@@ -510,6 +510,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 		FunctionID:     nil,
 	}
 
+	stampEndpointGeneration(ctx, attrs)
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
@@ -681,7 +682,7 @@ func (s *Service) writeCodexToolCallRequestToPG(ctx context.Context, payload *ge
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCodexChatTitle)
 }
 
 func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) error {
@@ -729,7 +730,7 @@ func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCodexChatTitle)
 }
 
 func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) error {
@@ -778,7 +779,7 @@ func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.Cod
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCodexChatTitle)
 }
 
 func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) error {
@@ -827,7 +828,7 @@ func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *
 		Generation:       0,
 	}
 
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle); err != nil {
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCodexChatTitle); err != nil {
 		return err
 	}
 

@@ -7,6 +7,7 @@ const (
 	identityProviderSigningCredentialIDFlag = "identity-provider-signing-credential-id"
 	identityProviderSigningServiceAccount   = "identity-provider-signing-service-account"
 	identityProviderKMSKeyRingLocalDefault  = "projects/gram-local/locations/global/keyRings/identity-provider-connections"
+	internalSessionIssuerSigningPausedFlag  = "internal-session-issuer-signing-paused"
 )
 
 func identityProviderConnectionFlags() []cli.Flag {
@@ -26,5 +27,17 @@ func identityProviderConnectionFlags() []cli.Flag {
 			Usage:   "Service account the signing credential must impersonate; any other target is refused.",
 			EnvVars: []string{"GRAM_IDENTITY_PROVIDER_SIGNING_SERVICE_ACCOUNT"},
 		},
+		internalSessionIssuerSigningPausedCLIFlag(),
+	}
+}
+
+// internalSessionIssuerSigningPausedCLIFlag is the startup kill switch for
+// internal session issuer signing; the PostHog flag of the same name pauses
+// without a restart.
+func internalSessionIssuerSigningPausedCLIFlag() cli.Flag {
+	return &cli.BoolFlag{
+		Name:    internalSessionIssuerSigningPausedFlag,
+		Usage:   "Kill switch: refuse every internal session issuer signature. Discovery keeps serving.",
+		EnvVars: []string{"GRAM_INTERNAL_SESSION_ISSUER_SIGNING_PAUSED"},
 	}
 }

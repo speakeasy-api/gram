@@ -10,6 +10,7 @@ const keyMocks = vi.hoisted(() => ({
     ensure: vi.fn(),
   })),
   flow: vi.fn(),
+  stepList: vi.fn(),
 }));
 vi.mock("../platform-setup-values", () => ({
   usePlatformApiKeys: keyMocks.usePlatformApiKeys,
@@ -29,7 +30,16 @@ vi.mock("../enable-logging-section", () => ({
   EnableLoggingSection: () => <div>Enable logging section</div>,
 }));
 vi.mock("../marketplace-section", () => ({
-  MarketplaceSection: () => <div>Marketplace section</div>,
+  MarketplaceSection: ({
+    requiresCollaborators,
+  }: {
+    requiresCollaborators?: boolean;
+  }) => (
+    <div>
+      Marketplace section
+      {requiresCollaborators ? " (needs a collaborator)" : ""}
+    </div>
+  ),
 }));
 vi.mock("../confirm-traffic-section", () => ({
   ConfirmTrafficSection: ({
@@ -44,6 +54,11 @@ vi.mock("../confirm-traffic-section", () => ({
       <p>{callout?.title}</p>
       <p>{callout?.body}</p>
     </div>
+  ),
+}));
+vi.mock("../organization-gateway-section", () => ({
+  OrganizationGatewayConnectorSection: () => (
+    <div>Organization Gateway connector section</div>
   ),
 }));
 vi.mock("../platform-setup-flow", () => ({
@@ -69,11 +84,33 @@ vi.mock("../platform-setup-flow", () => ({
     );
   },
 }));
+vi.mock("../platform-step-list", () => ({
+  PlatformStepList: ({
+    platformId,
+    steps,
+    heldBack,
+    apiKeys,
+  }: {
+    platformId: string;
+    steps: Array<{ title: string }>;
+    heldBack?: string;
+    apiKeys?: unknown;
+  }) => {
+    keyMocks.stepList(platformId, apiKeys);
+    return (
+      <p>
+        {heldBack ??
+          `${platformId} steps: ${steps.map(({ title }) => title).join(" | ")}`}
+      </p>
+    );
+  },
+}));
 
 afterEach(cleanup);
 
 beforeEach(() => {
   keyMocks.flow.mockClear();
+  keyMocks.stepList.mockClear();
   publishStatus.current = { data: { connected: false }, isLoading: false };
 });
 
@@ -81,75 +118,79 @@ function renderStep() {
   return render(<AnthropicAdminControlsStep onComplete={() => {}} />);
 }
 
+const published = {
+  connected: true,
+  repoUrl: "https://github.com/acme/acme-plugins",
+  marketplaceUrl: "https://app.example.com/marketplace/tok.git",
+};
+
 describe("AnthropicAdminControlsStep", () => {
-  it("gives Cowork, Claude Code and Cursor a section of their own, Cowork first", () => {
-    publishStatus.current = {
-      data: {
-        connected: true,
-        repoUrl: "https://github.com/acme/acme-plugins",
-        marketplaceUrl: "https://app.example.com/marketplace/tok.git",
-      },
-      isLoading: false,
-    };
+  it("covers Claude Code and Cowork monitoring, and leaves plugin registration to Set up Claude Desktop", () => {
+    publishStatus.current = { data: published, isLoading: false };
 
     renderStep();
 
     expect(keyMocks.usePlatformApiKeys).toHaveBeenCalledWith({
       shareAnthropicKey: true,
     });
-    const flows = keyMocks.flow.mock.calls;
-    expect(flows.find(([id]) => id === "claude")![1]).toBe(
-      flows.find(([id]) => id === "claude-cowork")![1],
-    );
-    expect(flows.find(([id]) => id === "claude")![1]).toBeDefined();
-    expect(flows.find(([id]) => id === "cursor")![1]).toBeUndefined();
+    const [, claudeKeys] = keyMocks.flow.mock.calls.find(
+      ([id]) => id === "claude",
+    )!;
+    const [, coworkKeys] = keyMocks.stepList.mock.calls.find(
+      ([id]) => id === "claude-cowork",
+    )!;
+    expect(claudeKeys).toBeDefined();
+    expect(coworkKeys).toBe(claudeKeys);
     expect(
       screen.getByText(/One Hooks API key is generated automatically/),
     ).toBeTruthy();
     expect(screen.getByText("Set up Anthropic admin controls")).toBeTruthy();
+    expect(
+      screen.getByText(/have their own cards under Set up Claude Desktop/),
+    ).toBeTruthy();
     expect(screen.getByText("Enable logging section")).toBeTruthy();
     expect(screen.getByText("Marketplace section")).toBeTruthy();
-    expect(screen.getByText("Optional")).toBeTruthy();
+    expect(
+      screen.getByText("Organization Gateway connector section"),
+    ).toBeTruthy();
+    expect(screen.getAllByText("Optional")).toHaveLength(1);
     expect(
       screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
     ).toEqual([
-      "Connect Claude Cowork",
       "Connect Claude Code",
-      "Connect Cursor",
+      "Turn on Cowork monitoring",
+      "Add the Organization Gateway to Claude",
     ]);
 
     expect(screen.getByText("Steps for claude")).toBeTruthy();
-    expect(screen.getByText("Steps for claude-cowork")).toBeTruthy();
-    expect(screen.getByText("Steps for cursor")).toBeTruthy();
+    expect(
+      screen.getByText("claude-cowork steps: Enable OTEL export"),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Sync from GitHub/)).toBeNull();
+    expect(
+      keyMocks.flow.mock.calls.some(([id]) => id === "claude-cowork"),
+    ).toBe(false);
+    expect(screen.queryByText(/Cursor/)).toBeNull();
   });
 
-  it("calls out that Cowork reports nothing until its toggle is on", () => {
-    publishStatus.current = {
-      data: {
-        connected: true,
-        marketplaceUrl: "https://app.example.com/marketplace/tok.git",
-      },
-      isLoading: false,
-    };
+  it("sends Cowork checks to Agent Sessions instead of the traffic list", () => {
+    publishStatus.current = { data: published, isLoading: false };
 
     renderStep();
 
-    expect(screen.getByText("Turn Cowork on before you chat")).toBeTruthy();
+    expect(screen.getByText("Check Cowork in Agent Sessions")).toBeTruthy();
+    expect(
+      screen.getByText(/Cowork conversations don't appear in this list/),
+    ).toBeTruthy();
     expect(
       screen.getByText(
-        /switch the Claude Cowork toggle on, then send a message/,
+        /Look for them in Agent Sessions after Claude's first reply/,
       ),
     ).toBeTruthy();
   });
 
-  it("tracks each platform's connected badge on its own", () => {
-    publishStatus.current = {
-      data: {
-        connected: true,
-        marketplaceUrl: "https://app.example.com/marketplace/tok.git",
-      },
-      isLoading: false,
-    };
+  it("tracks Claude Code's connected badge", () => {
+    publishStatus.current = { data: published, isLoading: false };
 
     renderStep();
 
@@ -160,43 +201,31 @@ describe("AnthropicAdminControlsStep", () => {
     expect(screen.getAllByText("Complete")).toHaveLength(1);
   });
 
-  it("holds the instructions back when the repo has no collaborators", () => {
-    // Claude.ai syncs the repo through its own GitHub App and cannot read one
-    // it has no access to, so the platform flows wait on that too.
+  it("doesn't wait on a GitHub collaborator, which only Claude.ai's plugin sync needs", () => {
+    // Claude Code clones through Speakeasy's proxy. Registering the plugins in
+    // Claude.ai, which syncs through GitHub, is its own card.
     publishStatus.current = {
-      data: {
-        connected: true,
-        marketplaceUrl: "https://app.example.com/marketplace/tok.git",
-        hasCollaborators: false,
-      },
+      data: { ...published, hasCollaborators: false },
       isLoading: false,
     };
 
     renderStep();
 
-    expect(screen.getAllByText(/Add a collaborator/)).toHaveLength(3);
+    expect(screen.queryByText(/Add a collaborator/)).toBeNull();
+    expect(screen.queryByText(/needs a collaborator/)).toBeNull();
+    expect(screen.getByText("Steps for claude")).toBeTruthy();
   });
 
-  it("proceeds when the collaborator check could not be read", () => {
-    publishStatus.current = {
-      data: {
-        connected: true,
-        marketplaceUrl: "https://app.example.com/marketplace/tok.git",
-      },
-      isLoading: false,
-    };
-
-    renderStep();
-
-    expect(screen.getByText("Steps for claude-cowork")).toBeTruthy();
-  });
-
-  it("holds every set of instructions until the marketplace is published", () => {
+  it("holds Claude Code's instructions until the marketplace is published", () => {
     renderStep();
 
     expect(
       screen.getAllByText(/Publish the marketplace above first/),
-    ).toHaveLength(3);
+    ).toHaveLength(1);
+    // Native monitoring doesn't read the marketplace.
+    expect(
+      screen.getByText("claude-cowork steps: Enable OTEL export"),
+    ).toBeTruthy();
   });
 
   it("still holds them when a connection has no marketplace URL yet", () => {
@@ -215,6 +244,6 @@ describe("AnthropicAdminControlsStep", () => {
 
     expect(
       screen.getAllByText(/Publish the marketplace above first/),
-    ).toHaveLength(3);
+    ).toHaveLength(1);
   });
 });

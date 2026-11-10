@@ -1,3 +1,5 @@
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
+import { UpdateRouteRequestBodyDataSource as KnownUpdateRouteRequestBodyDataSource } from "@gram/client/models/components/updaterouterequestbody.js";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { SettingsPage } from "@/components/page-templates";
 import { ProjectAvatar } from "@/components/project-menu";
@@ -67,10 +69,14 @@ const DATA_SOURCE_OPTIONS: DataSourceOption[] = [
     value: DataSource.ToolCallLogs,
     label: "Tool call logs",
   },
+  {
+    value: DataSource.McpConnectionLogs,
+    label: "MCP connection logs",
+  },
 ];
 
 function renderDataSourceDescription(
-  dataSource: DataSourceValue,
+  dataSource: string,
   links: { eventFeed?: string; riskPolicies?: string; toolLogs?: string } = {},
 ): ReactNode {
   if (dataSource === DataSource.ProductTelemetry) {
@@ -132,6 +138,10 @@ function renderDataSourceDescription(
         telemetry instead.
       </>
     );
+  }
+
+  if (dataSource === DataSource.McpConnectionLogs) {
+    return "OTLP logs for failed MCP connections, including server problems an admin or service provider needs to fix. Blocked or declined connections, and connections through organization gateways, are not included.";
   }
 
   return "OTLP data";
@@ -216,7 +226,7 @@ type DestinationEditCandidate = {
 function sourceLabel(dataSource: string): string {
   return (
     DATA_SOURCE_OPTIONS.find((option) => option.value === dataSource)?.label ??
-    dataSource.replaceAll("_", " ")
+    "Unknown data source"
   );
 }
 
@@ -374,6 +384,18 @@ function DataExportsInner(): JSX.Element {
     ]);
 
   const handleSaveExport = async (values: ConfigureExportValues) => {
+    if (
+      !isKnownEnumValue(
+        KnownUpdateRouteRequestBodyDataSource,
+        values.dataSource,
+      ) ||
+      (configureRoute &&
+        !isKnownEnumValue(
+          KnownUpdateRouteRequestBodyDataSource,
+          configureRoute.dataSource,
+        ))
+    )
+      return;
     const state = projectExports.find(
       ({ project }) => project.slug === values.projectSlug,
     );
@@ -479,23 +501,23 @@ function DataExportsInner(): JSX.Element {
     route: DataExportRoute,
     enabled: boolean,
   ) => {
+    if (
+      !isKnownEnumValue(KnownUpdateRouteRequestBodyDataSource, route.dataSource)
+    )
+      return;
     const queryKey = aggregateQueryKey;
     await queryClient.cancelQueries({ queryKey });
     const previous =
       queryClient.getQueryData<ListDataExportsForOrgResult>(queryKey);
-    queryClient.setQueryData<ListDataExportsForOrgResult>(
-      queryKey,
-      (current) =>
-        current
-          ? {
-              ...current,
-              routes: current.routes.map((candidate) =>
-                candidate.id === route.id
-                  ? { ...candidate, enabled }
-                  : candidate,
-              ),
-            }
-          : current,
+    queryClient.setQueryData<ListDataExportsForOrgResult>(queryKey, (current) =>
+      current
+        ? {
+            ...current,
+            routes: current.routes.map((candidate) =>
+              candidate.id === route.id ? { ...candidate, enabled } : candidate,
+            ),
+          }
+        : current,
     );
 
     try {
@@ -504,7 +526,10 @@ function DataExportsInner(): JSX.Element {
           id: route.id,
           gramProject: project.slug,
           updateRouteRequestBody: {
-            dataSource: route.dataSource,
+            dataSource: requireKnownEnumValue(
+              KnownUpdateRouteRequestBodyDataSource,
+              route.dataSource,
+            ),
             enabled,
             otelDestinationId: route.otelDestinationId,
           },
@@ -822,6 +847,10 @@ function ExportSourceNode({
 }): JSX.Element {
   const { project, route } = exportRow;
   const source = visualSource(exportRow, descriptionLinks);
+  const supportsEditing = isKnownEnumValue(
+    KnownUpdateRouteRequestBodyDataSource,
+    route.dataSource,
+  );
 
   return (
     <div
@@ -832,7 +861,12 @@ function ExportSourceNode({
         <button
           type="button"
           onClick={() => onConfigure(project, route)}
-          disabled={mutating}
+          disabled={mutating || !supportsEditing}
+          title={
+            !supportsEditing
+              ? "Refresh the page before changing this unsupported export."
+              : undefined
+          }
           aria-label={`Configure ${source.name} export`}
           className="absolute inset-0 z-10 cursor-pointer transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:hover:bg-transparent"
         />
@@ -856,6 +890,10 @@ function ExportSourceNode({
               {
                 label: "Configure export",
                 icon: "pencil",
+                disabled: mutating || !supportsEditing,
+                description: !supportsEditing
+                  ? "Refresh the page before changing this unsupported export."
+                  : undefined,
                 onClick: () => onConfigure(project, route),
               },
               {
@@ -881,11 +919,18 @@ function ExportSourceNode({
           {route.enabled ? "Enabled" : "Paused"}
         </span>
         <RequireScope scope="org:admin" level="component">
-          <div className="pointer-events-auto">
+          <div
+            className="pointer-events-auto"
+            title={
+              !supportsEditing
+                ? "Refresh the page before changing this unsupported export."
+                : undefined
+            }
+          >
             <Switch
               checked={route.enabled}
               onCheckedChange={(enabled) => onToggle(project, route, enabled)}
-              disabled={mutating}
+              disabled={mutating || !supportsEditing}
               aria-label={`${route.enabled ? "Pause" : "Enable"} export from ${source.name}`}
             />
           </div>

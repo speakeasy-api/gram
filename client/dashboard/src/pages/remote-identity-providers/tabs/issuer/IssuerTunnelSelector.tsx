@@ -82,13 +82,13 @@ export function IssuerTunnelSelector({
           </SelectContent>
         </Select>
         <Text small muted>
-          Routes this provider's whole back channel through the selected project
-          tunnel: persisted metadata refresh, its JWK Set, token exchange,
-          refresh, revocation, dynamic client registration, and the userinfo and
-          introspection calls that name a session's owner. Those requests are
-          delivered to the tunnel agent's configured local target, so use a
-          local reverse proxy when the MCP server and identity provider use
-          separate origins.
+          Routes this authorization server's whole back channel through the
+          selected project tunnel: persisted metadata refresh, its JWK Set,
+          token exchange, refresh, revocation, dynamic client registration, and
+          the userinfo and introspection calls that name a session's owner.
+          Those requests are delivered to the tunnel agent's configured local
+          target, so use a local reverse proxy when the MCP server and
+          authorization server use separate origins.
         </Text>
         {loadError && (
           <Text

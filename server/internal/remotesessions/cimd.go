@@ -1,7 +1,7 @@
 // cimd.go implements outbound OAuth Client ID Metadata Document (CIMD,
 // draft-ietf-oauth-client-id-metadata-document) support for remote-session
 // clients. A CIMD-mode client publishes a JSON metadata document at a stable
-// Gram URL and sends that URL as its client_id on every outbound OAuth call;
+// Speakeasy URL and sends that URL as its client_id on every outbound OAuth call;
 // the upstream Authorization Server dereferences the URL to fetch this
 // document. The builder here renders that document; HandleClientMetadataDocument
 // serves it at the public, unauthenticated endpoint.
@@ -17,6 +17,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -28,13 +30,6 @@ import (
 )
 
 const (
-	// clientMetadataDocumentMaxAgeSeconds is the Cache-Control max-age for
-	// served CIMD documents. Longer than the well-known metadata TTL: a
-	// document is keyed by an immutable client_id and changes only if the
-	// client's registration does, so upstream Authorization Servers can safely
-	// cache it for an hour.
-	clientMetadataDocumentMaxAgeSeconds = 3600
-
 	// clientJSONWebKeySetMaxAgeSeconds lets verifiers cache client public keys
 	// for an hour. Key rotation publishes pending keys before activating them
 	// and retains retired keys, so both sides of the rotation overlap this
@@ -46,7 +41,7 @@ const (
 	ManagedClientJSONWebKeySetMaxAgeSeconds = 300
 )
 
-// cimdClientName is the client_name Gram publishes in every CIMD document. It
+// cimdClientName is the client_name Speakeasy publishes in every CIMD document. It
 // is what the end user sees on the upstream's consent screen, so it carries the
 // Speakeasy brand customers recognize. There is no per-client name column yet;
 // a static value keeps the document free of any project/MCP-server-scoped state
@@ -54,17 +49,17 @@ const (
 // many MCP servers).
 const cimdClientName = "Speakeasy"
 
-// clientMetadataDocumentPath is the URL path prefix Gram serves CIMD documents
+// clientMetadataDocumentPath is the URL path prefix Speakeasy serves CIMD documents
 // under. Not an IANA-registered well-known location — the CIMD draft only
 // requires an HTTPS URL with a path component — but placed under /.well-known
 // for parity with the sibling OAuth metadata documents.
 const clientMetadataDocumentPath = "/.well-known/oauth-client/"
 
 // ClientMetadataDocumentURL builds the platform-canonical CIMD document URL for
-// a client id. serverURL is the Gram deployment's public base URL; the path
+// a client id. serverURL is the client's pinned callback origin; the path
 // component is the client's globally unique primary key. This is the value
 // stored as both client_id and client_id_metadata_uri on a CIMD-mode row and
-// the URL Gram sends upstream as client_id.
+// the URL Speakeasy sends upstream as client_id.
 func ClientMetadataDocumentURL(serverURL *url.URL, clientID uuid.UUID) string {
 	return strings.TrimRight(serverURL.String(), "/") + clientMetadataDocumentPath + clientID.String()
 }
@@ -93,17 +88,28 @@ type clientMetadataDocument struct {
 
 // BuildClientMetadataDocument renders the CIMD document for a client. clientID
 // MUST equal the URL the document is served at (the CIMD invariant the upstream
-// AS validates); redirectURI is Gram's outbound callback for this deployment;
+// AS validates); redirectURI is Speakeasy's outbound callback for this deployment;
 // tokenEndpointAuthMethod is the method the client actually uses; jwksURI is
 // present only while a key set is attached; scope is the client's explicit
 // upstream scopes, omitted when empty.
 func BuildClientMetadataDocument(clientID, redirectURI string, tokenEndpointAuthMethod TokenEndpointAuthMethod, jwksURI string, scope []string) clientMetadataDocument {
+	return BuildClientMetadataDocumentWithGrants(clientID, redirectURI, tokenEndpointAuthMethod, jwksURI, scope, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken})
+}
+
+// BuildClientMetadataDocumentWithGrants publishes only this client's recorded
+// grants. NULL is unknown and advertises no grants, as does an explicit empty
+// record. Publication is not proof of provider acceptance.
+func BuildClientMetadataDocumentWithGrants(clientID, redirectURI string, tokenEndpointAuthMethod TokenEndpointAuthMethod, jwksURI string, scope, grants []string) clientMetadataDocument {
+	responses := []string{}
+	if slices.Contains(grants, oauthwire.GrantTypeAuthorizationCode) {
+		responses = append(responses, oauthwire.ResponseTypeCode)
+	}
 	return clientMetadataDocument{
 		ClientID:                clientID,
 		ClientName:              cimdClientName,
 		RedirectURIs:            []string{redirectURI},
-		GrantTypes:              []string{"authorization_code", "refresh_token"},
-		ResponseTypes:           []string{"code"},
+		GrantTypes:              append([]string{}, grants...),
+		ResponseTypes:           responses,
 		JWKSURI:                 jwksURI,
 		TokenEndpointAuthMethod: string(tokenEndpointAuthMethod),
 		Scope:                   strings.Join(scope, " "),
@@ -120,10 +126,24 @@ func preflightCIMDIssuer(issuer remotesessions_repo.RemoteSessionIssuer) error {
 	if !issuer.ClientIDMetadataDocumentSupported {
 		return fmt.Errorf("issuer %q does not advertise client_id_metadata_document_supported", issuer.Slug)
 	}
-	if methods := issuer.TokenEndpointAuthMethodsSupported; len(methods) > 0 && !slices.Contains(methods, string(TokenEndpointAuthMethodNone)) {
+	if !SupportsClientIDMetadataDocument(issuer.ClientIDMetadataDocumentSupported, issuer.TokenEndpointAuthMethodsSupported) {
 		return fmt.Errorf("issuer %q does not advertise the none token_endpoint_auth_method required for client id metadata documents", issuer.Slug)
 	}
 	return nil
+}
+
+// SupportsClientIDMetadataDocument reports whether an authorization server's
+// metadata lets Speakeasy use a Client ID Metadata Document instead of dynamic
+// client registration: it must advertise client_id_metadata_document_supported
+// and, when it enumerates token endpoint auth methods, accept "none" (CIMD
+// clients are public). An empty method list means the issuer did not advertise
+// them, so it is not second-guessed. Every caller that chooses between CIMD,
+// dynamic registration and manual setup uses this one predicate.
+func SupportsClientIDMetadataDocument(clientIDMetadataDocumentSupported bool, tokenEndpointAuthMethodsSupported []string) bool {
+	if !clientIDMetadataDocumentSupported {
+		return false
+	}
+	return len(tokenEndpointAuthMethodsSupported) == 0 || slices.Contains(tokenEndpointAuthMethodsSupported, string(TokenEndpointAuthMethodNone))
 }
 
 // HandleClientMetadataDocument serves the public, unauthenticated CIMD document
@@ -159,26 +179,50 @@ func (m *ChallengeManager) HandleClientMetadataDocument(w http.ResponseWriter, r
 
 	// client_id is the stored canonical URL (== the value sent upstream), not a
 	// host-derived one, so it always matches what the AS dereferenced. The JWKS
-	// URL is likewise built from the configured platform origin rather than the
-	// request host.
+	// URL and redirect_uri are likewise built from the client's pinned origin
+	// rather than the request host or the current server URL.
+	origin := m.origins.ForClient(row.CallbackBaseUrl)
+	redirectURI := RemoteLoginCallbackURL(origin)
 	jwksURI := ""
 	if row.HasJsonWebKeySet {
-		jwksURI = ClientJSONWebKeySetURL(m.serverURL, row.ID)
+		jwksURI = ClientJSONWebKeySetURL(origin, row.ID)
 	}
-	doc := BuildClientMetadataDocument(
+	doc := BuildClientMetadataDocumentWithGrants(
 		row.ClientIDMetadataUri.String,
-		m.callbackURL(canonicalCallbackRouteBase),
+		redirectURI,
 		TokenEndpointAuthMethod(row.TokenEndpointAuthMethod),
 		jwksURI,
 		row.Scope,
+		row.GrantTypes,
 	)
+	if row.GrantTypes == nil {
+		// The original interactive CIMD API created clients without recording
+		// grants. Preserve its public authorization-code/refresh contract, not
+		// registration evidence: NULL stays unknown in preparation and this
+		// compatibility document never advertises identity-chaining grants.
+		doc = BuildClientMetadataDocument(row.ClientIDMetadataUri.String, redirectURI, TokenEndpointAuthMethod(row.TokenEndpointAuthMethod), jwksURI, row.Scope)
+	}
 
 	body, err := json.Marshal(doc)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "marshal client metadata document").LogError(ctx, m.logger)
 	}
 
-	return httpcache.WriteCacheableJSON(ctx, w, r, m.logger, "application/json; charset=utf-8", clientMetadataDocumentMaxAgeSeconds, body)
+	return httpcache.WriteCacheableJSON(ctx, clientMetadataResponseWriter{w}, r, m.logger, "application/json; charset=utf-8", 0, body)
+}
+
+// clientMetadataResponseWriter retains the shared ETag/conditional GET handling,
+// but overrides its freshness policy before either a 200 or 304 is committed.
+// A stable client_id does not imply immutable grant evidence: caches may store
+// the document, but must revalidate before reuse, including after revocation.
+// This policy is specific to metadata, not the rotation-aware JWKS endpoint.
+type clientMetadataResponseWriter struct {
+	http.ResponseWriter
+}
+
+func (w clientMetadataResponseWriter) WriteHeader(status int) {
+	w.Header().Set("Cache-Control", "public, no-cache")
+	w.ResponseWriter.WriteHeader(status)
 }
 
 // HandleClientJSONWebKeySet serves the public keys for a remote-session client

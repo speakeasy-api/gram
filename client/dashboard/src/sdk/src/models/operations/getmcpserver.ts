@@ -30,6 +30,10 @@ export type GetMcpServerRequest = {
    */
   slug?: string | undefined;
   /**
+   * Resolve the preferred MCP server for this toolset. Mutually exclusive with id and slug.
+   */
+  toolsetId?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -148,6 +152,7 @@ export function getMcpServerSecurityToJSON(
 export type GetMcpServerRequest$Outbound = {
   id?: string | undefined;
   slug?: string | undefined;
+  toolset_id?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -161,12 +166,14 @@ export const GetMcpServerRequest$outboundSchema: z.ZodMiniType<
   z.object({
     id: z.optional(z.string()),
     slug: z.optional(z.string()),
+    toolsetId: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      toolsetId: "toolset_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

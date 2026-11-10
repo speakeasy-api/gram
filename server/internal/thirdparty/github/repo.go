@@ -12,7 +12,10 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"unicode/utf8"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -67,7 +70,7 @@ func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name
 		"name":          name,
 		"private":       private,
 		"auto_init":     true,
-		"description":   "Plugin packages managed by Gram",
+		"description":   "Plugin packages managed by Speakeasy",
 		"has_issues":    false,
 		"has_wiki":      false,
 		"has_downloads": false,
@@ -215,13 +218,20 @@ func (c *Client) PushFiles(ctx context.Context, installationID int64, owner, rep
 	return newCommitSHA, nil
 }
 
-// GetRepoFiles returns every file on the given branch as a path->content map,
-// using the Git Trees API (recursive) plus one blob fetch per file. Returns
+// repoFileFetchConcurrency bounds the parallel blob fetches in GetRepoFiles.
+// A publish is otherwise one sequential round trip per file, and GitHub's
+// secondary rate limits penalize bursts of concurrent requests, so keep this
+// modest.
+const repoFileFetchConcurrency = 8
+
+// GetRepoFiles returns the files on the given branch as a path->content map,
+// using the Git Trees API (recursive) plus one blob fetch per file. When
+// include is non-nil only paths it accepts are fetched and returned. Returns
 // ErrRepoNotFound if the repo or branch does not exist yet. The publish path
 // uses this to carry an unchanged plugin component (hooks or MCP) verbatim from
 // the existing repo into a fresh push, so publishing one component leaves the
 // other's files — including their embedded API keys — untouched.
-func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string, include func(path string) bool) (map[string][]byte, error) {
 	treeURL, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "trees", branch)
 	treeURL += "?recursive=1"
 	resp, err := c.doAPI(ctx, installationID, http.MethodGet, treeURL, nil)
@@ -256,16 +266,29 @@ func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, 
 		return nil, fmt.Errorf("get tree: response truncated (repo too large)")
 	}
 
-	files := make(map[string][]byte, len(tree.Entries))
+	var (
+		mu    sync.Mutex
+		files = make(map[string][]byte, len(tree.Entries))
+	)
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(repoFileFetchConcurrency)
 	for _, entry := range tree.Entries {
-		if entry.Type != "blob" {
+		if entry.Type != "blob" || (include != nil && !include(entry.Path)) {
 			continue
 		}
-		content, err := c.getBlob(ctx, installationID, owner, repo, entry.SHA)
-		if err != nil {
-			return nil, fmt.Errorf("get blob %s: %w", entry.Path, err)
-		}
-		files[entry.Path] = content
+		g.Go(func() error {
+			content, err := c.getBlob(gctx, installationID, owner, repo, entry.SHA)
+			if err != nil {
+				return fmt.Errorf("get blob %s: %w", entry.Path, err)
+			}
+			mu.Lock()
+			files[entry.Path] = content
+			mu.Unlock()
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("get repo files: %w", err)
 	}
 
 	return files, nil
@@ -367,22 +390,28 @@ func (c *Client) getRef(ctx context.Context, installationID int64, owner, repo, 
 func (c *Client) createTree(ctx context.Context, installationID int64, owner, repo string, files map[string][]byte) (string, error) {
 	treeEntries := make([]map[string]string, 0, len(files))
 	for path, content := range files {
-		// The Trees API treats `content` as UTF-8 text; binary content must be
-		// uploaded via the Blobs API and referenced by `sha`. Fail loudly here
-		// rather than silently corrupting binary files.
-		if !utf8.Valid(content) {
-			return "", fmt.Errorf("create tree: %q is not valid UTF-8 (binary content requires the Blobs API)", path)
-		}
 		mode := "100644"
 		if strings.HasSuffix(path, ".sh") {
 			mode = "100755"
 		}
-		treeEntries = append(treeEntries, map[string]string{
-			"path":    path,
-			"mode":    mode,
-			"type":    "blob",
-			"content": string(content),
-		})
+		entry := map[string]string{
+			"path": path,
+			"mode": mode,
+			"type": "blob",
+		}
+		// The Trees API treats `content` as UTF-8 text, so binary content such
+		// as a plugin icon is uploaded through the Blobs API and referenced by
+		// `sha` instead of being corrupted inline.
+		if utf8.Valid(content) {
+			entry["content"] = string(content)
+		} else {
+			sha, err := c.createBlob(ctx, installationID, owner, repo, content)
+			if err != nil {
+				return "", fmt.Errorf("create blob for %q: %w", path, err)
+			}
+			entry["sha"] = sha
+		}
+		treeEntries = append(treeEntries, entry)
 	}
 
 	// Omit base_tree to build a clean tree from scratch. This ensures
@@ -411,6 +440,37 @@ func (c *Client) createTree(ctx context.Context, installationID int64, owner, re
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", fmt.Errorf("decode tree: %w", err)
+	}
+	return result.SHA, nil
+}
+
+// createBlob uploads content as a base64 blob and returns its SHA, for files
+// the Trees API cannot carry inline.
+func (c *Client) createBlob(ctx context.Context, installationID int64, owner, repo string, content []byte) (string, error) {
+	body, err := json.Marshal(map[string]string{
+		"content":  base64.StdEncoding.EncodeToString(content),
+		"encoding": "base64",
+	})
+	if err != nil {
+		return "", fmt.Errorf("marshal blob: %w", err)
+	}
+
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "blobs")
+	resp, err := c.doAPI(ctx, installationID, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusCreated {
+		return "", fmt.Errorf("status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var result struct {
+		SHA string `json:"sha"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode blob: %w", err)
 	}
 	return result.SHA, nil
 }
@@ -449,7 +509,7 @@ func (c *Client) createCommit(ctx context.Context, installationID int64, owner, 
 func (c *Client) updateRef(ctx context.Context, installationID int64, owner, repo, branch, commitSHA string) error {
 	// force: true is required because we build clean trees (no base_tree)
 	// which Git may see as non-fast-forward. Safe because each project gets
-	// its own repo that Gram fully manages.
+	// its own repo that Speakeasy fully manages.
 	payload := map[string]any{
 		"sha":   commitSHA,
 		"force": true,

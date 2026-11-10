@@ -9,8 +9,13 @@ import {
 } from "@/components/mcp-server-readiness-bar";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
+import {
+  gatewayInstallPageUrl,
+  useResolvedMcpServerUrl,
+} from "@/hooks/useToolsetUrl";
 import {
   activeTabFromPath,
   gatewayTabHref,
@@ -27,6 +32,7 @@ import {
   Network,
   Plug,
   Settings as SettingsIcon,
+  Terminal,
   Users,
   Wrench,
 } from "lucide-react";
@@ -47,16 +53,18 @@ export function GatewaySidebarNav(): React.JSX.Element | null {
       enabled: id !== "",
     });
   const endpoints = endpointsResult?.mcpEndpoints ?? [];
-  const { mcpUrl, installPageUrl } = useResolvedMcpServerUrl(
-    endpoints,
-    isLoadingEndpoints,
-  );
+  const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
+  const installPageUrl = gatewayInstallPageUrl(endpoints);
   const { rows } = useGatewayMemberRows(id);
   const { hasScope } = useRBAC();
   // Mirrors the mcp_servers sidebar: the tab reads org membership as well as
   // the resource, so hide it rather than render a permission wall.
   const canViewTeamAccess =
     !!metaMcpServer && hasScope("org:read") && hasScope("mcp:read", id);
+  const project = useProject();
+  // Same check as the Skills tab route: skill read on this project.
+  const canViewSkills =
+    useSkillsOverMcpEnabled() && hasScope("skill:read", project.id, project.id);
   if (!id) return null;
 
   const activeTab = activeTabFromPath(location.pathname, id);
@@ -110,6 +118,17 @@ export function GatewaySidebarNav(): React.JSX.Element | null {
       href: gatewayTabHref(routes, id, "inspect"),
       active: activeTab === "inspect",
     },
+    ...(canViewSkills
+      ? [
+          {
+            key: "skills",
+            title: "Skills",
+            Icon: Terminal,
+            href: gatewayTabHref(routes, id, "skills"),
+            active: activeTab === "skills",
+          },
+        ]
+      : []),
     ...(canViewTeamAccess
       ? [
           {

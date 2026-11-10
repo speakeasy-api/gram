@@ -1,6 +1,10 @@
 package platformtools
 
-import "net/url"
+import (
+	"net/url"
+
+	"github.com/google/uuid"
+)
 
 // AssistantsPlatformToolsetSlug is the reserved slug for the platform
 // toolset granted to every assistant runtime.
@@ -18,11 +22,19 @@ const ManagedAssistantPlatformToolsetSlug = "managed-assistant"
 // organization.
 const PlatformMCPReadToolsetSlug = "platform"
 
+// SpeakeasySlackPlatformToolsetSlug is the reserved slug for the toolset a
+// project's managed assistant replies through when the Speakeasy Slack app
+// routes a workspace to its project. The tools post with that workspace's bot
+// token, resolved on the server per call.
+const SpeakeasySlackPlatformToolsetSlug = "speakeasy-slack"
+
 // ResearchToolsetSlug is the reserved slug for the MCP research agent's web
 // tools (search and page fetch). No assistant is granted it by default; the
 // research-agent runner attaches it explicitly, and its tools are gated on
 // the mcp_approval feature.
 const ResearchToolsetSlug = "research"
+
+var platformToolsetNamespace = uuid.NewSHA1(uuid.NameSpaceURL, []byte("https://app.getgram.ai/platform/mcp"))
 
 // Toolset is a virtual collection of platform tools exposed at runtime via a
 // dedicated MCP endpoint. Platform toolsets are not persisted; the slug is
@@ -41,6 +53,7 @@ type ToolsetDependencies struct {
 	AssistantTriggerTools         []ExternalTool
 	ManagedAssistantInsightsTools []ExternalTool
 	PlatformMCPReadTools          []ExternalTool
+	SpeakeasySlackTools           []ExternalTool
 }
 
 type toolsetBuilder func(deps ToolsetDependencies) Toolset
@@ -63,6 +76,11 @@ var toolsetRegistry = []toolsetBuilder{
 		tools = append(tools, deps.PlatformMCPReadTools...)
 		return NewPlatformMCPReadToolset(tools...)
 	},
+	func(deps ToolsetDependencies) Toolset {
+		tools := make([]ExternalTool, 0, len(deps.SpeakeasySlackTools))
+		tools = append(tools, deps.SpeakeasySlackTools...)
+		return Toolset{Slug: SpeakeasySlackPlatformToolsetSlug, Tools: tools}
+	},
 }
 
 // BuildToolsets materializes every registered platform toolset against the
@@ -82,6 +100,28 @@ func BuildToolsets(deps ToolsetDependencies) map[string]Toolset {
 		out[ts.Slug] = ts
 	}
 	return out
+}
+
+// PlatformToolsetID returns the stable policy and finding identity for a
+// code-owned Platform MCP toolset.
+func PlatformToolsetID(slug string) uuid.UUID {
+	return uuid.NewSHA1(platformToolsetNamespace, []byte(slug))
+}
+
+// PlatformToolsetName returns the dashboard label for a Platform MCP toolset.
+func PlatformToolsetName(slug string) string {
+	switch slug {
+	case AssistantsPlatformToolsetSlug:
+		return "Speakeasy assistant tools"
+	case ManagedAssistantPlatformToolsetSlug:
+		return "Speakeasy managed assistant tools"
+	case PlatformMCPReadToolsetSlug:
+		return "Speakeasy Platform MCP"
+	case SpeakeasySlackPlatformToolsetSlug:
+		return "Speakeasy Slack app"
+	default:
+		return slug
+	}
 }
 
 // NewAssistantsToolset returns the assistants platform toolset bound to the

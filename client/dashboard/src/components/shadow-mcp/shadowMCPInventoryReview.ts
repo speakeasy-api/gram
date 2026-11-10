@@ -11,11 +11,21 @@ export function observedDate(date: Date | undefined): Date | undefined {
 }
 
 /**
+ * A legacy policy-bypass request is a pending ask too: the server counts only
+ * the requests still waiting against an enabled blocking policy, so a row
+ * with one is awaiting a decision whatever its dossier says.
+ */
+function hasPendingBypassRequest(server: ShadowMCPInventoryServer): boolean {
+  return server.requestCount > 0;
+}
+
+/**
  * Pending decisions sort first; the rest follow the review lifecycle. An
  * unreviewed dossier is a storage detail, not a state — it ranks with "no
  * review".
  */
 export function reviewSortRank(server: ShadowMCPInventoryServer): number {
+  if (hasPendingBypassRequest(server)) return 0;
   switch (server.approvalRequest?.status) {
     case "requested":
       return 0;
@@ -28,6 +38,7 @@ export function reviewSortRank(server: ShadowMCPInventoryServer): number {
     case undefined:
       return 2;
   }
+  return 2;
 }
 
 export function matchesReviewFilter(
@@ -35,10 +46,17 @@ export function matchesReviewFilter(
   review: string | undefined,
 ): boolean {
   if (!review) return true;
+  if (review === "requested") {
+    return (
+      server.approvalRequest?.status === "requested" ||
+      hasPendingBypassRequest(server)
+    );
+  }
   if (review === "none") {
     return (
-      server.approvalRequest === undefined ||
-      server.approvalRequest.status === "unreviewed"
+      !hasPendingBypassRequest(server) &&
+      (server.approvalRequest === undefined ||
+        server.approvalRequest.status === "unreviewed")
     );
   }
   return server.approvalRequest?.status === review;

@@ -5,10 +5,14 @@
 import { analyticsDescribe } from "../funcs/analyticsDescribe.js";
 import { analyticsDimensionValues } from "../funcs/analyticsDimensionValues.js";
 import { analyticsQuery } from "../funcs/analyticsQuery.js";
+import { analyticsSignalDefinition } from "../funcs/analyticsSignalDefinition.js";
+import { analyticsSignalFindings } from "../funcs/analyticsSignalFindings.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AnalyticsDescribeResult } from "../models/components/analyticsdescriberesult.js";
 import { AnalyticsDimensionValuesResult } from "../models/components/analyticsdimensionvaluesresult.js";
 import { AnalyticsQueryResult } from "../models/components/analyticsqueryresult.js";
+import { AnalyticsSignalDefinition } from "../models/components/analyticssignaldefinition.js";
+import { AnalyticsSignalFindings } from "../models/components/analyticssignalfindings.js";
 import {
   AnalyticsDescribeRequest,
   AnalyticsDescribeSecurity,
@@ -21,6 +25,14 @@ import {
   AnalyticsQueryRequest,
   AnalyticsQuerySecurity,
 } from "../models/operations/analyticsquery.js";
+import {
+  AnalyticsSignalDefinitionRequest,
+  AnalyticsSignalDefinitionSecurity,
+} from "../models/operations/analyticssignaldefinition.js";
+import {
+  AnalyticsSignalFindingsRequest,
+  AnalyticsSignalFindingsSecurity,
+} from "../models/operations/analyticssignalfindings.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Analytics extends ClientSDK {
@@ -74,6 +86,44 @@ export class Analytics extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AnalyticsQueryResult> {
     return unwrapAsync(analyticsQuery(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * signalDefinition analytics
+   *
+   * @remarks
+   * Inspect the immutable semantic definition used by a signal reading. Requires signals_intelligence and project:read.
+   */
+  async signalDefinition(
+    request: AnalyticsSignalDefinitionRequest,
+    security?: AnalyticsSignalDefinitionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AnalyticsSignalDefinition> {
+    return unwrapAsync(analyticsSignalDefinition(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * signalFindings analytics
+   *
+   * @remarks
+   * Find cross-session signal patterns, joint-answer co-occurrence and guarded previous-window changes. Aggregate reads require project:read and Signals Intelligence; each evidence reference additionally passes the underlying conversation access checks.
+   */
+  async signalFindings(
+    request: AnalyticsSignalFindingsRequest,
+    security?: AnalyticsSignalFindingsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AnalyticsSignalFindings> {
+    return unwrapAsync(analyticsSignalFindings(
       this,
       request,
       security,

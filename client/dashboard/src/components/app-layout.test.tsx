@@ -143,6 +143,45 @@ describe("trusted support banner", () => {
 });
 
 describe("LoginCheck", () => {
+  it.each(["/org/setup?task=enable-logging", "/org/setup/enable-logging"])(
+    "preserves unauthenticated setup destination %s through login",
+    (destination) => {
+      mocks.useSession.mockReturnValue({ ...baseSession, session: "" });
+      render(
+        <MemoryRouter initialEntries={[destination]}>
+          <Routes>
+            <Route element={<LoginCheck />}>
+              <Route path="/org/setup" element={<div>setup</div>} />
+              <Route path="/org/setup/:taskSlug" element={<div>setup</div>} />
+            </Route>
+            <Route path="/login" element={<CurrentLocation />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.getByTestId("location").textContent).toBe(
+        `/login?redirect=${encodeURIComponent(destination)}`,
+      );
+      expect(screen.queryByText("setup")).toBeNull();
+    },
+  );
+
+  it("lifts signin_error out of the destination onto the login page", () => {
+    mocks.useSession.mockReturnValue({ ...baseSession, session: "" });
+    render(
+      <MemoryRouter initialEntries={["/?signin_error=sign_in_revoked"]}>
+        <Routes>
+          <Route element={<LoginCheck />}>
+            <Route path="/" element={<div>home</div>} />
+          </Route>
+          <Route path="/login" element={<CurrentLocation />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/login?redirect=%2F&signin_error=sign_in_revoked",
+    );
+  });
+
   it("sends authenticated zero-org sessions to sign-up with their destination", () => {
     mocks.useSession.mockReturnValue({
       ...baseSession,

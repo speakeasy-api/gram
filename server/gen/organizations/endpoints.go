@@ -17,12 +17,14 @@ import (
 // Endpoints wraps the "organizations" service endpoints.
 type Endpoints struct {
 	Get                                goa.Endpoint
+	GetGateway                         goa.Endpoint
 	SendInvite                         goa.Endpoint
 	RevokeInvite                       goa.Endpoint
 	UpdateInviteRole                   goa.Endpoint
 	ListInvites                        goa.Endpoint
 	ListUsers                          goa.Endpoint
 	RemoveUser                         goa.Endpoint
+	RevokeMemberSignIns                goa.Endpoint
 	EnableWebhooks                     goa.Endpoint
 	DisableWebhooks                    goa.Endpoint
 	CreatePortalSession                goa.Endpoint
@@ -32,6 +34,7 @@ type Endpoints struct {
 	GenerateWorkOSAdminPortalLink      goa.Endpoint
 	ListSetupTasks                     goa.Endpoint
 	UpdateSetupTask                    goa.Endpoint
+	SubmitOnboardingSurvey             goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizations" service with endpoints.
@@ -40,12 +43,14 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		Get:                                NewGetEndpoint(s, a.APIKeyAuth),
+		GetGateway:                         NewGetGatewayEndpoint(s, a.APIKeyAuth),
 		SendInvite:                         NewSendInviteEndpoint(s, a.APIKeyAuth),
 		RevokeInvite:                       NewRevokeInviteEndpoint(s, a.APIKeyAuth),
 		UpdateInviteRole:                   NewUpdateInviteRoleEndpoint(s, a.APIKeyAuth),
 		ListInvites:                        NewListInvitesEndpoint(s, a.APIKeyAuth),
 		ListUsers:                          NewListUsersEndpoint(s, a.APIKeyAuth),
 		RemoveUser:                         NewRemoveUserEndpoint(s, a.APIKeyAuth),
+		RevokeMemberSignIns:                NewRevokeMemberSignInsEndpoint(s, a.APIKeyAuth),
 		EnableWebhooks:                     NewEnableWebhooksEndpoint(s, a.APIKeyAuth),
 		DisableWebhooks:                    NewDisableWebhooksEndpoint(s, a.APIKeyAuth),
 		CreatePortalSession:                NewCreatePortalSessionEndpoint(s, a.APIKeyAuth),
@@ -55,6 +60,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GenerateWorkOSAdminPortalLink:      NewGenerateWorkOSAdminPortalLinkEndpoint(s, a.APIKeyAuth),
 		ListSetupTasks:                     NewListSetupTasksEndpoint(s, a.APIKeyAuth),
 		UpdateSetupTask:                    NewUpdateSetupTaskEndpoint(s, a.APIKeyAuth),
+		SubmitOnboardingSurvey:             NewSubmitOnboardingSurveyEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -62,12 +68,14 @@ func NewEndpoints(s Service) *Endpoints {
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Get = m(e.Get)
+	e.GetGateway = m(e.GetGateway)
 	e.SendInvite = m(e.SendInvite)
 	e.RevokeInvite = m(e.RevokeInvite)
 	e.UpdateInviteRole = m(e.UpdateInviteRole)
 	e.ListInvites = m(e.ListInvites)
 	e.ListUsers = m(e.ListUsers)
 	e.RemoveUser = m(e.RemoveUser)
+	e.RevokeMemberSignIns = m(e.RevokeMemberSignIns)
 	e.EnableWebhooks = m(e.EnableWebhooks)
 	e.DisableWebhooks = m(e.DisableWebhooks)
 	e.CreatePortalSession = m(e.CreatePortalSession)
@@ -77,6 +85,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GenerateWorkOSAdminPortalLink = m(e.GenerateWorkOSAdminPortalLink)
 	e.ListSetupTasks = m(e.ListSetupTasks)
 	e.UpdateSetupTask = m(e.UpdateSetupTask)
+	e.SubmitOnboardingSurvey = m(e.SubmitOnboardingSurvey)
 }
 
 // NewGetEndpoint returns an endpoint function that calls the method "get" of
@@ -99,6 +108,29 @@ func NewGetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoin
 			return nil, err
 		}
 		return s.Get(ctx, p)
+	}
+}
+
+// NewGetGatewayEndpoint returns an endpoint function that calls the method
+// "getGateway" of service "organizations".
+func NewGetGatewayEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGatewayPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGateway(ctx, p)
 	}
 }
 
@@ -237,6 +269,29 @@ func NewRemoveUserEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return nil, s.RemoveUser(ctx, p)
+	}
+}
+
+// NewRevokeMemberSignInsEndpoint returns an endpoint function that calls the
+// method "revokeMemberSignIns" of service "organizations".
+func NewRevokeMemberSignInsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevokeMemberSignInsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RevokeMemberSignIns(ctx, p)
 	}
 }
 
@@ -445,5 +500,28 @@ func NewUpdateSetupTaskEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.UpdateSetupTask(ctx, p)
+	}
+}
+
+// NewSubmitOnboardingSurveyEndpoint returns an endpoint function that calls
+// the method "submitOnboardingSurvey" of service "organizations".
+func NewSubmitOnboardingSurveyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SubmitOnboardingSurveyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SubmitOnboardingSurvey(ctx, p)
 	}
 }

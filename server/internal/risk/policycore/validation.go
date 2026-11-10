@@ -6,17 +6,26 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var (
 	approvedDomainFormat = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`)
 	customRuleIDFormat   = regexp.MustCompile(`^custom\.[a-z0-9_]+$`)
 )
+
+var knownMCPToolAnnotations = []string{
+	"destructiveHint",
+	"idempotentHint",
+	"openWorldHint",
+	"readOnlyHint",
+}
 
 // ValidationError separates a stable client-facing validation message from an
 // underlying technical cause retained for logs and diagnostics.
@@ -41,13 +50,208 @@ type DetectionScopeInput struct {
 	ScopeExempt  *string
 }
 
+// MCPScopeInput preserves transport strings until UUID and tool validation.
+type MCPScopeInput struct {
+	AllServers      bool
+	ToolAnnotations []string
+	Servers         []*MCPServerScopeInput
+}
+
+// MCPServerScopeInput is one server or gateway selection.
+type MCPServerScopeInput struct {
+	MCPServerID string
+	Tools       []string
+}
+
+// NormalizeMCPScope validates and canonicalizes an MCP policy scope. An
+// explicit empty scope clears the restriction and therefore returns nil.
+func NormalizeMCPScope(input *MCPScopeInput) (*MCPScope, error) {
+	if input == nil {
+		return nil, nil
+	}
+
+	annotations := make([]string, 0, len(input.ToolAnnotations))
+	seenAnnotations := make(map[string]struct{}, len(input.ToolAnnotations))
+	for _, rawAnnotation := range input.ToolAnnotations {
+		annotation := strings.TrimSpace(rawAnnotation)
+		if !isKnownMCPToolAnnotation(annotation) {
+			return nil, fmt.Errorf("MCP tool annotation %q is not recognized", rawAnnotation)
+		}
+		if _, ok := seenAnnotations[annotation]; ok {
+			continue
+		}
+		seenAnnotations[annotation] = struct{}{}
+		annotations = append(annotations, annotation)
+	}
+	slices.Sort(annotations)
+
+	if !input.AllServers && len(input.Servers) == 0 {
+		if len(annotations) == 0 {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("MCP scope must select all servers or at least one server")
+	}
+
+	scope := &MCPScope{
+		AllServers:      input.AllServers,
+		ToolAnnotations: annotations,
+		Servers:         make([]MCPServerScope, 0, len(input.Servers)),
+	}
+	seenServers := make(map[uuid.UUID]struct{}, len(input.Servers))
+	for _, server := range input.Servers {
+		if server == nil {
+			return nil, fmt.Errorf("MCP server scope must not be null")
+		}
+		serverID, err := uuid.Parse(server.MCPServerID)
+		if err != nil {
+			return nil, fmt.Errorf("MCP server id %q is not a valid UUID", server.MCPServerID)
+		}
+		if _, ok := seenServers[serverID]; ok {
+			return nil, fmt.Errorf("MCP server %q specified more than once", server.MCPServerID)
+		}
+		seenServers[serverID] = struct{}{}
+
+		var tools []string
+		if server.Tools != nil {
+			if len(server.Tools) == 0 {
+				if len(annotations) > 0 {
+					return nil, fmt.Errorf("custom MCP tool selection must include at least one tool when the policy has a tool-annotation rule")
+				}
+				// An explicit empty list means "every tool on this server",
+				// same as never selecting one — not "no tools". Normalize to
+				// the wildcard sentinel rather than storing an empty slice:
+				// see AllToolsWildcard's doc comment for why a bare empty
+				// slice can't represent this durably.
+				tools = []string{AllToolsWildcard}
+			} else {
+				tools = make([]string, 0, len(server.Tools))
+				seenTools := make(map[string]struct{}, len(server.Tools))
+				for _, rawTool := range server.Tools {
+					tool := strings.TrimSpace(rawTool)
+					if tool == "" {
+						return nil, fmt.Errorf("MCP tool name must not be empty")
+					}
+					if tool == AllToolsWildcard {
+						return nil, fmt.Errorf("MCP tool name %q is reserved for matching every tool; use an empty tool list instead", AllToolsWildcard)
+					}
+					if _, ok := seenTools[tool]; ok {
+						continue
+					}
+					seenTools[tool] = struct{}{}
+					tools = append(tools, tool)
+				}
+				slices.Sort(tools)
+			}
+		}
+		if input.AllServers && tools == nil {
+			return nil, fmt.Errorf("all-servers scope entries must contain custom tools")
+		}
+		scope.Servers = append(scope.Servers, MCPServerScope{
+			MCPServerID: serverID,
+			Tools:       tools,
+		})
+	}
+	slices.SortFunc(scope.Servers, func(a, b MCPServerScope) int {
+		return strings.Compare(a.MCPServerID.String(), b.MCPServerID.String())
+	})
+	return scope, nil
+}
+
+func isKnownMCPToolAnnotation(annotation string) bool {
+	return slices.Contains(knownMCPToolAnnotations, annotation)
+}
+
+// ValidateMCPScopeOwnership requires every selected target to belong to the
+// policy's project or the code-owned Platform MCP registry.
+func ValidateMCPScopeOwnership(scope *MCPScope, projectServerIDs, platformToolsetIDs []uuid.UUID) error {
+	if scope == nil {
+		return nil
+	}
+	owned := make(map[uuid.UUID]struct{}, len(projectServerIDs)+len(platformToolsetIDs))
+	for _, id := range projectServerIDs {
+		owned[id] = struct{}{}
+	}
+	for _, id := range platformToolsetIDs {
+		owned[id] = struct{}{}
+	}
+	for _, server := range scope.Servers {
+		if _, ok := owned[server.MCPServerID]; !ok {
+			return fmt.Errorf("MCP server %q does not belong to the project", server.MCPServerID)
+		}
+	}
+	return nil
+}
+
+// ValidateMCPScopeSources rejects sources that cannot be evaluated against
+// individual MCP calls.
+func ValidateMCPScopeSources(scope *MCPScope, sources []string) error {
+	if scope == nil {
+		return nil
+	}
+	for _, source := range []string{ra.SourceAccountIdentity, shadowmcp.SourceShadowMCP} {
+		if slices.Contains(sources, source) {
+			return fmt.Errorf("source %q cannot be used by an MCP-scoped policy", source)
+		}
+	}
+	return nil
+}
+
+// ValidateMCPScope applies the source and action constraints for policies
+// evaluated against individual MCP calls.
+func ValidateMCPScope(scope *MCPScope, sources []string, action string) error {
+	if err := ValidateMCPScopeSources(scope, sources); err != nil {
+		return err
+	}
+	if action == ActionRequireApproval && scope == nil {
+		return fmt.Errorf("action %q needs an MCP scope naming the servers or tools that require approval", action)
+	}
+	if scope == nil || action == "flag" || action == "block" || action == ActionRequireApproval {
+		return nil
+	}
+	return fmt.Errorf("action %q cannot be used by an MCP-scoped policy; use flag or block", action)
+}
+
 func ValidateAction(action string) error {
 	switch action {
-	case "flag", "block", "warn", "quarantine":
+	case "flag", "block", "warn", "quarantine", ActionRequireApproval:
 		return nil
 	default:
-		return fmt.Errorf("action must be one of: flag, warn, block, quarantine")
+		return fmt.Errorf("action must be one of: flag, warn, block, quarantine, %s", ActionRequireApproval)
 	}
+}
+
+// ValidateApprovalPolicy checks the fields a require_approval policy depends
+// on: it holds calls by MCP scope alone, so it takes no detectors and must name
+// at least one approver. Every other action must leave approvalConfig unset.
+func ValidateApprovalPolicy(action, policyType string, sources, customRuleIDs []string, approvalConfig *ApprovalConfig) error {
+	if action != ActionRequireApproval {
+		if approvalConfig != nil {
+			return fmt.Errorf("approval_config is only valid when action is %s", ActionRequireApproval)
+		}
+		return nil
+	}
+	if policyType != "" && policyType != "standard" {
+		return fmt.Errorf("action %s needs policy_type standard", ActionRequireApproval)
+	}
+	if len(sources) > 0 || len(customRuleIDs) > 0 {
+		return fmt.Errorf("action %s holds calls by MCP scope alone and takes no detection sources or custom rules", ActionRequireApproval)
+	}
+	if approvalConfig == nil || len(approvalConfig.Approvers) == 0 {
+		return fmt.Errorf("action %s needs approval_config with at least one approver", ActionRequireApproval)
+	}
+	for _, approver := range approvalConfig.Approvers {
+		principal, err := urn.ParsePrincipal(approver)
+		if err != nil {
+			return fmt.Errorf("approver %q is not a principal URN: %w", approver, err)
+		}
+		if principal.Type != urn.PrincipalTypeUser && principal.Type != urn.PrincipalTypeRole {
+			return fmt.Errorf("approver %q must be a user or role", approver)
+		}
+		if principal.ID == "" || principal.ID == "all" {
+			return fmt.Errorf("approver %q must name a specific user or role", approver)
+		}
+	}
+	return nil
 }
 
 func ValidateSources(sources []string) error {
@@ -128,7 +332,7 @@ func ValidatePolicyType(policyType string) error {
 	}
 }
 
-// knownCategory reports whether the category is one Gram defines.
+// knownCategory reports whether the category is one Speakeasy defines.
 func knownCategory(category categories.Category) bool {
 	return slices.ContainsFunc(categories.All(), func(def categories.Definition) bool {
 		return def.Category == category

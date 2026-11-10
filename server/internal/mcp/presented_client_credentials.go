@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // presentedClientCredentials is everything a token or revocation request
@@ -49,17 +49,18 @@ func (c presentedClientCredentials) presented() bool {
 	return c.hasClientAuthParameters || c.clientID != "" || c.secret != "" || c.assertion.Presented()
 }
 
-// extractClientCredentials reads every client authentication parameter a
-// request can carry. HTTP Basic still wins for the client_id and secret when
-// both it and form parameters are present, so existing clients keep their
-// behavior; the "multiple" label surfaces the misconfiguration in logs.
-//
-// "multiple" is decided on values, not on which keys the form carried. A
-// parameter sent empty alongside a real credential is not a second
-// authentication method under RFC 6749 section 2.3, and refusing it would
-// turn a client that pads its form into a failed exchange. Dispatch still
-// reads key presence, through presented, because a caller that names any
-// client is one that has to authenticate.
+// clientless reports whether a token request presents no client
+// authentication at all, in its form or an Authorization header. Of the JWT
+// bearer requests, only a clientless one is the workload grant; any other is
+// the ID-JAG exchange. An Authorization header counts by its presence, so an
+// empty or repeated one is never read as no client.
+func (c presentedClientCredentials) clientless(r *http.Request) bool {
+	return !c.presented() && len(r.Header.Values("Authorization")) == 0
+}
+
+// extractClientCredentials reads client authentication after request validation.
+// Empty form credentials are treated as omitted; client_id alone is not a
+// second authentication method alongside Basic.
 func extractClientCredentials(r *http.Request) presentedClientCredentials {
 	formID := r.PostForm.Get(oauthwire.ParamClientID)
 	formSecret := r.PostForm.Get(oauthwire.ParamClientSecret)
@@ -67,7 +68,7 @@ func extractClientCredentials(r *http.Request) presentedClientCredentials {
 		Value: r.PostForm.Get(oauthwire.ParamClientAssertion),
 		Type:  r.PostForm.Get(oauthwire.ParamClientAssertionType),
 	}
-	hasFormCredentials := formID != "" || formSecret != ""
+	hasFormCredentials := formSecret != ""
 	hasClientAuthParameters := slices.ContainsFunc(clientAuthFormParameters, func(key string) bool {
 		_, ok := r.PostForm[key]
 		return ok

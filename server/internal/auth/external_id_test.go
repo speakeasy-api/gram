@@ -12,8 +12,8 @@ import (
 )
 
 // TestExternalID_Priority2_WorkOSExternalID verifies that when no existing
-// Gram user matches by email but WorkOS has an external_id (e.g. set by the
-// Registry backfill), Gram uses that as the new user's primary key.
+// Speakeasy user matches by email but WorkOS has an external_id (e.g. set by the
+// Registry backfill), Speakeasy uses that as the new user's primary key.
 func TestExternalID_Priority2_WorkOSExternalID(t *testing.T) {
 	t.Parallel()
 
@@ -34,7 +34,7 @@ func TestExternalID_Priority2_WorkOSExternalID(t *testing.T) {
 
 	returnedID, err := instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
 	require.NoError(t, err)
-	require.Equal(t, externalID, returnedID, "should use WorkOS external_id as Gram user ID")
+	require.Equal(t, externalID, returnedID, "should use WorkOS external_id as Speakeasy user ID")
 
 	// Verify DB row uses the external_id as primary key.
 	usersQueries := usersRepo.New(instance.conn)
@@ -49,7 +49,7 @@ func TestExternalID_Priority2_WorkOSExternalID(t *testing.T) {
 }
 
 // TestExternalID_EmailMatchWinsOverExternalID verifies that when a user with
-// the same email already exists in Gram, their existing ID is preserved — even
+// the same email already exists in Speakeasy, their existing ID is preserved — even
 // if WorkOS has a different external_id. User IDs are immutable once assigned.
 func TestExternalID_EmailMatchWinsOverExternalID(t *testing.T) {
 	t.Parallel()
@@ -88,7 +88,7 @@ func TestExternalID_EmailMatchWinsOverExternalID(t *testing.T) {
 }
 
 // TestExternalID_Priority1_EmailMatch verifies that when a user with the same
-// email already exists, Gram reuses their existing ID regardless of whether
+// email already exists, Speakeasy reuses their existing ID regardless of whether
 // WorkOS has an external_id.
 func TestExternalID_Priority1_EmailMatch(t *testing.T) {
 	t.Parallel()
@@ -175,7 +175,7 @@ func TestExternalID_Priority3_DeterministicUUIDv5(t *testing.T) {
 }
 
 // TestExternalID_Deterministic verifies the UUIDv5 derivation is stable —
-// logging in twice with the same WorkOS ID produces the same Gram user ID.
+// logging in twice with the same WorkOS ID produces the same Speakeasy user ID.
 func TestExternalID_Deterministic(t *testing.T) {
 	t.Parallel()
 

@@ -3,12 +3,14 @@ package remotesessions
 import (
 	. "goa.design/goa/v3/dsl"
 
+	remotesessionclients "github.com/speakeasy-api/gram/server/design/remotesessionclients"
+	remotesessionissuers "github.com/speakeasy-api/gram/server/design/remotesessionissuers"
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
 var _ = Service("remoteSessions", func() {
-	Description("Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.")
+	Description("Operator visibility into remote_sessions Speakeasy is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -16,8 +18,138 @@ var _ = Service("remoteSessions", func() {
 	shared.DeclareErrorResponses()
 	principalBindingMethods()
 
+	Method("testServerConnection", func() {
+		Description("Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused. Requires the staff-managed provider_setup organization feature, disabled by default; unavailable organizations receive HTTP 404.")
+		Security(security.Session, security.ProjectSlug)
+		Payload(func() {
+			Meta("openapi:typename", "TestServerConnectionRequestBody")
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("mcp_server_id", String, "Exact MCP server to test.", func() { Format(FormatUUID) })
+			Required("mcp_server_id")
+		})
+		Result(ServerConnectionTestResult)
+		HTTP(func() {
+			POST("/rpc/remoteSessions.testServerConnection")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "testServerConnection")
+		Meta("openapi:extension:x-speakeasy-name-override", "testServerConnection")
+		Meta("openapi:extension:x-speakeasy-react-hook", "{\"name\": \"TestServerConnection\"}")
+	})
+
+	Method("commitServerIdentityConfiguration", func() {
+		Description("Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.")
+
+		Payload(func() {
+			Extend(CommitServerIdentityConfigurationForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(CommitServerIdentityConfigurationResult)
+
+		HTTP(func() {
+			POST("/rpc/remoteSessions.commitServerIdentityConfiguration")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "commitServerIdentityConfiguration")
+		Meta("openapi:extension:x-speakeasy-name-override", "commitServerIdentityConfiguration")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CommitServerIdentityConfiguration"}`)
+	})
+
+	Method("getServerIdentityImpact", func() {
+		Description("Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.")
+
+		Payload(func() {
+			Extend(ServerIdentityImpactForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ServerIdentityImpactResult)
+
+		HTTP(func() {
+			GET("/rpc/remoteSessions.getServerIdentityImpact")
+			Param("user_session_issuer_id")
+			Param("mcp_server_id")
+			Param("change")
+			Param("provider_id")
+			Param("client_id")
+			Param("replace_client")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getServerIdentityImpact")
+		Meta("openapi:extension:x-speakeasy-name-override", "getServerIdentityImpact")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ServerIdentityImpact"}`)
+	})
+
+	Method("listServerClientAssociations", func() {
+		Description("List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Associations are recorded ahead of the serving path that will read them; until then the server keeps signing in through its user session issuer's bindings. Requires mcp:read on the server.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })
+			Required("mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListServerClientAssociationsResult)
+
+		HTTP(func() {
+			GET("/rpc/remoteSessions.listServerClientAssociations")
+			Param("mcp_server_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listServerClientAssociations")
+		Meta("openapi:extension:x-speakeasy-name-override", "listServerClientAssociations")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ServerClientAssociations"}`)
+	})
+
+	Method("detachServerClientAssociation", func() {
+		Description("Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server's issuer) and synchronizes the backfill-derived typed links. Administrator-owned typed links are untouched. Requires mcp:write on the server.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })
+			Attribute("remote_session_client_id", String, "The associated remote session client.", func() { Format(FormatUUID) })
+			Required("mcp_server_id", "remote_session_client_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/remoteSessions.detachServerClientAssociation")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "detachServerClientAssociation")
+		Meta("openapi:extension:x-speakeasy-name-override", "detachServerClientAssociation")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DetachServerClientAssociation"}`)
+	})
+
 	Method("listRemoteSessions", func() {
-		Description("List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).")
+		Description("List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, authorization_expires_at, scopes).")
 
 		Payload(func() {
 			Attribute("principal_id", String, "Owned agent whose eligible sessions to list; requires user_session_issuer_id.", func() { Format(FormatUUID) })
@@ -55,6 +187,35 @@ var _ = Service("remoteSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoteSessions"}`)
 	})
 
+	Method("countRemoteSessions", func() {
+		Description("Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller's project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.")
+
+		Payload(func() {
+			Attribute("remote_session_client_id", String, "The remote_session_client whose sessions to count.", func() {
+				Format(FormatUUID)
+			})
+			Required("remote_session_client_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(CountRemoteSessionsResult)
+
+		HTTP(func() {
+			GET("/rpc/remoteSessions.count")
+			Param("remote_session_client_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "countRemoteSessions")
+		Meta("openapi:extension:x-speakeasy-name-override", "count")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoteSessionsCount"}`)
+	})
+
 	Method("revokeRemoteSession", func() {
 		Description("Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.")
 
@@ -83,6 +244,161 @@ var _ = Service("remoteSessions", func() {
 	})
 })
 
+var ServerConnectionTestResult = Type("ServerConnectionTestResult", func() {
+	Attribute("status", String, "Live result of this test, never a persisted completion record.", func() { Enum("ready", "authorization_required", "configuration_required", "failed") })
+	Attribute("code", String, "Stable, credential-free reason suitable for choosing a recovery action.")
+	Attribute("message", String, "Safe message for display in the failed setup step.")
+	Attribute("tool_count", Int, "Tools discovered, present only after every tools/list page succeeds.", func() { Minimum(0) })
+	Required("status", "code", "message")
+})
+
+var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurationForm", func() {
+	Description("A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.")
+
+	Attribute("mcp_server_id", String, "The target MCP server. It must be backed directly by a Remote MCP source.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("provider_id", String, "An existing Remote Identity Provider visible to the target project.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("target_server_only", Boolean, "Refuse a save if the user session issuer also serves another MCP server. Setup screens must set this to avoid changing shared sign-in bindings. Explicitly assign a dedicated issuer before retrying.")
+	Attribute("create_provider", remotesessionissuers.CreateRemoteSessionIssuerForm, "A new project-scoped Remote Identity Provider to create.")
+	Attribute("client_mode", String, "How to provide the OAuth client.", func() {
+		Enum("auto", "existing", "manual")
+	})
+	Attribute("existing_client_id", String, "An existing visible remote-session client to link. Required only for existing mode. Linking shares the client with every server that already uses it: a person holds one upstream grant per client, so signing in through one server replaces the grant another server obtained. To give this server its own client on the same upstream registration, use manual mode with client_configuration.template_client_id instead.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("client_configuration", ServerIdentityClientConfiguration, "Client settings for auto or manual mode. Forbidden for existing mode.")
+	Attribute("registration_method", String, "Auto mode only. cimd (the default) prefers a Client ID Metadata Document when the provider supports one and falls back to dynamic client registration; dcr always uses dynamic client registration.", func() {
+		Enum("cimd", "dcr")
+	})
+	Attribute("replace_client", Boolean, "Replace the selected provider's client already bound to the user session issuer, rather than reuse it or be refused. Everyone signed in through the old client must sign in again, on this server and every other server that uses it. The other servers move to the new client. Refused when a gateway or a server that is not directly Remote MCP-backed shares the issuer, or when a server using the client is in another project.")
+	Attribute("replace_client_server_ids", ArrayOf(String), "With replace_client, exactly the other MCP servers that use the client being replaced, as getServerIdentityImpact listed them. The commit is refused if they no longer match.", func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
+
+	Required("mcp_server_id", "client_mode")
+})
+
+var ServerIdentityImpactForm = Type("ServerIdentityImpactForm", func() {
+	Description("A proposed client binding change on a user session issuer. replace mirrors commitServerIdentityConfiguration: made from a server, it moves that server to the chosen client without unbinding a client another server uses; made without one, the bound clients of other providers (or of the same provider, for a client swap) are unbound and the chosen client is bound. attach binds one more client and unbinds nothing. detach unbinds the clients only mcp_server_id uses, or every client the caller's project can see when made without a server. For replace and attach, client_id names an existing client; without it a new project client of provider_id is assumed, and without provider_id a new provider.")
+
+	Attribute("user_session_issuer_id", String, "The user session issuer whose client bindings change.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("mcp_server_id", String, "The MCP server the change is made from. Excluded from the result.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("change", String, "The kind of binding change.", func() {
+		Enum("replace", "attach", "detach")
+	})
+	Attribute("provider_id", String, "The Remote Identity Provider of the client being bound. Omit for a new provider.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("client_id", String, "An existing client being bound. Omit for a new client.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("replace_client", Boolean, "Preview replacing the provider's bound client, as commitServerIdentityConfiguration's replace_client does. The servers that use it are listed with the resignin impact, and that list is what the commit must confirm. Only with change replace and mcp_server_id.")
+
+	Required("user_session_issuer_id", "change")
+})
+
+var ServerIdentityImpactServer = Type("ServerIdentityImpactServer", func() {
+	Description("An MCP server or gateway a proposed binding change affects.")
+
+	Attribute("id", String, "The MCP server or gateway id.", func() { Format(FormatUUID) })
+	Attribute("kind", String, "Whether this is an MCP server or a gateway.", func() {
+		Enum("mcp_server", "gateway")
+	})
+	Attribute("name", String, "The MCP server or gateway name.")
+	Attribute("slug", String, "The MCP server slug. Gateways have none.")
+	Attribute("project_id", String, "The owning project.", func() { Format(FormatUUID) })
+	Attribute("project_name", String, "The name of the owning project.")
+	Attribute("impact", String, "repoint: its upstream authorization server changes to another single provider. clear: it is left with no single provider and loses its upstream. resignin: its upstream is unchanged but its client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.", func() {
+		Enum("repoint", "clear", "resignin", "client_removed")
+	})
+
+	Required("id", "kind", "project_id", "project_name", "impact")
+})
+
+var ServerIdentityImpactResult = Type("ServerIdentityImpactResult", func() {
+	Description("The MCP servers and gateways, other than the target, that a proposed binding change affects.")
+
+	Attribute("servers", ArrayOf(ServerIdentityImpactServer), "Affected MCP servers the caller can read.")
+	Attribute("hidden_server_count", Int, "MCP servers and gateways the caller cannot read; they are not named. When the change touches an organization-level client this counts every such server on the issuer, affected or not.")
+	Attribute("detach_client_ids", ArrayOf(String), "With change detach and mcp_server_id, the clients only that server uses, which leaving User Identity unbinds from the issuer.", func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
+	Attribute("release_client_ids", ArrayOf(String), "With change detach and mcp_server_id, the clients other consumers also use. They stay bound, and leaving User Identity only removes that server's association with them.", func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
+
+	Required("servers", "hidden_server_count")
+})
+
+var ServerIdentityClientConfiguration = Type("ServerIdentityClientConfiguration", func() {
+	Description("Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id, client_secret and template_client_id and uses scope, audience, and token_endpoint_auth_method as registration preferences.")
+
+	Attribute("client_id", String, "The out-of-band OAuth client identifier. Manual mode only.")
+	Attribute("client_secret", String, "The out-of-band OAuth client secret. Manual mode only; encrypted before persistence.")
+	remotesessionclients.TemplateClientAttribute()
+	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the provider token endpoint, or the preferred method for DCR.", func() {
+		Enum("client_secret_basic", "client_secret_post", "none")
+	})
+	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes for this client.", func() {
+		remotesessionclients.ScopeAttribute("Each value must be an RFC 6749 scope token.")
+	})
+	Attribute("audience", String, "Optional upstream OAuth audience.", remotesessionclients.AudienceAttribute)
+})
+
+var ServerIdentityRegistrationFailure = Type("ServerIdentityRegistrationFailure", func() {
+	Description("A completed automatic registration failure using the bounded OAuth registration taxonomy.")
+
+	Attribute("outcome", String, func() {
+		Enum("unreachable", "refused")
+	})
+	Attribute("reason", String, func() {
+		Enum("dns_error", "tls_error", "timeout", "network_error", "rate_limited", "upstream_unavailable", "authorization_rejected", "invalid_success_response")
+	})
+	Attribute("retryable", Boolean)
+	Attribute("provider_message", String, "Optional sanitized and truncated provider-controlled message.")
+	Attribute("http_status", Int, "Optional upstream HTTP status.")
+
+	Required("outcome", "reason", "retryable")
+})
+
+var CommitServerIdentityConfigurationResult = Type("CommitServerIdentityConfigurationResult", func() {
+	Description("The outcome of committing a Remote MCP server user-identity plan. registered and linked are successful local commits. A registration failure is returned in failure. manual_setup_required is a preparation signal, not a registration outcome, and means auto mode found neither usable CIMD nor DCR support; no local state changed.")
+
+	Attribute("status", String, "Successful commit status. Present only after local commit.", func() {
+		Enum("registered", "linked")
+	})
+	Attribute("registration_method", String, "How the client was obtained. Present on success and registration failure.", func() {
+		Enum("cimd", "dcr", "manual", "existing")
+	})
+	Attribute("manual_setup_required", Boolean, "True only when auto mode found neither usable CIMD nor DCR support. This is not a registration failure and no local state was changed.")
+	Attribute("provider", remotesessionissuers.RemoteSessionIssuer, "The selected or created provider on success, or the selected existing provider when manual setup is required or DCR fails.")
+	Attribute("client", remotesessionclients.RemoteSessionClient, "The created or linked client on success. Never includes a client secret.")
+	Attribute("provider_tier", String, "The provider ownership tier.", func() {
+		Enum("project-specific", "organization-level", "platform-level")
+	})
+	Attribute("client_tier", String, "The client ownership tier.", func() {
+		Enum("project-specific", "organization-level")
+	})
+	Attribute("provider_path", String, "Organization-relative dashboard path to the Remote Identity Provider detail surface.")
+	Attribute("client_path", String, "Organization-relative dashboard path to the client detail surface.")
+	Attribute("failure", ServerIdentityRegistrationFailure, "Completed DCR failure. Mutually exclusive with status and manual_setup_required=true.")
+
+	Required("manual_setup_required")
+})
+
 // organizationRemoteSessions manages remote_sessions from the
 // organization-administrator surface (AIS-119). Unlike the project-scoped
 // remoteSessions service above, these methods span every project in the
@@ -90,7 +406,7 @@ var _ = Service("remoteSessions", func() {
 // organization-scoped (no ProjectSlug); RBAC gates writes on org:admin and
 // reads on org:read.
 var _ = Service("organizationRemoteSessions", func() {
-	Description("Organization-administrator visibility into remote_sessions Gram is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.")
+	Description("Organization-administrator visibility into remote_sessions Speakeasy is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.")
 	Security(security.Session)
 	Security(security.ByKey, func() {
 		Scope("producer")
@@ -105,7 +421,12 @@ var _ = Service("organizationRemoteSessions", func() {
 				Format(FormatUUID)
 			})
 			Required("client_id")
-			Attribute("cursor", String, "Pagination cursor.")
+			Attribute("search", String, "Case-insensitive literal identity search.", func() { MaxLength(200) })
+			Attribute("status", String, "Filter by effective upstream authorization status. Access expiry alone does not expire a refreshable account.", func() { Enum("active", "expired", "all") })
+			Attribute("created_after", String, "Inclusive creation lower bound.", func() { Format(FormatDateTime) })
+			Attribute("created_before", String, "Exclusive creation upper bound.", func() { Format(FormatDateTime) })
+			Attribute("sort", String, "Ordering. Authorization expiry is the earliest hard authorization deadline and usable refresh/access deadline. Omit to retain ID ordering and UUID cursors.", func() { Enum("newest", "oldest", "last_used", "expiry") })
+			Attribute("cursor", String, "Pagination cursor. Preserve the filters and ordering when following it.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -116,6 +437,11 @@ var _ = Service("organizationRemoteSessions", func() {
 		HTTP(func() {
 			GET("/rpc/organizationRemoteSessions.list")
 			Param("client_id")
+			Param("search")
+			Param("status")
+			Param("created_after")
+			Param("created_before")
+			Param("sort")
 			Param("cursor")
 			Param("limit")
 			security.SessionHeader()
@@ -212,15 +538,15 @@ var _ = Service("organizationRemoteSessions", func() {
 var RemoteSession = Type("RemoteSession", func() {
 	Meta("struct:pkg:path", "types")
 
-	Description("A remote_session record — Gram's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.")
+	Description("A remote_session record — Speakeasy's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.")
 
 	Attribute("id", String, "The remote_session id.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("subject_urn", String, "The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).")
-	Attribute("subject_display_name", String, "Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.")
-	Attribute("subject_email", String, "Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.")
-	Attribute("upstream_email", String, "Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Gram subject.")
+	Attribute("subject_display_name", String, "Resolved display name when the subject is a Speakeasy user. Absent for apikey/anonymous subjects or unresolved users.")
+	Attribute("subject_email", String, "Resolved email when the subject is a Speakeasy user. Absent for apikey/anonymous subjects or unresolved users.")
+	Attribute("upstream_email", String, "Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Speakeasy subject.")
 	Attribute("upstream_display_name", String, "Stored display name of the account at the upstream provider. Absent when no upstream identity interface supplied it.")
 	Attribute("identity_source", String, "The upstream identity interface that supplied the stored account identity, such as an ID token or userinfo response. Absent when upstream identity is unknown.")
 	Attribute("user_session_issuer_id", String, "The user_session_issuer this session is bound to.", func() {
@@ -235,6 +561,11 @@ var RemoteSession = Type("RemoteSession", func() {
 	Attribute("refresh_expires_at", String, "Upstream refresh-token expiry. Null when the session has no refresh token.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("authorization_expires_at", String, "Upstream authorization deadline. When present, the connection cannot be used or refreshed after this time even if its tokens have later expiries.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_used_at", String, "Last recorded upstream request, accurate to within five minutes. Null means unknown.", func() { Format(FormatDateTime) })
+
 	Attribute("has_refresh_token", Boolean, "Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.")
 	Attribute("scopes", ArrayOf(String), "Scopes held by this session.")
 	Attribute("created_at", String, func() {
@@ -247,6 +578,14 @@ var RemoteSession = Type("RemoteSession", func() {
 	Required("id", "subject_urn", "user_session_issuer_id", "remote_session_client_id", "access_expires_at", "has_refresh_token", "scopes", "created_at", "updated_at")
 })
 
+var CountRemoteSessionsResult = Type("CountRemoteSessionsResult", func() {
+	Description("Result type for counting the people signed in through a remote_session_client.")
+
+	Attribute("subjects", Int64, "Distinct user subjects with a live remote_session through the client.")
+
+	Required("subjects")
+})
+
 var ListRemoteSessionsResult = Type("ListRemoteSessionsResult", func() {
 	Description("Result type for listing remote_sessions.")
 
@@ -254,4 +593,32 @@ var ListRemoteSessionsResult = Type("ListRemoteSessionsResult", func() {
 	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
 
 	Required("items")
+})
+
+var ServerClientAssociation = Type("ServerClientAssociation", func() {
+	Description("One upstream OAuth client an MCP server is associated with. Client secrets are never returned.")
+
+	Attribute("remote_session_client_id", String, "The associated remote session client.", func() { Format(FormatUUID) })
+	Attribute("client_id", String, "The provider-issued client_id.")
+	Attribute("remote_session_issuer_id", String, "The client's remote session issuer: the upstream authorization server it signs in with.", func() { Format(FormatUUID) })
+	Attribute("issuer_name", String, "Display name of the remote session issuer, if set.")
+	Attribute("issuer_slug", String, "Slug of the remote session issuer.")
+	Attribute("issuer_url", String, "The remote session issuer's issuer identifier.")
+	Attribute("scope", String, "Who owns the client.", func() {
+		Enum("project", "organization", "global")
+	})
+	Attribute("server_count", Int64, "How many live MCP servers are associated with this client, including this one.")
+	Attribute("associated_at", String, "When the association was recorded.", func() { Format(FormatDateTime) })
+
+	Required("remote_session_client_id", "client_id", "remote_session_issuer_id", "issuer_slug", "issuer_url", "scope", "server_count", "associated_at")
+})
+
+var ListServerClientAssociationsResult = Type("ListServerClientAssociationsResult", func() {
+	Attribute("associations", ArrayOf(ServerClientAssociation), "The server's associated upstream OAuth clients, oldest first.")
+	Attribute("required_client_ids", ArrayOf(String), "The remote_session_client_id of each client bound to the server's user session issuer that its callers need to sign in through. These are its associated clients, or when it has none, the bound clients no other server claims and it has not explicitly detached. Empty when the server requires no upstream sign-in.", func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
+	Required("associations", "required_client_ids")
 })

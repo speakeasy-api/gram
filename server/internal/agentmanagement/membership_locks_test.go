@@ -37,7 +37,7 @@ func (r *membershipLockRecorder) QueryRow(ctx context.Context, query string, arg
 			r.onAgent()
 		}
 	}
-	return r.DBTX.QueryRow(ctx, query, args...)
+	return r.DBTX.QueryRow(ctx, query, args...) //nolint:glint // notestingrawsql: wrapper forwards SQLc-generated SQL through the transaction while recording lock acquisition order
 }
 
 func TestMembershipLocksUseCanonicalOrderBeforeAgent(t *testing.T) {
@@ -47,7 +47,7 @@ func TestMembershipLocksUseCanonicalOrderBeforeAgent(t *testing.T) {
 	for _, userID := range []string{"a-user", "z-user"} {
 		seedOrganizationUser(t, db, "org-lock-order", userID)
 	}
-	for _, operation := range []string{"create", "transfer", "credential"} {
+	for _, operation := range []string{"create", "transfer", "credential", "policy"} {
 		for _, pair := range [][2]string{{"z-user", "a-user"}, {"a-user", "z-user"}, {"z-user", "z-user"}} {
 			t.Run(operation+"/"+pair[0]+"/"+pair[1], func(t *testing.T) {
 				t.Parallel()
@@ -69,6 +69,8 @@ func TestMembershipLocksUseCanonicalOrderBeforeAgent(t *testing.T) {
 						_, _, err = authorizer.RequireTransfer(ctx, recorder, agent.ID, owner)
 					case "credential":
 						_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, recorder, agent.ID, OwnedAgentAuthorize)
+					case "policy":
+						_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, recorder, agent.ID, OwnedAgentSetup)
 					}
 					require.NoError(t, err)
 					want := []string{"a-user", "z-user"}

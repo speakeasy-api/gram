@@ -1,27 +1,32 @@
 package metamcp
 
-import "strings"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
+)
 
 // Instructions is the built-in server-instructions block answered by
 // initialize and server/discover when a gateway has no operator-authored
-// instructions of its own. Deliberately static and member-agnostic: clients
-// cache instructions from the handshake, and the member set is both mutable
-// and filtered per caller, so naming members here would go stale, contradict
-// list_servers, and disclose members a caller cannot reach. It teaches the
-// drill-down and the two rules agents get wrong; the inventory itself belongs
-// to list_servers alone.
-const Instructions = `This endpoint fronts a set of MCP servers as one, exposing four tools instead of every member's full catalog.
+// instructions of its own. It stays static so the dashboard can ship a copy;
+// the caller's servers are prepended per request by ResolveDiscoveryInstructions.
+const Instructions = `This endpoint fronts a set of MCP servers as one, exposing a handful of tools instead of every member's full catalog.
 
 Work from the outside in:
 
-1. list_servers — what is reachable, what each system is for, and each member's status: "available", "unavailable" when the member's tunnel is down, or "unknown" when the gateway cannot observe the member's health.
+1. list_servers — what is reachable, what each system is for, and each member's status: "available", "unavailable" when the member's tunnel is down, or "unknown" when it was not checked (this list does not contact remote servers; call connection_status to check sign-in).
 2. describe_server — that server's tools, as qualified names (server--tool) with descriptions but no input schemas.
 3. describe_tools — input schemas for the specific tools you intend to call.
 4. execute_tool — run one: the qualified name goes in "name", its JSON payload in "arguments".
 
 Never execute a name you have not described: arguments guessed from a tool name will fail validation.
 
-If a call fails, re-check list_servers before retrying. "unknown" means unobserved, not broken — such members usually answer describe and execute calls normally. Only "unavailable" means the member cannot currently be reached.`
+If a call fails, re-check list_servers before retrying. "unknown" means not checked, not broken: call connection_status to check sign-in. Such members usually answer describe and execute calls normally. Only "unavailable" means the member cannot currently be reached.
+
+If a member says it needs authentication, call connection_status. A connection_status of "unavailable" means a temporary problem: retry shortly. Live connections show current sign-in status and, when this gateway has a sign-in page, link to it. Cached connections report verification at consent without a new probe; tool calls check current authorization. If new consent is required, reconnect this gateway in your AI app.`
 
 // ResolveInstructions returns custom instructions verbatim when nonblank,
 // otherwise falling back to the built-in gateway instructions.
@@ -30,4 +35,77 @@ func ResolveInstructions(custom *string) string {
 		return Instructions
 	}
 	return *custom
+}
+
+// HasCustomInstructions reports whether the owner replaced the built-in text.
+func HasCustomInstructions(custom *string) bool {
+	return custom != nil && strings.TrimSpace(*custom) != ""
+}
+
+// ResolveDiscoveryInstructions describes the active catalog unless the owner
+// supplies custom instructions. Built-in text starts with a one-line list of
+// members, so agents that see only the first line still learn what the
+// gateway reaches.
+func ResolveDiscoveryInstructions(custom *string, mode DiscoveryMode, members []MemberLabel) string {
+	if HasCustomInstructions(custom) {
+		return *custom
+	}
+	instructions := Instructions
+	if mode == DiscoveryModeDirect {
+		instructions = "This gateway exposes the tools from its MCP servers directly. Use tools/list to discover tool definitions, then call each tool by its qualified server--tool name."
+	}
+	if mode == DiscoveryModeCode {
+		instructions = "Code Mode exposes one execute tool for Python. Inside execute, tools is prebound and top-level await works. Discover with tools.search, inspect tools.describe, call tools.call; await each. Use described input schemas and exact server--tool paths. Fresh state per run. Limits, results and retry rules are in the execute description."
+	}
+	if len(members) == 0 {
+		return instructions
+	}
+	return MemberSummary(members) + "\n\n" + instructions
+}
+
+// memberSummaryLimit fits the summary in the one line Codex keeps for a
+// deferred MCP server: the first line, cut at 250 characters.
+const memberSummaryLimit = 250
+
+// MemberLabel names one server for the instructions summary.
+type MemberLabel struct {
+	Slug string
+	Name string
+}
+
+// MemberSummary lists server names in at most memberSummaryLimit characters,
+// counting the ones that do not fit.
+func MemberSummary(members []MemberLabel) string {
+	// Quoting keeps operator labels from injecting new instruction lines.
+	quoted := make([]string, len(members))
+	for i, member := range members {
+		quoted[i] = strconv.Quote(conv.Default(member.Name, member.Slug))
+	}
+	const prefix = "Tools from these servers: "
+	if full := prefix + strings.Join(quoted, ", ") + "."; utf8.RuneCountInString(full) <= memberSummaryLimit {
+		return full
+	}
+	summary := prefix
+	for i := range quoted {
+		next := summary
+		if i > 0 {
+			next += ", "
+		}
+		next += quoted[i]
+		rest := ""
+		if left := len(members) - i - 1; left > 0 {
+			rest = fmt.Sprintf(" and %d more", left)
+		}
+		if utf8.RuneCountInString(next+rest+".") > memberSummaryLimit {
+			if i == 0 && len(members) == 1 {
+				return "Tools from 1 server."
+			}
+			if i == 0 {
+				return fmt.Sprintf("Tools from %d servers.", len(members))
+			}
+			return fmt.Sprintf("%s and %d more.", summary, len(members)-i)
+		}
+		summary = next
+	}
+	return summary + "."
 }

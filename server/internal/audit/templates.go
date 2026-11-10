@@ -25,7 +25,7 @@ type LogTemplateCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	TemplateID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Template and migrate to TemplateURN; pending team discussion
+	TemplateID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Template and migrate to TemplateURN; pending team discussion
 	TemplateURN  urn.Tool
 	TemplateName string
 }
@@ -41,6 +41,7 @@ func (l *Logger) LogTemplateCreate(ctx context.Context, dbtx repo.DBTX, event Lo
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -72,7 +73,7 @@ type LogTemplateUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	TemplateID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Template and migrate to TemplateURN; pending team discussion
+	TemplateID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Template and migrate to TemplateURN; pending team discussion
 	TemplateURN  urn.Tool
 	TemplateName string
 }
@@ -88,6 +89,7 @@ func (l *Logger) LogTemplateUpdate(ctx context.Context, dbtx repo.DBTX, event Lo
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -119,7 +121,7 @@ type LogTemplateDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	TemplateID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Template and migrate to TemplateURN; pending team discussion
+	TemplateID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Template and migrate to TemplateURN; pending team discussion
 	TemplateURN  urn.Tool
 	TemplateName string
 }
@@ -135,6 +137,7 @@ func (l *Logger) LogTemplateDelete(ctx context.Context, dbtx repo.DBTX, event Lo
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 

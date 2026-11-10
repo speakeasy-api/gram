@@ -18,6 +18,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -68,6 +70,7 @@ type Adapter struct {
 	sessions     *remotesessions.ChallengeManager
 	descriptor   Descriptor
 	configurator ProviderClientConfigurator
+	chaining     platformmcp.IdentityChainingGovernor
 }
 
 // New accepts an optional configurator so existing reviewed adapters retain
@@ -83,7 +86,18 @@ func New(policy *guardian.Policy, sessions *remotesessions.ChallengeManager, des
 		sessions:     sessions,
 		descriptor:   descriptor,
 		configurator: configured,
+		chaining:     nil,
 	}
+}
+
+// WithIdentityChaining judges a provider without an interactive session by
+// identity chaining: ready on a usable chained credential, otherwise marked
+// configured.
+func (a *Adapter) WithIdentityChaining(governor platformmcp.IdentityChainingGovernor) *Adapter {
+	if a != nil {
+		a.chaining = governor
+	}
+	return a
 }
 
 func (a *Adapter) ProviderKey() string {
@@ -151,20 +165,31 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 	if err != nil {
 		return platformmcp.ProviderSetupResult{}, err
 	}
+	if client.CredentialOwner == remotesessions.CredentialOwnerSelf {
+		// The provider client holds its own upstream credential, so there is
+		// no member authorization to begin.
+		return platformmcp.ProviderSetupResult{}, fmt.Errorf("%w: reviewed provider client holds its own upstream credential", platformmcp.ErrProviderAdapterUnavailable)
+	}
 	subject := urn.NewUserSubject(request.UserID)
 	authorizationURL, err := a.sessions.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		ClientName:          "",
+		ConnectionPopup:     false,
 		ID:                  request.HandoffID.String(),
 		ProjectID:           request.ProjectID,
 		OrganizationID:      request.OrganizationID,
 		UserSessionIssuerID: request.UserSessionIssuerID,
 		Subject:             &subject,
 		McpSlug:             request.MCPSlug,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		McpServerID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ResourceMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		FinalRedirectURI:    descriptor.ProviderSetupCompletionURL,
+		ConsentURL:          "",
+		ConsentServer:       "",
 		Resource:            descriptor.Resource,
 		AutoRefresh:         nil,
+		TypedAuthorization:  nil,
 		Authority: networkingress.Authority{
 			Surface:          "",
 			BaseURL:          "",
@@ -173,6 +198,10 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 			NamespaceKind:    "",
 			CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},
+		BrowserCookieID: "",
+		BrowserHash:     "",
+		Attempt:         mcpconnectionattempts.NoAttempt,
+		ClientRequest:   mcpconnectionattempts.FromRequest(nil),
 	}, client)
 	if err != nil {
 		return platformmcp.ProviderSetupResult{}, fmt.Errorf("build reviewed provider authorization URL: %w", err)
@@ -191,6 +220,7 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 
 	authorization, err := a.sessions.ResolveAuthorization(
 		ctx,
+		remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(request.OrganizationID, request.ProjectID, mcpconnectionattempts.AppFirstParty)),
 		request.ProjectID,
 		request.OrganizationID,
 		request.UserSessionIssuerID,
@@ -199,39 +229,68 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 		descriptor.Resource,
 	)
 	if errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding) {
+		if chained, ok := platformmcp.ResolveIdentityChainingReadiness(ctx, a.chaining, request.OrganizationID, request.UserID, request.ProjectID, request.UserSessionIssuerID, descriptor.StreamableHTTPURL); ok {
+			return a.readinessResult(chained.State, chained.EvidenceCode, request, remotesessions.ResolvedAuthorization{
+				AccessToken:            "",
+				RemoteSessionID:        uuid.Nil,
+				RemoteSessionUpdatedAt: time.Time{},
+				RemoteSessionClientID:  uuid.Nil,
+				RemoteSessionIssuerID:  chained.RemoteSessionIssuerID,
+				CredentialOwner:        remotesessions.CredentialOwnerSubject,
+			}, chained.Absence), nil
+		}
 		return a.readinessResult(platformmcp.ReadinessNeedsConfiguration, "no_reviewed_client", request, remotesessions.ResolvedAuthorization{
 			AccessToken:            "",
 			RemoteSessionID:        uuid.Nil,
 			RemoteSessionUpdatedAt: time.Time{},
 			RemoteSessionClientID:  uuid.Nil,
 			RemoteSessionIssuerID:  descriptor.RemoteSessionIssuerID,
+			CredentialOwner:        remotesessions.CredentialOwnerSubject,
 		}, "no_client"), nil
 	}
-	if errors.Is(err, remotesessions.ErrNoValidToken) {
-		return a.readinessResult(platformmcp.ReadinessNeedsGramAuthorization, "no_valid_authorization", request, remotesessions.ResolvedAuthorization{
+	if state, evidence, ok := platformmcp.ClientCredentialReadiness(err); ok {
+		return a.readinessResult(state, evidence, request, remotesessions.ResolvedAuthorization{
 			AccessToken:            "",
 			RemoteSessionID:        uuid.Nil,
 			RemoteSessionUpdatedAt: time.Time{},
 			RemoteSessionClientID:  uuid.Nil,
 			RemoteSessionIssuerID:  descriptor.RemoteSessionIssuerID,
+			CredentialOwner:        remotesessions.CredentialOwnerSelf,
 		}, "no_session"), nil
+	}
+	if errors.Is(err, remotesessions.ErrNoValidToken) {
+		absent := remotesessions.ResolvedAuthorization{
+			AccessToken:            "",
+			RemoteSessionID:        uuid.Nil,
+			RemoteSessionUpdatedAt: time.Time{},
+			RemoteSessionClientID:  uuid.Nil,
+			RemoteSessionIssuerID:  descriptor.RemoteSessionIssuerID,
+			CredentialOwner:        remotesessions.CredentialOwnerSubject,
+		}
+		if chained, ok := platformmcp.ResolveIdentityChainingReadiness(ctx, a.chaining, request.OrganizationID, request.UserID, request.ProjectID, request.UserSessionIssuerID, descriptor.StreamableHTTPURL); ok {
+			absent.RemoteSessionIssuerID = chained.RemoteSessionIssuerID
+			return a.readinessResult(chained.State, chained.EvidenceCode, request, absent, chained.Absence), nil
+		}
+		return a.readinessResult(platformmcp.ReadinessNeedsGramAuthorization, "no_valid_authorization", request, absent, "no_session"), nil
 	}
 	if err != nil {
 		return platformmcp.ProviderReadinessProbeResult{}, fmt.Errorf("resolve reviewed provider authorization: %w", err)
 	}
 
+	absence := platformmcp.ProviderAuthorizationAbsence(authorization)
 	state, evidence := a.probe(ctx, descriptor, authorization.AccessToken)
+	state, evidence = platformmcp.ClientCredentialProbeReadiness(authorization, state, evidence)
 	if state != platformmcp.ReadinessReady {
-		return a.readinessResult(state, evidence, request, authorization, ""), nil
+		return a.readinessResult(state, evidence, request, authorization, absence), nil
 	}
-	return a.readinessResult(platformmcp.ReadinessReady, "tools_list_ok", request, authorization, ""), nil
+	return a.readinessResult(platformmcp.ReadinessReady, "tools_list_ok", request, authorization, absence), nil
 }
 
 func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string) (platformmcp.ReadinessState, string) {
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 
-	httpClient := a.policy.Client(guardian.WithAllowedCIDRBlocks(descriptor.TestOnlyAllowedCIDRBlocks...))
+	httpClient := a.policy.Client(guardian.WithInternalCatalog(), guardian.WithAllowedCIDRBlocks(descriptor.TestOnlyAllowedCIDRBlocks...))
 	httpClient.Timeout = probeTimeout
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return errRedirectRejected }
 	authRT := &authorizationRoundTripper{

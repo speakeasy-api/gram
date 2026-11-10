@@ -13,8 +13,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -127,6 +130,7 @@ func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, 
 			PluginID:       created.ID,
 			OrganizationID: organizationID,
 			PrincipalUrn:   urn.PrincipalWildcard,
+			InstallMode:    string(installmode.Default),
 		}); err != nil {
 			return nil, fmt.Errorf("assign default plugin to org: %w", err)
 		}
@@ -151,8 +155,8 @@ var (
 )
 
 // AttachToDefaultPluginParams identifies the server to attach — exactly one
-// of ToolsetID / McpServerID must be Valid, mirroring the plugin_servers
-// backend-exclusivity constraint.
+// of ToolsetID / McpServerID must be Valid; a toolset resolves to its
+// canonical MCP server.
 type AttachToDefaultPluginParams struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
@@ -169,6 +173,9 @@ type AttachToDefaultPluginResult struct {
 	PluginSlug    string
 	PluginCreated bool
 	Server        repo.PluginServer
+
+	// Plugin is the Default plugin's row, for the creation audit entry.
+	Plugin repo.Plugin
 }
 
 // AttachToDefaultPlugin idempotently adds a server (toolset- or mcp_server-
@@ -273,6 +280,7 @@ func AttachToExistingPluginAudited(ctx context.Context, tx pgx.Tx, auditLogger *
 		ServerSortOrder:   attached.Server.SortOrder,
 		ToolsetURN:        nil,
 		McpServerURN:      &mcpServerURN,
+		MetaMcpServerURN:  nil,
 	}); err != nil {
 		return nil, fmt.Errorf("audit existing default plugin server add: %w", err)
 	}
@@ -281,15 +289,25 @@ func AttachToExistingPluginAudited(ctx context.Context, tx pgx.Tx, auditLogger *
 }
 
 func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pluginCreated bool, params AttachToDefaultPluginParams) (*AttachToDefaultPluginResult, error) {
+	mcpServerID, err := hostedEntryKey(ctx, q, plugin.ProjectID, params.ToolsetID, params.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	if !mcpServerID.Valid {
+		// A toolset without an MCP server has nothing to attach.
+		return nil, nil
+	}
+
 	// Check for an existing attachment before inserting rather than relying
 	// on unique-violation classification alone: a duplicate insert of an
 	// attached server trips the (plugin_id, display_name) index (created
 	// before the backend ones, so Postgres reports it first) and the failed
 	// statement aborts the caller's surrounding transaction either way.
-	_, err := q.GetPluginServerByBackend(ctx, repo.GetPluginServerByBackendParams{
-		PluginID:    plugin.ID,
-		ToolsetID:   params.ToolsetID,
-		McpServerID: params.McpServerID,
+	_, err = q.GetPluginServerByBackend(ctx, repo.GetPluginServerByBackendParams{
+		PluginID:       plugin.ID,
+		ProjectID:      plugin.ProjectID,
+		OrganizationID: plugin.OrganizationID,
+		McpServerID:    mcpServerID,
 	})
 	switch {
 	case err == nil:
@@ -299,9 +317,9 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		return nil, fmt.Errorf("check existing default plugin server: %w", err)
 	}
 
-	// A different attached server (a same-named toolset row, or a stale row
-	// from a deleted server) may already hold the display name, which the
-	// (plugin_id, display_name) unique index spans across backends. Blocking
+	// A different attached server (a stale row from a deleted server) may
+	// already hold the display name, which the (plugin_id, display_name)
+	// unique index spans across backends. Blocking
 	// the attach — and with it the triggering action, e.g. enabling a server —
 	// over a marketplace display name is disproportionate, so uniquify instead.
 	displayName, err := availableDisplayName(ctx, q, plugin.ID, params)
@@ -311,8 +329,7 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 
 	server, err := q.AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    plugin.ID,
-		ToolsetID:   params.ToolsetID,
-		McpServerID: params.McpServerID,
+		McpServerID: mcpServerID,
 		DisplayName: displayName,
 		Policy:      "required",
 		SortOrder:   0,
@@ -321,7 +338,7 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			switch pgErr.ConstraintName {
-			case "plugin_servers_plugin_id_toolset_id_key", "plugin_servers_plugin_id_mcp_server_id_key":
+			case "plugin_servers_plugin_id_mcp_server_id_key":
 				// Concurrent attach race lost after the existence check —
 				// already attached, an expected no-op. Note the failed insert
 				// has aborted the surrounding transaction, so the caller's
@@ -344,6 +361,7 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		PluginSlug:    plugin.Slug,
 		PluginCreated: pluginCreated,
 		Server:        server,
+		Plugin:        plugin,
 	}, nil
 }
 
@@ -400,6 +418,61 @@ func backendIDSuffix(params AttachToDefaultPluginParams) string {
 	return s[len(s)-4:]
 }
 
+// hostedEntryKey returns the MCP server an entry is stored under: a toolset's canonical wrapper shares its id. Invalid when the toolset has none.
+func hostedEntryKey(ctx context.Context, q *repo.Queries, projectID uuid.UUID, toolsetID, mcpServerID uuid.NullUUID) (uuid.NullUUID, error) {
+	if !toolsetID.Valid {
+		return mcpServerID, nil
+	}
+	wrapped, err := q.HasCanonicalWrapper(ctx, repo.HasCanonicalWrapperParams{ToolsetID: toolsetID.UUID, ProjectID: projectID})
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("check canonical wrapper: %w", err)
+	}
+	if !wrapped {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	return toolsetID, nil
+}
+
+// AttachToDefaultAndRolePluginsAudited attaches a newly eligible server to the
+// Default plugin and matching role-audience plugins in the caller's transaction.
+// Callers enqueue publication only after commit; the returned bool reports
+// whether the Default plugin was lazily created.
+func AttachToDefaultAndRolePluginsAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard) (bool, error) {
+	outcome, err := AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params, guard)
+	return outcome.PluginCreated, err
+}
+
+// AttachToDefaultAndRolePluginsAuditedWithOutcome also reports whether the
+// server joined the Default plugin, independently of role-audience delivery.
+func AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard) (DefaultPluginAttachOutcome, error) {
+	if err := admission.LockProject(ctx, dbtx, params.ProjectID); err != nil {
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("lock eligible server admission: %w", err)
+	}
+	mcpServerID, err := hostedEntryKey(ctx, repo.New(dbtx), params.ProjectID, params.ToolsetID, params.McpServerID)
+	if err != nil {
+		return DefaultPluginAttachOutcome{}, err
+	}
+	if !mcpServerID.Valid {
+		return DefaultPluginAttachOutcome{Attached: false, PluginCreated: false}, nil
+	}
+	params.ToolsetID, params.McpServerID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}, mcpServerID
+	containsPlatform, err := roledelivery.ContainsPlatformTools(ctx, dbtx, params.OrganizationID, params.ProjectID, params.ToolsetID, params.McpServerID)
+	if err != nil {
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("classify automatic plugin attachment: %w", err)
+	}
+	if containsPlatform {
+		return DefaultPluginAttachOutcome{Attached: false, PluginCreated: false}, nil
+	}
+	outcome, err := AttachToDefaultPluginAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params)
+	if err != nil {
+		return DefaultPluginAttachOutcome{}, err
+	}
+	if _, err := roledelivery.Eligible(ctx, dbtx, params.OrganizationID, params.ProjectID, mcpServerID.UUID, guard); err != nil {
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("deliver newly eligible server: %w", err)
+	}
+	return outcome, nil
+}
+
 // AttachToDefaultPluginAudited runs AttachToDefaultPlugin and records the
 // same audit trail a manual "add server to plugin" produces: a plugin
 // creation event when the Default plugin was lazily provisioned, and a
@@ -413,39 +486,48 @@ func backendIDSuffix(params AttachToDefaultPluginParams) string {
 // marketplace publish for it, but only after their own transaction commits,
 // since this runs pre-commit and the DB writes could still roll back.
 func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams) (bool, error) {
+	outcome, err := AttachToDefaultPluginAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params)
+	return outcome.PluginCreated, err
+}
+
+// DefaultPluginAttachOutcome reports what AttachToDefaultPluginAuditedWithOutcome
+// actually did, so a caller can tell people who now receives a server rather
+// than inferring it from the inputs.
+type DefaultPluginAttachOutcome struct {
+	Attached      bool
+	PluginCreated bool
+}
+
+// AttachToDefaultPluginAuditedWithOutcome is AttachToDefaultPluginAudited for a
+// caller that must report whether the server really joined the Default plugin.
+func AttachToDefaultPluginAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams) (DefaultPluginAttachOutcome, error) {
 	attached, err := AttachToDefaultPlugin(ctx, dbtx, params)
 	if err != nil {
-		return false, fmt.Errorf("attach server to default plugin: %w", err)
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("attach server to default plugin: %w", err)
 	}
 	if attached == nil {
-		return false, nil
+		return DefaultPluginAttachOutcome{Attached: false, PluginCreated: false}, nil
 	}
 
 	if attached.PluginCreated {
 		if err := auditLogger.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
-			OrganizationID:   params.OrganizationID,
-			ProjectID:        params.ProjectID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			PluginID:         attached.PluginID,
-			PluginName:       attached.PluginName,
-			PluginSlug:       attached.PluginSlug,
+			OrganizationID:      params.OrganizationID,
+			ProjectID:           params.ProjectID,
+			Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:    authCtx.Email,
+			ActorSlug:           nil,
+			PluginID:            attached.PluginID,
+			PluginName:          attached.PluginName,
+			PluginSlug:          attached.PluginSlug,
+			PluginSnapshotAfter: PluginAuditSnapshot(attached.Plugin),
 		}); err != nil {
-			return false, fmt.Errorf("audit log default plugin create: %w", err)
+			return DefaultPluginAttachOutcome{}, fmt.Errorf("audit log default plugin create: %w", err)
 		}
 	}
 
-	// Exactly one of the URNs is set, mirroring params' toolset_id XOR
-	// mcp_server_id contract.
-	var toolsetURN *urn.Toolset
 	var mcpServerURN *urn.McpServer
-	if params.ToolsetID.Valid {
-		u := urn.NewToolset(params.ToolsetID.UUID)
-		toolsetURN = &u
-	}
-	if params.McpServerID.Valid {
-		u := urn.NewMcpServer(params.McpServerID.UUID)
+	if attached.Server.McpServerID.Valid {
+		u := urn.NewMcpServer(attached.Server.McpServerID.UUID)
 		mcpServerURN = &u
 	}
 
@@ -462,11 +544,12 @@ func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger 
 		ServerDisplayName: attached.Server.DisplayName,
 		ServerPolicy:      attached.Server.Policy,
 		ServerSortOrder:   attached.Server.SortOrder,
-		ToolsetURN:        toolsetURN,
+		ToolsetURN:        nil,
 		McpServerURN:      mcpServerURN,
+		MetaMcpServerURN:  nil,
 	}); err != nil {
-		return false, fmt.Errorf("audit log default plugin server add: %w", err)
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("audit log default plugin server add: %w", err)
 	}
 
-	return attached.PluginCreated, nil
+	return DefaultPluginAttachOutcome{Attached: true, PluginCreated: attached.PluginCreated}, nil
 }

@@ -23,6 +23,7 @@ const (
 	ActionToolsetAttachOAuthProxy          Action = "toolset:attach_oauth_proxy"
 	ActionToolsetUpdateOAuthProxy          Action = "toolset:update_oauth_proxy"
 	ActionToolsetDetachOAuthProxy          Action = "toolset:detach_oauth_proxy"
+	ActionToolsetMigrateToRemoteMcp        Action = "toolset:migrate_to_remote_mcp"
 )
 
 type LogToolsetCreateEvent struct {
@@ -41,6 +42,7 @@ type LogToolsetCreateEvent struct {
 func (l *Logger) LogToolsetCreate(ctx context.Context, dbtx repo.DBTX, event LogToolsetCreateEvent) error {
 	action := ActionToolsetCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -114,6 +116,7 @@ func (l *Logger) LogToolsetUpdate(ctx context.Context, dbtx repo.DBTX, event Log
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -153,6 +156,7 @@ type LogToolsetDeleteEvent struct {
 func (l *Logger) LogToolsetDelete(ctx context.Context, dbtx repo.DBTX, event LogToolsetDeleteEvent) error {
 	action := ActionToolsetDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -189,7 +193,7 @@ type LogToolsetAttachExternalOAuthEvent struct {
 	ToolsetSlug         string
 	ToolsetVersionAfter int64
 
-	ExternalOAuthServerID        string //nolint:glint // TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
+	ExternalOAuthServerID        string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
 	ExternalOAuthServerSlug      string
 	AuthorizationServerIssuerSet bool
 }
@@ -208,6 +212,7 @@ func (l *Logger) LogToolsetAttachExternalOAuth(ctx context.Context, dbtx repo.DB
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -244,7 +249,7 @@ type LogToolsetUpdateExternalOAuthIssuerEvent struct {
 	ToolsetSlug         string
 	ToolsetVersionAfter int64
 
-	ExternalOAuthServerID        string //nolint:glint // TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
+	ExternalOAuthServerID        string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
 	ExternalOAuthServerSlug      string
 	AuthorizationServerIssuerSet bool
 }
@@ -262,6 +267,7 @@ func (l *Logger) LogToolsetUpdateExternalOAuthIssuer(ctx context.Context, dbtx r
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,
@@ -294,7 +300,7 @@ type LogToolsetDetachExternalOAuthEvent struct {
 	ToolsetSlug         string
 	ToolsetVersionAfter int64
 
-	ExternalOAuthServerID   *string //nolint:glint // TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
+	ExternalOAuthServerID   *string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
 	ExternalOAuthServerSlug *string
 }
 
@@ -311,6 +317,7 @@ func (l *Logger) LogToolsetDetachExternalOAuth(ctx context.Context, dbtx repo.DB
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -337,3 +344,7 @@ func (l *Logger) LogToolsetDetachExternalOAuth(ctx context.Context, dbtx repo.DB
 // NOTE: The Attach/Update/Detach OAuth-proxy emit functions were removed with
 // the OAuth proxy. The ActionToolset*OAuthProxy action-string constants
 // are retained because historical audit-log entries still reference them.
+
+// NOTE: The migrate-to-remote-MCP emit function was removed with the external
+// MCP migration. ActionToolsetMigrateToRemoteMcp is retained because historical
+// audit-log entries still reference it.

@@ -19,7 +19,7 @@ import (
 const eventMCPInitialized = "mcp_initialized"
 
 // InitializePostHogEventInterceptor emits the [eventMCPInitialized] PostHog
-// event for every JSON-RPC `initialize` request observed by `/x/mcp`. It is
+// event for every JSON-RPC `initialize` request observed by the remote MCP proxy. It is
 // a [proxy.InitializeRequestInterceptor]: the proxy routes only initialize
 // requests to it, so the interceptor never has to dispatch on method.
 // Analytics emission is best-effort and never rejects.
@@ -83,7 +83,7 @@ func (i *InitializePostHogEventInterceptor) InterceptInitializeRequest(ctx conte
 	// protocolVersion mirrors the property the hosted /mcp handler records on
 	// this same event. Without it the two runtimes emit the same event name
 	// with different schemas, and the proxy — the path with real version
-	// negotiation, since Gram is only passing through — is the one with no
+	// negotiation, since Speakeasy is only passing through — is the one with no
 	// unsampled record of what clients ask for.
 	var protocolVersion string
 	if init.Params != nil {

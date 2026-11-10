@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import seed from "../../../../../server/internal/admin/supportmatrix/catalog.json";
 import {

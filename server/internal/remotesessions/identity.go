@@ -44,8 +44,8 @@ var errIDTokenSubjectMismatch = errors.New("id token subject differs from the id
 // errIDTokenVerificationDisabled is NoIDTokenVerifier's answer; callers treat it as silence.
 var errIDTokenVerificationDisabled = errors.New("id token verification is disabled")
 
-// errJWTKeySetUnavailable marks a key-set failure that says nothing about the token: source, cache, fetch, or budget.
-var errJWTKeySetUnavailable = errors.New("issuer key set unavailable")
+// ErrJWTKeySetUnavailable marks a key-set failure that says nothing about the token: source, cache, fetch, or budget.
+var ErrJWTKeySetUnavailable = errors.New("issuer key set unavailable")
 
 // errUnknownSigningKey marks an ID token whose named kid the key set lacks; a kid-less token against several keys is not this.
 var errUnknownSigningKey = errors.New("id token names a kid the key set lacks")
@@ -218,8 +218,8 @@ func (v *jwksIDTokenVerifier) Verify(ctx context.Context, rawIDToken string, exp
 	if claims.Expiry == nil {
 		return UpstreamIdentity{}, errors.New("id token has no exp")
 	}
-	// Compared by hand so a trailing-slash difference is tolerated like elsewhere in the package.
-	if !issuerURLsEqual(claims.Issuer, expect.issuer) {
+	// Bind the token to the exact configured issuer, including any trailing slash.
+	if !IssuerURLsEqual(claims.Issuer, expect.issuer) {
 		return UpstreamIdentity{}, fmt.Errorf("id token issuer %q is not the grant's issuer", truncateForMessage(claims.Issuer))
 	}
 	now := time.Now()
@@ -270,7 +270,7 @@ func verifyIssuerSignedJWTWithKeyPolicy(ctx context.Context, keys *jwks.KeyResol
 	var none jose.Header
 	source, err := jwks.NewRemoteSource(jwksURI)
 	if err != nil {
-		return none, fmt.Errorf("issuer jwks_uri: %w: %w", errJWTKeySetUnavailable, err)
+		return none, fmt.Errorf("issuer jwks_uri: %w: %w", ErrJWTKeySetUnavailable, err)
 	}
 	// A tunnel-bound issuer publishes its key set inside the customer network,
 	// so the key that verifies its tokens is only readable over the tunnel.
@@ -293,7 +293,7 @@ func verifyIssuerSignedJWTWithKeyPolicy(ctx context.Context, keys *jwks.KeyResol
 			}
 			return none, fmt.Errorf("resolve jwt signing key: %w", err)
 		}
-		return none, fmt.Errorf("resolve jwt signing key: %w: %w", errJWTKeySetUnavailable, err)
+		return none, fmt.Errorf("resolve jwt signing key: %w: %w", ErrJWTKeySetUnavailable, err)
 	}
 	if keyPolicy != nil {
 		if err := keyPolicy(key); err != nil {

@@ -37,7 +37,7 @@ func TestVerifySigningKey_ES256(t *testing.T) {
 	require.Empty(t, result.Detail)
 }
 
-// The stored algorithm drives how Gram advertises the key, so a healthy key
+// The stored algorithm drives how Speakeasy advertises the key, so a healthy key
 // configured as the wrong algorithm must fail loudly and report what it is.
 func TestVerifySigningKey_ReportsAlgorithmMismatch(t *testing.T) {
 	t.Parallel()
@@ -128,6 +128,10 @@ func TestVerifySigningKey_ClassifiesProviderFailures(t *testing.T) {
 		{status.Error(codes.ResourceExhausted, "quota exceeded"), ReasonUnavailable},
 		{status.Error(codes.InvalidArgument, "malformed request"), ReasonUnexpected},
 		{ErrUnsupportedAlgorithm, ReasonUnsupportedAlgorithm},
+		// The local stand-in reports a disabled version with this sentinel
+		// rather than a FailedPrecondition status.
+		{ErrKeyVersionDisabled, ReasonKeyUnusable},
+		{ErrEncryptionResponseInvalid, ReasonUnavailable},
 
 		// Bare context errors carry no gRPC status. Without explicit handling they
 		// would classify as unexpected, and a caller would not retry a timeout.

@@ -1,3 +1,5 @@
+import { Spinner } from "@/components/ui/Spinner";
+import { enumPresentation } from "@/lib/enum";
 import {
   Select,
   SelectContent,
@@ -5,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
@@ -13,10 +16,11 @@ import type { ChallengeBucket } from "@gram/client/models/components/challengebu
 import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { Badge as MoonshineBadge } from "@/components/ui/Badge";
 import { type Column, Table } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
-import { Check, Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -27,14 +31,18 @@ import { useGrantFlow } from "./useGrantFlow";
 type BucketOutcome = ChallengeBucket["outcome"];
 type OutcomeFilter = "all" | "deny" | "allow" | "resolved";
 
-function principalFilterLabel(value: string): string {
+/**
+ * What the trigger says for the selected principal. `label` is the option's
+ * own wording, which for an agent is its name — the raw value is its urn.
+ */
+function principalFilterLabel(value: string, label?: string): string {
   switch (value) {
     case "all":
       return "Everyone";
     case "user:all":
       return "All users";
     default:
-      return value;
+      return label ?? value;
   }
 }
 
@@ -91,7 +99,10 @@ export function OutcomeBadge({
     allow: { variant: "success", label: "Allowed" },
     error: { variant: "neutral", label: "Error" },
   };
-  const c = config[outcome];
+  const c = enumPresentation(config, outcome, {
+    variant: "neutral",
+    label: "Unknown",
+  });
 
   return (
     <MoonshineBadge variant={c.variant}>
@@ -357,19 +368,54 @@ export function ChallengesTab(): JSX.Element {
   });
   const { data: allData } = useChallengeBuckets(baseFilters);
 
+  // Named agents for the rows and the dropdown. The challenge carries only
+  // the urn, and an id off a challenge is not permission to open the agent,
+  // so the roster is both the name and the decision to link.
+  const agents = useReadableAgents(
+    rows.some((bucket) => bucket.principalType === "agent"),
+  );
+  const agentsById = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
+
   // Unique values for filter dropdowns (from loaded data).
   const uniquePrincipals = useMemo(() => {
     const principals = new Map<string, string>();
     for (const bucket of rows) {
-      const value = bucket.userEmail ?? bucket.principalUrn;
+      // Keyed by what the option actually filters on. The API narrows by
+      // `principal_urn`, and an agent challenge can carry the acting user's
+      // address — keying by that would have hung an agent's name on a
+      // person's filter value, and merged two agents into one option.
+      const value =
+        bucket.principalType === "agent"
+          ? bucket.principalUrn
+          : (bucket.userEmail ?? bucket.principalUrn);
       if (!value) continue;
-      principals.set(
-        value,
-        principalDisplayName(bucket.userEmail, bucket.principalUrn),
-      );
+      // An option is plain text, so an agent takes the shared wording rather
+      // than the urn the identity helper falls back to. Said in one place, so
+      // the dropdown and the rows below it name the same agent the same way.
+      if (bucket.principalType === "agent") {
+        const id = bucket.principalUrn.replace(/^agent:/, "");
+        principals.set(
+          value,
+          actingPrincipalText({ id, name: agentsById.get(id)?.name }),
+        );
+      } else {
+        principals.set(
+          value,
+          principalDisplayName(bucket.userEmail, bucket.principalUrn),
+        );
+      }
     }
     return [...principals.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [rows]);
+  }, [rows, agentsById]);
 
   const uniqueScopes = useMemo(() => {
     const set = new Set(rows.map((b) => b.scope));
@@ -414,6 +460,7 @@ export function ChallengesTab(): JSX.Element {
     toggleBucket,
     expandedChildIds,
     recentlyResolvedIds,
+    agentsById,
   );
 
   const wrappedActionsColumn: Column<ChallengeBucket> = useMemo(
@@ -473,7 +520,14 @@ export function ChallengesTab(): JSX.Element {
             size="sm"
             className="h-8 w-auto max-w-[280px] min-w-fit"
           >
-            <SelectValue>{principalFilterLabel(principalFilter)}</SelectValue>
+            <SelectValue>
+              {principalFilterLabel(
+                principalFilter,
+                uniquePrincipals.find(
+                  ([value]) => value === principalFilter,
+                )?.[1],
+              )}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Everyone</SelectItem>
@@ -551,7 +605,7 @@ export function ChallengesTab(): JSX.Element {
                 >
                   {isLoadingMore ? (
                     <>
-                      <Loader2 className="size-4 animate-spin" />
+                      <Spinner className="mr-0 size-4" />
                       Loading...
                     </>
                   ) : (

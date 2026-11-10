@@ -58,7 +58,12 @@ export function ModeSwitchStarfield({
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
     };
     resize();
-    window.addEventListener("resize", resize);
+    // Observe the canvas, not the window: its box also changes without a
+    // window resize, e.g. when the headless pane's scrollbar appears after the
+    // switch animation. A stale bitmap is wider than the area each frame clears,
+    // and the uncleared strip keeps every streak ever drawn into it.
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas);
 
     const draw = () => {
       const width = canvas.clientWidth;
@@ -106,7 +111,7 @@ export function ModeSwitchStarfield({
 
     return () => {
       window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", resize);
+      observer.disconnect();
     };
   }, [direction]);
 

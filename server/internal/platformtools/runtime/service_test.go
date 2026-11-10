@@ -93,7 +93,6 @@ func TestManagedAssistantRiskToolsExposesCatalog(t *testing.T) {
 		"platform_list_risk_policies",
 		"platform_list_risk_results_for_agent",
 		"platform_list_risk_results_by_chat",
-		"platform_get_risk_policy_status",
 		"platform_get_risk_rule_breakdown",
 		"platform_list_risk_exclusions",
 		"platform_create_risk_exclusion",
@@ -225,7 +224,6 @@ func TestService_ExecuteTool_RequiresProjectAuthContext(t *testing.T) {
 	}, toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, nil)
@@ -253,7 +251,6 @@ func TestService_ExecuteTool_RejectsMismatchedProjectAuthContext(t *testing.T) {
 	}, toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, nil)

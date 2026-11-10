@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { IdentityProviderConnectionApplication } from "@gram/client/models/components/identityproviderconnectionapplication.js";
@@ -23,6 +24,7 @@ import { useIdentityProviderConnectionApplications } from "@gram/client/react-qu
 import { useSyncIdentityProviderConnectionApplicationsMutation } from "@gram/client/react-query/syncIdentityProviderConnectionApplications.js";
 
 import { ConnectionGate } from "../../ConnectionGate";
+import { OktaServerSuggestions } from "./OktaServerSuggestions";
 import {
   applicationStatusVariant,
   humanizeOktaToken,
@@ -420,7 +422,10 @@ export function ApplicationsTab({
       icon="layout-grid"
       purpose="to view your Okta applications"
     >
-      <ApplicationsSnapshot connection={connection} />
+      <div className="flex min-w-0 flex-col gap-10">
+        <OktaServerSuggestions />
+        <ApplicationsSnapshot connection={connection} />
+      </div>
     </ConnectionGate>
   );
 }

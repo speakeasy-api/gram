@@ -1,0 +1,701 @@
+import type { ReactNode } from "react";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { IdentityChainingSection } from "./IdentityChainingSection";
+
+const state = vi.hoisted(() => ({
+  issuer: undefined as Record<string, unknown> | undefined,
+  speakeasy: undefined as Record<string, unknown> | undefined,
+  flags: { oktaConnections: true, emaProviders: true } as Record<
+    string,
+    boolean
+  >,
+  clientsLoading: false,
+  clientsError: false,
+  // The sign-in's own registrations, apart from the organization-wide read.
+  linkedLoading: false,
+  linkedError: false,
+  clientsRefetch: vi.fn(),
+  url: "https://mcp.vendor.example.com/mcp" as string | undefined,
+  sourceError: false,
+  hash: "",
+  refetch: vi.fn(),
+  speakeasyStatus: "success" as "success" | "loading" | "error" | "disabled",
+  speakeasyRefetch: vi.fn(),
+  orgAdmin: true,
+  upstreamAuth: "legacy" as "loading" | "enforced" | "legacy" | "error",
+  linked: [{ id: "client" }] as { id: string }[],
+  registrations: [] as { id: string }[],
+  clientFilters: [] as unknown[],
+  credentials: [] as {
+    clientType?: string;
+    remoteSessionClientId?: string;
+    enabled?: boolean;
+  }[],
+  credentialsStatus: "configured" as string,
+  credentialsLoading: false,
+  credentialsError: false,
+  credentialsRefetch: vi.fn(),
+}));
+
+vi.mock("./authTarget", () => ({
+  useMcpServerAuthTarget: (server: McpServer) => ({
+    remoteMcpServerId: server.remoteMcpServerId,
+    userSessionIssuerId: server.userSessionIssuerId,
+  }),
+}));
+vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
+  useUserSessionIssuer: () => ({
+    data: state.issuer,
+    isLoading: false,
+    isError: false,
+    refetch: state.refetch,
+  }),
+}));
+vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
+  useGetRemoteMcpServer: () => ({
+    data: state.url ? { url: state.url } : undefined,
+    isLoading: !state.url && !state.sourceError,
+    isError: state.sourceError,
+    refetch: state.refetch,
+  }),
+}));
+vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
+  useUpstreamAuthEnforcement: () => state.upstreamAuth,
+}));
+vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
+  useMcpServerAuthentication: () => ({
+    data: { status: state.credentialsStatus, clients: state.credentials },
+    isLoading: state.credentialsLoading,
+    isError: state.credentialsError,
+    refetch: state.credentialsRefetch,
+  }),
+}));
+vi.mock("@/lib/remote-identity", () => ({
+  useAllRemoteSessionClients: (
+    filters: { userSessionIssuerId?: string },
+    options?: { enabled?: boolean },
+  ) => (
+    options?.enabled !== false && state.clientFilters.push(filters),
+    {
+      items:
+        options?.enabled === false
+          ? []
+          : filters.userSessionIssuerId
+            ? state.linked
+            : state.registrations,
+      isLoading:
+        state.clientsLoading ||
+        (!!filters.userSessionIssuerId && state.linkedLoading),
+      isError:
+        state.clientsError ||
+        (!!filters.userSessionIssuerId && state.linkedError),
+      refetch: state.clientsRefetch,
+    }
+  ),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
+vi.mock("@/pages/org/identity-provider/tabs", () => ({
+  identityProvidersHref: () => "?tab=identity-providers",
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) => ({
+    status: state.flags[flag] ? "enabled" : "disabled",
+  }),
+}));
+vi.mock("@/lib/featureFlags", () => ({
+  FEATURE_FLAGS: {
+    oktaConnections: "oktaConnections",
+    emaProviders: "emaProviders",
+  },
+}));
+vi.mock("./useSpeakeasyIssuerStatus", () => ({
+  useSpeakeasyIssuerStatus: () => ({
+    data: state.speakeasyStatus === "success" ? state.speakeasy : undefined,
+    isLoading: state.speakeasyStatus === "loading",
+    isPending: state.speakeasyStatus !== "success",
+    isError: state.speakeasyStatus === "error",
+    fetchStatus: state.speakeasyStatus === "loading" ? "fetching" : "idle",
+    refetch: state.speakeasyRefetch,
+  }),
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org" }),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string) => scope !== "org:admin" || state.orgAdmin,
+  }),
+}));
+vi.mock("./IdentityChainingField", () => ({
+  IdentityChainingField: (props: {
+    providers: { external: boolean };
+    linkedClients: { id: string }[];
+    speakeasyIssuerUrl?: string;
+    resource: string;
+    onlyWhenOn?: boolean;
+    frame?: (content: ReactNode) => ReactNode;
+  }) => {
+    const content = (
+      <div
+        data-testid="identity-chaining"
+        data-linked-clients={props.linkedClients
+          .map((client) => client.id)
+          .join(",")}
+      >
+        {JSON.stringify({
+          providers: props.providers,
+          speakeasyIssuerUrl: props.speakeasyIssuerUrl,
+          resource: props.resource,
+          ...(props.onlyWhenOn ? { onlyWhenOn: true } : {}),
+        })}
+      </div>
+    );
+    return props.frame ? props.frame(content) : content;
+  },
+}));
+
+const server = {
+  id: "mcp-server",
+  remoteMcpServerId: "remote",
+  userSessionIssuerId: "issuer",
+} as McpServer;
+
+beforeEach(() => {
+  state.issuer = { id: "issuer", projectId: "" };
+  state.speakeasy = {
+    state: "enabled",
+    issuer: "https://speakeasy.example.com/idp",
+  };
+  state.flags = { oktaConnections: true, emaProviders: true };
+  state.clientsLoading = false;
+  state.clientsError = false;
+  state.linkedLoading = false;
+  state.linkedError = false;
+  state.clientsRefetch.mockReset();
+  state.url = "https://mcp.vendor.example.com/mcp";
+  state.sourceError = false;
+  state.hash = "";
+  state.refetch.mockReset();
+  state.speakeasyStatus = "success";
+  state.speakeasyRefetch.mockReset();
+  state.orgAdmin = true;
+  state.upstreamAuth = "legacy";
+  state.linked = [{ id: "client" }];
+  state.registrations = [];
+  state.clientFilters = [];
+  state.credentials = [];
+  state.credentialsStatus = "configured";
+  state.credentialsLoading = false;
+  state.credentialsError = false;
+  state.credentialsRefetch.mockReset();
+});
+
+// The page URL carries the deep-link hash the section scrolls to.
+function Router({ children }: { children: ReactNode }) {
+  return (
+    <MemoryRouter initialEntries={[`/${state.hash}`]}>{children}</MemoryRouter>
+  );
+}
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+describe("IdentityChainingSection", () => {
+  it("is its own section on an organization issuer Speakeasy can vouch for", () => {
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
+    ).toBeTruthy();
+    expect(screen.getByText(/using their existing login/)).toBeTruthy();
+    expect(
+      JSON.parse(screen.getByTestId("identity-chaining").textContent!),
+    ).toEqual({
+      providers: { external: false },
+      speakeasyIssuerUrl: "https://speakeasy.example.com/idp",
+      resource: "https://mcp.vendor.example.com/mcp",
+    });
+  });
+
+  it("adds the registrations behind the server's credentials when upstream auth is enforced", () => {
+    state.upstreamAuth = "enforced";
+    state.registrations = [
+      { id: "client" },
+      { id: "attached" },
+      { id: "unattached" },
+      { id: "ema-registration" },
+    ];
+    state.credentials = [
+      { clientType: "remote_session", remoteSessionClientId: "attached" },
+      { clientType: "remote_session", remoteSessionClientId: "client" },
+      { clientType: "ema", remoteSessionClientId: "ema-registration" },
+      { clientType: "service_account", remoteSessionClientId: "unattached" },
+      { clientType: "static_credential" },
+    ];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("client,attached,ema-registration");
+  });
+
+  it("leaves out another server's registration on a shared sign-in when upstream auth is enforced", () => {
+    state.upstreamAuth = "enforced";
+    // The organization-wide sign-in binds the other server's registration.
+    state.linked = [{ id: "other-server" }];
+    state.registrations = [{ id: "other-server" }, { id: "own" }];
+    state.credentials = [
+      { clientType: "remote_session", remoteSessionClientId: "own" },
+    ];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("own");
+    expect(state.clientFilters).not.toContainEqual({
+      userSessionIssuerId: "issuer",
+    });
+  });
+
+  it("ignores a failed or pending read of the sign-in's registrations when the server's credentials decide", () => {
+    state.upstreamAuth = "enforced";
+    state.registrations = [{ id: "own" }];
+    state.credentials = [
+      { clientType: "remote_session", remoteSessionClientId: "own" },
+    ];
+    // A cached answer from before the organization enforced upstream auth.
+    state.linkedError = true;
+    const { unmount } = render(<IdentityChainingSection mcpServer={server} />, {
+      wrapper: Router,
+    });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("own");
+    expect(
+      screen.queryByText(
+        "Couldn’t load Enterprise Managed Authorization for this server.",
+      ),
+    ).toBeNull();
+    unmount();
+
+    state.linkedError = false;
+    state.linkedLoading = true;
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("own");
+  });
+
+  it("reads the sign-in's registrations when a per-person credential names no registration", () => {
+    state.upstreamAuth = "enforced";
+    state.credentials = [{ clientType: "remote_session", enabled: true }];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("client");
+    expect(state.clientFilters).toContainEqual({
+      userSessionIssuerId: "issuer",
+    });
+  });
+
+  it("ignores a disabled per-person credential that names no registration", () => {
+    state.upstreamAuth = "enforced";
+    // The organization-wide sign-in binds another server's registration.
+    state.linked = [{ id: "other-server" }];
+    state.registrations = [{ id: "own" }];
+    state.credentials = [
+      {
+        clientType: "remote_session",
+        enabled: true,
+        remoteSessionClientId: "own",
+      },
+      { clientType: "remote_session", enabled: false },
+    ];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("own");
+    expect(state.clientFilters).not.toContainEqual({
+      userSessionIssuerId: "issuer",
+    });
+  });
+
+  it("reads the sign-in's registrations while the server's setup is incomplete", () => {
+    state.upstreamAuth = "enforced";
+    state.credentialsStatus = "setup_incomplete";
+    state.credentials = [];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("client");
+  });
+
+  it("offers only clients linked to the sign-in when upstream auth isn't enforced", () => {
+    state.registrations = [{ id: "attached" }];
+    state.credentials = [
+      { clientType: "remote_session", remoteSessionClientId: "attached" },
+    ];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("client");
+    expect(state.clientFilters).toEqual([{ userSessionIssuerId: "issuer" }]);
+  });
+
+  it("lists no registrations when the server has no per-person credential, whatever the sign-in binds", () => {
+    state.upstreamAuth = "enforced";
+    state.registrations = [{ id: "attached" }];
+    state.credentials = [
+      { clientType: "service_account", remoteSessionClientId: "attached" },
+    ];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("");
+    expect(state.clientFilters).toEqual([]);
+  });
+
+  it("holds its place while the upstream auth enforcement state loads", () => {
+    state.upstreamAuth = "loading";
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(screen.getByRole("status").textContent).toBe(
+      "Loading Enterprise Managed Authorization…",
+    );
+  });
+
+  it("holds its place while the server's credentials load", () => {
+    state.upstreamAuth = "enforced";
+    state.credentialsLoading = true;
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(screen.getByRole("status").textContent).toBe(
+      "Loading Enterprise Managed Authorization…",
+    );
+  });
+
+  it("says when the server's credentials couldn't load, with a retry", () => {
+    state.upstreamAuth = "enforced";
+    state.credentialsError = true;
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.getByText(
+        "Couldn’t load Enterprise Managed Authorization for this server.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.credentialsRefetch).toHaveBeenCalled();
+  });
+
+  it("falls back to clients linked to the sign-in when the enforcement state can't be read", () => {
+    state.upstreamAuth = "error";
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("client");
+  });
+
+  it("says a project sign-in can't chain, and where to change it", () => {
+    state.issuer = { id: "issuer", projectId: "project", slug: "team-only" };
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(screen.queryByTestId("identity-chaining")).toBeNull();
+    expect(
+      screen.getByText(/needs an organization-level sign-in/).textContent,
+    ).toContain("This server’s sign-in belongs to this project.");
+    expect(screen.queryByText(/team-only/)).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: "Change in Sessions" })
+        .getAttribute("href"),
+    ).toBe("/#sessions");
+  });
+
+  it("points at setting Speakeasy up when nothing can vouch yet", () => {
+    state.speakeasy = { state: "setup_required" };
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
+    ).toBeTruthy();
+    expect(screen.queryByTestId("identity-chaining")).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: "Set up Speakeasy as an identity provider" })
+        .getAttribute("href"),
+    ).toBe("/org/identity?tab=identity-providers");
+  });
+
+  it("sends a verified-domain gap to the Single sign-on tab", () => {
+    state.speakeasy = { state: "verified_domain_required" };
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByRole("link", {
+          name: "Verify a domain on the Single sign-on tab",
+        })
+        .getAttribute("href"),
+    ).toBe("/org/identity?tab=sso");
+    expect(
+      screen.queryByRole("link", {
+        name: "Set up Speakeasy as an identity provider",
+      }),
+    ).toBeNull();
+  });
+
+  it("asks someone who isn't an org admin to have Speakeasy set up", () => {
+    state.orgAdmin = false;
+    state.speakeasy = { state: "setup_required" };
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.queryByRole("link", {
+        name: "Set up Speakeasy as an identity provider",
+      }),
+    ).toBeNull();
+    expect(
+      screen.getByText(
+        /An organization admin can set up Speakeasy as an identity provider/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("holds its place while Speakeasy's issuer loads", () => {
+    state.speakeasyStatus = "loading";
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(screen.getByRole("status").textContent).toBe(
+      "Loading Enterprise Managed Authorization…",
+    );
+  });
+
+  it("says when Speakeasy's issuer couldn't load, with a retry", () => {
+    state.speakeasyStatus = "error";
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.getByText(
+        "Couldn’t load Enterprise Managed Authorization for this server.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.speakeasyRefetch).toHaveBeenCalled();
+  });
+
+  it("keeps an on binding manageable for someone who can't read Speakeasy's issuer", () => {
+    state.speakeasyStatus = "disabled";
+    state.orgAdmin = false;
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
+    ).toBeTruthy();
+    expect(
+      JSON.parse(screen.getByTestId("identity-chaining").textContent!),
+    ).toEqual({
+      providers: { external: false },
+      resource: "https://mcp.vendor.example.com/mcp",
+      onlyWhenOn: true,
+    });
+  });
+
+  it.each([
+    [
+      "nothing can vouch",
+      () => {
+        state.speakeasy = undefined;
+      },
+    ],
+    [
+      "Speakeasy isn't rolled out and nothing else can vouch",
+      () => {
+        state.speakeasy = { state: "unavailable" };
+        state.flags = { oktaConnections: true, emaProviders: false };
+      },
+    ],
+    [
+      "the issuer belongs to a project and nothing could vouch",
+      () => {
+        state.issuer = { id: "issuer", projectId: "project" };
+        state.speakeasy = undefined;
+      },
+    ],
+    [
+      "the issuer belongs to a project and Speakeasy isn't set up",
+      () => {
+        state.issuer = { id: "issuer", projectId: "project" };
+        state.speakeasy = { state: "setup_required" };
+      },
+    ],
+    [
+      "the issuer belongs to a project whose identity provider has no client",
+      () => {
+        state.issuer = {
+          id: "issuer",
+          projectId: "project",
+          trustedRemoteSessionIssuerId: "okta",
+        };
+        state.speakeasy = { state: "verified_domain_required" };
+      },
+    ],
+    [
+      "the rollouts are off",
+      () => {
+        state.flags = { oktaConnections: false, emaProviders: false };
+        state.speakeasy = { state: "unavailable" };
+      },
+    ],
+  ])("is hidden when %s", (_name, arrange) => {
+    arrange();
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.queryByRole("heading", {
+        name: "Enterprise Managed Authorization",
+      }),
+    ).toBe(null);
+  });
+
+  it("stays hidden when Speakeasy's issuer is unavailable even with ema-providers on", () => {
+    state.flags = { oktaConnections: false, emaProviders: true };
+    state.speakeasy = { state: "unavailable" };
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.queryByRole("heading", {
+        name: "Enterprise Managed Authorization",
+      }),
+    ).toBe(null);
+  });
+
+  it("shows when Speakeasy's issuer is offered while ema-providers is off", () => {
+    state.flags = { oktaConnections: false, emaProviders: false };
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.getByRole("heading", {
+        name: "Enterprise Managed Authorization",
+      }),
+    ).toBeTruthy();
+  });
+
+  it.each([
+    [
+      "loading",
+      () => {
+        state.clientsLoading = true;
+      },
+    ],
+    [
+      "failing",
+      () => {
+        state.url = undefined;
+        state.sourceError = true;
+      },
+    ],
+  ])("stays off the page while %s with both rollouts off", (_name, arrange) => {
+    state.flags = { oktaConnections: false, emaProviders: false };
+    state.speakeasy = { state: "unavailable" };
+    arrange();
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.queryByRole("heading", {
+        name: "Enterprise Managed Authorization",
+      }),
+    ).toBe(null);
+    expect(screen.queryByRole("status")).toBe(null);
+  });
+
+  it.each([
+    [
+      "the remote URL hasn't loaded",
+      () => {
+        state.url = undefined;
+      },
+    ],
+    [
+      "linked clients are still loading",
+      () => {
+        state.clientsLoading = true;
+      },
+    ],
+  ])("holds its place while %s", (_name, arrange) => {
+    arrange();
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe(
+      "Loading Enterprise Managed Authorization…",
+    );
+    expect(screen.queryByTestId("identity-chaining")).toBeNull();
+  });
+
+  it("says when it couldn't load, with a retry", () => {
+    state.url = undefined;
+    state.sourceError = true;
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.getByText(
+        "Couldn’t load Enterprise Managed Authorization for this server.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.refetch).toHaveBeenCalled();
+  });
+
+  it("says when the clients couldn't load, instead of asking for a client", () => {
+    state.clientsError = true;
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.getByText(
+        "Couldn’t load Enterprise Managed Authorization for this server.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.clientsRefetch).toHaveBeenCalled();
+  });
+
+  it("scrolls to itself once it has loaded on a deep link", () => {
+    state.hash = "#identity-chaining";
+    state.clientsLoading = true;
+    // jsdom has no scrollIntoView to spy on.
+    if (!Object.hasOwn(Element.prototype, "scrollIntoView")) {
+      Element.prototype.scrollIntoView = () => {};
+    }
+    const scroll = vi
+      .spyOn(Element.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 1;
+    });
+    const { rerender } = render(
+      <IdentityChainingSection mcpServer={server} />,
+      { wrapper: Router },
+    );
+    expect(scroll).not.toHaveBeenCalled();
+    state.clientsLoading = false;
+    rerender(<IdentityChainingSection mcpServer={server} />);
+    expect(scroll).toHaveBeenCalledTimes(1);
+    const section = document.getElementById("identity-chaining");
+    expect(section).not.toBeNull();
+    expect(scroll.mock.contexts[0]).toBe(section);
+    rerender(<IdentityChainingSection mcpServer={server} />);
+    expect(scroll).toHaveBeenCalledTimes(1);
+  });
+});

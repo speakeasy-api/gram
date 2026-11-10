@@ -5,12 +5,6 @@
 
 set -euo pipefail
 
-# Opted-in via ./zero (persisted in mise.local.toml): install/update the
-# SHA-pinned external skill set before linking, so sync keeps it current.
-if [ "${USE_RECOMMENDED_SKILLS:-false}" = "true" ] && [ -f ".agents/recommended-skills.json" ]; then
-  mise run skills:recommended --yes
-fi
-
 SOURCE_DIR=".agents/skills"
 TARGETS=(
   ".claude/skills"

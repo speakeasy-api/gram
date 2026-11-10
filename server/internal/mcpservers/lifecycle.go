@@ -15,9 +15,12 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -35,16 +38,69 @@ type LifecycleUpdateInput struct {
 	Visibility        string
 	NetworkAccessMode *networkaccess.Mode
 
-	EnvironmentID         uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	TunneledMcpServerID   uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	UnproxiedMcpServerID  uuid.NullUUID
-	ToolVariationsGroupID uuid.NullUUID
+	EnvironmentID       uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+	// ClearUserSessionIssuer detaches the issuer; UserSessionIssuerID must then be invalid.
+	ClearUserSessionIssuer bool
+	RemoteMcpServerID      uuid.NullUUID
+	TunneledMcpServerID    uuid.NullUUID
+	ToolsetID              uuid.NullUUID
+	UnproxiedMcpServerID   uuid.NullUUID
+	ToolVariationsGroupID  uuid.NullUUID
 }
 
 const maxLifecycleMCPServerNameBytes = 256
+
+// UpdateMCPServerNetworkAccessModeInTransaction changes only the network mode of
+// an existing MCP server. The caller owns the transaction and must perform its
+// RBAC check before calling. Admission is finalized before the project lock to
+// keep ingress/project lock order consistent across MCP and gateway writes.
+func UpdateMCPServerNetworkAccessModeInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input LifecycleUpdateInput, mode networkaccess.Mode, finalize networkaccess.AdmissionFinalizer) (repo.McpServer, error) {
+	if tx == nil || auditLogger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" || input.ServerID == uuid.Nil {
+		return repo.McpServer{}, fmt.Errorf("invalid MCP server network access update input")
+	}
+	if _, err := networkaccess.Parse(string(mode)); err != nil {
+		return repo.McpServer{}, fmt.Errorf("validate MCP server network access mode: %w", err)
+	}
+	if err := finalize.Finalize(ctx, tx); err != nil {
+		return repo.McpServer{}, fmt.Errorf("finalize network access admission: %w", err)
+	}
+	if err := admission.LockProject(ctx, tx, input.ProjectID); err != nil {
+		return repo.McpServer{}, fmt.Errorf("lock distribution admission: %w", err)
+	}
+	queries := repo.New(tx)
+	existing, err := queries.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{ID: input.ServerID, ProjectID: input.ProjectID})
+	if err != nil {
+		return repo.McpServer{}, fmt.Errorf("lock MCP server: %w", err)
+	}
+	if existing.ToolsetID.Valid && existing.ToolsetID.UUID == existing.ID {
+		return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "change a hosted MCP server's network access with mcpServers.update")
+	}
+	if existing.UnproxiedMcpServerID.Valid && !mode.IsPublicOnly() {
+		return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
+	}
+	updated, err := queries.UpdateMCPServerNetworkAccessMode(ctx, repo.UpdateMCPServerNetworkAccessModeParams{NetworkAccessMode: networkaccess.Storage(mode), ID: input.ServerID, ProjectID: input.ProjectID})
+	if err != nil {
+		return repo.McpServer{}, fmt.Errorf("update MCP server network access mode: %w", err)
+	}
+	if updated != 1 {
+		return repo.McpServer{}, pgx.ErrNoRows
+	}
+	after, err := queries.GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{ID: input.ServerID, ProjectID: input.ProjectID})
+	if err != nil {
+		return repo.McpServer{}, fmt.Errorf("reload MCP server: %w", err)
+	}
+	if err := auditLogger.LogMcpServerUpdate(ctx, tx, audit.LogMcpServerUpdateEvent{
+		OrganizationID: input.OrganizationID, ProjectID: input.ProjectID,
+		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID), ActorDisplayName: input.ActorEmail,
+		ActorSlug: nil, McpServerURN: urn.NewMcpServer(after.ID), McpServerName: conv.FromPGTextOrEmpty[string](after.Name),
+		McpServerSlug: conv.FromPGTextOrEmpty[string](after.Slug), McpServerSnapshotBefore: mv.BuildMcpServerView(existing),
+		McpServerSnapshotAfter: mv.BuildMcpServerView(after),
+	}); err != nil {
+		return repo.McpServer{}, fmt.Errorf("audit MCP server network access update: %w", err)
+	}
+	return after, nil
+}
 
 // MCPServerVisibilityResult reports only the post-update server and root domains
 // that need reconciliation after the caller commits its transaction.
@@ -70,7 +126,7 @@ func LockMCPServerVisibilityDependencies(ctx context.Context, tx pgx.Tx, organiz
 	if err != nil {
 		return fmt.Errorf("list MCP server custom domains: %w", err)
 	}
-	if err := lockMcpServerCustomDomains(ctx, tx, domainIDs); err != nil {
+	if _, err := tombstone.LockCustomDomains(ctx, tx, organizationID, domainIDs); err != nil {
 		return fmt.Errorf("lock MCP server custom domains: %w", err)
 	}
 	if _, err := mcpendpointsrepo.New(tx).LockRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockRootMCPEndpointsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID}); err != nil {
@@ -98,40 +154,11 @@ func UpdateMCPServerVisibilityInTransaction(ctx context.Context, tx pgx.Tx, audi
 		if err != nil {
 			return MCPServerVisibilityResult{}, fmt.Errorf("clear MCP server root endpoints: %w", err)
 		}
-		if err := logMCPServerRootAutoClears(ctx, tx, auditLogger, input.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID), input.ActorEmail, cleared); err != nil {
-			return MCPServerVisibilityResult{}, err
+		if err := tombstone.LogRootAutoClears(ctx, tx, auditLogger, input.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID), input.ActorEmail, cleared); err != nil {
+			return MCPServerVisibilityResult{}, fmt.Errorf("log MCP root cleanup: %w", err)
 		}
 	}
-	return MCPServerVisibilityResult{Server: updated, ClearedRootDomainIDs: rootDomainIDs(cleared)}, nil
-}
-
-func logMCPServerRootAutoClears(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, organizationID string, actor urn.Principal, actorDisplayName *string, rootEndpoints []mcpendpointsrepo.McpEndpoint) error {
-	if auditLogger == nil || organizationID == "" {
-		return fmt.Errorf("invalid MCP root cleanup audit input")
-	}
-	repository := customdomainsrepo.New(tx)
-	for _, endpoint := range rootEndpoints {
-		if !endpoint.CustomDomainID.Valid {
-			continue
-		}
-		domain, err := repository.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
-		if err != nil {
-			return fmt.Errorf("load custom domain for MCP root cleanup audit: %w", err)
-		}
-		if err := auditLogger.LogCustomDomainUpdate(ctx, tx, audit.LogCustomDomainUpdateEvent{
-			OrganizationID:             organizationID,
-			Actor:                      actor,
-			ActorDisplayName:           actorDisplayName,
-			ActorSlug:                  nil,
-			CustomDomainURN:            urn.NewCustomDomain(domain.ID),
-			DomainName:                 domain.Domain,
-			CustomDomainSnapshotBefore: mv.BuildCustomDomainView(domain, false, endpoint.ID),
-			CustomDomainSnapshotAfter:  mv.BuildCustomDomainView(domain, false, uuid.Nil),
-		}); err != nil {
-			return fmt.Errorf("audit MCP root cleanup: %w", err)
-		}
-	}
-	return nil
+	return MCPServerVisibilityResult{Server: updated, ClearedRootDomainIDs: tombstone.RootDomainIDs(cleared)}, nil
 }
 
 // UpdateMCPServerLifecycleInTransaction updates only the name-derived slug and
@@ -158,27 +185,32 @@ func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, audit
 
 	storedMode := pgtype.Text{String: "", Valid: false}
 	if input.NetworkAccessMode != nil {
-		if _, err := networkaccess.Parse(string(*input.NetworkAccessMode)); err != nil {
+		mode, err := networkaccess.Parse(string(*input.NetworkAccessMode))
+		if err != nil {
 			return repo.McpServer{}, fmt.Errorf("validate MCP server network access mode: %w", err)
 		}
-		storedMode = networkaccess.Storage(*input.NetworkAccessMode)
+		if existing.UnproxiedMcpServerID.Valid && !mode.IsPublicOnly() {
+			return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
+		}
+		storedMode = networkaccess.Storage(mode)
 	}
 
 	updated, err := repo.New(tx).UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
-		Name:                  name,
-		Slug:                  conv.ToPGText(slug),
-		EnvironmentID:         input.EnvironmentID,
-		UserSessionIssuerID:   input.UserSessionIssuerID,
-		RemoteMcpServerID:     input.RemoteMcpServerID,
-		TunneledMcpServerID:   input.TunneledMcpServerID,
-		ToolsetID:             input.ToolsetID,
-		UnproxiedMcpServerID:  input.UnproxiedMcpServerID,
-		ToolVariationsGroupID: input.ToolVariationsGroupID,
-		Visibility:            input.Visibility,
-		NetworkAccessModeSet:  input.NetworkAccessMode != nil,
-		NetworkAccessMode:     storedMode,
-		ID:                    existing.ID,
-		ProjectID:             input.ProjectID,
+		Name:                   name,
+		Slug:                   conv.ToPGText(slug),
+		EnvironmentID:          input.EnvironmentID,
+		UserSessionIssuerID:    input.UserSessionIssuerID,
+		ClearUserSessionIssuer: input.ClearUserSessionIssuer,
+		RemoteMcpServerID:      input.RemoteMcpServerID,
+		TunneledMcpServerID:    input.TunneledMcpServerID,
+		ToolsetID:              input.ToolsetID,
+		UnproxiedMcpServerID:   input.UnproxiedMcpServerID,
+		ToolVariationsGroupID:  input.ToolVariationsGroupID,
+		Visibility:             input.Visibility,
+		NetworkAccessModeSet:   input.NetworkAccessMode != nil,
+		NetworkAccessMode:      storedMode,
+		ID:                     existing.ID,
+		ProjectID:              input.ProjectID,
 	})
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("update MCP server lifecycle: %w", err)

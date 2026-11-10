@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * uploadFunctions assets
  *
  * @remarks
- * Upload functions to Gram.
+ * Upload functions to Speakeasy.
  */
 export function assetsUploadFunctions(
   client: GramCore,

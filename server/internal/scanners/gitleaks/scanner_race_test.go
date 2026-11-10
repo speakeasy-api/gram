@@ -9,20 +9,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 )
 
-// TestConcurrentScan verifies that many concurrent Scan calls don't panic from
-// viper's global state race during detector creation. Detectors are built lazily
-// by the pool's New func, which can fire concurrently on pool misses. Without
-// the detectorInitMu mutex, this test triggers:
-//
-//	fatal error: concurrent map read and map write
+// TestConcurrentScan runs many Scan calls at once across fresh scanners. Every
+// detector shares one memoized config, so under -race this checks that
+// detection never writes to it, and that the first, concurrent build of that
+// config does not race on gitleaks' global viper state.
 func TestConcurrentScan(t *testing.T) {
 	t.Parallel()
 
-	messages := []string{
-		"normal message",
-		"AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REALKEY",
-		"export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab",
-		"another clean message",
+	messages := []struct {
+		content  string
+		findings bool
+	}{
+		{content: "normal message", findings: false},
+		// The access key id alone only anchors the composite rule (SkipReport).
+		{content: "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REALKEY", findings: false},
+		{content: "AccessKeyId: " + fakeAccessKeyID + ", SecretAccessKey: " + fakeSecret, findings: true},
+		{content: "export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab", findings: true},
+		{content: "another clean message", findings: false},
+		// A placeholder value is dropped by a shared allowlist stopword.
+		{content: "api_key = \"your_api_key_here_placeholder\"", findings: false},
 	}
 
 	// Fan out many Scan calls concurrently across fresh scanners — this
@@ -31,19 +36,26 @@ func TestConcurrentScan(t *testing.T) {
 	const concurrent = 20
 	var wg sync.WaitGroup
 	errs := make([]error, concurrent)
+	found := make([]bool, concurrent)
 
 	for i := range concurrent {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			_, err := gitleaks.NewScanner().Scan(t.Context(), messages[idx%len(messages)])
-			errs[idx] = err
-		}(i)
+		wg.Go(func() {
+			scanner := gitleaks.NewScanner()
+			for range 3 {
+				result, err := scanner.Scan(t.Context(), messages[i%len(messages)].content)
+				if err != nil {
+					errs[i] = err
+					return
+				}
+				found[i] = len(result.Findings) > 0
+			}
+		})
 	}
 
 	wg.Wait()
 
 	for i, err := range errs {
 		require.NoError(t, err, "Scan call %d failed", i)
+		require.Equal(t, messages[i%len(messages)].findings, found[i], "Scan call %d findings", i)
 	}
 }

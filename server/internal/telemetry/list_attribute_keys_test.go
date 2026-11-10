@@ -2,7 +2,6 @@ package telemetry_test
 
 import (
 	"context"
-	"slices"
 	"testing"
 	"time"
 
@@ -81,7 +80,7 @@ func TestListAttributeKeys_ReturnsSystemAndUserKeys(t *testing.T) {
 		To:   now.Format(time.RFC3339),
 	}
 
-	result := waitForAttributeKey(t, ctx, ti.service, payload, "http.route")
+	result := requireAttributeKey(t, ctx, ti.service, payload, "http.route")
 
 	require.Contains(t, result.Keys, "http.route")
 	require.Contains(t, result.Keys, "@user.region")
@@ -124,7 +123,7 @@ func TestListAttributeKeys_Deduplicated(t *testing.T) {
 		To:   now.Format(time.RFC3339),
 	}
 
-	result := waitForAttributeKey(t, ctx, ti.service, payload, "http.route")
+	result := requireAttributeKey(t, ctx, ti.service, payload, "http.route")
 
 	keyCounts := map[string]int{}
 	for _, key := range result.Keys {
@@ -166,7 +165,7 @@ func TestListAttributeKeys_SortedAlphabetically(t *testing.T) {
 		To:   now.Format(time.RFC3339),
 	}
 
-	result := waitForAttributeKey(t, ctx, ti.service, payload, "http.method")
+	result := requireAttributeKey(t, ctx, ti.service, payload, "http.method")
 
 	require.GreaterOrEqual(t, len(result.Keys), 3)
 
@@ -218,7 +217,7 @@ func TestListAttributeKeys_TimeRangeFilter(t *testing.T) {
 		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 	}
 
-	result := waitForAttributeKey(t, ctx, ti.service, payload, "@in.range")
+	result := requireAttributeKey(t, ctx, ti.service, payload, "@in.range")
 
 	require.Contains(t, result.Keys, "@in.range")
 	require.NotContains(t, result.Keys, "@out.of.range")
@@ -266,25 +265,20 @@ func TestListAttributeKeys_ScopedByProject(t *testing.T) {
 		To:   now.Format(time.RFC3339),
 	}
 
-	result := waitForAttributeKey(t, ctx, ti.service, payload, "@my.attr")
+	result := requireAttributeKey(t, ctx, ti.service, payload, "@my.attr")
 
 	require.Contains(t, result.Keys, "@my.attr")
 	require.NotContains(t, result.Keys, "@other.project.attr")
 }
 
-// waitForAttributeKey polls ListAttributeKeys until the given key appears in results.
-func waitForAttributeKey(t *testing.T, ctx context.Context, service gen.Service, payload *gen.ListAttributeKeysPayload, key string) *gen.ListAttributeKeysResult {
+// requireAttributeKey lists attribute keys and requires the given key among them.
+func requireAttributeKey(t *testing.T, ctx context.Context, service gen.Service, payload *gen.ListAttributeKeysPayload, key string) *gen.ListAttributeKeysResult {
 	t.Helper()
 
-	var result *gen.ListAttributeKeysResult
-	require.Eventually(t, func() bool {
-		var err error
-		result, err = service.ListAttributeKeys(ctx, payload)
-		if err != nil || result == nil {
-			return false
-		}
-		return slices.Contains(result.Keys, key)
-	}, 2*time.Second, 50*time.Millisecond, "expected attribute key %q to appear in ClickHouse", key)
+	result, err := service.ListAttributeKeys(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Contains(t, result.Keys, key)
 
 	return result
 }

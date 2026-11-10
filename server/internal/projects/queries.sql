@@ -25,6 +25,15 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY id ASC;
 
+-- name: ListProjectNamesIncludingDeleted :many
+-- Every project of an organization, deleted ones included, for labelling
+-- records written while they existed. The deleted flag says whether the
+-- project still has a page to link to.
+SELECT id, name, slug, deleted
+FROM projects
+WHERE organization_id = @organization_id
+ORDER BY deleted ASC, created_at DESC;
+
 -- name: ListProjectsByOrganizationLimited :many
 SELECT *
 FROM projects
@@ -153,3 +162,23 @@ UPDATE organization_metadata
 SET whitelisted = @whitelisted,
     updated_at = clock_timestamp()
 WHERE id = @organization_id;
+
+-- name: LockProjectForEMADeletion :one
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE FOR UPDATE;
+
+-- name: CountActiveProjectEMABindings :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = @project_id AND organization_id = @organization_id AND state IS DISTINCT FROM 'unlinked';
+
+-- name: DeleteProjectEMATombstones :exec
+DELETE FROM remote_session_ema_bindings WHERE project_id = @project_id AND organization_id = @organization_id AND state = 'unlinked';
+
+-- name: LockOtherActiveProject :one
+-- FOR SHARE waits for an in-flight project delete, then rechecks the row, so a
+-- concurrently deleted project is not reported as still active.
+SELECT id
+FROM projects
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND id <> @project_id
+LIMIT 1
+FOR SHARE;

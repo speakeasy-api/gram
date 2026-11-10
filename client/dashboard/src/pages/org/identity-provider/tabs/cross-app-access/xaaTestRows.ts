@@ -26,6 +26,7 @@ export function confirmedRow(
     pending: false,
     audience: "https://issuer.example.com/saved",
     oktaApplicationId: "recorded-app",
+    confirmedAt: new Date("2026-09-01T00:00:00Z"),
     ...overrides,
   };
 }

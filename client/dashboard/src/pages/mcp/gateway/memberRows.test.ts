@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpMember } from "@gram/client/models/components/metamcpmember.js";
@@ -229,6 +230,18 @@ describe("buildAddCandidates", () => {
     );
     expect(candidates).toEqual([
       { kind: "server", server: expect.objectContaining({ id: "s-1" }) },
+    ]);
+  });
+
+  it("offers the toolset instead of its own hosted server", () => {
+    const candidates = buildAddCandidates(
+      [server({ id: "ts-1", name: "Linear", toolsetId: "ts-1" })],
+      [toolset()],
+      new Set(),
+      "",
+    );
+    expect(candidates).toEqual([
+      { kind: "toolset", toolset: expect.objectContaining({ id: "ts-1" }) },
     ]);
   });
 

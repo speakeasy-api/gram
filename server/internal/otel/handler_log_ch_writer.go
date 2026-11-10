@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"log/slog"
 
 	"go.opentelemetry.io/otel/metric"
@@ -75,6 +76,9 @@ var _ streams.BatchHandler[*otelv1.LogRecord] = (*LogEventCHWriter)(nil)
 func (w *LogEventCHWriter) HandleBatch(ctx context.Context, messages []*otelv1.LogRecord, _ []gcp.MessageMetadata) error {
 	rows := make([]chrepo.OTelLogRow, 0, len(messages))
 	for _, message := range messages {
+		if isConnectionLogRecord(message) {
+			continue
+		}
 		row, skipReason := logEventRow(message)
 		if skipReason != "" {
 			w.logger.ErrorContext(ctx, "skipping unprocessable otel log record",
@@ -153,7 +157,7 @@ func logEventRow(record *otelv1.LogRecord) (chrepo.OTelLogRow, string) {
 		ProjectID:            record.GetProvenance().GetProjectId(),
 		TimeUnixNano:         timeNano,
 		ObservedTimeUnixNano: observedNano,
-		Source:               canonicalEventSource(logEventServiceName(record)),
+		Source:               enrich.CanonicalSource(logEventServiceName(record)),
 		TraceID:              hexEventID(record.GetTraceId()),
 		SpanID:               hexEventID(record.GetSpanId()),
 		EventName:            record.GetEventName(),
@@ -172,7 +176,7 @@ func logEventRow(record *otelv1.LogRecord) (chrepo.OTelLogRow, string) {
 
 func logEventServiceName(record *otelv1.LogRecord) string {
 	for _, kv := range record.GetResource().GetAttributes() {
-		if kv.GetKey() == serviceNameAttribute && kv.GetValue().HasStringValue() {
+		if kv.GetKey() == enrich.ServiceNameAttribute && kv.GetValue().HasStringValue() {
 			return kv.GetValue().GetStringValue()
 		}
 	}

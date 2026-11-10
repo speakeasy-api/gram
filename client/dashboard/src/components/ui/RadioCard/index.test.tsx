@@ -402,6 +402,81 @@ describe("RadioCard", () => {
     );
   });
 
+  it("keeps detail out of the description and the selection", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn<(value: string) => void>();
+    render(
+      <RadioCardGroup aria-label="Scope" onValueChange={onValueChange}>
+        <RadioCard
+          value="org"
+          title="Organization"
+          detail={<pre data-testid="detail">snippet</pre>}
+        >
+          Everyone
+        </RadioCard>
+      </RadioCardGroup>,
+    );
+
+    const radio = screen.getByRole("radio", { name: "Organization" });
+    const descriptionId = radio.getAttribute("aria-describedby") ?? "";
+    expect(document.getElementById(descriptionId)?.textContent).toBe(
+      "Everyone",
+    );
+    await user.click(screen.getByTestId("detail"));
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps trailing controls out of the label and the selection", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn<(value: string) => void>();
+    render(
+      <RadioCardGroup aria-label="Scope" onValueChange={onValueChange}>
+        <RadioCard
+          value="all"
+          title="All servers"
+          trailing={<button type="button">Edit</button>}
+        >
+          Every server
+        </RadioCard>
+      </RadioCardGroup>,
+    );
+
+    expect(screen.getByRole("radio", { name: "All servers" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("disables trailing controls with the card", () => {
+    render(
+      <RadioCardGroup aria-label="Scope">
+        <RadioCard
+          value="all"
+          title="All servers"
+          disabled
+          trailing={<button type="button">Edit</button>}
+        >
+          Every server
+        </RadioCard>
+      </RadioCardGroup>,
+    );
+    expect(
+      document
+        .querySelector("[data-slot=radio-card-trailing]")
+        ?.hasAttribute("inert"),
+    ).toBe(true);
+  });
+
+  it("renders a numeric zero detail", () => {
+    render(
+      <RadioCardGroup aria-label="Count">
+        <RadioCard value="zero" title="Zero" detail={0} />
+      </RadioCardGroup>,
+    );
+    expect(
+      document.querySelector("[data-slot=radio-card-detail]")?.textContent,
+    ).toBe("0");
+  });
+
   it("forwards the orientation prop to the radio group", () => {
     const { rerender } = render(<ControlledGroup />);
     const group = screen.getByRole("radiogroup", { name: "View mode" });
@@ -410,5 +485,31 @@ describe("RadioCard", () => {
 
     rerender(<ControlledGroup orientation="horizontal" />);
     expect(group.getAttribute("data-orientation")).toBe("horizontal");
+  });
+
+  it("centers a leading mark on the title's line box at each density", () => {
+    const { rerender } = render(
+      <RadioCardGroup aria-label="Choice" value="a">
+        <RadioCard value="a" leading={<span data-testid="mark" />} title="A">
+          Body copy.
+        </RadioCard>
+      </RadioCardGroup>,
+    );
+
+    // The slot takes the title's line-height and centers in it. Top-aligning a
+    // 16px mark against a 24px line leaves it sitting visibly high.
+    const slot = () =>
+      document.querySelector('[data-slot="radio-card-leading"]') as HTMLElement;
+    expect(slot().className).toContain("items-center");
+    expect(slot().className).toContain("h-6");
+
+    rerender(
+      <RadioCardGroup aria-label="Choice" size="sm" value="a">
+        <RadioCard value="a" leading={<span data-testid="mark" />} title="A">
+          Body copy.
+        </RadioCard>
+      </RadioCardGroup>,
+    );
+    expect(slot().className).toContain("h-5");
   });
 });

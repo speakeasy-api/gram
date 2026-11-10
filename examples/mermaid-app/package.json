@@ -3,11 +3,11 @@
   "name": "mermaid-app",
   "version": "0.0.0",
   "private": true,
-  "description": "Mermaid diagram renderer exposed as an MCP app via Gram Functions. React + Vite built as a single-file bundle and served through experimental_uiResource.",
+  "description": "Mermaid diagram renderer exposed as an MCP app via Speakeasy Functions. React + Vite built as a single-file bundle and served through experimental_uiResource.",
   "keywords": [
     "mcp",
     "mcp-apps",
-    "getgram.ai"
+    "speakeasy"
   ],
   "engines": {
     "node": ">=22.18.0"
@@ -16,13 +16,13 @@
     "dev": "vite",
     "build:ui": "vite build",
     "build:inline": "node scripts/inline-html.mjs",
-    "build:gram": "gf build",
-    "build": "pnpm run build:ui && pnpm run build:inline && pnpm run build:gram",
+    "build:functions": "speakeasy functions build",
+    "build": "pnpm run build:ui && pnpm run build:inline && pnpm run build:functions",
     "lint": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.ui.json",
-    "push": "pnpm run build && gf push"
+    "push": "pnpm run build && speakeasy functions push --no-build"
   },
   "dependencies": {
-    "@gram-ai/functions": "^0.14.0",
+    "@speakeasy-api/functions": "^0.20.0",
     "mermaid": "^11.4.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

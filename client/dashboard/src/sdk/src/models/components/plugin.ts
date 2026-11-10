@@ -26,6 +26,14 @@ export type Plugin = {
    * Role/user assignments.
    */
   assignments?: Array<PluginAssignment> | undefined;
+  /**
+   * Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
+   */
+  autoCreated: boolean;
+  /**
+   * Whether changes to this plugin publish to the marketplace automatically. When false, they wait until someone syncs the marketplace by hand.
+   */
+  autoSyncEnabled: boolean;
   createdAt: Date;
   /**
    * Optional description.
@@ -68,6 +76,8 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
     agent_plugins_v1_compatible: z.boolean(),
     assignment_count: z.optional(z.int()),
     assignments: z.optional(z.array(PluginAssignment$inboundSchema)),
+    auto_created: z.boolean(),
+    auto_sync_enabled: z.boolean(),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -89,6 +99,8 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
     return remap$(v, {
       "agent_plugins_v1_compatible": "agentPluginsV1Compatible",
       "assignment_count": "assignmentCount",
+      "auto_created": "autoCreated",
+      "auto_sync_enabled": "autoSyncEnabled",
       "created_at": "createdAt",
       "is_default": "isDefault",
       "server_count": "serverCount",

@@ -203,11 +203,17 @@ func (a *Analyzer) fail(ctx context.Context, span trace.Span, info CallInfo, com
 	span.RecordError(err)
 	span.SetStatus(codes.Error, "risk llm analysis failed")
 	span.SetAttributes(attribute.String("gram.risk.llm.dead_letter_reason", reason))
-	a.logger.WarnContext(ctx, "risk llm analysis failed; returning dead-letter result",
+	attrs := []slog.Attr{
 		attr.SlogError(err),
 		attr.SlogOrganizationID(info.OrgID),
 		attr.SlogRiskScanMode(info.ScanMode),
-	)
+	}
+	if errors.Is(err, ErrParse) {
+		// The reply is the evidence: without it a parse failure cannot be
+		// diagnosed (the model's text is not recorded anywhere else).
+		attrs = append(attrs, attr.SlogRiskLLMCompletion(completion.Content))
+	}
+	a.logger.LogAttrs(ctx, slog.LevelWarn, "risk llm analysis failed; returning dead-letter result", attrs...)
 	return Analysis{
 		Result:     DeadLetterResult(reason),
 		Verdict:    Verdict{Risks: nil, Raw: ""},

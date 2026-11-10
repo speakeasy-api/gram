@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listUsers organizations
  *
  * @remarks
- * List users in the active organization from Gram organization_user_relationships.
+ * List users in the active organization from Speakeasy organization_user_relationships.
  */
 export function organizationsListUsers(
   client: GramCore,

@@ -16,6 +16,35 @@ import (
 // which rejects the issuer before anything is verified.
 var errWorkloadNotAdmitted = errors.New("workload identity is not admitted by this organization")
 
+// workloadTenancy is what a workload assertion grant resolves trust under:
+// the organization and project its issuer lookup and subject admission run
+// against, and the authorization server whose budgets it spends.
+type workloadTenancy struct {
+	// OrganizationID scopes every issuer and admission that could answer.
+	OrganizationID string
+
+	// ProjectID is the project trust resolves in, or uuid.Nil for an
+	// organization-scoped caller, which sees only organization-tier issuers
+	// and admissions. A grant naming a resource asks as that MCP server's
+	// project; a grant naming none asks as its issuer's project, or as the
+	// organization for an organization issuer.
+	ProjectID uuid.UUID
+
+	// UserSessionIssuerID names the authorization server the grant is served
+	// by. It keys the lookup, key-fetch, and replay budgets, not the tenancy.
+	UserSessionIssuerID uuid.UUID
+}
+
+// workloadTenancy is the tenancy a grant naming this endpoint as its resource
+// resolves under: the endpoint's own project and the organization above it.
+func (e *ResolvedMcpEndpoint) workloadTenancy() workloadTenancy {
+	return workloadTenancy{
+		OrganizationID:      e.OrganizationID,
+		ProjectID:           e.ProjectID,
+		UserSessionIssuerID: e.UserSessionIssuerID,
+	}
+}
+
 // workloadIdentity is one admission query. Every field is part of the key.
 //
 // No pattern, prefix or wildcard field: wildcarding a CI subject is the
@@ -36,7 +65,7 @@ type workloadIdentity struct {
 	// discovery refresh cannot silently repoint an existing admission.
 	WorkloadIssuerID uuid.UUID
 	// ExternalSubject is the sub claim the issuer asserted. Named to stay
-	// distinct from urn.SessionSubject, the Gram identity derived from it.
+	// distinct from urn.SessionSubject, the Speakeasy identity derived from it.
 	ExternalSubject string
 }
 
@@ -98,8 +127,8 @@ func newStaticWorkloadIdentityLookup(admitted ...workloadAdmission) workloadIden
 	}
 }
 
-// admitWorkloadIdentity reports nil when the endpoint's tenant admits
-// externalSubject from this issuer, errWorkloadNotAdmitted when it does not.
+// admitWorkloadIdentity reports nil when the tenant admits externalSubject
+// from this issuer, errWorkloadNotAdmitted when it does not.
 //
 // The security boundary, and a different question from the one the signature
 // answered: a CI provider signs valid assertions for every job on its
@@ -108,7 +137,7 @@ func newStaticWorkloadIdentityLookup(admitted ...workloadAdmission) workloadIden
 func admitWorkloadIdentity(
 	ctx context.Context,
 	lookup workloadIdentityLookup,
-	endpoint *ResolvedMcpEndpoint,
+	tenancy workloadTenancy,
 	workloadIssuerID uuid.UUID,
 	externalSubject string,
 ) error {
@@ -116,16 +145,16 @@ func admitWorkloadIdentity(
 	// An unwired policy reads as "no admissions", an unbuildable key as "no
 	// row could answer", and an empty subject is refused rather than looked up
 	// so it can never match a row holding one.
-	case lookup == nil, endpoint == nil, workloadIssuerID == uuid.Nil, externalSubject == "":
+	case lookup == nil, tenancy.OrganizationID == "", workloadIssuerID == uuid.Nil, externalSubject == "":
 		return errWorkloadNotAdmitted
 	}
 
 	admitted, err := lookup(ctx, workloadIdentity{
-		OrganizationID: endpoint.OrganizationID,
+		OrganizationID: tenancy.OrganizationID,
 		// A zero project asks as an organization-scoped caller rather than as
 		// project uuid.Nil: a sentinel comparing equal by accident is not a
 		// property to rely on at a security boundary.
-		ProjectID:        uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil},
+		ProjectID:        uuid.NullUUID{UUID: tenancy.ProjectID, Valid: tenancy.ProjectID != uuid.Nil},
 		WorkloadIssuerID: workloadIssuerID,
 		ExternalSubject:  externalSubject,
 	})

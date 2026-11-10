@@ -19,6 +19,14 @@ export type ListAgentDelegableGrantsRequest = {
    */
   toolsetId?: string | undefined;
   /**
+   * Optional MCP authorization resource identifiers, discovered in one request. Each narrows discovery like toolset_id; the result is the union of candidates across all of them.
+   */
+  toolsetIds?: Array<string> | undefined;
+  /**
+   * Keep a wildcard candidate that a narrower exclusion overlaps, and return that exclusion beside it as a blocklist-scope grant, instead of omitting the candidate. Requesting both on a key needs delegated grants version 4 or later.
+   */
+  carryExclusions?: boolean | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -58,6 +66,8 @@ export function listAgentDelegableGrantsSecurityToJSON(
 export type ListAgentDelegableGrantsRequest$Outbound = {
   agent_id: string;
   toolset_id?: string | undefined;
+  toolset_ids?: Array<string> | undefined;
+  carry_exclusions: boolean;
   "Gram-Session"?: string | undefined;
 };
 
@@ -69,12 +79,16 @@ export const ListAgentDelegableGrantsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     agentId: z.string(),
     toolsetId: z.optional(z.string()),
+    toolsetIds: z.optional(z.array(z.string())),
+    carryExclusions: z._default(z.boolean(), false),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       agentId: "agent_id",
       toolsetId: "toolset_id",
+      toolsetIds: "toolset_ids",
+      carryExclusions: "carry_exclusions",
       gramSession: "Gram-Session",
     });
   }),

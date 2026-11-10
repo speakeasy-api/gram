@@ -12,6 +12,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -72,6 +74,7 @@ func TestToolCallRejection_CallerFaultLogsAtWarn(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, oops.CodeBadRequest, rejected.Code)
 	require.Equal(t, http.StatusBadRequest, rejected.HTTPStatus(ctx))
+	require.Equal(t, "tool call was rejected as invalid or not permitted", rejected.Error(), "a refusal with no shareable message keeps the generic text")
 
 	entry := decodeLogEntry(t, buf)
 	require.Equal(t, "WARN", entry["level"], "caller mistakes must not drive the component error rate")
@@ -116,8 +119,51 @@ func TestPlatformToolCallError_ShareableClientFaultIsRejected(t *testing.T) {
 	require.ErrorAs(t, err, &rejected)
 	require.Equal(t, oops.CodeBadRequest, rejected.Code)
 
+	require.Equal(t, "upstream refused", rejected.Error())
+
 	entry := decodeLogEntry(t, buf)
 	require.Equal(t, "WARN", entry["level"], "caller faults must use the same warning path when already shareable")
+}
+
+// A caller fault that already carries a client-safe message, such as a Slack
+// tool's missing configuration, answers with that message and code instead of
+// the generic rejection.
+func TestToolCallRejection_ShareableCauseKeepsItsMessage(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger, buf, _ := recordedToolCallLogger(t)
+	message := "server not configured: missing environment variable SLACK_BOT_TOKEN."
+	cause := fmt.Errorf("execute platform tool: %w",
+		oops.E(oops.CodeFailedPrecondition, &upstreamRefusalError{code: "not_configured", caller: true}, "%s", message))
+
+	rejected, ok := toolCallRejection(ctx, logger, cause)
+	require.True(t, ok)
+	require.Equal(t, oops.CodeFailedPrecondition, rejected.Code)
+	require.Equal(t, oops.MCPCodeInvalidRequest, rejected.Code.MCPCode())
+	require.Equal(t, message, rejected.Error())
+
+	entry := decodeLogEntry(t, buf)
+	require.Equal(t, "WARN", entry["level"], "caller mistakes must not drive the component error rate")
+}
+
+// A Slack-side failure is not the caller's to fix, so it stays an internal
+// error (-32603) whatever the tool wraps it in.
+func TestPlatformToolCallError_SlackSideFailureStaysInternal(t *testing.T) {
+	t.Parallel()
+
+	for _, slackErr := range []*slackapi.Error{
+		{Method: "conversations.list", Code: "internal_error", StatusCode: http.StatusOK, Needed: ""},
+		{Method: "conversations.list", Code: "", StatusCode: http.StatusServiceUnavailable, Needed: ""},
+	} {
+		ctx, logger, _, _ := recordedToolCallLogger(t)
+		cause := fmt.Errorf("execute platform tool tools:platform/slack/search_channels: %w", slackErr)
+
+		err := platformToolCallError(ctx, logger, cause, attr.SlogToolName("platform_slack_search_channels"))
+		shareable, ok := errors.AsType[*oops.ShareableError](err)
+		require.True(t, ok, "want a shareable error, got %v", err)
+		require.Equal(t, oops.CodeUnexpected, shareable.Code)
+		require.Equal(t, oops.MCPCodeInternalError, shareable.Code.MCPCode())
+	}
 }
 
 func TestRecordToolCallErrorStatus_UsesShareableHTTPStatus(t *testing.T) {
@@ -139,4 +185,21 @@ func TestRecordToolCallErrorStatus_IgnoresUnclassifiedErrors(t *testing.T) {
 	recordToolCallErrorStatus(t.Context(), rw, errors.New("connection reset by peer"))
 
 	require.Equal(t, http.StatusOK, rw.statusCode)
+}
+
+func TestDiscardWithheldBodyPreventsTelemetryContent(t *testing.T) {
+	t.Parallel()
+
+	rw := &toolCallResponseWriter{
+		statusCode: http.StatusOK,
+		headers:    make(http.Header),
+		body:       bytes.NewBufferString("person@example.com"),
+	}
+
+	discardWithheldBody(rw.body)
+	attrs := tm.HTTPLogAttributes{}
+	attrs.RecordResponseBodyContent(rw.body.Bytes())
+
+	require.Zero(t, rw.body.Len())
+	require.NotContains(t, attrs, attr.GenAIToolCallResultKey)
 }

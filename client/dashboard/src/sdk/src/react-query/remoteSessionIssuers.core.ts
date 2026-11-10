@@ -12,6 +12,7 @@ import { remoteSessionIssuersList } from "../funcs/remoteSessionIssuersList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import {
+  ListRemoteSessionIssuersQueryParamTier,
   ListRemoteSessionIssuersRequest,
   ListRemoteSessionIssuersResponse,
   ListRemoteSessionIssuersSecurity,
@@ -83,6 +84,9 @@ export function buildRemoteSessionIssuersQuery(
     queryKey: queryKeyRemoteSessionIssuers({
       cursor: request?.cursor,
       limit: request?.limit,
+      search: request?.search,
+      upstreamHost: request?.upstreamHost,
+      tier: request?.tier,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -126,6 +130,9 @@ export function buildRemoteSessionIssuersInfiniteQuery(
     queryKey: queryKeyRemoteSessionIssuersInfinite({
       cursor: request?.cursor,
       limit: request?.limit,
+      search: request?.search,
+      upstreamHost: request?.upstreamHost,
+      tier: request?.tier,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -166,6 +173,9 @@ export function queryKeyRemoteSessionIssuers(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    search?: string | undefined;
+    upstreamHost?: string | undefined;
+    tier?: ListRemoteSessionIssuersQueryParamTier | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;
@@ -178,6 +188,9 @@ export function queryKeyRemoteSessionIssuersInfinite(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    search?: string | undefined;
+    upstreamHost?: string | undefined;
+    tier?: ListRemoteSessionIssuersQueryParamTier | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

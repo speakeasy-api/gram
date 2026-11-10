@@ -50,6 +50,8 @@ var knownDeviceAgentConfigurationKeys = map[string]struct{}{
 	"blocked_versions":         {},
 	"sync_interval_seconds":    {},
 	"ai_scan_interval_seconds": {},
+	"disable_ai_scan":          {},
+	"disable_crash_reports":    {},
 }
 
 // platformAdminOnlyDeviceAgentConfigurationKeys are Speakeasy-internal
@@ -153,6 +155,14 @@ func validateDeviceAgentConfiguration(config map[string]any) ([]byte, error) {
 					minSyncIntervalSeconds,
 					maxSyncIntervalSeconds,
 				)
+			}
+		}
+	}
+
+	for _, key := range []string{"disable_ai_scan", "disable_crash_reports"} {
+		if value, ok := config[key]; ok {
+			if _, ok := value.(bool); !ok {
+				return nil, oops.E(oops.CodeInvalid, nil, "%s must be a boolean", key)
 			}
 		}
 	}
@@ -296,6 +306,17 @@ func attachDeviceAgentConfiguration(result *gen.GetPluginsResult, configuration 
 	result.Configuration = configuration
 	hash := sha256.New()
 	_, _ = fmt.Fprintf(hash, "plugins=%s\nconfiguration=%s\n", result.Etag, configuration.Etag)
+	result.Etag = hex.EncodeToString(hash.Sum(nil))
+}
+
+func attachOrganizationGatewayURL(result *gen.GetPluginsResult, gatewayURL *string) {
+	result.OrganizationGatewayURL = gatewayURL
+	value := ""
+	if gatewayURL != nil {
+		value = *gatewayURL
+	}
+	hash := sha256.New()
+	_, _ = fmt.Fprintf(hash, "policy=%s\norganization_gateway_url=%t\x00%s\n", result.Etag, gatewayURL != nil, value)
 	result.Etag = hex.EncodeToString(hash.Sum(nil))
 }
 

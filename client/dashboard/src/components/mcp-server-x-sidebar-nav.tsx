@@ -1,6 +1,9 @@
-import { useOrganization } from "@/contexts/Auth";
+import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
+import { setupProviderForUrl } from "@/pages/mcp/x/setup/provider-setup";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
+import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import {
   DetailSidebarInfoLabel,
   DetailSidebarNav,
@@ -21,16 +24,36 @@ import {
 } from "@/hooks/usePrivateMcpServerUrls";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
-import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import {
+  MCPServerAvailabilityToggle,
+  MCPServerStatusDropdown,
+} from "@/pages/mcp/x/MCPServerDetails";
 import {
   activeTabFromPath,
+  isCanonicalHostedWrapper,
   mcpServerTabHref,
+  standsInForToolset,
 } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { useToolset } from "@/hooks/toolTypes";
+import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
+import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
+import { hostedToolCountLabel } from "@/components/mcp/mcp-server-kind";
+import { MCP_AGENT_SETUP_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/AgentSetupSection";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
-import { useAllRemoteSessionClients } from "@/pages/mcp/x/tabs/settings/sections/authentication/useAllRemoteSessionClients";
+import {
+  tunnelAgentReadiness,
+  useTunneledMcpConnections,
+} from "@/pages/mcp/x/tabs/tunnelStatus";
+import { type IdentityMode } from "@/lib/remote-identity";
+import { IdentityExplainerDialog } from "@/lib/remote-identity";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useRoutes } from "@/routes";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { isNotNotFound } from "@/lib/query-errors";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
 import { McpServerNetworkAccessMode } from "@gram/client/models/components/mcpserver.js";
@@ -38,18 +61,259 @@ import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import {
+  AlertTriangle,
   ArrowRight,
   ExternalLink,
+  Info,
   LayoutDashboard,
   Plug,
   Settings as SettingsIcon,
+  ShieldCheck,
+  Terminal,
   Users,
   Wrench,
+  Database,
+  MessageSquareText,
 } from "lucide-react";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/HoverCard";
+import { cn } from "@/lib/utils";
+import {
+  SIGN_IN_DETECTED_STATUS,
+  UNKNOWN_STATUS,
+  UPSTREAM_AUTH_STATUS,
+} from "@/lib/auth-clients";
+import { enumPresentation } from "@/lib/enum";
+import { useMcpServerAuthenticationReadiness } from "@/hooks/useMcpServerAuthenticationReadiness";
 import * as React from "react";
-import { useLocation, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 
-function SidebarUrl({
+// The dot colours carry the state at a glance, matching the identity symbols
+// AIM-230 settled on: blue for per-user, green for the shared agent, grey for
+// none, amber when none is configured but the upstream demands a credential.
+const IDENTITY_DOT: Record<IdentityMode, string> = {
+  user: "bg-information-default",
+  agent: "bg-success-default",
+  none: "bg-muted-foreground/50",
+};
+
+/**
+ * The Identity summary for an organization that enforces upstream auth. It
+ * reports the server's upstream sign-in status from its credentials, the
+ * same presentation the Identity settings section uses.
+ */
+export function UpstreamCredentialsIdentitySummary({
+  status,
+  authenticationRequired,
+  unavailable,
+  loading,
+  settingsHref,
+}: {
+  /** The server's upstream auth status; undefined while unknown. */
+  status: string | undefined;
+  authenticationRequired: boolean;
+  unavailable: boolean;
+  loading: boolean;
+  settingsHref: string;
+}): React.JSX.Element {
+  let value: React.JSX.Element;
+  if (unavailable || (!loading && status === undefined)) {
+    value = (
+      <Text small className="text-destructive">
+        Identity unavailable
+      </Text>
+    );
+  } else if (loading || status === undefined) {
+    value = (
+      <Text muted small>
+        Loading…
+      </Text>
+    );
+  } else {
+    const presentation =
+      status === "no_auth_required" && authenticationRequired
+        ? SIGN_IN_DETECTED_STATUS
+        : enumPresentation(UPSTREAM_AUTH_STATUS, status, UNKNOWN_STATUS);
+    const warn = presentation.tone === "warning";
+    const pill = (
+      <Link
+        to={settingsHref}
+        aria-label={`Identity: ${presentation.label}. Open identity settings`}
+        className={cn(
+          "bg-card hover:border-input hover:bg-muted/40 flex w-fit shrink-0 items-center gap-2 border px-2.5 py-1.5 text-sm font-medium transition-colors",
+          warn && "border-warning-default",
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            UPSTREAM_STATUS_DOT[presentation.tone],
+          )}
+        />
+        {presentation.label}
+      </Link>
+    );
+    value = warn ? (
+      <HoverCard openDelay={150}>
+        <HoverCardTrigger asChild>{pill}</HoverCardTrigger>
+        <HoverCardContent align="start" className="w-72">
+          <Text small className="block">
+            {presentation.hint}
+          </Text>
+        </HoverCardContent>
+      </HoverCard>
+    ) : (
+      pill
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <DetailSidebarInfoLabel>Identity</DetailSidebarInfoLabel>
+      {value}
+    </div>
+  );
+}
+
+const UPSTREAM_STATUS_DOT: Record<"success" | "warning" | "neutral", string> = {
+  success: "bg-success-default",
+  warning: "bg-warning-default",
+  neutral: "bg-muted-foreground/50",
+};
+
+function remoteIdentityLabel(mode: IdentityMode): string {
+  switch (mode) {
+    case "user":
+      return "User";
+    case "agent":
+      return "Shared credential";
+    case "none":
+      return "Manual";
+  }
+}
+
+export function RemoteIdentitySummary({
+  mode,
+  passThroughAuthorization,
+  authenticationRequired,
+  unavailable,
+  loading,
+  settingsHref,
+}: {
+  mode: IdentityMode;
+  passThroughAuthorization: boolean;
+  /** None is configured but the upstream answered the probe with a challenge. */
+  authenticationRequired: boolean;
+  unavailable: boolean;
+  loading: boolean;
+  settingsHref: string;
+}): React.JSX.Element {
+  const [explainerOpen, setExplainerOpen] = React.useState(false);
+  const warn = passThroughAuthorization || authenticationRequired;
+  const label = passThroughAuthorization
+    ? "Needs cleanup"
+    : remoteIdentityLabel(mode);
+
+  // Only the warning states have something to reveal; a healthy identity is
+  // fully described by the pill itself.
+  let problem: string | null = null;
+  if (passThroughAuthorization) {
+    problem =
+      "A legacy pass-through Authorization header is still configured. Remove it under Custom Headers so this server's identity is the only thing sending a credential.";
+  } else if (authenticationRequired) {
+    problem =
+      "This server answers with an authentication challenge, but no identity is configured. Requests will keep failing until User Identity or a shared credential is set up.";
+  }
+
+  let status: React.JSX.Element;
+  if (unavailable) {
+    status = (
+      <Text small className="text-destructive">
+        Identity unavailable
+      </Text>
+    );
+  } else if (loading) {
+    status = (
+      <Text muted small>
+        Loading…
+      </Text>
+    );
+  } else {
+    // The pill is the way into the setting it reports, so it is the link.
+    const pill = (
+      <Link
+        to={settingsHref}
+        aria-label={`Identity: ${label}. Open identity settings`}
+        className={cn(
+          "bg-card hover:border-input hover:bg-muted/40 flex w-fit shrink-0 items-center gap-2 border px-2.5 py-1.5 text-sm font-medium transition-colors",
+          warn && "border-warning-default",
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            warn ? "bg-warning-default" : IDENTITY_DOT[mode],
+          )}
+        />
+        {label}
+      </Link>
+    );
+
+    status = problem ? (
+      <HoverCard openDelay={150}>
+        <HoverCardTrigger asChild>{pill}</HoverCardTrigger>
+        <HoverCardContent align="start" className="w-72">
+          <Text small className="block">
+            {problem}
+          </Text>
+        </HoverCardContent>
+      </HoverCard>
+    ) : (
+      pill
+    );
+  }
+
+  return (
+    // One row: what the setting is on the left, what it currently is on the
+    // right. The pill is small enough that a second line spent nothing.
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <DetailSidebarInfoLabel>Identity</DetailSidebarInfoLabel>
+        {/* The question the label raises — what these modes mean — rather than
+            something about the value beside it. */}
+        <button
+          type="button"
+          onClick={() => setExplainerOpen(true)}
+          aria-label="What do these identity modes mean?"
+          className="text-muted-foreground hover:text-foreground shrink-0"
+        >
+          <Info aria-hidden="true" className="size-3" />
+        </button>
+      </div>
+      {status}
+      <IdentityExplainerDialog
+        open={explainerOpen}
+        onOpenChange={setExplainerOpen}
+      />
+    </div>
+  );
+}
+
+/**
+ * A labelled URL in the rail. The value is long and the rail is narrow, so it
+ * sits on one clipped line and the whole thing appears on hover.
+ *
+ * The reveal is a hover card rather than an absolutely-positioned child:
+ * SidebarContent scrolls (overflow-auto), which clips any descendant that
+ * tries to escape the rail no matter what z-index it carries. Radix portals
+ * the content to the body, so it floats over the page as intended.
+ */
+export function SidebarUrlRow({
   label,
   url,
   copyTooltip,
@@ -58,34 +322,86 @@ function SidebarUrl({
   url: string;
   copyTooltip: string;
 }): React.JSX.Element {
+  const display = url.replace(/^https?:\/\//, "");
   return (
     <div className="flex flex-col gap-1">
-      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
-      <div className="flex items-start gap-1">
-        <Text
-          variant="small"
-          muted
-          className="line-clamp-2 font-mono text-xs break-all"
-        >
-          {url.replace(/^https?:\/\//, "")}
-        </Text>
-        <CopyButton
-          text={url}
-          size="xs"
-          tooltip={copyTooltip}
-          className="mt-[-2px] shrink-0"
-        />
+      {/* The copy button sits beside the label, not the URL: the hover card
+        that reveals the full URL would otherwise cover it. */}
+      <div className="flex items-center gap-1">
+        <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
+        <CopyButton text={url} size="xs" tooltip={copyTooltip} />
+      </div>
+      <div className="min-w-0">
+        {/* No delay: this is a reveal of text already on screen, not a
+          disclosure of extra information. */}
+        <HoverCard openDelay={0}>
+          <HoverCardTrigger asChild>
+            {/* The padding belongs to the trigger, not the text inside it:
+              the card aligns to the trigger's box, and matching insets are
+              what land the two texts on each other. The negative margin
+              cancels the indent so the URL stays flush with its label. */}
+            <span className="-mx-2 block px-2 py-1">
+              <Text
+                variant="small"
+                muted
+                data-slot="sidebar-url-line"
+                className="block truncate font-mono text-xs"
+              >
+                {display}
+              </Text>
+            </span>
+          </HoverCardTrigger>
+          {/* The card carries the same insets as the line, so aligning their
+            boxes aligns their text: pull up by exactly the trigger's height
+            and the two land on each other. */}
+          <HoverCardContent
+            align="start"
+            side="bottom"
+            sideOffset={-24}
+            data-slot="sidebar-url-full"
+            className="w-auto max-w-none px-2 py-1 font-mono text-xs whitespace-nowrap duration-75"
+          >
+            {display}
+          </HoverCardContent>
+        </HoverCard>
       </div>
     </div>
   );
 }
 
+export function McpServerCardStatus({
+  server,
+}: {
+  server: McpServer;
+}): React.JSX.Element | null {
+  if (server.remoteMcpServerId) {
+    return <MCPServerAvailabilityToggle server={server} />;
+  }
+
+  // Clients connect straight to the vendor, so visibility has nothing to gate.
+  if (server.unproxiedMcpServerId) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
+      <MCPServerStatusDropdown server={server} />
+    </div>
+  );
+}
+
 export function McpServerXSidebarNav(): React.JSX.Element | null {
+  const providerSetupRollout = useProviderSetupRollout();
   const routes = useRoutes();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const { hasScope, hasAnyScope } = useRBAC();
+  const mcpScoped =
+    useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
   const organization = useOrganization();
+  const project = useProject();
+  const skillsOverMcp = useSkillsOverMcpEnabled();
   const pluginScope = usePluginQueryScope();
   const canWritePlugins = usePluginWriteAccess();
   const canReadPlugins =
@@ -95,7 +411,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const { data: mcpServer } = useGetMcpServer(
     getMcpServerArgs(idOrSlug),
     undefined,
-    { enabled: idOrSlug !== "" },
+    { enabled: idOrSlug !== "", throwOnError: isNotNotFound },
   );
   const mcpServerId = mcpServer?.id ?? "";
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
@@ -135,7 +451,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const { data: remoteMcpServer } = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
-    { enabled: remoteMcpServerId !== "" },
+    { enabled: remoteMcpServerId !== "", throwOnError: false },
   );
   const unproxiedMcpServerId = mcpServer?.unproxiedMcpServerId ?? "";
   const { data: unproxiedMcpServer } = useGetUnproxiedMcpServer(
@@ -144,15 +460,22 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     { enabled: unproxiedMcpServerId !== "" },
   );
   const upstreamUrl = remoteMcpServer?.url ?? unproxiedMcpServer?.url;
-
-  const userSessionIssuerId = mcpServer?.userSessionIssuerId;
-  // A remote identity provider is attached when this server's issuer has at
-  // least one remote session client pairing.
-  const { items: remoteSessionClients } = useAllRemoteSessionClients(
-    { userSessionIssuerId },
-    { enabled: !!userSessionIssuerId },
+  // Reads the snapshot the Overview's tunnel status polls, so the readiness
+  // card and the status beside it agree without a second poller.
+  const tunnelConnections = useTunneledMcpConnections(
+    mcpServer?.tunneledMcpServerId ?? "",
   );
-  const hasRemoteIdentityProvider = remoteSessionClients.length > 0;
+
+  const authReadiness = useMcpServerAuthenticationReadiness(mcpServer);
+  const {
+    remoteIdentityMode,
+    passThroughAuthorization,
+    identityUnavailable,
+    isLoadingRemoteIdentity,
+    upstreamAuth,
+    upstreamAuthQuery,
+    identityProbeStatus,
+  } = authReadiness;
 
   // Mirrors PluginStatusBanner's isTrulyPublished: server membership in a
   // plugin alone isn't "included" if the marketplace repo was never
@@ -172,6 +495,30 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   );
   const isTrulyIncluded = isPluginMember && marketplaceReady;
 
+  const canonicalToolsetSlug =
+    mcpServer && isCanonicalHostedWrapper(mcpServer)
+      ? mcpServer.toolset?.slug
+      : undefined;
+  const { data: canonicalToolset } = useToolset(canonicalToolsetSlug, {
+    enabled: canonicalToolsetSlug !== undefined,
+    throwOnError: false,
+  });
+  const { data: environmentsData } = useListEnvironments(undefined, undefined, {
+    enabled: canonicalToolsetSlug !== undefined,
+  });
+  const { data: canonicalMetadata } = useGetMcpMetadata(
+    { toolsetSlug: canonicalToolsetSlug ?? "" },
+    undefined,
+    { enabled: canonicalToolsetSlug !== undefined, throwOnError: false },
+  );
+  // Settings carries the warning the toolset page put on Authentication.
+  const missingRequiredEnvVars = useMissingRequiredEnvVars(
+    canonicalToolset,
+    environmentsData?.environments ?? [],
+    canonicalToolset?.defaultEnvironmentSlug || "default",
+    canonicalMetadata?.metadata,
+  );
+
   if (!idOrSlug) return null;
 
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
@@ -179,23 +526,28 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const isTunneledBacked = !!mcpServer?.tunneledMcpServerId;
   const isUnproxied = !!mcpServer?.unproxiedMcpServerId;
   const isSourceBacked = isRemoteBacked || isTunneledBacked || isUnproxied;
+  const hosted = !!mcpServer && standsInForToolset(mcpServer);
+  // A hosted server is granted under its toolset id, like the API checks it.
+  const grantResourceId = mcpServer?.toolsetId ?? mcpServer?.id ?? "";
   const canViewTeamAccess =
     !!mcpServer &&
     hasScope("org:read", organization.id) &&
-    hasScope("mcp:read", mcpServer.id);
+    hasScope("mcp:read", grantResourceId);
+  // Same check as the Skills tab routes: skill read on this project. Only
+  // hosted and remote-backed servers have the tab.
+  const canViewSkills =
+    skillsOverMcp &&
+    (hosted || isRemoteBacked) &&
+    hasScope("skill:read", project.id, project.id);
 
-  let authenticationDescription =
-    "Attach a remote identity provider so users can access the upstream service.";
-  if (isUnproxied) {
-    authenticationDescription =
-      "Not applicable — the customer connects directly using the vendor's own credentials.";
-  } else if (hasRemoteIdentityProvider) {
-    authenticationDescription =
-      "A remote identity provider is attached to this server.";
-  } else if (isTunneledBacked) {
-    authenticationDescription =
-      "Speakeasy authentication is configured; upstream identity providers are optional.";
-  }
+  // Guardrails police traffic that passes through Speakeasy, so unproxied servers
+  // (which never do) have none. Admin-only, like the policies it manages.
+  const canViewGuardrails =
+    mcpScoped &&
+    !!mcpServer &&
+    !isUnproxied &&
+    hasScope("org:admin", organization.id) &&
+    hasScope("mcp:read", mcpServer.id);
 
   // Source detail pages are gone; the description still explains the backend,
   // but there is no separate page to send anyone to.
@@ -237,11 +589,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         {
           key: "authentication",
           label: "Authentication",
-          description: authenticationDescription,
-          ready:
-            isUnproxied ||
-            hasRemoteIdentityProvider ||
-            (isTunneledBacked && !!userSessionIssuerId),
+          description: authReadiness.description,
+          ready: authReadiness.ready,
           href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
         },
         {
@@ -250,6 +599,17 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           description: sourceDescription,
           ready: isSourceBacked,
         },
+        ...(isTunneledBacked
+          ? [
+              tunnelAgentReadiness({
+                connections: tunnelConnections.data,
+                loading: tunnelConnections.isLoading,
+                error: tunnelConnections.isError,
+                agentSetupHref: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`,
+                overviewHref: mcpServerTabHref(routes, idOrSlug, "overview"),
+              }),
+            ]
+          : []),
         ...(canReadPlugins
           ? [
               {
@@ -261,6 +621,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
                     ? "Marketplace needs publishing before this plugin is installable."
                     : "Add this server to a plugin so your team can install it.",
                 ready: isTrulyIncluded,
+                // Distribution is a later choice, not part of making the
+                // server work, so it never counts as a step left.
+                optional: true,
                 href: routes.plugins.href(),
               },
             ]
@@ -269,6 +632,20 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     : [];
 
   const items: DetailSidebarNavItem[] = [
+    ...(providerSetupRollout === "enabled" &&
+    mcpServer?.remoteMcpServerId &&
+    setupProviderForUrl(upstreamUrl) &&
+    hasScope("mcp:write", mcpServer.id)
+      ? [
+          {
+            key: "setup",
+            title: "Setup",
+            Icon: Wrench,
+            href: mcpServerTabHref(routes, idOrSlug, "setup"),
+            active: activeTab === "setup",
+          },
+        ]
+      : []),
     {
       key: "overview",
       title: "Overview",
@@ -280,17 +657,52 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     // their tools yet (the vendor's own auth blocks an anonymous probe, and
     // there's no fallback source wired up), so the tab had nothing useful to
     // show.
-    ...(isUnproxied
-      ? []
-      : [
+    ...(hosted
+      ? [
           {
-            key: "inspect",
-            title: "Inspect",
+            key: "tools",
+            title: "Tools",
             Icon: Wrench,
-            href: mcpServerTabHref(routes, idOrSlug, "inspect"),
-            active: activeTab === "inspect",
+            href: mcpServerTabHref(routes, idOrSlug, "tools"),
+            active: activeTab === "tools",
           },
-        ]),
+          {
+            key: "resources",
+            title: "Resources",
+            Icon: Database,
+            href: mcpServerTabHref(routes, idOrSlug, "resources"),
+            active: activeTab === "resources",
+          },
+          {
+            key: "prompts",
+            title: "Prompts",
+            Icon: MessageSquareText,
+            href: mcpServerTabHref(routes, idOrSlug, "prompts"),
+            active: activeTab === "prompts",
+          },
+        ]
+      : isUnproxied
+        ? []
+        : [
+            {
+              key: "inspect",
+              title: "Inspect",
+              Icon: Wrench,
+              href: mcpServerTabHref(routes, idOrSlug, "inspect"),
+              active: activeTab === "inspect",
+            },
+          ]),
+    ...(canViewSkills
+      ? [
+          {
+            key: "skills",
+            title: "Skills",
+            Icon: Terminal,
+            href: mcpServerTabHref(routes, idOrSlug, "skills"),
+            active: activeTab === "skills",
+          },
+        ]
+      : []),
     ...(canViewTeamAccess
       ? [
           {
@@ -302,8 +714,19 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           },
         ]
       : []),
+    ...(canViewGuardrails
+      ? [
+          {
+            key: "guardrails",
+            title: "Guardrails",
+            Icon: ShieldCheck,
+            href: mcpServerTabHref(routes, idOrSlug, "guardrails"),
+            active: activeTab === "guardrails",
+          },
+        ]
+      : []),
     // Hidden for unproxied servers: the customer connects straight to the
-    // vendor with the vendor's own credentials, so Gram never mints a session
+    // vendor with the vendor's own credentials, so Speakeasy never mints a session
     // or registers a client for them and the tab would always be empty.
     ...(isUnproxied
       ? []
@@ -320,6 +743,16 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       key: "settings",
       title: "Settings",
       Icon: SettingsIcon,
+      titleNode:
+        missingRequiredEnvVars > 0 ? (
+          <span className="flex items-center gap-1.5">
+            Settings
+            <AlertTriangle
+              className="text-warning h-3.5 w-3.5 shrink-0"
+              aria-label="Required environment variables not configured"
+            />
+          </span>
+        ) : undefined,
       href: mcpServerTabHref(routes, idOrSlug, "settings"),
       active: activeTab === "settings",
     },
@@ -327,34 +760,60 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
   const cardContent = mcpServer && (
     <>
-      <div className="flex items-center gap-2.5">
-        <SourceMcpIcon
-          mcpServerId={mcpServer.id}
-          className="h-6 w-6 shrink-0 object-contain"
-        />
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <Text className="truncate font-semibold">
-            {mcpServer.name || "MCP Server"}
-          </Text>
-          {isRemoteBacked && (
-            <DetailSidebarInfoLabel>Remote MCP</DetailSidebarInfoLabel>
-          )}
-          {isTunneledBacked && (
-            <DetailSidebarInfoLabel>Tunneled MCP</DetailSidebarInfoLabel>
-          )}
-          {isUnproxied && (
-            <DetailSidebarInfoLabel>Unproxied MCP</DetailSidebarInfoLabel>
-          )}
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <SourceMcpIcon
+            mcpServerId={mcpServer.id}
+            className="h-6 w-6 shrink-0 object-contain"
+          />
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <Text className="truncate font-semibold">
+              {mcpServer.name || "MCP Server"}
+            </Text>
+            {isRemoteBacked && (
+              <DetailSidebarInfoLabel>Remote MCP</DetailSidebarInfoLabel>
+            )}
+            {isTunneledBacked && (
+              <DetailSidebarInfoLabel>Tunneled MCP</DetailSidebarInfoLabel>
+            )}
+            {isUnproxied && (
+              <DetailSidebarInfoLabel>Unproxied MCP</DetailSidebarInfoLabel>
+            )}
+            {hosted && (
+              <DetailSidebarInfoLabel>Hosted MCP</DetailSidebarInfoLabel>
+            )}
+          </div>
         </div>
+        {isRemoteBacked ? <McpServerCardStatus server={mcpServer} /> : null}
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
-        <MCPServerStatusDropdown server={mcpServer} />
-      </div>
+      {isRemoteBacked ? null : <McpServerCardStatus server={mcpServer} />}
+
+      {isRemoteBacked && upstreamAuth !== "legacy" ? (
+        <UpstreamCredentialsIdentitySummary
+          status={upstreamAuthQuery.data?.status}
+          authenticationRequired={
+            identityProbeStatus === "authentication-required"
+          }
+          unavailable={upstreamAuth === "error" || upstreamAuthQuery.isError}
+          loading={upstreamAuth === "loading" || upstreamAuthQuery.isPending}
+          settingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
+        />
+      ) : isRemoteBacked ? (
+        <RemoteIdentitySummary
+          mode={remoteIdentityMode}
+          passThroughAuthorization={!!passThroughAuthorization}
+          authenticationRequired={
+            identityProbeStatus === "authentication-required"
+          }
+          unavailable={identityUnavailable}
+          loading={isLoadingRemoteIdentity}
+          settingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
+        />
+      ) : null}
 
       {publicRoutesEnabled && mcpUrl && (
-        <SidebarUrl
+        <SidebarUrlRow
           label={privateRoutesEnabled ? "Public URL" : "URL"}
           url={mcpUrl}
           copyTooltip="Copy public URL"
@@ -363,7 +822,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
       {privateRoutesEnabled &&
         privateMcpUrls.map((url, index) => (
-          <SidebarUrl
+          <SidebarUrlRow
             key={url}
             label={index === 0 ? "Private URL" : "Private URL (additional)"}
             url={url}
@@ -386,30 +845,36 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         </div>
       )}
 
-      {upstreamUrl && (
-        <SidebarUrl
-          label="Upstream URL"
-          url={upstreamUrl}
-          copyTooltip="Copy upstream URL"
-        />
-      )}
+      {hosted && mcpServer.toolset ? (
+        <div className="flex flex-col gap-1">
+          <DetailSidebarInfoLabel>Tools</DetailSidebarInfoLabel>
+          <Text variant="small">{hostedToolCountLabel(mcpServer.toolset)}</Text>
+        </div>
+      ) : null}
 
-      {/* Content-sized halves with one gutter either side of the rule: at
-          flex-1 the rule sat at the container's midpoint, which the longer
-          label crowded while the shorter one left slack. */}
-      <div className="border-border flex items-stretch justify-center gap-3 border-t pt-3">
+      {upstreamUrl ? (
+        <SidebarUrlRow
+          label="Remote URL"
+          url={upstreamUrl}
+          copyTooltip="Copy remote URL"
+        />
+      ) : null}
+
+      <div
+        className={`border-border flex gap-3 border-t pt-3 ${effectiveInstallPageLinks.length > 1 ? "flex-col items-start" : "items-stretch justify-center"}`}
+      >
         {effectiveInstallPageLinks.length > 0 ? (
-          <div className="flex flex-col items-center gap-1">
+          <div className="flex min-w-0 max-w-full flex-col items-start gap-1">
             {effectiveInstallPageLinks.map(({ url, label }) => (
               <a
                 key={url}
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
+                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 break-words text-xs font-semibold transition-colors hover:no-underline"
               >
                 {label}
-                <ExternalLink className="h-3 w-3" />
+                <ExternalLink className="size-3 shrink-0" />
               </a>
             ))}
           </div>
@@ -419,7 +884,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             <ExternalLink className="h-3 w-3" />
           </span>
         )}
-        <div className="bg-border w-px self-stretch" />
+        <div
+          className={`bg-border ${effectiveInstallPageLinks.length > 1 ? "h-px w-full" : "w-px self-stretch"}`}
+        />
         {isUnproxied ? (
           <span className="text-muted-foreground/50 flex cursor-not-allowed items-center gap-1 text-xs font-semibold">
             Playground
@@ -430,7 +897,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             queryParams={
               isRemoteBacked || isTunneledBacked
                 ? { mcpServer: mcpServer.id }
-                : undefined
+                : hosted && mcpServer.toolset
+                  ? { toolset: mcpServer.toolset.slug }
+                  : undefined
             }
             className="flex items-center hover:no-underline"
           >

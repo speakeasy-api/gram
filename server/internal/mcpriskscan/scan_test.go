@@ -33,7 +33,7 @@ func TestNoop_DoesNotPromoteCredentialOwnerToPrincipal(t *testing.T) {
 		Method: mcpriskscan.MethodToolsCall,
 	}
 	evaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, event, mcpriskscan.BorrowPayload(nil)))
-	apiKeyCtx := mcpidentity.NewValidatorBoundary().StampAPIKey(ctx)
+	apiKeyCtx := mcpidentity.NewValidatorBoundary().StampAPIKey(ctx, "key_test")
 	evaluator.Scan(apiKeyCtx, mcpriskscan.NewRequest(apiKeyCtx, event, mcpriskscan.BorrowPayload(nil)))
 	assistantCtx := mcpidentity.NewValidatorBoundary().StampAssistant(ctx)
 	evaluator.Scan(assistantCtx, mcpriskscan.NewRequest(assistantCtx, event, mcpriskscan.BorrowPayload(nil)))
@@ -101,6 +101,8 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 		attrs := attribute.NewSet(
 			attribute.String("gram.mcp.risk.scan.surface", seam.surface),
 			attribute.String("gram.mcp.risk.scan.method", seam.method),
+			attribute.String("gram.mcp.risk.scan.phase", mcpriskscan.PhaseRequest),
+			attribute.String("gram.mcp.risk.scan.decision", "allow"),
 		)
 		wantCounts[attrs] = 2
 		ctx := t.Context()
@@ -111,7 +113,7 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 				ServerID: "server-" + suffix, ToolsetID: "toolset-" + suffix,
 				ToolName: "tool-" + suffix, ResourceURI: "resource://" + suffix, PromptName: "prompt-" + suffix,
 			}, mcpriskscan.BorrowPayload([]byte(suffix))))
-			ctx = mcpidentity.NewValidatorBoundary().StampAPIKey(ctx)
+			ctx = mcpidentity.NewValidatorBoundary().StampAPIKey(ctx, "key_test")
 		}
 	}
 
@@ -134,7 +136,7 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 	for _, point := range scans.DataPoints {
 		counts[point.Attributes] = point.Value
 	}
-	require.Equal(t, wantCounts, counts, "phase, identifiers, principal and payload must not create metric series")
+	require.Equal(t, wantCounts, counts, "identifiers, principal and payload must not create metric series")
 
 	duration, ok := collected["mcp.risk.scan.duration"].Data.(metricdata.Histogram[float64])
 	require.True(t, ok, "scan duration must be a seconds histogram")
@@ -182,7 +184,7 @@ func TestEvaluator_IgnoresNonOwnerSurface(t *testing.T) {
 
 func TestNewResponse_ReusesExecutionAndTrustedPrincipal(t *testing.T) {
 	t.Parallel()
-	ctx := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context())
+	ctx := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context(), "key_test")
 	request := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface: mcpriskscan.SurfaceRemoteMCP,
 		Method:  mcpriskscan.MethodToolsCall,

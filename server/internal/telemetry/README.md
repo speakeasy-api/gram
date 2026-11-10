@@ -14,7 +14,7 @@ We follow the **wide event** (or "wide structured log") pattern. Instead of scat
 - [ClickHouse — Schema Design for Observability](https://clickhouse.com/docs/use-cases/observability/schema-design)
 - [ClickHouse — Working with Time Series Data](https://clickhouse.com/blog/working-with-time-series-data-and-functions-ClickHouse)
 
-### How it works in Gram
+### How it works in Speakeasy
 
 Each telemetry log row in `telemetry_logs` contains:
 
@@ -63,13 +63,13 @@ The table below shows representative keys from each category. See `conventions.g
 | **User**                 | `user.id`                                                                                                                                                     | [General semconv](https://opentelemetry.io/docs/specs/semconv/general/attributes/) |
 | **Error**                | `error.message`, `exception.stacktrace`                                                                                                                       | [Error semconv](https://opentelemetry.io/docs/specs/semconv/exceptions/)           |
 
-### Custom Gram keys (`gram.*`)
+### Custom Speakeasy keys (`gram.*`)
 
-The `gram.*` prefix is used for attributes that are **Gram system-generated** — they identify internal Gram concepts that have no OTel equivalent. These are not fallbacks; they are explicitly namespaced to make it clear the attribute originates from the Gram platform.
+The `gram.*` prefix is used for attributes that are **Speakeasy system-generated** — they identify internal Speakeasy concepts that have no OTel equivalent. These are not fallbacks; they are explicitly namespaced to make it clear the attribute originates from the Speakeasy platform.
 
 | Key                      | Description                                            |
 | ------------------------ | ------------------------------------------------------ |
-| `gram.project.id`        | Gram project UUID                                      |
+| `gram.project.id`        | Speakeasy project UUID                                 |
 | `gram.deployment.id`     | Deployment UUID                                        |
 | `gram.function.id`       | Serverless function UUID                               |
 | `gram.tool.urn`          | Tool URN (e.g., `tools:function:my-source:my-tool`)    |
@@ -371,7 +371,7 @@ Key testing patterns:
 - Create helper functions for inserting test data
 - Use table-driven tests with descriptive names
 - For logger-backed query fixtures, use `require.NoError(t, logger.LogSyncForTest(ctx, params))`. This test-only helper preserves the normal logger pipeline but uses synchronous inserts, so rows are committed before it returns and no async queue flush is needed.
-- Production telemetry writes use ClickHouse [async inserts](https://clickhouse.com/docs/optimize/asynchronous-inserts). Tests that exercise that path still need `testenv.FlushClickHouseAsyncInserts(t, conn)` (`server/internal/testenv/clickhouse.go`) before querying. Do not treat the shared queue flush as a per-write completion barrier: it can miss batches already dequeued for a background flush. Prefer synchronous inserts when testing query behavior rather than async ingestion.
+- Production telemetry writes use ClickHouse [async inserts](https://clickhouse.com/docs/optimize/asynchronous-inserts). They set `async_insert=1` per query and leave `wait_for_async_insert` to the connection: the server connection sets 0 (fire-and-forget), and the test connection (`server/internal/testenv/clickhouse.go`) sets 1, so in tests the insert returns only once its rows and the materialized views they feed are committed. Read directly after the write returns. Every other insert must state its own posture (`async_insert=0`, or `async_insert=1` with `wait_for_async_insert=1`): ClickHouse defaults `async_insert` to 1 since 26.2, so an insert that sends no async settings is fire-and-forget on the server connection. Do not pin `wait_for_async_insert=0` on a query, which would override the test connection, and do not flush the queue (`SYSTEM FLUSH ASYNC INSERT QUEUE`) as a per-write barrier: it can miss batches already dequeued for a background flush.
 - **Never wait for visibility non-deterministically** — no `time.Sleep` (enforced repo-wide via `forbidigo`; see the `golang` skill) and no `require.EventuallyWithT` polling for async-insert visibility. Polling masks the real synchronization point, slows tests, and still flakes under load. Reserve `require.EventuallyWithT` for conditions that are genuinely eventually consistent with no explicit flush mechanism.
 
 ## Data Models

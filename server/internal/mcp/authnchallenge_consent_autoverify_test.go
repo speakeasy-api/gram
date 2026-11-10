@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -135,7 +137,7 @@ func TestConsentAutoVerify_PendingUntilProbeFinishes(t *testing.T) {
 		"&verifying_until=" + strconv.FormatInt(deadline.UnixMilli(), 10)
 	page := renderConsentAt(t, fx, target)
 	require.Contains(t, page, `data-validation="pending"`)
-	require.Contains(t, page, `>Connected<span class="text-muted-foreground" data-validation="pending" > · Verifying…</span >`)
+	require.Contains(t, page, `>Service connected<span class="text-muted-foreground" data-validation="pending" > · Verifying…</span >`)
 	require.Contains(t, page, `data-verify-deadline-ms="`+strconv.FormatInt(deadline.UnixMilli(), 10)+`"`)
 	require.NotContains(t, page, "Not yet verified")
 	require.NotContains(t, page, "data-auto-close", "a first-party tab stays open while a verdict is pending")
@@ -235,7 +237,7 @@ func TestConsentAutoVerify_AdoptedRefreshWinnerIsSkipped(t *testing.T) {
 func configureAutoRefreshGrant(t *testing.T, ctx context.Context, fx validationFixture, tokenEndpoint string) remotesessions_repo.RemoteSession {
 	t.Helper()
 	projectID, orgID := consentTestTenant(t, ctx)
-	rows, err := remotesessions_repo.New(fx.ti.conn).ForceRemoteSessionIssuerTokenEndpointFixture(ctx, remotesessions_repo.ForceRemoteSessionIssuerTokenEndpointFixtureParams{
+	rows, err := testrepo.New(fx.ti.conn).ForceRemoteSessionIssuerTokenEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerTokenEndpointFixtureParams{
 		TokenEndpoint:         conv.ToPGText(tokenEndpoint),
 		RemoteSessionClientID: fx.clientID,
 		ProjectID:             projectID,
@@ -371,7 +373,7 @@ func TestConsentAutoVerify_IntrospectionRunsBesideTheProbe(t *testing.T) {
 	projectID, orgID := consentTestTenant(t, ctx)
 	var body atomic.Pointer[string]
 	body.Store(conv.PtrEmpty(`{"active":false}`))
-	rows, err := remotesessions_repo.New(fx.ti.conn).ForceRemoteSessionIssuerEnrichmentEndpointsFixture(ctx, remotesessions_repo.ForceRemoteSessionIssuerEnrichmentEndpointsFixtureParams{
+	rows, err := testrepo.New(fx.ti.conn).ForceRemoteSessionIssuerEnrichmentEndpointsFixture(ctx, testrepo.ForceRemoteSessionIssuerEnrichmentEndpointsFixtureParams{
 		UserinfoEndpoint:      pgtype.Text{String: "", Valid: false},
 		IntrospectionEndpoint: conv.ToPGText(introspectionServer(t, &body)),
 		JwksUri:               pgtype.Text{String: "", Valid: false},

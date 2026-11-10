@@ -9,13 +9,17 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * A remote_session record — Gram's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.
+ * A remote_session record — Speakeasy's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.
  */
 export type RemoteSession = {
   /**
    * Upstream access-token expiry. Independent of refresh_expires_at.
    */
   accessExpiresAt: Date;
+  /**
+   * Upstream authorization deadline. When present, the connection cannot be used or refreshed after this time even if its tokens have later expiries.
+   */
+  authorizationExpiresAt?: Date | undefined;
   createdAt: Date;
   /**
    * Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.
@@ -30,6 +34,10 @@ export type RemoteSession = {
    */
   identitySource?: string | undefined;
   /**
+   * Last recorded upstream request, accurate to within five minutes. Null means unknown.
+   */
+  lastUsedAt?: Date | undefined;
+  /**
    * Upstream refresh-token expiry. Null when the session has no refresh token.
    */
   refreshExpiresAt?: Date | undefined;
@@ -42,11 +50,11 @@ export type RemoteSession = {
    */
   scopes: Array<string>;
   /**
-   * Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+   * Resolved display name when the subject is a Speakeasy user. Absent for apikey/anonymous subjects or unresolved users.
    */
   subjectDisplayName?: string | undefined;
   /**
-   * Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+   * Resolved email when the subject is a Speakeasy user. Absent for apikey/anonymous subjects or unresolved users.
    */
   subjectEmail?: string | undefined;
   /**
@@ -59,7 +67,7 @@ export type RemoteSession = {
    */
   upstreamDisplayName?: string | undefined;
   /**
-   * Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Gram subject.
+   * Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Speakeasy subject.
    */
   upstreamEmail?: string | undefined;
   /**
@@ -78,6 +86,9 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    authorization_expires_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -85,6 +96,9 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
     has_refresh_token: z.boolean(),
     id: z.string(),
     identity_source: z.optional(z.string()),
+    last_used_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     refresh_expires_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -104,9 +118,11 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "access_expires_at": "accessExpiresAt",
+      "authorization_expires_at": "authorizationExpiresAt",
       "created_at": "createdAt",
       "has_refresh_token": "hasRefreshToken",
       "identity_source": "identitySource",
+      "last_used_at": "lastUsedAt",
       "refresh_expires_at": "refreshExpiresAt",
       "remote_session_client_id": "remoteSessionClientId",
       "subject_display_name": "subjectDisplayName",

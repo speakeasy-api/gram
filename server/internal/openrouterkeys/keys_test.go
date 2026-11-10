@@ -371,7 +371,7 @@ func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
 		require.NoError(t, err)
 		testBaseURL, err := openrouter.WithTestBaseURL(upstream.URL)
 		require.NoError(t, err)
-		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, nil, enc, testBaseURL)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, enc, testBaseURL)
 	})
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "enablereal", "chat", "sk-or-enable-real")
@@ -617,7 +617,7 @@ func TestAdminReconciliationRangeIsBoundedAndUsesOrganizationSequenceIndex(t *te
 	require.Equal(t, matching, advanced)
 	require.Equal(t, before+1, ti.provisioner.ReconcileCalls(), "a recent matching event must PATCH")
 
-	//nolint:glint // This regression intentionally inspects PostgreSQL's plan for the production query.
+	//nolint:glint // notestingrawsql: This regression intentionally inspects PostgreSQL's plan for the production query.
 	rows, err := ti.conn.Query(ctx, `
 EXPLAIN (COSTS OFF)
 SELECT seq
@@ -705,7 +705,6 @@ func TestEnableKeyWaitsForPerKeyBillingLock(t *testing.T) {
 	})
 
 	result := make(chan error, 1)
-	acquiredBeforeEnable := ti.conn.Stat().AcquiredConns()
 	go func() {
 		_, enableErr := ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{
 			SessionToken:   nil,
@@ -714,15 +713,8 @@ func TestEnableKeyWaitsForPerKeyBillingLock(t *testing.T) {
 		})
 		result <- enableErr
 	}()
-	require.Eventually(t, func() bool {
-		// EnableKey holds its acquired session while pg_advisory_lock waits on
-		// lockConn. Seeing the additional held connection proves the operation
-		// reached the contested lock before the negative assertion starts.
-		return ti.conn.Stat().AcquiredConns() > acquiredBeforeEnable
-	}, 5*time.Second, 10*time.Millisecond)
-	require.Never(t, func() bool {
-		return len(ti.provisioner.RefreshCalls()) > 0
-	}, 150*time.Millisecond, 10*time.Millisecond)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, lockConn.Conn().PgConn().PID(), 1)
+	require.Empty(t, ti.provisioner.RefreshCalls())
 
 	unlocked, err := lockQueries.ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(lockParams))
 	require.NoError(t, err)
@@ -1451,7 +1443,7 @@ func newRealOpenRouterTestService(t *testing.T, baseURL string) (context.Context
 		require.NoError(t, err)
 		testBaseURL, err := openrouter.WithTestBaseURL(baseURL)
 		require.NoError(t, err)
-		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-secret", nil, nil, nil, enc, testBaseURL)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-secret", nil, nil, enc, testBaseURL)
 	})
 }
 

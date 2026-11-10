@@ -1,6 +1,7 @@
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { Badge } from "@/components/ui/Badge";
@@ -114,6 +115,7 @@ function inventoryAccessStatus(
     case "unenforced":
       return "observed";
   }
+  return "unknown";
 }
 
 function serverLabel(server: ShadowMCPInventoryServer): string {
@@ -437,9 +439,9 @@ export function ShadowMCPPolicyServerSelector({
   let selectionContent: JSX.Element;
   if (isLoading) {
     selectionContent = (
-      <Text muted small>
-        Loading Shadow MCP inventory…
-      </Text>
+      <div role="status" aria-label="Loading Shadow MCP inventory">
+        <Skeleton className="h-11 w-full" />
+      </div>
     );
   } else if (error) {
     selectionContent = (

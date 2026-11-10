@@ -37,6 +37,7 @@ func TestListIssuers(t *testing.T) {
 	result, err := ti.service.ListIssuers(ctx, &orgissuersgen.ListIssuersPayload{
 		Cursor:       nil,
 		Limit:        nil,
+		Tier:         nil,
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})
@@ -61,6 +62,44 @@ func TestListIssuers(t *testing.T) {
 	require.Equal(t, 1, gotProj.ClientCount)
 }
 
+// TestListIssuers_TierListsOneTierOnly proves each tier filter returns only
+// its own rows, so the platform catalog cannot fill a page meant for the
+// organization's own issuers.
+func TestListIssuers_TierListsOneTierOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	orgIssuer, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("tier-list-org", nil))
+	require.NoError(t, err)
+	projIssuerID := createRemoteIssuer(t, ctx, ti, "tier-list-proj", "")
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "tier-list-platform").String()
+
+	listTier := func(tier string) map[string]bool {
+		result, err := ti.service.ListIssuers(ctx, &orgissuersgen.ListIssuersPayload{
+			Cursor:       nil,
+			Limit:        nil,
+			Tier:         new(tier),
+			SessionToken: nil,
+			ApikeyToken:  nil,
+		})
+		require.NoError(t, err)
+		ids := make(map[string]bool, len(result.Items))
+		for _, item := range result.Items {
+			ids[item.Issuer.ID] = true
+		}
+		return ids
+	}
+
+	all := []string{orgIssuer.ID, projIssuerID, platformID}
+	for tier, want := range map[string]string{"organization": orgIssuer.ID, "project": projIssuerID, "platform": platformID} {
+		ids := listTier(tier)
+		for _, id := range all {
+			require.Equal(t, id == want, ids[id], "%s tier listing of %s", tier, id)
+		}
+	}
+}
+
 // TestListIssuers_CrossOrgIsolation proves an issuer owned by another
 // organization is never surfaced to this org's admin.
 func TestListIssuers_CrossOrgIsolation(t *testing.T) {
@@ -74,6 +113,7 @@ func TestListIssuers_CrossOrgIsolation(t *testing.T) {
 	result, err := ti.service.ListIssuers(ctx, &orgissuersgen.ListIssuersPayload{
 		Cursor:       nil,
 		Limit:        nil,
+		Tier:         nil,
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})
@@ -104,6 +144,7 @@ func TestListIssuers_RBACForbidden(t *testing.T) {
 	_, err := ti.service.ListIssuers(ctx, &orgissuersgen.ListIssuersPayload{
 		Cursor:       nil,
 		Limit:        nil,
+		Tier:         nil,
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})
@@ -211,7 +252,9 @@ func TestUpdateIssuerRejectsCapabilitiesThatInvalidateTrustedClient(t *testing.T
 func TestDeleteIssuer_SerializedAgainstClientBinding(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	// probeTimeout bounds the server lock probe, independently of goroutine scheduling.
+	const probeTimeout = 100 * time.Millisecond
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{lockTimeout: probeTimeout})
 
 	issuerID := createRemoteIssuer(t, ctx, ti, "admin-delissuer-lock", "")
 
@@ -221,23 +264,19 @@ func TestDeleteIssuer_SerializedAgainstClientBinding(t *testing.T) {
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, repo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, parsed))
 
-	done := make(chan error, 1)
-	go func() {
-		done <- ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{
-			ID:           issuerID,
-			SessionToken: nil,
-			ApikeyToken:  nil,
-		})
-	}()
-
-	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
-		"delete completed while another transaction held the client-binding lock")
-
+	probeErr := ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{
+		ID:           issuerID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	testenv.RequireLockNotAvailable(t, probeErr)
 	require.NoError(t, tx.Rollback(ctx))
-
-	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
-		"delete did not complete after the client-binding lock was released")
-	require.NoError(t, <-done)
+	probeErr = ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{
+		ID:           issuerID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, probeErr)
 }
 
 // TestDeleteIssuer_CrossOrgNotFound proves an issuer owned by another
@@ -844,6 +883,7 @@ func TestListIssuers_PlatformIssuerClientCountIsOrgScoped(t *testing.T) {
 	result, err := ti.service.ListIssuers(ctx, &orgissuersgen.ListIssuersPayload{
 		Cursor:       nil,
 		Limit:        nil,
+		Tier:         nil,
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})
@@ -878,6 +918,7 @@ func TestListIssuers_ClientCountIncludesPreBackfillClients(t *testing.T) {
 	result, err := ti.service.ListIssuers(ctx, &orgissuersgen.ListIssuersPayload{
 		Cursor:       nil,
 		Limit:        nil,
+		Tier:         nil,
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})

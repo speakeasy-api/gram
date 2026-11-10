@@ -128,7 +128,7 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 	if !needed {
 		return
 	}
-	policies, err := repo.ListEnabledRiskPoliciesByProject(ctx, *authCtx.ProjectID)
+	policies, err := repo.ListEnabledUnscopedRiskPoliciesByProject(ctx, *authCtx.ProjectID)
 	var policyGenerations []string
 	if err != nil {
 		s.logger.WarnContext(ctx, "load skill prompt injection policy generation", attr.SlogError(err))

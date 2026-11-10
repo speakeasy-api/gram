@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"log/slog"
 	"strings"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
@@ -23,12 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
-
-// DefaultChatTitle is the placeholder a chat is seeded with until the async
-// title generator produces a real one. It must be a sentinel recognized by
-// isDefaultChatTitle (background/activities/generate_chat_title.go), or the
-// chat is treated as deliberately titled and never retitled.
-const DefaultChatTitle = "New Chat"
 
 // ChatMessageCaptureStrategy captures completion messages to the database.
 // It implements the MessageCaptureStrategy interface.
@@ -71,7 +67,7 @@ func NewChatMessageCaptureStrategy(
 
 func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request openrouter.CompletionRequest) (openrouter.CaptureSession, error) {
 	chatID := request.ChatID
-	if chatID == uuid.Nil {
+	if chatID == uuid.Nil || assistanttokens.InferenceTranscriptOwned(ctx) {
 		return nil, nil // No chat ID, so no need to start or resume a chat
 	}
 
@@ -80,8 +76,8 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		return nil, oops.E(oops.CodeUnexpected, err, "parse project ID").LogError(ctx, s.logger)
 	}
 	orgID := request.OrgID
-	userID := request.UserID
-	externalUserID := request.ExternalUserID
+
+	identity := captureIdentity(ctx, request)
 
 	// Create chat with placeholder title - title generation happens via the generateTitle RPC.
 	//
@@ -94,14 +90,15 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		ID:             chatID,
 		ProjectID:      projectID,
 		OrganizationID: orgID,
-		UserID:         conv.ToPGText(userID),
-		ExternalUserID: conv.ToPGText(externalUserID),
+		UserID:         identity.userID,
+		ExternalUserID: identity.externalUserID,
+		AgentID:        identity.agentID,
 		Title:          conv.ToPGText(DefaultChatTitle),
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// Only reachable when the id names a chat in another project, so the
-		// public message must not say so. Cause is kept for logs.
+		// Reached when the id names a chat in another project or a session another
+		// agent drives, so the public message must not say which. Cause is kept for logs.
 		return nil, oops.E(oops.CodeNotFound, err, "chat not found")
 	case err != nil:
 		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))
@@ -134,7 +131,17 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		}, nil
 	}
 
-	rows := buildPendingRows(request, projectID, userID, externalUserID, newMessages, generation)
+	rows := buildPendingRows(request, projectID, request.UserID, request.ExternalUserID, newMessages, generation)
+	if matchResult.diverged {
+		slots := make([]messageSlot, len(newMessages))
+		for i, message := range newMessages {
+			slots[i] = slotFromIncoming(message)
+		}
+		lineages := transcriptLineage(matchResult.previous, slots, false)
+		for i := range rows {
+			rows[i].lineage = lineages[i]
+		}
+	}
 
 	if err := s.writer.WriteWithAssets(ctx, projectID, rows); err != nil {
 		s.logger.ErrorContext(ctx, "failed to store chat messages", attr.SlogError(err))
@@ -157,6 +164,7 @@ type matchResult struct {
 	generation    int32
 	matchedPrefix int
 	diverged      bool
+	previous      []repo.ListChatMessagesForMatchRow
 }
 
 // matchIncomingAgainstStored finds the longest matching prefix between
@@ -229,6 +237,7 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 		generation:    currentGen,
 		matchedPrefix: ii,
 		diverged:      diverged,
+		previous:      stored,
 	}, nil
 }
 
@@ -289,6 +298,7 @@ func buildPendingRows(
 			completionTokens: 0,
 			totalTokens:      0,
 			generation:       generation,
+			lineage:          nil,
 		}
 	}
 	return rows
@@ -302,7 +312,7 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 	response openrouter.CompletionResponse,
 ) error {
 	// Skip if no chat ID
-	if request.ChatID == uuid.Nil {
+	if request.ChatID == uuid.Nil || assistanttokens.InferenceTranscriptOwned(ctx) {
 		return nil
 	}
 
@@ -434,15 +444,17 @@ func buildAssistantRows(
 
 	assistantID, workloadSource := messageReadingAttribution(ctx, request.UsageSource)
 	return []MessageWrite{{
-		Params:         only,
-		BillingUserID:  request.UserID,
-		AssistantID:    assistantID,
-		WorkloadSource: workloadSource,
-		UserEmail:      request.UserEmail,
-		Provider:       response.Provider,
-		HookHostname:   "",
-		AccountType:    "",
-		BillingMode:    "",
+		Params:            only,
+		BillingUserID:     request.UserID,
+		AssistantID:       assistantID,
+		WorkloadSource:    workloadSource,
+		UserEmail:         request.UserEmail,
+		Provider:          response.Provider,
+		InferenceProvider: response.Provider,
+		Lineage:           nil,
+		HookHostname:      "",
+		AccountType:       "",
+		BillingMode:       "",
 	}}
 }
 
@@ -597,4 +609,39 @@ func (s *NoOpCaptureStrategy) CaptureMessage(
 	_ openrouter.CompletionResponse,
 ) error {
 	return nil
+}
+
+// captureIdentityColumns is who a captured session is attributed to, as written
+// on the chat row.
+type captureIdentityColumns struct {
+	userID         pgtype.Text
+	externalUserID pgtype.Text
+	agentID        uuid.NullUUID
+}
+
+// captureIdentity resolves the identity columns for one completion.
+//
+// A completion made with an agent credential, or by a workload admitted for an
+// agent, is the agent's activity. Its auth context carries no human identity
+// (the authorizer is who the agent acts for, not who performed the turn), so
+// the identity columns must stay NULL rather than hold an empty string: an
+// empty user_id is not an author, but it still disqualifies the session from
+// the agent-only shape that lets the agent's owner open it. If an agent-actor
+// turn ever carries a human identity, that identity is kept and the agent is
+// attribution only. Human turns keep writing the request identity as before,
+// empty strings included.
+func captureIdentity(ctx context.Context, request openrouter.CompletionRequest) captureIdentityColumns {
+	agentID, actsAsAgent := contextvalues.EffectiveAgentID(ctx)
+	if !actsAsAgent {
+		return captureIdentityColumns{
+			userID:         conv.ToPGText(request.UserID),
+			externalUserID: conv.ToPGText(request.ExternalUserID),
+			agentID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}
+	}
+	return captureIdentityColumns{
+		userID:         conv.ToPGTextEmpty(request.UserID),
+		externalUserID: conv.ToPGTextEmpty(request.ExternalUserID),
+		agentID:        conv.ToNullUUID(agentID),
+	}
 }

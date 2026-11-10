@@ -7,6 +7,7 @@ SELECT
   , o.org_url
   , o.agent_id
   , o.agent_app_id
+  , o.remote_session_issuer_id
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -34,11 +35,22 @@ FOR UPDATE;
 
 -- Servers the organization owns (tenancy through projects, since mcp_servers
 -- has no organization column) with a live backend and an authorization server
--- the organization can see. Whether Speakeasy fronts the user login does not
--- matter: readiness is about the upstream authorization server. Undiscovered
--- issuers are returned so the list can count them; whether the issuer
--- advertises ID-JAG is decided in Go so the derivation stays pure.
+-- the organization can see. The authorization server comes from the server's
+-- live client associations; a server with none or several is left out. Whether
+-- Speakeasy fronts the user login does not matter: readiness is about the
+-- upstream authorization server. Undiscovered issuers are returned so the list
+-- can count them; whether the issuer advertises ID-JAG is decided in Go so the
+-- derivation stays pure.
 -- name: ListEligibleServers :many
+-- Typed auth clients choose upstream authentication only for proxied servers.
+-- Unproxied servers have no typed offers and retain their derived issuer and clients.
+-- The enforced-and-proxied predicate appears four times in this file, twice per
+-- query, and changes with them and with Go code that gates typed auth clients on
+-- remote or tunneled backends.
+-- Where typed auth clients apply (typed_auth_enforced),
+-- a server's authorization server is the one its personal or identity-provider
+-- auth clients offer: an identity-provider client's if it offers one, else the
+-- first by id. Elsewhere it is the one its live client associations name.
 SELECT
     ms.id
   , ms.project_id
@@ -47,6 +59,25 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , (@typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL))::boolean AS typed_auth_enforced
+  , ARRAY(
+      SELECT oc.id
+      FROM mcp_server_auth_clients AS ol
+      JOIN mcp_auth_clients AS oa
+        ON oa.id = ol.auth_client_id
+       AND oa.organization_id = ol.organization_id
+       AND oa.deleted IS FALSE
+       AND oa.enabled
+       AND oa.client_type IN ('ema', 'remote_session')
+      JOIN remote_session_clients AS oc
+        ON oc.id = oa.remote_session_client_id
+       AND oc.deleted IS FALSE
+      WHERE ol.mcp_server_id = ms.id
+        AND ol.project_id = ms.project_id
+        AND ol.deleted IS FALSE
+      ORDER BY oc.id
+    )::uuid[] AS offered_client_ids
+  , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
   , i.authorization_grant_profiles_supported
@@ -59,7 +90,36 @@ JOIN projects AS p
  AND p.organization_id = @organization_id
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = ms.remote_session_issuer_id
+  ON i.id = CASE WHEN @typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
+       SELECT oc.remote_session_issuer_id
+       FROM mcp_server_auth_clients AS ol
+       JOIN mcp_auth_clients AS oa
+         ON oa.id = ol.auth_client_id
+        AND oa.organization_id = ol.organization_id
+        AND oa.deleted IS FALSE
+        AND oa.enabled
+        AND oa.client_type IN ('ema', 'remote_session')
+       JOIN remote_session_clients AS oc
+         ON oc.id = oa.remote_session_client_id
+        AND oc.deleted IS FALSE
+       WHERE ol.mcp_server_id = ms.id
+         AND ol.project_id = ms.project_id
+         AND ol.deleted IS FALSE
+       ORDER BY (oa.client_type = 'ema') DESC, oc.id
+       LIMIT 1
+     ) ELSE (
+       SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                   THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
+       FROM mcp_server_remote_session_clients AS a
+       JOIN remote_session_clients AS c
+         ON c.id = a.remote_session_client_id
+        AND c.deleted IS FALSE
+       JOIN remote_session_issuers AS provider
+         ON provider.id = c.remote_session_issuer_id
+        AND provider.deleted IS FALSE
+       WHERE a.mcp_server_id = ms.id
+         AND a.deleted IS FALSE
+     ) END
  AND i.deleted IS FALSE
  AND (
    i.project_id = ms.project_id
@@ -104,6 +164,25 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , (@typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL))::boolean AS typed_auth_enforced
+  , ARRAY(
+      SELECT oc.id
+      FROM mcp_server_auth_clients AS ol
+      JOIN mcp_auth_clients AS oa
+        ON oa.id = ol.auth_client_id
+       AND oa.organization_id = ol.organization_id
+       AND oa.deleted IS FALSE
+       AND oa.enabled
+       AND oa.client_type IN ('ema', 'remote_session')
+      JOIN remote_session_clients AS oc
+        ON oc.id = oa.remote_session_client_id
+       AND oc.deleted IS FALSE
+      WHERE ol.mcp_server_id = ms.id
+        AND ol.project_id = ms.project_id
+        AND ol.deleted IS FALSE
+      ORDER BY oc.id
+    )::uuid[] AS offered_client_ids
+  , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
   , i.authorization_grant_profiles_supported
@@ -116,7 +195,36 @@ JOIN projects AS p
  AND p.organization_id = @organization_id
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = ms.remote_session_issuer_id
+  ON i.id = CASE WHEN @typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
+       SELECT oc.remote_session_issuer_id
+       FROM mcp_server_auth_clients AS ol
+       JOIN mcp_auth_clients AS oa
+         ON oa.id = ol.auth_client_id
+        AND oa.organization_id = ol.organization_id
+        AND oa.deleted IS FALSE
+        AND oa.enabled
+        AND oa.client_type IN ('ema', 'remote_session')
+       JOIN remote_session_clients AS oc
+         ON oc.id = oa.remote_session_client_id
+        AND oc.deleted IS FALSE
+       WHERE ol.mcp_server_id = ms.id
+         AND ol.project_id = ms.project_id
+         AND ol.deleted IS FALSE
+       ORDER BY (oa.client_type = 'ema') DESC, oc.id
+       LIMIT 1
+     ) ELSE (
+       SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                   THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
+       FROM mcp_server_remote_session_clients AS a
+       JOIN remote_session_clients AS c
+         ON c.id = a.remote_session_client_id
+        AND c.deleted IS FALSE
+       JOIN remote_session_issuers AS provider
+         ON provider.id = c.remote_session_issuer_id
+        AND provider.deleted IS FALSE
+       WHERE a.mcp_server_id = ms.id
+         AND a.deleted IS FALSE
+     ) END
  AND i.deleted IS FALSE
  AND (
    i.project_id = ms.project_id
@@ -163,6 +271,7 @@ SELECT
   , c.resource_identifier
   , i.scope_override AS issuer_scope_override
   , i.scopes_supported AS issuer_scopes_supported
+  , i.omit_scope_fallback AS issuer_omit_scope_fallback
   , (
       SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
       FROM remote_session_client_user_session_issuers AS link
@@ -188,6 +297,26 @@ WHERE c.deleted IS FALSE
     OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id))
   )
 ORDER BY c.remote_session_issuer_id, c.project_id NULLS LAST, c.created_at, c.id;
+
+-- name: ListRemoteProtectedResourceScopes :many
+-- What the cached protected resource rows say about scopes, for any of the
+-- given projects and upstream URLs; callers match rows back to servers.
+SELECT
+    rpr.project_id
+  , rpr.resource_identifier
+  , rpr.scope_override
+  , rpr.challenge_scopes
+  , rpr.scopes_supported
+  , rpr.metadata_fetched_at
+  , COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
+FROM remote_protected_resources AS rpr
+JOIN projects AS p
+  ON p.id = rpr.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE rpr.project_id = ANY (@project_ids::uuid[])
+  AND rpr.resource_identifier = ANY (@resource_identifiers::text[])
+  AND rpr.deleted IS FALSE;
 
 -- name: ListEMABindings :many
 SELECT
@@ -244,8 +373,28 @@ WHERE organization_id = @organization_id
   AND resource = @resource
 FOR UPDATE;
 
--- A row is the confirmation. Repeating it updates the audience and keeps the
--- recorded app instance unless a new one is given.
+-- The observer's unlocked first read rejects stale attempts without taking a lock.
+-- Concurrently locked rows are skipped by GetResourceConnectionForObservation.
+-- name: GetResourceConnection :one
+SELECT *
+FROM okta_resource_connections
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND remote_session_issuer_id = @remote_session_issuer_id
+  AND resource = @resource;
+
+-- Skips a row another observer or a confirmation holds, so the proxied
+-- request never waits on readiness bookkeeping.
+-- name: GetResourceConnectionForObservation :one
+SELECT *
+FROM okta_resource_connections
+WHERE id = @id
+  AND organization_id = @organization_id
+FOR UPDATE SKIP LOCKED;
+
+-- A row is the confirmation. Repeating it updates the audience, keeps the
+-- recorded app instance unless a new one is given, and clears the observed
+-- result so a stale failure does not outlive the fix it was confirmed for.
 -- name: UpsertResourceConnection :one
 INSERT INTO okta_resource_connections (
   organization_id,
@@ -265,8 +414,22 @@ INSERT INTO okta_resource_connections (
 ON CONFLICT (organization_id, identity_provider_connection_id, remote_session_issuer_id, resource) DO UPDATE
 SET audience = EXCLUDED.audience,
     okta_application_id = COALESCE(EXCLUDED.okta_application_id, okta_resource_connections.okta_application_id),
+    observed_result = NULL,
+    observed_at = NULL,
     updated_at = clock_timestamp()
 RETURNING *;
+
+-- Records an exchange observation. updated_at stays the confirmation time,
+-- so an attempt that started before the latest confirmation or observation
+-- never lands.
+-- name: RecordObservation :execrows
+UPDATE okta_resource_connections
+SET observed_result = @observed_result,
+    observed_at = @observed_at
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND updated_at < @observed_at
+  AND (observed_at IS NULL OR observed_at < @observed_at);
 
 -- Reset withdraws the confirmation for the upstream; every server sharing it
 -- reads as unconfirmed again. Observed evidence goes with the row.
@@ -293,6 +456,21 @@ SET grant_types_supported = @grant_types_supported::text[],
     metadata_fetched_at = clock_timestamp()
 WHERE id = @id;
 
+-- Test fixture: an issuer whose advertised capabilities have no discovery recorded.
+-- name: ClearIssuerDiscoveryFixture :execrows
+UPDATE remote_session_issuers
+SET metadata_fetched_at = NULL
+WHERE id = @id
+  AND organization_id = @organization_id;
+
+-- Test fixture: an issuer identifier, e.g. to match a confirmed audience.
+-- name: SetIssuerURLFixture :execrows
+UPDATE remote_session_issuers
+SET issuer = @issuer
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id;
+
 -- Test fixture: a snapshot row for an identity provider app instance.
 -- name: CreateOktaApplicationFixture :one
 INSERT INTO okta_applications (organization_id, identity_provider_connection_id, okta_app_id, label, name, sign_on_mode, status)
@@ -316,8 +494,8 @@ VALUES (@project_id, @name, @slug, @tunneled_mcp_server_id, @remote_session_issu
 RETURNING id;
 
 -- name: CreateEligibleMCPServerFixture :one
-INSERT INTO mcp_servers (project_id, name, slug, remote_mcp_server_id, remote_session_issuer_id, user_session_issuer_id, visibility)
-VALUES (@project_id, @name, @slug, @remote_mcp_server_id, @remote_session_issuer_id, sqlc.narg(user_session_issuer_id), @visibility)
+INSERT INTO mcp_servers (project_id, name, slug, remote_mcp_server_id, unproxied_mcp_server_id, remote_session_issuer_id, user_session_issuer_id, visibility)
+VALUES (@project_id, @name, @slug, @remote_mcp_server_id, sqlc.narg(unproxied_mcp_server_id), @remote_session_issuer_id, sqlc.narg(user_session_issuer_id), @visibility)
 RETURNING id;
 
 -- name: SetMCPServerVisibilityFixture :execrows

@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -76,23 +75,22 @@ func TestAuthenticatedUserAdapterDeriveCandidates(t *testing.T) {
 	organization := killswitches.OrganizationID(orgID)
 
 	activeUser := "user_" + uuid.NewString()
-	insertUser(t, conn, activeUser, nil)
-	insertMembership(t, conn, orgID, activeUser, nil)
+	insertUser(t, conn, activeUser, false)
+	insertMembership(t, conn, orgID, activeUser, false)
 
 	inactiveUser := "user_" + uuid.NewString()
-	removedAt := time.Now().UTC()
-	insertUser(t, conn, inactiveUser, nil)
-	insertMembership(t, conn, orgID, inactiveUser, &removedAt)
+	insertUser(t, conn, inactiveUser, false)
+	insertMembership(t, conn, orgID, inactiveUser, true)
 
 	deletedUser := "user_" + uuid.NewString()
-	insertUser(t, conn, deletedUser, &removedAt)
-	insertMembership(t, conn, orgID, deletedUser, nil)
+	insertUser(t, conn, deletedUser, true)
+	insertMembership(t, conn, orgID, deletedUser, false)
 
 	otherOrg := "org_" + uuid.NewString()
 	insertOrganization(t, conn, otherOrg)
 	crossOrgUser := "user_" + uuid.NewString()
-	insertUser(t, conn, crossOrgUser, nil)
-	insertMembership(t, conn, otherOrg, crossOrgUser, nil)
+	insertUser(t, conn, crossOrgUser, false)
+	insertMembership(t, conn, otherOrg, crossOrgUser, false)
 
 	result, err := adapter.DeriveCandidates(t.Context(), organization, testIdentity(t, mcpidentity.KindUserSession, activeUser))
 	require.NoError(t, err)
@@ -152,8 +150,8 @@ func TestAuthenticatedUserAdapterValidateCurrentOrganization(t *testing.T) {
 	organization := killswitches.OrganizationID(orgID)
 
 	activeUser := "user_" + uuid.NewString()
-	insertUser(t, conn, activeUser, nil)
-	insertMembership(t, conn, orgID, activeUser, nil)
+	insertUser(t, conn, activeUser, false)
+	insertMembership(t, conn, orgID, activeUser, false)
 
 	valid, err := adapter.ValidateCurrentOrganization(t.Context(), organization, killswitches.PrincipalKey(activeUser))
 	require.NoError(t, err)
@@ -174,19 +172,18 @@ func TestMCPServerAdapterDerive(t *testing.T) {
 	adapter := NewMCPServerResourceAdapter(conn)
 	organization := killswitches.OrganizationID(orgID)
 
-	project := insertProject(t, conn, orgID, "proj-live", nil)
-	liveServer := insertMCPServer(t, conn, orgID, project, nil)
+	project := insertProject(t, conn, orgID, "proj-live", false)
+	liveServer := insertMCPServer(t, conn, orgID, project, false)
 
-	deletedAt := time.Now().UTC()
-	deletedServer := insertMCPServer(t, conn, orgID, project, &deletedAt)
+	deletedServer := insertMCPServer(t, conn, orgID, project, true)
 
-	deletedProject := insertProject(t, conn, orgID, "proj-deleted", &deletedAt)
-	orphanedServer := insertMCPServer(t, conn, orgID, deletedProject, nil)
+	deletedProject := insertProject(t, conn, orgID, "proj-deleted", true)
+	orphanedServer := insertMCPServer(t, conn, orgID, deletedProject, false)
 
 	otherOrg := "org_" + uuid.NewString()
 	insertOrganization(t, conn, otherOrg)
-	otherProject := insertProject(t, conn, otherOrg, "proj-other", nil)
-	crossTenantServer := insertMCPServer(t, conn, otherOrg, otherProject, nil)
+	otherProject := insertProject(t, conn, otherOrg, "proj-other", false)
+	crossTenantServer := insertMCPServer(t, conn, otherOrg, otherProject, false)
 
 	result, err := adapter.Derive(t.Context(), organization, ServerSource{FrontingServerID: uuid.NullUUID{UUID: liveServer, Valid: true}})
 	require.NoError(t, err)
@@ -254,8 +251,8 @@ func TestMCPServerAdapterValidateCurrentOrganization(t *testing.T) {
 	adapter := NewMCPServerResourceAdapter(conn)
 	organization := killswitches.OrganizationID(orgID)
 
-	project := insertProject(t, conn, orgID, "proj-validate", nil)
-	liveServer := insertMCPServer(t, conn, orgID, project, nil)
+	project := insertProject(t, conn, orgID, "proj-validate", false)
+	liveServer := insertMCPServer(t, conn, orgID, project, false)
 
 	valid, err := adapter.ValidateCurrentOrganization(t.Context(), organization, killswitches.ResourceKey(liveServer.String()))
 	require.NoError(t, err)

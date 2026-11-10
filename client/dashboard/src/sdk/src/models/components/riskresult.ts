@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { RiskSpan, RiskSpan$inboundSchema } from "./riskspan.js";
@@ -25,7 +26,7 @@ export const EnforcementOutcome = {
 /**
  * Recorded enforcement outcome, independent of policy configuration.
  */
-export type EnforcementOutcome = ClosedEnum<typeof EnforcementOutcome>;
+export type EnforcementOutcome = OpenEnum<typeof EnforcementOutcome>;
 
 /**
  * Why the result is suppressed: 'rule' (an exclusion rule, see exclusion_id), 'manual' (dismissed by a user), or 'automated' (the automated false-positive sweep). Null when not suppressed.
@@ -38,7 +39,7 @@ export const SuppressedReason = {
 /**
  * Why the result is suppressed: 'rule' (an exclusion rule, see exclusion_id), 'manual' (dismissed by a user), or 'automated' (the automated false-positive sweep). Null when not suppressed.
  */
-export type SuppressedReason = ClosedEnum<typeof SuppressedReason>;
+export type SuppressedReason = OpenEnum<typeof SuppressedReason>;
 
 export type RiskResult = {
   /**
@@ -86,7 +87,7 @@ export type RiskResult = {
    */
   exclusionId?: string | undefined;
   /**
-   * Identity of the concrete mediated execution.
+   * The mediated MCP execution (tool call, resource read or prompt get) that raised this finding. Filter listResults by it to list that execution's non-dismissed findings.
    */
   executionId?: string | undefined;
   /**
@@ -126,7 +127,7 @@ export type RiskResult = {
    */
   metaMcpServerId?: string | undefined;
   /**
-   * Execution phase inspected by risk.
+   * Which phase of the mediated MCP execution was scanned: its request or its response.
    */
   phase?: string | undefined;
   /**
@@ -188,14 +189,16 @@ export type RiskResult = {
 };
 
 /** @internal */
-export const EnforcementOutcome$inboundSchema: z.ZodMiniEnum<
-  typeof EnforcementOutcome
-> = z.enum(EnforcementOutcome);
+export const EnforcementOutcome$inboundSchema: z.ZodMiniType<
+  EnforcementOutcome,
+  unknown
+> = openEnums.inboundSchema(EnforcementOutcome);
 
 /** @internal */
-export const SuppressedReason$inboundSchema: z.ZodMiniEnum<
-  typeof SuppressedReason
-> = z.enum(SuppressedReason);
+export const SuppressedReason$inboundSchema: z.ZodMiniType<
+  SuppressedReason,
+  unknown
+> = openEnums.inboundSchema(SuppressedReason);
 
 /** @internal */
 export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z

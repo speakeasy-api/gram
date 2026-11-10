@@ -67,6 +67,26 @@ func LockProject(ctx context.Context, tx pgx.Tx, projectID uuid.UUID) error {
 	return nil
 }
 
+// blockPolicyEnabled reports whether the project has at least one enabled
+// Shadow MCP policy whose action is block. Without one, nothing in this package
+// has anything to enforce.
+func blockPolicyEnabled(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID) (bool, error) {
+	policies, err := riskrepo.New(tx).ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
+	if err != nil {
+		return false, fmt.Errorf("list blocking Shadow MCP policies: %w", err)
+	}
+	blocking := false
+	for _, policy := range policies {
+		if policy.OrganizationID != organizationID {
+			return false, errors.New("shadow MCP policy organization mismatch")
+		}
+		if policy.Action == "block" {
+			blocking = true
+		}
+	}
+	return blocking, nil
+}
+
 // Check evaluates a canonical server URL and complete desired assignment set
 // from one transaction snapshot. Callers must acquire LockProject first.
 func Check(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, canonicalURL string, desiredPrincipalURNs []string) (Verdict, error) {
@@ -83,18 +103,9 @@ func Check(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid
 		return Verdict{State: StateEmptyAudience, MissingAudienceCounts: MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, MissingPrincipalURNs: nil}, nil
 	}
 
-	policies, err := riskrepo.New(tx).ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
+	blocking, err := blockPolicyEnabled(ctx, tx, organizationID, projectID)
 	if err != nil {
-		return Verdict{}, fmt.Errorf("list blocking Shadow MCP policies: %w", err)
-	}
-	blocking := false
-	for _, policy := range policies {
-		if policy.OrganizationID != organizationID {
-			return Verdict{}, errors.New("shadow MCP policy organization mismatch")
-		}
-		if policy.Action == "block" {
-			blocking = true
-		}
+		return Verdict{}, err
 	}
 	if !blocking {
 		return Verdict{State: StateNotRequired, MissingAudienceCounts: MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, MissingPrincipalURNs: nil}, nil

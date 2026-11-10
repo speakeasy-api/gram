@@ -1,18 +1,21 @@
--- name: UpsertOrganizationMetadata :one
+-- name: UpsertOrganizationMetadataWithRequests :one
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
     slug,
     workos_id,
     whitelisted,
-    creation_source
+    creation_source,
+    default_host
 ) VALUES (
     @id,
     @name,
     @slug,
     @workos_id,
     COALESCE(sqlc.narg('whitelisted')::boolean, FALSE),
-    sqlc.narg('creation_source')::text
+    sqlc.narg('creation_source')::text,
+    sqlc.narg('default_host')::text
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -29,8 +32,35 @@ ON CONFLICT (id) DO UPDATE SET
     -- passes null and leaves whatever is already recorded alone, so a later
     -- upsert from an unrelated path cannot erase the flow that created the row.
     creation_source = COALESCE(EXCLUDED.creation_source, organization_metadata.creation_source),
+    -- default_host is deliberately absent: it is chosen when the organization
+    -- is created, and a later upsert must not move an existing organization's
+    -- URLs to another host.
     updated_at = clock_timestamp()
-RETURNING *;
+RETURNING *, (xmax = 0) AS inserted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written;
 
 -- name: SetAccountType :exec
 UPDATE organization_metadata
@@ -51,6 +81,14 @@ RETURNING *;
 SELECT *
 FROM organization_metadata
 WHERE id = @id;
+
+-- name: LockOrganizationForAdminConfiguration :one
+-- Pin the displayed identity without blocking settings inserts that acquire
+-- foreign-key KEY SHARE locks after the chat-analysis budget lock.
+SELECT *
+FROM organization_metadata
+WHERE id = @id
+FOR NO KEY UPDATE;
 
 -- name: LockOrganizationForInviteAcceptance :one
 SELECT *
@@ -104,7 +142,7 @@ SELECT EXISTS(
 ) AS exists;
 
 -- name: HasActiveOrganizationUser :one
--- Returns whether a Gram user is an active member of the organization.
+-- Returns whether a Speakeasy user is an active member of the organization.
 SELECT EXISTS(
   SELECT 1
   FROM users
@@ -147,7 +185,7 @@ WHERE our.organization_id = @organization_id
   AND u.deleted_at IS NULL;
 
 -- name: ListActiveOrganizationUserIDs :many
--- Returns the Gram user IDs of active members of the organization. Used to
+-- Returns the Speakeasy user IDs of active members of the organization. Used to
 -- suppress challenges raised by users outside the organization (e.g. Speakeasy
 -- staff impersonating a customer org) from the Challenge UI.
 SELECT u.id
@@ -158,7 +196,7 @@ WHERE our.organization_id = @organization_id
   AND u.deleted_at IS NULL;
 
 -- name: FilterOrganizationMemberUserIDs :many
--- Returns the subset of the given Gram user IDs that are active members of
+-- Returns the subset of the given Speakeasy user IDs that are active members of
 -- the organization. Used to mask Speakeasy staff identities in customer-facing
 -- audit feeds.
 SELECT user_id::text AS user_id
@@ -369,9 +407,33 @@ SELECT EXISTS (
     AND expires_at > clock_timestamp()
 );
 
+-- name: ListPendingInvitationsForEmail :many
+-- Lists the live invitations addressed to this email in every organization,
+-- newest first. A signed-in user with no organization is offered these before
+-- creating one, so an invited teammate joins their team instead.
+SELECT
+  organization_invitations.id,
+  organization_invitations.organization_id,
+  organization_metadata.name AS organization_name,
+  organization_metadata.workos_id AS organization_workos_id,
+  COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_enabled,
+  COALESCE(organization_metadata.verified_domains, '{}'::text[])::text[] AS verified_domains
+FROM organization_invitations
+JOIN organization_metadata ON organization_metadata.id = organization_invitations.organization_id
+WHERE organization_invitations.email = @email
+  AND organization_invitations.state = 'pending'
+  AND organization_invitations.expires_at > clock_timestamp()
+  AND organization_metadata.disabled_at IS NULL
+ORDER BY organization_invitations.created_at DESC;
+
 -- name: ExpireInvitationForTest :exec
 UPDATE organization_invitations
 SET expires_at = clock_timestamp() - interval '1 hour'
+WHERE id = @id;
+
+-- name: SetOrganizationDefaultHostForTest :exec
+UPDATE organization_metadata
+SET default_host = @default_host
 WHERE id = @id;
 
 -- name: GetInvitationByTokenHash :one
@@ -379,9 +441,35 @@ SELECT *
 FROM organization_invitations
 WHERE token_hash = @token_hash;
 
--- name: CreateOrganizationMetadata :exec
-INSERT INTO organization_metadata (id, name, slug)
-VALUES (@id, @name, @slug);
+-- name: CreateOrganizationMetadataWithRequests :one
+WITH written AS (
+INSERT INTO organization_metadata (id, name, slug, default_host)
+VALUES (@id, @name, @slug, sqlc.narg('default_host')::text)
+RETURNING *, TRUE AS inserted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written;
 
 -- name: GetOrganizationByWorkosID :one
 SELECT *
@@ -503,7 +591,7 @@ UNION ALL
 SELECT user_id FROM inserted;
 
 -- name: SyncUserOrganizationRoleAssignments :exec
--- Declaratively set all WorkOS role assignments for a known Gram user in an
+-- Declaratively set all WorkOS role assignments for a known Speakeasy user in an
 -- org. Role slugs are resolved from role sync tables and stale assignments for
 -- this WorkOS user are removed.
 WITH input_role_urns AS (
@@ -540,7 +628,7 @@ upserted AS (
         @workos_last_event_id
     FROM input_role_urns
     ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
-        -- COALESCE preserves a backfilled user_id if the sync fires before the Gram user exists.
+        -- COALESCE preserves a backfilled user_id if the sync fires before the Speakeasy user exists.
         user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
         workos_membership_id = EXCLUDED.workos_membership_id,
         workos_updated_at = EXCLUDED.workos_updated_at,
@@ -654,7 +742,7 @@ WHERE organization_id = @organization_id
   AND deleted_at IS NULL;
 
 -- name: ReassignOrganizationUserWorkOSID :exec
--- Login reuses a Gram user after WorkOS delete-and-signup, so membership
+-- Login reuses a Speakeasy user after WorkOS delete-and-signup, so membership
 -- rows still pointing at a previous WorkOS user id must follow the new one.
 -- Matches any leftover id so a retry after overwrite still converges.
 UPDATE organization_user_relationships
@@ -725,65 +813,124 @@ ORDER BY role_urn;
 -- name: LockOrganizationSlug :exec
 SELECT pg_advisory_xact_lock(hashtext(@slug));
 
--- name: CreateOrganizationMetadataFromWorkOS :one
--- Create a Gram organization row from a WorkOS organization event. The caller
--- chooses the Gram org ID from WorkOS external_id or a deterministic fallback.
--- Slug is a Gram-owned initial value and is never updated by WorkOS sync.
+-- name: CreateOrganizationMetadataFromWorkOSWithRequests :one
+-- Create a Speakeasy organization row from a WorkOS organization event. The caller
+-- chooses the Speakeasy org ID from WorkOS external_id or a deterministic fallback.
+-- Slug is a Speakeasy-owned initial value and is never updated by WorkOS sync.
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
     slug,
     workos_id,
     workos_updated_at,
-    workos_last_event_id
+    workos_last_event_id,
+    verified_domains,
+    default_host
 ) VALUES (
     @id,
     @name,
     @slug,
     @workos_id,
     @workos_updated_at,
-    @workos_last_event_id
+    @workos_last_event_id,
+    @verified_domains::text[],
+    sqlc.narg('default_host')::text
 )
-RETURNING *;
+RETURNING *, (xmax = 0) AS inserted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written;
 
--- name: UpsertOrganizationMetadataFromWorkOS :one
--- Upsert a Gram organization row from a WorkOS organization event.
--- The caller must only use this when WorkOS external_id is set and is the Gram
--- org ID. Slug is a Gram-owned initial value chosen by the caller and is never
+-- name: UpsertOrganizationMetadataFromWorkOSWithRequests :one
+-- Upsert a Speakeasy organization row from a WorkOS organization event.
+-- The caller must only use this when WorkOS external_id is set and is the Speakeasy
+-- org ID. Slug is a Speakeasy-owned initial value chosen by the caller and is never
 -- updated by WorkOS sync after creation.
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
     slug,
     workos_id,
     workos_updated_at,
-    workos_last_event_id
+    workos_last_event_id,
+    default_host
 ) VALUES (
     @id,
     @name,
     @slug,
     @workos_id,
     @workos_updated_at,
-    @workos_last_event_id
+    @workos_last_event_id,
+    sqlc.narg('default_host')::text
 )
 ON CONFLICT (id) DO UPDATE SET
+    -- default_host is only written on insert, so an existing organization
+    -- keeps its host.
     name = EXCLUDED.name,
     workos_id = EXCLUDED.workos_id,
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
-RETURNING *;
+RETURNING *, (xmax = 0) AS inserted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written;
 
 -- name: UpdateOrganizationMetadataFromWorkOS :one
 -- Update an existing organization row from a WorkOS organization event. Caller
--- must have already resolved the Gram organization and passed the row through
--- ShouldProcessEvent. WorkOS does not own Gram slugs, so this only updates
+-- must have already resolved the Speakeasy organization and passed the row through
+-- ShouldProcessEvent. WorkOS does not own Speakeasy slugs, so this only updates
 -- WorkOS-owned metadata and cursor columns.
 UPDATE organization_metadata
 SET name = @name,
     workos_id = @workos_id,
     workos_updated_at = @workos_updated_at,
     workos_last_event_id = @workos_last_event_id,
+    verified_domains = @verified_domains::text[],
     updated_at = clock_timestamp()
 WHERE id = @id
 RETURNING *;
@@ -860,6 +1007,50 @@ SET scim_enabled = @enabled,
     updated_at = clock_timestamp()
 WHERE workos_id = @workos_id;
 
+-- name: AddVerifiedDomainByWorkosID :exec
+-- Add one domain to an organization's verified domains after a WorkOS
+-- organization_domain.verified event. The match ignores case, so a domain
+-- already in the list is not added twice. The event cursor is recorded even
+-- when the list does not change.
+UPDATE organization_metadata
+SET verified_domains = CASE
+        WHEN EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(organization_metadata.verified_domains, '{}'::text[])) AS existing (domain)
+            WHERE lower(existing.domain) = lower(@domain::text)
+        ) THEN COALESCE(organization_metadata.verified_domains, '{}'::text[])
+        ELSE array_append(COALESCE(organization_metadata.verified_domains, '{}'::text[]), @domain::text)
+    END,
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id;
+
+-- name: RemoveVerifiedDomainByWorkosID :exec
+-- Remove one domain from an organization's verified domains after a WorkOS
+-- organization_domain.deleted event. The match ignores case and keeps the
+-- order of the remaining domains. The event cursor is recorded even when the
+-- domain was not in the list.
+UPDATE organization_metadata
+SET verified_domains = ARRAY(
+        SELECT existing.domain
+        FROM unnest(COALESCE(organization_metadata.verified_domains, '{}'::text[])) WITH ORDINALITY AS existing (domain, position)
+        WHERE lower(existing.domain) <> lower(@domain::text)
+        ORDER BY existing.position
+    ),
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id;
+
+-- name: SetVerifiedDomains :exec
+-- Fill an empty verified domains list with the result of a live WorkOS check.
+-- A non-empty list is owned by the event sync and may be newer than the live
+-- check, so it is never overwritten here.
+UPDATE organization_metadata
+SET verified_domains = @verified_domains::text[],
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND cardinality(COALESCE(verified_domains, '{}'::text[])) = 0;
+
 -- name: ClearWorkosOrgID :exec
 UPDATE organization_metadata
 SET workos_id = NULL,
@@ -894,6 +1085,7 @@ FROM organization_metadata
 WHERE id = @organization_id
 FOR UPDATE;
 
+
 -- name: GetOrganizationSetupTask :one
 SELECT *
 FROM organization_setup_tasks
@@ -925,28 +1117,393 @@ ON CONFLICT (organization_id, task_key) DO UPDATE SET
 RETURNING *;
 
 -- name: GetSetupTaskCompletionFacts :one
-WITH default_project AS (
-    SELECT id
-    FROM projects
-    WHERE organization_id = @organization_id
-      AND deleted IS FALSE
-    ORDER BY created_at, id
-    LIMIT 1
-)
 SELECT
     COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
     COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
-    EXISTS (
-        SELECT 1
-        FROM plugin_github_connections
-        JOIN default_project ON default_project.id = plugin_github_connections.project_id
-    ) AS marketplace_published,
+    (COALESCE(cardinality(organization_metadata.verified_domains), 0) > 0)::boolean AS domain_verified,
     (
         SELECT COUNT(DISTINCT organization_features.feature_name) = 3
         FROM organization_features
         WHERE organization_features.organization_id = @organization_id
           AND organization_features.feature_name IN ('logs', 'tool_io_logs', 'session_capture')
           AND organization_features.deleted IS FALSE
-    )::boolean AS logging_enabled
+    )::boolean AS logging_enabled,
+    -- Any message stored from a Claude transcript upload (Cowork sessions
+    -- shipped on Stop) in one of the organization's projects. Served by the
+    -- partial chat_messages_claude_transcript_project_idx.
+    EXISTS (
+        SELECT 1
+        FROM chat_messages
+        WHERE chat_messages.origin = 'claude-transcript'
+          AND chat_messages.project_id IN (
+              SELECT projects.id
+              FROM projects
+              WHERE projects.organization_id = @organization_id
+                AND projects.deleted IS FALSE
+          )
+    ) AS claude_transcript_captured
 FROM organization_metadata
 WHERE organization_metadata.id = @organization_id;
+
+-- name: GetOrganizationOnboardingSelection :many
+SELECT onboarding.preset AS onboarding_preset, task.task_key, task.hidden_at
+FROM organization_metadata om
+LEFT JOIN organization_onboarding onboarding ON onboarding.organization_id = om.id
+LEFT JOIN organization_setup_tasks task ON task.organization_id = om.id
+WHERE om.id = @organization_id;
+
+-- name: SetOrganizationOnboardingPreset :exec
+INSERT INTO organization_onboarding (organization_id, preset)
+VALUES (@organization_id::text, @preset)
+ON CONFLICT (organization_id) DO UPDATE SET
+    preset = EXCLUDED.preset,
+    updated_at = clock_timestamp();
+
+-- name: SetOrganizationSetupTaskVisibility :exec
+INSERT INTO organization_setup_tasks (organization_id, task_key, status, hidden_at)
+VALUES (@organization_id, @task_key, 'todo', CASE WHEN @hidden::boolean THEN clock_timestamp() ELSE NULL END)
+ON CONFLICT (organization_id, task_key) DO UPDATE SET
+    hidden_at = EXCLUDED.hidden_at,
+    updated_at = clock_timestamp()
+WHERE (organization_setup_tasks.hidden_at IS NOT NULL) IS DISTINCT FROM @hidden::boolean;
+
+-- name: LockOnboardingSteps :exec
+SELECT pg_advisory_xact_lock(719438202);
+
+-- name: UpsertOnboardingStep :one
+INSERT INTO onboarding_steps (slug, title, description, completion, hidden_by_default, sort_order)
+VALUES (@slug, @title, @description, @completion, @hidden_by_default, @sort_order)
+ON CONFLICT (slug) DO UPDATE SET
+    title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    completion = EXCLUDED.completion,
+    hidden_by_default = EXCLUDED.hidden_by_default,
+    sort_order = EXCLUDED.sort_order,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING id;
+
+-- name: SetOnboardingStepParent :exec
+UPDATE onboarding_steps
+SET parent_step_id = sqlc.narg(parent_step_id), updated_at = clock_timestamp()
+WHERE id = @id AND parent_step_id IS DISTINCT FROM sqlc.narg(parent_step_id);
+
+-- name: RetireOnboardingStepsNotIn :exec
+UPDATE onboarding_steps
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE deleted_at IS NULL AND NOT (slug = ANY(@slugs::text[]));
+
+-- name: DeleteOnboardingStepMethods :exec
+DELETE FROM onboarding_step_methods WHERE step_id = @step_id;
+
+-- name: InsertOnboardingStepMethod :execrows
+INSERT INTO onboarding_step_methods (step_id, integration_method_id)
+SELECT @step_id, m.id
+FROM support_matrix_integration_methods m
+WHERE m.slug = @method_slug AND m.deleted_at IS NULL
+ON CONFLICT DO NOTHING;
+
+-- name: DeleteOnboardingStepDependencies :exec
+DELETE FROM onboarding_step_dependencies WHERE step_id = @step_id;
+
+-- name: InsertOnboardingStepDependency :exec
+INSERT INTO onboarding_step_dependencies (step_id, requires_step_id)
+SELECT @step_id, r.id
+FROM onboarding_steps r
+WHERE r.slug = @requires_slug
+ON CONFLICT DO NOTHING;
+
+-- name: ListOnboardingSteps :many
+SELECT s.id, s.slug, s.title, s.description, s.completion, s.hidden_by_default, s.sort_order,
+  p.slug AS parent_slug,
+  (
+    SELECT coalesce(array_agg(m.slug ORDER BY m.sort_order, m.slug), '{}')::text[]
+    FROM onboarding_step_methods sm
+    JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
+    WHERE sm.step_id = s.id
+  ) AS method_slugs,
+  (
+    SELECT coalesce(array_agg(r.slug ORDER BY r.sort_order, r.slug), '{}')::text[]
+    FROM onboarding_step_dependencies d
+    JOIN onboarding_steps r ON r.id = d.requires_step_id AND r.deleted_at IS NULL
+    WHERE d.step_id = s.id
+  ) AS requires_slugs
+FROM onboarding_steps s
+LEFT JOIN onboarding_steps p ON p.id = s.parent_step_id AND p.deleted_at IS NULL
+WHERE s.deleted_at IS NULL
+ORDER BY s.sort_order, s.slug;
+
+-- name: GetOrganizationOnboardingStack :one
+SELECT om.id, om.name, om.slug, onboarding.mdm_vendor, onboarding.mdm_vendor_name
+FROM organization_metadata om
+LEFT JOIN organization_onboarding onboarding ON onboarding.organization_id = om.id
+WHERE om.id = @organization_id;
+
+-- name: ListOrganizationOnboardingVendors :many
+SELECT v.vendor, p.slug AS plan_slug
+FROM organization_onboarding_vendors v
+LEFT JOIN support_matrix_plans p ON p.id = v.plan_id AND p.deleted_at IS NULL
+WHERE v.organization_id = @organization_id
+ORDER BY v.vendor;
+
+-- name: UpsertOrganizationOnboardingStack :exec
+INSERT INTO organization_onboarding (organization_id, mdm_vendor, mdm_vendor_name)
+VALUES (@organization_id::text, sqlc.narg(mdm_vendor), sqlc.narg(mdm_vendor_name))
+ON CONFLICT (organization_id) DO UPDATE SET
+    mdm_vendor = EXCLUDED.mdm_vendor,
+    mdm_vendor_name = EXCLUDED.mdm_vendor_name,
+    updated_at = clock_timestamp();
+
+-- name: DeleteOrganizationOnboardingVendors :exec
+DELETE FROM organization_onboarding_vendors WHERE organization_id = @organization_id;
+
+-- name: InsertOrganizationOnboardingVendor :exec
+INSERT INTO organization_onboarding_vendors (organization_id, vendor, plan_id)
+VALUES (
+  @organization_id,
+  @vendor,
+  (SELECT p.id FROM support_matrix_plans p WHERE p.slug = sqlc.narg(plan_slug)::text AND p.deleted_at IS NULL)
+);
+
+-- name: ListSupportMatrixPlatformsForOnboarding :many
+SELECT slug, name, vendor, family, surface
+FROM support_matrix_platforms
+WHERE deleted_at IS NULL
+ORDER BY sort_order, slug;
+
+-- name: ListSupportMatrixPlansForOnboarding :many
+SELECT slug, vendor, name
+FROM support_matrix_plans
+WHERE deleted_at IS NULL
+ORDER BY sort_order, slug;
+
+-- name: LockOnboardingPlaybooks :exec
+SELECT pg_advisory_xact_lock(719438203);
+
+-- name: ListOnboardingUseCases :many
+SELECT u.id, u.slug, u.name, u.description, u.sort_order,
+  d.id AS default_playbook_id
+FROM onboarding_use_cases u
+LEFT JOIN onboarding_playbooks d ON d.use_case_id = u.id AND d.is_default AND d.organization_id IS NULL AND d.deleted_at IS NULL
+WHERE u.deleted_at IS NULL
+ORDER BY u.sort_order, u.name, u.id;
+
+-- name: GetOnboardingUseCase :one
+SELECT id, slug, name, description, sort_order
+FROM onboarding_use_cases
+WHERE id = @id AND deleted_at IS NULL;
+
+-- name: GetOnboardingUseCaseBySlug :one
+SELECT id, slug, name, description, sort_order
+FROM onboarding_use_cases
+WHERE slug = @slug AND deleted_at IS NULL;
+
+-- name: CreateOnboardingUseCase :one
+INSERT INTO onboarding_use_cases (slug, name, description, sort_order)
+VALUES (@slug, @name, @description, (SELECT coalesce(max(sort_order), 0) + 1 FROM onboarding_use_cases))
+RETURNING id, slug, name, description, sort_order;
+
+-- name: UpdateOnboardingUseCase :one
+UPDATE onboarding_use_cases
+SET name = @name, description = @description, updated_at = clock_timestamp()
+WHERE id = @id AND deleted_at IS NULL
+RETURNING id, slug, name, description, sort_order;
+
+-- name: DeleteOnboardingUseCase :execrows
+UPDATE onboarding_use_cases
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND deleted_at IS NULL;
+
+-- name: DeleteOnboardingPlaybooksOfUseCase :exec
+UPDATE onboarding_playbooks
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE use_case_id = @use_case_id AND deleted_at IS NULL;
+
+-- name: ListOnboardingPlaybooks :many
+-- Every playbook, or, for an organization, the use cases' and its own. A
+-- playbook belongs to a use case or to an organization, never both.
+SELECT p.id, p.use_case_id, p.organization_id, p.name, p.description, p.is_default,
+  u.slug AS use_case_slug, u.name AS use_case_name,
+  om.name AS organization_name
+FROM onboarding_playbooks p
+LEFT JOIN onboarding_use_cases u ON u.id = p.use_case_id AND u.deleted_at IS NULL
+LEFT JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.deleted_at IS NULL
+  AND (p.use_case_id IS NULL OR u.id IS NOT NULL)
+  AND (
+    sqlc.narg(organization_id)::text IS NULL
+    OR p.organization_id IS NULL
+    OR p.organization_id = sqlc.narg(organization_id)::text
+  )
+ORDER BY p.organization_id NULLS FIRST, u.sort_order, u.name, om.name, p.is_default DESC, p.name, p.id;
+
+-- name: GetOnboardingPlaybook :one
+SELECT p.id, p.use_case_id, p.organization_id, p.name, p.description, p.is_default,
+  u.slug AS use_case_slug, u.name AS use_case_name,
+  om.name AS organization_name
+FROM onboarding_playbooks p
+LEFT JOIN onboarding_use_cases u ON u.id = p.use_case_id AND u.deleted_at IS NULL
+LEFT JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.id = @id AND p.deleted_at IS NULL
+  AND (p.use_case_id IS NULL OR u.id IS NOT NULL);
+
+-- name: GetOnboardingDefaultPlaybook :one
+SELECT p.id, p.use_case_id, p.organization_id, p.name, p.description, p.is_default,
+  u.slug AS use_case_slug, u.name AS use_case_name
+FROM onboarding_playbooks p
+JOIN onboarding_use_cases u ON u.id = p.use_case_id AND u.deleted_at IS NULL
+WHERE p.use_case_id = @use_case_id AND p.is_default AND p.organization_id IS NULL AND p.deleted_at IS NULL;
+
+-- name: ListOnboardingPlaybookSteps :many
+SELECT ps.playbook_id, s.slug, s.title, ps.position
+FROM onboarding_playbook_steps ps
+JOIN onboarding_steps s ON s.id = ps.step_id AND s.deleted_at IS NULL
+WHERE ps.playbook_id = ANY(@playbook_ids::uuid[])
+ORDER BY ps.playbook_id, ps.position, s.slug;
+
+-- name: CreateOnboardingPlaybook :one
+INSERT INTO onboarding_playbooks (use_case_id, organization_id, name, description, is_default)
+VALUES (sqlc.narg(use_case_id)::uuid, sqlc.narg(organization_id)::text, @name, @description, @is_default)
+RETURNING id, use_case_id, organization_id, name, description, is_default;
+
+-- name: UpdateOnboardingPlaybook :one
+UPDATE onboarding_playbooks
+SET name = @name, description = @description, is_default = @is_default, updated_at = clock_timestamp()
+WHERE id = @id AND deleted_at IS NULL
+RETURNING id, use_case_id, organization_id, name, description, is_default;
+
+-- name: ClearOnboardingDefaultPlaybook :exec
+UPDATE onboarding_playbooks
+SET is_default = false, updated_at = clock_timestamp()
+WHERE use_case_id = @use_case_id AND organization_id IS NULL AND is_default AND deleted_at IS NULL AND id <> @keep_id;
+
+-- name: DeleteOnboardingPlaybook :execrows
+UPDATE onboarding_playbooks
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND deleted_at IS NULL;
+
+-- name: DeleteOnboardingPlaybookSteps :exec
+DELETE FROM onboarding_playbook_steps WHERE playbook_id = @playbook_id;
+
+-- name: InsertOnboardingPlaybookStep :execrows
+INSERT INTO onboarding_playbook_steps (playbook_id, step_id, position)
+SELECT @playbook_id, s.id, @position
+FROM onboarding_steps s
+WHERE s.slug = @slug AND s.deleted_at IS NULL;
+
+-- name: RepointRetiredOnboardingPlaybookSteps :execrows
+-- Moves each playbook's first step among the retired slugs onto the successor
+-- slug, keeping its position, unless the playbook already lists the
+-- successor. Retired slugs match whether or not they are retired yet.
+WITH successor AS (
+    SELECT onboarding_steps.id
+    FROM onboarding_steps
+    WHERE onboarding_steps.slug = @successor_slug::text
+      AND onboarding_steps.deleted_at IS NULL
+),
+firsts AS (
+    SELECT DISTINCT ON (ps.playbook_id) ps.playbook_id, ps.step_id
+    FROM onboarding_playbook_steps ps
+    JOIN onboarding_steps s ON s.id = ps.step_id
+    WHERE s.slug = ANY(@retired_slugs::text[])
+    ORDER BY ps.playbook_id, ps.position
+)
+UPDATE onboarding_playbook_steps ps
+SET step_id = successor.id, updated_at = clock_timestamp()
+FROM firsts, successor
+WHERE ps.playbook_id = firsts.playbook_id
+  AND ps.step_id = firsts.step_id
+  AND NOT EXISTS (
+      SELECT 1
+      FROM onboarding_playbook_steps listed
+      WHERE listed.playbook_id = ps.playbook_id
+        AND listed.step_id = successor.id
+  );
+
+-- name: DeleteRetiredOnboardingPlaybookSteps :execrows
+-- Drops the retired slugs' steps from every playbook that lists the successor
+-- slug. After the repoint, that is every playbook that listed one.
+DELETE FROM onboarding_playbook_steps ps
+USING onboarding_steps s
+WHERE s.id = ps.step_id
+  AND s.slug = ANY(@retired_slugs::text[])
+  AND EXISTS (
+      SELECT 1
+      FROM onboarding_playbook_steps listed
+      JOIN onboarding_steps successor ON successor.id = listed.step_id
+      WHERE listed.playbook_id = ps.playbook_id
+        AND successor.slug = @successor_slug::text
+        AND successor.deleted_at IS NULL
+  );
+
+-- name: GetOrganizationOnboardingPlaybookID :one
+SELECT om.id AS organization_id, o.playbook_id
+FROM organization_metadata om
+LEFT JOIN organization_onboarding o ON o.organization_id = om.id
+WHERE om.id = @organization_id;
+
+-- name: SetOrganizationOnboardingPlaybook :exec
+INSERT INTO organization_onboarding (organization_id, playbook_id)
+VALUES (@organization_id::text, sqlc.narg(playbook_id)::uuid)
+ON CONFLICT (organization_id) DO UPDATE SET
+    playbook_id = EXCLUDED.playbook_id,
+    updated_at = clock_timestamp();
+
+-- name: ListOrganizationOnboardingPlaybookSteps :many
+SELECT s.slug
+FROM organization_onboarding o
+JOIN onboarding_playbooks p ON p.id = o.playbook_id AND p.deleted_at IS NULL
+JOIN onboarding_playbook_steps ps ON ps.playbook_id = p.id
+JOIN onboarding_steps s ON s.id = ps.step_id AND s.deleted_at IS NULL
+WHERE o.organization_id = @organization_id
+ORDER BY ps.position, s.slug;
+
+-- name: ListOnboardingStepMethodApplicability :many
+SELECT s.slug AS step_slug, m.slug AS method_slug, m.vendor AS method_vendor,
+  -- Over the stack's platforms of the method's own vendor, or of every vendor
+  -- for a method that belongs to none, so an unrelated vendor in the stack
+  -- never changes the verdict. A platform the matrix does not map the method
+  -- to is unknown, which is not the same as not applicable.
+  coalesce((
+    SELECT bool_and(mp.platform_id IS NOT NULL AND mp.applicability = 'na')
+    FROM support_matrix_platforms p
+    LEFT JOIN support_matrix_method_platforms mp ON mp.platform_id = p.id AND mp.integration_method_id = m.id AND mp.deleted_at IS NULL
+    WHERE p.deleted_at IS NULL AND p.vendor = ANY(@vendors::text[])
+      AND (m.vendor IN ('Cross-platform', 'Others') OR p.vendor = m.vendor)
+  ), false)::boolean AS not_applicable_everywhere
+FROM onboarding_step_methods sm
+JOIN onboarding_steps s ON s.id = sm.step_id AND s.deleted_at IS NULL
+JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
+WHERE s.slug = ANY(@step_slugs::text[])
+ORDER BY s.slug, m.sort_order, m.slug;
+
+-- Acceptance is immutable even after redemption. Call only during signup or a
+-- verified first partner Checkout, under the billing/offer acceptance locks.
+-- name: AttributePartnerSignup :execrows
+INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id)
+SELECT sqlc.narg(organization_id), @stripe_promotion_code_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_promotion_applications WHERE organization_id = sqlc.narg(organization_id)
+)
+ON CONFLICT DO NOTHING;
+
+-- name: GetOrganizationPromotionApplication :one
+SELECT * FROM organization_promotion_applications
+WHERE organization_id = @organization_id::text
+ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+LIMIT 1;
+
+-- name: GetEnabledSignupOffer :one
+SELECT id FROM signup_offers
+WHERE stripe_promotion_code_id = @stripe_promotion_code_id
+  AND signup_flow = 'tailscale_partner_gateway' AND enabled
+FOR SHARE;
+
+-- name: GetAcceptedSignupOfferFlow :one
+-- All accepted applications originate in the partner gateway signup path.
+-- Derive display context from that immutable acceptance, not mutable offer mappings.
+-- Persist the accepted flow before introducing another signup flow or ledger writer.
+SELECT 'tailscale_partner_gateway'::text AS signup_flow
+FROM organization_promotion_applications
+WHERE organization_id = @organization_id::text
+LIMIT 1;

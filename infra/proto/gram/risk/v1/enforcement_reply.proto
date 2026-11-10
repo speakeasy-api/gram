@@ -11,6 +11,7 @@ enum EnforcementScanner {
   ENFORCEMENT_SCANNER_PROMPT_INJECTION = 3;
   ENFORCEMENT_SCANNER_JUDGE = 4;
   ENFORCEMENT_SCANNER_LLM_ANALYZER = 5;
+  ENFORCEMENT_SCANNER_CUSTOM_RULES = 6;
 }
 
 enum EnforcementStatus {
@@ -32,9 +33,9 @@ message EnforcementFinding {
   string tool_call_id = 9;
   string masked_preview = 10;
   string fingerprint = 11;
-  // Model rationale for the finding, limited to 500 Unicode characters. Set
-  // only by the LLM analyzer lane. It may paraphrase the flagged content, so
-  // it is treated with the same care as masked_preview.
+  // Human-readable scanner description or model rationale, limited to 500
+  // Unicode characters. It may paraphrase flagged content, so it is treated
+  // with the same care as masked_preview.
   string description = 12;
 }
 
@@ -53,4 +54,9 @@ message EnforcementReply {
   repeated EnforcementFinding findings = 5;
   EnforcementDiagnostics diagnostics = 6;
   string policy_id = 7; // Empty except for the judge lane.
+  // True when the consumer scanned only a bounded prefix of the request.
+  bool content_truncated = 8;
+  // True when an attempted scanner execution did not produce a valid complete
+  // result. Deliberate content bounding is reported by content_truncated.
+  bool incomplete = 9;
 }

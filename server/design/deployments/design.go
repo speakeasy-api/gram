@@ -220,6 +220,58 @@ var _ = Service("deployments", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "logs")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeploymentLogs"}`)
 	})
+
+	Method("evaluateOpenAPIv3", func() {
+		Description("Compare an uploaded OpenAPI document with the version of the same source in the active deployment. Reports changes to tools, inputs and security without deploying anything.")
+
+		Payload(func() {
+			Extend(EvaluateOpenAPIv3Form)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(OpenAPIv3Evaluation)
+
+		HTTP(func() {
+			POST("/rpc/deployments.evaluateOpenAPIv3")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "evaluateOpenAPIv3")
+		Meta("openapi:extension:x-speakeasy-name-override", "evaluateOpenAPIv3")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EvaluateOpenAPIv3"}`)
+	})
+
+	Method("getDeploymentEvaluation", func() {
+		Description("Compare the OpenAPI documents in a deployment with the deployment it was created from.")
+
+		Payload(func() {
+			Required("deployment_id")
+			Attribute("deployment_id", String, "The ID of the deployment to evaluate.")
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetDeploymentEvaluationResult)
+
+		HTTP(func() {
+			GET("/rpc/deployments.evaluation")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("deployment_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getDeploymentEvaluation")
+		Meta("openapi:extension:x-speakeasy-name-override", "evaluation")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeploymentEvaluation"}`)
+	})
 })
 
 var DeploymentSummary = Type("DeploymentSummary", func() {
@@ -293,7 +345,6 @@ var CreateDeploymentForm = Type("CreateDeploymentForm", func() {
 	Attribute("openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm))
 	Attribute("functions", ArrayOf(AddFunctionsForm))
 	Attribute("packages", ArrayOf(AddDeploymentPackageForm))
-	Attribute("external_mcps", ArrayOf(AddExternalMCPForm))
 })
 
 var AddOpenAPIv3DeploymentAssetForm = Type("AddOpenAPIv3DeploymentAssetForm", func() {
@@ -356,31 +407,6 @@ var AddDeploymentPackageForm = Type("AddDeploymentPackageForm", func() {
 	})
 	Attribute("version", String, func() {
 		Description("The version of the package.")
-	})
-})
-
-var AddExternalMCPForm = Type("AddExternalMCPForm", func() {
-	Required("name", "slug", "registry_server_specifier")
-
-	Attribute("registry_id", String, func() {
-		Description("The ID of the external MCP registry the server is from.")
-		Format(FormatUUID)
-	})
-	Attribute("name", String, func() {
-		Description("The display name for the external MCP server.")
-		Example("My Slack Integration")
-	})
-	Attribute("slug", shared.Slug, func() {
-		Description("A URL-friendly identifier used for tool prefixing (e.g., 'exa').")
-		Example("exa")
-	})
-	Attribute("registry_server_specifier", String, func() {
-		Description("The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').")
-		Example("slack")
-	})
-	Attribute("selected_remotes", ArrayOf(String), func() {
-		Description("URLs of the remotes to use for this MCP server. If not provided, the backend will auto-select based on transport type preference.")
-		Example([]string{"https://mcp.example.com/sse"})
 	})
 })
 
@@ -447,11 +473,10 @@ var EvolveForm = Type("EvolveForm", func() {
 	Attribute("upsert_openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm), "The OpenAPI 3.x documents to upsert in the new deployment.")
 	Attribute("upsert_packages", ArrayOf(AddPackageForm), "The packages to upsert in the new deployment.")
 	Attribute("upsert_functions", ArrayOf(AddFunctionsForm), "The tool functions to upsert in the new deployment.")
-	Attribute("upsert_external_mcps", ArrayOf(AddExternalMCPForm), "The external MCP servers to upsert in the new deployment.")
 	Attribute("exclude_openapiv3_assets", ArrayOf(String), "The OpenAPI 3.x documents, identified by slug, to exclude from the new deployment when cloning a previous deployment.")
 	Attribute("exclude_packages", ArrayOf(String), "The packages to exclude from the new deployment when cloning a previous deployment.")
 	Attribute("exclude_functions", ArrayOf(String), "The functions, identified by slug, to exclude from the new deployment when cloning a previous deployment.")
-	Attribute("exclude_external_mcps", ArrayOf(String), "The external MCP servers, identified by slug, to exclude from the new deployment when cloning a previous deployment.")
+	Attribute("exclude_external_mcps", ArrayOf(String), "Has no effect: new deployments never include external MCP servers. Accepted so existing callers keep working.")
 })
 
 var EvolveResult = Type("EvolveResult", func() {
@@ -490,4 +515,93 @@ var DeploymentLogEvent = Type("DeploymentLogEvent", func() {
 	Attribute("created_at", String, "The creation date of the log event")
 	Attribute("event", String, "The type of event that occurred")
 	Attribute("message", String, "The message of the log event")
+})
+
+var EvaluateOpenAPIv3Form = Type("EvaluateOpenAPIv3Form", func() {
+	Required("asset_id", "slug")
+
+	Attribute("asset_id", String, "The ID of the uploaded OpenAPI document asset to evaluate.")
+	Attribute("slug", String, "The slug of the OpenAPI source the document will replace. A slug that is not in the active deployment is evaluated as a new source.")
+	Attribute("name", String, "The display name of the source. Defaults to the deployed name or the slug.")
+})
+
+var GetDeploymentEvaluationResult = Type("GetDeploymentEvaluationResult", func() {
+	Required("deployment_id", "documents")
+
+	Attribute("deployment_id", String, "The ID of the evaluated deployment.")
+	Attribute("base_deployment_id", String, "The ID of the deployment it is compared with. Absent for the first deployment in a project.")
+	Attribute("documents", ArrayOf(OpenAPIv3Evaluation), "One evaluation per OpenAPI source that was added, changed or removed.")
+})
+
+var OpenAPIv3Evaluation = Type("OpenAPIv3Evaluation", func() {
+	Description("The changes an OpenAPI document introduces compared with the deployed version of the same source.")
+	Required("slug", "name", "status", "changes", "breaking_count", "warning_count", "info_count", "affected_toolsets")
+
+	Attribute("slug", String, "The slug of the OpenAPI source.")
+	Attribute("name", String, "The display name of the OpenAPI source.")
+	Attribute("status", String, "Whether the source is new, changed, unchanged or removed.", func() {
+		Enum("new", "changed", "unchanged", "removed")
+	})
+	Attribute("asset_id", String, "The asset ID of the evaluated document. Absent when the source was removed.")
+	Attribute("base_asset_id", String, "The asset ID of the deployed document. Absent for a new source.")
+	Attribute("base", OpenAPIv3DocumentSnapshot, "A summary of the deployed document.")
+	Attribute("next", OpenAPIv3DocumentSnapshot, "A summary of the evaluated document.")
+	Attribute("changes", ArrayOf(OpenAPIv3EvaluationChange), "Every change found, most severe first.")
+	Attribute("breaking_count", Int, "The number of breaking changes.")
+	Attribute("warning_count", Int, "The number of changes that need attention.")
+	Attribute("info_count", Int, "The number of informational changes.")
+	Attribute("affected_toolsets", ArrayOf(OpenAPIv3AffectedToolset), "Toolsets (MCP servers) that include tools from this source.")
+})
+
+var OpenAPIv3DocumentSnapshot = Type("OpenAPIv3DocumentSnapshot", func() {
+	Required("tool_count", "skipped_operation_count", "security_schemes", "default_security")
+
+	Attribute("tool_count", Int, "The number of tools the document produces.")
+	Attribute("skipped_operation_count", Int, "The number of operations that cannot be turned into tools.")
+	Attribute("security_schemes", ArrayOf(OpenAPIv3SecuritySchemeSummary), "The security schemes tools can use.")
+	Attribute("default_security", String, "The document-level security requirement.")
+	Attribute("server_url", String, "The default server URL tools call.")
+})
+
+var OpenAPIv3SecuritySchemeSummary = Type("OpenAPIv3SecuritySchemeSummary", func() {
+	Required("key", "type", "summary", "env_variables")
+
+	Attribute("key", String, "The name of the scheme under components.securitySchemes.")
+	Attribute("type", String, "The OpenAPI security scheme type.")
+	Attribute("summary", String, "A short description of the scheme.")
+	Attribute("env_variables", ArrayOf(String), "The environment variables that supply credentials for the scheme.")
+})
+
+var OpenAPIv3EvaluationChange = Type("OpenAPIv3EvaluationChange", func() {
+	Required("severity", "category", "code", "title", "details", "tools")
+
+	Attribute("severity", OpenAPIv3EvaluationSeverity, "How likely the change is to break existing MCP servers.")
+	Attribute("category", OpenAPIv3EvaluationCategory, "The part of the MCP the change affects.")
+	Attribute("code", String, "A stable identifier for the kind of change.")
+	Attribute("title", String, "A one-line summary of the change.")
+	Attribute("details", ArrayOf(String), "Supporting lines, such as before and after values.")
+	Attribute("tools", ArrayOf(String), "The names of the tools the change affects.")
+})
+
+var OpenAPIv3EvaluationSeverity = Type("OpenAPIv3EvaluationSeverity", String, func() {
+	Description("How likely an OpenAPI change is to break existing MCP servers.")
+	Enum("breaking", "warning", "info")
+})
+
+var OpenAPIv3EvaluationCategory = Type("OpenAPIv3EvaluationCategory", String, func() {
+	Description("The part of the MCP an OpenAPI change affects.")
+	Enum("security", "tools", "server")
+})
+
+var OpenAPIv3AffectedToolset = Type("OpenAPIv3AffectedToolset", func() {
+	Required("id", "name", "slug", "mcp_enabled", "oauth_configured", "tool_count", "affected_tool_count")
+
+	Attribute("id", String, "The ID of the toolset.")
+	Attribute("name", String, "The name of the toolset.")
+	Attribute("slug", String, "The slug of the toolset.")
+	Attribute("mcp_slug", String, "The MCP slug of the toolset, when it is served as an MCP server.")
+	Attribute("mcp_enabled", Boolean, "Whether the toolset is served as an MCP server.")
+	Attribute("oauth_configured", Boolean, "Whether the MCP server has OAuth configured.")
+	Attribute("tool_count", Int, "The number of tools from this source in the toolset.")
+	Attribute("affected_tool_count", Int, "The number of those tools with breaking changes or changes that need attention.")
 })

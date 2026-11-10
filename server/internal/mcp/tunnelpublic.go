@@ -1,8 +1,8 @@
 // Anonymous public serving for tunneled MCP servers.
 //
 // Public tunneled endpoints have NO OAuth surface and NO user_sessions rows:
-// Gram terminates MCP sessions itself. On a successful anonymous initialize
-// it mints a Gram-owned session id, rewrites the backend's Mcp-Session-Id
+// Speakeasy terminates MCP sessions itself. On a successful anonymous initialize
+// it mints a Speakeasy-owned session id, rewrites the backend's Mcp-Session-Id
 // response header to it, and records a Redis-only mapping to the backend's
 // session id plus the exact tunnel target (gateway address + agent session)
 // that owns it. Session-bearing requests resolve that mapping and are pinned
@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -45,6 +46,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/publiclimits"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -362,7 +364,7 @@ func (s *Service) serveTunneledPublicBackend(
 // (this endpoint deliberately has no authorization server — relaying the
 // challenge would misdirect clients at an unreachable one), and
 // state-mutating headers (Set-Cookie, Clear-Site-Data) that would let a
-// backend plant or wipe browser state on the Gram or custom-domain origin.
+// backend plant or wipe browser state on the Speakeasy or custom-domain origin.
 func stripPublicResponseHeaders(resp *http.Response) {
 	resp.Header.Del("WWW-Authenticate")
 	resp.Header.Del("Set-Cookie")
@@ -373,7 +375,7 @@ func stripPublicResponseHeaders(resp *http.Response) {
 // uncommitted reservation so a Redis stall cannot pin the request goroutine.
 const reservationCleanupTimeout = 5 * time.Second
 
-// serveTunneledPublicInit serves anonymous requests that carry no Gram
+// serveTunneledPublicInit serves anonymous requests that carry no Speakeasy
 // session id: initialize plus all traffic to stateless/draft-protocol
 // backends. Admission (initialize rate limit + capacity reservation) runs as
 // plain pre-proxy code so availability failures surface as real HTTP status
@@ -399,7 +401,10 @@ func (s *Service) serveTunneledPublicInit(
 	// Peek the JSON-RPC method, restoring the body for the proxy. A parse
 	// failure or non-initialize method simply skips reservation; the proxy
 	// then handles the request (or rejects a malformed/batch body) itself.
-	isInit := r.Method == http.MethodPost && peekIsInitialize(r)
+	isInit, clientFamily := false, ""
+	if r.Method == http.MethodPost {
+		isInit, clientFamily = peekInitialize(r)
+	}
 
 	var sid string
 	reserved := false
@@ -430,8 +435,19 @@ func (s *Service) serveTunneledPublicInit(
 		reserved = true
 	}
 
-	p, err := s.tunnelManager.buildProxy(ctx, tunnelrouting.ClientAffinityKeyFromRequest(r), logger, endpoint.ProjectID, organizationID, mcpServer, "", "", nil)
+	p, err := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
+		ClientAffinityKey:  tunnelrouting.ClientAffinityKeyFromRequest(r),
+		ProjectID:          endpoint.ProjectID,
+		OrganizationID:     organizationID,
+		MCPServer:          mcpServer,
+		ResourceIdentifier: "",
+		UpstreamAuth:       "",
+		WWWAuthenticate:    "",
+		Selection:          nil,
+		Request:            r,
+	})
 	if err != nil {
+		tagTunnelOutage(w, err)
 		if reserved {
 			s.rollbackReservation(ctx, logger, tunnelID, mcpServerID, sid)
 		}
@@ -447,7 +463,7 @@ func (s *Service) serveTunneledPublicInit(
 		if !reserved {
 			return nil
 		}
-		ok, err := s.commitAnonymousSession(ctx, logger, endpoint, mcpServer, p, tunnelID, mcpServerID, sid, resp)
+		ok, err := s.commitAnonymousSession(ctx, logger, endpoint, mcpServer, p, tunnelID, mcpServerID, sid, clientFamily, resp)
 		if err != nil {
 			return err
 		}
@@ -470,7 +486,9 @@ func (s *Service) serveTunneledPublicInit(
 
 // commitAnonymousSession records the Redis mapping for a successful,
 // session-bearing anonymous initialize and rewrites the response's
-// Mcp-Session-Id to the Gram-owned id. Returns (committed, err): committed is
+// Mcp-Session-Id to the Speakeasy-owned id. clientFamily, classified from the
+// initialize's clientInfo.name, rides along so the session's later requests
+// are attributed without another lookup. Returns (committed, err): committed is
 // false with a nil error for the paths that legitimately mint no session
 // (non-2xx initialize, stateless backend that returned no session header) so
 // the caller releases the reservation. A non-nil error aborts the relay
@@ -482,7 +500,7 @@ func (s *Service) commitAnonymousSession(
 	endpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
 	p *proxy.Proxy,
-	tunnelID, mcpServerID, sid string,
+	tunnelID, mcpServerID, sid, clientFamily string,
 	resp *http.Response,
 ) (bool, error) {
 	logger = logger.With(attr.SlogTunnelAnonymousSessionHash(hashSessionID(sid)))
@@ -493,7 +511,7 @@ func (s *Service) commitAnonymousSession(
 
 	backendSids := resp.Header.Values(proxy.McpSessionIDHeader)
 	if len(backendSids) == 0 {
-		// Stateless / draft-protocol backend: no session to track. Gram never
+		// Stateless / draft-protocol backend: no session to track. Speakeasy never
 		// synthesizes a session header the backend did not produce.
 		return false, nil
 	}
@@ -526,6 +544,7 @@ func (s *Service) commitAnonymousSession(
 		BackendSessionID: backendSid,
 		GatewayAddr:      p.RemoteURL,
 		AgentSessionID:   agentSession,
+		ClientFamily:     clientFamily,
 	}
 	err := s.tunnelPublic.sessions.Commit(ctx, tunnelID, mcpServerID, sid, session)
 	switch {
@@ -550,13 +569,14 @@ func (s *Service) rollbackReservation(ctx context.Context, logger *slog.Logger, 
 	}
 }
 
-// peekIsInitialize reads the request body (bounded), restores it for the
-// proxy, and reports whether it is a single JSON-RPC "initialize" request.
-// Malformed, batched, or oversized bodies read as not-initialize; the proxy
-// then applies its own parsing and rejection semantics.
-func peekIsInitialize(r *http.Request) bool {
+// peekInitialize reads the request body (bounded), restores it for the
+// proxy, and reports whether it is a single JSON-RPC "initialize" request,
+// with the tunnel metrics family of the clientInfo.name it reports ("" when
+// none). Malformed, batched, or oversized bodies read as not-initialize; the
+// proxy then applies its own parsing and rejection semantics.
+func peekInitialize(r *http.Request) (bool, string) {
 	if r.Body == nil {
-		return false
+		return false, ""
 	}
 	// Read one byte past the proxy's buffered-body cap: restoring exactly the
 	// cap would make an oversized body indistinguishable from a cap-sized one
@@ -565,17 +585,27 @@ func peekIsInitialize(r *http.Request) bool {
 	_ = r.Body.Close()
 	if err != nil {
 		r.Body = io.NopCloser(bytes.NewReader(body))
-		return false
+		return false, ""
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
 
 	var probe struct {
-		Method string `json:"method"`
+		Method string          `json:"method"`
+		Params json.RawMessage `json:"params"`
 	}
-	if err := json.Unmarshal(body, &probe); err != nil {
-		return false
+	if err := json.Unmarshal(body, &probe); err != nil || probe.Method != mcpversions.MethodInitialize {
+		return false, ""
 	}
-	return probe.Method == "initialize"
+	// Malformed params still reserve a session; they only lose attribution.
+	var params struct {
+		ClientInfo struct {
+			Name string `json:"name"`
+		} `json:"clientInfo"`
+	}
+	if err := json.Unmarshal(probe.Params, &params); err != nil {
+		return true, ""
+	}
+	return true, reportedClientFamily(params.ClientInfo.Name)
 }
 
 // isValidBackendSessionID enforces the MCP spec's constraint that a session
@@ -594,7 +624,7 @@ func isValidBackendSessionID(sid string) bool {
 }
 
 // serveTunneledPublicSession serves an anonymous request that carries a
-// Gram-owned session id: resolve the Redis mapping, pin the forward to the
+// Speakeasy-owned session id: resolve the Redis mapping, pin the forward to the
 // exact recorded gateway + agent session, and translate the session header in
 // both directions. A lost mapping or dead target surfaces as HTTP 404 so MCP
 // clients re-initialize; the cross-gateway retryer is never used because the
@@ -614,7 +644,7 @@ func (s *Service) serveTunneledPublicSession(
 	mcpServerID := mcpServer.ID.String()
 
 	if !tunnelsessions.IsSessionID(sid) {
-		// Not a Gram-minted id — never valid on this endpoint, and not safe
+		// Not a Speakeasy-minted id — never valid on this endpoint, and not safe
 		// to use as Redis key material.
 		return oops.E(oops.CodeNotFound, nil, "session not found").LogWarn(ctx, logger)
 	}
@@ -648,6 +678,7 @@ func (s *Service) serveTunneledPublicSession(
 		}
 	}
 	if !live {
+		m.observeNoRoute(tunnelID, mcpServerID, r)
 		if delErr := rt.sessions.Delete(ctx, tunnelID, mcpServerID, sid); delErr != nil {
 			logger.ErrorContext(ctx, "drop anonymous tunnel session for dead gateway", attr.SlogError(delErr))
 		}
@@ -658,6 +689,7 @@ func (s *Service) serveTunneledPublicSession(
 	headers = append(headers,
 		proxy.ConfiguredHeader{
 			IsRequired:             true,
+			IsSecret:               false,
 			Name:                   wire.HeaderTunnelAgentSession,
 			StaticValue:            session.AgentSessionID,
 			ValueFromRequestHeader: "",
@@ -665,6 +697,7 @@ func (s *Service) serveTunneledPublicSession(
 		// Configured headers win over copied request headers.
 		proxy.ConfiguredHeader{
 			IsRequired:             true,
+			IsSecret:               false,
 			Name:                   proxy.McpSessionIDHeader,
 			StaticValue:            session.BackendSessionID,
 			ValueFromRequestHeader: "",
@@ -687,10 +720,12 @@ func (s *Service) serveTunneledPublicSession(
 		"",
 		"",
 		nil,
+		remotemcp.WithHeaderPolicy(proxy.HeaderPolicyTunneled),
 	)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
 	p.GuardianClientOptions = m.guardianClientOptions()
+	p.SessionClients = recordedClientFamily(session.ClientFamily)
 
 	isDelete := r.Method == http.MethodDelete
 	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
@@ -721,7 +756,7 @@ func (s *Service) serveTunneledPublicSession(
 		}
 
 		// Never leak the backend's session id: rewrite any echoed session
-		// header back to the Gram-owned id.
+		// header back to the Speakeasy-owned id.
 		if resp.Header.Get(proxy.McpSessionIDHeader) != "" {
 			resp.Header.Set(proxy.McpSessionIDHeader, sid)
 		}

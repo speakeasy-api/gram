@@ -80,7 +80,7 @@ func TestDistributionPluginsHTTPSkillOnlyAuthorization(t *testing.T) {
 			for _, projection := range projections {
 				// Check raw transport keys: typed decoding alone ignores leaked fields.
 				for key := range projection {
-					require.Contains(t, []string{"id", "name", "description", "is_default"}, key)
+					require.Contains(t, []string{"id", "name", "description", "is_default", "auto_created"}, key)
 				}
 				var id string
 				require.NoError(t, json.Unmarshal(projection["id"], &id))
@@ -88,7 +88,7 @@ func TestDistributionPluginsHTTPSkillOnlyAuthorization(t *testing.T) {
 					found = true
 					encoded, err := json.Marshal(projection)
 					require.NoError(t, err)
-					require.JSONEq(t, `{"id":"`+plugin.ID+`","name":"HTTP target","description":"HTTP projection description","is_default":false}`, string(encoded))
+					require.JSONEq(t, `{"id":"`+plugin.ID+`","name":"HTTP target","description":"HTTP projection description","is_default":false,"auto_created":false}`, string(encoded))
 				}
 			}
 			require.True(t, found, "response must include the created plugin")

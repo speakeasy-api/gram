@@ -15,11 +15,15 @@ vi.mock("@/components/ui/MoreActions", () => ({
   MoreActions: ({
     actions,
   }: {
-    actions: Array<{ label: string; onClick: () => void }>;
+    actions: Array<{ label: string; onClick: () => void; disabled?: boolean }>;
   }) => (
     <>
       {actions.map((action) => (
-        <button key={action.label} onClick={action.onClick}>
+        <button
+          key={action.label}
+          onClick={action.onClick}
+          disabled={action.disabled}
+        >
           {action.label}
         </button>
       ))}
@@ -217,4 +221,35 @@ describe("ExportMap", () => {
     expect(screen.getByText("Collector A")).toBeTruthy();
     expect(screen.getByText("Collector B")).toBeTruthy();
   });
+});
+
+it("disables toggling and configuring an export with an unknown data source", () => {
+  render(
+    <MemoryRouter>
+      <ExportMap
+        exports={[
+          exportRow({
+            routeID: "future-route",
+            dataSource: "future_source",
+            destinationID: "destination-1",
+            destinationName: "Example destination",
+          }),
+        ]}
+        {...callbacks}
+      />
+    </MemoryRouter>,
+  );
+  expect((screen.getByRole("checkbox") as HTMLInputElement).disabled).toBe(
+    true,
+  );
+  for (const button of screen.getAllByRole("button", {
+    name: /^Configure.*export$/,
+  })) {
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(button);
+  }
+  expect(callbacks.onConfigure).not.toHaveBeenCalled();
+  expect(screen.getByText("Unknown data source")).toBeTruthy();
+  expect(screen.queryByText("future source")).toBeNull();
+  expect(screen.queryByText("future_source")).toBeNull();
 });

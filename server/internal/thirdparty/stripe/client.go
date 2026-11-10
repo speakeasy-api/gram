@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strings"
 	"time"
 
 	stripesdk "github.com/stripe/stripe-go/v85"
@@ -42,6 +43,18 @@ var ErrWebhookNotConfigured = errors.New("stripe webhook is not configured")
 
 // ErrCustomerNotFound indicates that a customer is missing or deleted in Stripe.
 var ErrCustomerNotFound = errors.New("stripe customer not found or deleted")
+
+// ErrCheckoutSessionNotFound indicates that a Checkout session is missing in Stripe.
+var ErrCheckoutSessionNotFound = errors.New("stripe checkout session not found")
+
+// ErrSubscriptionNotFound indicates that a subscription is missing in Stripe.
+var ErrSubscriptionNotFound = errors.New("stripe subscription not found")
+
+// ErrCheckoutTrialEndInvalid means Stripe rejected the trial_end parameter.
+var ErrCheckoutTrialEndInvalid = errors.New("stripe checkout trial end is invalid")
+
+// ErrInvalidGatewayCoupon indicates an unavailable promotion code or an invalid gateway coupon.
+var ErrInvalidGatewayCoupon = errors.New("invalid Stripe gateway promotion code or coupon")
 
 // ErrCustomerLookupUnavailable indicates that no live customer lookup is configured.
 var ErrCustomerLookupUnavailable = errors.New("stripe customer lookup is unavailable")
@@ -91,14 +104,33 @@ func IsConfigured(value string) bool {
 	return value != "" && value != "unset"
 }
 
+// GetSubscriptionOption controls validation for a live subscription read.
+type GetSubscriptionOption int
+
+// RequireAdoptionEligibility rejects subscriptions outside the configured billing catalog.
+// Ordinary reads remain tolerant so already-linked subscriptions can still be managed.
+const RequireAdoptionEligibility GetSubscriptionOption = iota
+
+// SubscriptionEligibilityError identifies a subscription that cannot be adopted.
+// Reason contains a safe catalog validation message, never upstream Stripe details.
+type SubscriptionEligibilityError struct {
+	Reason string
+}
+
+func (e *SubscriptionEligibilityError) Error() string { return e.Reason }
+
 // Client is the Stripe surface used by PAYG billing.
 type Client interface {
+	ResolveGatewayPromotionCode(context.Context, string) (string, error)
 	CreateCustomer(context.Context, CreateCustomerInput) (*Customer, error)
 	GetCustomer(context.Context, string) (*CustomerDetails, error)
 	UpdateCustomer(context.Context, UpdateCustomerInput) error
 	CreateCheckoutSession(context.Context, CreateCheckoutSessionInput) (*CheckoutSession, error)
+	// PublishableKey is the Stripe.js key paired with this client.
+	// Use IsConfigured to check for empty or "unset" configuration.
+	PublishableKey() string
 	GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error)
-	GetSubscription(context.Context, string) (*SubscriptionState, error)
+	GetSubscription(context.Context, string, ...GetSubscriptionOption) (*SubscriptionState, error)
 	SetSubscriptionCancelAtPeriodEnd(context.Context, SetSubscriptionCancelAtPeriodEndInput) (*SubscriptionState, error)
 	CreatePortalSession(context.Context, CreatePortalSessionInput) (*PortalSession, error)
 	GetInvoice(context.Context, string) (*InvoiceState, error)
@@ -196,24 +228,43 @@ func validAccountType(accountType string) string {
 	return ""
 }
 
-// CreateCheckoutSessionInput describes the hosted Checkout session for a PAYG subscription.
+// CreateCheckoutSessionInput describes a Checkout session for a PAYG subscription.
+// ReturnURL selects embedded Checkout. SuccessURL and CancelURL select the hosted page.
+// Stripe rejects a session that sets both.
 type CreateCheckoutSessionInput struct {
 	// CustomerID identifies the Stripe customer that owns the subscription.
 	CustomerID string
 
-	// OrganizationID is Gram's stable organization identifier.
+	// PromotionCodeID applies a resolved Stripe promotion instead of allowing manual entry.
+	PromotionCodeID string
+
+	// OrganizationID is Speakeasy's stable organization identifier.
 	OrganizationID string
 
 	// OrganizationSlug is the organization slug included in Stripe metadata.
 	OrganizationSlug string
 
-	// SuccessURL is the browser destination after successful Checkout.
+	// SuccessURL is the browser destination after successful hosted Checkout.
 	SuccessURL string
 
-	// CancelURL is the browser destination when Checkout is canceled.
+	// CancelURL is the browser destination when hosted Checkout is canceled.
 	CancelURL string
 
-	// TrialEnd is the UTC-aligned financial trial end. Gram retains the exact
+	// ReturnURL is where embedded Checkout sends the browser after a redirect-based
+	// payment method. It must contain the literal {CHECKOUT_SESSION_ID} template.
+	ReturnURL string
+
+	// EmbeddedBrandingV1 applies the immutable v1 appearance to new embedded intents.
+	// Leave false when replaying intents created before this branding version.
+	EmbeddedBrandingV1 bool
+
+	// EmbeddedBrandingDarkV1 applies the immutable dark preset, not the current UI tokens.
+	EmbeddedBrandingDarkV1 bool
+
+	// EmbeddedForm selects the adopted custom form checkout UI.
+	EmbeddedForm bool
+
+	// TrialEnd is the UTC-aligned financial trial end. Speakeasy retains the exact
 	// product trial end separately and the interval between them is a free stub.
 	TrialEnd *time.Time
 
@@ -232,12 +283,18 @@ type CheckoutSession struct {
 	// ID is Stripe's stable Checkout Session identifier.
 	ID string
 
-	// URL is Stripe's hosted Checkout page.
+	// URL is Stripe's hosted Checkout page. Empty for embedded Checkout.
 	URL string
+
+	// ClientSecret mounts embedded Checkout in the browser.
+	ClientSecret string
 }
 
 // CheckoutSessionState is the current Stripe state used to activate PAYG.
 type CheckoutSessionState struct {
+	Partner                *CheckoutPartnerState
+	PaymentStatus          string
+	OrganizationID         string
 	ID                     string
 	Status                 string
 	CustomerID             string
@@ -247,8 +304,20 @@ type CheckoutSessionState struct {
 	BillingCycleAnchor     time.Time
 }
 
+// PaymentReady reports whether Checkout has satisfied the payment gate. Metered
+// trials can complete with unpaid status even after collecting a payment method.
+// Callers must still verify completion, ownership, and subscription lifecycle.
+func (s *CheckoutSessionState) PaymentReady() bool {
+	return s != nil && (s.PaymentStatus == "paid" || s.PaymentStatus == "no_payment_required" ||
+		(s.PaymentStatus == "unpaid" && s.SubscriptionStatus == "trialing"))
+}
+
 // SubscriptionState is the live Stripe subscription data needed by billing callers.
 type SubscriptionState struct {
+	DiscountDescription     *string
+	DiscountEndsAt          time.Time
+	GatewayPromotionApplied bool
+
 	// ID is Stripe's stable subscription identifier.
 	ID string
 
@@ -263,6 +332,9 @@ type SubscriptionState struct {
 
 	// CurrentPeriodEnd is the exclusive service-period boundary for the TUM item.
 	CurrentPeriodEnd time.Time
+
+	// BillingCycleAnchor is Stripe's billing-cycle anchor for this subscription.
+	BillingCycleAnchor time.Time
 
 	// TrialStart is the start of the subscription trial, when present.
 	TrialStart time.Time
@@ -307,7 +379,7 @@ type CreatePortalSessionInput struct {
 	// CustomerID identifies the Stripe customer entering the portal.
 	CustomerID string
 
-	// ReturnURL is the Gram billing page Stripe returns the customer to.
+	// ReturnURL is the Speakeasy billing page Stripe returns the customer to.
 	ReturnURL string
 }
 
@@ -407,6 +479,9 @@ type WebhookEvent struct {
 }
 
 type stripeAPI interface {
+	listPromotionCodes(context.Context, *stripesdk.PromotionCodeListParams) stripesdk.Seq2[*stripesdk.PromotionCode, error]
+	retrieveCoupon(context.Context, string, *stripesdk.CouponRetrieveParams) (*stripesdk.Coupon, error)
+	retrievePrice(context.Context, string, *stripesdk.PriceRetrieveParams) (*stripesdk.Price, error)
 	createCustomer(context.Context, *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error)
 	retrieveCustomer(context.Context, string, *stripesdk.CustomerRetrieveParams) (*stripesdk.Customer, error)
 	updateCustomer(context.Context, string, *stripesdk.CustomerUpdateParams) (*stripesdk.Customer, error)
@@ -425,6 +500,26 @@ type stripeAPI interface {
 
 type sdkAPI struct {
 	client *stripesdk.Client
+}
+
+func (s *sdkAPI) listPromotionCodes(ctx context.Context, params *stripesdk.PromotionCodeListParams) stripesdk.Seq2[*stripesdk.PromotionCode, error] {
+	return s.client.V1PromotionCodes.List(ctx, params).All(ctx)
+}
+
+func (s *sdkAPI) retrieveCoupon(ctx context.Context, id string, params *stripesdk.CouponRetrieveParams) (*stripesdk.Coupon, error) {
+	coupon, err := s.client.V1Coupons.Retrieve(ctx, id, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK retrieve coupon: %w", err)
+	}
+	return coupon, nil
+}
+
+func (s *sdkAPI) retrievePrice(ctx context.Context, id string, params *stripesdk.PriceRetrieveParams) (*stripesdk.Price, error) {
+	price, err := s.client.V1Prices.Retrieve(ctx, id, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK retrieve price: %w", err)
+	}
+	return price, nil
 }
 
 func (s *sdkAPI) createCustomer(ctx context.Context, params *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error) {
@@ -532,13 +627,14 @@ func (s *sdkAPI) listCreditNotes(ctx context.Context, params *stripesdk.CreditNo
 }
 
 type client struct {
-	api           stripeAPI
-	catalog       Catalog
-	webhookSecret string
+	api            stripeAPI
+	catalog        Catalog
+	webhookSecret  string
+	publishableKey string
 }
 
 // NewClient creates a real Stripe client using the repository HTTP policy.
-func NewClient(guardianPolicy *guardian.Policy, apiKey, webhookSecret string, catalog Catalog) Client {
+func NewClient(guardianPolicy *guardian.Policy, apiKey, webhookSecret, publishableKey string, catalog Catalog) Client {
 	retries := guardian.DefaultRetryConfig()
 	retries.WaitMax = 10 * time.Second
 	retries.MaxAttempts = 1
@@ -553,10 +649,15 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey, webhookSecret string, ca
 	sdkClient := stripesdk.NewClient(apiKey, stripesdk.WithBackends(backends))
 
 	return &client{
-		api:           &sdkAPI{client: sdkClient},
-		catalog:       catalog,
-		webhookSecret: webhookSecret,
+		api:            &sdkAPI{client: sdkClient},
+		catalog:        catalog,
+		webhookSecret:  webhookSecret,
+		publishableKey: publishableKey,
 	}
+}
+
+func (c *client) PublishableKey() string {
+	return c.publishableKey
 }
 
 func (c *client) CreateCustomer(ctx context.Context, input CreateCustomerInput) (*Customer, error) {
@@ -635,6 +736,79 @@ func (c *client) UpdateCustomer(ctx context.Context, input UpdateCustomerInput) 
 	return nil
 }
 
+// ResolveGatewayPromotionCode resolves customer-facing text to a Stripe promotion ID.
+// Redemption remains subject to Stripe's availability checks when Checkout completes.
+func (c *client) ResolveGatewayPromotionCode(ctx context.Context, code string) (string, error) {
+	if !IsConfigured(code) {
+		return "", ErrInvalidGatewayCoupon
+	}
+	params := new(stripesdk.PromotionCodeListParams)
+	params.Code = stripesdk.String(code)
+	params.Active = new(true)
+	var promotion *stripesdk.PromotionCode
+	for candidate, err := range c.api.listPromotionCodes(ctx, params) {
+		if err != nil {
+			return "", fmt.Errorf("list Stripe gateway promotion codes: %w", err)
+		}
+		if candidate == nil || !candidate.Active || !strings.EqualFold(candidate.Code, code) {
+			continue
+		}
+		if promotion != nil {
+			return "", ErrInvalidGatewayCoupon
+		}
+		promotion = candidate
+	}
+	if promotion == nil || !strings.HasPrefix(promotion.ID, "promo_") ||
+		(promotion.ExpiresAt != 0 && promotion.ExpiresAt <= time.Now().Unix()) ||
+		(promotion.MaxRedemptions != 0 && promotion.TimesRedeemed >= promotion.MaxRedemptions) ||
+		promotion.Promotion == nil || promotion.Promotion.Type != stripesdk.PromotionCodePromotionTypeCoupon ||
+		promotion.Promotion.Coupon == nil {
+		return "", ErrInvalidGatewayCoupon
+	}
+	// Stripe enforces customer, first-purchase, and minimum-spend restrictions
+	// during redemption; lookup does not grant access or consume the promotion.
+	if err := c.validateGatewayCoupon(ctx, promotion.Promotion.Coupon.ID); err != nil {
+		return "", err
+	}
+	return promotion.ID, nil
+}
+
+// validateGatewayCoupon checks that a redeemable coupon applies only to the configured MCP-egress product.
+func (c *client) validateGatewayCoupon(ctx context.Context, couponID string) error {
+	if !IsConfigured(couponID) {
+		return ErrInvalidGatewayCoupon
+	}
+	params := new(stripesdk.CouponRetrieveParams)
+	params.AddExpand("applies_to")
+	coupon, err := c.api.retrieveCoupon(ctx, couponID, params)
+	if err != nil {
+		if stripeErr, ok := errors.AsType[*stripesdk.Error](err); ok && stripeErr.Code == stripesdk.ErrorCodeResourceMissing {
+			return fmt.Errorf("%w: %w", ErrInvalidGatewayCoupon, err)
+		}
+		return fmt.Errorf("retrieve Stripe gateway coupon: %w", err)
+	}
+	if coupon == nil || coupon.ID != couponID || coupon.Deleted || !coupon.Valid ||
+		(coupon.RedeemBy != 0 && coupon.RedeemBy <= time.Now().Unix()) ||
+		(coupon.MaxRedemptions != 0 && coupon.TimesRedeemed >= coupon.MaxRedemptions) ||
+		coupon.AppliesTo == nil || len(coupon.AppliesTo.Products) != 1 {
+		return ErrInvalidGatewayCoupon
+	}
+	if !IsConfigured(c.catalog.PriceIDMCPEgress) {
+		return errors.New("missing MCP egress price id in catalog")
+	}
+	price, err := c.api.retrievePrice(ctx, c.catalog.PriceIDMCPEgress, new(stripesdk.PriceRetrieveParams))
+	if err != nil {
+		return fmt.Errorf("retrieve Stripe MCP egress price: %w", err)
+	}
+	if price == nil || price.ID != c.catalog.PriceIDMCPEgress || price.Product == nil || price.Product.ID == "" {
+		return errors.New("stripe MCP egress price has no expected product identity")
+	}
+	if coupon.AppliesTo.Products[0] != price.Product.ID {
+		return ErrInvalidGatewayCoupon
+	}
+	return nil
+}
+
 func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckoutSessionInput) (*CheckoutSession, error) {
 	if input.IdempotencyKey == "" {
 		return nil, errMissingIdempotencyKey
@@ -647,9 +821,47 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	}
 
 	params := new(stripesdk.CheckoutSessionCreateParams)
-	params.AllowPromotionCodes = new(true)
-	params.CancelURL = stripesdk.String(input.CancelURL)
+	if input.PromotionCodeID != "" {
+		params.Discounts = []*stripesdk.CheckoutSessionCreateDiscountParams{
+			{PromotionCode: stripesdk.String(input.PromotionCodeID)},
+		}
+	} else {
+		params.AllowPromotionCodes = new(true)
+	}
 	params.ClientReferenceID = stripesdk.String(input.OrganizationID)
+	if input.ReturnURL != "" {
+		params.UIMode = stripesdk.String(string(stripesdk.CheckoutSessionUIModeEmbeddedPage))
+		params.ReturnURL = stripesdk.String(input.ReturnURL)
+		if input.EmbeddedBrandingV1 || input.EmbeddedBrandingDarkV1 {
+			// Never change this preset: durable intents must replay identical parameters.
+			params.BrandingSettings = &stripesdk.CheckoutSessionCreateBrandingSettingsParams{
+				DisplayName:     nil,
+				Icon:            nil,
+				Logo:            nil,
+				UnsetFields:     nil,
+				BackgroundColor: stripesdk.String("#ffffff"),
+				ButtonColor:     stripesdk.String("#303030"),
+				BorderStyle:     stripesdk.String("rectangular"),
+				FontFamily:      stripesdk.String("inter"),
+			}
+		}
+		if input.EmbeddedBrandingDarkV1 {
+			// Frozen from dark bg-surface-primary-default and primary: black and white.
+			params.BrandingSettings.BackgroundColor = stripesdk.String("#000000")
+			params.BrandingSettings.ButtonColor = stripesdk.String("#ffffff")
+		}
+
+		// Card payments stay on the page. Redirect-based methods still use ReturnURL.
+		params.RedirectOnCompletion = stripesdk.String(string(stripesdk.CheckoutSessionRedirectOnCompletionIfRequired))
+		if input.EmbeddedForm {
+			params.UIMode = stripesdk.String(string(stripesdk.CheckoutSessionUIModeForm))
+			params.BrandingSettings = nil
+			params.RedirectOnCompletion = nil
+		}
+	} else {
+		params.CancelURL = stripesdk.String(input.CancelURL)
+		params.SuccessURL = stripesdk.String(input.SuccessURL)
+	}
 	params.Customer = stripesdk.String(input.CustomerID)
 	params.ExpiresAt = new(input.ExpiresAt.Unix())
 	params.LineItems = []*stripesdk.CheckoutSessionCreateLineItemParams{
@@ -676,7 +888,6 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	params.SubscriptionData = new(stripesdk.CheckoutSessionCreateSubscriptionDataParams)
 	// Subscription metadata is also copied by Stripe onto invoice.parent.subscription_details.metadata.
 	params.SubscriptionData.Metadata = contractMetadata(identity)
-	params.SuccessURL = stripesdk.String(input.SuccessURL)
 	if input.TrialEnd != nil {
 		params.SubscriptionData.TrialEnd = new(input.TrialEnd.Unix())
 	} else {
@@ -687,9 +898,14 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 
 	session, err := c.api.createCheckoutSession(ctx, params)
 	if err != nil {
+		if stripeErr, ok := errors.AsType[*stripesdk.Error](err); ok &&
+			stripeErr.HTTPStatusCode == 400 && stripeErr.Type == stripesdk.ErrorTypeInvalidRequest &&
+			stripeErr.Param == "subscription_data[trial_end]" {
+			err = errors.Join(ErrCheckoutTrialEndInvalid, err)
+		}
 		return nil, fmt.Errorf("create Stripe Checkout session: %w", err)
 	}
-	return &CheckoutSession{ID: session.ID, URL: session.URL}, nil
+	return &CheckoutSession{ID: session.ID, URL: session.URL, ClientSecret: session.ClientSecret}, nil
 }
 
 func (c *client) ExpireCheckoutSession(ctx context.Context, id string) error {
@@ -705,9 +921,13 @@ func (c *client) ExpireCheckoutSession(ctx context.Context, id string) error {
 func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSessionState, error) {
 	params := new(stripesdk.CheckoutSessionRetrieveParams)
 	params.AddExpand("subscription")
+	params.AddExpand("subscription.discounts")
 
 	session, err := c.api.retrieveCheckoutSession(ctx, id, params)
 	if err != nil {
+		if stripeErr, ok := errors.AsType[*stripesdk.Error](err); ok && stripeErr.Code == stripesdk.ErrorCodeResourceMissing {
+			return nil, fmt.Errorf("%w: %w", ErrCheckoutSessionNotFound, err)
+		}
 		return nil, fmt.Errorf("retrieve Stripe Checkout session: %w", err)
 	}
 	if session == nil {
@@ -715,8 +935,11 @@ func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSe
 	}
 
 	state := &CheckoutSessionState{
+		Partner:                nil,
 		ID:                     session.ID,
 		Status:                 string(session.Status),
+		PaymentStatus:          string(session.PaymentStatus),
+		OrganizationID:         session.Metadata[organizationIDMetadataKey],
 		CustomerID:             "",
 		SubscriptionID:         "",
 		SubscriptionCustomerID: "",
@@ -727,6 +950,7 @@ func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSe
 		state.CustomerID = session.Customer.ID
 	}
 	if session.Subscription != nil {
+		state.Partner = c.checkoutPartnerState(session.Subscription)
 		state.SubscriptionID = session.Subscription.ID
 		state.SubscriptionStatus = string(session.Subscription.Status)
 		if session.Subscription.Customer != nil {
@@ -740,18 +964,65 @@ func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSe
 	return state, nil
 }
 
-func (c *client) GetSubscription(ctx context.Context, id string) (*SubscriptionState, error) {
+func (c *client) GetSubscription(ctx context.Context, id string, options ...GetSubscriptionOption) (*SubscriptionState, error) {
 	if id == "" {
 		return nil, errors.New("subscription id is required")
 	}
 
 	params := new(stripesdk.SubscriptionRetrieveParams)
 	params.AddExpand("latest_invoice")
+	params.AddExpand("discounts.source.coupon.applies_to")
 	subscription, err := c.api.retrieveSubscription(ctx, id, params)
 	if err != nil {
+		if stripeErr, ok := errors.AsType[*stripesdk.Error](err); ok && stripeErr.Code == stripesdk.ErrorCodeResourceMissing {
+			return nil, fmt.Errorf("%w: %w", ErrSubscriptionNotFound, err)
+		}
 		return nil, fmt.Errorf("retrieve Stripe subscription: %w", err)
 	}
+	for _, option := range options {
+		if option == RequireAdoptionEligibility {
+			if err := c.validateSubscriptionCatalog(subscription); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return c.subscriptionState(subscription)
+}
+
+// validateSubscriptionCatalog fails closed only when adopting a subscription.
+func (c *client) validateSubscriptionCatalog(subscription *stripesdk.Subscription) error {
+	if subscription == nil || subscription.ID == "" {
+		return errors.New("stripe subscription response is empty")
+	}
+	if !IsConfigured(c.catalog.PriceIDTUM) {
+		return errors.New("missing TUM price id in catalog")
+	}
+	if subscription.Items == nil || subscription.Items.HasMore {
+		return &SubscriptionEligibilityError{Reason: "stripe subscription item coverage is incomplete"}
+	}
+	var hasTUMServicePeriod bool
+	for _, item := range subscription.Items.Data {
+		if item == nil || item.Price == nil || !IsConfigured(item.Price.ID) {
+			return &SubscriptionEligibilityError{Reason: "stripe subscription item is missing a price"}
+		}
+		priceID := item.Price.ID
+		// Match subscriptionState: the first TUM item defines the service period.
+		if priceID == c.catalog.PriceIDTUM && !hasTUMServicePeriod {
+			if item.CurrentPeriodStart <= 0 || item.CurrentPeriodEnd <= item.CurrentPeriodStart {
+				return &SubscriptionEligibilityError{Reason: "stripe subscription is missing the configured TUM service period"}
+			}
+			hasTUMServicePeriod = true
+		}
+		if priceID != c.catalog.PriceIDTUM &&
+			(!IsConfigured(c.catalog.PriceIDMCPEgress) || priceID != c.catalog.PriceIDMCPEgress) &&
+			(!IsConfigured(c.catalog.PriceIDRiskScans) || priceID != c.catalog.PriceIDRiskScans) {
+			return &SubscriptionEligibilityError{Reason: "stripe subscription contains a price outside the configured AICP catalog"}
+		}
+	}
+	if !hasTUMServicePeriod {
+		return &SubscriptionEligibilityError{Reason: "stripe subscription is missing the configured TUM service period"}
+	}
+	return nil
 }
 
 func (c *client) SetSubscriptionCancelAtPeriodEnd(ctx context.Context, input SetSubscriptionCancelAtPeriodEndInput) (*SubscriptionState, error) {
@@ -762,6 +1033,7 @@ func (c *client) SetSubscriptionCancelAtPeriodEnd(ctx context.Context, input Set
 	params := new(stripesdk.SubscriptionUpdateParams)
 	params.CancelAtPeriodEnd = new(input.CancelAtPeriodEnd)
 	params.AddExpand("latest_invoice")
+	params.AddExpand("discounts.source.coupon.applies_to")
 	subscription, err := c.api.updateSubscription(ctx, input.SubscriptionID, params)
 	if err != nil {
 		return nil, fmt.Errorf("update Stripe subscription cancellation: %w", err)
@@ -829,12 +1101,17 @@ func (c *client) subscriptionState(subscription *stripesdk.Subscription) (*Subsc
 	status := string(subscription.Status)
 	paymentFailed := status == "past_due" && latestInvoiceStatus == "open" && latestInvoiceAmountRemaining > 0
 
+	description, endsAt, gatewayPromotion := c.subscriptionDiscount(subscription, time.Now())
 	return &SubscriptionState{
+		DiscountDescription:          description,
+		DiscountEndsAt:               endsAt,
+		GatewayPromotionApplied:      gatewayPromotion,
 		ID:                           subscription.ID,
 		CustomerID:                   customerID,
 		Status:                       status,
 		CurrentPeriodStart:           time.Unix(tumItem.CurrentPeriodStart, 0).UTC(),
 		CurrentPeriodEnd:             time.Unix(tumItem.CurrentPeriodEnd, 0).UTC(),
+		BillingCycleAnchor:           unixTime(subscription.BillingCycleAnchor),
 		TrialStart:                   unixTime(subscription.TrialStart),
 		TrialEnd:                     unixTime(subscription.TrialEnd),
 		CancelAtPeriodEnd:            subscription.CancelAtPeriodEnd,
@@ -1119,16 +1396,28 @@ func (s *stubClient) UpdateCustomer(ctx context.Context, _ UpdateCustomerInput) 
 	return nil
 }
 
+func (s *stubClient) ResolveGatewayPromotionCode(context.Context, string) (string, error) {
+	return "", errors.New("resolve Stripe gateway promotion code is unavailable locally")
+}
+
 func (s *stubClient) CreateCheckoutSession(ctx context.Context, input CreateCheckoutSessionInput) (*CheckoutSession, error) {
 	s.logger.DebugContext(ctx, "stub Stripe Checkout session creation skipped")
-	return &CheckoutSession{ID: "cs_local_stub", URL: fmt.Sprintf("http://localhost:3000/%s/billing", url.PathEscape(input.OrganizationSlug))}, nil
+	return &CheckoutSession{
+		ID:           "cs_local_stub",
+		URL:          fmt.Sprintf("http://localhost:3000/%s/billing", url.PathEscape(input.OrganizationSlug)),
+		ClientSecret: "",
+	}, nil
+}
+
+func (*stubClient) PublishableKey() string {
+	return ""
 }
 
 func (s *stubClient) GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error) {
 	return nil, errors.New("retrieve Stripe Checkout session is unavailable locally")
 }
 
-func (s *stubClient) GetSubscription(context.Context, string) (*SubscriptionState, error) {
+func (s *stubClient) GetSubscription(context.Context, string, ...GetSubscriptionOption) (*SubscriptionState, error) {
 	return nil, errors.New("retrieve Stripe subscription is unavailable locally")
 }
 

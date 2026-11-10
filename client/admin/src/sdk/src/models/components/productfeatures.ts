@@ -18,9 +18,9 @@ export type ProductFeatures = {
    */
   authzChallengeLoggingEnabled: boolean;
   /**
-   * Whether MCP consent screens offer the tool filtering picker for the organization
+   * Whether the organization has the staff-managed gateway Code Mode entitlement
    */
-  consentToolFilteringEnabled: boolean;
+  codeModeEnabled: boolean;
   /**
    * Whether the organization can supply its own model provider API keys (BYOK)
    */
@@ -50,9 +50,17 @@ export type ProductFeatures = {
    */
   networkIngressEnabled: boolean;
   /**
-   * Whether the organization can use the Gram Platform MCP capability
+   * Whether an organization admin turned the organization gateway off, so its routes answer 404
+   */
+  organizationGatewayDisabled: boolean;
+  /**
+   * Whether the organization can use the Speakeasy Platform MCP capability
    */
   platformMcpEnabled: boolean;
+  /**
+   * Whether the staff-managed provider setup rollout is enabled. Defaults to false when absent.
+   */
+  providerSetupEnabled?: boolean | undefined;
   /**
    * Whether consent screens expose automatic remote-session refresh for the organization
    */
@@ -74,6 +82,10 @@ export type ProductFeatures = {
    */
   sessionPortabilityEnabled: boolean;
   /**
+   * Whether the organization can configure signals intelligence
+   */
+  signalsIntelligenceEnabled: boolean;
+  /**
    * Whether skill capture stores activation metadata without requesting manifest content
    */
   skillCaptureMetadataOnly: boolean;
@@ -89,6 +101,10 @@ export type ProductFeatures = {
    * Whether tool I/O logging is enabled
    */
   toolIoLogsEnabled: boolean;
+  /**
+   * Whether upstream auth enforcement is on for the organization. Absent when the state could not be read. Staff change it through the admin enforcement endpoint.
+   */
+  upstreamAuthEnforced?: boolean | undefined;
 };
 
 /** @internal */
@@ -99,7 +115,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
   z.object({
     ai_platform_push_integrations_enabled: z.boolean(),
     authz_challenge_logging_enabled: z.boolean(),
-    consent_tool_filtering_enabled: z.boolean(),
+    code_mode_enabled: z.boolean(),
     custom_model_keys_enabled: z.boolean(),
     customer_managed_encryption_keys_enabled: z.boolean(),
     device_agent: z.boolean(),
@@ -107,23 +123,27 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     network_ingress_enabled: z.boolean(),
+    organization_gateway_disabled: z.boolean(),
     platform_mcp_enabled: z.boolean(),
+    provider_setup_enabled: z.optional(z.boolean()),
     remote_session_auto_refresh_enabled: z.boolean(),
     remote_session_auto_refresh_enforced_enabled: z.boolean(),
     scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
     session_portability_enabled: z.boolean(),
+    signals_intelligence_enabled: z.boolean(),
     skill_capture_metadata_only: z.boolean(),
     skills_enabled: z.boolean(),
     sso_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
+    upstream_auth_enforced: z.optional(z.boolean()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "ai_platform_push_integrations_enabled":
         "aiPlatformPushIntegrationsEnabled",
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
-      "consent_tool_filtering_enabled": "consentToolFilteringEnabled",
+      "code_mode_enabled": "codeModeEnabled",
       "custom_model_keys_enabled": "customModelKeysEnabled",
       "customer_managed_encryption_keys_enabled":
         "customerManagedEncryptionKeysEnabled",
@@ -132,17 +152,21 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
       "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",
       "network_ingress_enabled": "networkIngressEnabled",
+      "organization_gateway_disabled": "organizationGatewayDisabled",
       "platform_mcp_enabled": "platformMcpEnabled",
+      "provider_setup_enabled": "providerSetupEnabled",
       "remote_session_auto_refresh_enabled": "remoteSessionAutoRefreshEnabled",
       "remote_session_auto_refresh_enforced_enabled":
         "remoteSessionAutoRefreshEnforcedEnabled",
       "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
       "session_portability_enabled": "sessionPortabilityEnabled",
+      "signals_intelligence_enabled": "signalsIntelligenceEnabled",
       "skill_capture_metadata_only": "skillCaptureMetadataOnly",
       "skills_enabled": "skillsEnabled",
       "sso_enabled": "ssoEnabled",
       "tool_io_logs_enabled": "toolIoLogsEnabled",
+      "upstream_auth_enforced": "upstreamAuthEnforced",
     });
   }),
 );

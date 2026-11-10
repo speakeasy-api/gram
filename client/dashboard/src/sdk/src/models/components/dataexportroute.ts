@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -16,11 +17,12 @@ export const DataExportRouteDataSource = {
   ProductTelemetry: "product_telemetry",
   RiskFindings: "risk_findings",
   ToolCallLogs: "tool_call_logs",
+  McpConnectionLogs: "mcp_connection_logs",
 } as const;
 /**
  * Class of data exported by this route.
  */
-export type DataExportRouteDataSource = ClosedEnum<
+export type DataExportRouteDataSource = OpenEnum<
   typeof DataExportRouteDataSource
 >;
 
@@ -59,9 +61,10 @@ export type DataExportRoute = {
 };
 
 /** @internal */
-export const DataExportRouteDataSource$inboundSchema: z.ZodMiniEnum<
-  typeof DataExportRouteDataSource
-> = z.enum(DataExportRouteDataSource);
+export const DataExportRouteDataSource$inboundSchema: z.ZodMiniType<
+  DataExportRouteDataSource,
+  unknown
+> = openEnums.inboundSchema(DataExportRouteDataSource);
 
 /** @internal */
 export const DataExportRoute$inboundSchema: z.ZodMiniType<

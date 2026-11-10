@@ -32,11 +32,15 @@ func (s *Service) upsertShadowMCPInventoryURLs(ctx context.Context, orgID string
 	go func() {
 		asyncCtx, cancel := context.WithTimeout(detachedCtx, shadowMCPInventoryUpsertTimeout)
 		defer cancel()
+		// The span lives inside the goroutine so it measures the detached work;
+		// it outlasts the ingest span, which does not wait on it.
+		asyncCtx, span := s.tracer.Start(asyncCtx, "hooks.upsertShadowMCPInventoryURLs")
+		defer span.End()
 		// One custom-domain lookup covers every entry — the per-entry
 		// IsGramHostedMCPURLForOrg variant would re-query custom_domains for
 		// each external URL in the inventory.
 		//
-		// Without the host list every Gram-hosted entry would read as external
+		// Without the host list every Speakeasy-hosted entry would read as external
 		// and be recorded as shadow inventory. This capture is best-effort
 		// telemetry, so skipping the batch beats writing wrong rows.
 		trustedHosts, err := s.shadowMCPClient.TrustedMCPHostsForOrg(asyncCtx, orgID)

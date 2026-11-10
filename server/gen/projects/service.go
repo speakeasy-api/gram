@@ -15,7 +15,7 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manages projects in Gram.
+// Manages projects in Speakeasy.
 type Service interface {
 	// Get project details by slug.
 	GetProject(context.Context, *GetProjectPayload) (res *GetProjectResult, err error)

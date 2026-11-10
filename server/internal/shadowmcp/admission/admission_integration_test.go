@@ -120,20 +120,14 @@ func TestLockProjectSerializesTransactions(t *testing.T) {
 	require.NoError(t, LockProject(ctx, first, fixture.projectID))
 
 	second := testenv.BeginTx(t, ctx, fixture.conn)
-	acquired := make(chan error, 1)
-	go func() {
-		acquired <- LockProject(ctx, second, fixture.projectID)
-	}()
-
-	require.Never(t, func() bool {
-		return len(acquired) > 0
-	}, 100*time.Millisecond, 10*time.Millisecond)
-
+	// The server-side timeout proves the exact advisory lock was reached.
+	const probeTimeout = 100 * time.Millisecond
+	testenv.SetLockTimeout(t, ctx, second, probeTimeout)
+	testenv.RequireLockNotAvailable(t, LockProject(ctx, second, fixture.projectID))
+	require.NoError(t, second.Rollback(ctx))
 	require.NoError(t, first.Rollback(ctx))
-	require.Eventually(t, func() bool {
-		return len(acquired) > 0
-	}, time.Second, 10*time.Millisecond)
-	require.NoError(t, <-acquired)
+	third := testenv.BeginTx(t, ctx, fixture.conn)
+	require.NoError(t, LockProject(ctx, third, fixture.projectID))
 }
 
 func seedBlockingPolicy(t *testing.T, fixture admissionFixture) {
@@ -166,8 +160,16 @@ func seedBlockingPolicy(t *testing.T, fixture admissionFixture) {
 
 func seedDecision(t *testing.T, fixture admissionFixture, target, decision string, principals []string) uuid.UUID {
 	t.Helper()
+	return seedDecisionOn(t, fixture.conn, fixture, target, decision, principals)
+}
 
-	request, err := approvalrepo.New(fixture.conn).UpsertApprovalRequest(t.Context(), approvalrepo.UpsertApprovalRequestParams{
+// seedDecisionOn writes the decision through db, which may be an open
+// transaction, so a test can prove an approval lives and dies with the write
+// it was recorded for.
+func seedDecisionOn(t *testing.T, db approvalrepo.DBTX, fixture admissionFixture, target, decision string, principals []string) uuid.UUID {
+	t.Helper()
+
+	request, err := approvalrepo.New(db).UpsertApprovalRequest(t.Context(), approvalrepo.UpsertApprovalRequestParams{
 		OrganizationID:            fixture.orgID,
 		ProjectID:                 fixture.projectID,
 		TargetKind:                "server_url",
@@ -179,7 +181,7 @@ func seedDecision(t *testing.T, fixture admissionFixture, target, decision strin
 		RiskPolicyBypassRequestID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
-	_, err = approvalrepo.New(fixture.conn).CreateApprovalDecision(t.Context(), approvalrepo.CreateApprovalDecisionParams{
+	_, err = approvalrepo.New(db).CreateApprovalDecision(t.Context(), approvalrepo.CreateApprovalDecisionParams{
 		OrganizationID:       fixture.orgID,
 		ProjectID:            fixture.projectID,
 		McpApprovalRequestID: request.ID,

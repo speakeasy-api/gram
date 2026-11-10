@@ -9,32 +9,27 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import {
-  useProxiedMcpTools,
   type ProxiedMcpTool,
   type ProxiedMcpToolAnnotations,
 } from "@/hooks/useProxiedMcpTools";
-import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
-import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
 import { ToolAnnotationIndicators } from "./ToolAnnotationIndicators";
 import { ToolMetadataDriftPanel } from "./ToolMetadataDriftPanel";
 import { computeDrift } from "./toolMetadataSync";
-import { useSyncToolMetadata } from "./useSyncToolMetadata";
-import {
-  useToolMetadata,
-  type ToolMetadataByName,
-} from "@/hooks/useToolMetadata";
+import { useRemoteMcpToolConnection } from "./useRemoteMcpToolConnection";
+import { type ToolMetadataByName } from "@/hooks/useToolMetadata";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
-import { PlugZap } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { Link } from "react-router";
 
 type RemoteMcpToolsSectionProps = {
-  /** The Gram-proxied MCP URL to connect to; undefined while endpoints load. */
+  /** The Speakeasy-proxied MCP URL to connect to; undefined while endpoints load. */
   mcpUrl: string | undefined;
   /** True while the server address / endpoints are still resolving. */
   isResolvingUrl: boolean;
@@ -58,16 +53,26 @@ type RemoteMcpToolsSectionProps = {
    * server with no authentication configured fails to list its tools.
    */
   authSettingsHref?: string;
+  /**
+   * Speakeasy-origin endpoint slug. Custom-domain slugs are a different namespace
+   * and must not be used to build the first-party connect URL.
+   */
+  platformSlug?: string;
+  /** Set when the backend is a tunnel. Public tunnels have no Connect route. */
+  tunneledMcpServerId?: string;
+  visibility?: string;
 };
 
 /**
  * Lists the tools advertised by the remote MCP server, connecting through the
- * Gram-proxied `/mcp/<slug>` endpoint via the AI SDK MCP client.
+ * Speakeasy-proxied `/mcp/<slug>` endpoint via the AI SDK MCP client.
  *
  * For issuer-gated servers we mint a user-session JWT scoped to the mcp_server
  * and connect with it. When no upstream remote_session exists yet the gateway
- * 401s into `needsAuth`, and we surface an Authenticate button that opens the
+ * 401s into `needsAuth`, and we surface a Connect button that opens the
  * first-party connect page in a new tab; returning focus re-attempts the list.
+ * That page 404s unless the server is issuer-gated on a Speakeasy-hosted address, so
+ * a 401 from any other server points at authentication settings instead.
  *
  * Expected fetch failures are rendered inline (see RemoteMcpToolsBody). The
  * surrounding ErrorBoundary is the defensive layer for unexpected render-time
@@ -140,18 +145,11 @@ function RemoteMcpToolsErrorFallback({
   if (!isIssuerGated) {
     return (
       <ToolsSectionShell>
-        <EmptyState
-          message="This server has no authentication configured yet. Set up an identity provider so its tools can be listed."
+        <ConfigureAuthenticationState
+          message={unconfiguredAuthMessage}
+          authSettingsHref={authSettingsHref}
           onRetry={resetErrorBoundary}
-        >
-          {authSettingsHref ? (
-            <Button variant="secondary" asChild>
-              <Link to={authSettingsHref}>
-                <Button.Text>Configure authentication</Button.Text>
-              </Link>
-            </Button>
-          ) : null}
-        </EmptyState>
+        />
       </ToolsSectionShell>
     );
   }
@@ -166,84 +164,60 @@ function RemoteMcpToolsErrorFallback({
   );
 }
 
+const unconfiguredAuthMessage =
+  "This server has no authentication configured yet. Set up an authorization server so its tools can be listed.";
+
+const unavailableConnectMessage =
+  "Connect isn't available for this server. Review its authentication settings.";
+
 function RemoteMcpToolsSectionInner({
   mcpUrl,
   isResolvingUrl,
   mcpServerId,
   userSessionIssuerId,
   remoteMcpServerId,
+  authSettingsHref,
+  platformSlug,
+  tunneledMcpServerId,
+  visibility,
 }: RemoteMcpToolsSectionProps): JSX.Element {
-  const isIssuerGated = !!userSessionIssuerId;
-
-  const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
-    target: { kind: "mcpServer", id: mcpServerId },
-    userSessionIssuerId,
-  });
-
-  // Speakeasy's stored annotation overrides for this server's tools. Toolset-backed
-  // servers don't carry any, so skip the request entirely for them.
-  const { metadataByTool, isLoading: isMetadataLoading } = useToolMetadata(
+  const {
+    tools,
+    metadataByTool,
+    loading: connectionLoading,
+    needsAuth,
+    isError,
+    isIssuerGated,
+    refetch,
+    connect,
+    sync,
+    isSyncing,
+    canWrite,
+  } = useRemoteMcpToolConnection({
+    mcpUrl,
     mcpServerId,
-    { enabled: !!remoteMcpServerId },
-  );
-
-  // Issuer-gated servers must wait for the JWT before connecting, otherwise the
-  // unauthenticated request 401s and caches a spurious `needsAuth`.
-  const headers = useMemo(
-    () =>
-      accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-    [accessToken],
-  );
-  const connectionEnabled = !isIssuerGated || !!accessToken;
-
-  // Connect through the dev proxy origin (same-origin) so the AI SDK transport
-  // carries the gram_session cookie and the gateway's proxied SSE response
-  // isn't dropped on a cross-origin hop. No-op in prod / for custom domains.
-  const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
-
-  const { tools, isLoading, needsAuth, isError, refetch } = useProxiedMcpTools(
-    connectUrl,
-    { headers, enabled: connectionEnabled },
-  );
+    userSessionIssuerId,
+    remoteMcpServerId,
+    platformSlug,
+    tunneledMcpServerId,
+    visibility,
+  });
 
   const toolEntries = useMemo(
     () => (tools ? Object.entries(tools) : []),
     [tools],
   );
 
-  // The first-party connect page is opened as a top-level new tab, so it rides
-  // the gram_session cookie on the backend origin (not the dev proxy).
-  const authUrl = useMemo(() => firstPartyConnectUrl(mcpUrl), [mcpUrl]);
-
-  // When the user comes back from the connect tab, re-attempt the listing so a
-  // freshly linked session surfaces without a manual refresh.
-  useEffect(() => {
-    if (!needsAuth) return;
-    const onFocus = () => refetch();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [needsAuth, refetch]);
-
-  const handleConnect = () => {
-    if (authUrl) window.open(authUrl, "_blank", "noopener,noreferrer");
-  };
-
-  const loading =
-    isResolvingUrl || isTokenLoading || isLoading || isMetadataLoading;
-
-  // Only remote-backed servers carry tool metadata, and there is nothing to
-  // reconcile until both the session and the stored set have loaded.
+  const loading = isResolvingUrl || connectionLoading;
   const tracksMetadata = !!remoteMcpServerId;
-  const { sync, isSyncing } = useSyncToolMetadata({
-    mcpServerId,
-    live: tools,
-    stored: metadataByTool,
-    enabled: tracksMetadata && !loading && !!tools,
-  });
 
+  // Sync is for admins correcting an existing record. An empty record fills in
+  // as soon as the server's tools are listed, so there is nothing to offer yet.
+  const canOfferSync =
+    tracksMetadata && canWrite && Object.keys(metadataByTool).length > 0;
   const drift = useMemo(
-    () => (tracksMetadata && tools ? computeDrift(tools, metadataByTool) : []),
-    [tracksMetadata, tools, metadataByTool],
+    () => (canOfferSync && tools ? computeDrift(tools, metadataByTool) : []),
+    [canOfferSync, tools, metadataByTool],
   );
 
   return (
@@ -251,7 +225,6 @@ function RemoteMcpToolsSectionInner({
       {!loading && drift.length > 0 ? (
         <ToolMetadataDriftPanel
           drift={drift}
-          mcpServerId={mcpServerId}
           onSync={sync}
           isSyncing={isSyncing}
         />
@@ -260,10 +233,12 @@ function RemoteMcpToolsSectionInner({
         loading={loading}
         needsAuth={needsAuth}
         isError={isError}
+        isIssuerGated={isIssuerGated}
+        authSettingsHref={authSettingsHref}
         toolEntries={toolEntries}
         metadataByTool={metadataByTool}
         onRetry={refetch}
-        onConnect={authUrl ? handleConnect : undefined}
+        onConnect={connect}
       />
     </ToolsSectionShell>
   );
@@ -273,6 +248,8 @@ function RemoteMcpToolsBody({
   loading,
   needsAuth,
   isError,
+  isIssuerGated,
+  authSettingsHref,
   toolEntries,
   metadataByTool,
   onRetry,
@@ -281,6 +258,8 @@ function RemoteMcpToolsBody({
   loading: boolean;
   needsAuth: boolean;
   isError: boolean;
+  isIssuerGated: boolean;
+  authSettingsHref?: string;
   toolEntries: Array<[string, ProxiedMcpTool]>;
   metadataByTool: ToolMetadataByName;
   onRetry: () => void;
@@ -290,8 +269,22 @@ function RemoteMcpToolsBody({
     return <ToolsListSkeleton />;
   }
 
-  if (needsAuth) {
+  if (needsAuth && onConnect) {
     return <RemoteMcpToolsConnectPrompt onConnect={onConnect} />;
+  }
+
+  // A 401 with no connect target used to open the first-party connect route
+  // anyway, which returns a bare not_found document. Point at settings instead.
+  if (needsAuth) {
+    return (
+      <ConfigureAuthenticationState
+        message={
+          isIssuerGated ? unavailableConnectMessage : unconfiguredAuthMessage
+        }
+        authSettingsHref={authSettingsHref}
+        onRetry={onRetry}
+      />
+    );
   }
 
   if (isError) {
@@ -336,21 +329,51 @@ function RemoteMcpToolsList({
       ? (toolEntries.find(([name]) => name === selectedName) ?? null)
       : null;
 
+  const available = toolEntries.filter(([, tool]) => !tool.unavailable);
+  const unavailable = toolEntries.filter(([, tool]) => tool.unavailable);
+
+  const renderRows = (entries: Array<[string, ProxiedMcpTool]>) => (
+    <div className="border-neutral-softest w-full overflow-hidden border">
+      {entries.map(([name, tool]) => (
+        <RemoteToolRow
+          key={name}
+          name={name}
+          description={tool.description}
+          annotations={tool.annotations}
+          stored={metadataByTool[name]}
+          selected={name === selectedName}
+          onSelect={() => setSelectedName(name)}
+        />
+      ))}
+    </div>
+  );
+
   return (
     <>
-      <div className="border-neutral-softest w-full overflow-hidden border">
-        {toolEntries.map(([name, tool]) => (
-          <RemoteToolRow
-            key={name}
-            name={name}
-            description={tool.description}
-            annotations={tool.annotations}
-            stored={metadataByTool[name]}
-            selected={name === selectedName}
-            onSelect={() => setSelectedName(name)}
-          />
-        ))}
-      </div>
+      {unavailable.length === 0 ? (
+        renderRows(available)
+      ) : (
+        <div className="flex flex-col gap-8">
+          {available.length > 0 ? (
+            <div>
+              <h4 className="text-eyebrow mb-2">
+                Available ({available.length})
+              </h4>
+              {renderRows(available)}
+            </div>
+          ) : null}
+          <div>
+            <h4 className="text-eyebrow mb-2">
+              Not available ({unavailable.length})
+            </h4>
+            <Text muted small className="mb-2">
+              Your access or this server&apos;s policy doesn&apos;t allow these
+              tools.
+            </Text>
+            {renderRows(unavailable)}
+          </div>
+        </div>
+      )}
 
       <Sheet
         open={selected !== null}
@@ -376,7 +399,7 @@ function RemoteMcpToolsList({
  * A single tool row, styled to match the toolset Tools tab (see ToolList's
  * ToolRow): tool name on top with the description truncated to one line below,
  * and any annotation hints rendered as badges beside the name. Remote MCP tools
- * carry no Gram-side identity, so there are no method/variation badges or action
+ * carry no Speakeasy-side identity, so there are no method/variation badges or action
  * menus — selecting a row opens the details drawer instead.
  */
 function RemoteToolRow({
@@ -507,6 +530,28 @@ function ToolParameterRow({
   );
 }
 
+function ConfigureAuthenticationState({
+  message,
+  authSettingsHref,
+  onRetry,
+}: {
+  message: string;
+  authSettingsHref?: string;
+  onRetry?: () => void;
+}): JSX.Element {
+  return (
+    <EmptyState message={message} onRetry={onRetry}>
+      {authSettingsHref ? (
+        <Button variant="secondary" asChild>
+          <Link to={authSettingsHref}>
+            <Button.Text>Configure authentication</Button.Text>
+          </Link>
+        </Button>
+      ) : null}
+    </EmptyState>
+  );
+}
+
 function EmptyState({
   message,
   onRetry,
@@ -555,27 +600,26 @@ function ToolRowSkeleton(): JSX.Element {
 }
 
 /**
- * The needs-connect state: a centered card prompting the user to connect
- * upstream before tools can be listed. Connecting opens the first-party connect
- * page; returning focus re-attempts the listing.
+ * The needs-connect state. Connecting opens the first-party connect page;
+ * returning focus re-attempts the listing, which saves any tools new to the
+ * project whoever is connecting, so the copy says so.
  */
 function RemoteMcpToolsConnectPrompt({
   onConnect,
 }: {
-  onConnect?: () => void;
+  onConnect: () => void;
 }): JSX.Element {
   return (
-    <div className="border-neutral-softest flex flex-col items-center gap-3 border px-6 py-12 text-center">
-      <PlugZap className="text-muted-foreground/70 size-8" />
-      <Text muted small>
-        Connect to this MCP to view the tools.
-      </Text>
-      {onConnect ? (
+    <InlineEmptyState
+      icon="plug-zap"
+      heading="Sign in to load this server's tools"
+      description="Connect your own account. Speakeasy then saves the server's tool list for this project, so roles can use it."
+      action={
         <Button variant="secondary" onClick={onConnect}>
-          <Button.Text>Connect</Button.Text>
+          <Button.Text>Connect account</Button.Text>
         </Button>
-      ) : null}
-    </div>
+      }
+    />
   );
 }
 

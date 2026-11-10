@@ -464,3 +464,40 @@ describe("MultiSelect group icons", () => {
     expect(screen.getByTestId("group-icon")).toBeTruthy();
   });
 });
+
+describe("MultiSelect creatable values", () => {
+  function openCreatable(caseSensitiveCreate: boolean) {
+    const onValueChange = vi.fn<(value: string[]) => void>();
+    render(
+      <MultiSelect
+        options={[{ label: "read", value: "read" }]}
+        onValueChange={onValueChange}
+        placeholder="Pick values"
+        creatable
+        caseSensitiveCreate={caseSensitiveCreate}
+        hideSelectAll
+      />,
+    );
+    fireEvent.click(screen.getByText("Pick values"));
+    fireEvent.change(screen.getByPlaceholderText("Search options..."), {
+      target: { value: "Read" },
+    });
+    return onValueChange;
+  }
+
+  it("treats a value differing only by case as existing by default", () => {
+    openCreatable(false);
+
+    expect(screen.queryByRole("option", { name: /Create new option/ })).toBe(
+      null,
+    );
+  });
+
+  it("creates a value differing only by case when case-sensitive", () => {
+    const onValueChange = openCreatable(true);
+
+    fireEvent.click(screen.getByRole("option", { name: /Create new option/ }));
+
+    expect(onValueChange).toHaveBeenCalledWith(["Read"]);
+  });
+});

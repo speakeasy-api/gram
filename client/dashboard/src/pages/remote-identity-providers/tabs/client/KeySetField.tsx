@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
   Select,
@@ -9,24 +11,32 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAttachOrganizationRemoteSessionClientKeySetMutation } from "@gram/client/react-query/attachOrganizationRemoteSessionClientKeySet.js";
 import { useDetachOrganizationRemoteSessionClientKeySetMutation } from "@gram/client/react-query/detachOrganizationRemoteSessionClientKeySet.js";
-import { buildListJsonWebKeySetsQuery } from "@gram/client/react-query/listJsonWebKeySets";
+import { invalidateAllListJsonWebKeySets } from "@gram/client/react-query/listJsonWebKeySets";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { buildOrganizationRemoteSessionClientsQuery } from "@gram/client/react-query/organizationRemoteSessionClients.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import {
+  useCustomerManagedKeys,
+  useOrganizationKeySets,
+  useResolveKeySet,
+} from "@/lib/remote-identity";
+import { ExternalKeySelect } from "@/pages/org/encryption-keys/jwks/ExternalKeySelect";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 // The Select cannot carry an empty string as a value, so "no set attached" gets
 // a sentinel. Chosen to be impossible as a uuid.
 const NONE = "__none__";
+// Opens the inline form that creates a set from a Google Cloud KMS key.
+const NEW_SET = "__new__";
 
 // KeySetField picks the JSON Web Key Set this client signs private_key_jwt
 // assertions with. It sits beside the token endpoint authentication method
-// because that is where an administrator is already deciding how Gram
+// because that is where an administrator is already deciding how Speakeasy
 // authenticates at this counterparty.
 //
 // Unlike the other fields on this tab it saves immediately rather than on "Save
@@ -44,35 +54,26 @@ export function KeySetField({
   client,
   issuerId,
   onPendingChange,
+  disabled = false,
 }: {
   client: RemoteSessionClient;
   issuerId: string;
   // Lets the enclosing form hold its own Save until this link has settled, so
   // an update that depends on the attach cannot overtake it.
   onPendingChange?: (pending: boolean) => void;
+  disabled?: boolean;
 }): JSX.Element | null {
   const organization = useOrganization();
   const gramClient = useGramContext();
   const queryClient = useQueryClient();
 
-  const { data: features, isLoading: featuresLoading } = useProductFeatures(
-    { organizationId: organization.id },
-    undefined,
-    { staleTime: 30_000, throwOnError: false },
-  );
-  const entitled =
-    !featuresLoading && features?.customerManagedEncryptionKeysEnabled === true;
-
+  const { entitled } = useCustomerManagedKeys();
   // Keyed by organization so a switch never offers the previous one's sets.
-  const setsQuery = buildListJsonWebKeySetsQuery(gramClient);
-  const { data: setsData, isPending: setsPending } = useQuery({
-    ...setsQuery,
-    queryKey: [...setsQuery.queryKey, { organizationId: organization.id }],
-    enabled: entitled,
-  });
+  const { data: setsData, isPending: setsPending } =
+    useOrganizationKeySets(entitled);
   const sets = setsData?.sets ?? [];
 
-  // AIM-64 establishes that Gram may hold more than one client at the same
+  // AIM-64 establishes that Speakeasy may hold more than one client at the same
   // downstream issuer — an interactive one and a separate chaining one. Same
   // trust relationship, same counterparty, so when a sibling at this issuer
   // already signs with a set, suggest that one rather than making the
@@ -119,7 +120,7 @@ export function KeySetField({
     await invalidateAllOrganizationRemoteSessionClient(queryClient, {
       refetchType: "all",
     });
-    await queryClient.invalidateQueries({ queryKey: setsQuery.queryKey });
+    await invalidateAllListJsonWebKeySets(queryClient);
   };
 
   const startedIn = organization.id;
@@ -132,7 +133,69 @@ export function KeySetField({
     onError: onError(startedIn),
   });
 
-  const pending = attach.isPending || detach.isPending;
+  const resolveKeySet = useResolveKeySet();
+  const [newSetOpen, setNewSetOpen] = useState(false);
+  const [newSetName, setNewSetName] = useState("");
+  const [newSetKeyId, setNewSetKeyId] = useState("");
+  const [creatingSet, setCreatingSet] = useState(false);
+  // A set created by an attempt whose attach failed, reused by a retry with
+  // the same name and key rather than created again.
+  const [madeSet, setMadeSet] = useState<{
+    id: string;
+    name: string;
+    externalKeyId: string;
+  } | null>(null);
+
+  const createAndAttach = async () => {
+    setCreatingSet(true);
+    try {
+      let jsonWebKeySetId = madeSet?.id;
+      if (
+        !jsonWebKeySetId ||
+        madeSet?.name !== newSetName ||
+        madeSet.externalKeyId !== newSetKeyId
+      ) {
+        try {
+          jsonWebKeySetId = await resolveKeySet({
+            kind: "new",
+            name: newSetName,
+            externalKeyId: newSetKeyId,
+          });
+        } catch (error) {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to create key set",
+          );
+          return;
+        }
+        setMadeSet({
+          id: jsonWebKeySetId,
+          name: newSetName,
+          externalKeyId: newSetKeyId,
+        });
+      }
+      try {
+        await attach.mutateAsync({
+          request: { attachKeySetForm: { id: client.id, jsonWebKeySetId } },
+        });
+      } catch (error) {
+        // The attach mutation's onError has already reported it. A 404 means
+        // the set (or the client) is gone, likely deleted elsewhere, so drop the
+        // cached set: reusing its id would fail the same way on every retry.
+        if (error instanceof GramError && error.statusCode === 404) {
+          setMadeSet(null);
+        }
+        return;
+      }
+      setMadeSet(null);
+      setNewSetOpen(false);
+      setNewSetName("");
+      setNewSetKeyId("");
+    } finally {
+      setCreatingSet(false);
+    }
+  };
+
+  const pending = attach.isPending || detach.isPending || creatingSet;
   const selected = client.jsonWebKeySetId ?? NONE;
 
   useEffect(() => {
@@ -142,6 +205,11 @@ export function KeySetField({
   if (!entitled) return null;
 
   const handleChange = (next: string) => {
+    if (next === NEW_SET) {
+      setNewSetOpen(true);
+      return;
+    }
+    setNewSetOpen(false);
     if (next === selected) return;
 
     if (next === NONE) {
@@ -167,7 +235,7 @@ export function KeySetField({
       <Select
         value={selected}
         onValueChange={handleChange}
-        disabled={setsPending || pending}
+        disabled={disabled || setsPending || pending}
       >
         <SelectTrigger>
           <SelectValue placeholder={setsPending ? "Loading…" : "None"} />
@@ -185,13 +253,54 @@ export function KeySetField({
                 " · used by another client here"}
             </SelectItem>
           ))}
+          <SelectItem value={NEW_SET}>Set up a new key set…</SelectItem>
         </SelectContent>
       </Select>
-      {sets.length === 0 && !setsPending ? (
+      {newSetOpen ? (
+        <div className="bg-muted/20 flex flex-col gap-3 border p-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="client-new-key-set-name">Name</Label>
+            <Input
+              id="client-new-key-set-name"
+              value={newSetName}
+              onChange={setNewSetName}
+              placeholder="Production signing keys"
+              disabled={pending}
+            />
+          </div>
+          <ExternalKeySelect
+            label="Google Cloud KMS key"
+            value={newSetKeyId}
+            onChange={setNewSetKeyId}
+            disabled={pending}
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={
+                pending || newSetName.trim() === "" || newSetKeyId === ""
+              }
+              onClick={() => void createAndAttach()}
+            >
+              <Button.Text>
+                {creatingSet ? "Creating…" : "Create and attach"}
+              </Button.Text>
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => setNewSetOpen(false)}
+            >
+              <Button.Text>Cancel</Button.Text>
+            </Button>
+          </div>
+        </div>
+      ) : sets.length === 0 && !setsPending ? (
         <Text small muted>
-          No signing key sets yet. Create one under Encryption Keys to let this
-          client authenticate with a signed assertion instead of a shared
-          secret.
+          No signing key sets yet. Set up a new one from a Google Cloud KMS key
+          to let this client authenticate with a signed assertion instead of a
+          shared secret.
         </Text>
       ) : (
         <Text small muted>

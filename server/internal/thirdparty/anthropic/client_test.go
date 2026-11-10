@@ -24,14 +24,17 @@ func TestListActivitiesSendsAuthAndFilters(t *testing.T) {
 		if got := r.Header.Get("x-api-key"); got != "anthropic-key" {
 			t.Errorf("expected x-api-key anthropic-key, got %s", got)
 		}
-		if got := r.URL.Query()["activity_types[]"]; !slices.Equal(got, []string{"claude_chat_created", "claude_chat_updated"}) {
-			t.Errorf("expected activity_types[] [claude_chat_created claude_chat_updated], got %v", got)
+		if got := r.URL.Query()["activity_types[]"]; !slices.Equal(got, []string{"claude_chat_created"}) {
+			t.Errorf("expected activity_types[] [claude_chat_created], got %v", got)
 		}
 		if got := r.URL.Query()["organization_ids[]"]; !slices.Equal(got, []string{"91012d09-e48b-438e-a489-1bebfd8fa6f9"}) {
 			t.Errorf("expected organization_ids[] [91012d09-e48b-438e-a489-1bebfd8fa6f9], got %v", got)
 		}
 		if got := r.URL.Query().Get("created_at.gte"); got != "2026-04-10T08:09:10Z" {
 			t.Errorf("expected created_at.gte 2026-04-10T08:09:10Z, got %s", got)
+		}
+		if got := r.URL.Query().Get("created_at.lt"); got != "2026-04-10T09:09:10Z" {
+			t.Errorf("expected created_at.lt 2026-04-10T09:09:10Z, got %s", got)
 		}
 		if got := r.URL.Query().Get("after_id"); got != "activity_last" {
 			t.Errorf("expected after_id activity_last, got %s", got)
@@ -56,9 +59,10 @@ func TestListActivitiesSendsAuthAndFilters(t *testing.T) {
 
 	client := New(testGuardianPolicy(t), WithBaseURL(server.URL), WithAPIKey("anthropic-key"))
 	page, err := client.ListActivities(t.Context(), ListActivitiesParams{
-		ActivityTypes:   []string{"claude_chat_created", "claude_chat_updated"},
+		ActivityTypes:   []string{"claude_chat_created"},
 		OrganizationIDs: []string{"91012d09-e48b-438e-a489-1bebfd8fa6f9"},
 		CreatedAtGTE:    time.Date(2026, 4, 10, 8, 9, 10, 0, time.UTC),
+		CreatedAtLT:     time.Date(2026, 4, 10, 9, 9, 10, 0, time.UTC),
 		AfterID:         "activity_last",
 		BeforeID:        "",
 		Limit:           5000,
@@ -92,12 +96,92 @@ func TestListActivitiesSendsBeforeID(t *testing.T) {
 		ActivityTypes:   nil,
 		OrganizationIDs: nil,
 		CreatedAtGTE:    time.Time{},
+		CreatedAtLT:     time.Time{},
 		AfterID:         "",
 		BeforeID:        "activity_first",
 		Limit:           100,
 	})
 	require.NoError(t, err)
 	require.False(t, page.HasMore)
+}
+
+func TestListChatsSendsOrderingAndCursor(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/compliance/apps/chats" {
+			t.Errorf("expected path /v1/compliance/apps/chats, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("x-api-key"); got != "anthropic-key" {
+			t.Errorf("expected x-api-key anthropic-key, got %s", got)
+		}
+		if got := r.URL.Query()["organization_ids[]"]; !slices.Equal(got, []string{"91012d09-e48b-438e-a489-1bebfd8fa6f9"}) {
+			t.Errorf("expected organization_ids[] [91012d09-e48b-438e-a489-1bebfd8fa6f9], got %v", got)
+		}
+		if got := r.URL.Query().Get("order_by"); got != "updated_at" {
+			t.Errorf("expected order_by updated_at, got %q", got)
+		}
+		if got := r.URL.Query().Get("updated_at.gte"); got != "2026-04-10T08:09:10Z" {
+			t.Errorf("expected updated_at.gte 2026-04-10T08:09:10Z, got %q", got)
+		}
+		if got := r.URL.Query().Get("after_id"); got != "chat_cursor" {
+			t.Errorf("expected after_id chat_cursor, got %q", got)
+		}
+		if got := r.URL.Query().Get("limit"); got != "100" {
+			t.Errorf("expected limit 100, got %q", got)
+		}
+		if got := r.URL.Query().Get("user_ids[]"); got != "" {
+			t.Errorf("org-wide listing must not send user_ids[], got %q", got)
+		}
+
+		_, _ = w.Write([]byte(`{
+			"data": [{
+				"id": "claude_chat_1",
+				"name": "Product Requirements Discussion",
+				"created_at": "2026-04-10T08:09:10Z",
+				"updated_at": "2026-04-10T09:10:11Z",
+				"deleted_at": null,
+				"href": "https://claude.ai/chat/abc",
+				"model": "claude-opus-4-8",
+				"organization_uuid": "91012d09-e48b-438e-a489-1bebfd8fa6f9",
+				"project_id": null,
+				"user": {"id": "user_1", "email_address": "dev@example.com"}
+			}, {
+				"id": "claude_chat_2",
+				"name": "",
+				"created_at": "2026-04-10T08:09:10Z",
+				"updated_at": "2026-04-10T09:10:12Z",
+				"deleted_at": "2026-04-10T09:10:12Z",
+				"href": "https://claude.ai/chat/def",
+				"model": null,
+				"organization_uuid": "91012d09-e48b-438e-a489-1bebfd8fa6f9",
+				"project_id": null,
+				"user": null
+			}],
+			"has_more": true,
+			"first_id": "first",
+			"last_id": "last"
+		}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client := New(testGuardianPolicy(t), WithBaseURL(server.URL), WithAPIKey("anthropic-key"))
+	page, err := client.ListChats(t.Context(), ListChatsParams{
+		OrganizationIDs: []string{"91012d09-e48b-438e-a489-1bebfd8fa6f9"},
+		OrderBy:         ChatOrderByUpdatedAt,
+		UpdatedAtGTE:    time.Date(2026, 4, 10, 8, 9, 10, 0, time.UTC),
+		AfterID:         "chat_cursor",
+		Limit:           100,
+	})
+	require.NoError(t, err)
+	require.True(t, page.HasMore)
+	require.Equal(t, "last", page.LastID)
+	require.Len(t, page.Data, 2)
+	require.Equal(t, "claude_chat_1", page.Data[0].ID)
+	require.Equal(t, "dev@example.com", page.Data[0].User.EmailAddress)
+	require.Nil(t, page.Data[0].DeletedAt)
+	require.NotNil(t, page.Data[1].DeletedAt)
+	require.Empty(t, page.Data[1].User.ID)
 }
 
 func TestGetChatMessagesDecodesDocsShape(t *testing.T) {

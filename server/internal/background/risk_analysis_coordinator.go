@@ -121,11 +121,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					PresidioScoreThreshold: 0,
 					ApprovedEmailDomains:   nil,
 					CustomRuleIds:          policy.CustomRuleIds,
-					// Placeholder: overwritten by AnalyzeBatch.Do from the refetched
-					// policy's AnalyzerConfig (defaults to true). The zero value here
-					// does NOT disable the library; it is required only by exhaustruct.
-					BuiltinPresetsEnabled: false,
-					DetectionScopes:       nil,
+					DetectionScopes:        nil,
 				})
 				dispatches = append(dispatches, analyzeDispatch{future: f, riskPolicyID: policy.ID, messageIDs: batch, contentPartIDs: nil})
 			}
@@ -142,7 +138,6 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					PresidioScoreThreshold: 0,
 					ApprovedEmailDomains:   nil,
 					CustomRuleIds:          policy.CustomRuleIds,
-					BuiltinPresetsEnabled:  false,
 					DetectionScopes:        nil,
 				})
 				dispatches = append(dispatches, analyzeDispatch{future: f, riskPolicyID: policy.ID, messageIDs: nil, contentPartIDs: batch})

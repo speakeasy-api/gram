@@ -5,31 +5,38 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   RiskDetectionScope,
   RiskDetectionScope$inboundSchema,
 } from "./riskdetectionscope.js";
+import { RiskMCPScope, RiskMCPScope$inboundSchema } from "./riskmcpscope.js";
+import {
+  RiskPolicyApprovalConfig,
+  RiskPolicyApprovalConfig$inboundSchema,
+} from "./riskpolicyapprovalconfig.js";
 import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$inboundSchema,
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).
+ * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export const RiskPolicyAction = {
   Flag: "flag",
   Warn: "warn",
   Block: "block",
   Quarantine: "quarantine",
+  RequireApproval: "require_approval",
 } as const;
 /**
- * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).
+ * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
-export type RiskPolicyAction = ClosedEnum<typeof RiskPolicyAction>;
+export type RiskPolicyAction = OpenEnum<typeof RiskPolicyAction>;
 
 /**
  * Policy audience type: everyone or targeted.
@@ -41,7 +48,7 @@ export const RiskPolicyAudienceType = {
 /**
  * Policy audience type: everyone or targeted.
  */
-export type RiskPolicyAudienceType = ClosedEnum<typeof RiskPolicyAudienceType>;
+export type RiskPolicyAudienceType = OpenEnum<typeof RiskPolicyAudienceType>;
 
 /**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
@@ -53,27 +60,28 @@ export const RiskPolicyPolicyType = {
 /**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
  */
-export type RiskPolicyPolicyType = ClosedEnum<typeof RiskPolicyPolicyType>;
+export type RiskPolicyPolicyType = OpenEnum<typeof RiskPolicyPolicyType>;
 
 /**
- * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
+ * Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
  */
 export const RiskPolicyShadowMcpDisposition = {
   BlockAll: "block_all",
   AllowAll: "allow_all",
 } as const;
 /**
- * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
+ * Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
  */
-export type RiskPolicyShadowMcpDisposition = ClosedEnum<
+export type RiskPolicyShadowMcpDisposition = OpenEnum<
   typeof RiskPolicyShadowMcpDisposition
 >;
 
 export type RiskPolicy = {
   /**
-   * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).
+   * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
    */
   action: RiskPolicyAction;
+  approvalConfig?: RiskPolicyApprovalConfig | undefined;
   /**
    * For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty means the domain rule is inert.
    */
@@ -114,15 +122,12 @@ export type RiskPolicy = {
    * The risk policy ID.
    */
   id: string;
+  mcpScope?: RiskMCPScope | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name.
    */
   name: string;
-  /**
-   * Number of messages not yet analyzed at the current policy version. Populated on single-policy reads; omitted from list responses (use riskPoliciesStatus for progress).
-   */
-  pendingMessages?: number | undefined;
   /**
    * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
    */
@@ -152,17 +157,13 @@ export type RiskPolicy = {
    */
   score: number;
   /**
-   * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
+   * Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
    */
   shadowMcpDisposition?: RiskPolicyShadowMcpDisposition | undefined;
   /**
    * Detection sources enabled for this policy.
    */
   sources: Array<string>;
-  /**
-   * Total number of messages in the project. Populated on single-policy reads; omitted from list responses.
-   */
-  totalMessages?: number | undefined;
   /**
    * When the policy was last updated.
    */
@@ -178,30 +179,35 @@ export type RiskPolicy = {
 };
 
 /** @internal */
-export const RiskPolicyAction$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyAction
-> = z.enum(RiskPolicyAction);
+export const RiskPolicyAction$inboundSchema: z.ZodMiniType<
+  RiskPolicyAction,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyAction);
 
 /** @internal */
-export const RiskPolicyAudienceType$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyAudienceType
-> = z.enum(RiskPolicyAudienceType);
+export const RiskPolicyAudienceType$inboundSchema: z.ZodMiniType<
+  RiskPolicyAudienceType,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyAudienceType);
 
 /** @internal */
-export const RiskPolicyPolicyType$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyPolicyType
-> = z.enum(RiskPolicyPolicyType);
+export const RiskPolicyPolicyType$inboundSchema: z.ZodMiniType<
+  RiskPolicyPolicyType,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyPolicyType);
 
 /** @internal */
-export const RiskPolicyShadowMcpDisposition$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyShadowMcpDisposition
-> = z.enum(RiskPolicyShadowMcpDisposition);
+export const RiskPolicyShadowMcpDisposition$inboundSchema: z.ZodMiniType<
+  RiskPolicyShadowMcpDisposition,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyShadowMcpDisposition);
 
 /** @internal */
 export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
   .pipe(
     z.object({
       action: z._default(RiskPolicyAction$inboundSchema, "flag"),
+      approval_config: z.optional(RiskPolicyApprovalConfig$inboundSchema),
       approved_email_domains: z.optional(z.array(z.string())),
       audience_principal_urns: z.array(z.string()),
       audience_type: z._default(
@@ -218,9 +224,9 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
       id: z.string(),
+      mcp_scope: z.optional(RiskMCPScope$inboundSchema),
       model_config: z.optional(RiskPolicyModelConfig$inboundSchema),
       name: z.string(),
-      pending_messages: z.optional(z.int()),
       policy_type: z._default(RiskPolicyPolicyType$inboundSchema, "standard"),
       presidio_entities: z.optional(z.array(z.string())),
       presidio_score_threshold: z.optional(z.number()),
@@ -232,7 +238,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         RiskPolicyShadowMcpDisposition$inboundSchema,
       ),
       sources: z.array(z.string()),
-      total_messages: z.optional(z.int()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -242,6 +247,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "approval_config": "approvalConfig",
         "approved_email_domains": "approvedEmailDomains",
         "audience_principal_urns": "audiencePrincipalUrns",
         "audience_type": "audienceType",
@@ -250,15 +256,14 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "custom_rule_ids": "customRuleIds",
         "detection_scopes": "detectionScopes",
         "disabled_rules": "disabledRules",
+        "mcp_scope": "mcpScope",
         "model_config": "modelConfig",
-        "pending_messages": "pendingMessages",
         "policy_type": "policyType",
         "presidio_entities": "presidioEntities",
         "presidio_score_threshold": "presidioScoreThreshold",
         "project_id": "projectId",
         "prompt_injection_rules": "promptInjectionRules",
         "shadow_mcp_disposition": "shadowMcpDisposition",
-        "total_messages": "totalMessages",
         "updated_at": "updatedAt",
         "user_message": "userMessage",
       });

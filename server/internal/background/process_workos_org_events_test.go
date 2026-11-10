@@ -49,6 +49,86 @@ func TestProcessWorkOSOrganizationEventsWorkflow_CompletesWhenNoMore(t *testing.
 	require.False(t, result.HasMore)
 }
 
+func TestProcessWorkOSOrganizationEventsWorkflow_RetriesOnceAfterEmptyPage(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	// WorkOS can deliver the webhook before the event is listable, so the
+	// first read is empty and the second read finds the event.
+	calls := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
+			calls++
+			if calls == 1 {
+				return &activities.ProcessWorkOSOrganizationEventsResult{SinceEventID: "event_01HZA", LastEventID: "", HasMore: false}, nil
+			}
+			return &activities.ProcessWorkOSOrganizationEventsResult{SinceEventID: "event_01HZA", LastEventID: "event_01HZB", HasMore: true}, nil
+		},
+		activity.RegisterOptions{Name: "ProcessWorkOSOrganizationEvents"},
+	)
+
+	env.ExecuteWorkflow(ProcessWorkOSOrganizationEventsWorkflow, ProcessWorkOSEventsParams{WorkOSOrganizationID: "org_01HZ"})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, 2, calls)
+
+	// The second read's result decides whether another page is needed.
+	var result ProcessWorkOSEventsResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.True(t, result.HasMore)
+}
+
+func TestProcessWorkOSOrganizationEventsWorkflow_RetriesEmptyPageOnlyOnce(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	calls := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
+			calls++
+			return &activities.ProcessWorkOSOrganizationEventsResult{SinceEventID: "event_01HZA", LastEventID: "", HasMore: false}, nil
+		},
+		activity.RegisterOptions{Name: "ProcessWorkOSOrganizationEvents"},
+	)
+
+	env.ExecuteWorkflow(ProcessWorkOSOrganizationEventsWorkflow, ProcessWorkOSEventsParams{WorkOSOrganizationID: "org_01HZ"})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, 2, calls)
+
+	var result ProcessWorkOSEventsResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.False(t, result.HasMore)
+}
+
+func TestProcessWorkOSOrganizationEventsWorkflow_DoesNotRetryNonEmptyPage(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	calls := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
+			calls++
+			return &activities.ProcessWorkOSOrganizationEventsResult{SinceEventID: "", LastEventID: "event_01HZA", HasMore: false}, nil
+		},
+		activity.RegisterOptions{Name: "ProcessWorkOSOrganizationEvents"},
+	)
+
+	env.ExecuteWorkflow(ProcessWorkOSOrganizationEventsWorkflow, ProcessWorkOSEventsParams{WorkOSOrganizationID: "org_01HZ"})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, 1, calls)
+}
+
 func TestProcessWorkOSOrganizationEventsWorkflow_SignalsHasMoreToWrapper(t *testing.T) {
 	t.Parallel()
 

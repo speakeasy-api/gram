@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 )
 
@@ -29,13 +32,61 @@ type tokenResponse struct {
 	// IDToken is verified and reduced to claims at the exchange; never persisted or logged.
 	IDToken string `json:"id_token"`
 
+	// IssuedTokenType is the RFC 8693 §2.2.1 type of AccessToken on a token
+	// exchange response; empty on other grants.
+	IssuedTokenType string `json:"issued_token_type"`
+
 	// raw is the response body the fields above were decoded from, kept so
 	// the non-standard members a provider adds can be retained.
 	raw []byte
 }
 
+// tokenResponseWire keeps upstream JSON compatibility rules out of the internal
+// token representation.
+type tokenResponseWire tokenResponse
+
+func (w *tokenResponseWire) UnmarshalJSON(data []byte) error {
+	// A distinct type prevents recursive calls to this unmarshaler.
+	type plain tokenResponseWire
+	var decoded plain
+	response := struct {
+		*plain
+		ExpiresIn              json.RawMessage `json:"expires_in"`
+		RefreshTokenTimeout    json.RawMessage `json:"refresh_token_timeout"`
+		AuthorizationExpiresIn json.RawMessage `json:"authorization_expires_in"`
+		RefreshExpiresIn       json.RawMessage `json:"refresh_expires_in"`
+		RefreshTokenExpiresIn  json.RawMessage `json:"refresh_token_expires_in"`
+	}{plain: &decoded, ExpiresIn: nil, RefreshTokenTimeout: nil, AuthorizationExpiresIn: nil, RefreshExpiresIn: nil, RefreshTokenExpiresIn: nil}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return fmt.Errorf("decode token response fields: %w", err)
+	}
+	if seconds := decodeLifetime(response.ExpiresIn); seconds != nil && usableLifetime(*seconds) && *seconds <= int64(^uint(0)>>1) {
+		decoded.ExpiresIn = int(*seconds)
+	}
+	decoded.RefreshTokenTimeout = decodeLifetime(response.RefreshTokenTimeout)
+	decoded.AuthorizationExpiresIn = decodeLifetime(response.AuthorizationExpiresIn)
+	decoded.RefreshExpiresIn = conv.PtrValOr(decodeLifetime(response.RefreshExpiresIn), 0)
+	decoded.RefreshTokenExpiresIn = conv.PtrValOr(decodeLifetime(response.RefreshTokenExpiresIn), 0)
+	*w = tokenResponseWire(decoded)
+	return nil
+}
+
+// decodeLifetime reads an integer or integer string; anything else is unreported, so it cannot discard a token response.
+func decodeLifetime(raw json.RawMessage) *int64 {
+	value := string(bytes.TrimSpace(raw))
+	if len(value) > 0 && value[0] == '"' {
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return nil
+		}
+	}
+	seconds, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return nil
+	}
+	return &seconds
+}
+
 func (t *tokenResponse) UnmarshalJSON(data []byte) error {
-	type wire tokenResponse
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(data, &members); err != nil {
 		return fmt.Errorf("decode token response members: %w", err)
@@ -51,7 +102,7 @@ func (t *tokenResponse) UnmarshalJSON(data []byte) error {
 			return errors.New("token response scope must be a string")
 		}
 	}
-	var decoded wire
+	var decoded tokenResponseWire
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return fmt.Errorf("decode token response: %w", err)
 	}
@@ -154,22 +205,35 @@ func (t tokenResponse) Scopes() []string {
 	return strings.Fields(t.Scope)
 }
 
-// ScopeReported distinguishes omission from Gram's compatibility exception: an explicitly empty token-response scope.
+// scopesForIssuer preserves RFC 6749 scope parsing except for Slack's official
+// MCP issuer, whose token endpoint reports a comma-separated grant.
+func (t tokenResponse) scopesForIssuer(issuer string) []string {
+	if issuerURLsCanonicallyEqual(issuer, "https://mcp.slack.com") {
+		return strings.Fields(strings.ReplaceAll(t.Scope, ",", " "))
+	}
+	return t.Scopes()
+}
+
+// ScopeReported distinguishes omission from Speakeasy's compatibility exception: an explicitly empty token-response scope.
 func (t tokenResponse) ScopeReported() bool {
 	return t.scopePresent
 }
 
+// usableLifetime reports whether a provider's lifetime in seconds can be a deadline.
+func usableLifetime(seconds int64) bool {
+	return seconds > 0 && seconds <= int64((1<<63-1)/time.Second)
+}
+
 // RefreshTokenTimeoutSeconds normalizes the standard sliding idle timeout and
-// two common provider aliases. The boolean distinguishes an omitted value from
-// an explicit zero-second timeout.
+// two common provider aliases. The boolean is false when no value is usable.
 func (t tokenResponse) RefreshTokenTimeoutSeconds() (int64, bool) {
-	if t.RefreshTokenTimeout != nil {
+	if t.RefreshTokenTimeout != nil && usableLifetime(*t.RefreshTokenTimeout) {
 		return *t.RefreshTokenTimeout, true
 	}
-	if t.RefreshExpiresIn > 0 {
+	if usableLifetime(t.RefreshExpiresIn) {
 		return t.RefreshExpiresIn, true
 	}
-	if t.RefreshTokenExpiresIn > 0 {
+	if usableLifetime(t.RefreshTokenExpiresIn) {
 		return t.RefreshTokenExpiresIn, true
 	}
 	return 0, false
@@ -204,9 +268,9 @@ func (t tokenResponse) AccessExpiresAt(now time.Time) *time.Time {
 }
 
 // AuthorizationLifetimeSeconds is the remaining absolute lifetime of the
-// upstream authorization, when the provider reports it.
+// upstream authorization, when the provider reports a usable one.
 func (t tokenResponse) AuthorizationLifetimeSeconds() (int64, bool) {
-	if t.AuthorizationExpiresIn == nil {
+	if t.AuthorizationExpiresIn == nil || !usableLifetime(*t.AuthorizationExpiresIn) {
 		return 0, false
 	}
 	return *t.AuthorizationExpiresIn, true
@@ -219,3 +283,49 @@ func expirationDeadline(now time.Time, seconds int64, reported bool) *time.Time 
 	deadline := now.Add(time.Duration(seconds) * time.Second)
 	return &deadline
 }
+
+// TokenResponse is a decoded token endpoint response for callers outside this
+// package. It formats redacted; only AccessToken exposes the credential.
+type TokenResponse struct {
+	t tokenResponse
+}
+
+// DecodeTokenResponse decodes a token endpoint response body without
+// requiring an access token.
+func DecodeTokenResponse(body []byte) (TokenResponse, error) {
+	var none TokenResponse
+	var tok tokenResponse
+	if err := json.Unmarshal(body, &tok); err != nil {
+		return none, fmt.Errorf("decode token response: %w", err)
+	}
+	tok.raw = body
+	return TokenResponse{t: tok}, nil
+}
+
+// AccessToken is the issued token: an access token, or the grant an RFC 8693
+// exchange issued.
+func (r TokenResponse) AccessToken() string { return r.t.AccessToken }
+
+// TokenType is the RFC 6749 token_type; empty when omitted.
+func (r TokenResponse) TokenType() string { return r.t.TokenType }
+
+// IssuedTokenType is the RFC 8693 issued_token_type; empty on other grants.
+func (r TokenResponse) IssuedTokenType() string { return r.t.IssuedTokenType }
+
+// RefreshTokenReturned reports that the response carried a refresh token,
+// without exposing it.
+func (r TokenResponse) RefreshTokenReturned() bool { return r.t.RefreshToken != "" }
+
+// Scopes is the granted scope set.
+func (r TokenResponse) Scopes() []string { return r.t.Scopes() }
+
+// ScopeReported distinguishes an omitted scope from a reported one.
+func (r TokenResponse) ScopeReported() bool { return r.t.ScopeReported() }
+
+// AccessExpiresAt is when the access token expires, or nil when unknown.
+func (r TokenResponse) AccessExpiresAt(now time.Time) *time.Time { return r.t.AccessExpiresAt(now) }
+
+func (r TokenResponse) String() string               { return "[redacted token response]" }
+func (r TokenResponse) GoString() string             { return r.String() }
+func (r TokenResponse) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
+func (r TokenResponse) LogValue() slog.Value         { return slog.StringValue(r.String()) }

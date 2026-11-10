@@ -1,0 +1,155 @@
+package mcp_test
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	gramMCP "github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+func TestPrincipalCredentialAuthenticatesAsItsAgent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithoutTemporal(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	agents := agentrepo.New(ti.conn)
+	agent, err := agents.CreateAgent(t.Context(), agentrepo.CreateAgentParams{OrganizationID: ac.ActiveOrganizationID, OwnerUserID: ac.UserID, ProjectID: uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}, Name: "Principal credential agent " + uuid.NewString()[:8]})
+	require.NoError(t, err)
+	connect := authz.NewGrant(authz.ScopeMCPConnect, toolset.ID.String())
+	selector, err := json.Marshal(connect.Selector)
+	require.NoError(t, err)
+	_, err = agents.CreateAgentPolicyGrant(t.Context(), agentrepo.CreateAgentPolicyGrantParams{OrganizationID: ac.ActiveOrganizationID, AgentID: agent.ID, Scope: string(authz.ScopeMCPConnect), Selectors: selector})
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), Scope: string(authz.ScopeMCPConnect), Selectors: selector})
+	require.NoError(t, err)
+	projectRead, err := authz.NewSelector(authz.ScopeProjectRead, ac.ProjectID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), Scope: string(authz.ScopeProjectRead), Selectors: projectRead})
+	require.NoError(t, err)
+	token, _, err := ti.principalCredentials.Mint(principalcredential.Credential{
+		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
+		Principal: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), AuthorizerUserID: ac.UserID,
+	})
+	require.NoError(t, err)
+
+	endpoint := &gramMCP.ResolvedMcpEndpoint{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, UserSessionIssuerID: issuer.ID, AudienceURN: urn.NewUserSessionIssuer(issuer.ID).String(), Slug: toolset.Slug, RouteBase: mcproute.MCP}
+	admitted, _, _, err := ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, ti.serverURL.String(), endpoint)
+	require.NoError(t, err, "issuer-gated endpoints admit principal credentials like agent keys")
+	actor, ok := contextvalues.AuthenticatedActor(admitted)
+	require.True(t, ok)
+	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), actor)
+
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/"+toolset.Slug, nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	private, err := ti.service.RequirePrivateIdentityAuth(t.Context(), httptest.NewRecorder(), request, false, toolset.ID, "")
+	require.NoError(t, err, "private toolsets without an issuer authenticate principal credentials too")
+	actor, ok = contextvalues.AuthenticatedActor(private)
+	require.True(t, ok)
+	require.Equal(t, urn.PrincipalTypeAgent, actor.Type)
+	private, err = ti.authzEngine.PrepareContext(private)
+	require.NoError(t, err)
+	require.NoError(t, ti.authzEngine.Require(private, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), ac.ProjectID.String())))
+
+	foreign := *endpoint
+	foreign.ToolsetID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	rejected := httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), rejected, token, ti.serverURL.String(), &foreign)
+	require.Error(t, err, "the agent's and the authorizer's live grants bound the resources it reaches")
+	require.NotEmpty(t, rejected.Header().Get("WWW-Authenticate"))
+
+	removed, err := accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(t.Context(), accessrepo.DeletePrincipalGrantByIdentityParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), Scope: string(authz.ScopeMCPConnect), Selectors: selector})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), removed)
+	revoked := httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), revoked, token, ti.serverURL.String(), endpoint)
+	var denied *oops.ShareableError
+	require.ErrorAs(t, err, &denied, "a grant the authorizer loses stops the already-issued credential")
+	require.Equal(t, oops.CodeUnauthorized, denied.Code)
+	require.NotEmpty(t, revoked.Header().Get("WWW-Authenticate"))
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), Scope: string(authz.ScopeMCPConnect), Selectors: selector})
+	require.NoError(t, err)
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, ti.serverURL.String(), endpoint)
+	require.NoError(t, err, "restoring the grant re-admits the same credential, so the refusal came from the revoked grant")
+
+	_, err = agents.SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: ac.ActiveOrganizationID, ID: agent.ID})
+	require.NoError(t, err)
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, ti.serverURL.String(), endpoint)
+	require.Error(t, err, "admission reads the agent's live lifecycle")
+}
+
+// A principal credential the engine couldn't judge isn't told to sign in again.
+func TestIssuerGatePrincipalCredentialOutageIsNotARejection(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithoutTemporal(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(t.Context(), agentrepo.CreateAgentParams{OrganizationID: ac.ActiveOrganizationID, OwnerUserID: ac.UserID, ProjectID: uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}, Name: "Principal credential agent " + uuid.NewString()[:8]})
+	require.NoError(t, err)
+	projectRead, err := authz.NewSelector(authz.ScopeProjectRead, ac.ProjectID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), Scope: string(authz.ScopeProjectRead), Selectors: projectRead})
+	require.NoError(t, err)
+	token, _, err := ti.principalCredentials.Mint(principalcredential.Credential{
+		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
+		Principal: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), AuthorizerUserID: ac.UserID,
+	})
+	require.NoError(t, err)
+	endpoint := &gramMCP.ResolvedMcpEndpoint{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, UserSessionIssuerID: issuer.ID, AudienceURN: urn.NewUserSessionIssuer(issuer.ID).String(), Slug: toolset.Slug, RouteBase: mcproute.MCP}
+
+	for _, tt := range []struct {
+		name      string
+		admission error
+		code      oops.Code
+		challenge bool
+	}{
+		{name: "database restarting", admission: &pgconn.PgError{Code: "57P01"}, code: oops.CodeUnavailable, challenge: false},
+		{name: "broken query", admission: &pgconn.PgError{Code: "42P01"}, code: oops.CodeUnexpected, challenge: false},
+		{name: "engine fault", admission: oops.E(oops.CodeUnexpected, nil, "engine fault"), code: oops.CodeUnexpected, challenge: false},
+		{name: "withdrawn", admission: oops.C(oops.CodeUnauthorized), code: oops.CodeUnauthorized, challenge: true},
+	} {
+		ti.service.SetAuthzEngine(authz.NewEngine(ti.logger, nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
+			AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
+				return authz.PrincipalCredentialAdmission{}, tt.admission
+			},
+		}))
+		w := httptest.NewRecorder()
+		_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
+		var shareable *oops.ShareableError
+		require.ErrorAs(t, err, &shareable, tt.name)
+		require.Equal(t, tt.code, shareable.Code, tt.name)
+		require.Equal(t, tt.challenge, w.Header().Get("WWW-Authenticate") != "", tt.name)
+	}
+
+	// The caller's own deadline ran out: not an outage, and not a sign-in prompt either.
+	ti.service.SetAuthzEngine(ti.authzEngine)
+	expired, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	w := httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(expired, w, token, ti.serverURL.String(), endpoint)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnexpected, shareable.Code, "error: %v", err)
+	require.Empty(t, w.Header().Get("Retry-After"))
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
+}

@@ -74,6 +74,33 @@ sql:
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
+          # directory_groups
+          - column: "directory_groups.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "directory_groups.organization_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          # directory_users
+          - column: "directory_users.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "directory_users.organization_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          # directory_group_members
+          - column: "directory_group_members.group_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "directory_group_members.user_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
           # ema_apps
           - column: "ema_apps.id"
             go_type:

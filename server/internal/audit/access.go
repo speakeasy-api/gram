@@ -14,12 +14,33 @@ import (
 )
 
 const (
-	ActionAccessRoleCreate       Action = "access_role:create"
-	ActionAccessRoleUpdate       Action = "access_role:update"
-	ActionAccessRoleDelete       Action = "access_role:delete"
-	ActionAccessMemberRoleUpdate Action = "access_member:update_role"
-	ActionAccessChallengeResolve Action = "access_challenge:resolve"
+	ActionAccessRoleCreate          Action = "access_role:create"
+	ActionAccessRoleUpdate          Action = "access_role:update"
+	ActionAccessRoleDelete          Action = "access_role:delete"
+	ActionAccessMemberRoleUpdate    Action = "access_member:update_role"
+	ActionAccessMemberSignInsRevoke Action = "access_member:revoke_sign_ins"
+	ActionAccessChallengeResolve    Action = "access_challenge:resolve"
 )
+
+// accessGrantMetadata is the metadata of a role or membership change that
+// gave someone sensitive access. It names the scopes by slug; the dashboard
+// maps them to the catalogue.
+type accessGrantMetadata struct {
+	SensitiveScopesAdded []string `json:"sensitive_scopes_added"`
+}
+
+// accessGrantMetadataPayload is nil when nothing sensitive was added, so a
+// plain change reads like one written before the field existed.
+func accessGrantMetadataPayload(action Action, sensitiveScopesAdded []string) ([]byte, error) {
+	if len(sensitiveScopesAdded) == 0 {
+		return nil, nil
+	}
+	metadata, err := marshalAuditPayload(accessGrantMetadata{SensitiveScopesAdded: sensitiveScopesAdded})
+	if err != nil {
+		return nil, fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+	return metadata, nil
+}
 
 type LogAccessRoleCreateEvent struct {
 	OrganizationID string
@@ -28,15 +49,24 @@ type LogAccessRoleCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RoleID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
+	RoleID   string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
 	RoleName string
 	RoleSlug string
+
+	// SensitiveScopesAdded names the sensitive scopes the new role grants.
+	SensitiveScopesAdded []string
 }
 
 func (l *Logger) LogAccessRoleCreate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleCreateEvent) error {
 	action := ActionAccessRoleCreate
 
+	metadata, err := accessGrantMetadataPayload(action, event.SensitiveScopesAdded)
+	if err != nil {
+		return err
+	}
+
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -54,7 +84,7 @@ func (l *Logger) LogAccessRoleCreate(ctx context.Context, dbtx repo.DBTX, event 
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
-		Metadata:       nil,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessRoleV1})
@@ -67,12 +97,16 @@ type LogAccessRoleUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RoleID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
+	RoleID   string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
 	RoleName string
 	RoleSlug string
 
 	RoleSnapshotBefore *accessgen.Role
 	RoleSnapshotAfter  *accessgen.Role
+
+	// SensitiveScopesAdded names the sensitive scopes the role grants after
+	// the change and did not before.
+	SensitiveScopesAdded []string
 }
 
 func (l *Logger) LogAccessRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleUpdateEvent) error {
@@ -88,7 +122,13 @@ func (l *Logger) LogAccessRoleUpdate(ctx context.Context, dbtx repo.DBTX, event 
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
 
+	metadata, err := accessGrantMetadataPayload(action, event.SensitiveScopesAdded)
+	if err != nil {
+		return err
+	}
+
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -106,7 +146,7 @@ func (l *Logger) LogAccessRoleUpdate(ctx context.Context, dbtx repo.DBTX, event 
 
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
-		Metadata:       nil,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessRoleV1})
@@ -119,7 +159,7 @@ type LogAccessRoleDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RoleID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
+	RoleID   string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
 	RoleName string
 	RoleSlug string
 }
@@ -127,6 +167,7 @@ type LogAccessRoleDeleteEvent struct {
 func (l *Logger) LogAccessRoleDelete(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleDeleteEvent) error {
 	action := ActionAccessRoleDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -157,12 +198,16 @@ type LogAccessMemberRoleUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	MemberID    string //nolint:glint // TODO(AGE-1954): discuss URN treatment for RBAC member identifiers; pending team discussion
+	MemberID    string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for RBAC member identifiers; pending team discussion
 	MemberName  string
 	MemberEmail string
 
 	MemberSnapshotBefore *accessgen.AccessMember
 	MemberSnapshotAfter  *accessgen.AccessMember
+
+	// SensitiveScopesAdded names the sensitive scopes the member's roles
+	// grant after the change and did not before.
+	SensitiveScopesAdded []string
 }
 
 func (l *Logger) LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAccessMemberRoleUpdateEvent) error {
@@ -178,7 +223,13 @@ func (l *Logger) LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, 
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
 
+	metadata, err := accessGrantMetadataPayload(action, event.SensitiveScopesAdded)
+	if err != nil {
+		return err
+	}
+
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -196,7 +247,7 @@ func (l *Logger) LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, 
 
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
-		Metadata:       nil,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessMemberV1})
@@ -208,8 +259,8 @@ type LogAccessChallengeResolveEvent struct {
 	Actor            urn.Principal
 	ActorDisplayName *string
 
-	ChallengeID    string //nolint:glint // TODO(AGE-1954): discuss URN treatment for challenge identifiers; pending team discussion
-	PrincipalURN   string //nolint:glint // TODO(AGE-1954): principal URN comes as pre-formatted string from challenge payload
+	ChallengeID    string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for challenge identifiers; pending team discussion
+	PrincipalURN   string //nolint:glint // auditeventurntyping: TODO(AGE-1954): principal URN comes as pre-formatted string from challenge payload
 	Scope          string
 	ResolutionType string
 	RoleSlug       *string
@@ -219,6 +270,7 @@ func (l *Logger) LogAccessChallengeResolve(ctx context.Context, dbtx repo.DBTX, 
 	action := ActionAccessChallengeResolve
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -240,4 +292,61 @@ func (l *Logger) LogAccessChallengeResolve(ctx context.Context, dbtx repo.DBTX, 
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessChallengeV1})
+}
+
+type LogAccessMemberSignInsRevokeEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+
+	MemberID    string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for RBAC member identifiers; pending team discussion
+	MemberEmail string
+
+	Reason          string
+	RevokedSignIns  int
+	RevokedSessions int
+}
+
+type accessMemberSignInsRevokeMetadata struct {
+	Reason          string `json:"reason"`
+	RevokedSignIns  int    `json:"revoked_sign_ins"`
+	RevokedSessions int    `json:"revoked_sessions"`
+}
+
+func (l *Logger) LogAccessMemberSignInsRevoke(ctx context.Context, dbtx repo.DBTX, event LogAccessMemberSignInsRevokeEvent) error {
+	action := ActionAccessMemberSignInsRevoke
+
+	metadata, err := marshalAuditPayload(accessMemberSignInsRevokeMetadata{
+		Reason:          event.Reason,
+		RevokedSignIns:  event.RevokedSignIns,
+		RevokedSessions: event.RevokedSessions,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(nil),
+
+		Action: string(action),
+
+		SubjectID:          event.MemberID,
+		SubjectType:        string(subjectTypeAccessMember),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.MemberEmail),
+		SubjectSlug:        conv.ToPGTextEmpty(event.MemberEmail),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessMemberV1})
 }

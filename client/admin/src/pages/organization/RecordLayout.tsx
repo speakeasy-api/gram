@@ -1,6 +1,6 @@
 import { useMemo, useState, type JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Outlet, useParams } from "@tanstack/react-router";
+import { Outlet, useMatches, useParams } from "@tanstack/react-router";
 
 import { useAnnouncer } from "@/hooks/use-announcer";
 import { organizationQuery } from "@/lib/adminQueries";
@@ -11,6 +11,13 @@ import {
 } from "@/pages/organizations/OrganizationActions";
 
 import { RecordHeader } from "./RecordHeader";
+
+declare module "@tanstack/react-router" {
+  interface StaticDataRouteOption {
+    // Set by a view that draws its own header in place of the organization's.
+    hideRecordHeader?: boolean;
+  }
+}
 
 export function RecordLayout(): JSX.Element {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
@@ -42,6 +49,9 @@ export function RecordLayout(): JSX.Element {
 function Record({ org }: { org: AdminOrganization }): JSX.Element {
   const [failure, setFailure] = useState<string | null>(null);
   const { announce, announced } = useAnnouncer();
+  const hideHeader = useMatches({
+    select: (matches) => matches.some((m) => m.staticData.hideRecordHeader),
+  });
 
   // The record's actions report through context, whose default is a silent
   // no-op: without a reporter every write on this page succeeds and announces
@@ -54,7 +64,7 @@ function Record({ org }: { org: AdminOrganization }): JSX.Element {
   return (
     <WriteReportProvider value={reporter}>
       <div className="flex min-h-0 flex-1 flex-col gap-6">
-        <RecordHeader org={org} />
+        {!hideHeader && <RecordHeader org={org} />}
         {failure && <p className="text-destructive text-sm">{failure}</p>}
         {/* Polite, and load-bearing. Radix marks the rest of the document
             aria-hidden while a dialog is open and exempts live regions by name,

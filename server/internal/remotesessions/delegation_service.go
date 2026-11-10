@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,18 +21,22 @@ type DelegationAuthorizer = delegation.Authorizer
 type DelegationOfflineStatus = delegation.OfflineStatus
 
 var (
-	ErrDelegationTemporary        = delegation.ErrTemporary
-	ErrDelegationReauthentication = delegation.ErrReauthentication
-	ErrDelegationConfiguration    = delegation.ErrConfiguration
+	ErrDelegationTemporary             = delegation.ErrTemporary
+	ErrDelegationReauthentication      = delegation.ErrReauthentication
+	ErrDelegationConfiguration         = delegation.ErrConfiguration
+	ErrDelegationStaleRegistration     = delegation.ErrStaleRegistration
+	ErrDelegationRetainedConfiguration = delegation.ErrRetainedConfiguration
 )
 
 type DelegationService struct{ service *delegation.Service }
 
 func NewDelegationService(db *pgxpool.Pool, enc *encryption.Client, manager *ChallengeManager) *DelegationService {
-	return &DelegationService{service: delegation.New(db, enc, delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, nil))}
+	dependencies := delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, manager.federatedClientPaused, nil)
+	dependencies.Connections = manager.connections
+	return &DelegationService{service: delegation.New(db, enc, dependencies)}
 }
 
-func delegationDependencies(binding, provider func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error), refresh func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error), now func() time.Time) delegation.Dependencies {
+func delegationDependencies(binding, provider func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error), refresh func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error), paused func(context.Context, *FederatedProvider) bool, now func() time.Time) delegation.Dependencies {
 	adaptLoader := func(load func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error)) func(context.Context, string, uuid.UUID, uuid.UUID) (delegation.Provider, error) {
 		return func(ctx context.Context, org string, issuer, client uuid.UUID) (delegation.Provider, error) {
 			p, err := load(ctx, org, issuer, client)
@@ -44,35 +49,41 @@ func delegationDependencies(binding, provider func(context.Context, string, uuid
 			return delegationProvider{p}, nil
 		}
 	}
-	return delegation.Dependencies{Now: now, LoadBinding: adaptLoader(binding), LoadProvider: adaptLoader(provider), RefreshIdentity: func(ctx context.Context, provider delegation.Provider, token, subject, nonce string) (*delegation.RefreshResult, error) {
+	return delegation.Dependencies{Connections: nil, Now: now, LoadBinding: adaptLoader(binding), LoadProvider: adaptLoader(provider), RefreshPaused: func(ctx context.Context, provider delegation.Provider) bool {
+		p, ok := provider.(delegationProvider)
+		return ok && paused(ctx, p.p)
+	}, RefreshIdentity: func(ctx context.Context, provider delegation.Provider, token, subject, nonce string) (*delegation.RefreshResult, error) {
 		p, ok := provider.(delegationProvider)
 		if !ok {
-			return nil, &delegation.RefreshError{Kind: delegation.RefreshConfiguration}
+			return nil, &delegation.RefreshError{Kind: delegation.RefreshSetup, SigningFailure: false, RetryAfter: 0}
 		}
 		result, err := refresh(ctx, p.p, token, subject, nonce)
-		if err != nil {
-			return nil, delegationRefreshError(err)
-		}
 		if result == nil {
-			return nil, nil
+			return nil, delegationRefreshError(err)
 		}
 		var identity delegation.Identity
 		if result.Identity != nil {
 			identity = delegationIdentity{result.Identity}
 		}
-		return &delegation.RefreshResult{Identity: identity, Credentials: result.Credentials}, nil
+		return &delegation.RefreshResult{Identity: identity, Credentials: result.Credentials}, delegationRefreshError(err)
 	}}
 }
 func delegationConfigurationError(err error) error {
 	if errors.Is(err, ErrFederatedConfiguration) {
 		return ErrDelegationConfiguration
 	}
+	if errors.Is(err, ErrFederatedUnavailable) && !errors.Is(err, ErrFederatedSigning) && !errors.Is(err, context.Canceled) {
+		return errors.Join(delegation.ErrProviderUnavailable, err)
+	}
 	return err
 }
 func delegationRefreshError(err error) error {
+	if err == nil {
+		return nil
+	}
 	var failure *FederatedRefreshError
 	if !errors.As(err, &failure) {
-		return &delegation.RefreshError{Kind: delegation.RefreshAmbiguous}
+		return &delegation.RefreshError{Kind: delegation.RefreshAmbiguous, SigningFailure: false, RetryAfter: 0}
 	}
 	kind := delegation.RefreshAmbiguous
 	switch failure.Kind {
@@ -82,12 +93,19 @@ func delegationRefreshError(err error) error {
 		kind = delegation.RefreshInvalidGrant
 	case FederatedRefreshConfiguration:
 		kind = delegation.RefreshConfiguration
+	case FederatedRefreshClientRejected:
+		kind = delegation.RefreshClientRejected
+	case FederatedRefreshSetup:
+		kind = delegation.RefreshSetup
+	// A 429 is usually a WAF, and if one hid a rotation the replay's invalid_grant costs the same sign-in a held claim would.
+	case FederatedRefreshRateLimited, FederatedRefreshRetryable:
+		kind = delegation.RefreshRetryable
+	case FederatedRefreshSetupRetryable:
+		kind = delegation.RefreshSetupRetryable
 	case FederatedRefreshInvalidIdentity:
 		kind = delegation.RefreshInvalidIdentity
-	case FederatedRefreshRetryable:
-		kind = delegation.RefreshRetryable
 	}
-	return &delegation.RefreshError{Kind: kind}
+	return &delegation.RefreshError{Kind: kind, SigningFailure: errors.Is(err, ErrFederatedSigning), RetryAfter: failure.RetryAfter}
 }
 
 type delegationProvider struct{ p *FederatedProvider }
@@ -101,12 +119,7 @@ func (p delegationProvider) DelegationConfigurationHash() string {
 }
 func (p delegationProvider) OfflineConfigurationHash() string { return p.p.OfflineConfigurationHash() }
 func (p delegationProvider) OfflineRequested() bool {
-	for _, scope := range p.p.client.Scope {
-		if scope == "offline_access" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.p.client.Scope, "offline_access")
 }
 func (p delegationProvider) OfflineSupported() bool {
 	policy, err := p.p.OfflinePolicy()
@@ -163,6 +176,25 @@ func (s *DelegationService) Resolve(ctx context.Context, b DelegationBinding, au
 		authority = delegationAuthority{authority}
 	}
 	return s.service.Resolve(ctx, b, authority) //nolint:wrapcheck // Compatibility facade preserves the public sentinel error and message contract.
+}
+
+// Check reports whether a retained credential still belongs to the current
+// trusted registration, without renewing it or contacting the provider.
+func (s *DelegationService) Check(ctx context.Context, b DelegationBinding, authority DelegationAuthorizer) error {
+	if authority != nil {
+		authority = delegationAuthority{authority}
+	}
+	return s.service.Check(ctx, b, authority) //nolint:wrapcheck // Compatibility facade preserves the public sentinel error and message contract.
+}
+
+// CheckResolvable reports whether Resolve could return an assertion now
+// without the human signing in again, without renewing the credential or
+// contacting the provider.
+func (s *DelegationService) CheckResolvable(ctx context.Context, b DelegationBinding, authority DelegationAuthorizer) error {
+	if authority != nil {
+		authority = delegationAuthority{authority}
+	}
+	return s.service.CheckResolvable(ctx, b, authority) //nolint:wrapcheck // Compatibility facade preserves the public sentinel error and message contract.
 }
 func (s *DelegationService) Revoke(ctx context.Context, b DelegationBinding, authority DelegationAuthorizer) error {
 	if authority != nil {

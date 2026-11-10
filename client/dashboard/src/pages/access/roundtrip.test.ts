@@ -1,3 +1,5 @@
+// @vitest-environment node
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, it, expect } from "vitest";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
@@ -6,6 +8,7 @@ import {
   applyRemoveRule,
   diffGrants,
   grantsFromRole,
+  roleHoldsGrants,
   sdkGrantsFromForm,
 } from "./roleGrantTransform";
 
@@ -16,6 +19,10 @@ const scopeDefinitions = [
     resourceType: "project",
     visibility: "user_visible",
     agentEligible: true,
+    label: "project:write",
+    category: "project",
+    sensitive: false,
+    subScopes: [],
     exclusionScope: "project:blocked_write",
   },
   {
@@ -24,6 +31,10 @@ const scopeDefinitions = [
     resourceType: "mcp",
     visibility: "user_visible",
     agentEligible: true,
+    label: "mcp:write",
+    category: "mcp",
+    sensitive: false,
+    subScopes: [],
     exclusionScope: "mcp:blocked_write",
   },
   {
@@ -32,6 +43,10 @@ const scopeDefinitions = [
     resourceType: "mcp",
     visibility: "user_visible",
     agentEligible: true,
+    label: "mcp:connect",
+    category: "mcp",
+    sensitive: false,
+    subScopes: [],
     exclusionScope: "mcp:blocked_connect",
   },
   {
@@ -40,7 +55,23 @@ const scopeDefinitions = [
     resourceType: "skill",
     visibility: "user_visible",
     agentEligible: true,
+    label: "skill:write",
+    category: "skill",
+    sensitive: false,
+    subScopes: [],
     exclusionScope: "skill:blocked_write",
+  },
+  {
+    slug: "assistant:write",
+    description: "Create and modify assistants within the project.",
+    resourceType: "assistant",
+    visibility: "user_visible",
+    agentEligible: true,
+    label: "assistant:write",
+    category: "assistant",
+    sensitive: false,
+    subScopes: [],
+    exclusionScope: "assistant:blocked_write",
   },
 ] satisfies ScopeDefinition[];
 
@@ -184,6 +215,44 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
       },
     ]);
   });
+
+  it("round-trips project-filtered assistant rules and exceptions", () => {
+    const assistantSelectors = [
+      { resourceKind: "assistant", resourceId: "*", projectId: "project_123" },
+    ] as unknown as Role["grants"][number]["selectors"];
+    const assistantExclusions = [
+      { resourceKind: "assistant", resourceId: "assistant_456" },
+    ] as unknown as Role["grants"][number]["selectors"];
+    const r = role([
+      {
+        scope: "assistant:write" as Role["grants"][number]["scope"],
+        selectors: assistantSelectors,
+      },
+      {
+        scope: "assistant:blocked_write" as Role["grants"][number]["scope"],
+        selectors: assistantExclusions,
+      },
+    ]);
+
+    expect(
+      sdkGrantsFromForm(grantsFromRole(r, scopeDefinitions), scopeDefinitions),
+    ).toEqual([
+      {
+        scope: "assistant:write",
+        selectors: [
+          {
+            resourceKind: "assistant",
+            resourceId: "*",
+            projectId: "project_123",
+          },
+        ],
+      },
+      {
+        scope: "assistant:blocked_write",
+        selectors: [{ resourceKind: "assistant", resourceId: "assistant_456" }],
+      },
+    ]);
+  });
 });
 
 describe("diffGrants", () => {
@@ -276,5 +345,108 @@ describe("applyRemoveRule", () => {
     expect(next).not.toBeNull();
     expect(next!.rules).toHaveLength(1);
     expect(next!.rules[0]!.effect).toBe("allow");
+  });
+});
+
+describe("forward-compatible role grants", () => {
+  it.each(["future:read", "__proto__", "constructor"])(
+    "preserves unknown scope %s and its selectors",
+    (scope) => {
+      const grants: Role["grants"] = [
+        {
+          scope: unrecognized(scope),
+          selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+        },
+      ];
+      expect(
+        sdkGrantsFromForm(
+          grantsFromRole(role(grants), scopeDefinitions),
+          scopeDefinitions,
+        ),
+      ).toEqual(grants);
+    },
+  );
+  it("preserves unknown resource kinds and dispositions when another grant changes", () => {
+    const grants: Role["grants"] = [
+      {
+        scope: "mcp:connect",
+        selectors: [
+          { resourceKind: unrecognized("future_resource"), resourceId: "*" },
+        ],
+      },
+      {
+        scope: "mcp:write",
+        selectors: [
+          {
+            resourceKind: "mcp",
+            resourceId: "server-1",
+            disposition: unrecognized("__proto__"),
+          },
+        ],
+      },
+    ];
+    const form = grantsFromRole(role(grants), scopeDefinitions);
+    const after = sdkGrantsFromForm(form, scopeDefinitions);
+    expect(after).toEqual(grants);
+    expect(form["mcp:write"]?.rules[0]?.annotations).toEqual([]);
+    expect(diffGrants(grants, [...after, { scope: "project:read" }])).toEqual({
+      addGrants: [{ scope: "project:read", selectors: undefined }],
+      removeGrants: [],
+    });
+  });
+});
+
+describe("roleHoldsGrants", () => {
+  it("accepts a stored wildcard for an unrestricted grant", () => {
+    const saved = role([
+      {
+        scope: "mcp:connect",
+        selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+      },
+    ]);
+    expect(
+      roleHoldsGrants(
+        saved,
+        [{ scope: "mcp:connect", selectors: undefined }],
+        scopeDefinitions,
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects a reply that still holds a removed grant", () => {
+    // The server answers without an error when a removal matches no row, so
+    // the editor must not report the save as done.
+    const saved = role([
+      {
+        scope: "mcp:connect",
+        selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+      },
+      {
+        scope: "mcp:write",
+        selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+      },
+    ]);
+    expect(
+      roleHoldsGrants(
+        saved,
+        [{ scope: "mcp:connect", selectors: undefined }],
+        scopeDefinitions,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a reply missing an added grant", () => {
+    expect(
+      roleHoldsGrants(
+        role([]),
+        [
+          {
+            scope: "mcp:connect",
+            selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
+          },
+        ],
+        scopeDefinitions,
+      ),
+    ).toBe(false);
   });
 });

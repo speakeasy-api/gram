@@ -11,6 +11,10 @@ export type CreateIssuerRequestBody = {
    */
   authorizationEndpoint?: string | undefined;
   /**
+   * Advertised grant profiles; metadata evidence is not client authorization or user access.
+   */
+  authorizationGrantProfilesSupported?: Array<string> | undefined;
+  /**
    * Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null ("not captured").
    */
   authorizationResponseIssParameterSupported?: boolean | undefined;
@@ -70,6 +74,10 @@ export type CreateIssuerRequestBody = {
    * When true, may unlock OIDC-aware behaviour. Default false.
    */
   oidc?: boolean | undefined;
+  /**
+   * When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Omit to leave it unset: such a login requests the provider's whole scopes_supported.
+   */
+  omitScopeFallback?: boolean | undefined;
   /**
    * RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
    */
@@ -139,6 +147,7 @@ export type CreateIssuerRequestBody = {
 /** @internal */
 export type CreateIssuerRequestBody$Outbound = {
   authorization_endpoint?: string | undefined;
+  authorization_grant_profiles_supported?: Array<string> | undefined;
   authorization_response_iss_parameter_supported?: boolean | undefined;
   backchannel_logout_supported?: boolean | undefined;
   claims_supported?: Array<string> | undefined;
@@ -154,6 +163,7 @@ export type CreateIssuerRequestBody$Outbound = {
   logo_asset_id?: string | undefined;
   name?: string | undefined;
   oidc?: boolean | undefined;
+  omit_scope_fallback?: boolean | undefined;
   op_policy_uri?: string | undefined;
   op_tos_uri?: string | undefined;
   passthrough?: boolean | undefined;
@@ -179,6 +189,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorizationEndpoint: z.optional(z.string()),
+    authorizationGrantProfilesSupported: z.optional(z.array(z.string())),
     authorizationResponseIssParameterSupported: z.optional(z.boolean()),
     backchannelLogoutSupported: z.optional(z.boolean()),
     claimsSupported: z.optional(z.array(z.string())),
@@ -194,6 +205,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
     logoAssetId: z.optional(z.string()),
     name: z.optional(z.string()),
     oidc: z.optional(z.boolean()),
+    omitScopeFallback: z.optional(z.boolean()),
     opPolicyUri: z.optional(z.string()),
     opTosUri: z.optional(z.string()),
     passthrough: z.optional(z.boolean()),
@@ -214,6 +226,8 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       authorizationEndpoint: "authorization_endpoint",
+      authorizationGrantProfilesSupported:
+        "authorization_grant_profiles_supported",
       authorizationResponseIssParameterSupported:
         "authorization_response_iss_parameter_supported",
       backchannelLogoutSupported: "backchannel_logout_supported",
@@ -229,6 +243,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
         "introspection_endpoint_auth_methods_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",
+      omitScopeFallback: "omit_scope_fallback",
       opPolicyUri: "op_policy_uri",
       opTosUri: "op_tos_uri",
       projectId: "project_id",

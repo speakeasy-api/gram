@@ -1,6 +1,6 @@
 package aivendors
 
-// registry is Gram's curated list of AI products.
+// registry is Speakeasy's curated list of AI products.
 //
 // Every Document here becomes a CIMD admission entry. A MISSING one is a hard,
 // unrecoverable auth failure: MCP clients pick CIMD over dynamic registration
@@ -8,8 +8,9 @@ package aivendors
 // no recourse. Be generous — an extra document costs a string comparison.
 //
 // Verify every document live before it lands (HTTP 200, valid JSON, client_id
-// equal to URL, token_endpoint_auth_method "none") and record the date above
-// the product. Every product with Signatures is also a scan target.
+// equal to URL, token_endpoint_auth_method "none" or absent OR
+// "private_key_jwt" with exactly one of jwks or jwks_uri) and record the date
+// above the product. Every product with Signatures is also a scan target.
 //
 // Declaration order is load-bearing: wildcards match in order, so reordering
 // can change which entry a client_id is attributed to.
@@ -280,7 +281,7 @@ var registry = []Product{
 			{
 				// The stable shared Codex document. Verified 2026-09: Codex
 				// CLI 0.154.0 presents this one, not the per-server document
-				// above, when it authorizes against a Gram MCP server.
+				// above, when it authorizes against a Speakeasy MCP server.
 				// OpenAI's docs tie that switch to authorization servers
 				// advertising RFC 9207. Both forms stay registered: older
 				// CLIs still mint a document per server, and which one a
@@ -462,8 +463,143 @@ var registry = []Product{
 		}},
 	},
 
+	// Verified 2026-10-05 against Conductor 0.90.1 (macOS aarch64 DMG): HTTP
+	// 200, a self-referential client_id, and token_endpoint_auth_method "none".
+	// Shorter (/oauth/client.json), invented-segment, and sibling-file paths
+	// all return 404, so this is an exact entry, not a pattern. A desktop app
+	// (Tauri shell orchestrating Claude Code + Codex), with a hosted callback
+	// matching Skydive's shape, not loopback. CFBundleIdentifier is the exact
+	// install signal; the process name is generic but kept on purpose (matching
+	// convention in goose, pi, crush, qwen above). No binaries: the CLI shim
+	// in Contents/Resources/bin is not installed onto PATH. ~/.conductor is the
+	// user config directory per Conductor's settings docs; .conductor/ in the
+	// repository root are per-repo workspace settings.
+	{
+		ID:          "conductor",
+		VendorKey:   "conductor",
+		DisplayName: "Conductor",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.conductor.app"},
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/.conductor"},
+			ProcessNames: []string{"conductor"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://api.conductor.build/oauth/client-metadata.json",
+			DisplayName: "Conductor",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-05: HTTP 200, self-referential client_id,
+	// token_endpoint_auth_method "private_key_jwt" with jwks_uri. This is a
+	// wildcard: Vercel Connect mints one document per connector, with
+	// server-generated IDs (scl_...). Sibling paths return 404 (/connectors,
+	// /connectors/a/b), so the namespace is bounded. The single redirect_uri
+	// is Vercel's own /callback. client_name is user-chosen (the connector
+	// owner's chosen name); the consent page shows it alongside the
+	// connect.vercel.com origin, which is the verifiable trust anchor. The
+	// catalog DisplayName ("Vercel Connect") attributes the client in the
+	// dashboard.
+	{
+		ID:              "vercel-connect",
+		VendorKey:       "vercel",
+		DisplayName:     "Vercel Connect",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://connect.vercel.com/connectors/*",
+			DisplayName: "Vercel Connect (connectors)",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-09. The only redirect is a hosted https URL on
+	// linear.app, not a loopback URL, matching Skydive and Conductor. Sibling
+	// paths return 404 (/.well-known/oauth-client-metadata/zzz.json,
+	// /.well-known/oauth-client-metadata/agent.json, etc.), so an exact entry
+	// rather than a pattern is the right rule.
+	{
+		ID:              "linear",
+		VendorKey:       "linear",
+		DisplayName:     "Linear",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
+			DisplayName: "Linear",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-12. Lovable is a hosted connector client with a
+	// same-origin https callback (api.lovable.dev). Sibling paths return 404
+	// (/.well-known/oauth-client/, /.well-known/oauth-client.json, etc.), so
+	// an exact entry rather than a pattern is the right rule. The document
+	// carries an unregistered code_challenge_methods_used field, which the
+	// validator ignores.
+	{
+		ID:              "lovable",
+		VendorKey:       "lovable",
+		DisplayName:     "Lovable",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://api.lovable.dev/.well-known/oauth-client",
+			DisplayName: "Lovable",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-14, re-verified 2026-10-14. A desktop IDE and CLI with
+	// a same-origin hosted https callback (antigravity.google). Sibling paths
+	// return 404 (/oauth/client-metadata, /oauth/zzz.json, etc.), so an exact
+	// entry rather than a pattern is the right rule. The www form
+	// (www.antigravity.google) is deliberately absent because its client_id is
+	// the apex URL.
+	//
+	// Signatures verified 2026-10-14 against the Antigravity 2.23.0 macOS DMG
+	// and Antigravity CLI 1.3.5 tarball (the Homebrew cask artifacts). Both
+	// bundled language servers embed the document URL above; the separate
+	// Antigravity IDE (com.google.antigravity-ide, 2.5.5) does not, so it is
+	// not covered here. The app's CFBundleExecutable is "Antigravity" and it
+	// keeps state in ~/.gemini/antigravity. The CLI installer writes the binary
+	// to ~/.local/bin/agy, while the Homebrew cask links agy to a file named
+	// antigravity, so both process names are kept; its settings live in
+	// ~/.gemini/antigravity-cli. ~/.antigravity is deliberately absent: the
+	// 2.x app never references it (only the cask's zap stanza does, a leftover
+	// of the earlier IDE builds), so it would match stale installs.
+	{
+		ID:          "antigravity",
+		VendorKey:   "google",
+		DisplayName: "Google Antigravity",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.google.antigravity"},
+			Binaries:     []string{"agy"},
+			ConfigDirs:   []string{"~/.gemini/antigravity", "~/.gemini/antigravity-cli"},
+			ProcessNames: []string{"Antigravity", "agy", "antigravity"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://antigravity.google/oauth/client-metadata.json",
+			DisplayName: "Google Antigravity",
+			Enabled:     true,
+		}},
+	},
+
 	// Products below publish no CIMD document. They register dynamically or
-	// do not speak MCP to Gram at all, so an access decision about them is
+	// do not speak MCP to Speakeasy at all, so an access decision about them is
 	// recorded and enforces nothing — the dashboard says so rather than
 	// implying the gateway turns them away. They carry reported client names
 	// for attribution only.
@@ -483,6 +619,11 @@ var registry = []Product{
 		Documents:       nil,
 	},
 	{
+		// ~/.gemini itself is shared with Google Antigravity, which keeps its
+		// state in ~/.gemini/antigravity, ~/.gemini/config and others, so the
+		// root would report every Antigravity install as Gemini CLI too. The
+		// marker is the CLI's session directory instead, written on first use,
+		// which neither Antigravity 2.23.0 nor its CLI 1.3.5 references.
 		ID:          "gemini-cli",
 		VendorKey:   "google",
 		DisplayName: "Gemini CLI",
@@ -490,7 +631,7 @@ var registry = []Product{
 		Signatures: Signatures{
 			BundleIDs:    nil,
 			Binaries:     []string{"gemini"},
-			ConfigDirs:   []string{"~/.gemini"},
+			ConfigDirs:   []string{"~/.gemini/tmp"},
 			ProcessNames: []string{"gemini"},
 		},
 		VersionPlistKey: "",
@@ -884,7 +1025,7 @@ var registry = []Product{
 		Documents:       nil,
 	},
 
-	// Local model runtimes. They never speak MCP to Gram, so they carry no
+	// Local model runtimes. They never speak MCP to Speakeasy, so they carry no
 	// documents and no reported names: there is no caller to recognize.
 	// Bundle id and data path verified 2026-09-11 from the Homebrew cask. Jan
 	// is both a runtime and a chat UI; filed as a runtime because that is the

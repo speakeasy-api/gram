@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { registryEntryNameKey } from "@/lib/registryEntryName";
 import { organizationQuery, projectQuery } from "@/lib/adminQueries";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization, aProject } from "@/test/fixtures";
@@ -15,6 +16,9 @@ import { renderRouteTree } from "@/test/harness";
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
+  listUsers: vi
+    .fn()
+    .mockResolvedValue({ users: [], total: 0, page: 1, limit: 50 }),
   listOrganizations: vi.fn(),
   getOrganization: vi.fn(),
   getProject: vi.fn(),
@@ -27,6 +31,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   return {
     ...actual,
     getSession: mocks.getSession,
+    listUsers: mocks.listUsers,
     listOrganizations: mocks.listOrganizations,
     getOrganization: mocks.getOrganization,
     getProject: mocks.getProject,
@@ -240,6 +245,7 @@ describe("SiteHeader", () => {
   // where the record crumb's own target is where the operator is standing.
   it.each([
     ["the organizations list", "/organizations", "Organizations"],
+    ["the users list", "/users", "Users"],
     ["a record's own index", `/organizations/${ORG.slug}`, "Overview"],
     ["the activity view", `/organizations/${ORG.slug}/activity`, "Activity"],
     ["the members view", `/organizations/${ORG.slug}/members`, "Members"],
@@ -411,4 +417,15 @@ describe("SiteHeader", () => {
       expect(router.state.location.pathname).toBe(`/organizations/${ORG.slug}`);
     });
   });
+});
+
+it("names the registry entry crumb from the detail name cache", async () => {
+  const client = seeded();
+  const id = "00000000-0000-4000-8000-000000000001";
+  client.setQueryData(registryEntryNameKey(id), { name: "example.test/demo" });
+  await renderRouteTree(routeTree, {
+    initialPath: `/registry/${id}`,
+    queryClient: client,
+  });
+  expect(crumbs()).toEqual(["MCP Registry", "example.test/demo"]);
 });

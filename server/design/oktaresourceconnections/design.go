@@ -20,16 +20,26 @@ var ResourceConnectionServer = Type("OktaResourceConnectionServer", func() {
 	Attribute("project_slug", String)
 	Attribute("server_name", String, "Server display name; admin-editable, never a key.")
 	Attribute("server_slug", String)
-	Attribute("state", String, "Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server's upstream; connected: the administrator confirmed it. Whether the exchange works is not known here.", func() {
-		Enum("not_applicable", "needs_agent", "needs_connection", "connected")
+	Attribute("state", String, "Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server's upstream, or an exchange since confirmation found it missing; broken: confirmed but known not to work, see broken_reason; connected: the administrator confirmed it and no conclusive exchange has run since; verified: an exchange since confirmation succeeded.", func() {
+		Enum("not_applicable", "needs_agent", "needs_connection", "broken", "connected", "verified")
 	})
 	Attribute("not_applicable_reason", String, "no_idjag: the server's authorization server metadata does not advertise the identity assertion grant.", func() {
 		Enum("no_idjag")
+	})
+	Attribute("broken_reason", String, "Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server's authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.", func() {
+		Enum("audience_mismatch", "scope_not_allowed", "client_auth_failed", "downstream_rejected")
+	})
+	Attribute("observed_result", String, "What the latest identity chaining exchange since confirmation showed. connection_missing is inferred from the identity provider's invalid_target error.", func() {
+		Enum("verified", "downstream_rejected", "connection_missing", "scope_not_allowed", "client_auth_failed")
+	})
+	Attribute("observed_at", String, "When the exchange behind observed_result started.", func() {
+		Format(FormatDateTime)
 	})
 	Attribute("pending", Boolean, "Whether the administrator still has a step to do for this server.")
 	Attribute("issuer_id", String, "The upstream authorization server ID. Together with the resource indicator, identifies the shared readiness confirmation; independent of the confirmed identity assertion audience.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("authorization_server_issuer", String, "The server's authorization server issuer; the Issuer URL to enter when enabling Cross App Access on a resource app. Omitted when unknown.")
 	Attribute("resource_indicator", String, "The resource indicator to enter on the connection: the server's RFC 9728 resource identifier when known, otherwise its URL.")
 	Attribute("client_id", String, "Speakeasy's client ID at the server's authorization server. Omitted when no client is bound yet.")
 	Attribute("client_binding", String, "bound: an explicit identity chaining binding selects the client; single: the one client attached to the authorization server; ambiguous: more than one candidate and no single binding; missing: no client registered yet.", func() {
@@ -47,7 +57,7 @@ var ResourceConnectionServer = Type("OktaResourceConnectionServer", func() {
 
 var ListResult = Type("ListOktaResourceConnectionsResult", func() {
 	Required("servers", "pending_count", "total_count", "undiscovered_count", "agent_recorded")
-	Attribute("servers", ArrayOf(ResourceConnectionServer), "Pending servers first, then by name. By default only servers with a step left; include_all adds connected and not-applicable ones.")
+	Attribute("servers", ArrayOf(ResourceConnectionServer), "Pending servers first, then by name. By default only servers with a step left; include_all adds connected, verified and not-applicable ones.")
 	Attribute("pending_count", Int, "Servers that still need a step.")
 	Attribute("total_count", Int, "Eligible servers before filtering.")
 	Attribute("undiscovered_count", Int, "Servers left out because their authorization server metadata has not been fetched yet.")
@@ -105,7 +115,7 @@ var _ = Service("oktaResourceConnections", func() {
 
 		Payload(func() {
 			security.SessionPayload()
-			Attribute("include_all", Boolean, "Include connected and not-applicable servers.", func() {
+			Attribute("include_all", Boolean, "Include connected, verified and not-applicable servers.", func() {
 				Default(false)
 			})
 		})

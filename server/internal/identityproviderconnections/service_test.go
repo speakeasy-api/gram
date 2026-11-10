@@ -115,7 +115,7 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 	require.Equal(t, fullOrgURL, created.OrgURL)
 	require.Equal(t, fullOrgURL, created.IssuerURL)
 	require.Equal(t, identityproviderconnections.ListingModeCustomApp, created.ListingMode)
-	require.Contains(t, created.JwksURL, testServerURL)
+	require.Contains(t, conv.PtrValOr(created.JwksURL, ""), testServerURL)
 	require.Nil(t, created.ClientID)
 	require.False(t, created.ClientIDSubmitted)
 	require.Equal(t, allScopes(), created.RequiredScopes)
@@ -129,12 +129,15 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 	keys := checklistKeys(created.Checklist)
 	require.Equal(t, []string{
 		"create_api_services_app", "public_key_auth", "dpop", "grant_scopes", "assign_admin_roles", "submit_client_id",
-		"register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection",
+		"register_ai_agent", "link_agent_app", "record_ai_agent", "add_agent_public_key", "activate_agent_app", "first_resource_connection",
 	}, keys)
 	for _, item := range created.Checklist {
 		switch item.Key {
 		case "public_key_auth":
-			require.Contains(t, item.Details, "Enter this URL: "+created.JwksURL)
+			require.Len(t, item.Details, 3)
+			require.Contains(t, item.Details[0], "Public keys")
+			require.Contains(t, item.Details[1], "Use a URL to fetch keys dynamically")
+			require.Contains(t, item.Details[2], "Client Credentials")
 			require.Nil(t, item.Completed, "nothing observed before the first verification")
 		case "assign_admin_roles":
 			require.Contains(t, item.Description, "multi-factor authentication")
@@ -142,7 +145,7 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 		case "submit_client_id":
 			require.NotNil(t, item.Completed)
 			require.False(t, *item.Completed)
-		case "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection":
+		case "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "add_agent_public_key", "first_resource_connection":
 			require.Equal(t, "cross_app_access", item.Group)
 		default:
 			require.Equal(t, "connect", item.Group)
@@ -185,21 +188,23 @@ func TestCreate_SecondLiveConnectionConflicts(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeConflict)
 }
 
-func TestCreate_PendingIssuersCoexistUntilCredentialProof(t *testing.T) {
+func TestSubmitClientID_TwoOrganizationsVerifySameOktaOrg(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
 	first := createConnection(t, ctx, si, fullOrgURL)
 	otherCtx, _ := asOtherOrganization(t, ctx, si)
 	second := createConnection(t, otherCtx, si, fullOrgURL)
 
-	// The later creator can prove ownership; the earlier pending row cannot squat.
-	submitClientID(t, otherCtx, si, second.ID)
-	_, err := si.svc.SubmitClientID(ctx, &gen.SubmitClientIDPayload{ID: first.ID, ClientID: testClientID})
-	requireOopsCode(t, err, oops.CodeConflict)
-	fetched, err := si.svc.Get(ctx, &gen.GetPayload{ID: &first.ID})
-	require.NoError(t, err)
-	require.False(t, fetched.Connection.ClientIDSubmitted, "conflicting claim rolls back the client id")
-	require.Equal(t, identityproviderconnections.StatusPending, fetched.Connection.Status)
+	contexts := []context.Context{ctx, otherCtx}
+	for i, connection := range []*gen.OktaIdentityProviderConnection{first, second} {
+		result := submitClientID(t, contexts[i], si, connection.ID)
+		require.Equal(t, identityproviderconnections.StatusVerified, result.Status)
+		stored, err := repo.New(si.conn.conn).GetOktaIdentityProviderConnection(ctx, repo.GetOktaIdentityProviderConnectionParams{
+			OrganizationID: connection.OrganizationID, ID: conv.ToNullUUID(mustParseUUID(t, connection.ID)),
+		})
+		require.NoError(t, err)
+		require.True(t, stored.OktaIdentityProviderConnection.OwnershipClaimed)
+	}
 }
 
 func TestSubmitClientID_RejectsMalformedIDs(t *testing.T) {
@@ -237,7 +242,7 @@ func TestSubmitClientID_VerifiesAndPersists(t *testing.T) {
 	require.Nil(t, submitted.LastError)
 
 	fake := si.oktaFakes.Fake(fullOrgURL)
-	require.Equal(t, []string{"VerifyScopes", "ListApps", "ListUsers", "ListGroups"}, fake.Calls())
+	require.Equal(t, []string{"VerifyScopes", "ListApps"}, fake.Calls())
 
 	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, created.ID))
 	require.NoError(t, err)
@@ -297,9 +302,9 @@ func TestSubmitClientID_DegradedStillPersists(t *testing.T) {
 
 	require.Equal(t, identityproviderconnections.StatusDegraded, submitted.Status)
 	require.True(t, submitted.ClientIDSubmitted)
-	require.Equal(t, []string{"okta.apps.read"}, submitted.GrantedScopes)
-	require.Equal(t, []string{"okta.users.read", "okta.groups.read"}, submitted.MissingScopes)
-	require.Equal(t, []string{identityproviderconnections.ReasonMissingScope}, submitted.VerificationReasons)
+	require.Empty(t, submitted.GrantedScopes)
+	require.Equal(t, []string{"okta.apps.read"}, submitted.MissingScopes)
+	require.Equal(t, []string{identityproviderconnections.ReasonMissingScope, identityproviderconnections.ReasonDPoPNotBound}, submitted.VerificationReasons, "a refused scope mints no token")
 	require.Nil(t, submitted.LastError, "reasons are not failures")
 	require.Nil(t, submitted.LastVerifiedAt, "only a verified outcome advances last_verified_at")
 }
@@ -383,7 +388,6 @@ func TestVerify_ReadFailureDegrades(t *testing.T) {
 	require.Equal(t, []string{identityproviderconnections.ReasonReadFailedApps, identityproviderconnections.ReasonMissingRole}, verified.VerificationReasons)
 	require.Nil(t, verified.LastError)
 	require.Equal(t, allScopes(), verified.GrantedScopes)
-	require.Contains(t, fake.Calls(), "ListUsers", "every granted scope is read")
 
 	// The token mint failing as a non-credential error keeps the status and
 	// records the typed failure.
@@ -552,7 +556,9 @@ func TestRevoke_IsIdempotentAndFreesTheOrganization(t *testing.T) {
 	// The managed client stays live serving an empty JWKS at the same URL.
 	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, created.ID))
 	require.NoError(t, err)
-	require.Equal(t, created.JwksURL, managed.JSONWebKeySetURL)
+	require.Equal(t, conv.PtrValOr(created.JwksURL, ""), managed.JSONWebKeySetURL)
+	require.NotNil(t, created.RemoteSessionIssuerID)
+	require.Equal(t, managed.IssuerID.String(), *created.RemoteSessionIssuerID)
 	require.False(t, managed.ActiveKeyID.Valid)
 	require.JSONEq(t, `{"keys":[]}`, managedJWKS(t, ctx, si, managed))
 
@@ -754,7 +760,7 @@ func TestCreate_ProvisionFailureLeavesOrgRetryable(t *testing.T) {
 	empty, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
 	require.NoError(t, err)
 	require.Nil(t, empty.Connection)
-	issuers, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionIssuers(ctx, remotesessionsrepo.ListOrganizationRemoteSessionIssuersParams{OrganizationID: conv.ToPGText(si.orgID), IncludeGlobal: false, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10})
+	issuers, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionIssuers(ctx, remotesessionsrepo.ListOrganizationRemoteSessionIssuersParams{OrganizationID: conv.ToPGText(si.orgID), IncludeOrganizational: true, IncludeProjectSpecific: true, IncludeGlobal: false, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10})
 	require.NoError(t, err)
 	require.Empty(t, issuers, "the abandoned issuer was tombstoned")
 
@@ -840,6 +846,7 @@ func TestRevoke_RetryAfterManagedClientDeleted(t *testing.T) {
 	require.Nil(t, again.ClientID)
 	require.False(t, again.ClientIDSubmitted)
 	require.Empty(t, again.JwksURL)
+	require.Nil(t, again.RemoteSessionIssuerID, "no managed client, no issuer to report")
 }
 
 func TestRevoke_ConcurrentCallsBothSucceedAndAuditOnce(t *testing.T) {
@@ -872,20 +879,6 @@ func TestRevoke_ConcurrentCallsBothSucceedAndAuditOnce(t *testing.T) {
 	require.Equal(t, before+1, after)
 }
 
-func TestCreate_SameOktaOrgFreedByRevoke(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestService(t)
-	first := createConnection(t, ctx, si, fullOrgURL)
-	submitClientID(t, ctx, si, first.ID)
-	otherCtx, _ := asOtherOrganization(t, ctx, si)
-	second := createConnection(t, otherCtx, si, fullOrgURL)
-	_, err := si.svc.SubmitClientID(otherCtx, &gen.SubmitClientIDPayload{ID: second.ID, ClientID: testClientID})
-	requireOopsCode(t, err, oops.CodeConflict)
-	_, err = si.svc.Revoke(ctx, &gen.RevokePayload{ID: first.ID})
-	require.NoError(t, err)
-	submitClientID(t, otherCtx, si, second.ID)
-}
-
 func TestNormalizeOktaOrgURL(t *testing.T) {
 	t.Parallel()
 
@@ -893,25 +886,31 @@ func TestNormalizeOktaOrgURL(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, fullOrgURL, normalized)
 
-	adminConsole, err := identityproviderconnections.NormalizeOktaOrgURL("https://example-admin.okta.com/")
-	require.NoError(t, err)
-	require.Equal(t, fullOrgURL, adminConsole, "the admin console address maps to the org")
-	_, err = identityproviderconnections.NormalizeOktaOrgURL("https://-admin.okta.com")
-	require.Error(t, err)
-	for _, suffix := range []string{"oktapreview.com", "okta-emea.com", "okta.mil"} {
-		mapped, err := identityproviderconnections.NormalizeOktaOrgURL("https://example-admin." + suffix)
-		require.NoError(t, err, suffix)
-		require.Equal(t, "https://example."+suffix, mapped, suffix)
-	}
 	doubleHyphen, err := identityproviderconnections.NormalizeOktaOrgURL("https://foo--admin.okta.com")
 	require.NoError(t, err)
 	require.Equal(t, "https://foo--admin.okta.com", doubleHyphen)
 
-	for _, raw := range []string{"https://sub.example.okta.mil", "https://dev-1.oktapreview.com", "https://x.okta-emea.com"} {
+	for _, raw := range []string{"https://sub.example.okta.mil", "https://dev-1.oktapreview.com", "https://x.okta-emea.com", "https://agency.okta-gov.com", "https://oin-test.trexcloud.com"} {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.NoError(t, err, raw)
 	}
-	for _, raw := range []string{"https://okta.com", "https://okta.com.evil.com", "https://example.okta.com/path", "http://localhost", "https://[::1]", "https://example.okta.com.", "https://xn--exmple-cua.okta.com", "https://exämple.okta.com", "https://%zz.okta.com", "https://\u212Aexample.okta.com", "https://example.okta.com?", "https://example.okta.com#", "https://example.okta.com/#"} {
+	for raw, want := range map[string]string{
+		"https://acme-admin.okta.com":                    "https://acme.okta.com",
+		"https://acme-admin.oktapreview.com/":            "https://acme.oktapreview.com",
+		"https://acme-admin.okta-emea.com/admin":         "https://acme.okta-emea.com",
+		"https://acme-admin.okta.mil/admin/home":         "https://acme.okta.mil",
+		"https://acme-admin.okta-gov.com/admin":          "https://acme.okta-gov.com",
+		"https://Dev-1-Admin.okta.com/admin/apps/active": "https://dev-1.okta.com",
+		"https://myadmin-co.okta.com":                    "https://myadmin-co.okta.com",
+		"https://admin-team.okta.com":                    "https://admin-team.okta.com",
+		"https://acme-admin.sub.okta.com":                "https://acme-admin.sub.okta.com",
+		"https://sub.acme-admin.okta.com/admin/home":     "https://sub.acme.okta.com",
+	} {
+		got, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
+		require.NoError(t, err, raw)
+		require.Equal(t, want, got, raw)
+	}
+	for _, raw := range []string{"https://example.okta.com/admin/home", "https://acme-admin.okta.com/app/UserHome", "https://acme-admin.okta.com/admin/home?x=1", "https://acme-admin.okta.com/administrator", "https://-admin.okta.com", "https://acme-admin-admin.okta.com", "https://acme-admin.okta.com/%61dmin", "https://acme-admin.okta.com/admin%2Fx", "https://acme-admin.okta.com/admin/a b", "https://acme-admin.okta.com//admin", "https://okta.com", "https://okta.com.evil.com", "https://example.okta.com/path", "http://localhost", "https://[::1]", "https://example.okta.com.", "https://xn--exmple-cua.okta.com", "https://exämple.okta.com", "https://%zz.okta.com", "https://\u212Aexample.okta.com", "https://example.okta.com?", "https://example.okta.com#", "https://example.okta.com/#"} {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.Error(t, err, raw)
 	}
@@ -989,44 +988,6 @@ func TestSubmitClientID_NoMintedTokenDoesNotClaimIssuer(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, stored.OktaIdentityProviderConnection.OwnershipClaimed, "nil verification error is not credential proof")
 	}
-}
-
-func TestSubmitClientID_ConcurrentIssuerClaimsHaveOneWinner(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestService(t)
-	first := createConnection(t, ctx, si, fullOrgURL)
-	otherCtx, _ := asOtherOrganization(t, ctx, si)
-	second := createConnection(t, otherCtx, si, fullOrgURL)
-	start := make(chan struct{})
-	results := make(chan error, 2)
-	contexts := []context.Context{ctx, otherCtx}
-	connections := []*gen.OktaIdentityProviderConnection{first, second}
-	for i, connection := range connections {
-		go func() {
-			<-start
-			_, err := si.svc.SubmitClientID(contexts[i], &gen.SubmitClientIDPayload{ID: connection.ID, ClientID: testClientID})
-			results <- err
-		}()
-	}
-	close(start)
-	a, b := <-results, <-results
-	if a == nil {
-		requireOopsCode(t, b, oops.CodeConflict)
-	} else {
-		requireOopsCode(t, a, oops.CodeConflict)
-		require.NoError(t, b)
-	}
-	claimed := 0
-	for _, connection := range connections {
-		stored, err := repo.New(si.conn.conn).GetOktaIdentityProviderConnection(ctx, repo.GetOktaIdentityProviderConnectionParams{
-			OrganizationID: connection.OrganizationID, ID: conv.ToNullUUID(mustParseUUID(t, connection.ID)),
-		})
-		require.NoError(t, err)
-		if stored.OktaIdentityProviderConnection.OwnershipClaimed {
-			claimed++
-		}
-	}
-	require.Equal(t, 1, claimed)
 }
 
 func TestCreate_SmallPoolAdmissionPreventsCrossOrganizationStarvation(t *testing.T) {

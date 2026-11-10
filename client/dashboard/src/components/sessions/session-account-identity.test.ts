@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import {
@@ -10,7 +11,7 @@ const session = {
   remoteSessionClientId: "client_example",
   userSessionIssuerId: "issuer_example",
   subjectUrn: "user:example",
-  subjectDisplayName: "Gram user",
+  subjectDisplayName: "Speakeasy user",
   subjectEmail: "gram@example.test",
   scopes: [],
   hasRefreshToken: false,
@@ -20,7 +21,7 @@ const session = {
 } satisfies RemoteSession;
 
 describe("stored session account identity", () => {
-  it("never substitutes the Gram subject or internal identifiers", () => {
+  it("never substitutes the Speakeasy subject or internal identifiers", () => {
     expect(sessionAccountLabel(session)).toBe("Identity unavailable");
     expect(sessionAccountLabel()).toBe("Identity unavailable");
   });

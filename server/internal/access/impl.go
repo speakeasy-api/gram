@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -59,7 +60,7 @@ type Service struct {
 	roleMgr  *RoleManager
 	audit    *audit.Logger
 	email    *email.Service
-	siteURL  *url.URL
+	orgHosts *orghost.Resolver
 	foldGate CanonicalFoldGate
 }
 
@@ -85,7 +86,7 @@ func NewService(
 	authz *authz.Engine,
 	auditLogger *audit.Logger,
 	emailService *email.Service,
-	siteURL *url.URL,
+	orgHosts *orghost.Resolver,
 	foldGate CanonicalFoldGate,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
@@ -100,7 +101,7 @@ func NewService(
 		roleMgr:  roleMgr,
 		audit:    auditLogger,
 		email:    emailService,
-		siteURL:  siteURL,
+		orgHosts: orgHosts,
 		foldGate: foldGate,
 	}
 }
@@ -119,7 +120,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// ListRoles reads local role records and enriches them with Gram's local grant state.
+// ListRoles reads local role records and enriches them with Speakeasy's local grant state.
 func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
 	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
 	// roleOrgContext, but the listing itself is pure Postgres — serve it.
@@ -169,7 +170,7 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	return s.roleMgr.ListRoles(ctx, ac.ActiveOrganizationID)
 }
 
-// GetRole returns the role definition enriched with Gram's local grant
+// GetRole returns the role definition enriched with Speakeasy's local grant
 // state so callers see the complete effective role configuration in one place.
 func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*gen.Role, error) {
 	ac, _, err := s.roleOrgContext(ctx)
@@ -281,64 +282,73 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		attr.UserID(ac.UserID),
 	)
 
-	scopes := []scopeDefinitionInput{
-		{scope: authz.ScopeOrgRead, description: "Read organization metadata and members.", resourceType: "org"},
-		{scope: authz.ScopeOrgBlockedRead, description: "Store exceptions for organization read access.", resourceType: "org"},
-		{scope: authz.ScopeOrgAdmin, description: "Manage organization access and settings.", resourceType: "org"},
-		{scope: authz.ScopeOrgBlockedAdmin, description: "Store exceptions for organization admin access.", resourceType: "org"},
-		{scope: authz.ScopeProjectRead, description: "View projects and project-related resources.", resourceType: "project"},
-		{scope: authz.ScopeProjectBlockedRead, description: "Store exceptions for project read access.", resourceType: "project"},
-		{scope: authz.ScopeProjectWrite, description: "Create and modify projects and project-related resources.", resourceType: "project"},
-		{scope: authz.ScopeProjectBlockedWrite, description: "Store exceptions for project write access.", resourceType: "project"},
-		{scope: authz.ScopeMCPRead, description: "View MCP servers and configuration.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPBlockedRead, description: "Store exceptions for MCP read access.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPWrite, description: "Create and modify MCP servers and configuration.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPBlockedWrite, description: "Store exceptions for MCP write access.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPConnect, description: "Connect to and use MCP servers.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPBlockedConnect, description: "Store exceptions for MCP connect access.", resourceType: "mcp"},
-		{scope: authz.ScopeEnvironmentRead, description: "View environments and their entries within the project.", resourceType: "environment"},
-		{scope: authz.ScopeEnvironmentBlockedRead, description: "Store exceptions for environment read access.", resourceType: "environment"},
-		{scope: authz.ScopeEnvironmentWrite, description: "Add, edit, clone, and remove environments within the project.", resourceType: "environment"},
-		{scope: authz.ScopeEnvironmentBlockedWrite, description: "Store exceptions for environment write access.", resourceType: "environment"},
-		{scope: authz.ScopeSkillRead, description: "View skills within the project.", resourceType: "skill"},
-		{scope: authz.ScopeSkillBlockedRead, description: "Store exceptions for skill read access.", resourceType: "skill"},
-		{scope: authz.ScopeSkillWrite, description: "Create and modify skills within the project.", resourceType: "skill"},
-		{scope: authz.ScopeSkillBlockedWrite, description: "Store exceptions for skill write access.", resourceType: "skill"},
-		{scope: authz.ScopePluginWrite, description: "Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.", resourceType: "project"},
-		{scope: authz.ScopePluginBlockedWrite, description: "Store exceptions for plugin write access.", resourceType: "project"},
-		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeChatRead, description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.", resourceType: "chat"},
-		{scope: authz.ScopeChatWrite, description: "Rename, delete, and give feedback on other members' agent sessions. Everyone keeps their own.", resourceType: "chat"},
-		{scope: authz.ScopeAgentRead, description: "View agents.", resourceType: "agent"},
-		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
-		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
-		{scope: authz.ScopeAgentTransfer, description: "Transfer agent ownership.", resourceType: "agent"},
-		{scope: authz.ScopeOrgDeviceAgentSync, description: "Let an agent's device agent sync the plugins assigned to it.", resourceType: "org"},
-		{scope: authz.ScopeOrgHooksIngest, description: "Let an agent send AI-tool hook events and telemetry.", resourceType: "org"},
-	}
-	result := make([]*gen.ScopeDefinition, 0, len(scopes))
-	for _, scope := range scopes {
-		result = append(result, scopeDefinition(scope))
-	}
-
-	return &gen.ListScopesResult{Scopes: result}, nil
+	return scopeCatalogueResult(), nil
 }
 
-type scopeDefinitionInput struct {
-	scope        authz.Scope
-	description  string
-	resourceType string
+// scopeCatalogueResult is the catalogue as access.listScopes serves it. It is
+// the same for every caller, so the dashboard's tests read a fixture of it.
+func scopeCatalogueResult() *gen.ListScopesResult {
+	catalog := authz.ScopeCatalog()
+	result := make([]*gen.ScopeDefinition, 0, len(catalog))
+	for _, entry := range catalog {
+		result = append(result, scopeDefinition(entry))
+	}
+
+	tasks := authz.Tasks()
+	taskModels := make([]*gen.ScopeTask, 0, len(tasks))
+	for _, task := range tasks {
+		scopes := make([]string, 0, len(task.Scopes))
+		for _, scope := range task.Scopes {
+			scopes = append(scopes, string(scope))
+		}
+		taskModels = append(taskModels, &gen.ScopeTask{
+			Slug:   task.Slug,
+			Label:  task.Label,
+			Scopes: scopes,
+		})
+	}
+
+	return &gen.ListScopesResult{Scopes: result, Tasks: taskModels}
 }
 
-func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
+// ListAgentPolicyScopes lists the catalogue scopes an agent policy may hold.
+// It needs a session and no organization grant: an owner configuring their
+// own agent holds no RBAC grant, and the list is product configuration that
+// names nothing about the organization. The dashboard's agent permission
+// editor reads it instead of keeping a copy of the runtime-safe set.
+func (s *Service) ListAgentPolicyScopes(ctx context.Context, _ *gen.ListAgentPolicyScopesPayload) (*gen.ListAgentPolicyScopesResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	catalog := authz.ScopeCatalog()
+	result := make([]*gen.ScopeDefinition, 0, len(catalog))
+	for _, entry := range catalog {
+		definition := scopeDefinition(entry)
+		// Only what a person could also tick in a role: the runtime registry
+		// decides eligibility, exception scopes are not a choice, and shared
+		// auth-client access is provisioned by the auth client editor rather
+		// than chosen as a permission.
+		if !definition.AgentEligible || definition.Visibility != authz.ScopeVisibilityUserVisible || entry.Category == authz.ScopeCategoryMCPAuthClient {
+			continue
+		}
+		result = append(result, definition)
+	}
+	return &gen.ListAgentPolicyScopesResult{Scopes: result}, nil
+}
+
+func scopeDefinition(entry authz.ScopeEntry) *gen.ScopeDefinition {
 	var exclusionScope *string
-	if exclusion, ok := authz.ExclusionScopeFor(input.scope); ok {
+	if exclusion, ok := authz.ExclusionScopeFor(entry.Scope); ok {
 		exclusionScopeValue := string(exclusion)
 		exclusionScope = &exclusionScopeValue
 	}
-	visibility, ok := authz.ScopeVisibilityFor(input.scope)
+	visibility, ok := authz.ScopeVisibilityFor(entry.Scope)
 	if !ok {
 		visibility = authz.ScopeVisibilityInternal
 	}
@@ -346,16 +356,28 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 	// A role may hold scopes its agent members cannot. Agent policy is filtered
 	// against the runtime registry every time it is loaded, so those scopes are
 	// dropped rather than granted; reporting eligibility here lets the role
-	// editor say so instead of leaving the difference invisible.
-	agentEligible := runtimepolicy.IsRuntimeScopeSafe(runtimepolicy.CurrentRuntimeScopeRegistryVersion, input.scope)
+	// editor say so instead of leaving the difference invisible. Scopes kept
+	// only for managed assistants are not eligible through a role.
+	agentEligible := runtimepolicy.IsRuntimeScopeSafe(runtimepolicy.CurrentRuntimeScopeRegistryVersion, entry.Scope) && !runtimepolicy.IsManagedAssistantOnlyScope(entry.Scope)
+
+	var sensitivity *string
+	if entry.Sensitive() {
+		reason := string(entry.Sensitivity)
+		sensitivity = &reason
+	}
 
 	return &gen.ScopeDefinition{
-		Slug:           string(input.scope),
-		Description:    input.description,
-		ResourceType:   input.resourceType,
+		Slug:           string(entry.Scope),
+		Label:          entry.Label,
+		Description:    entry.Description,
+		ResourceType:   entry.ResourceType,
+		Category:       string(entry.Category),
 		Visibility:     visibility,
 		AgentEligible:  agentEligible,
 		ExclusionScope: exclusionScope,
+		Sensitive:      entry.Sensitive(),
+		Sensitivity:    sensitivity,
+		SubScopes:      entry.SubScopes(),
 	}
 }
 
@@ -496,7 +518,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 
 // UpdateMemberRoles replaces all role assignments for a member. It is
 // intentionally stricter than member listing: it only mutates access for users
-// Gram knows are connected to the local organization.
+// Speakeasy knows are connected to the local organization.
 func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemberRolesPayload) (*gen.AccessMember, error) {
 	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -526,7 +548,28 @@ func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemb
 		attr.UserID(ac.UserID),
 	)
 
-	return memberUpdate.After, nil
+	// The update's After is also the audit snapshot, which leaves out
+	// directory-owned data, so the response gets the member's mapped roles on a
+	// copy. The roles are already committed, so a failed read only leaves the
+	// mapped roles out of the response.
+	result := *memberUpdate.After
+	principals, err := repo.New(s.db).ListUserRolePrincipals(ctx, repo.ListUserRolePrincipalsParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		UserID:         result.ID,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "load directory mapped roles for member role update response", attr.SlogError(err))
+		return &result, nil
+	}
+	for _, principal := range principals {
+		if !principal.FromDirectoryMapping {
+			continue
+		}
+		// A role principal URN ends in the role ID: role:<kind>:<id>.
+		roleID := principal.PrincipalUrn[strings.LastIndex(principal.PrincipalUrn, ":")+1:]
+		result.DirectoryRoleIds = append(result.DirectoryRoleIds, roleID)
+	}
+	return &result, nil
 }
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
@@ -634,17 +677,29 @@ func genSelectorToAuthz(s *gen.Selector) authz.Selector {
 	if s.ServerURL != nil {
 		sel["server_url"] = *s.ServerURL
 	}
+	if s.ClientType != nil {
+		sel[authz.SelectorKeyClientType] = *s.ClientType
+	}
+	if s.ConnectionOwner != nil {
+		sel[authz.SelectorKeyConnectionOwner] = *s.ConnectionOwner
+	}
+	if s.UpstreamClient != nil {
+		sel[authz.SelectorKeyUpstreamClient] = *s.UpstreamClient
+	}
 	return sel
 }
 
 func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	s := &gen.Selector{
-		ResourceKind: sel["resource_kind"],
-		ResourceID:   sel["resource_id"],
-		Disposition:  nil,
-		Tool:         nil,
-		ProjectID:    nil,
-		ServerURL:    nil,
+		ResourceKind:    sel["resource_kind"],
+		ResourceID:      sel["resource_id"],
+		Disposition:     nil,
+		Tool:            nil,
+		ProjectID:       nil,
+		ServerURL:       nil,
+		ClientType:      nil,
+		ConnectionOwner: nil,
+		UpstreamClient:  nil,
 	}
 	if v, ok := sel["disposition"]; ok {
 		s.Disposition = &v
@@ -657,6 +712,15 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	}
 	if v, ok := sel["server_url"]; ok {
 		s.ServerURL = &v
+	}
+	if v, ok := sel[authz.SelectorKeyClientType]; ok {
+		s.ClientType = &v
+	}
+	if v, ok := sel[authz.SelectorKeyConnectionOwner]; ok {
+		s.ConnectionOwner = &v
+	}
+	if v, ok := sel[authz.SelectorKeyUpstreamClient]; ok {
+		s.UpstreamClient = &v
 	}
 	return s
 }
@@ -685,15 +749,21 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeSkillRead), Selectors: nil},
 		{Scope: string(authz.ScopeSkillWrite), Selectors: nil},
 		{Scope: string(authz.ScopePluginWrite), Selectors: nil},
+		{Scope: string(authz.ScopeAssistantRead), Selectors: nil},
+		{Scope: string(authz.ScopeAssistantWrite), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
+		{Scope: string(authz.ScopeInferenceExecute), Selectors: nil},
 		{Scope: string(authz.ScopeChatRead), Selectors: nil},
 		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
+		{Scope: string(authz.ScopeLogRead), Selectors: nil},
 		{Scope: string(authz.ScopeAgentRead), Selectors: nil},
 		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
 		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
+		{Scope: string(authz.ScopeWorkloadRead), Selectors: nil},
+		{Scope: string(authz.ScopeWorkloadWrite), Selectors: nil},
 		{Scope: string(authz.ScopeOrgDeviceAgentSync), Selectors: nil},
 		{Scope: string(authz.ScopeOrgHooksIngest), Selectors: nil},
 	}
@@ -701,13 +771,19 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 
 func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	scoped := authz.GrantsToScopedGrants(grants)
+	// Direct selectors let clients apply principal precedence: a direct grant
+	// naming a resource outranks a block inherited from a role or everyone.
+	direct := make(map[string][]*gen.Selector)
+	for _, grant := range authz.DirectOverrideGrants(grants) {
+		direct[string(grant.Scope)] = append(direct[string(grant.Scope)], authzSelectorToGen(grant.Selector))
+	}
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {
 		var selectors []*gen.Selector
 		for _, sel := range g.Selectors {
 			selectors = append(selectors, authzSelectorToGen(sel))
 		}
-		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors})
+		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors, DirectSelectors: direct[g.Scope]})
 	}
 	return out
 }
@@ -761,7 +837,7 @@ type challengeUserInfo struct {
 	photoURL *string
 }
 
-// activeOrgMemberUserIDs returns the Gram user IDs of active members of the
+// activeOrgMemberUserIDs returns the Speakeasy user IDs of active members of the
 // organization. The challenge UI uses it to suppress challenges raised by users
 // outside the organization — e.g. Speakeasy staff impersonating a customer org,
 // whose entries otherwise clutter the list while they switch accounts. Always
@@ -852,6 +928,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 			Outcome:        payload.Outcome,
 			PrincipalURN:   payload.PrincipalUrn,
 			Scope:          payload.Scope,
+			ExcludeScopes:  payload.ExcludeScopes,
 			MemberUserIDs:  memberIDs,
 		},
 		From:           from,
@@ -1085,6 +1162,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 			Outcome:        payload.Outcome,
 			PrincipalURN:   payload.PrincipalUrn,
 			Scope:          payload.Scope,
+			ExcludeScopes:  nil,
 			MemberUserIDs:  memberIDs,
 		},
 		Resolved:             payload.Resolved,
@@ -1558,8 +1636,8 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	// project from the tenant-qualified resource rather than trusting browser
 	// state or a client-supplied project id.
 	manageAccessLink := ""
-	if s.siteURL != nil {
-		accessURL := s.siteURL.JoinPath(org.Slug, "access", "roles")
+	if siteURL := s.orgHosts.SiteURL(org.DefaultHost); siteURL != nil {
+		accessURL := siteURL.JoinPath(org.Slug, "access", "roles")
 		q := url.Values{}
 		q.Set("grant_user", ac.UserID)
 		q.Set("scope", payload.Scope)
@@ -1580,10 +1658,22 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		manageAccessLink = accessURL.String()
 	}
 
+	// Name the permission the way the role editor does, so the admin reads
+	// "View tool logs" rather than a slug. An unknown slug is sent as is.
+	permissionLabel := payload.Scope
+	permissionDescription := ""
+	if entry, ok := authz.ScopeEntryFor(authz.Scope(payload.Scope)); ok {
+		permissionLabel = entry.Label
+		permissionDescription = entry.Description
+	}
+
 	tmpl := email.AccessRequest{
-		RequesterName:    conv.Default(requester.DisplayName, requester.Email),
-		OrganizationName: org.Name,
-		ManageAccessLink: manageAccessLink,
+		RequesterName:         conv.Default(requester.DisplayName, requester.Email),
+		OrganizationName:      org.Name,
+		ManageAccessLink:      manageAccessLink,
+		PermissionLabel:       permissionLabel,
+		PermissionScope:       payload.Scope,
+		PermissionDescription: permissionDescription,
 	}
 
 	// Send emails to all admins

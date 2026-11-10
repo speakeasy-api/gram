@@ -111,13 +111,13 @@ var File_gram_ping_v2_processor_proto protoreflect.FileDescriptor
 
 const file_gram_ping_v2_processor_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgram/ping/v2/processor.proto\x12\fgram.ping.v2\x1a\x1bgcp/pubsub/v1/options.proto\"A\n" +
-	"\tProcessor:4\x92\xb5\x180\x12\x03\b\x90\x1c\x18\x01\"\x02\b\x1e2\t\n" +
+	"\x1cgram/ping/v2/processor.proto\x12\fgram.ping.v2\x1a\x1bgcp/pubsub/v1/options.proto\"=\n" +
+	"\tProcessor:0\x92\xb5\x18,\x12\x03\b\x90\x1c\x18\x01\"\x02\b\x1e2\t\n" +
 	"\x02\b\n" +
-	"\x12\x03\b\xd8\x04J\x02\x10\x05R\x14gram.ping.v2.Message\"C\n" +
-	"\vPyProcessor:4\x92\xb5\x180\x12\x03\b\x90\x1c\x18\x01\"\x02\b\x1e2\t\n" +
+	"\x12\x03\b\xd8\x04R\x14gram.ping.v2.Message\"?\n" +
+	"\vPyProcessor:0\x92\xb5\x18,\x12\x03\b\x90\x1c\x18\x01\"\x02\b\x1e2\t\n" +
 	"\x02\b\n" +
-	"\x12\x03\b\xd8\x04J\x02\x10\x05R\x14gram.ping.v2.MessageB=Z;github.com/speakeasy-api/gram/infra/gen/gram/ping/v2;pingv2b\beditionsp\xe9\a"
+	"\x12\x03\b\xd8\x04R\x14gram.ping.v2.MessageB=Z;github.com/speakeasy-api/gram/infra/gen/gram/ping/v2;pingv2b\beditionsp\xe9\a"
 
 var file_gram_ping_v2_processor_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_gram_ping_v2_processor_proto_goTypes = []any{

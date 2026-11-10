@@ -13,6 +13,7 @@ import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQ
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -23,12 +24,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { useProjectFavorites } from "@/hooks/useProjectFavorites";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { dateTimeFormatters } from "@/lib/dates";
 import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
@@ -36,6 +39,7 @@ import {
   getInitials,
   isDisplayableBucket,
 } from "@/pages/access/challengeHelpers";
+import { OrgHomeNoAccess } from "@/pages/org/OrgHomeNoAccess";
 import { OrgWelcomeBanner } from "@/pages/org/OrgWelcomeBanner";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -56,6 +60,7 @@ import {
 } from "@/components/ui/Dropdown";
 import { type IconName } from "@/components/ui/Icon/names";
 import {
+  Bot,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -99,9 +104,12 @@ export default function OrgHome(): JSX.Element {
       {/* fullWidth + noPadding so the welcome banner can run edge to edge;
           everything else re-applies the page column below. */}
       <Page.Body fullWidth noPadding className="gap-0">
+        {/* No project:read here: an unscoped check passes for a grant on any
+            single project, which kept project-only members on this page. */}
         <RequireScope
-          scope={["org:read", "project:read", "org:admin"]}
+          scope={["org:read", "org:admin"]}
           level="page"
+          fallback={<OrgHomeNoAccess />}
         >
           <OrgHomeInner />
         </RequireScope>
@@ -170,6 +178,10 @@ function OrgHomeInner() {
   // of active actors per project — all from one network call.
   const { data: auditData } = useAuditLogs();
   const auditLogs = useMemo(() => auditData?.result.logs ?? [], [auditData]);
+  // Resolved once for the whole page. Every project row names an actor, and
+  // each resolving its own put a second pair of query observers on the page
+  // per project and rebuilt the same two maps for each of them.
+  const identities = useAuditPrincipals(auditLogs);
 
   const { data: membersData } = useMembers();
   const memberById = useMemo(() => {
@@ -219,23 +231,43 @@ function OrgHomeInner() {
             project.slug.toLowerCase().includes(query)
           );
         })
-        .sort((a, b) => a.name.localeCompare(b.name)),
+        .sort(
+          (a, b) =>
+            Number(b.slug === "default") - Number(a.slug === "default") ||
+            a.name.localeCompare(b.name),
+        ),
     [organization.projects, search],
   );
 
   const isSearching = search.length > 0;
 
-  const { favoriteProjects, otherProjects } = useMemo(() => {
-    if (isSearching) {
-      return { favoriteProjects: [], otherProjects: filteredProjects };
+  // The `default` project is always pinned above favorites. With no
+  // favorites it stays in the main list, where the sort already puts it
+  // first, so the list and grid read as one continuous container.
+  const { pinnedProjects, favoriteProjects, otherProjects } = useMemo(() => {
+    const favs = isSearching
+      ? []
+      : filteredProjects.filter(
+          (p) => p.slug !== "default" && favoriteSet.has(p.id),
+        );
+    if (favs.length === 0) {
+      return {
+        pinnedProjects: [],
+        favoriteProjects: [],
+        otherProjects: filteredProjects,
+      };
     }
-    const favs: OrgProject[] = [];
+    const pinned: OrgProject[] = [];
     const rest: OrgProject[] = [];
     for (const p of filteredProjects) {
-      if (favoriteSet.has(p.id)) favs.push(p);
-      else rest.push(p);
+      if (p.slug === "default") pinned.push(p);
+      else if (!favoriteSet.has(p.id)) rest.push(p);
     }
-    return { favoriteProjects: favs, otherProjects: rest };
+    return {
+      pinnedProjects: pinned,
+      favoriteProjects: favs,
+      otherProjects: rest,
+    };
   }, [filteredProjects, favoriteSet, isSearching]);
 
   const hasMore = !isSearching && otherProjects.length > PROJECT_LIMIT;
@@ -271,6 +303,7 @@ function OrgHomeInner() {
     const props = {
       project,
       latestLog: latestActionByProjectSlug.get(project.slug),
+      identities,
       facepile: getFacepileMembers(project.slug),
       isFavorite: isFavorite(project.id),
       onToggleFavorite: () => toggleFavorite(project.id),
@@ -292,7 +325,6 @@ function OrgHomeInner() {
   return (
     <>
       <OrgWelcomeBanner />
-
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-8 pb-24">
         {/* `items-start` so each column is only as tall as its content — the
             default stretch left the Projects card padded with dead space
@@ -347,6 +379,10 @@ function OrgHomeInner() {
                 </div>
               ) : (
                 <>
+                  {pinnedProjects.length > 0 &&
+                    renderProjectContainer(
+                      pinnedProjects.map(renderProjectItem),
+                    )}
                   {favoriteProjects.length > 0 && (
                     <>
                       <section className="flex flex-col">
@@ -394,7 +430,8 @@ function OrgHomeInner() {
                   )}
 
                   {otherProjects.length === 0 &&
-                    favoriteProjects.length === 0 && (
+                    favoriteProjects.length === 0 &&
+                    pinnedProjects.length === 0 && (
                       <div className="border-border bg-card flex flex-col items-center gap-3 border border-dashed py-12 text-center">
                         <Text muted>No projects yet</Text>
                         <RequireScope scope="org:admin" level="component">
@@ -415,7 +452,7 @@ function OrgHomeInner() {
 
           <aside className="flex flex-col gap-8 xl:sticky xl:top-[calc(var(--page-sticky-top,0px)+1rem)] xl:self-start">
             <RecentChallengesCompact />
-            <RecentActivityCompact logs={auditLogs} />
+            <RecentActivityCompact logs={auditLogs} identities={identities} />
           </aside>
         </div>
       </div>
@@ -585,12 +622,14 @@ function ViewModeButton({
 function ProjectRow({
   project,
   latestLog,
+  identities,
   facepile,
   isFavorite,
   onToggleFavorite,
 }: {
   project: OrgProject;
   latestLog: AuditLog | undefined;
+  identities: AuditIdentities;
   facepile: AccessMember[];
   isFavorite: boolean;
   onToggleFavorite: () => void;
@@ -632,7 +671,7 @@ function ProjectRow({
             </div>
 
             <div className="min-w-0 flex-1">
-              <RecentActionBlock log={latestLog} />
+              <RecentActionBlock log={latestLog} identities={identities} />
             </div>
           </div>
         </div>
@@ -646,7 +685,7 @@ function ProjectRow({
               e.stopPropagation();
             }}
           >
-            <MemberFacepile members={facepile} maxFaces={5} />
+            <MemberFacepile members={facepile} maxFaces={3} />
           </div>
 
           <ProjectRowActions
@@ -672,12 +711,14 @@ function ProjectRow({
 function ProjectCard({
   project,
   latestLog,
+  identities,
   facepile,
   isFavorite,
   onToggleFavorite,
 }: {
   project: OrgProject;
   latestLog: AuditLog | undefined;
+  identities: AuditIdentities;
   facepile: AccessMember[];
   isFavorite: boolean;
   onToggleFavorite: () => void;
@@ -712,7 +753,7 @@ function ProjectCard({
         </div>
 
         <div className="pointer-events-none min-w-0 flex-1">
-          <RecentActionBlock log={latestLog} />
+          <RecentActionBlock log={latestLog} identities={identities} />
         </div>
 
         <div className="flex items-center justify-between gap-2">
@@ -878,15 +919,26 @@ function ProjectRowActions({
   );
 }
 
-function RecentActionBlock({ log }: { log: AuditLog | undefined }) {
+/** The agent and member inventories, resolved once per page. */
+type AuditIdentities = ReturnType<typeof useAuditPrincipals>;
+
+function RecentActionBlock({
+  log,
+  // Handed in rather than resolved here: this renders once per visible
+  // project, and the page already holds the inventory the whole audit feed
+  // was resolved against.
+  identities,
+}: {
+  log: AuditLog | undefined;
+  identities: AuditIdentities;
+}) {
   if (!log) {
     return (
-      <Text small muted className="text-xs">
+      <Text small muted className="truncate text-xs whitespace-nowrap">
         No recent activity
       </Text>
     );
   }
-  const actor = getActorLabel(log);
   const verb = renderVerb(log);
 
   return (
@@ -905,7 +957,11 @@ function RecentActionBlock({ log }: { log: AuditLog | undefined }) {
                 includeTime: false,
               })}
               <span className="mx-1 opacity-60">·</span>
-              {actor}
+              <AuditPrincipalLink
+                principal={auditActorPrincipal(log)}
+                identities={identities}
+                fallback={getActorLabel(log)}
+              />
             </span>
           </span>
         </TooltipTrigger>
@@ -961,10 +1017,15 @@ function TimestampDetail({ date }: { date: Date }) {
   );
 }
 
-function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
+function RecentActivityCompact({
+  logs,
+  identities,
+}: {
+  logs: AuditLog[];
+  identities: AuditIdentities;
+}) {
   const orgRoutes = useOrgRoutes();
   const preview = useMemo(() => logs.slice(0, AUDIT_PREVIEW_LIMIT), [logs]);
-  const identities = useAuditPrincipals(preview);
 
   return (
     <Card.Dashboard
@@ -1066,7 +1127,22 @@ function RecentChallengesCompact() {
     [data?.buckets],
   );
 
-  if (isLoading) return null;
+  // Named agents for the rows. The challenge carries only the urn, and an id
+  // off a challenge is not permission to open the agent, so the roster is the
+  // name and the decision to link.
+  const agents = useReadableAgents(
+    buckets.some((bucket) => bucket.principalType === "agent"),
+  );
+  const agentsById = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
 
   return (
     <Card.Dashboard
@@ -1080,7 +1156,13 @@ function RecentChallengesCompact() {
         </orgRoutes.access.challenges.Link>
       }
     >
-      {buckets.length === 0 ? (
+      {isLoading ? (
+        <Skeleton label="Loading challenges">
+          <div className="h-8 w-full" />
+          <div className="h-8 w-full" />
+          <div className="h-8 w-full" />
+        </Skeleton>
+      ) : buckets.length === 0 ? (
         // Compact copy rather than the full-page ChallengesEmptyState — inside
         // a rail card its illustration and framing box read as a second card.
         <Text muted small>
@@ -1090,7 +1172,7 @@ function RecentChallengesCompact() {
         <ol className="divide-border max-h-72 divide-y overflow-y-auto">
           {buckets.map((bucket) => (
             <li key={bucket.id}>
-              <CompactChallengeRow bucket={bucket} />
+              <CompactChallengeRow bucket={bucket} agentsById={agentsById} />
             </li>
           ))}
         </ol>
@@ -1109,31 +1191,55 @@ function shortenPrincipal(bucket: ChallengeBucket): string {
   return bucket.principalUrn;
 }
 
-function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
+function CompactChallengeRow({
+  bucket,
+  agentsById,
+}: {
+  bucket: ChallengeBucket;
+  agentsById: Map<string, { name: string }>;
+}) {
   const orgRoutes = useOrgRoutes();
-  const label = shortenPrincipal(bucket);
   const isApiKey = bucket.principalType === "api_key";
+  const isAgent = bucket.principalType === "agent";
+  const agentId = isAgent ? bucket.principalUrn.replace(/^agent:/, "") : null;
+  // An agent label uses the shared text helper for consistent naming, with the
+  // resolved name when available (falling back to the id otherwise).
+  const agent = agentId ? agentsById.get(agentId) : undefined;
+  const label = agentId
+    ? actingPrincipalText({ id: agentId, name: agent?.name })
+    : shortenPrincipal(bucket);
   const lastSeen = new Date(bucket.lastSeen);
   const count = Number(bucket.challengeCount);
 
   return (
     <orgRoutes.access.challenges.Link className="hover:bg-muted/40 flex items-start gap-3 px-6 py-3 text-xs no-underline transition-colors hover:no-underline">
       {/* Sized to match the ActionIconTile in Recent activity below, so the two
-          rail cards line up row for row. */}
-      <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full">
-        {isApiKey || !bucket.userEmail ? (
-          <KeyRound className="size-4" />
-        ) : (
-          <Avatar className="size-8">
-            {bucket.photoUrl ? (
-              <AvatarImage src={bucket.photoUrl} alt={label} />
-            ) : null}
-            <AvatarFallback className="bg-muted text-muted-foreground text-[11px] font-medium">
-              {getInitials(bucket.userEmail)}
-            </AvatarFallback>
-          </Avatar>
-        )}
-      </div>
+          rail cards line up row for row. Agents render a square face to
+          distinguish them from round user avatars. */}
+      {isAgent ? (
+        <span
+          role="img"
+          aria-label="Agent"
+          className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center"
+        >
+          <Bot aria-hidden="true" className="size-4" />
+        </span>
+      ) : (
+        <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full">
+          {isApiKey || !bucket.userEmail ? (
+            <KeyRound className="size-4" />
+          ) : (
+            <Avatar className="size-8">
+              {bucket.photoUrl ? (
+                <AvatarImage src={bucket.photoUrl} alt={label} />
+              ) : null}
+              <AvatarFallback className="bg-muted text-muted-foreground text-[11px] font-medium">
+                {getInitials(bucket.userEmail)}
+              </AvatarFallback>
+            </Avatar>
+          )}
+        </div>
+      )}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Text small className="truncate leading-snug">
           <span className="text-destructive mr-1.5 font-mono text-[10px] font-medium uppercase">

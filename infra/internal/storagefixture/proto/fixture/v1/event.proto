@@ -1,0 +1,50 @@
+edition = "2024";
+
+package fixture.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/internal/storagefixture/pb/fixture/v1;fixturepb";
+
+message Event {
+  option (gcp.pubsub.v1.topic) = {};
+
+  message Child {
+    string value = 1;
+    repeated int32 numbers = 2;
+  }
+  message Empty {}
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_ONE = 1;
+  }
+  string id = 1;
+  int64 signed = 2;
+  uint64 unsigned = 3;
+  uint32 unsigned32 = 4;
+  bool flag = 5;
+  bytes data = 6;
+  double fraction = 7;
+  float small_fraction = 8;
+  Kind kind = 9;
+  Child child = 10;
+  repeated string tags = 11;
+  repeated Child children = 12;
+  map<string, Child> attributes = 13;
+  map<bool, string> flags = 14;
+  Empty empty = 15;
+  oneof choice {
+    string text = 16;
+    int32 number = 17;
+    Child chosen_child = 18;
+    bytes chosen_data = 19;
+  }
+  int32 implicit = 20 [features.field_presence = IMPLICIT];
+  repeated Empty empties = 21;
+  sint32 zigzag32 = 22;
+  sint64 zigzag64 = 23;
+  sfixed32 signed_fixed32 = 24;
+  sfixed64 signed_fixed64 = 25;
+  fixed32 fixed32 = 26;
+  fixed64 fixed64 = 27;
+}

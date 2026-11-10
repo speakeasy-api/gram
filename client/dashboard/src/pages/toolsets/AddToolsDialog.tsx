@@ -9,7 +9,8 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
-import { Tool, Toolset, getToolSourceLabel } from "@/lib/toolTypes";
+import type { Tool, Toolset } from "@/lib/toolTypes";
+import { getToolSourceLabel } from "@/lib/toolTypes";
 import { Button } from "@/components/ui/Button";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";

@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/auditlogs"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
+	securityrepo "github.com/speakeasy-api/gram/server/internal/audit/securityevent/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -21,6 +22,7 @@ import (
 )
 
 type auditLogSeed struct {
+	isInternal         bool
 	organizationID     string
 	projectID          uuid.NullUUID
 	actorID            string
@@ -28,6 +30,7 @@ type auditLogSeed struct {
 	actorDisplayName   *string
 	actorSlug          *string
 	actingSurface      *string
+	actingClientID     *string
 	action             string
 	subjectID          string
 	subjectType        string
@@ -36,6 +39,7 @@ type auditLogSeed struct {
 	beforeSnapshot     []byte
 	afterSnapshot      []byte
 	metadata           []byte
+	category           audit.Category
 }
 
 func TestAuditService_List_Unauthorized(t *testing.T) {
@@ -746,6 +750,125 @@ func TestAuditService_List_ExcludesAssistantEventsByDefault(t *testing.T) {
 	require.Equal(t, insertedPlatform.String(), result.Logs[0].ID)
 }
 
+func TestAuditService_List_ShowsOnlyConfigurationEntries(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	projectID := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      projectID,
+		actorID:        "kit-runtime",
+		actorType:      "system",
+		action:         string(audit.ActionWorkloadAdmissionAdmit),
+		subjectID:      uuid.NewString(),
+		subjectType:    "workload_admission",
+		category:       audit.CategorySecurity,
+	})
+	configuration := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      projectID,
+		actorID:        "user:first",
+		actorType:      "user",
+		action:         string(audit.ActionWorkloadAdmissionAdmit),
+		subjectID:      uuid.NewString(),
+		subjectType:    "workload_admission",
+		category:       audit.CategoryConfiguration,
+	})
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1, "the audit log shows configuration entries only")
+	require.Equal(t, configuration.String(), result.Logs[0].ID)
+
+	// Naming the subject type or actor of a security entry does not bring it
+	// into the configuration feed either.
+	result, err = ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      new("kit-runtime"),
+		Action:       nil,
+		SubjectType:  new("workload_admission"),
+		SubjectID:    nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.Logs)
+}
+
+// Security entries are listed when asked for, and every entry says which
+// category it is in.
+func TestAuditService_List_ListsSecurityEntriesWhenAsked(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	projectID := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+
+	security := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      projectID,
+		actorID:        "agent:" + uuid.NewString(),
+		actorType:      "agent",
+		action:         string(audit.ActionWorkloadAdmissionAdmit),
+		subjectID:      uuid.NewString(),
+		subjectType:    "workload_admission",
+		category:       audit.CategorySecurity,
+	})
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      projectID,
+		actorID:        "user:first",
+		actorType:      "user",
+		action:         "project:update",
+		subjectID:      uuid.NewString(),
+		subjectType:    "project",
+	})
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
+		Category:     string(audit.CategorySecurity),
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, security.String(), result.Logs[0].ID)
+	require.Equal(t, string(audit.CategorySecurity), conv.PtrValOrEmpty(result.Logs[0].Category, ""))
+
+	result, err = ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
+		Category:     string(audit.CategoryConfiguration),
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, string(audit.CategoryConfiguration), conv.PtrValOrEmpty(result.Logs[0].Category, ""))
+}
+
 func TestAuditService_List_FilterBySubjectTypeAndSubjectID(t *testing.T) {
 	t.Parallel()
 
@@ -821,7 +944,8 @@ func testAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthConte
 func insertAuditLog(t *testing.T, ctx context.Context, ti *testInstance, seed auditLogSeed) uuid.UUID {
 	t.Helper()
 
-	row, err := repo.New(ti.conn).InsertAuditLog(ctx, repo.InsertAuditLogParams{
+	params := repo.InsertAuditLogParams{
+		IsInternal:         seed.isInternal,
 		OrganizationID:     seed.organizationID,
 		ProjectID:          seed.projectID,
 		ActorID:            seed.actorID,
@@ -829,6 +953,7 @@ func insertAuditLog(t *testing.T, ctx context.Context, ti *testInstance, seed au
 		ActorDisplayName:   conv.PtrToPGTextEmpty(seed.actorDisplayName),
 		ActorSlug:          conv.PtrToPGTextEmpty(seed.actorSlug),
 		ActingSurface:      conv.PtrToPGTextEmpty(seed.actingSurface),
+		ActingClientID:     conv.PtrToPGTextEmpty(seed.actingClientID),
 		Action:             seed.action,
 		SubjectID:          seed.subjectID,
 		SubjectType:        seed.subjectType,
@@ -837,7 +962,14 @@ func insertAuditLog(t *testing.T, ctx context.Context, ti *testInstance, seed au
 		BeforeSnapshot:     seed.beforeSnapshot,
 		AfterSnapshot:      seed.afterSnapshot,
 		Metadata:           seed.metadata,
-	})
+	}
+	// Security entries live in their own table with the same columns.
+	if seed.category == audit.CategorySecurity {
+		row, err := securityrepo.New(ti.conn).InsertSecurityAuditLog(ctx, securityrepo.InsertSecurityAuditLogParams(params))
+		require.NoError(t, err)
+		return row.ID
+	}
+	row, err := repo.New(ti.conn).InsertAuditLog(ctx, params)
 	require.NoError(t, err)
 
 	return row.ID
@@ -994,4 +1126,61 @@ func TestAuditService_List_FilterBySubjectIDs(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, padded.Logs, 1)
 	require.Equal(t, setCreated.String(), padded.Logs[0].ID)
+}
+
+// A cursor names the log it pages, so replaying it against the other log is
+// refused instead of paging from the wrong place: the two logs number their
+// rows from different ranges.
+func TestAuditService_List_RejectsACursorFromTheOtherLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	projectID := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+
+	// One more than a page (50), so the first page returns a cursor.
+	for range 51 {
+		insertAuditLog(t, ctx, ti, auditLogSeed{
+			organizationID: authCtx.ActiveOrganizationID,
+			projectID:      projectID,
+			actorID:        "agent:" + uuid.NewString(),
+			actorType:      "agent",
+			action:         string(audit.ActionWorkloadAdmissionAdmit),
+			subjectID:      uuid.NewString(),
+			subjectType:    "workload_admission",
+			category:       audit.CategorySecurity,
+		})
+	}
+
+	list := func(category audit.Category, cursor *string) (*gen.ListAuditLogsResult, error) {
+		return ti.service.List(ctx, &gen.ListPayload{
+			ApikeyToken:  nil,
+			SessionToken: nil,
+			Cursor:       cursor,
+			ProjectSlug:  nil,
+			ActorID:      nil,
+			Action:       nil,
+			SubjectType:  nil,
+			SubjectID:    nil,
+			Category:     string(category),
+		})
+	}
+
+	first, err := list(audit.CategorySecurity, nil)
+	require.NoError(t, err)
+	require.NotNil(t, first.NextCursor)
+
+	_, err = list(audit.CategoryConfiguration, first.NextCursor)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+
+	next, err := list(audit.CategorySecurity, first.NextCursor)
+	require.NoError(t, err)
+	require.Len(t, next.Logs, 1, "the security cursor pages the security log")
+
+	configurationCursor := audit.EncodeCursor(audit.CategoryConfiguration, 42, uuid.NewString())
+	_, err = list(audit.CategorySecurity, &configurationCursor)
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }

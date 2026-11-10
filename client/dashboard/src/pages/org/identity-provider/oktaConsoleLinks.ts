@@ -2,27 +2,35 @@ const OKTA_ORG_HOST_SUFFIXES = [
   "okta.com",
   "oktapreview.com",
   "okta-emea.com",
+  "okta-gov.com",
   "okta.mil",
+  "trexcloud.com",
 ] as const;
 
 const HOST_LABEL = "[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
 const PLAIN_HOSTNAME = new RegExp(`^${HOST_LABEL}(?:\\.${HOST_LABEL})+$`);
-const PLAIN_TENANT = new RegExp(`^${HOST_LABEL}(?:\\.${HOST_LABEL})*$`, "i");
 
-/** Mirrors the create API and okta.parseOrgURL: https, an ASCII plain hostname (no userinfo, port, path beyond one trailing slash, query, or fragment) that is a subdomain of an Okta-owned suffix. */
+/** Mirrors the create API: https, an ASCII plain hostname (no userinfo, port, query, or fragment) that is a subdomain of an Okta-owned suffix. A pasted admin console URL (`acme-admin.okta.com/admin/...`) resolves to its org (`acme.okta.com`); any other path beyond one trailing slash is refused. */
 export function normalizeOktaOrgUrl(input: string): string | undefined {
-  const match = /^https:\/\/([^/?#\s@:]+)\/?$/i.exec(input.trim());
+  const match = /^https:\/\/([^/?#\s@:]+)(\/[^?#\s%]*)?$/i.exec(input.trim());
   const rawHost = match?.[1];
   if (!rawHost || !PLAIN_HOSTNAME.test(rawHost)) return undefined;
-  const host = rawHost.toLowerCase();
-  for (const suffix of OKTA_ORG_HOST_SUFFIXES) {
-    if (!host.endsWith(`.${suffix}`)) continue;
-    // The admin console address is the org hostname with -admin appended.
-    const tenant = host.slice(0, -(suffix.length + 1));
-    const org = tenant.replace(/-admin$/, "");
-    return `https://${PLAIN_TENANT.test(org) ? org : tenant}.${suffix}`;
+  let host = rawHost.toLowerCase();
+  const suffix = OKTA_ORG_HOST_SUFFIXES.find((s) => host.endsWith(`.${s}`));
+  if (!suffix) return undefined;
+  let path = match[2] ?? "";
+  // The console host adds -admin to the label next to the Okta suffix.
+  const org = /^(.*[a-z0-9])-admin$/.exec(
+    host.slice(0, -(suffix.length + 1)),
+  )?.[1];
+  if (org) {
+    // Stripping twice would name a tenant the admin never typed.
+    if (org.endsWith("-admin")) return undefined;
+    host = `${org}.${suffix}`;
+    if (path === "/admin" || path.startsWith("/admin/")) path = "";
   }
-  return undefined;
+  if (path !== "" && path !== "/") return undefined;
+  return `https://${host}`;
 }
 
 /** The Okta admin console for an org URL (`acme.okta.com` → `acme-admin.okta.com`). */
@@ -31,9 +39,7 @@ export function oktaAdminConsoleUrl(orgUrl: string): string {
   if (!normalized) return orgUrl;
   for (const suffix of OKTA_ORG_HOST_SUFFIXES) {
     if (normalized.endsWith(`.${suffix}`)) {
-      const tenant = normalized
-        .slice(0, -(suffix.length + 1))
-        .replace(/-admin$/, "");
+      const tenant = normalized.slice(0, -(suffix.length + 1));
       return `${tenant}-admin.${suffix}`;
     }
   }
@@ -83,6 +89,18 @@ export function oktaApplicationsUrl(
   if (!normalized) return undefined;
   return new URL(
     "/admin/apps/active",
+    oktaAdminConsoleUrl(normalized),
+  ).toString();
+}
+
+/** Okta lists OIN API service integrations (Speakeasy's listing) on their own page. */
+export function oktaApiServiceIntegrationsUrl(
+  orgUrl: string,
+): string | undefined {
+  const normalized = normalizeOktaOrgUrl(orgUrl);
+  if (!normalized) return undefined;
+  return new URL(
+    "/admin/apps/api-service-integrations",
     oktaAdminConsoleUrl(normalized),
   ).toString();
 }

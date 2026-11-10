@@ -24,10 +24,14 @@ func TestTunnelEndToEnd(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx := t.Context()
 
+	receivedIdentity := make(chan http.Header, 1)
 	releaseSlowRequest := make(chan struct{})
 	var slowRequest sync.Once
 	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if r.URL.Path == "/mcp/initialize" {
+			receivedIdentity <- r.Header.Clone()
+		}
 		if r.URL.Path == "/mcp/slow" {
 			slowRequest.Do(func() {
 				select {
@@ -47,7 +51,7 @@ func TestTunnelEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	routes := newSnapshotStore()
 	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
-	gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
+	gw, err := gateway.New(gateway.Config{AuthzPublicKeys: "", ForwardToken: forwardToken}, keys, routes, logger)
 	require.NoError(t, err)
 	cleanupGateway(t, gw)
 
@@ -77,6 +81,8 @@ func TestTunnelEndToEnd(t *testing.T) {
 	req.Header.Set(wire.HeaderTunnelID, tunnelID)
 	req.Header.Set(wire.HeaderTunnelForwardToken, forwardToken)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Speakeasy-Identity", "signed-assertion-opaque-to-tunnel")
+	req.Header.Set("Authorization", "Bearer upstream-oauth")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -84,6 +90,11 @@ func TestTunnelEndToEnd(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Contains(t, string(out), "POST /mcp/initialize")
 	require.Contains(t, string(out), `{"jsonrpc":"2.0"}`)
+	headers := <-receivedIdentity
+	require.Equal(t, "signed-assertion-opaque-to-tunnel", headers.Get("X-Speakeasy-Identity"))
+	require.Equal(t, "Bearer upstream-oauth", headers.Get("Authorization"))
+	require.Empty(t, headers.Get(wire.HeaderTunnelForwardToken))
+	require.Empty(t, headers.Get(wire.HeaderTunnelID))
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -162,7 +173,7 @@ func TestTunnelRouteSurvivesCurrentGatewayDisconnect(t *testing.T) {
 		}))
 		t.Cleanup(mcp.Close)
 
-		gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
+		gw, err := gateway.New(gateway.Config{AuthzPublicKeys: "", ForwardToken: forwardToken}, keys, routes, logger)
 		require.NoError(t, err)
 		cleanupGateway(t, gw)
 
@@ -226,7 +237,7 @@ func TestTunnelConsumerSessionSticksToAgent(t *testing.T) {
 
 	routes := route.NewRouteTable()
 	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
-	gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
+	gw, err := gateway.New(gateway.Config{AuthzPublicKeys: "", ForwardToken: forwardToken}, keys, routes, logger)
 	require.NoError(t, err)
 	cleanupGateway(t, gw)
 
@@ -280,7 +291,7 @@ func TestTunnelRevoke(t *testing.T) {
 	plaintext, _, err := wire.NewKey()
 	require.NoError(t, err)
 	routes := route.NewRouteTable()
-	gw, err := gateway.New(gateway.Config{ForwardToken: "forward-token"}, gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}), routes, logger)
+	gw, err := gateway.New(gateway.Config{AuthzPublicKeys: "", ForwardToken: "forward-token"}, gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}), routes, logger)
 	require.NoError(t, err)
 	cleanupGateway(t, gw)
 	publicServer := httptest.NewServer(gw.PublicHandler())
@@ -329,7 +340,7 @@ func TestTunnelRevokeDeletesAllGatewayOwners(t *testing.T) {
 	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
 
 	startGateway := func() (*gateway.Gateway, context.CancelFunc) {
-		gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
+		gw, err := gateway.New(gateway.Config{AuthzPublicKeys: "", ForwardToken: forwardToken}, keys, routes, logger)
 		require.NoError(t, err)
 		publicServer := httptest.NewServer(gw.PublicHandler())
 		t.Cleanup(publicServer.Close)
@@ -521,7 +532,7 @@ func TestTunnelGatewayShedsConnectsAtSessionCap(t *testing.T) {
 	require.NoError(t, err)
 	routes := newSnapshotStore()
 	gw, err := gateway.New(
-		gateway.Config{ForwardToken: "forward-token", MaxSessions: 1},
+		gateway.Config{AuthzPublicKeys: "", ForwardToken: "forward-token", MaxSessions: 1},
 		gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}),
 		routes,
 		logger,

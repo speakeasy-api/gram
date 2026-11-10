@@ -16,15 +16,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -45,9 +49,9 @@ type serverIdentity struct {
 }
 
 func parseSiteURL(raw string) (*url.URL, error) {
-	siteURL, err := url.Parse(raw)
-	if err != nil || siteURL.Hostname() == "" || (siteURL.Scheme != "http" && siteURL.Scheme != "https") {
-		return nil, fmt.Errorf("site URL must be an absolute HTTP(S) URL with a host")
+	siteURL, err := mcpregistry.ParseAssetBaseURL(raw)
+	if err != nil {
+		return nil, fmt.Errorf("invalid site URL: %w", err)
 	}
 	return siteURL, nil
 }
@@ -62,10 +66,7 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 		return nil, fmt.Errorf("failed to create pylon client: %w", err)
 	}
 	posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
-	var featureFlags feature.Provider = posthogClient
-	if c.String("environment") == "local" {
-		featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
-	}
+	featureFlags := newFeatureFlags(ctx, c, logger, posthogClient)
 	workosClient, available, err := newWorkOSClient(guardianPolicy, c)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create WorkOS client: %w", err)
@@ -74,7 +75,7 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	if err != nil {
 		return nil, err
 	}
-	billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
+	billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
 	if err != nil {
 		return nil, err
 	}
@@ -82,11 +83,21 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	if umClient == nil {
 		return nil, fmt.Errorf("failed to create IDP user management client: idp-client-secret is required")
 	}
-	idpClient := identity.NewWorkOSAdapter(umClient)
+	// The URL receives Google bearer tokens: HTTPS only, plain loopback locally.
+	googleUserInfoURL := c.String("google-userinfo-url")
+	if googleUserInfoURL != "" && !urls.IsAbsoluteHTTPS(googleUserInfoURL) && (c.String("environment") != "local" || !urls.IsAbsoluteHTTPSOrLoopback(googleUserInfoURL)) {
+		return nil, fmt.Errorf("google-userinfo-url must be an absolute HTTPS URL")
+	}
+	idpClient := identity.NewWorkOSAdapter(umClient).WithGoogleUserInfoURL(googleUserInfoURL).WithEvidence(identity.EvidenceConfig{
+		Logger:        logger,
+		MeterProvider: otel.GetMeterProvider(),
+		Enabled:       signins.EvidenceGate(db, featureFlags),
+	})
 	productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 
 	growth := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)
 	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), c.String("idp-base-url"), c.String("idp-client-id"), idpClient, workosClient, orgrepo.New(db), userrepo.New(db), pylonClient, posthogClient, growth, cache.SuffixNone)
 	manager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, idpClient, billingRepo, resolver)
-	return &serverIdentity{Posthog: posthogClient, Features: featureFlags, WorkOS: workosClient, WorkOSAvailable: available, Stripe: stripeClient, Billing: billingRepo, BillingTracker: billingTracker, ProductFeatures: productFeatures, SiteURL: siteURL, Growth: growth, Identity: resolver, Sessions: manager, ChatSessions: chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag))}, nil
+	manager.SetFlags(featureFlags)
+	return &serverIdentity{Posthog: posthogClient, Features: featureFlags, WorkOS: workosClient, WorkOSAvailable: available, Stripe: stripeClient, Billing: billingRepo, BillingTracker: billingTracker, ProductFeatures: productFeatures, SiteURL: siteURL, Growth: growth, Identity: resolver, Sessions: manager, ChatSessions: chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag), manager)}, nil
 }

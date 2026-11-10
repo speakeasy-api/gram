@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
@@ -63,6 +64,7 @@ func Headers(tunnelID, forwardToken, clientAffinityKey string) []proxy.Configure
 	headers := []proxy.ConfiguredHeader{
 		{
 			IsRequired:             true,
+			IsSecret:               false,
 			Name:                   wire.HeaderTunnelID,
 			StaticValue:            tunnelID,
 			ValueFromRequestHeader: "",
@@ -71,6 +73,7 @@ func Headers(tunnelID, forwardToken, clientAffinityKey string) []proxy.Configure
 	if forwardToken != "" {
 		headers = append(headers, proxy.ConfiguredHeader{
 			IsRequired:             true,
+			IsSecret:               false,
 			Name:                   wire.HeaderTunnelForwardToken,
 			StaticValue:            forwardToken,
 			ValueFromRequestHeader: "",
@@ -79,6 +82,7 @@ func Headers(tunnelID, forwardToken, clientAffinityKey string) []proxy.Configure
 	if clientAffinityKey != "" {
 		headers = append(headers, proxy.ConfiguredHeader{
 			IsRequired:             false,
+			IsSecret:               false,
 			Name:                   wire.HeaderTunnelConsumerSession,
 			StaticValue:            clientAffinityKey,
 			ValueFromRequestHeader: "",
@@ -153,6 +157,30 @@ func GatewayFailureRejection(resp *http.Response) *proxy.RejectError {
 	}
 }
 
+// FailureHappened says what a tunnel error status means. Empty means the tunnel forwarded the answer,
+// so a 502 without a status came from the server behind it.
+func FailureHappened(tunnelError string, causes ...error) (mcpconnectionattempts.Code, bool) {
+	var none mcpconnectionattempts.Code
+	if tunnelError == "" {
+		for _, err := range causes {
+			if status, ok := errors.AsType[*gatewayStatusError](err); ok {
+				tunnelError = status.status
+				break
+			}
+		}
+	}
+	switch tunnelError {
+	case "":
+		return none, false
+	case wire.TunnelErrorTunnelBusy:
+		return mcpconnectionattempts.CodeTunnelAtCapacity, true
+	case wire.TunnelErrorRouteStoreUnavailable, wire.TunnelErrorRouteLookupFailed, wire.TunnelErrorInvalidRoute, wire.TunnelErrorActiveCheckFailed, wire.TunnelErrorForwardRejected:
+		return mcpconnectionattempts.CodeInternalError, true
+	default:
+		return mcpconnectionattempts.CodeTunnelUnavailable, true
+	}
+}
+
 // Retryer returns the tunnel-specific proxy retry policy.
 func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forwardToken string) proxy.UpstreamResponseRetryer {
 	return func(ctx context.Context, resp *http.Response) (*proxy.UpstreamResponseRetry, error) {
@@ -205,8 +233,9 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 			return nil, errors.Join(fmt.Errorf("build tunnel retry route URL: %w", err), unpublishErr)
 		}
 		return &proxy.UpstreamResponseRetry{
-			RemoteURL: gatewayURL,
-			Headers:   Headers(tunnelID, forwardToken, clientAffinityKey),
+			RemoteURL:             gatewayURL,
+			Headers:               Headers(tunnelID, forwardToken, clientAffinityKey),
+			AuthorizationOverride: "",
 		}, nil
 	}
 }

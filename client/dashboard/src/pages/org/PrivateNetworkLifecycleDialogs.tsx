@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import type { NetworkIngress } from "@gram/client/models/components/networkingress.js";
 import { NetworkIngressCredentialsFields } from "./NetworkIngressCredentialsFields";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { handleAPIError } from "@/lib/errors";
 import { invalidateAllNetworkIngress } from "@gram/client/react-query/networkIngress.js";
@@ -159,9 +160,10 @@ export function DeleteNetworkIngressDialog({
         </Dialog.Header>
         <div className="space-y-4 py-4">
           {impact.isLoading && (
-            <Text small muted>
-              Checking affected MCP servers...
-            </Text>
+            <Skeleton
+              label="Checking affected MCP servers"
+              className="h-5 w-64"
+            />
           )}
           {impact.isError ? (
             <Alert variant="error" dismissible={false}>

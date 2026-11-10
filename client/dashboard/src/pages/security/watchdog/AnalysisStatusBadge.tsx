@@ -70,6 +70,7 @@ function StatusBadge({
         </Badge>
       );
   }
+  return <Badge variant="neutral">Analysis status unavailable</Badge>;
 }
 
 function IdleBadge({

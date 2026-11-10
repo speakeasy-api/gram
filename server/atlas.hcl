@@ -25,7 +25,7 @@ lint {
 }
 
 docker "clickhouse" "dev" {
-  image = "clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd"
+  image = "clickhouse/clickhouse-server:26.6.8.7-distroless@sha256:31f67400c46f94f7d9236728f369faa125067f13f98fa2ad620ee190fe70eed5"
   // Keep server scope for marts, but replay unqualified application DDL in gram.
   baseline = <<SQL
     CREATE DATABASE gram;

@@ -49,7 +49,7 @@ export function mismatchValueLabel(value: string | undefined): string {
 
 // Shared wording for non-blocking differences in tenant consolidation warnings.
 const TARGET_AUTHORITATIVE =
-  "the target provider's values become authoritative";
+  "the target authorization server's values become authoritative";
 
 // listMismatchDelta splits a list-valued difference into what the migrated
 // clients gain and what they lose.

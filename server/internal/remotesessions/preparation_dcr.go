@@ -1,0 +1,345 @@
+package remotesessions
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"mime"
+	"net/http"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+type preparationDCRResponse struct {
+	// callbackBaseURL is local registration provenance, never provider input.
+	callbackBaseURL pgtype.Text
+
+	ClientID                string   `json:"client_id"`
+	ClientSecret            string   `json:"client_secret"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
+	GrantTypes              []string `json:"grant_types"`
+	Scope                   *string  `json:"scope"`
+	ClientIDIssuedAt        int64    `json:"client_id_issued_at"`
+	ClientSecretExpiresAt   int64    `json:"client_secret_expires_at"`
+}
+
+// Every failure after submission that does not prove rejection is indeterminate.
+// No response body, client secret or management token becomes a diagnostic;
+// only a rejection's RFC 7591 error and error_description are logged.
+func (s *Service) submitPreparationDCR(ctx context.Context, in PreparationInput, endpoint, method string, grantsSupported []string) (preparationDCRResponse, string) {
+	return s.submitPreparationDCRWithTunnel(ctx, in, endpoint, method, grantsSupported, nil, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+}
+
+// preparationDCRGrants always requests JWT bearer and adds the interactive
+// grants only when the issuer advertises them.
+func preparationDCRGrants(grantsSupported, responseTypesSupported []string) ([]string, bool) {
+	interactive := slices.Contains(grantsSupported, oauthwire.GrantTypeAuthorizationCode) && (len(responseTypesSupported) == 0 || slices.Contains(responseTypesSupported, oauthwire.ResponseTypeCode))
+	if !interactive {
+		return []string{oauthwire.GrantTypeJWTBearer}, false
+	}
+	grants := []string{oauthwire.GrantTypeAuthorizationCode}
+	if slices.Contains(grantsSupported, oauthwire.GrantTypeRefreshToken) {
+		grants = append(grants, oauthwire.GrantTypeRefreshToken)
+	}
+	return append(grants, oauthwire.GrantTypeJWTBearer), true
+}
+
+func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in PreparationInput, endpoint, method string, grantsSupported, responseTypesSupported []string, tunnelID uuid.NullUUID) (preparationDCRResponse, string) {
+	var result preparationDCRResponse
+	if (method != oauthwire.AuthMethodClientSecretBasic && method != oauthwire.AuthMethodClientSecretPost) || !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
+		return result, PreparationStateManualSetupRequired
+	}
+	callbackBaseURL := s.origins.NewClientBaseURL(true)
+	if s.origins.OrganizationHosts != nil {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+			return result, PreparationStateIndeterminate
+		}
+		var err error
+		callbackBaseURL, err = s.origins.ResolveNewClientBaseURL(ctx, s.db, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return result, PreparationStateIndeterminate
+		}
+	}
+	result.callbackBaseURL = callbackBaseURL
+	origin := s.origins.ForClient(callbackBaseURL)
+	if s.policy == nil || origin == nil {
+		return result, PreparationStateIndeterminate
+	}
+	grants, interactive := preparationDCRGrants(grantsSupported, responseTypesSupported)
+	var redirectURIs, responseTypes []string
+	// Some providers require redirect_uris and a one-time owner sign-in approval.
+	if interactive {
+		redirectURIs, responseTypes = []string{RemoteLoginCallbackURL(origin)}, []string{oauthwire.ResponseTypeCode}
+	}
+	body, _ := json.Marshal(struct {
+		RedirectURIs  []string `json:"redirect_uris,omitempty"`
+		ResponseTypes []string `json:"response_types,omitempty"`
+		GrantTypes    []string `json:"grant_types"`
+		AuthMethod    string   `json:"token_endpoint_auth_method"`
+		Scope         string   `json:"scope,omitempty"`
+		ClientName    string   `json:"client_name"`
+	}{redirectURIs, responseTypes, grants, method, strings.Join(in.Scopes, " "), "Speakeasy identity chaining"})
+	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return result, PreparationStateIndeterminate
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("User-Agent", constants.UserAgent)
+	client := s.policy.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	doer, err := upstreamHTTPDoer(client, s.tunnels, tunnelID)
+	if err != nil {
+		return result, PreparationStateIndeterminate
+	}
+	response, err := doer.Do(request)
+	if err != nil {
+		return result, PreparationStateIndeterminate
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode >= 400 && response.StatusCode < 500 && response.StatusCode != http.StatusRequestTimeout && response.StatusCode != http.StatusTooManyRequests {
+		code, description := preparationDCRRejection(response.Body)
+		s.logger.WarnContext(ctx, "identity chaining registration rejected by provider",
+			attr.SlogHTTPResponseStatusCode(response.StatusCode),
+			attr.SlogOAuthError(code),
+			attr.SlogOAuthErrorDescription(description),
+		)
+		return result, PreparationStateProviderRejection
+	}
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusCreated {
+		return result, PreparationStateIndeterminate
+	}
+	media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	if err != nil || media != "application/json" {
+		return result, PreparationStateIndeterminate
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+	if err != nil || len(data) > 1<<20 {
+		return result, PreparationStateIndeterminate
+	}
+	if err = json.Unmarshal(data, &result); err != nil {
+		var empty preparationDCRResponse
+		return empty, PreparationStateIndeterminate
+	}
+	// Presence matters: null scope is not evidence that requested scopes
+	// were accepted, unlike an omitted scope under RFC 7591 section 3.2.1.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		var empty preparationDCRResponse
+		return empty, PreparationStateIndeterminate
+	}
+	if _, present := fields["scope"]; present && result.Scope == nil {
+		var empty preparationDCRResponse
+		return empty, PreparationStateIndeterminate
+	}
+	// RFC 7591 section 2 defaults only an omitted authentication method.
+	if _, present := fields["token_endpoint_auth_method"]; !present {
+		result.TokenEndpointAuthMethod = oauthwire.AuthMethodClientSecretBasic
+	}
+	return result, validatePreparationDCR(result, in.Scopes, method)
+}
+
+// preparationDCRRejection reads only the RFC 7591 section 3.2.2 error members.
+func preparationDCRRejection(body io.Reader) (string, string) {
+	var rejection struct {
+		Error       string `json:"error"`
+		Description string `json:"error_description"`
+	}
+	data, err := io.ReadAll(io.LimitReader(body, 64<<10))
+	if err != nil || json.Unmarshal(data, &rejection) != nil {
+		return "", ""
+	}
+	return providerErrorCode(strings.TrimSpace(rejection.Error)), ProviderErrorDescription(rejection.Description)
+}
+
+func validatePreparationDCR(result preparationDCRResponse, requested []string, method string) string {
+	if (method != oauthwire.AuthMethodClientSecretBasic && method != oauthwire.AuthMethodClientSecretPost) || strings.TrimSpace(result.ClientID) == "" || result.ClientSecret == "" || (result.TokenEndpointAuthMethod != oauthwire.AuthMethodClientSecretBasic && result.TokenEndpointAuthMethod != oauthwire.AuthMethodClientSecretPost) || result.ClientIDIssuedAt < 0 || result.ClientSecretExpiresAt < 0 {
+		return PreparationStateIndeterminate
+	}
+	// A provider response can narrow scope, never broaden the requested set.
+	if result.Scope != nil && *result.Scope != "" {
+		for scope := range strings.SplitSeq(*result.Scope, " ") {
+			if !validPreparationScopeToken(scope) || !slices.Contains(requested, scope) {
+				return PreparationStateIndeterminate
+			}
+		}
+	}
+	for _, grant := range result.GrantTypes {
+		if grant == "" || strings.ContainsAny(grant, " \t\r\n") {
+			return PreparationStateIndeterminate
+		}
+	}
+	if !slices.Contains(result.GrantTypes, oauthwire.GrantTypeJWTBearer) {
+		return preparationMissingGrantsState(result.GrantTypes)
+	}
+	if result.ClientSecretExpiresAt > 0 && !time.Unix(result.ClientSecretExpiresAt, 0).After(time.Now()) {
+		return PreparationStateManualSetupRequired
+	}
+	return PreparationStateReady
+}
+func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, in PreparationInput, claim repo.RemoteSessionEmaBinding, issuer repo.RemoteSessionIssuer, method string) (result *PreparationResult, returnErr error) {
+	var emptyClient repo.RemoteSessionClient
+	// The caller holds the connection-scoped binding lock, not a transaction.
+	response, state := s.submitPreparationDCRWithTunnel(ctx, in, issuer.RegistrationEndpoint.String, method, issuer.GrantTypesSupported, issuer.ResponseTypesSupported, issuer.TunneledMcpServerID)
+	// Run after completion rollback, with a fresh timeout even if saveCtx expired.
+	// Only this exact pending claim may change: a successful but ambiguously
+	// acknowledged commit or a replacement binding must never be overwritten.
+	defer func() {
+		if returnErr == nil {
+			return
+		}
+		recoveryCtx, recoveryCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer recoveryCancel()
+		_, recoveryErr := repo.New(conn).MarkEMAClaimIndeterminate(recoveryCtx, repo.MarkEMAClaimIndeterminateParams{
+			ID: claim.ID, ProjectID: claim.ProjectID, OrganizationID: claim.OrganizationID,
+			Generation: claim.Generation, ClaimID: claim.ClaimID,
+		})
+		if recoveryErr != nil {
+			returnErr = errors.Join(returnErr, oops.E(oops.CodeUnexpected, recoveryErr, "record indeterminate registration claim"))
+		}
+		result = preparationResult(claim, issuer, emptyClient, PreparationStateIndeterminate)
+	}()
+	// Persist an outcome even if the requesting connection has gone away. If this
+	// process dies before commit, the durable claim becomes indeterminate on read.
+	// Do not expire a confirmed provider result while waiting for ordinary
+	// database writers. The provider POST is not replayable; completion must
+	// wait for the ordered locks rather than discard returned credentials.
+	saveCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancel()
+	tx, err := conn.Begin(saveCtx)
+	if err != nil {
+		return preparationResult(claim, issuer, emptyClient, PreparationStateIndeterminate), err
+	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cleanupCancel()
+		_ = tx.Rollback(cleanupCtx)
+	}()
+	if err := authclientbackfill.LockEMAPreparationScope(saveCtx, tx, claim.OrganizationID, claim.ProjectID, claim.RemoteSessionIssuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock identity chaining completion sources")
+	}
+	q := repo.New(tx)
+	// Lock the project before parents, including wholly inherited configurations.
+	if _, err = q.LockEMAProject(saveCtx, repo.LockEMAProjectParams{ProjectID: claim.ProjectID, OrganizationID: claim.OrganizationID}); err != nil {
+		return nil, preparationLookupError(err, "project not found")
+	}
+	if err = lockUserSessionIssuersForClientBinding(saveCtx, s.logger, tx, q, claim.ProjectID, claim.OrganizationID, []uuid.UUID{claim.UserSessionIssuerID}); err != nil {
+		return preparationResult(claim, issuer, emptyClient, PreparationStateIndeterminate), err
+	}
+	if _, err = q.LockEMAUserIssuer(saveCtx, repo.LockEMAUserIssuerParams{ID: claim.UserSessionIssuerID, ProjectID: conv.ToNullUUID(claim.ProjectID), OrganizationID: conv.ToPGText(claim.OrganizationID)}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
+	}
+	currentIssuer, err := q.LockEMAIssuer(saveCtx, repo.LockEMAIssuerParams{ID: issuer.ID, ProjectID: conv.ToNullUUID(claim.ProjectID), OrganizationID: conv.ToPGText(claim.OrganizationID)})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
+	}
+	b, err := q.LockEMABinding(saveCtx, repo.LockEMABindingParams{ProjectID: claim.ProjectID, OrganizationID: claim.OrganizationID, UserSessionIssuerID: claim.UserSessionIssuerID, RemoteSessionIssuerID: claim.RemoteSessionIssuerID, Resource: claim.Resource})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
+	}
+	if b.Generation != claim.Generation || b.ClaimID != claim.ClaimID || preparationBindingState(b.State) != PreparationStateInProgress {
+		return preparationResult(b, currentIssuer, emptyClient, PreparationStateConfigurationRequired), nil
+	}
+	// Capability-only refreshes can commit during the POST. Retain confirmed
+	// credentials and project their current usability below; identity and
+	// registration endpoint changes still invalidate the response's provenance.
+	if currentIssuer.Issuer != issuer.Issuer || currentIssuer.RegistrationEndpoint != issuer.RegistrationEndpoint {
+		state = PreparationStateIndeterminate
+	}
+	expectedGeneration := b.Generation
+	var client repo.RemoteSessionClient
+	before := b
+	if state == PreparationStateReady || state == PreparationStateUnknownGrants || state == PreparationStateManualSetupRequired {
+		ciphertext, encErr := s.enc.Encrypt([]byte(response.ClientSecret))
+		if encErr != nil {
+			return preparationResult(b, currentIssuer, client, PreparationStateIndeterminate), encErr
+		}
+		scopes := in.Scopes
+		if response.Scope != nil {
+			scopes = strings.Fields(*response.Scope)
+		}
+		issued, expires := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+		if response.ClientIDIssuedAt > 0 {
+			issued = conv.ToPGTimestamptz(time.Unix(response.ClientIDIssuedAt, 0))
+		}
+		if response.ClientSecretExpiresAt > 0 {
+			expires = conv.ToPGTimestamptz(time.Unix(response.ClientSecretExpiresAt, 0))
+		}
+		// The registration's redirect_uris use this origin, as interactive clients do.
+		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{ForwardClientName: false, JsonWebKeySetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TokenEndpointAuthAudienceFormat: conv.ToPGTextEmpty(""), Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, CallbackBaseUrl: response.callbackBaseURL, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(response.TokenEndpointAuthMethod), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires, GrantTypes: nil, CredentialOwner: pgtype.Text{String: "", Valid: false}})
+		if err != nil {
+			return preparationResult(b, currentIssuer, client, PreparationStateIndeterminate), err
+		}
+		client, err = q.SetEMAClientGrants(saveCtx, repo.SetEMAClientGrantsParams{ID: client.ID, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), GrantTypes: response.GrantTypes})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
+		}
+		actor, displayName, actorErr := preparationAuditActor(saveCtx)
+		if actorErr != nil {
+			return nil, actorErr
+		}
+		// Identity-chaining clients bind through the preparation, not a user
+		// session issuer.
+		snapshot, err := mv.BuildRemoteSessionClientView(client, nil)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvariantViolation, err, "build preparation client view")
+		}
+		if err := s.auditLogger.LogRemoteSessionClientCreate(saveCtx, tx, audit.LogRemoteSessionClientCreateEvent{
+			OrganizationID: b.OrganizationID, ProjectID: b.ProjectID,
+			Actor: actor, ActorDisplayName: displayName, ActorSlug: nil,
+			RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID), ClientID: client.ClientID, SnapshotAfter: snapshot,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "audit preparation client creation")
+		}
+		// Attaching confirmed credentials changes the binding incarnation; status-only
+		// completions retain the claim generation. Preserve the original CAS below.
+		b.Generation++
+		b.RemoteSessionClientID = conv.ToNullUUID(client.ID)
+		b.RequestedScopes = sortedScopes(scopes)
+		b.GrantSource = conv.ToPGText(PreparationGrantSourceProviderReturned)
+		b.ClaimID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		b.ClaimedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+		// A confirmed registration must be retained even when it is not usable.
+		// Recheck after all lock waits and writes: metadata can change while the
+		// POST is in flight, and a returned secret can expire before completion.
+		state = preparationRegistrationReadiness(saveCtx, q, client, currentIssuer, b.OrganizationID)
+	}
+	b.State = conv.ToPGText(state)
+	b, err = setPreparationBinding(saveCtx, q, b, expectedGeneration)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
+	}
+	if err := s.auditIdentityChainingTransition(saveCtx, tx, before, b, client); err != nil {
+		return nil, err
+	}
+	if err := authclientbackfill.SyncEMARegistrations(saveCtx, tx, b.OrganizationID, []uuid.UUID{claim.RemoteSessionClientID.UUID, b.RemoteSessionClientID.UUID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "synchronize identity chaining auth client")
+	}
+	if err = tx.Commit(saveCtx); err != nil {
+		return preparationResult(claim, issuer, emptyClient, PreparationStateIndeterminate), err
+	}
+	return preparationResult(b, currentIssuer, client, state), nil
+}

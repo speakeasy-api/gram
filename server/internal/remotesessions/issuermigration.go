@@ -33,7 +33,7 @@ import (
 //     client's sessions and its user_session_issuer bindings travel with it.
 //   - Tokens are encrypted under one global key, not a per-issuer key, so the
 //     stored ciphertext stays decryptable.
-//   - client_id/client_secret belong to the upstream URL, not to Gram's issuer
+//   - client_id/client_secret belong to the upstream URL, not to Speakeasy's issuer
 //     row, so refresh tokens stay bound to an unchanged client_id.
 //
 // Ordering inside the transaction is load-bearing: re-point before
@@ -395,6 +395,7 @@ func sortedUnique(values []string) []string {
 // by migrateIssuer's own guards, so the dialog an admin confirms and the
 // mutation that runs cannot disagree about what blocks a migration.
 type migratePreflight struct {
+	emaBindingCount               int64
 	clientCount                   int64
 	mcpServerNames                []string
 	endpointMismatches            []issuerFieldMismatch
@@ -402,10 +403,11 @@ type migratePreflight struct {
 	warnings                      []issuerFieldMismatch
 	trustedUserSessionIssuerCount int64
 	trustedUserSessionIssuers     []trustedUserSessionIssuerReference
+	trustedClientCount            int64
 }
 
 func (p migratePreflight) canMigrate() bool {
-	return len(p.endpointMismatches) == 0 && len(p.conflictingMcpServerNames) == 0 && p.trustedUserSessionIssuerCount == 0
+	return p.emaBindingCount == 0 && len(p.endpointMismatches) == 0 && len(p.conflictingMcpServerNames) == 0 && p.trustedUserSessionIssuerCount == 0 && p.trustedClientCount == 0
 }
 
 type trustedUserSessionIssuerReference struct {
@@ -417,6 +419,11 @@ type trustedUserSessionIssuerReference struct {
 // source onto target. The caller has already loaded both issuers scoped to the
 // organization and validated the scope ladder.
 func buildMigratePreflight(ctx context.Context, r *repo.Queries, source, target repo.RemoteSessionIssuer) (migratePreflight, error) {
+	emaCount, err := r.CountActiveEMABindingsForIssuer(ctx, repo.CountActiveEMABindingsForIssuerParams{IssuerID: source.ID, OrganizationID: source.OrganizationID.String, ProjectID: source.ProjectID.UUID})
+	if err != nil {
+		return migratePreflight{}, fmt.Errorf("count identity-chaining bindings: %w", err)
+	}
+
 	clientCount, err := r.CountRemoteSessionClientsByIssuerID(ctx, source.ID)
 	if err != nil {
 		return migratePreflight{}, fmt.Errorf("count source issuer clients: %w", err)
@@ -471,7 +478,13 @@ func buildMigratePreflight(ctx context.Context, r *repo.Queries, source, target 
 		trusted = append(trusted, trustedUserSessionIssuerReference{id: row.ID, slug: row.Slug})
 	}
 
+	trustedClientCount, err := r.CountTrustedUserSessionIssuersForRemoteSessionIssuerClients(ctx, source.ID)
+	if err != nil {
+		return migratePreflight{}, fmt.Errorf("count user session issuers that trust source issuer clients: %w", err)
+	}
+
 	return migratePreflight{
+		emaBindingCount:               emaCount,
 		clientCount:                   clientCount,
 		mcpServerNames:                names,
 		endpointMismatches:            endpointMismatches(source, target),
@@ -479,6 +492,7 @@ func buildMigratePreflight(ctx context.Context, r *repo.Queries, source, target 
 		warnings:                      migrationWarnings(source, target),
 		trustedUserSessionIssuerCount: trustedCount,
 		trustedUserSessionIssuers:     trusted,
+		trustedClientCount:            trustedClientCount,
 	}, nil
 }
 
@@ -504,19 +518,25 @@ func lockIssuersForMigration(ctx context.Context, r *repo.Queries, issuerIDs ...
 // is the whole of the operation apart from soft-deleting the source, which each
 // surface does with its own scoped delete query.
 //
-// The three guards are the reason this is shared rather than duplicated. Endpoint
+// The four guards are the reason this is shared rather than duplicated. Endpoint
 // parity is what keeps an already-authenticated session refreshing against the
-// authorization server it was established with, and the binding-conflict check
+// authorization server it was established with, and a self client's token
+// endpoint in place, and the binding-conflict check
 // is the only thing enforcing the at-most-one-client-per-(user_session_issuer,
 // remote_session_issuer) invariant, which no database constraint expresses.
 // Trusted user-session-issuer references must be explicitly unlinked or
-// re-linked rather than silently following a migration. A surface that drifted
+// re-linked rather than silently following a migration. EMA bindings likewise
+// require explicit unlinking before migration. A surface that drifted
 // on any guard would not merely behave differently, it would be less safe.
 //
 // Callers must already hold the advisory locks from lockIssuersForMigration and
 // have re-read both issuers under a row lock, so that the rows validated here
 // cannot change before the transaction commits.
 func runIssuerMigration(ctx context.Context, r *repo.Queries, logger *slog.Logger, source, target repo.RemoteSessionIssuer) (int64, error) {
+	if err := guardEMABindingsForIssuer(ctx, r, source.OrganizationID.String, source.ProjectID.UUID, source.ID); err != nil {
+		return 0, err
+	}
+
 	preflight, err := buildMigratePreflight(ctx, r, source, target)
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "build remote session issuer migrate preflight").LogError(ctx, logger)
@@ -536,6 +556,11 @@ func runIssuerMigration(ctx context.Context, r *repo.Queries, logger *slog.Logge
 
 	if preflight.trustedUserSessionIssuerCount > 0 {
 		return 0, oops.E(oops.CodeConflict, nil, "source remote session issuer is trusted by active user session issuers; unlink or re-link them before migrating").LogError(ctx, logger)
+	}
+
+	// The per-client federated redirect URI is what binds a login response to one issuer (RFC 9700 4.4.2); moving a trusted client would re-point it.
+	if preflight.trustedClientCount > 0 {
+		return 0, oops.E(oops.CodeConflict, nil, "a client of the source remote session issuer is a user session issuer's trusted sign-in client; its sign-in callback identifies this issuer, so unlink it before migrating").LogError(ctx, logger)
 	}
 
 	clientsMigrated, err := r.UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionClientsToRemoteSessionIssuerParams{

@@ -68,10 +68,10 @@ var File_gram_risk_v1_llm_enforcer_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_llm_enforcer_proto_rawDesc = "" +
 	"\n" +
-	"\x1fgram/risk/v1/llm_enforcer.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"C\n" +
-	"\vLLMEnforcer:4\x92\xb5\x180\x12\x03\b\xd8\x04\"\x02\b\x1e2\x04\n" +
+	"\x1fgram/risk/v1/llm_enforcer.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"?\n" +
+	"\vLLMEnforcer:0\x92\xb5\x18,\x12\x03\b\xd8\x04\"\x02\b\x1e2\x04\n" +
 	"\x02\b\n" +
-	"J\x02\x10\x05R\x1bgram.risk.v1.LLMEnforcementB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
+	"R\x1bgram.risk.v1.LLMEnforcementB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_llm_enforcer_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_risk_v1_llm_enforcer_proto_goTypes = []any{

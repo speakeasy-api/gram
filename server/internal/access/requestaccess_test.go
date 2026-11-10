@@ -1,12 +1,15 @@
 package access
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 func TestService_RequestAccess_NotifiesAdmins(t *testing.T) {
@@ -47,6 +50,10 @@ func TestService_RequestAccess_NotifiesAdmins(t *testing.T) {
 	require.Contains(t, link, "project_id="+projectID)
 	require.NotEmpty(t, sent[0].DataVariables["requester_name"])
 	require.NotEmpty(t, sent[0].DataVariables["organization_name"])
+	// The admin reads the catalogue wording, not just the slug.
+	require.Equal(t, "Connect to MCP servers", sent[0].DataVariables["permission_label"])
+	require.Equal(t, "mcp:connect", sent[0].DataVariables["permission_scope"])
+	require.NotEmpty(t, sent[0].DataVariables["permission_description"])
 }
 
 func TestService_RequestAccess_LegacyResourceStillNotifiesWithoutProject(t *testing.T) {
@@ -119,4 +126,33 @@ func TestService_RequestAccess_AllNotificationsFail(t *testing.T) {
 	require.Equal(t, 0, result.SentToCount)
 	require.Len(t, ti.emailSender.Attempts(), 1)
 	require.Empty(t, ti.emailSender.Sent())
+}
+
+func TestService_RequestAccess_LinksToOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NoError(t, orgrepo.New(ti.conn).SetOrganizationDefaultHostForTest(ctx, orgrepo.SetOrganizationDefaultHostForTestParams{
+		DefaultHost: conv.ToPGText("https://platform.example.com"),
+		ID:          authCtx.ActiveOrganizationID,
+	}))
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_admin", "ada@example.com", "Ada Admin", "user_admin", "membership_admin")
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_admin", mockMember("", "membership_admin", "user_admin", "admin"))
+
+	_, err := ti.service.RequestAccess(ctx, &gen.RequestAccessPayload{
+		Scope:        "mcp:connect",
+		ResourceID:   nil,
+		ResourceName: nil,
+		Message:      nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+
+	sent := ti.emailSender.Sent()
+	require.Len(t, sent, 1)
+	require.True(t, strings.HasPrefix(sent[0].DataVariables["manage_access_link"], "https://platform.example.com/"))
 }

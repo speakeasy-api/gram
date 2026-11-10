@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getIssuer organizationUserSessionIssuers
  *
  * @remarks
- * Get an organization-owned user_session_issuer by id. Requires org:read.
+ * Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.
  */
 export function organizationUserSessionIssuersGet(
   client: GramCore,

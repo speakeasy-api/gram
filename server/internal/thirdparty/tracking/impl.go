@@ -88,6 +88,12 @@ func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCa
 	if event.MCPSessionID != nil {
 		properties["mcp_session_id"] = *event.MCPSessionID
 	}
+	if event.MCPServerID != nil {
+		properties["mcp_server_id"] = *event.MCPServerID
+	}
+	if event.MCPEndpointID != nil {
+		properties["mcp_endpoint_id"] = *event.MCPEndpointID
+	}
 	if event.MetaMCPServerID != nil {
 		properties["meta_mcp_server_id"] = *event.MetaMCPServerID
 	}

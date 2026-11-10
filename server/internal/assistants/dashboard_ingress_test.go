@@ -16,7 +16,7 @@ func TestDashboardAdapterThreadContext(t *testing.T) {
 
 	got, err := dashboardAdapter{}.ThreadContext([]byte(`{"user_id":"user-1"}`))
 	require.NoError(t, err)
-	require.Contains(t, got, "Gram dashboard")
+	require.Contains(t, got, "Speakeasy dashboard")
 	require.Contains(t, got, "user-1")
 }
 
@@ -85,7 +85,7 @@ func TestManagedAssistantDashboardTriggerLifecycle(t *testing.T) {
 	core := newProvisioningCore(t, conn)
 	projectID := newProvisioningProject(t, conn, "dash-trigger")
 
-	managed, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	managed, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)
 	require.NoError(t, err)
 
 	target := triggerrepo.ListActiveTriggerInstancesByTargetParams{
@@ -120,7 +120,7 @@ func TestEnableManagedAssistantHealsMissingDashboardTrigger(t *testing.T) {
 	core := newProvisioningCore(t, conn)
 	projectID := newProvisioningProject(t, conn, "dash-heal")
 
-	managed, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	managed, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)
 	require.NoError(t, err)
 
 	target := triggerrepo.ListActiveTriggerInstancesByTargetParams{
@@ -145,7 +145,7 @@ func TestEnableManagedAssistantHealsMissingDashboardTrigger(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, instances)
 
-	healed, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	healed, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)
 	require.NoError(t, err)
 	require.Equal(t, managed.ID, healed.ID, "re-enable returns the existing managed assistant")
 

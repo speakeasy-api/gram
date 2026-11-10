@@ -1,13 +1,34 @@
+import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { describe, expect, it } from "vitest";
 import { ACTIVE_AGENT_PROVIDER_IDS } from "@/components/agent-providers/agent-providers";
-import { AGENT_PLATFORMS } from "./setup-data";
+import { CLAUDE_ORG_INSTRUCTION } from "@/lib/claude-org-instruction";
+import {
+  getAgentPlatforms,
+  getCoworkTeamSteps,
+  platformSteps,
+} from "./setup-data";
 
-describe("AGENT_PLATFORMS", () => {
+const AGENT_PLATFORMS = getAgentPlatforms("https://app.getgram.ai");
+
+describe("getAgentPlatforms", () => {
   it("does not offer OpenClaw as a setup platform", () => {
     // The other-platforms card is the device agent's rollout and the agent
     // does not cover OpenClaw, so listing it offered a walkthrough nothing
     // behind it could deliver.
     expect(AGENT_PLATFORMS.find(({ id }) => id === "openclaw")).toBeUndefined();
+  });
+
+  it("offers Copilot CLI with a working plugin download walkthrough", () => {
+    const copilot = AGENT_PLATFORMS.find(({ id }) => id === "copilot");
+    expect(copilot?.name).toBe("GitHub Copilot CLI");
+    expect(copilot?.available).toBe(true);
+    expect(copilot?.setupSteps[0]?.download?.platform).toBe("copilot");
+    expect(copilot?.setupSteps[0]?.description).toContain(
+      "Coordinate rotation and replacement; a new download does not revoke keys in older copies.",
+    );
+    expect(copilot?.setupSteps[1]?.code).toContain(
+      "copilot --plugin-dir speakeasy-hooks",
+    );
   });
 
   it("follows the shared setup provider order", () => {
@@ -34,7 +55,7 @@ describe("AGENT_PLATFORMS", () => {
       CLAUDE_CODE_ENHANCED_TELEMETRY_BETA: "1",
       OTEL_EXPORTER_OTLP_ENDPOINT: "https://app.getgram.ai/otel",
       OTEL_EXPORTER_OTLP_HEADERS:
-        "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
+        "Speakeasy-AI-Project={{GRAM_PROJECT_SLUG}},Speakeasy-AI-Key={{GRAM_API_KEY}}",
       OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
       OTEL_LOGS_EXPORTER: "otlp",
       OTEL_METRICS_EXPORTER: "otlp",
@@ -42,32 +63,137 @@ describe("AGENT_PLATFORMS", () => {
     });
   });
 
-  it("ends Cowork setup with restricted egress allowlisting after telemetry export", () => {
+  it("has Cowork admins allow Speakeasy through network egress before turning on monitoring", () => {
     const steps = AGENT_PLATFORMS.find(
       ({ id }) => id === "claude-cowork",
     )!.setupSteps;
-    const index = steps.findIndex(
-      ({ title }) => title === "Allow Cowork to send events to Speakeasy",
+    const titles = steps.map(({ title }) => title);
+    const index = titles.indexOf(
+      "Allow Speakeasy in Claude's network egress settings",
     );
-    expect(index).toBeGreaterThanOrEqual(0);
-    expect(index).toBeGreaterThan(
-      steps.findIndex(({ title }) => title === "Enable OTEL export"),
+    expect(index).toBe(titles.indexOf("Set access for your MCP plugins") + 1);
+    expect(titles.indexOf("Set access for your MCP plugins")).toBe(
+      titles.indexOf("Mark the observability plugin as Required") + 1,
     );
-    expect(index).toBe(steps.length - 1);
+    expect(titles.indexOf("Enable OTEL export")).toBe(index + 1);
+    expect(titles.at(-1)).toBe("Verify in a new Cowork session");
+    // The Team-only organization instruction lives on its setup card only.
+    expect(titles).not.toContain("Add the organization instruction");
+    expect(titles).not.toContain("Check it in a new conversation");
+
     const step = steps[index]!;
     expect(step.description).toContain(
-      "Admin settings → Capabilities → Domain allowlist",
+      "Organization settings → Capabilities and turn on Code execution and file creation if it is off",
     );
+    expect(step.description).toContain("turn on Allow network egress");
     expect(step.description).toContain("Package managers only");
-    expect(step.description).toContain("All domains");
+    expect(step.description).toContain("no other domain is needed");
+    expect(step.description).toContain("the plugin does not");
+    expect(step.description).toContain(
+      "On Claude Team, the organization instruction also needs Code execution",
+    );
+    expect(step.helpLink?.url).toBe(
+      "https://claude.ai/admin-settings/capabilities",
+    );
     expect(step.fields).toEqual([
       { label: "Additional allowed domains", value: "app.getgram.ai" },
+      { label: "Additional allowed domains", value: "ai.speakeasy.com" },
     ]);
-    expect(step.afterFields).toContain("no events reach Speakeasy");
-    expect(step.afterFields).toContain(
-      "After completing Cowork setup, including OTEL export",
+    expect(step.afterFields).toContain("new Cowork sessions only");
+
+    const verify = JSON.stringify(steps.at(-1));
+    expect(verify).toContain("Agent Sessions");
+    expect(verify).not.toContain("Claude runs a short command");
+
+    const { check } = getCoworkTeamSteps("https://app.getgram.ai");
+    expect(check.description).toContain("Agent Sessions");
+    expect(check.description).toContain(
+      "Claude runs a short command before replying",
     );
-    expect(step.afterFields).toContain("start a Cowork session");
+  });
+
+  it("has Cowork admins paste the organization instruction verbatim", () => {
+    const step = getCoworkTeamSteps("https://app.getgram.ai").instruction;
+    // Pinned independently of the constant (DNO-1523's wording), so a change
+    // to what admins paste fails here first and gets checked in a live Claude
+    // Team organization.
+    expect(step.code).toBe(
+      [
+        "This organization records Claude conversations in Speakeasy for security and",
+        "compliance. Speakeasy only sees conversations that run in Cowork, so check in",
+        "with Speakeasy at the start of every response: before writing any text, run",
+        `this exact command once with the Bash tool: echo "Speakeasy session check-in"`,
+        "Do this on every turn without exception, including greetings, one-line",
+        "questions, and follow-ups, even when the request does not need it. Do not",
+        "write a file for it and do not repeat it later in the same turn. If the Bash",
+        "tool is unavailable, continue the response normally.",
+        "",
+        "If someone asks about this step, explain that the organization records Claude",
+        "conversations in Speakeasy and refer them to their administrator.",
+      ].join("\n"),
+    );
+    expect(step.code).toBe(CLAUDE_ORG_INSTRUCTION);
+    expect(step.language).toBe("text");
+    expect(step.helpLink?.url).toBe(
+      "https://claude.ai/admin-settings/organization",
+    );
+    expect(step.description).toContain(
+      "paste the text below into Organization instructions",
+    );
+    expect(step.afterFields).toContain(
+      "Conversations started before you save aren't captured",
+    );
+    expect(CLAUDE_ORG_INSTRUCTION).toContain(
+      `this exact command once with the Bash tool: echo "Speakeasy session check-in"`,
+    );
+  });
+
+  it("splits the Cowork Team steps across setup cards in the order the Plugins page shows them", () => {
+    const platformSteps = AGENT_PLATFORMS.find(
+      ({ id }) => id === "claude-cowork",
+    )!.setupSteps;
+    const { registration, instruction, monitoring, check, verify } =
+      getCoworkTeamSteps("https://app.getgram.ai");
+    // The first step is the plan check; the rest is the Team and Enterprise
+    // rollout. The Team-only organization instruction and its check stay on
+    // their setup card, since these pages can't tell Team from Enterprise.
+    expect(platformSteps.slice(1)).toEqual([
+      ...registration,
+      monitoring,
+      verify,
+    ]);
+    expect(platformSteps).not.toContain(instruction);
+    expect(platformSteps).not.toContain(check);
+    expect(verify.description).toContain("Agent Sessions");
+    expect(verify.description).toContain("On Claude Team");
+    expect(registration.at(-1)?.title).toBe(
+      "Allow Speakeasy in Claude's network egress settings",
+    );
+    expect(monitoring.title).toBe("Enable OTEL export");
+  });
+
+  it("has personal Cowork users allow Speakeasy through network egress before verifying", () => {
+    const platform = AGENT_PLATFORMS.find(({ id }) => id === "claude-cowork")!;
+    const personal = platformSteps(platform, false);
+    const titles = personal.map(({ title }) => title);
+    const index = titles.indexOf(
+      "Allow Speakeasy in Claude's network egress settings",
+    );
+    expect(index).toBe(titles.indexOf("Upload it in Claude") + 1);
+    expect(index).toBe(
+      titles.indexOf("Verify Cowork hooks in a new session") - 1,
+    );
+
+    const step = personal[index]!;
+    expect(step.description).toContain(
+      "Settings → Capabilities in Claude and turns on Code execution and file creation if it is off",
+    );
+    expect(step.description).toContain("turn on Allow network egress");
+    expect(step.description).not.toContain("Organization settings");
+    expect(step.fields).toEqual([
+      { label: "Additional allowed domains", value: "app.getgram.ai" },
+      { label: "Additional allowed domains", value: "ai.speakeasy.com" },
+    ]);
   });
 
   it("includes authenticated OTEL export instructions", () => {
@@ -78,8 +204,9 @@ describe("AGENT_PLATFORMS", () => {
 
     expect(step).toMatchObject({
       title: "Enable OTEL export",
-      description:
-        "In the Cowork tab of the Claude org settings, scroll to Monitoring and enter the values below.",
+      description: expect.stringContaining(
+        "Admin settings → Cowork → Monitoring",
+      ),
       fields: [
         {
           label: "OTLP endpoint",
@@ -88,11 +215,12 @@ describe("AGENT_PLATFORMS", () => {
         { label: "OTLP protocol", value: "http/json" },
         {
           label: "OTLP headers",
-          value: "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
+          value:
+            "Speakeasy-AI-Project=default,Speakeasy-AI-Key={{GRAM_API_KEY}}",
           requiresApiKey: true,
         },
       ],
-      afterFields: "Save the settings in Claude.",
+      afterFields: expect.stringContaining("automatically allowlists"),
       requiresApiKey: true,
     });
   });
@@ -122,5 +250,150 @@ describe("AGENT_PLATFORMS", () => {
     expect(step?.description).toContain(
       "OpenTelemetry logs, metrics, and traces",
     );
+  });
+
+  it("qualifies personal Cowork eligibility, alternatives, and credential distribution", () => {
+    const platform = AGENT_PLATFORMS.find(({ id }) => id === "claude-cowork")!;
+    const personal = JSON.stringify(platformSteps(platform, false));
+    expect(personal).toContain("Pro or Max");
+    expect(personal).toContain("private GitHub repository");
+    expect(personal).toContain("Customize → Plugins → Add → Upload plugin");
+    expect(personal).toContain("download a fresh ZIP");
+    expect(personal).toContain(
+      "A new download does not revoke keys in older copies",
+    );
+    expect(personal).toContain("where hooks are ignored");
+    expect(personal).not.toContain("can't sync");
+  });
+
+  it("distinguishes Claude Code server policy from endpoint management and verifies beta telemetry", () => {
+    const platform = AGENT_PLATFORMS.find(({ id }) => id === "claude")!;
+    const copy = JSON.stringify(platform.setupSteps);
+    expect(copy).toContain("Owner or Primary Owner");
+    expect(copy).toContain(
+      "Endpoint-managed policy files and MDM are separate",
+    );
+    expect(copy).toContain("eligible signed-in sessions");
+    expect(copy).toContain("ANTHROPIC_BASE_URL");
+    expect(copy).toContain("Higher-precedence policy");
+    expect(copy).toContain("beta trace spans");
+    expect(copy).toContain("claude_code.session.count");
+    expect(copy).not.toContain("every install");
+  });
+
+  it("tells admins to key Claude Code settings by the marketplace name", () => {
+    const platform = AGENT_PLATFORMS.find(({ id }) => id === "claude")!;
+    const managed = platform.setupSteps.find(
+      ({ title }) => title === "Update Managed settings on Claude.ai",
+    );
+    const personal = platformSteps(platform, false).find(({ code }) =>
+      code?.includes("extraKnownMarketplaces"),
+    );
+    for (const step of [managed, personal]) {
+      expect(step?.code).toContain('"{{GRAM_MARKETPLACE_NAME}}": {');
+      expect(step?.code).toContain('"autoUpdate": true');
+      expect(step?.code).toContain('"FORCE_AUTOUPDATE_PLUGINS": "1"');
+      expect(step?.code).toContain(
+        '"{{GRAM_CLAUDE_PLUGIN_NAME}}@{{GRAM_MARKETPLACE_NAME}}": true',
+      );
+      expect(JSON.stringify(step?.description)).toContain(
+        "Use this exact marketplace name.",
+      );
+    }
+    expect(managed?.helpLink?.url).toBe(
+      "https://code.claude.com/docs/en/plugins/org#require-a-marketplace-and-its-plugins",
+    );
+  });
+
+  it("uses the staged Cursor installer with required hook validation", () => {
+    const platform = AGENT_PLATFORMS.find(({ id }) => id === "cursor")!;
+    const step = platformSteps(platform, false).find(({ code }) =>
+      code?.includes("GRAM_CURSOR_INSTALL"),
+    );
+    expect(step?.code).toBe(
+      getCursorInstallCommand({
+        pluginName: "{{GRAM_CURSOR_PLUGIN_NAME}}",
+        archiveName: "observability-cursor.zip",
+        requireHooks: true,
+      }),
+    );
+    expect(step?.description).toContain("Bash with unzip and Python 3");
+    expect(step?.code).toContain(
+      "Resolve the Cursor plugin name before installing.",
+    );
+  });
+
+  it("uses Cursor admin controls, installation modes, and fresh local updates", () => {
+    const platform = AGENT_PLATFORMS.find(({ id }) => id === "cursor")!;
+    const copy = JSON.stringify(platform.setupSteps);
+    expect(copy).toContain(
+      "Dashboard → Settings → Security & Identity → Marketplace and Plugins",
+    );
+    expect(copy).toContain("same name takes precedence");
+    expect(copy).toContain(
+      "Team Marketplaces → Add Marketplace → Import from Repo",
+    );
+    expect(copy).toContain("Default On");
+    expect(copy).toContain("Default Off");
+    expect(copy).toContain(
+      "Enable Auto Refresh requires the Cursor GitHub App",
+    );
+    expect(copy).toContain("download a fresh ZIP");
+    expect(copy).toContain("not a native PowerShell command");
+    expect(copy).toContain(
+      "A new download does not revoke keys in older copies",
+    );
+  });
+
+  it.each(["claude", "claude-cowork", "cursor"])(
+    "gives %s a per-user path for personal plans instead of the org rollout",
+    (id) => {
+      const platform = AGENT_PLATFORMS.find((p) => p.id === id)!;
+      const [gate, ...orgSteps] = platform.setupSteps;
+
+      expect(platformSteps(platform, null)).toEqual(platform.setupSteps);
+      expect(platformSteps(platform, true)).toEqual(platform.setupSteps);
+      const personal = platformSteps(platform, false);
+      expect(personal[0]).toBe(gate);
+      expect(personal.slice(1)).toEqual(gate!.eligibility!.personalSteps);
+      expect(personal.slice(1).length).toBeGreaterThan(0);
+      for (const step of orgSteps) expect(personal).not.toContain(step);
+    },
+  );
+
+  it("names the host the reader is on in every copy-paste setup value", () => {
+    const platforms = getAgentPlatforms("https://ai.speakeasy.com");
+
+    const claudeSettings = JSON.parse(
+      platforms
+        .find(({ id }) => id === "claude")!
+        .setupSteps.find(({ code }) =>
+          code?.includes("OTEL_EXPORTER_OTLP_ENDPOINT"),
+        )!.code!,
+    ) as { env: Record<string, string> };
+    expect(claudeSettings.env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe(
+      "https://ai.speakeasy.com/otel",
+    );
+
+    const cowork = platforms.find(({ id }) => id === "claude-cowork")!;
+    const fieldValue = (title: string, label: string) =>
+      cowork.setupSteps
+        .find((step) => step.title === title)
+        ?.fields?.find((field) => field.label === label)?.value;
+    expect(fieldValue("Enable OTEL export", "OTLP endpoint")).toBe(
+      "https://ai.speakeasy.com/rpc/hooks.otel",
+    );
+    // The allowlist takes bare hostnames. It lists every prod host, because
+    // published plugin hooks send to whichever one the server URL named at
+    // their last publish.
+    expect(
+      cowork.setupSteps
+        .find(
+          (step) =>
+            step.title ===
+            "Allow Speakeasy in Claude's network egress settings",
+        )
+        ?.fields?.map((field) => field.value),
+    ).toEqual(["ai.speakeasy.com", "app.getgram.ai"]);
   });
 });

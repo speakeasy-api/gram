@@ -71,7 +71,7 @@ func authenticatedCounterContext(t *testing.T) context.Context {
 	})
 	return contextvalues.SetRequestContext(ctx, &contextvalues.RequestContext{
 		Host:   "x.example.com",
-		ReqURL: "/x/mcp/abc",
+		ReqURL: "/mcp/abc",
 	})
 }
 

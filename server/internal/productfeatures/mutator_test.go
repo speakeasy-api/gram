@@ -161,7 +161,7 @@ func TestMutatorSetRemoteSessionAutoRefreshEnabled_ClearsEnforced(t *testing.T) 
 	}
 	mutator := productfeatures.NewMutator(ti.client, audit.NewLogger())
 
-	require.NoError(t, mutator.SetRemoteSessionAutoRefreshEnabled(ctx, organizationID, true, actor))
+	require.NoError(t, mutator.SetFeature(ctx, organizationID, productfeatures.FeatureRemoteSessionAutoRefresh, true, actor))
 
 	q := featurerepo.New(ti.conn)
 	visible, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{

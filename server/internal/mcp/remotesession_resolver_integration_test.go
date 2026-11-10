@@ -1,7 +1,7 @@
 // remotesession_resolver_integration_test.go drives an end-to-end
-// tools/call against an issuer-gated toolset fronting an external MCP
-// server. It pins the load-bearing claim of the resolver contract: the
-// upstream MCP request receives `Authorization: Bearer <stored token>`
+// tools/call against an issuer-gated toolset holding an OAuth-secured HTTP
+// tool. It pins the load-bearing claim of the resolver contract: the
+// upstream request receives `Authorization: Bearer <stored token>`
 // for the resolved remote_sessions row — proving the exchanged token is
 // what reaches the wire, not the user-session JWT, not an empty header,
 // not some other row's token.
@@ -18,8 +18,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/http/httputil"
-	"net/url"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,16 +29,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
-	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
-	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-func TestServePublic_UserSessionIssuerRemoteSessionResolvedTokenReachesExternalMCP(t *testing.T) {
+func TestServePublic_UserSessionIssuerRemoteSessionResolvedTokenReachesHTTPTool(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -49,30 +42,10 @@ func TestServePublic_UserSessionIssuerRemoteSessionResolvedTokenReachesExternalM
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	mockTools := []testmcp.Tool{{
-		Name:        "ping",
-		Description: "Returns pong",
-		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
-		Response: testmcp.ToolResponse{
-			Content: []map[string]any{{"type": "text", "text": "pong"}},
-		},
-	}}
-	mockServer := newMockExternalMCPServer(t, externalmcp_types.TransportTypeStreamableHTTP, mockTools)
-	t.Cleanup(mockServer.Close)
-
 	var capturedAuth atomic.Value
-	target, err := url.Parse(mockServer.URL)
-	require.NoError(t, err)
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if auth := r.Header.Get("Authorization"); auth != "" {
-			capturedAuth.Store(auth)
-		}
-		proxy.ServeHTTP(w, r)
-	}))
-	t.Cleanup(recorder.Close)
+	recorder := newAuthorizationRecorder(t, &capturedAuth)
 
-	fixture := createIssuerGatedExternalMCPFixture(t, ctx, ti, authCtx, "resolver-extmcp", recorder.URL)
+	fixture := createIssuerGatedHTTPToolFixture(t, ctx, ti, authCtx, "resolver-http", recorder.URL)
 
 	requestSubject := urn.NewUserSubject("resolver-user-" + uuid.NewString())
 	insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, requestSubject, "valid-upstream-token", time.Now().Add(time.Hour))
@@ -113,53 +86,44 @@ func TestServePublic_UserSessionIssuerRemoteSessionResolvedTokenReachesExternalM
 		"resolver must forward the exchanged remote_session access token verbatim as the upstream Authorization header")
 }
 
-type issuerGatedExternalMCPFixture struct {
-	Toolset             toolsets_repo.Toolset
-	UserSessionIssuer   usersessions_repo.UserSessionIssuer
-	RemoteSessionClient remotesessions_repo.RemoteSessionClient
-	ToolName            string
+// newAuthorizationRecorder stands up an upstream API that stores the
+// Authorization header of the requests it serves.
+func newAuthorizationRecorder(t *testing.T, captured *atomic.Value) *httptest.Server {
+	t.Helper()
+
+	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			captured.Store(auth)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"pong":true}`))
+	}))
+	t.Cleanup(recorder.Close)
+
+	return recorder
 }
 
-// createIssuerGatedExternalMCPFixture wires a public, issuer-gated
-// toolset to an external MCP attachment that requires OAuth, plus a
-// remote_session_client bound to the same user_session_issuer so the
-// resolver has a remote-session requirement to satisfy. The upstream
-// URL is whatever the test wants to point at (typically a recording
-// reverse proxy in front of a mock MCP server).
-func createIssuerGatedExternalMCPFixture(
+type issuerGatedHTTPToolFixture struct {
+	remoteSessionResolverFixture
+	ToolName string
+}
+
+// createIssuerGatedHTTPToolFixture extends the remote-session resolver fixture
+// with a new deployment whose only tool is an HTTP tool at upstreamURL secured
+// by OAuth, so the resolved remote session token is what authenticates the
+// upstream request.
+func createIssuerGatedHTTPToolFixture(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
 	authCtx *contextvalues.AuthContext,
 	slugPrefix string,
 	upstreamURL string,
-) issuerGatedExternalMCPFixture {
+) issuerGatedHTTPToolFixture {
 	t.Helper()
 
-	suffix := uuid.NewString()[:8]
-	slug := slugPrefix + "-" + suffix
-
-	userIssuer, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
-		ProjectID:          *authCtx.ProjectID,
-		Slug:               "resolver-extmcp-usi-" + suffix,
-		AuthnChallengeMode: "interactive",
-		SessionDuration: pgtype.Interval{
-			Microseconds: int64(time.Hour / time.Microsecond),
-			Days:         0,
-			Months:       0,
-			Valid:        true,
-		},
-	})
-	require.NoError(t, err)
-
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, slug)
-	toolset, err = toolsetsRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, slugPrefix)
+	toolset := fixture.Toolset
 
 	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      toolset.ProjectID,
@@ -173,85 +137,57 @@ func createIssuerGatedExternalMCPFixture(
 		Status:       "completed",
 	}))
 
-	externalmcpRepo := externalmcp_repo.New(ti.conn)
-	registryID, err := externalmcpRepo.CreateMCPRegistry(ctx, externalmcp_repo.CreateMCPRegistryParams{
-		Name: "resolver-extmcp-registry-" + suffix,
-		Url:  upstreamURL,
-	})
-	require.NoError(t, err)
-	attachment, err := externalmcpRepo.CreateExternalMCPAttachment(ctx, externalmcp_repo.CreateExternalMCPAttachmentParams{
-		DeploymentID:            deploymentID,
-		RegistryID:              uuid.NullUUID{UUID: registryID, Valid: true},
-		Name:                    "Resolver External MCP",
-		Slug:                    slug,
-		RegistryServerSpecifier: "resolver-extmcp",
-	})
-	require.NoError(t, err)
-
-	toolURNString := "tools:externalmcp:" + slug + ":proxy"
-	_, err = externalmcpRepo.CreateExternalMCPToolDefinition(ctx, externalmcp_repo.CreateExternalMCPToolDefinitionParams{
-		ExternalMcpAttachmentID:    attachment.ID,
-		ToolUrn:                    toolURNString,
-		Type:                       "proxy",
-		RemoteUrl:                  upstreamURL,
-		TransportType:              externalmcp_types.TransportTypeStreamableHTTP,
-		RequiresOauth:              true,
-		OauthVersion:               "2.1",
-		OauthAuthorizationEndpoint: conv.ToPGText(upstreamURL + "/authorize"),
-		OauthTokenEndpoint:         conv.ToPGText(upstreamURL + "/token"),
-		OauthRegistrationEndpoint:  pgtype.Text{},
-		OauthScopesSupported:       []string{},
+	const toolName = "ping"
+	toolURN := urn.NewTool(urn.ToolKindHTTP, "resolver-upstream", uuid.NewString()[:8])
+	_, err = deployments_repo.New(ti.conn).CreateOpenAPIv3ToolDefinition(ctx, deployments_repo.CreateOpenAPIv3ToolDefinitionParams{
+		ProjectID:           toolset.ProjectID,
+		DeploymentID:        deploymentID,
+		Openapiv3DocumentID: uuid.NullUUID{},
+		ToolUrn:             toolURN,
+		Name:                toolName,
+		Summary:             "Ping the upstream API",
+		Description:         "Ping the upstream API",
+		Tags:                []string{},
+		Security:            []byte(`[{"test_oauth": []}]`),
+		HttpMethod:          http.MethodGet,
+		Path:                "/ping",
+		SchemaVersion:       "3.0.0",
+		Schema:              []byte(`{}`),
+		HeaderSettings:      []byte(`{}`),
+		QuerySettings:       []byte(`{}`),
+		PathSettings:        []byte(`{}`),
+		ServerEnvVar:        "TEST_SERVER_URL",
+		DefaultServerUrl:    conv.ToPGText(upstreamURL),
 	})
 	require.NoError(t, err)
 
-	toolURN, err := urn.ParseTool(toolURNString)
+	_, err = deployments_repo.New(ti.conn).CreateHTTPSecurity(ctx, deployments_repo.CreateHTTPSecurityParams{
+		Key:                 "test_oauth",
+		DeploymentID:        deploymentID,
+		ProjectID:           uuid.NullUUID{UUID: toolset.ProjectID, Valid: true},
+		Openapiv3DocumentID: uuid.NullUUID{},
+		Type:                pgtype.Text{String: "oauth2", Valid: true},
+		Name:                pgtype.Text{},
+		InPlacement:         pgtype.Text{},
+		Scheme:              pgtype.Text{},
+		BearerFormat:        pgtype.Text{},
+		EnvVariables:        []string{"TEST_OAUTH_ACCESS_TOKEN"},
+		OauthTypes:          []string{"authorization_code"},
+		OauthFlows:          []byte(`{"authorizationCode": {"scopes": {}}}`),
+	})
+	require.NoError(t, err)
+
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	latest, err := toolsetsRepo.GetLatestToolsetVersion(ctx, toolset.ID)
 	require.NoError(t, err)
 	_, err = toolsetsRepo.CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
 		ToolsetID:     toolset.ID,
-		Version:       1,
+		Version:       latest.Version + 1,
 		ToolUrns:      []urn.Tool{toolURN},
 		ResourceUrns:  []urn.Resource{},
-		PredecessorID: uuid.NullUUID{Valid: false},
+		PredecessorID: uuid.NullUUID{UUID: latest.ID, Valid: true},
 	})
 	require.NoError(t, err)
 
-	remoteRepo := remotesessions_repo.New(ti.conn)
-	remoteIssuer, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         uuid.NullUUID{UUID: toolset.ProjectID, Valid: true},
-		Slug:                              "resolver-extmcp-rsi-" + suffix,
-		Issuer:                            "https://upstream.example/" + suffix,
-		AuthorizationEndpoint:             conv.ToPGText("https://upstream.example/" + suffix + "/authorize"),
-		TokenEndpoint:                     conv.ToPGText("https://upstream.example/" + suffix + "/token"),
-		RegistrationEndpoint:              pgtype.Text{},
-		JwksUri:                           pgtype.Text{},
-		ScopesSupported:                   []string{},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
-		ResponseTypesSupported:            []string{"code"},
-		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
-		Oidc:                              false,
-		Passthrough:                       false,
-	})
-	require.NoError(t, err)
-	remoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
-		ProjectID:             conv.ToNullUUID(toolset.ProjectID),
-		RemoteSessionIssuerID: remoteIssuer.ID,
-		ClientID:              "resolver-extmcp-client-" + suffix,
-		ClientSecretEncrypted: pgtype.Text{},
-		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		ClientSecretExpiresAt: pgtype.Timestamptz{},
-	})
-	require.NoError(t, err)
-
-	err = remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: remoteClient.ID,
-		UserSessionIssuerID:   userIssuer.ID,
-	})
-	require.NoError(t, err)
-
-	return issuerGatedExternalMCPFixture{
-		Toolset:             toolset,
-		UserSessionIssuer:   userIssuer,
-		RemoteSessionClient: remoteClient,
-		ToolName:            slug + "--ping",
-	}
+	return issuerGatedHTTPToolFixture{remoteSessionResolverFixture: fixture, ToolName: toolName}
 }

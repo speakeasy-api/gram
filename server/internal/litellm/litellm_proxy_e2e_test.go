@@ -25,6 +25,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -38,7 +39,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	riskanalysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -50,7 +50,6 @@ import (
 	riskcelenv "github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -211,7 +210,7 @@ func (r *timeoutRelay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	responseBody, readErr := io.ReadAll(response.Body)
 	closeErr := response.Body.Close()
 	if readErr != nil || closeErr != nil {
-		http.Error(w, "read Gram response", http.StatusBadGateway)
+		http.Error(w, "read Speakeasy response", http.StatusBadGateway)
 		return
 	}
 
@@ -403,14 +402,15 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 	container, err := testcontainers.Run(t.Context(), manifest.Image,
 		testcontainers.WithLogger(testenv.NewTestcontainersLogger()),
 		testcontainers.WithExposedPorts("4000/tcp"),
+		testenv.WithLoopbackPorts(),
 		testcontainers.WithHostPortAccess(hostPorts...),
 		testcontainers.WithFiles(testcontainers.ContainerFile{
 			Reader: bytes.NewReader(configBytes), ContainerFilePath: "/app/e2e-config.yaml", FileMode: 0o644,
 		}),
 		testcontainers.WithEnv(map[string]string{
-			"GRAM_LITELLM_INGEST_KEY": apiKey,
-			"GRAM_PROJECT_SLUG":       *authCtx.ProjectSlug,
-			"REQUEST_TIMEOUT":         fmt.Sprintf("%d", proxyRequestTimeout/time.Second),
+			"SPEAKEASY_AI_LITELLM_INGEST_KEY": apiKey,
+			"SPEAKEASY_AI_PROJECT":            *authCtx.ProjectSlug,
+			"REQUEST_TIMEOUT":                 fmt.Sprintf("%d", proxyRequestTimeout/time.Second),
 		}),
 		testcontainers.WithCmd("--config", "/app/e2e-config.yaml", "--port", "4000"),
 		testcontainers.WithWaitStrategy(wait.ForHTTP("/health/liveliness").WithPort("4000/tcp").WithStartupTimeout(3*time.Minute)),
@@ -482,7 +482,7 @@ func buildProxyConfig(t *testing.T, providerURL, timeoutProviderURL, gramURL, fa
 	require.NotEmpty(t, guardrail.Params["api_base"])
 	require.ElementsMatch(t, []any{"pre_call", "post_call"}, guardrail.Params["mode"])
 	require.Equal(t, []any{
-		"x-gram-session-id",
+		"speakeasy-ai-session-id",
 		"x-claude-code-session-id",
 		"session-id",
 		"thread-id",
@@ -490,8 +490,8 @@ func buildProxyConfig(t *testing.T, providerURL, timeoutProviderURL, gramURL, fa
 	}, guardrail.Params["extra_headers"])
 	headers, ok := guardrail.Params["headers"].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, "os.environ/GRAM_LITELLM_INGEST_KEY", headers["Gram-Key"])
-	require.Equal(t, "os.environ/GRAM_PROJECT_SLUG", headers["Gram-Project"])
+	require.Equal(t, "os.environ/SPEAKEASY_AI_LITELLM_INGEST_KEY", headers["Speakeasy-AI-Key"])
+	require.Equal(t, "os.environ/SPEAKEASY_AI_PROJECT", headers["Speakeasy-AI-Project"])
 
 	clone := func(name, apiBase string, failureBehavior bool) proxyGuardrail {
 		params := maps.Clone(guardrail.Params)
@@ -670,7 +670,7 @@ func (h *proxyHarness) requireSSE(body []byte) {
 
 func (h *proxyHarness) safeNonStreaming() {
 	scenario, sessionID, callID := "safe", "e2e-safe-session", "e2e-safe-call"
-	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e", "safe prompt", false)
+	response := h.request(scenario, "speakeasy-ai-session-id", sessionID, callID, "gram-e2e", "safe prompt", false)
 	require.Equal(h.t, http.StatusOK, response.Status, string(response.Body))
 	h.requireCompletion(response.Body)
 	require.Equal(h.t, 1, h.provider.count(h.key(scenario, sessionID, callID)))
@@ -704,7 +704,7 @@ func (h *proxyHarness) nativeSessionHeaders() {
 	}
 
 	scenario, sessionID, callID := "session-header-precedence", "e2e-gram-session", "e2e-precedence-call"
-	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e", "precedence prompt", false, map[string]string{
+	response := h.request(scenario, "speakeasy-ai-session-id", sessionID, callID, "gram-e2e", "precedence prompt", false, map[string]string{
 		"x-claude-code-session-id": "e2e-claude-session",
 		"session-id":               "e2e-codex-session",
 		"thread-id":                "e2e-codex-thread",
@@ -718,7 +718,7 @@ func (h *proxyHarness) nativeSessionHeaders() {
 
 func (h *proxyHarness) blockedNonStreaming() {
 	scenario, sessionID, callID := "blocked", "e2e-blocked-session", "e2e-blocked-call"
-	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e", "token="+syntheticSecret, false)
+	response := h.request(scenario, "speakeasy-ai-session-id", sessionID, callID, "gram-e2e", "token="+syntheticSecret, false)
 	require.Equal(h.t, http.StatusBadRequest, response.Status, string(response.Body))
 	h.requireBlocked(response.Body)
 	require.Zero(h.t, h.provider.count(h.key(scenario, sessionID, callID)))
@@ -731,7 +731,7 @@ func (h *proxyHarness) blockedNonStreaming() {
 
 func (h *proxyHarness) safeStreaming() {
 	scenario, sessionID, callID := "stream-safe", "e2e-stream-safe-session", "e2e-stream-safe-call"
-	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e", "safe streaming prompt", true)
+	response := h.request(scenario, "speakeasy-ai-session-id", sessionID, callID, "gram-e2e", "safe streaming prompt", true)
 	require.Equal(h.t, http.StatusOK, response.Status, string(response.Body))
 	require.Contains(h.t, response.Header.Get("Content-Type"), "text/event-stream")
 	h.requireSSE(response.Body)
@@ -741,7 +741,7 @@ func (h *proxyHarness) safeStreaming() {
 
 func (h *proxyHarness) blockedStreaming() {
 	scenario, sessionID, callID := "stream-blocked", "e2e-stream-blocked-session", "e2e-stream-blocked-call"
-	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e", "token="+syntheticSecret, true)
+	response := h.request(scenario, "speakeasy-ai-session-id", sessionID, callID, "gram-e2e", "token="+syntheticSecret, true)
 	require.Equal(h.t, http.StatusBadRequest, response.Status, string(response.Body))
 	h.requireBlocked(response.Body)
 	require.Zero(h.t, h.provider.count(h.key(scenario, sessionID, callID)))
@@ -753,7 +753,7 @@ func (h *proxyHarness) blockedStreaming() {
 
 func (h *proxyHarness) failClosed() {
 	scenario, sessionID, callID := "fail-closed", "e2e-fail-closed-session", "e2e-fail-closed-call"
-	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e-fail-closed", "outage prompt", false)
+	response := h.request(scenario, "speakeasy-ai-session-id", sessionID, callID, "gram-e2e-fail-closed", "outage prompt", false)
 	require.NotContains(h.t, []int{http.StatusOK, http.StatusCreated, http.StatusNoContent}, response.Status, string(response.Body))
 	require.Zero(h.t, h.provider.count(h.key(scenario, sessionID, callID)))
 	h.noMessages(sessionID)
@@ -761,7 +761,7 @@ func (h *proxyHarness) failClosed() {
 
 func (h *proxyHarness) failOpen() {
 	scenario, sessionID, callID := "fail-open", "e2e-fail-open-session", "e2e-fail-open-call"
-	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e-fail-open", "outage prompt", false)
+	response := h.request(scenario, "speakeasy-ai-session-id", sessionID, callID, "gram-e2e-fail-open", "outage prompt", false)
 	require.Equal(h.t, http.StatusOK, response.Status, string(response.Body))
 	require.Equal(h.t, 1, h.provider.count(h.key(scenario, sessionID, callID)))
 	h.noMessages(sessionID)
@@ -771,7 +771,7 @@ func (h *proxyHarness) timeoutAndResend() {
 	// LiteLLM 1.94.0 does not retry a timed-out guardrail callback. A gateway may
 	// safely resend with the same call ID; an ordinary retry with a new call ID is distinct.
 	scenario, sessionID, callID := "timeout", "e2e-timeout-session", "e2e-timeout-call"
-	first := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e-timeout", "timeout prompt", false)
+	first := h.request(scenario, "speakeasy-ai-session-id", sessionID, callID, "gram-e2e-timeout", "timeout prompt", false)
 	require.NotEqual(h.t, http.StatusOK, first.Status, string(first.Body))
 	require.Zero(h.t, h.provider.count(h.key(scenario, sessionID, callID)))
 	require.Equal(h.t, "user", h.messages(sessionID, 1)[0].Role)
@@ -782,7 +782,7 @@ func (h *proxyHarness) timeoutAndResend() {
 	require.Never(h.t, func() bool {
 		return h.provider.count(h.key(scenario, sessionID, callID)) > 0
 	}, 3*time.Second, 10*time.Millisecond)
-	second := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e-timeout", "timeout prompt", false)
+	second := h.request(scenario, "speakeasy-ai-session-id", sessionID, callID, "gram-e2e-timeout", "timeout prompt", false)
 	require.Equal(h.t, http.StatusOK, second.Status, string(second.Body))
 	require.Equal(h.t, 1, h.provider.count(h.key(scenario, sessionID, callID)))
 	h.requireConversation(h.messages(sessionID, 2), h.prompt(scenario, sessionID, callID, "timeout prompt"))
@@ -790,24 +790,29 @@ func (h *proxyHarness) timeoutAndResend() {
 
 func (h *proxyHarness) materializeFinding(messageID uuid.UUID) {
 	h.t.Helper()
-	customRules, err := customruleanalyzer.NewScanner(h.conn)
-	require.NoError(h.t, err)
 	celEngine, err := riskcelenv.New()
 	require.NoError(h.t, err)
-	flags := &feature.InMemory{}
-	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(h.t), h.conn, cache.NoopCache, nil)
+	gitleaksPub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
+	var gitleaksRequests []*riskv1.GitleaksAnalysis
+	gitleaksPub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			request, ok := args.Get(1).(*riskv1.GitleaksAnalysis)
+			require.True(h.t, ok)
+			gitleaksRequests = append(gitleaksRequests, request)
+		})
 	analyze, err := riskanalysis.NewAnalyzeBatch(
 		testenv.NewLogger(h.t), testenv.NewTracerProvider(h.t), testenv.NewMeterProvider(h.t), h.conn,
-		nil, &riskanalysis.StubPIIScanner{}, nil, shadowMCPClient, noMCPProvenance{}, nil, flags,
+		nil, &feature.InMemory{},
 		gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
-		gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+		gitleaksPub,
 		gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
-		gcp.NewNoopPublisher[*riskv1.Finding](),
-		customRules, celEngine, nil, nil,
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		gcp.NewNoopPublisher[*riskv1.ToolCallAnalysis](),
+		gcp.NewNoopPublisher[*riskv1.AccountIdentityAnalysis](),
+		celEngine,
 		false,
 	)
 	require.NoError(h.t, err)
@@ -816,22 +821,14 @@ func (h *proxyHarness) materializeFinding(messageID uuid.UUID) {
 	env.RegisterActivity(analyze.Do)
 	activityResult, err := env.ExecuteActivity(analyze.Do, riskanalysis.AnalyzeBatchArgs{
 		ProjectID: h.projectID, OrganizationID: h.orgID, RiskPolicyID: h.policy.ID, PolicyVersion: h.policy.Version,
-		MessageIDs: []uuid.UUID{messageID}, ContentPartIDs: nil, Sources: h.policy.Sources, MessageTypes: h.policy.MessageTypes,
+		MessageIDs: []uuid.UUID{messageID}, ContentPartIDs: nil, Sources: h.policy.Sources,
 		PresidioEntities: nil, PresidioScoreThreshold: 0, CustomRuleIds: nil, ApprovedEmailDomains: nil,
-		BuiltinPresetsEnabled: false, DetectionScopes: nil,
+		DetectionScopes: nil,
 	})
 	require.NoError(h.t, err)
 	var analyzed riskanalysis.AnalyzeBatchResult
 	require.NoError(h.t, activityResult.Get(&analyzed))
 	require.Equal(h.t, 1, analyzed.Processed)
-	require.Positive(h.t, analyzed.Findings)
-	findings, err := riskrepo.New(h.conn).ListRiskResultsByProjectAndPolicy(h.t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
-		ProjectID: h.projectID, RiskPolicyID: h.policy.ID, CursorMessageCreatedAt: pgtype.Timestamptz{},
-		CursorID: uuid.NullUUID{}, PageLimit: 10,
-	})
-	require.NoError(h.t, err)
-	require.NotEmpty(h.t, findings)
-	require.Equal(h.t, riskanalysis.SourceGitleaks, findings[0].Source)
-	require.True(h.t, findings[0].Found)
-	require.Equal(h.t, messageID, findings[0].ChatMessageID.UUID)
+	require.Len(h.t, gitleaksRequests, 1)
+	require.Equal(h.t, messageID.String(), gitleaksRequests[0].GetChatMessageId())
 }

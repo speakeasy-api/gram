@@ -25,7 +25,7 @@ export type AdminOpenRouterKey = {
    */
   disabled: boolean;
   /**
-   * The organization's Gram account type (e.g. free, pro, enterprise).
+   * The organization's Speakeasy account type (e.g. free, pro, enterprise).
    */
   gramAccountType: string;
   /**

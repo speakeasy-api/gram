@@ -15,17 +15,8 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 
-// The route helper resolves :orgSlug from the URL; stubbing it keeps the
-// expected href readable without standing up the org route tree.
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    remoteIdentityProviders: {
-      issuerDetail: {
-        href: (id: string) =>
-          `/org-slug/projects/project-slug/remote-identity-providers/${id}`,
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org-slug", projectSlug: "project-slug" }),
 }));
 
 function issuer(overrides: Partial<RemoteSessionIssuer> = {}) {
@@ -51,6 +42,7 @@ function renderField(
     onEdit?: () => void;
     onDelete?: () => void;
     allowAdditionalProviders?: boolean;
+    isError?: boolean;
   } = {},
 ) {
   return render(
@@ -58,6 +50,7 @@ function renderField(
       <RemoteIdentityProvidersField
         associatedIssuers={issuers}
         isLoading={false}
+        isError={handlers.isError}
         allowAdditionalProviders={handlers.allowAdditionalProviders ?? true}
         projectId="project-1"
         onAdd={vi.fn<() => void>()}
@@ -78,12 +71,34 @@ describe("RemoteIdentityProvidersField", () => {
     vi.clearAllMocks();
   });
 
+  it("reports a failed lookup instead of the empty state", () => {
+    renderField([], { isError: true });
+
+    expect(
+      screen.getByText(/Failed to load the authorization servers/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /add authorization server/i }),
+    ).toBeNull();
+  });
+
+  it("keeps the providers that loaded when another fails", () => {
+    renderField([issuer()], { isError: true });
+
+    expect(screen.getByText("Acme Identity")).toBeTruthy();
+    expect(
+      screen.getByText(/Failed to load the authorization servers/),
+    ).toBeTruthy();
+  });
+
   // The gateway (meta MCP) case attaches one provider per member vendor, so
   // the add action must survive past the first attachment.
   it("keeps Attach Provider available once providers exist", () => {
     renderField([issuer()]);
 
-    expect(screen.getByRole("button", { name: /add provider/i })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /add authorization server/i }),
+    ).toBeTruthy();
   });
 
   // Remote/tunneled servers have exactly one upstream: once it is attached,
@@ -91,7 +106,9 @@ describe("RemoteIdentityProvidersField", () => {
   it("hides Attach Provider for single-upstream targets once a provider exists", () => {
     renderField([issuer()], { allowAdditionalProviders: false });
 
-    expect(screen.queryByRole("button", { name: /add provider/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /add authorization server/i }),
+    ).toBeNull();
   });
 
   it("links the provider name to its detail page", () => {

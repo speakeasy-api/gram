@@ -21,6 +21,10 @@ type CreatePluginRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// Defaults to true. When false, the plugin stays out of the marketplace until
+	// someone syncs it by hand.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
 }
 
 // UpdatePluginRequestBody is the type of the "plugins" service "updatePlugin"
@@ -33,20 +37,28 @@ type UpdatePluginRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Updated description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// Omit to keep the current setting. Turning it off is refused while the plugin
+	// has changes that haven't been synced, and the slug can't change while it is
+	// off.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
 }
 
 // AddPluginServerRequestBody is the type of the "plugins" service
 // "addPluginServer" endpoint HTTP request body.
 type AddPluginServerRequestBody struct {
 	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
-	// Gram toolset ID for a toolset-backed MCP server. Provide exactly one of
-	// toolset_id or mcp_server_id.
+	// Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
+	// meta_mcp_server_id; a hosted MCP server's toolset_id and mcp_server_id may
+	// both be sent when equal.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of
-	// toolset_id or mcp_server_id.
+	// Speakeasy MCP server ID. Provide exactly one backend ID; a hosted MCP
+	// server's toolset_id and mcp_server_id may both be sent when equal.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// Display name for the server. Defaults to the backing toolset or mcp_server
-	// name when omitted.
+	// MCP gateway ID. Provide exactly one backend ID.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Display name for the server. Defaults to the backing server name when
+	// omitted.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	Policy      *string `form:"policy,omitempty" json:"policy,omitempty" xml:"policy,omitempty"`
 	SortOrder   *int32  `form:"sort_order,omitempty" json:"sort_order,omitempty" xml:"sort_order,omitempty"`
@@ -68,6 +80,17 @@ type SetPluginAssignmentsRequestBody struct {
 	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
 	// List of principal URNs to assign.
 	PrincipalUrns []string `form:"principal_urns,omitempty" json:"principal_urns,omitempty" xml:"principal_urns,omitempty"`
+	// Install mode per principal URN in principal_urns. A principal missing from
+	// this map keeps its current mode, or gets `default` when it is newly assigned.
+	InstallModes map[string]string `form:"install_modes,omitempty" json:"install_modes,omitempty" xml:"install_modes,omitempty"`
+}
+
+// RotateObservabilityCredentialRequestBody is the type of the "plugins"
+// service "rotateObservabilityCredential" endpoint HTTP request body.
+type RotateObservabilityCredentialRequestBody struct {
+	// What happens to existing observability plugin hooks keys after the
+	// replacement is minted.
+	PreviousKeyFate *string `form:"previous_key_fate,omitempty" json:"previous_key_fate,omitempty" xml:"previous_key_fate,omitempty"`
 }
 
 // PublishPluginsRequestBody is the type of the "plugins" service
@@ -102,7 +125,10 @@ type GetDistributionPluginResponseBody struct {
 	ID          string  `form:"id" json:"id" xml:"id"`
 	Name        string  `form:"name" json:"name" xml:"name"`
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	IsDefault   bool    `form:"is_default" json:"is_default" xml:"is_default"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
+	IsDefault   bool `form:"is_default" json:"is_default" xml:"is_default"`
 }
 
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
@@ -125,6 +151,12 @@ type GetPluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled bool `form:"auto_sync_enabled" json:"auto_sync_enabled" xml:"auto_sync_enabled"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -155,6 +187,12 @@ type CreatePluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled bool `form:"auto_sync_enabled" json:"auto_sync_enabled" xml:"auto_sync_enabled"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -185,6 +223,12 @@ type UpdatePluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled bool `form:"auto_sync_enabled" json:"auto_sync_enabled" xml:"auto_sync_enabled"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -207,12 +251,16 @@ type UpdatePluginResponseBody struct {
 type AddPluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
-	// toolset_id / mcp_server_id is set).
+	// Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server
+	// sets toolset_id and mcp_server_id to the same id; otherwise exactly one
+	// backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
-	// of toolset_id / mcp_server_id is set).
+	// Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP
+	// server sets toolset_id and mcp_server_id to the same id; otherwise exactly
+	// one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// MCP gateway ID. When set, no other backend ID is set.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
 	// Whether this server is required or optional.
@@ -227,12 +275,16 @@ type AddPluginServerResponseBody struct {
 type UpdatePluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
-	// toolset_id / mcp_server_id is set).
+	// Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server
+	// sets toolset_id and mcp_server_id to the same id; otherwise exactly one
+	// backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
-	// of toolset_id / mcp_server_id is set).
+	// Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP
+	// server sets toolset_id and mcp_server_id to the same id; otherwise exactly
+	// one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// MCP gateway ID. When set, no other backend ID is set.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
 	// Whether this server is required or optional.
@@ -254,6 +306,35 @@ type SetPluginAssignmentsResponseBody struct {
 type ListAudiencesResponseBody struct {
 	// Audiences that can be assigned to plugins.
 	Audiences []*PluginAudienceResponseBody `form:"audiences" json:"audiences" xml:"audiences"`
+}
+
+// RotateObservabilityCredentialResponseBody is the type of the "plugins"
+// service "rotateObservabilityCredential" endpoint HTTP response body.
+type RotateObservabilityCredentialResponseBody struct {
+	// The newly minted hooks-scoped API key. Returned only on this response.
+	Key string `form:"key" json:"key" xml:"key"`
+	// The recognizable prefix of the new key.
+	KeyPrefix string `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
+	// What happened to previous observability plugin hooks keys.
+	PreviousKeyFate string `form:"previous_key_fate" json:"previous_key_fate" xml:"previous_key_fate"`
+	// Previous observability plugin hooks keys that were revoked or scheduled to
+	// expire.
+	PreviousKeys []*RotatedObservabilityKeyResponseBody `form:"previous_keys" json:"previous_keys" xml:"previous_keys"`
+	// The latest deadline among previous keys when previous_key_fate is grace.
+	// Individual keys can expire earlier, so this is an upper bound rather than a
+	// shared deadline; per-key deadlines are on previous_keys.
+	PreviousKeysExpireAt *string `form:"previous_keys_expire_at,omitempty" json:"previous_keys_expire_at,omitempty" xml:"previous_keys_expire_at,omitempty"`
+	// Whether the chosen fate was applied to the previous keys. False means the
+	// replacement was created and published but retiring the previous keys failed,
+	// so they are still valid and the rotation should be retried.
+	PreviousKeysRetired bool `form:"previous_keys_retired" json:"previous_keys_retired" xml:"previous_keys_retired"`
+	// Whether the published marketplace was updated with the new credential.
+	MarketplaceRepublished bool `form:"marketplace_republished" json:"marketplace_republished" xml:"marketplace_republished"`
+	// True when a marketplace exists but could not be updated yet (for example the
+	// organization is not approved for the latest hooks version, or GitHub
+	// publishing is unavailable). Existing marketplace installs keep the previous
+	// credential until the marketplace is republished.
+	MarketplaceUpdateDeferred *bool `form:"marketplace_update_deferred,omitempty" json:"marketplace_update_deferred,omitempty" xml:"marketplace_update_deferred,omitempty"`
 }
 
 // GetPublishStatusResponseBody is the type of the "plugins" service
@@ -289,9 +370,16 @@ type GetPublishStatusResponseBody struct {
 	// is not connected.
 	HasCollaborators *bool `form:"has_collaborators,omitempty" json:"has_collaborators,omitempty" xml:"has_collaborators,omitempty"`
 	// Whether the project's current plugin state matches what was last published
-	// to GitHub. Absent when the project is not connected, or when the connection
-	// predates content fingerprinting (freshness can't be determined).
+	// to GitHub, including changes of plugins whose auto sync is off that wait for
+	// a manual sync. Absent when the project is not connected, or when the
+	// connection predates content fingerprinting (freshness can't be determined).
 	UpToDate *bool `form:"up_to_date,omitempty" json:"up_to_date,omitempty" xml:"up_to_date,omitempty"`
+	// Whether an automatic publish would change the published marketplace. False
+	// while the only pending changes belong to plugins whose auto sync is off,
+	// which publish only on a manual sync. Absent when up_to_date is absent.
+	AutomaticSyncPending *bool `form:"automatic_sync_pending,omitempty" json:"automatic_sync_pending,omitempty" xml:"automatic_sync_pending,omitempty"`
+	// Each live plugin's own freshness. Absent when up_to_date is absent.
+	Plugins []*PluginPublishStatusResponseBody `form:"plugins,omitempty" json:"plugins,omitempty" xml:"plugins,omitempty"`
 	// When the project was last published to GitHub. Absent when the project is
 	// not connected.
 	LastPublishedAt *string `form:"last_published_at,omitempty" json:"last_published_at,omitempty" xml:"last_published_at,omitempty"`
@@ -1340,6 +1428,25 @@ type CreatePluginGatewayErrorResponseBody struct {
 // CreatePluginUnavailableResponseBody is the type of the "plugins" service
 // "createPlugin" endpoint HTTP response body for the "unavailable" error.
 type CreatePluginUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePluginFailedPreconditionResponseBody is the type of the "plugins"
+// service "updatePlugin" endpoint HTTP response body for the
+// "failed_precondition" error.
+type UpdatePluginFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3001,6 +3108,215 @@ type DownloadPluginPackageUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RotateObservabilityCredentialUnauthorizedResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unauthorized" error.
+type RotateObservabilityCredentialUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialForbiddenResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "forbidden" error.
+type RotateObservabilityCredentialForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialBadRequestResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "bad_request" error.
+type RotateObservabilityCredentialBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialNotFoundResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "not_found" error.
+type RotateObservabilityCredentialNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialConflictResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "conflict" error.
+type RotateObservabilityCredentialConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialUnsupportedMediaResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unsupported_media" error.
+type RotateObservabilityCredentialUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialInvalidResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "invalid" error.
+type RotateObservabilityCredentialInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialInvariantViolationResponseBody is the type of
+// the "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "invariant_violation" error.
+type RotateObservabilityCredentialInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialUnexpectedResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unexpected" error.
+type RotateObservabilityCredentialUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialGatewayErrorResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "gateway_error" error.
+type RotateObservabilityCredentialGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialUnavailableResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unavailable" error.
+type RotateObservabilityCredentialUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DownloadObservabilityPluginUnauthorizedResponseBody is the type of the
 // "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -4245,7 +4561,10 @@ type DistributionPluginResponseBody struct {
 	ID          string  `form:"id" json:"id" xml:"id"`
 	Name        string  `form:"name" json:"name" xml:"name"`
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	IsDefault   bool    `form:"is_default" json:"is_default" xml:"is_default"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
+	IsDefault   bool `form:"is_default" json:"is_default" xml:"is_default"`
 }
 
 // PluginResponseBody is used to define fields on response body types.
@@ -4260,6 +4579,12 @@ type PluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled bool `form:"auto_sync_enabled" json:"auto_sync_enabled" xml:"auto_sync_enabled"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -4281,12 +4606,16 @@ type PluginResponseBody struct {
 type PluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
-	// toolset_id / mcp_server_id is set).
+	// Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server
+	// sets toolset_id and mcp_server_id to the same id; otherwise exactly one
+	// backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
-	// of toolset_id / mcp_server_id is set).
+	// Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP
+	// server sets toolset_id and mcp_server_id to the same id; otherwise exactly
+	// one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// MCP gateway ID. When set, no other backend ID is set.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
 	// Whether this server is required or optional.
@@ -4302,7 +4631,11 @@ type PluginAssignmentResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Principal URN (e.g. role:organization:<uuid>, user:id, or *).
 	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
-	CreatedAt    string `form:"created_at" json:"created_at" xml:"created_at"`
+	// How the device agent installs the plugin for this audience. `required`:
+	// installed, and the user can't turn it off. `default`: installed, and the
+	// user can turn it off. `available`: not installed until the user turns it on.
+	InstallMode string `form:"install_mode" json:"install_mode" xml:"install_mode"`
+	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
 // PluginAudienceResponseBody is used to define fields on response body types.
@@ -4315,6 +4648,36 @@ type PluginAudienceResponseBody struct {
 	MemberCount *int64 `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// Principal URN used to assign the audience to a plugin.
 	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+}
+
+// RotatedObservabilityKeyResponseBody is used to define fields on response
+// body types.
+type RotatedObservabilityKeyResponseBody struct {
+	// The API key ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The API key name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The recognizable prefix of the previous key.
+	KeyPrefix string `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
+	// When this key stops authenticating. A key already inside a shorter grace
+	// window keeps its earlier deadline, so this can precede the rotation's own
+	// deadline. Absent when the key was revoked immediately.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+}
+
+// PluginPublishStatusResponseBody is used to define fields on response body
+// types.
+type PluginPublishStatusResponseBody struct {
+	// The plugin's slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Whether the plugin's published package is current. With auto sync on: an
+	// automatic publish would push nothing new for it, its package and the
+	// marketplace manifests alike. With auto sync off: its package matches what it
+	// was last published with.
+	UpToDate bool `form:"up_to_date" json:"up_to_date" xml:"up_to_date"`
+	// Whether the plugin's auto sync is off and it has changes, or has never been
+	// published, so only a manual sync publishes it.
+	AwaitingManualSync bool `form:"awaiting_manual_sync" json:"awaiting_manual_sync" xml:"awaiting_manual_sync"`
 }
 
 // MarketplaceSettingsResultResponseBody is used to define fields on response
@@ -4360,6 +4723,7 @@ func NewGetDistributionPluginResponseBody(res *plugins.DistributionPlugin) *GetD
 		ID:          res.ID,
 		Name:        res.Name,
 		Description: res.Description,
+		AutoCreated: res.AutoCreated,
 		IsDefault:   res.IsDefault,
 	}
 	return body
@@ -4393,6 +4757,8 @@ func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 		Slug:                     res.Slug,
 		Description:              res.Description,
 		IsDefault:                res.IsDefault,
+		AutoCreated:              res.AutoCreated,
+		AutoSyncEnabled:          res.AutoSyncEnabled,
 		ServerCount:              res.ServerCount,
 		SkillCount:               res.SkillCount,
 		AssignmentCount:          res.AssignmentCount,
@@ -4432,6 +4798,8 @@ func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody 
 		Slug:                     res.Slug,
 		Description:              res.Description,
 		IsDefault:                res.IsDefault,
+		AutoCreated:              res.AutoCreated,
+		AutoSyncEnabled:          res.AutoSyncEnabled,
 		ServerCount:              res.ServerCount,
 		SkillCount:               res.SkillCount,
 		AssignmentCount:          res.AssignmentCount,
@@ -4471,6 +4839,8 @@ func NewUpdatePluginResponseBody(res *plugins.Plugin) *UpdatePluginResponseBody 
 		Slug:                     res.Slug,
 		Description:              res.Description,
 		IsDefault:                res.IsDefault,
+		AutoCreated:              res.AutoCreated,
+		AutoSyncEnabled:          res.AutoSyncEnabled,
 		ServerCount:              res.ServerCount,
 		SkillCount:               res.SkillCount,
 		AssignmentCount:          res.AssignmentCount,
@@ -4505,13 +4875,14 @@ func NewUpdatePluginResponseBody(res *plugins.Plugin) *UpdatePluginResponseBody 
 // of the "addPluginServer" endpoint of the "plugins" service.
 func NewAddPluginServerResponseBody(res *plugins.PluginServer) *AddPluginServerResponseBody {
 	body := &AddPluginServerResponseBody{
-		ID:          res.ID,
-		ToolsetID:   res.ToolsetID,
-		McpServerID: res.McpServerID,
-		DisplayName: res.DisplayName,
-		Policy:      res.Policy,
-		SortOrder:   res.SortOrder,
-		CreatedAt:   res.CreatedAt,
+		ID:              res.ID,
+		ToolsetID:       res.ToolsetID,
+		McpServerID:     res.McpServerID,
+		MetaMcpServerID: res.MetaMcpServerID,
+		DisplayName:     res.DisplayName,
+		Policy:          res.Policy,
+		SortOrder:       res.SortOrder,
+		CreatedAt:       res.CreatedAt,
 	}
 	return body
 }
@@ -4520,13 +4891,14 @@ func NewAddPluginServerResponseBody(res *plugins.PluginServer) *AddPluginServerR
 // result of the "updatePluginServer" endpoint of the "plugins" service.
 func NewUpdatePluginServerResponseBody(res *plugins.PluginServer) *UpdatePluginServerResponseBody {
 	body := &UpdatePluginServerResponseBody{
-		ID:          res.ID,
-		ToolsetID:   res.ToolsetID,
-		McpServerID: res.McpServerID,
-		DisplayName: res.DisplayName,
-		Policy:      res.Policy,
-		SortOrder:   res.SortOrder,
-		CreatedAt:   res.CreatedAt,
+		ID:              res.ID,
+		ToolsetID:       res.ToolsetID,
+		McpServerID:     res.McpServerID,
+		MetaMcpServerID: res.MetaMcpServerID,
+		DisplayName:     res.DisplayName,
+		Policy:          res.Policy,
+		SortOrder:       res.SortOrder,
+		CreatedAt:       res.CreatedAt,
 	}
 	return body
 }
@@ -4569,6 +4941,34 @@ func NewListAudiencesResponseBody(res *plugins.ListAudiencesResult) *ListAudienc
 	return body
 }
 
+// NewRotateObservabilityCredentialResponseBody builds the HTTP response body
+// from the result of the "rotateObservabilityCredential" endpoint of the
+// "plugins" service.
+func NewRotateObservabilityCredentialResponseBody(res *plugins.RotateObservabilityCredentialResult) *RotateObservabilityCredentialResponseBody {
+	body := &RotateObservabilityCredentialResponseBody{
+		Key:                       res.Key,
+		KeyPrefix:                 res.KeyPrefix,
+		PreviousKeyFate:           res.PreviousKeyFate,
+		PreviousKeysExpireAt:      res.PreviousKeysExpireAt,
+		PreviousKeysRetired:       res.PreviousKeysRetired,
+		MarketplaceRepublished:    res.MarketplaceRepublished,
+		MarketplaceUpdateDeferred: res.MarketplaceUpdateDeferred,
+	}
+	if res.PreviousKeys != nil {
+		body.PreviousKeys = make([]*RotatedObservabilityKeyResponseBody, len(res.PreviousKeys))
+		for i, val := range res.PreviousKeys {
+			if val == nil {
+				body.PreviousKeys[i] = nil
+				continue
+			}
+			body.PreviousKeys[i] = marshalPluginsRotatedObservabilityKeyToRotatedObservabilityKeyResponseBody(val)
+		}
+	} else {
+		body.PreviousKeys = []*RotatedObservabilityKeyResponseBody{}
+	}
+	return body
+}
+
 // NewGetPublishStatusResponseBody builds the HTTP response body from the
 // result of the "getPublishStatus" endpoint of the "plugins" service.
 func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPublishStatusResponseBody {
@@ -4584,8 +4984,19 @@ func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPubli
 		CursorObservabilityPlugin: res.CursorObservabilityPlugin,
 		HasCollaborators:          res.HasCollaborators,
 		UpToDate:                  res.UpToDate,
+		AutomaticSyncPending:      res.AutomaticSyncPending,
 		LastPublishedAt:           res.LastPublishedAt,
 		LiveVersion:               res.LiveVersion,
+	}
+	if res.Plugins != nil {
+		body.Plugins = make([]*PluginPublishStatusResponseBody, len(res.Plugins))
+		for i, val := range res.Plugins {
+			if val == nil {
+				body.Plugins[i] = nil
+				continue
+			}
+			body.Plugins[i] = marshalPluginsPluginPublishStatusToPluginPublishStatusResponseBody(val)
+		}
 	}
 	return body
 }
@@ -5407,6 +5818,20 @@ func NewCreatePluginGatewayErrorResponseBody(res *goa.ServiceError) *CreatePlugi
 // the result of the "createPlugin" endpoint of the "plugins" service.
 func NewCreatePluginUnavailableResponseBody(res *goa.ServiceError) *CreatePluginUnavailableResponseBody {
 	body := &CreatePluginUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePluginFailedPreconditionResponseBody builds the HTTP response body
+// from the result of the "updatePlugin" endpoint of the "plugins" service.
+func NewUpdatePluginFailedPreconditionResponseBody(res *goa.ServiceError) *UpdatePluginFailedPreconditionResponseBody {
+	body := &UpdatePluginFailedPreconditionResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6703,6 +7128,171 @@ func NewDownloadPluginPackageUnavailableResponseBody(res *goa.ServiceError) *Dow
 	return body
 }
 
+// NewRotateObservabilityCredentialUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialUnauthorizedResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialUnauthorizedResponseBody {
+	body := &RotateObservabilityCredentialUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialForbiddenResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialForbiddenResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialForbiddenResponseBody {
+	body := &RotateObservabilityCredentialForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialBadRequestResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialBadRequestResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialBadRequestResponseBody {
+	body := &RotateObservabilityCredentialBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialNotFoundResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialNotFoundResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialNotFoundResponseBody {
+	body := &RotateObservabilityCredentialNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialConflictResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialConflictResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialConflictResponseBody {
+	body := &RotateObservabilityCredentialConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialUnsupportedMediaResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialUnsupportedMediaResponseBody {
+	body := &RotateObservabilityCredentialUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialInvalidResponseBody builds the HTTP response
+// body from the result of the "rotateObservabilityCredential" endpoint of the
+// "plugins" service.
+func NewRotateObservabilityCredentialInvalidResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialInvalidResponseBody {
+	body := &RotateObservabilityCredentialInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialInvariantViolationResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialInvariantViolationResponseBody {
+	body := &RotateObservabilityCredentialInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialUnexpectedResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialUnexpectedResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialUnexpectedResponseBody {
+	body := &RotateObservabilityCredentialUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialGatewayErrorResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialGatewayErrorResponseBody {
+	body := &RotateObservabilityCredentialGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialUnavailableResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialUnavailableResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialUnavailableResponseBody {
+	body := &RotateObservabilityCredentialUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDownloadObservabilityPluginUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "downloadObservabilityPlugin" endpoint
 // of the "plugins" service.
@@ -7720,9 +8310,10 @@ func NewGetPluginPayload(id string, sessionToken *string, projectSlugInput *stri
 // payload.
 func NewCreatePluginPayload(body *CreatePluginRequestBody, sessionToken *string, projectSlugInput *string) *plugins.CreatePluginPayload {
 	v := &plugins.CreatePluginPayload{
-		Name:        *body.Name,
-		Slug:        body.Slug,
-		Description: body.Description,
+		Name:            *body.Name,
+		Slug:            body.Slug,
+		Description:     body.Description,
+		AutoSyncEnabled: body.AutoSyncEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -7734,10 +8325,11 @@ func NewCreatePluginPayload(body *CreatePluginRequestBody, sessionToken *string,
 // payload.
 func NewUpdatePluginPayload(body *UpdatePluginRequestBody, sessionToken *string, projectSlugInput *string) *plugins.UpdatePluginPayload {
 	v := &plugins.UpdatePluginPayload{
-		ID:          *body.ID,
-		Name:        *body.Name,
-		Slug:        *body.Slug,
-		Description: body.Description,
+		ID:              *body.ID,
+		Name:            *body.Name,
+		Slug:            *body.Slug,
+		Description:     body.Description,
+		AutoSyncEnabled: body.AutoSyncEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -7760,10 +8352,11 @@ func NewDeletePluginPayload(id string, sessionToken *string, projectSlugInput *s
 // payload.
 func NewAddPluginServerPayload(body *AddPluginServerRequestBody, sessionToken *string, projectSlugInput *string) *plugins.AddPluginServerPayload {
 	v := &plugins.AddPluginServerPayload{
-		PluginID:    *body.PluginID,
-		ToolsetID:   body.ToolsetID,
-		McpServerID: body.McpServerID,
-		DisplayName: body.DisplayName,
+		PluginID:        *body.PluginID,
+		ToolsetID:       body.ToolsetID,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		DisplayName:     body.DisplayName,
 	}
 	if body.Policy != nil {
 		v.Policy = *body.Policy
@@ -7831,6 +8424,14 @@ func NewSetPluginAssignmentsPayload(body *SetPluginAssignmentsRequestBody, sessi
 	for i, val := range body.PrincipalUrns {
 		v.PrincipalUrns[i] = val
 	}
+	if body.InstallModes != nil {
+		v.InstallModes = make(map[string]string, len(body.InstallModes))
+		for key, val := range body.InstallModes {
+			tk := key
+			tv := val
+			v.InstallModes[tk] = tv
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -7853,6 +8454,18 @@ func NewDownloadPluginPackagePayload(pluginID string, platform string, sessionTo
 	v := &plugins.DownloadPluginPackagePayload{}
 	v.PluginID = pluginID
 	v.Platform = platform
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewRotateObservabilityCredentialPayload builds a plugins service
+// rotateObservabilityCredential endpoint payload.
+func NewRotateObservabilityCredentialPayload(body *RotateObservabilityCredentialRequestBody, sessionToken *string, projectSlugInput *string) *plugins.RotateObservabilityCredentialPayload {
+	v := &plugins.RotateObservabilityCredentialPayload{
+		PreviousKeyFate: *body.PreviousKeyFate,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -7971,6 +8584,9 @@ func ValidateAddPluginServerRequestBody(body *AddPluginServerRequestBody) (err e
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy", *body.Policy, []any{"required", "optional"}))
@@ -8016,6 +8632,25 @@ func ValidateSetPluginAssignmentsRequestBody(body *SetPluginAssignmentsRequestBo
 	}
 	if body.PluginID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", *body.PluginID, goa.FormatUUID))
+	}
+	for _, v := range body.InstallModes {
+		if !(v == "required" || v == "default" || v == "available") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.install_modes[key]", v, []any{"required", "default", "available"}))
+		}
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialRequestBody runs the validations
+// defined on RotateObservabilityCredentialRequestBody
+func ValidateRotateObservabilityCredentialRequestBody(body *RotateObservabilityCredentialRequestBody) (err error) {
+	if body.PreviousKeyFate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_key_fate", "body"))
+	}
+	if body.PreviousKeyFate != nil {
+		if !(*body.PreviousKeyFate == "revoke_immediately" || *body.PreviousKeyFate == "grace") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.previous_key_fate", *body.PreviousKeyFate, []any{"revoke_immediately", "grace"}))
+		}
 	}
 	return
 }

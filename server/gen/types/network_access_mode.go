@@ -7,5 +7,6 @@
 
 package types
 
-// The network surfaces through which a Gram-hosted MCP server may be reached.
+// The network surfaces through which a Speakeasy-hosted MCP server may be
+// reached.
 type NetworkAccessMode string

@@ -14,8 +14,11 @@ type RouteSurface string
 type RouteID string
 
 const (
-	RouteSurfaceMCP  RouteSurface = "mcp"
-	RouteSurfaceXMCP RouteSurface = "xmcp"
+	RouteSurfaceMCP RouteSurface = "mcp"
+	// A gateway addressed by agent rather than by slug. Its own prefix, not a
+	// reserved slug under /mcp, so it can never be shadowed by a real server
+	// whose slug happens to be "agent".
+	RouteSurfaceAgentMCP RouteSurface = "agentmcp"
 
 	RouteRuntime              RouteID = "runtime"
 	RouteInstall              RouteID = "install"
@@ -45,6 +48,9 @@ var privateRoutes = []RouteSpec{
 	{Surface: RouteSurfaceMCP, ID: RouteRuntime, Method: http.MethodDelete, Path: "/mcp/{mcpSlug}"},
 	{Surface: RouteSurfaceMCP, ID: RouteRuntime, Method: http.MethodGet, Path: "/mcp/{mcpSlug}"},
 	{Surface: RouteSurfaceMCP, ID: RouteRuntime, Method: http.MethodPost, Path: "/mcp/{mcpSlug}"},
+	{Surface: RouteSurfaceMCP, ID: RouteRuntime, Method: http.MethodDelete, Path: "/mcp/{mcpSlug}/"},
+	{Surface: RouteSurfaceMCP, ID: RouteRuntime, Method: http.MethodGet, Path: "/mcp/{mcpSlug}/"},
+	{Surface: RouteSurfaceMCP, ID: RouteRuntime, Method: http.MethodPost, Path: "/mcp/{mcpSlug}/"},
 	{Surface: RouteSurfaceMCP, ID: RouteInstall, Method: http.MethodGet, Path: "/mcp/{mcpSlug}/install"},
 	{Surface: RouteSurfaceMCP, ID: RouteInstallScript, Method: http.MethodGet, Path: "/mcp/install-page-{hash}.js"},
 	{Surface: RouteSurfaceMCP, ID: RouteProtectedResource, Method: http.MethodGet, Path: wellknown.OAuthProtectedResourcePath + "/mcp/{mcpSlug}"},
@@ -62,22 +68,16 @@ var privateRoutes = []RouteSpec{
 	{Surface: RouteSurfaceMCP, ID: RouteToken, Method: http.MethodPost, Path: "/mcp/{mcpSlug}/token"},
 	{Surface: RouteSurfaceMCP, ID: RouteRevoke, Method: http.MethodPost, Path: "/mcp/{mcpSlug}/revoke"},
 
-	{Surface: RouteSurfaceXMCP, ID: RouteRuntime, Method: http.MethodDelete, Path: "/x/mcp/{slug}"},
-	{Surface: RouteSurfaceXMCP, ID: RouteRuntime, Method: http.MethodGet, Path: "/x/mcp/{slug}"},
-	{Surface: RouteSurfaceXMCP, ID: RouteRuntime, Method: http.MethodPost, Path: "/x/mcp/{slug}"},
-	{Surface: RouteSurfaceXMCP, ID: RouteInstall, Method: http.MethodGet, Path: "/x/mcp/{mcpSlug}/install"},
-	{Surface: RouteSurfaceXMCP, ID: RouteProtectedResource, Method: http.MethodGet, Path: wellknown.OAuthProtectedResourcePath + "/x/mcp/{mcpSlug}"},
-	{Surface: RouteSurfaceXMCP, ID: RouteAuthorizationServer, Method: http.MethodGet, Path: wellknown.OAuthAuthorizationServerPath + "/x/mcp/{mcpSlug}"},
-	{Surface: RouteSurfaceXMCP, ID: RouteRegister, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/register"},
-	{Surface: RouteSurfaceXMCP, ID: RouteAuthorize, Method: http.MethodGet, Path: "/x/mcp/{mcpSlug}/authorize"},
-	{Surface: RouteSurfaceXMCP, ID: RouteConnect, Method: http.MethodGet, Path: "/x/mcp/{mcpSlug}/connect"},
-	{Surface: RouteSurfaceXMCP, ID: RouteConnect, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/connect"},
-	{Surface: RouteSurfaceXMCP, ID: RouteConnectRemoteSession, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/connect/remote-session"},
-	{Surface: RouteSurfaceXMCP, ID: RouteConnectMCP, Method: http.MethodDelete, Path: "/x/mcp/{mcpSlug}/connect/mcp"},
-	{Surface: RouteSurfaceXMCP, ID: RouteConnectMCP, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/connect/mcp"},
-	{Surface: RouteSurfaceXMCP, ID: RouteConnectFirstParty, Method: http.MethodGet, Path: "/x/mcp/{mcpSlug}/connect/first-party"},
-	{Surface: RouteSurfaceXMCP, ID: RouteToken, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/token"},
-	{Surface: RouteSurfaceXMCP, ID: RouteRevoke, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/revoke"},
+	// POST only: an agent gateway has no proxied stream and no upstream
+	// session, so it needs neither the GET stream nor the DELETE teardown the
+	// slug surfaces carry. Its members are derived per request, so there is no
+	// install page, and it authenticates with an agent key rather than OAuth,
+	// so it has no authorization-server routes either.
+	{Surface: RouteSurfaceAgentMCP, ID: RouteRuntime, Method: http.MethodPost, Path: "/agent-mcp/{agentID}"},
+	// Minting is authenticated by the agent key; spending the code is not,
+	// because the code is itself the credential — single-use and short-lived.
+	{Surface: RouteSurfaceAgentMCP, ID: RouteInstall, Method: http.MethodPost, Path: "/agent-mcp/{agentID}/install-code"},
+	{Surface: RouteSurfaceAgentMCP, ID: RouteInstallScript, Method: http.MethodGet, Path: "/agent-mcp/install/{code}"},
 }
 
 var privateRouteMatcher = newPrivateRouteMatcher()
@@ -104,14 +104,23 @@ func IsPrivateRoute(method, requestPath string) bool {
 }
 
 func isReservedGlobalPath(method, requestPath string) bool {
-	if strings.HasSuffix(requestPath, "/") || strings.Contains(requestPath, "//") || strings.Contains(requestPath, "/./") || strings.Contains(requestPath, "/../") {
+	if strings.Contains(requestPath, "//") || strings.Contains(requestPath, "/./") || strings.Contains(requestPath, "/../") {
 		return true
+	}
+
+	// Only the slug-scoped runtime accepts a trailing slash; OAuth, metadata,
+	// and agent routes retain their exact paths.
+	if strings.HasSuffix(requestPath, "/") {
+		slug, runtimePrefix := strings.CutPrefix(requestPath, "/mcp/")
+		slug = strings.TrimSuffix(slug, "/")
+		if !runtimePrefix || slug == "" || strings.Contains(slug, "/") {
+			return true
+		}
 	}
 	for _, callback := range []string{
 		"/mcp/idp_callback",
 		"/mcp/remote_login_callback",
-		"/x/mcp/idp_callback",
-		"/x/mcp/remote_login_callback",
+		"/mcp/remote_login_bind",
 	} {
 		if requestPath == callback || strings.HasPrefix(requestPath, callback+"/") {
 			return true

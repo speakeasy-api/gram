@@ -1,41 +1,36 @@
-import { catalogLogoClassName } from "./logo";
+import { CatalogLogo } from "./CatalogLogo";
 import { cn } from "@/lib/utils";
 import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/Card";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { SetupGuideCallout } from "@/components/setup-guide/SetupGuideCallout";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
-import { useSdkClient } from "@/contexts/Sdk";
+import { CatalogInstallButton } from "@/pages/catalog/ServerCard";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { externalMcpSlugFromToolUrn } from "@/pages/catalog/catalogInstall";
 import { filterToHttpRemotes } from "@/pages/catalog/remotes";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import {
-  PulseMCPServer,
-  useIsCatalogServerInstalled,
+  useCatalogInstallations,
   useListMCPCatalog,
 } from "@/pages/catalog/hooks";
+import { parseServerMetadata } from "@/pages/catalog/hooks/serverMetadata";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
-import { useMcpRegistriesGetServerDetails } from "@gram/client/react-query/mcpRegistriesGetServerDetails.js";
-import { Badge } from "@/components/ui/Badge";
+import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Stack } from "@/components/ui/Stack";
-import { useMutation } from "@tanstack/react-query";
-import {
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
-  Loader2,
-  Minus,
-  Plus,
-  Server as ServerIcon,
-  Wrench,
-} from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { ReactNode, useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Minus, Server as ServerIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
+import { Spinner } from "@/components/ui/Spinner";
+import { MCPServerCard } from "@/components/mcp/MCPServerCard";
+import type { ListedMcpServer } from "@/components/mcp/mcp-server-kind";
 
 // Map of server specifiers to their website URLs
 const SERVER_WEBSITE_MAP: Record<string, string> = {
@@ -51,12 +46,12 @@ export function CatalogDetailRoot(): JSX.Element {
   return <Outlet />;
 }
 
-// The endpoint a setup guide is looked up by. Gram installs the streamable-HTTP
-// remote, so that is the URL a guide is most likely keyed on, but guides are
-// published per server rather than per transport: an entry that only lists an
-// SSE endpoint still has one, and would find it under no other key when the
-// guide publishes no registry alias.
-function setupGuideLookupUrl(server: PulseMCPServer): string | undefined {
+// The server's own endpoint: the one shown as its Server URL and the one a
+// setup guide is looked up by. Speakeasy installs the streamable-HTTP remote, so
+// that comes first, but guides are published per server rather than per
+// transport: an entry that only lists an SSE endpoint still has one, and would
+// find it under no other key when the guide publishes no registry alias.
+function primaryRemoteUrl(server: CatalogServer): string | undefined {
   return (
     filterToHttpRemotes(server).remotes?.[0]?.url ?? server.remotes?.[0]?.url
   );
@@ -75,50 +70,33 @@ export default function CatalogDetail(): JSX.Element {
   const { data, isLoading } = useListMCPCatalog();
   const [showAddDialog, setShowAddDialog] = useState(false);
 
+  const queryClient = useQueryClient();
+  const gramProject = useProjectSlugForRequests();
   const { data: deploymentResult, refetch: refetchDeployment } =
-    useLatestDeployment();
+    useLatestDeployment(gramProject ? { gramProject } : undefined, undefined, {
+      enabled: !!gramProject,
+      throwOnError: false,
+    });
   const deployment = deploymentResult?.deployment;
-
-  const { data: toolsetsResult } = useListToolsets();
+  const { installState, liveExternalMcp, instances } =
+    useCatalogInstallations();
 
   const server = useMemo(() => {
     if (!data?.servers || !decodedSpecifier) return null;
-    const allServers = data.servers as PulseMCPServer[];
+    const allServers = data.servers as CatalogServer[];
     return (
       allServers.find((s) => s.registrySpecifier === decodedSpecifier) ?? null
     );
   }, [data, decodedSpecifier]);
 
-  // The catalog list omits per-tool definitions to stay small, so fetch the
-  // full tool list for the detail view separately (cached server-side).
-  const { data: serverDetails } = useMcpRegistriesGetServerDetails(
-    {
-      registryId: server?.registryId ?? "",
-      serverSpecifier: decodedSpecifier,
-    },
-    undefined,
-    { enabled: !!server?.registryId && !!decodedSpecifier },
-  );
-  const detailTools: Tool[] = useMemo(
-    () =>
-      (serverDetails?.tools ?? [])
-        .filter((tool) => !!tool.name)
-        .map((tool) => ({
-          name: tool.name as string,
-          description: tool.description ?? undefined,
-          annotations: tool.annotations as Tool["annotations"],
-        })),
-    [serverDetails],
-  );
-
   const removeServerMutation = useMutation({
     mutationFn: async (slug: string) => {
-      const toolUrn = `tools:externalmcp:${slug}:proxy`;
-
-      // Find and delete any toolsets that use this external MCP
+      // Any tool on this external MCP, not only the proxy tool.
       const toolsets = await client.toolsets.list();
       const matchingToolsets =
-        toolsets.toolsets?.filter((ts) => ts.toolUrns?.includes(toolUrn)) ?? [];
+        toolsets.toolsets?.filter((ts) =>
+          ts.toolUrns?.some((urn) => externalMcpSlugFromToolUrn(urn) === slug),
+        ) ?? [];
 
       // Delete matching toolsets
       await Promise.all(
@@ -137,45 +115,27 @@ export default function CatalogDetail(): JSX.Element {
       });
     },
     onSuccess: async () => {
-      await refetchDeployment();
+      await Promise.all([
+        refetchDeployment(),
+        invalidateAllListToolsets(queryClient),
+        invalidateAllMcpServers(queryClient),
+      ]);
     },
   });
 
-  const meta = server?.meta?.["com.pulsemcp/server"];
-  const versionMeta = server?.meta?.["com.pulsemcp/server-version"];
-  const isOfficial = meta?.isOfficial;
-  const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
+  const versionMeta = server ? parseServerMetadata(server) : undefined;
+  const serverUrl = server ? primaryRemoteUrl(server) : undefined;
   const displayName =
     server?.title ??
     server?.registrySpecifier?.split("/").pop() ??
     decodedSpecifier.split("/").pop();
 
-  // Check if this server is already added to the project
-  const existingExternalMcp = useMemo(() => {
-    if (!deployment?.externalMcps || !server) return null;
-    return deployment.externalMcps.find(
-      (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
-    );
-  }, [deployment?.externalMcps, server]);
-
-  // Also consider origin-backed toolsets as installed — legacy installs
-  // created toolsets stamped with the catalog origin.
-  const hasOriginMatch = useMemo(() => {
-    if (!server) return false;
-    return (toolsetsResult?.toolsets ?? []).some(
-      (toolset) =>
-        toolset.origin?.registrySpecifier === server.registrySpecifier,
-    );
-  }, [toolsetsResult?.toolsets, server]);
-
-  // New installs are remote MCP servers, matched back to the catalog entry by
-  // endpoint URL.
-  const isInstalledByUrl = useIsCatalogServerInstalled();
-
-  const isInstalled =
-    !!existingExternalMcp ||
-    hasOriginMatch ||
-    (!!server && isInstalledByUrl(server));
+  // A deployment attachment only counts when an MCP server still selects it.
+  // Deleting the server leaves the attachment behind otherwise.
+  const install = server ? installState(server) : "unknown";
+  const existingExternalMcp =
+    server && install === "added" ? liveExternalMcp(server) : undefined;
+  const existingServers = server ? instances(server) : undefined;
 
   if (isLoading) {
     return (
@@ -187,18 +147,7 @@ export default function CatalogDetail(): JSX.Element {
             }}
           />
         </Page.Header>
-        <Page.Body>
-          <div className="@container">
-            <div className="grid grid-cols-1 gap-8 @3xl:grid-cols-3">
-              <div className="@3xl:col-span-2">
-                <Skeleton className="h-[400px]" />
-              </div>
-              <div>
-                <Skeleton className="h-[200px]" />
-              </div>
-            </div>
-          </div>
-        </Page.Body>
+        <Page.Body isLoading>{null}</Page.Body>
       </Page>
     );
   }
@@ -233,9 +182,6 @@ export default function CatalogDetail(): JSX.Element {
     );
   }
 
-  const weeklyUsage = meta?.visitorsEstimateMostRecentWeek;
-  const totalUsage = meta?.visitorsEstimateTotal;
-
   return (
     <Page>
       <Page.Header>
@@ -248,7 +194,7 @@ export default function CatalogDetail(): JSX.Element {
       <Page.Body>
         <SetupGuideCallout
           registrySpecifier={server.registrySpecifier}
-          serverUrl={setupGuideLookupUrl(server)}
+          serverUrl={serverUrl}
           iconUrl={server.iconUrl}
         />
         {/* Container query, not a viewport one: the side panel narrows this
@@ -260,18 +206,14 @@ export default function CatalogDetail(): JSX.Element {
               {/* Header */}
               <div className="flex items-start gap-6">
                 <div className="bg-card flex h-24 w-24 shrink-0 items-center justify-center border">
-                  {server.iconUrl ? (
-                    <img
-                      src={server.iconUrl}
-                      alt={displayName}
-                      className={cn(
-                        "h-16 w-16 object-contain",
-                        catalogLogoClassName(server.registrySpecifier),
-                      )}
-                    />
-                  ) : (
-                    <ServerIcon className="text-muted-foreground h-12 w-12" />
-                  )}
+                  <CatalogLogo
+                    server={server}
+                    alt={displayName}
+                    className={cn("h-16 w-16 object-contain")}
+                    fallback={
+                      <ServerIcon className="text-muted-foreground h-12 w-12" />
+                    }
+                  />
                 </div>
                 <div className="min-w-0 flex-1">
                   <Page.Eyebrow className="mb-2" />
@@ -282,10 +224,6 @@ export default function CatalogDetail(): JSX.Element {
                     className="mb-2"
                   >
                     <h1 className="text-display-sm font-thin">{displayName}</h1>
-                    {isOfficial && <Badge>Official</Badge>}
-                    {versionMeta?.isLatest && (
-                      <Badge variant="neutral">Latest</Badge>
-                    )}
                     <ManualSetupBadge server={server} />
                   </Stack>
                   {SERVER_WEBSITE_MAP[server.registrySpecifier] ? (
@@ -303,7 +241,7 @@ export default function CatalogDetail(): JSX.Element {
                     </Text>
                   )}
                   <div className="mt-4">
-                    {isInstalled ? (
+                    {install === "added" ? (
                       <Stack direction="horizontal" gap={2} align="center">
                         {existingExternalMcp && (
                           <Button
@@ -318,7 +256,7 @@ export default function CatalogDetail(): JSX.Element {
                           >
                             <Button.LeftIcon>
                               {removeServerMutation.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <Spinner className="mr-0" />
                               ) : (
                                 <Minus className="h-4 w-4" />
                               )}
@@ -330,23 +268,18 @@ export default function CatalogDetail(): JSX.Element {
                             </Button.Text>
                           </Button>
                         )}
-                        <Button
+                        <CatalogInstallButton
+                          state="added"
                           size="md"
-                          onClick={() => setShowAddDialog(true)}
-                        >
-                          <Button.LeftIcon>
-                            <Plus className="h-4 w-4" />
-                          </Button.LeftIcon>
-                          <Button.Text>Add another</Button.Text>
-                        </Button>
+                          onAdd={() => setShowAddDialog(true)}
+                        />
                       </Stack>
                     ) : (
-                      <Button size="md" onClick={() => setShowAddDialog(true)}>
-                        <Button.LeftIcon>
-                          <Plus className="h-4 w-4" />
-                        </Button.LeftIcon>
-                        <Button.Text>Add</Button.Text>
-                      </Button>
+                      <CatalogInstallButton
+                        state={install}
+                        size="md"
+                        onAdd={() => setShowAddDialog(true)}
+                      />
                     )}
                   </div>
                 </div>
@@ -363,9 +296,6 @@ export default function CatalogDetail(): JSX.Element {
                   </Text>
                 </Card.Content>
               </Card>
-
-              {/* Available Tools */}
-              {detailTools.length > 0 && <ToolsSection tools={detailTools} />}
             </div>
 
             {/* Right Column - Info */}
@@ -373,32 +303,6 @@ export default function CatalogDetail(): JSX.Element {
               <Card>
                 <Card.Content>
                   <div className="divide-y">
-                    {(weeklyUsage || visitorsTotal || totalUsage) && (
-                      <DetailGroup label="Usage">
-                        {weeklyUsage !== undefined && weeklyUsage > 0 && (
-                          <DetailRow label="This Week">
-                            <Text className="font-medium">
-                              {weeklyUsage.toLocaleString()}
-                            </Text>
-                          </DetailRow>
-                        )}
-                        {visitorsTotal !== undefined && visitorsTotal > 0 && (
-                          <DetailRow label="Monthly">
-                            <Text className="font-medium">
-                              {visitorsTotal.toLocaleString()}
-                            </Text>
-                          </DetailRow>
-                        )}
-                        {totalUsage !== undefined && totalUsage > 0 && (
-                          <DetailRow label="All Time">
-                            <Text className="font-medium">
-                              {totalUsage.toLocaleString()}
-                            </Text>
-                          </DetailRow>
-                        )}
-                      </DetailGroup>
-                    )}
-
                     <DetailGroup label="Version & Release">
                       <DetailRow label="Version">
                         <Text className="font-mono">{server.version}</Text>
@@ -413,43 +317,37 @@ export default function CatalogDetail(): JSX.Element {
                       {versionMeta?.publishedAt && (
                         <DetailRow label="Published">
                           <Text>
-                            {new Date(
-                              versionMeta.publishedAt,
-                            ).toLocaleDateString()}
+                            {versionMeta.publishedAt.toLocaleDateString()}
                           </Text>
                         </DetailRow>
                       )}
                       {versionMeta?.updatedAt && (
                         <DetailRow label="Last Updated">
                           <Text>
-                            {new Date(
-                              versionMeta.updatedAt,
-                            ).toLocaleDateString()}
+                            {versionMeta.updatedAt.toLocaleDateString()}
                           </Text>
-                        </DetailRow>
-                      )}
-                      {versionMeta?.source && (
-                        <DetailRow label="Source">
-                          <a
-                            href={
-                              versionMeta.source.startsWith("http")
-                                ? versionMeta.source
-                                : `https://${versionMeta.source}`
-                            }
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary flex items-center gap-1 hover:underline"
-                          >
-                            <Text className="max-w-[150px] truncate text-right">
-                              {versionMeta.source}
-                            </Text>
-                            <ExternalLink className="h-3 w-3 shrink-0" />
-                          </a>
                         </DetailRow>
                       )}
                     </DetailGroup>
 
                     <DetailGroup label="Registry">
+                      {serverUrl ? (
+                        <DetailRow label="Server URL">
+                          <div className="flex min-w-0 items-center gap-1">
+                            <Text
+                              className="truncate font-mono text-xs"
+                              title={serverUrl}
+                            >
+                              {serverUrl.replace(/^https?:\/\//, "")}
+                            </Text>
+                            <CopyButton
+                              text={serverUrl}
+                              size="xs"
+                              tooltip="Copy server URL"
+                            />
+                          </div>
+                        </DetailRow>
+                      ) : null}
                       <DetailRow label="Registry">
                         <div className="flex min-w-0 items-center gap-1">
                           <Text className="truncate font-mono text-xs">
@@ -476,7 +374,11 @@ export default function CatalogDetail(): JSX.Element {
             </div>
           </div>
         </div>
+        {existingServers && existingServers.length > 0 && (
+          <ExistingServers servers={existingServers} />
+        )}
         <AddServerDialog
+          openProviderSetup
           servers={[server]}
           open={showAddDialog}
           onOpenChange={setShowAddDialog}
@@ -486,6 +388,30 @@ export default function CatalogDetail(): JSX.Element {
         />
       </Page.Body>
     </Page>
+  );
+}
+
+/** The project's servers already created from this entry, one card each. */
+function ExistingServers({
+  servers,
+}: {
+  servers: ListedMcpServer[];
+}): JSX.Element {
+  return (
+    <section className="mt-8">
+      <div className="text-eyebrow mb-3">
+        {servers.length === 1
+          ? "1 server in this project"
+          : `${servers.length} servers in this project`}
+      </div>
+      <div className="flex snap-x snap-mandatory gap-6 overflow-x-auto pb-2">
+        {servers.map(({ server, kind }) => (
+          <div key={server.id} className="w-md max-w-full shrink-0 snap-start">
+            <MCPServerCard server={server} kind={kind} showAddressAndStatus />
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -518,193 +444,5 @@ function DetailRow({
       </Text>
       {children}
     </div>
-  );
-}
-
-const INITIAL_TOOLS_SHOWN = 5;
-
-type Tool = {
-  name: string;
-  description?: string;
-  annotations?: {
-    title?: string;
-    readOnlyHint?: boolean;
-    destructiveHint?: boolean;
-    idempotentHint?: boolean;
-    openWorldHint?: boolean;
-  };
-};
-
-// Registry descriptions are often markdown; strip the common inline syntax
-// (heading #s, bold markers, backticks) so the collapsed one-line summary
-// reads as plain text.
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .trim();
-}
-
-function getFirstSentence(text: string): string {
-  // Find the first period followed by a space or end of string
-  const match = text.match(/^[^.]*\./);
-  if (match) {
-    return match[0];
-  }
-  // If no period, return first 100 chars
-  return text.length > 100 ? text.slice(0, 100) + "..." : text;
-}
-
-function ToolCard({ tool }: { tool: Tool }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const hasDescription = !!tool.description;
-  const plainDescription = tool.description
-    ? stripMarkdown(tool.description)
-    : "";
-  const firstSentence = plainDescription
-    ? getFirstSentence(plainDescription)
-    : "";
-  const hasMoreContent =
-    !!plainDescription && plainDescription.length > firstSentence.length;
-
-  return (
-    <div className="bg-muted/50 flex flex-col gap-1 overflow-hidden p-3">
-      <button
-        onClick={() => {
-          void (hasMoreContent && setIsExpanded(!isExpanded));
-        }}
-        className={`flex w-full flex-col gap-1 text-left ${hasMoreContent ? "cursor-pointer" : "cursor-default"}`}
-      >
-        <Stack
-          direction="horizontal"
-          gap={2}
-          align="center"
-          justify="space-between"
-          className="w-full"
-        >
-          <Stack
-            direction="horizontal"
-            gap={2}
-            align="center"
-            className="flex-wrap"
-          >
-            <Text className="font-mono text-sm font-medium">
-              {tool.annotations?.title || tool.name}
-            </Text>
-            {tool.annotations?.readOnlyHint && (
-              <Badge variant="neutral" background className="text-xs">
-                Read-only
-              </Badge>
-            )}
-            {tool.annotations?.destructiveHint &&
-              !tool.annotations?.readOnlyHint && (
-                <Badge variant="warning" className="text-xs">
-                  Destructive
-                </Badge>
-              )}
-            {tool.annotations?.idempotentHint &&
-              !tool.annotations?.readOnlyHint && (
-                <Badge variant="information" className="text-xs">
-                  Idempotent
-                </Badge>
-              )}
-            {!tool.annotations?.readOnlyHint &&
-              !tool.annotations?.destructiveHint &&
-              !tool.annotations?.idempotentHint && (
-                <Badge variant="information" background className="text-xs">
-                  Write
-                </Badge>
-              )}
-          </Stack>
-          {hasMoreContent && (
-            <motion.div
-              animate={{ rotate: isExpanded ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <ChevronDown className="text-muted-foreground h-4 w-4" />
-            </motion.div>
-          )}
-        </Stack>
-        <AnimatePresence mode="wait">
-          {hasDescription && !isExpanded && (
-            <motion.div
-              key="collapsed"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Text small muted>
-                {firstSentence}
-              </Text>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </button>
-      <AnimatePresence>
-        {isExpanded && tool.description && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="mt-2 border-t pt-2">
-              <Text
-                small
-                className="prose prose-sm max-w-none whitespace-pre-wrap"
-              >
-                {tool.description}
-              </Text>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function ToolsSection({ tools }: { tools: Tool[] }) {
-  const [showAll, setShowAll] = useState(false);
-  const hasMore = tools.length > INITIAL_TOOLS_SHOWN;
-  const visibleTools = showAll ? tools : tools.slice(0, INITIAL_TOOLS_SHOWN);
-
-  return (
-    <Card>
-      <Card.Header>
-        <Card.Title>
-          <Stack direction="horizontal" gap={2} align="center">
-            <Wrench className="h-4 w-4" />
-            Available Tools ({tools.length})
-          </Stack>
-        </Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <div className="space-y-3">
-          {visibleTools.map((tool) => (
-            <ToolCard key={tool.name} tool={tool} />
-          ))}
-        </div>
-        {hasMore && (
-          <button
-            onClick={() => setShowAll(!showAll)}
-            className="text-muted-foreground hover:text-foreground mt-4 flex w-full items-center justify-center gap-1 text-sm transition-colors"
-          >
-            {showAll ? (
-              <>
-                Show less <ChevronUp className="h-4 w-4" />
-              </>
-            ) : (
-              <>
-                Show {tools.length - INITIAL_TOOLS_SHOWN} more tools{" "}
-                <ChevronDown className="h-4 w-4" />
-              </>
-            )}
-          </button>
-        )}
-      </Card.Content>
-    </Card>
   );
 }

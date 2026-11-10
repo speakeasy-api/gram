@@ -148,30 +148,70 @@ export const SLACK_CAPABILITY_GROUPS: readonly SlackCapabilityGroup[] = [
   },
 ];
 
+/**
+ * When a Slack assistant replies to conversation messages. Mirrors the slack
+ * trigger's `routing` config values.
+ */
+export type SlackReplyMode = "mentions" | "threads" | "channels";
+
+export type SlackReplyModeOption = {
+  value: SlackReplyMode;
+  label: string;
+  description: string;
+};
+
+export const DEFAULT_SLACK_REPLY_MODE: SlackReplyMode = "threads";
+
+export const SLACK_REPLY_MODES: readonly SlackReplyModeOption[] = [
+  {
+    value: "threads",
+    label: "When @-mentioned, then for the rest of the thread",
+    description:
+      "After someone @-mentions it, it keeps up with every reply in that thread without another @-mention, and steps out once it's no longer needed. An @-mention brings it back.",
+  },
+  {
+    value: "mentions",
+    label: "Only when @-mentioned",
+    description:
+      "Replies each time someone @-mentions it, catching up on the thread first. Replies without an @-mention are ignored.",
+  },
+  {
+    value: "channels",
+    label: "To any message in its channels",
+    description:
+      "Reads every message in channels it's been added to and decides when to chime in. Busy channels mean a lot of activity.",
+  },
+];
+
+export function isSlackReplyMode(value: unknown): value is SlackReplyMode {
+  return SLACK_REPLY_MODES.some((m) => m.value === value);
+}
+
+export function slackReplyModeLabel(value: unknown): string | undefined {
+  return SLACK_REPLY_MODES.find((m) => m.value === value)?.label;
+}
+
+/**
+ * Slack event types the reply mode governs. They are never listed in a slack
+ * trigger's `event_types` once a reply mode is set.
+ */
+export const SLACK_CONVERSATION_EVENT_TYPES: readonly string[] = [
+  "message",
+  "app_mention",
+];
+
+/**
+ * Extra Slack events that wake an assistant besides the conversation messages
+ * its reply mode covers.
+ */
 export type SlackEventGroup = {
   slug: string;
   label: string;
   description: string;
   eventTypes: readonly string[];
-  noisy?: boolean;
 };
 
 export const SLACK_EVENT_GROUPS: readonly SlackEventGroup[] = [
-  {
-    slug: "mentions",
-    label: "When @-mentioned",
-    description:
-      "Wake up only when someone @-mentions the assistant in a channel.",
-    eventTypes: ["app_mention"],
-  },
-  {
-    slug: "messages",
-    label: "Every message",
-    description:
-      "Wake up on every message in any channel or DM the assistant can see. Pair with a narrower filter — without one this fires constantly.",
-    eventTypes: ["message"],
-    noisy: true,
-  },
   {
     slug: "reactions",
     label: "Emoji reactions",

@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { IdentityLink } from "@/components/identity-link";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { Page } from "@/components/page-layout";
@@ -30,7 +31,7 @@ import {
   formatUsd,
   parseRuleUrn,
   ruleStatusOf,
-  targetSummary,
+  matchesRuleSearch,
   usageByRuleId,
   type RuleAction,
   type RuleDraft,
@@ -307,11 +308,7 @@ function RulesTab({
         return false;
       }
       if (!q) return true;
-      return (
-        r.name.toLowerCase().includes(q) ||
-        r.description.toLowerCase().includes(q) ||
-        targetSummary(r.target).toLowerCase().includes(q)
-      );
+      return matchesRuleSearch(r, q);
     });
   }, [rules, query, actionFilter]);
 
@@ -427,7 +424,7 @@ function buildRuleColumns({
       width: "0.6fr",
       render: (rule) => (
         <span className={cn("text-muted-foreground text-sm", dim(rule))}>
-          {WINDOW_LABELS[rule.windowKind]}
+          {enumPresentation(WINDOW_LABELS, rule.windowKind, "Unknown")}
         </span>
       ),
     },

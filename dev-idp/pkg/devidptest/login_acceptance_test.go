@@ -18,7 +18,7 @@ const fixtureRedirectURI = "http://localhost:8080/callback"
 // TestLoginClient_AuthCodeFlowWithoutPKCE drives the non-interactive login
 // flow end-to-end: the statically provisioned login client authorizes with no
 // code_challenge and without pre-registering, and the issued code is
-// exchangeable without a code_verifier. This is the shape the Gram server's
+// exchangeable without a code_verifier. This is the shape the Speakeasy server's
 // BuildAuthorizationURL produces — it sends no PKCE parameters.
 func TestLoginClient_AuthCodeFlowWithoutPKCE(t *testing.T) {
 	t.Parallel()

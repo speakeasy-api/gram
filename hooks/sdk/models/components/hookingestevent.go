@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Type - Canonical Gram hook event type.
+// Type - Canonical Speakeasy hook event type.
 type Type string
 
 const (
@@ -26,6 +26,7 @@ const (
 	TypeUsageReported        Type = "usage.reported"
 	TypeSkillActivated       Type = "skill.activated"
 	TypeNotificationReported Type = "notification.reported"
+	TypeClientDeliveryFailed Type = "client.delivery_failed"
 )
 
 func (e Type) ToPointer() *Type {
@@ -62,6 +63,8 @@ func (e *Type) UnmarshalJSON(data []byte) error {
 	case "skill.activated":
 		fallthrough
 	case "notification.reported":
+		fallthrough
+	case "client.delivery_failed":
 		*e = Type(v)
 		return nil
 	default:
@@ -69,11 +72,11 @@ func (e *Type) UnmarshalJSON(data []byte) error {
 	}
 }
 
-// HookIngestEvent - Canonical Gram feature event.
+// HookIngestEvent - Canonical Speakeasy feature event.
 type HookIngestEvent struct {
 	// RFC3339 timestamp from the local agent. Defaults to receive time when absent.
 	OccurredAt *time.Time `json:"occurred_at,omitzero"`
-	// Canonical Gram hook event type.
+	// Canonical Speakeasy hook event type.
 	Type Type `json:"type"`
 }
 

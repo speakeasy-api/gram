@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
@@ -41,7 +42,6 @@ var adminGenericWritableFeatures = []productfeatures.Feature{
 	productfeatures.FeatureAIPlatformPushIntegrations,
 	productfeatures.FeaturePlatformMCP,
 	productfeatures.FeatureCustomerManagedEncryptionKeys,
-	productfeatures.FeatureConsentToolFiltering,
 	productfeatures.FeatureSessionPortability,
 }
 
@@ -54,13 +54,37 @@ func TestAttach_MountsOrganizationFeaturesRoutes(t *testing.T) {
 	Attach(mux, svc)
 
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
-		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest(method, "/admin/organization.features", nil))
-		require.Equal(t, http.StatusUnauthorized, rec.Code)
+		for _, cookie := range []string{"", constants.SessionCookie} {
+			req := httptest.NewRequest(method, "/admin/organization.features", bytes.NewBufferString(`{"organization_id":"org_role_rollout","feature_name":"sso","enabled":true}`))
+			if cookie != "" {
+				req.AddCookie(&http.Cookie{Name: cookie, Value: "customer-session"})
+				req.Header.Set("Authorization", "Bearer customer-key")
+			}
+			rec := httptest.NewRecorder()
+			SessionMiddleware(mux).ServeHTTP(rec, req)
+			require.Equal(t, http.StatusUnauthorized, rec.Code)
+		}
 	}
+
+	// A stored admin cookie is not enough: the identity provider must still
+	// attest that its owner belongs to an allowed staff domain.
+	nonstaff := newTestSessionService(t, newTestOIDCClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"sub":"sub-admin","email":"person@external.test","email_verified":true,"hd":"external.test"}`))
+		assert.NoError(t, err)
+	}))
+	nonstaff.tracer = testenv.NewTracerProvider(t).Tracer("admin_test")
+	sessionID := makeAdminFeatureSession(t, t.Context(), nonstaff, "person@external.test")
+	nonstaffMux := goahttp.NewMuxer()
+	Attach(nonstaffMux, nonstaff)
+	req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(`{"organization_id":"org_role_rollout","feature_name":"sso","enabled":true}`))
+	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+	rec := httptest.NewRecorder()
+	SessionMiddleware(nonstaffMux).ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestGetOrganizationFeatures_ReturnsTwentyFields(t *testing.T) {
+func TestGetOrganizationFeatures_ReturnsEveryField(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -90,13 +114,15 @@ func TestGetOrganizationFeatures_ReturnsTwentyFields(t *testing.T) {
 		"skills_enabled": {}, "skill_capture_metadata_only": {}, "ai_platform_push_integrations_enabled": {},
 		"platform_mcp_enabled": {}, "customer_managed_encryption_keys_enabled": {},
 		"remote_session_auto_refresh_enabled": {}, "remote_session_auto_refresh_enforced_enabled": {},
-		"consent_tool_filtering_enabled": {}, "network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
+		"network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
+		"signals_intelligence_enabled": {}, "organization_gateway_disabled": {}, "code_mode_enabled": {}, "provider_setup_enabled": {},
 	}
 	gotKeys := make(map[string]struct{}, len(result))
 	for key := range result {
 		gotKeys[key] = struct{}{}
 	}
 	require.Equal(t, wantKeys, gotKeys)
+	require.False(t, result["provider_setup_enabled"])
 }
 
 func TestSetOrganizationFeature_SkillsAndRefreshSemantics(t *testing.T) {
@@ -205,7 +231,7 @@ func TestSetOrganizationFeature_EnableThenDisableEveryGenericWritableFeature(t *
 	Attach(mux, svc)
 	handler := SessionMiddleware(mux)
 	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
-	require.Len(t, adminGenericWritableFeatures, 15)
+	require.Len(t, adminGenericWritableFeatures, 14)
 	for _, feature := range adminGenericWritableFeatures {
 		setAdminOrganizationFeature(t, handler, sessionID, orgID, feature, true)
 	}
@@ -242,6 +268,7 @@ func TestSetOrganizationFeature_RejectsInvalidRequests(t *testing.T) {
 	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
 
 	for name, body := range map[string]string{
+		"retired feature": `{ "organization_id":"` + orgID + `","feature_name":"automatic-role-distribution","enabled":true}`,
 		"invalid feature": `{"organization_id":"` + orgID + `","feature_name":"not_a_feature","enabled":true}`,
 		"missing enabled": `{"organization_id":"` + orgID + `","feature_name":"logs"}`,
 		"unknown field":   `{"organization_id":"` + orgID + `","feature_name":"logs","enabled":true,"extra":true}`,

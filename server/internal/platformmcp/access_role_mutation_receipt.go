@@ -15,6 +15,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 const maxAccessRoleMutationReceiptPayloadBytes = 16 << 10
@@ -28,6 +30,11 @@ type AccessRoleMutationReceiptResult struct {
 	MCPAccess      MCPConnectSummary `json:"mcp_access"`
 	ResultCategory string            `json:"result_category"`
 	Reconciliation string            `json:"reconciliation"`
+	// SensitiveScopesAdded names the sensitive permissions the write gave the
+	// role that it did not hold before, as the audit log records them. Empty
+	// for every write so far: the MCP and inference role tools grant
+	// mcp:connect and inference:execute, neither of which is sensitive.
+	SensitiveScopesAdded []string `json:"sensitive_scopes_added,omitempty"`
 }
 
 type AccessRoleMutationTransaction func(context.Context, pgx.Tx) (AccessRoleMutationReceiptResult, error)
@@ -41,15 +48,15 @@ func NewAccessRoleMutationReceiptStore(db *pgxpool.Pool) *AccessRoleMutationRece
 	return &AccessRoleMutationReceiptStore{db: db, now: time.Now}
 }
 
-func (s *AccessRoleMutationReceiptStore) ExecuteCreate(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedCreateMCPAccessRole, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
-	return s.execute(ctx, principal, project, operationCreateMCPAccessRole, idempotencyKey, normalized, mutate)
+func (s *AccessRoleMutationReceiptStore) ExecuteCreate(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedCreateMCPAccessRole, charge func(context.Context) error, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
+	return s.execute(ctx, principal, project, operationCreateMCPAccessRole, idempotencyKey, normalized, charge, mutate)
 }
 
-func (s *AccessRoleMutationReceiptStore) ExecuteUpdate(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedUpdateMCPAccessRole, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
-	return s.execute(ctx, principal, project, operationUpdateMCPAccessRole, idempotencyKey, normalized, mutate)
+func (s *AccessRoleMutationReceiptStore) ExecuteUpdate(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedUpdateMCPAccessRole, charge func(context.Context) error, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
+	return s.execute(ctx, principal, project, operationUpdateMCPAccessRole, idempotencyKey, normalized, charge, mutate)
 }
 
-func (s *AccessRoleMutationReceiptStore) execute(ctx context.Context, principal Principal, project ResolvedProject, operation, idempotencyKey string, normalized any, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
+func (s *AccessRoleMutationReceiptStore) execute(ctx context.Context, principal Principal, project ResolvedProject, operation, idempotencyKey string, normalized any, charge func(context.Context) error, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
 	if s == nil || s.db == nil || s.now == nil || mutate == nil || !accessRoleMutationOperation(operation) || idempotencyKey == "" || len(idempotencyKey) > 128 {
 		return OperationReceipt{}, accessRoleMutationInvalid("The access role receipt request is invalid.")
 	}
@@ -57,7 +64,7 @@ func (s *AccessRoleMutationReceiptStore) execute(ctx context.Context, principal 
 	if err != nil {
 		return OperationReceipt{}, accessRoleMutationInvalid("The access role mutation could not be normalized.")
 	}
-	return executeMutationReceipt(ctx, mutationReceiptExecution[AccessRoleMutationReceiptResult]{
+	return executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[AccessRoleMutationReceiptResult]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
 		IdempotencyKey: idempotencyKey, InputHash: inputHash, Label: "access role",
 		Invalid: func(cause error) error {
@@ -88,7 +95,7 @@ func accessRoleMutationInputHash(operation string, normalized any) (string, erro
 }
 
 func accessRoleMutationOperation(operation string) bool {
-	return operation == operationCreateMCPAccessRole || operation == operationUpdateMCPAccessRole
+	return operation == operationCreateMCPAccessRole || operation == operationUpdateMCPAccessRole || operation == operationConfigureInferenceAccessRole
 }
 
 func encodeAccessRoleMutationReceipt(operation string, result AccessRoleMutationReceiptResult) ([]byte, error) {
@@ -139,13 +146,19 @@ func validAccessRoleMutationReceiptResult(operation string, result AccessRoleMut
 	switch operation {
 	case operationCreateMCPAccessRole:
 		expectedCategory = "created"
-	case operationUpdateMCPAccessRole:
+	case operationUpdateMCPAccessRole, operationConfigureInferenceAccessRole:
 		expectedCategory = "updated"
 	default:
 		return false
 	}
 	if result.ResultCategory != expectedCategory {
 		return false
+	}
+	for _, scope := range result.SensitiveScopesAdded {
+		entry, ok := authz.ScopeEntryFor(authz.Scope(scope))
+		if !ok || !entry.Sensitive() {
+			return false
+		}
 	}
 	return result.Reconciliation == "complete" || result.Reconciliation == "pending"
 }

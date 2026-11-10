@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
 const (
@@ -104,6 +105,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 	)
 	flags = append(flags, networkIngressQueueFlags()...)
 	flags = append(flags, networkIngressProviderFlags()...)
+	flags = append(flags, pluginPublicationEmitFlag())
 
 	return &cli.Command{
 		Name:  "network-ingress-worker",
@@ -187,14 +189,15 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if config.ProviderMutationsEnabled && encryptionClient == nil {
 				return errors.New("private ingress encryption key is required when provider mutations are enabled")
 			}
-			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, serviceEnv, "", "")
+			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, serviceEnv, "", "", "")
 			if err != nil {
 				return fmt.Errorf("create Kubernetes client: %w", err)
 			}
 			if k8sClient.Clientset == nil || k8sClient.DynamicClient == nil {
 				return errors.New("private ingress reconciler requires in-cluster Kubernetes clients")
 			}
-			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, config)
+			publicationRequester := plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}
+			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, config, publicationRequester)
 			if err != nil {
 				return err
 			}

@@ -5,10 +5,5 @@
 export const ISSUER_TABS = ["overview", "clients", "settings"] as const;
 export type IssuerTab = (typeof ISSUER_TABS)[number];
 
-export const CLIENT_TABS = [
-  "overview",
-  "mcp-servers",
-  "sessions",
-  "settings",
-] as const;
+export const CLIENT_TABS = ["overview", "mcp-servers", "sessions"] as const;
 export type ClientTab = (typeof CLIENT_TABS)[number];

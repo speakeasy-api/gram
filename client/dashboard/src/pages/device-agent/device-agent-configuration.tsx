@@ -28,6 +28,7 @@ import {
 import { useUpdateDeviceAgentConfigurationMutation } from "@gram/client/react-query/updateDeviceAgentConfiguration.js";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
+import { Switch } from "@/components/ui/Switch";
 import {
   enforcementLayer,
   recordValue,
@@ -38,6 +39,11 @@ import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 const PLATFORMS = [
+  {
+    key: "copilot",
+    label: "GitHub Copilot CLI",
+    description: "Configure GitHub Copilot CLI plugins and MCP settings.",
+  },
   {
     key: "claude_code",
     label: "Claude Code",
@@ -63,6 +69,12 @@ const PLATFORMS = [
   label: string;
   description: string;
 }>;
+
+const ENFORCEMENT_LAYER_LABELS: Record<EnforcementLayer, string> = {
+  off: "Off",
+  user: "User",
+  managed: "Managed",
+};
 
 const MIN_SYNC_INTERVAL_SECONDS = 60;
 const MAX_SYNC_INTERVAL_SECONDS = 86_400;
@@ -110,6 +122,17 @@ function autoUpdateSetting(config: DeviceAgentConfiguration): string {
 function syncIntervalSetting(config: DeviceAgentConfiguration): string {
   const value = config.config.sync_interval_seconds;
   return typeof value === "number" ? String(value) : "60";
+}
+
+// disable_ai_scan is only ever stored as true: turning the scan back on
+// deletes the key so each device's local or MDM setting still applies.
+function aiScanEnabledSetting(config: DeviceAgentConfiguration): boolean {
+  return config.config.disable_ai_scan !== true;
+}
+
+// disable_crash_reports follows disable_ai_scan: stored only as true.
+function crashReportsEnabledSetting(config: DeviceAgentConfiguration): boolean {
+  return config.config.disable_crash_reports !== true;
 }
 
 function blockedVersionsSetting(config: DeviceAgentConfiguration): string {
@@ -222,6 +245,12 @@ function DeviceAgentConfigurationForm({
   const [blockedVersions, setBlockedVersions] = useState(() =>
     blockedVersionsSetting(configuration),
   );
+  const [aiScanEnabled, setAIScanEnabled] = useState(() =>
+    aiScanEnabledSetting(configuration),
+  );
+  const [crashReportsEnabled, setCrashReportsEnabled] = useState(() =>
+    crashReportsEnabledSetting(configuration),
+  );
   const [saveError, setSaveError] = useState<string>();
 
   const mutation = useUpdateDeviceAgentConfigurationMutation({
@@ -255,7 +284,9 @@ function DeviceAgentConfigurationForm({
     autoUpdate !== autoUpdateSetting(configuration) ||
     syncInterval !== syncIntervalSetting(configuration) ||
     pinnedTarget !== stringSetting(configuration, "pinned_target", "") ||
-    blockedVersions !== blockedVersionsSetting(configuration);
+    blockedVersions !== blockedVersionsSetting(configuration) ||
+    aiScanEnabled !== aiScanEnabledSetting(configuration) ||
+    crashReportsEnabled !== crashReportsEnabledSetting(configuration);
   const disabled = mutation.isPending || !canEdit;
 
   const handleSave = () => {
@@ -279,6 +310,17 @@ function DeviceAgentConfigurationForm({
     }
     config.sync_interval_seconds = Number(syncInterval);
 
+    if (aiScanEnabled) {
+      delete config.disable_ai_scan;
+    } else {
+      config.disable_ai_scan = true;
+    }
+    if (crashReportsEnabled) {
+      delete config.disable_crash_reports;
+    } else {
+      config.disable_crash_reports = true;
+    }
+
     if (pinnedTarget.trim()) {
       config.pinned_target = pinnedTarget.trim();
     } else {
@@ -286,9 +328,12 @@ function DeviceAgentConfigurationForm({
     }
 
     // Update channel and blocked versions are Speakeasy-internal release
-    // controls. Non-admins never see the fields, so leave whatever is stored
-    // untouched rather than writing the (unchanged) local state back.
-    if (isPlatformAdmin) {
+    // controls. The server rejects them from non-admins even when unchanged,
+    // and keeps the stored values when they are omitted, so strip them.
+    if (!isPlatformAdmin) {
+      delete config.update_channel;
+      delete config.blocked_versions;
+    } else {
       config.update_channel = updateChannel.trim();
 
       const versions = blockedVersions
@@ -350,7 +395,9 @@ function DeviceAgentConfigurationForm({
                   className="w-40"
                   aria-label={`${platform.label} enforcement layer`}
                 >
-                  <SelectValue />
+                  <SelectValue>
+                    {ENFORCEMENT_LAYER_LABELS[platformLayers[platform.key]!]}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="off">Off</SelectItem>
@@ -370,6 +417,45 @@ function DeviceAgentConfigurationForm({
               </Select>
             </div>
           ))}
+        </div>
+
+        <div className="border-border border-t" />
+
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <Text variant="body" className="font-medium">
+              Shadow AI scan
+            </Text>
+            <Text muted small>
+              Allow scanning unless a device&apos;s local or MDM setting
+              disables it. Turn off to disable scanning across the fleet.
+            </Text>
+          </div>
+          <Switch
+            checked={aiScanEnabled}
+            onCheckedChange={setAIScanEnabled}
+            disabled={disabled}
+            aria-label="Shadow AI scan"
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <Text variant="body" className="font-medium">
+              Crash reports
+            </Text>
+            <Text muted small>
+              Send agent crash reports to Speakeasy unless a device&apos;s local
+              or MDM setting turns them off. Reports carry error text and code
+              locations, never file contents or hostnames.
+            </Text>
+          </div>
+          <Switch
+            checked={crashReportsEnabled}
+            onCheckedChange={setCrashReportsEnabled}
+            disabled={disabled}
+            aria-label="Crash reports"
+          />
         </div>
 
         <div className="border-border border-t" />
@@ -502,7 +588,7 @@ function DeviceAgentConfigurationForm({
           <Text muted small>
             After the first successful fetch, these settings override the same
             non-secret fields from local and MDM configuration. Device identity
-            and credentials always remain local. If Gram is temporarily
+            and credentials always remain local. If Speakeasy is temporarily
             unreachable, agents use their last-known remote configuration; an
             agent without a cached remote configuration falls back to local
             settings.

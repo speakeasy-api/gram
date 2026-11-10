@@ -159,7 +159,7 @@ export class RemoteSessionIssuers extends ClientSDK {
    * listRemoteSessionIssuers remoteSessionIssuers
    *
    * @remarks
-   * List remote_session_issuers in the caller's project.
+   * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.
    */
   async list(
     request?: ListRemoteSessionIssuersRequest | undefined,
@@ -180,7 +180,7 @@ export class RemoteSessionIssuers extends ClientSDK {
    * refreshRemoteSessionIssuerMetadata remoteSessionIssuers
    *
    * @remarks
-   * Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.
+   * Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.
    */
   async refreshMetadata(
     request: RefreshRemoteSessionIssuerMetadataRequest,

@@ -103,7 +103,7 @@ type ListInstancesResult struct {
 	Instances []*LiteLLMInstance
 }
 
-// How LiteLLM behaves when Gram cannot evaluate a request.
+// How LiteLLM behaves when Speakeasy cannot evaluate a request.
 type LiteLLMFailurePosture string
 
 type LiteLLMGuardrailAction string
@@ -137,8 +137,8 @@ type LiteLLMInstanceDiagnostics struct {
 	// Percentage of model requests in the last 24 hours that supplied a
 	// virtual-key email.
 	VirtualKeyEmailPct24h *float64
-	// Percentage of model requests in the last 24 hours that resolved to a Gram
-	// user.
+	// Percentage of model requests in the last 24 hours that resolved to a
+	// Speakeasy user.
 	PlatformUserPct24h *float64
 }
 

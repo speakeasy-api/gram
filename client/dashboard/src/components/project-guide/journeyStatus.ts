@@ -67,19 +67,24 @@ export function hasDefaultPluginServer(
   );
 }
 
+/** The activity row the guide attributes to a governed MCP server. */
+export function findMcpServerActivity(
+  activity: McpServerActivity[] | undefined,
+  server: McpServer | undefined,
+): McpServerActivity | undefined {
+  if (!server?.slug) return undefined;
+  return activity?.find(
+    (entry) =>
+      entry.targetType === "hosted_mcp_server" &&
+      entry.targetId === server.slug,
+  );
+}
+
 export function hasMcpServerActivity(
   activity: McpServerActivity[] | undefined,
   server: McpServer | undefined,
 ): boolean {
-  return Boolean(
-    server?.slug &&
-    activity?.some(
-      (entry) =>
-        entry.targetType === "hosted_mcp_server" &&
-        entry.targetId === server.slug &&
-        entry.totalToolCalls > 0,
-    ),
-  );
+  return (findMcpServerActivity(activity, server)?.totalToolCalls ?? 0) > 0;
 }
 
 export function latestSecretsFinding(

@@ -1,6 +1,5 @@
 ---
 "server": patch
-"dashboard": patch
 ---
 
-Accepts the Okta admin console address (the org hostname with `-admin`) when connecting Okta and maps it to the org, since Okta reports the org address as the issuer. The mismatch error and the field help now say which address to use.
+When the Okta org URL does not match the issuer Okta reports, the error now names the address Okta reports so the admin can enter it.

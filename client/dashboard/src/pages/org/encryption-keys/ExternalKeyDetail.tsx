@@ -8,11 +8,12 @@ import {
   Tabs,
   TabsContent,
 } from "@/components/ui/Tabs";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { activeDetailTab } from "@/lib/detail-tabs";
 import { useOrgRoutes } from "@/routes";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGetGcpKmsKey } from "@gram/client/react-query/getGcpKmsKey";
 import { isNotNotFound } from "@/lib/query-errors";
 import { Link, Navigate, useLocation, useParams } from "react-router";
@@ -157,7 +158,13 @@ export default function ExternalKeyDetail(): JSX.Element {
               {externalKey && (
                 <OverviewTab key={externalKey.id} externalKey={externalKey} />
               )}
-              {isLoading && <Text muted>Loading…</Text>}
+              {isLoading && (
+                <Skeleton label="Loading external key">
+                  <div className="h-5 w-48" />
+                  <div className="h-5 w-96" />
+                  <div className="h-5 w-64" />
+                </Skeleton>
+              )}
             </TabsContent>
             <TabsContent value="signing-keys" className="mt-0">
               <SigningKeysTab externalKeyId={keyId} />
@@ -176,7 +183,13 @@ export default function ExternalKeyDetail(): JSX.Element {
                   <SettingsTab key={externalKey.id} externalKey={externalKey} />
                 </RequireScope>
               )}
-              {isLoading && <Text muted>Loading…</Text>}
+              {isLoading && (
+                <Skeleton label="Loading external key">
+                  <div className="h-5 w-48" />
+                  <div className="h-5 w-96" />
+                  <div className="h-5 w-64" />
+                </Skeleton>
+              )}
             </TabsContent>
           </div>
         </Tabs>

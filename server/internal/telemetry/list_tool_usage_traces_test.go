@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,7 +69,7 @@ func TestListToolUsageTraces_ReturnsHostedShadowLocalAndSkills(t *testing.T) {
 		conversationID: "conv-skill",
 	})
 
-	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Limit: 10,
@@ -168,7 +167,7 @@ func TestListToolUsageTraces_SummaryPathMatchesRawPath(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	summaryPath := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	summaryPath := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  from,
 		To:    to,
 		Limit: 10,
@@ -180,7 +179,7 @@ func TestListToolUsageTraces_SummaryPathMatchesRawPath(t *testing.T) {
 	// A non-empty query forces the raw telemetry_logs path. ":" is present in all
 	// seeded gram_urn values, so it should not change the logical result set.
 	rawPathQuery := ":"
-	rawPath := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	rawPath := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  from,
 		To:    to,
 		Query: &rawPathQuery,
@@ -227,7 +226,7 @@ func TestListToolUsageTraces_DerivesSkillNameFromToolInput(t *testing.T) {
 		conversationID: "conv-skill",
 	})
 
-	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Limit: 10,
@@ -268,7 +267,7 @@ func TestListToolUsageTraces_ClassifiesDirectTunneledMCP(t *testing.T) {
 		statusCode:  200,
 	})
 
-	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:          now.Add(1 * time.Hour).Format(time.RFC3339),
 		TargetTypes: []gen.ToolUsageTargetType{"tunneled_mcp_server"},
@@ -320,7 +319,7 @@ func TestListToolUsageTraces_KeepsClassificationAfterServerDeleted(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:          now.Add(1 * time.Hour).Format(time.RFC3339),
 		TargetTypes: []gen.ToolUsageTargetType{"tunneled_mcp_server"},
@@ -335,6 +334,87 @@ func TestListToolUsageTraces_KeepsClassificationAfterServerDeleted(t *testing.T)
 	require.Equal(t, gen.ToolUsageTargetType("tunneled_mcp_server"), trace.TargetType)
 	require.Equal(t, "postgres-tunnel", trace.TargetID)
 	require.Equal(t, "Tunneled Postgres MCP", trace.TargetLabel)
+}
+
+// TestListToolUsageTraces_ConfiguredServerSelectorsExcludeASameNamedShadowServer
+// pins the separation an mcp_id-scoped search depends on. A shadow row's target
+// id is the name the calling app reported and nothing verifies it, so a
+// personal server someone calls "billing" must never appear in the configured
+// "billing" server's history. Both rows are inserted under the same project and
+// the same name; the configured-server selectors must return only the
+// configured one, and the shadow row must be reachable only by naming it as a
+// shadow server explicitly.
+func TestListToolUsageTraces_ConfiguredServerSelectorsExcludeASameNamedShadowServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	// The configured server's own traffic, recorded under its toolset.
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-20 * time.Minute),
+		toolsetSlug: "billing",
+		toolName:    "charge",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+	// An unrelated server the calling app merely reported as "billing". No URL
+	// resolved it, so it is classified shadow under that reported name.
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-15 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "mallory@example.com",
+		hookSource:     "cursor",
+		toolSource:     "billing",
+		toolName:       "drop_table",
+		result:         `"ok"`,
+		conversationID: "conv-same-name-shadow",
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Both rows are present in the project, so what follows is an exclusion
+	// rather than a row that never landed.
+	all := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:  from,
+		To:    to,
+		Limit: 10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 2
+	})
+	require.Len(t, all.Traces, 2)
+
+	configured := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:               from,
+		To:                 to,
+		HostedToolsetSlugs: []string{"billing"},
+		Limit:              10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
+	})
+	require.Len(t, configured.Traces, 1, "the same-named shadow row must not be folded into the configured server")
+	require.Equal(t, gen.ToolUsageTargetType("hosted_mcp_server"), configured.Traces[0].TargetType)
+	require.Equal(t, "charge", configured.Traces[0].ToolName)
+
+	// Naming the shadow server explicitly, which only the Tool Logs page does,
+	// still reaches it, and reaches only it.
+	shadow := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:              from,
+		To:                to,
+		ShadowServerNames: []string{"billing"},
+		Limit:             10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
+	})
+	require.Len(t, shadow.Traces, 1)
+	require.Equal(t, gen.ToolUsageTargetType("shadow_mcp_server"), shadow.Traces[0].TargetType)
+	require.Equal(t, "drop_table", shadow.Traces[0].ToolName)
 }
 
 func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
@@ -367,7 +447,7 @@ func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
 		customAttrs:    map[string]any{"gram.trigger.instance_id": "trigger_123"},
 	})
 
-	hostedOnly := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	hostedOnly := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:               now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:                 now.Add(1 * time.Hour).Format(time.RFC3339),
 		TargetTypes:        []gen.ToolUsageTargetType{"hosted_mcp_server"},
@@ -380,7 +460,7 @@ func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
 	require.Equal(t, gen.ToolUsageTargetType("hosted_mcp_server"), hostedOnly.Traces[0].TargetType)
 
 	attributeQuery := "conv-shadow"
-	shadowCursorOnly := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	shadowCursorOnly := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:              now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:                now.Add(1 * time.Hour).Format(time.RFC3339),
 		ShadowServerNames: []string{"shadow-db"},
@@ -395,7 +475,7 @@ func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
 	require.Equal(t, "shadow-db", shadowCursorOnly.Traces[0].TargetID)
 	require.Equal(t, "cursor", *shadowCursorOnly.Traces[0].HookSource)
 
-	triggerFiltered := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	triggerFiltered := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 		Filters: []*gen.LogFilter{
@@ -432,7 +512,7 @@ func TestListToolUsageTraces_PaginatesWithOpaqueCursor(t *testing.T) {
 		})
 	}
 
-	page1 := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	page1 := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Limit: 2,
@@ -500,7 +580,7 @@ func TestListToolUsageTraces_PrefersWorstStatusInGroupedTrace(t *testing.T) {
 		},
 	})
 
-	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Limit: 10,
@@ -577,7 +657,7 @@ func TestListToolUsageTraces_StatusFilterExcludesSuccessfulTracesWithStatuslessR
 	// Sanity check: without a status filter both traces are present. A non-empty query
 	// (":" is in every seeded gram_urn) forces the same raw path the status filter uses.
 	rawPathQuery := ":"
-	all := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	all := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Query: &rawPathQuery,
@@ -587,7 +667,7 @@ func TestListToolUsageTraces_StatusFilterExcludesSuccessfulTracesWithStatuslessR
 	})
 	require.Len(t, all.Traces, 2)
 
-	filtered := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	filtered := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 		Filters: []*gen.LogFilter{
@@ -658,7 +738,7 @@ func TestListToolUsageTraces_FiltersByStatus(t *testing.T) {
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
 	// Wait until all three traces are queryable.
-	waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From: from, To: to, Limit: 10,
 	}, func(result *gen.ListToolUsageTracesResult) bool {
 		return len(result.Traces) == 3
@@ -682,7 +762,7 @@ func TestListToolUsageTraces_FiltersByStatus(t *testing.T) {
 			t.Parallel()
 
 			want := len(tc.wantStatus)
-			result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+			result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 				From:     from,
 				To:       to,
 				Statuses: tc.statuses,
@@ -718,7 +798,7 @@ func TestListToolUsageTraces_IncludesTriggerOnlyRowsForTriggerFilter(t *testing.
 		body:              "trigger delivered",
 	})
 
-	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 		Filters: []*gen.LogFilter{
@@ -799,7 +879,7 @@ func insertTriggerOnlyLog(t *testing.T, ctx context.Context, ti *testInstance, p
 	require.NoError(t, err)
 }
 
-func waitForToolUsageTraces(
+func requireToolUsageTraces(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
@@ -808,13 +888,10 @@ func waitForToolUsageTraces(
 ) *gen.ListToolUsageTracesResult {
 	t.Helper()
 
-	var result *gen.ListToolUsageTracesResult
-	var err error
-	require.Eventually(t, func() bool {
-		result, err = ti.service.ListToolUsageTraces(ctx, payload)
-		return err == nil && result != nil && ready(result)
-	}, 2*time.Second, 50*time.Millisecond, "expected tool usage traces to become query-ready, err: %v", errors.Unwrap(err))
+	result, err := ti.service.ListToolUsageTraces(ctx, payload)
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.NotNil(t, result)
+	require.True(t, ready(result), "tool usage traces did not match")
 	return result
 }
 
@@ -872,7 +949,6 @@ func TestListToolUsageTraces_PreservesNameAcrossUnnamedSpans(t *testing.T) {
 		traceID := strings.ReplaceAll(uuid.New().String(), "-", "")
 		for _, name := range names {
 			insertHostedToolEventRow(t, ctx, ti, traceID, now, "payments", name, "")
-			testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 		}
 		// Replay the same spans as a single insert block under a fresh trace ID
 		// to exercise aggregation inside the materialized view as well.
@@ -973,4 +1049,145 @@ func TestListToolUsageTraces_CarriesClientOnBothQueryPaths(t *testing.T) {
 			require.Nil(t, refund.ClientVersion)
 		})
 	}
+}
+
+// Older ingest releases stamped the event name as gram.tool.name on prompt,
+// lifecycle, and unknown hook events (Kit's "prompt"). Those stored rows must
+// not count as tool calls: a session with one prompt and two tool calls
+// reports two.
+func TestListToolUsageTraces_ExcludesStoredNonToolHookEvents(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+	sessionTraceID := uuid.New().String()
+
+	insertSessionEvent := func(at time.Time, traceID, hookSource, eventName string) {
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   uuid.New().String(),
+			timestamp:      at,
+			traceID:        traceID,
+			userEmail:      "frank@example.com",
+			hookSource:     hookSource,
+			toolName:       eventName,
+			conversationID: "conv-prompt-count",
+			customAttrs:    map[string]any{"gram.hook.event": eventName},
+		})
+	}
+	insertSessionEvent(now.Add(-20*time.Minute), sessionTraceID, "openclaw", "SessionStart")
+	insertSessionEvent(now.Add(-19*time.Minute), sessionTraceID, "openclaw", "UserPromptSubmit")
+	insertSessionEvent(now.Add(-18*time.Minute), uuid.New().String(), "kit", "prompt")
+	for i, toolName := range []string{"exec", "read"} {
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   uuid.New().String(),
+			timestamp:      now.Add(-time.Duration(10-i) * time.Minute),
+			traceID:        uuid.New().String(),
+			userEmail:      "frank@example.com",
+			hookSource:     "openclaw",
+			toolName:       toolName,
+			result:         `"ok"`,
+			conversationID: "conv-prompt-count",
+			customAttrs:    map[string]any{"gram.hook.event": "PostToolUse"},
+		})
+	}
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	rawPathQuery := ":"
+	for name, query := range map[string]*string{"summary path": nil, "raw path": &rawPathQuery} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+				From:  from,
+				To:    to,
+				Query: query,
+				Limit: 10,
+				Sort:  "desc",
+			}, func(result *gen.ListToolUsageTracesResult) bool {
+				return len(result.Traces) == 2
+			})
+
+			// Each tool call is its own trace of one row: a prompt event
+			// traces per session, so it never joins a tool call's trace.
+			names := make([]string, 0, len(result.Traces))
+			for _, trace := range result.Traces {
+				names = append(names, trace.ToolName)
+				require.Equal(t, uint64(1), trace.LogCount, trace.ToolName)
+			}
+			require.ElementsMatch(t, []string{"exec", "read"}, names)
+		})
+	}
+}
+
+// OpenClaw reports the MCP server of a call only on its post-call row; the
+// pre-call row of the same trace has no source. The raw path must still
+// classify the call as one shadow MCP call rather than splitting it into an
+// MCP row and a local-tool row. The summary path cannot guarantee this yet:
+// trace_summaries keeps tool_source with any(), so the MV and part merges can
+// keep the pre-call row's empty string.
+func TestListToolUsageTraces_RawPathClassifiesMCPCallWithServerOnPostRowOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	insertOpenClawToolCall := func(traceID string, at time.Time, toolName string, server string) {
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   uuid.New().String(),
+			timestamp:      at,
+			traceID:        traceID,
+			userEmail:      "erin@example.com",
+			hookSource:     "openclaw",
+			toolName:       toolName,
+			conversationID: "conv-openclaw",
+			customAttrs:    map[string]any{"gram.hook.event": "PreToolUse"},
+		})
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   uuid.New().String(),
+			timestamp:      at.Add(time.Second),
+			traceID:        traceID,
+			userEmail:      "erin@example.com",
+			hookSource:     "openclaw",
+			toolSource:     server,
+			toolName:       toolName,
+			result:         `"ok"`,
+			conversationID: "conv-openclaw",
+			customAttrs:    map[string]any{"gram.hook.event": "PostToolUse"},
+		})
+	}
+	insertOpenClawToolCall(uuid.New().String(), now.Add(-10*time.Minute), "speakeasy__execute_tool", "speakeasy")
+	insertOpenClawToolCall(uuid.New().String(), now.Add(-5*time.Minute), "exec", "")
+
+	rawPathQuery := ":"
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
+		Query: &rawPathQuery,
+		Limit: 10,
+		Sort:  "desc",
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 2
+	})
+
+	traces := normalizeToolUsageTraces(result.Traces)
+	mcpCall, ok := traces["shadow_mcp_server:speakeasy:speakeasy__execute_tool"]
+	require.True(t, ok, "the MCP call must classify under its server: %v", traces)
+	require.Equal(t, "speakeasy", mcpCall.TargetLabel)
+	require.Equal(t, "success", mcpCall.HookStatus)
+	require.Equal(t, uint64(2), mcpCall.LogCount)
+
+	nativeCall, ok := traces["local_tool:local:exec"]
+	require.True(t, ok, "a native tool stays a local tool: %v", traces)
+	require.Equal(t, uint64(2), nativeCall.LogCount)
 }

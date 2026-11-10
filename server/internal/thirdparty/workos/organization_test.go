@@ -225,3 +225,52 @@ func TestVerifiedOrganizationDisplayNamePreservesDomain(t *testing.T) {
 		})
 	}
 }
+
+func TestOrganizationDomainStateIsVerified(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, workos.OrganizationDomainStateVerified.IsVerified())
+	require.True(t, workos.OrganizationDomainStateLegacyVerified.IsVerified())
+	require.False(t, workos.OrganizationDomainStatePending.IsVerified())
+	require.False(t, workos.OrganizationDomainState("failed").IsVerified())
+	require.False(t, workos.OrganizationDomainState("").IsVerified())
+}
+
+func TestOrganizationDomainPolicyVerifiedDomains(t *testing.T) {
+	t.Parallel()
+
+	policy := &workos.OrganizationDomainPolicy{Domains: []workos.OrganizationDomain{
+		{Domain: "pending.example.com", State: workos.OrganizationDomainStatePending},
+		{Domain: "example.com", State: workos.OrganizationDomainStateVerified},
+		{Domain: "failed.example.com", State: workos.OrganizationDomainState("failed")},
+		{Domain: "legacy.example.com", State: workos.OrganizationDomainStateLegacyVerified},
+	}}
+	require.Equal(t, []string{"example.com", "legacy.example.com"}, policy.VerifiedDomains())
+
+	empty := &workos.OrganizationDomainPolicy{Domains: nil}
+	require.NotNil(t, empty.VerifiedDomains())
+	require.Empty(t, empty.VerifiedDomains())
+}
+
+func TestOrganizationDomainPolicyVerifiedDomainsNormalizes(t *testing.T) {
+	t.Parallel()
+
+	policy := &workos.OrganizationDomainPolicy{Domains: []workos.OrganizationDomain{
+		{Domain: " Example.COM ", State: workos.OrganizationDomainStateVerified},
+		{Domain: "example.com", State: workos.OrganizationDomainStateLegacyVerified},
+		{Domain: "", State: workos.OrganizationDomainStateVerified},
+		{Domain: "Other.example.com", State: workos.OrganizationDomainStateVerified},
+		{Domain: "Example.org.", State: workos.OrganizationDomainStateVerified},
+		{Domain: "example.org", State: workos.OrganizationDomainStateVerified},
+		{Domain: ".", State: workos.OrganizationDomainStateVerified},
+	}}
+	require.Equal(t, []string{"example.com", "other.example.com", "example.org"}, policy.VerifiedDomains())
+}
+
+func TestNormalizeDomainStripsTrailingDot(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "example.org", workos.NormalizeDomain("Example.org."))
+	require.Equal(t, "example.org", workos.NormalizeDomain(" example.org. "))
+	require.Empty(t, workos.NormalizeDomain("."))
+}

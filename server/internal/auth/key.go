@@ -126,6 +126,11 @@ func GenerateAPIKeyMaterial(keyPrefix string) (plaintext, keyHash, displayPrefix
 // observability-download flows. The generated name embeds the first six token
 // characters while keyPrefix stores the first five, so authentication can
 // verify minting provenance instead of trusting a formerly-unrestricted name.
+//
+// The name shape parsed here is mirrored by the name pattern in
+// RevokePluginHooksAPIKeysByProject / ExpirePluginHooksAPIKeysByProject
+// (server/internal/keys/queries.sql), which is how credential rotation picks
+// the keys it may revoke or expire.
 func IsOrgWidePluginHooksAPIKey(name, key, keyPrefix string) bool {
 	var suffix string
 	switch {
@@ -293,6 +298,13 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading api key details")
 	}
 
+	// Managed Kit credentials were replaced by workload identity. Never let a
+	// historical key re-enter through an ordinary API-key transport, regardless
+	// of its runtime state or the binding's revocation timestamp.
+	if apiKey.SupersededKitCredential {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
 	actor, credential, principalBacked, err := classifyPrincipalAPIKey(apiKey, time.Now())
 	if err != nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
@@ -385,25 +397,32 @@ func principalAPIKeySupportsTransportScopes(requiredScopes []string) bool {
 
 func classifyPrincipalAPIKey(apiKey repo.GetAPIKeyByKeyHashRow, now time.Time) (urn.Principal, contextvalues.PrincipalCredential, bool, error) {
 	var emptyPrincipal urn.Principal
-	profilePresent := apiKey.SubjectUrn.Valid || apiKey.DelegatedGrants != nil || apiKey.DelegatedGrantsVersion.Valid || apiKey.ExpiresAt.Valid
+	// expires_at is deliberately NOT a profile signal. Scoped keys can carry an
+	// expiry too -- an observability credential rotation gives the previous
+	// hooks key a grace window -- and treating that as an agent-principal
+	// profile would fail the validation below and 401 the key on the spot.
+	// Expiry itself is enforced by GetAPIKeyByKeyHash, which never returns an
+	// expired row.
+	profilePresent := apiKey.SubjectUrn.Valid || apiKey.DelegatedGrants != nil || apiKey.DelegatedGrantsVersion.Valid
 	if !profilePresent {
-		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, false, nil
+		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: false}, false, nil
 	}
 	if !apiKey.SubjectUrn.Valid || apiKey.DelegatedGrants == nil || !apiKey.DelegatedGrantsVersion.Valid || !apiKey.ExpiresAt.Valid || !apiKey.CreatedAt.Valid ||
 		len(apiKey.Scopes) != 0 || apiKey.CreatedByUserID == "" || !apiKey.ExpiresAt.Time.After(now) ||
 		!apiKey.ExpiresAt.Time.After(apiKey.CreatedAt.Time) || apiKey.ExpiresAt.Time.After(apiKey.CreatedAt.Time.Add(maxAgentAPIKeyLifetime)) {
-		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, true, errors.New("invalid principal-backed api key profile")
+		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: false}, true, errors.New("invalid principal-backed api key profile")
 	}
 
 	actor, err := urn.ParsePrincipal(apiKey.SubjectUrn.String)
 	if err != nil || actor.Type != urn.PrincipalTypeAgent {
-		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, true, errors.New("invalid principal-backed api key subject")
+		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: false}, true, errors.New("invalid principal-backed api key subject")
 	}
 
 	return actor, contextvalues.PrincipalCredential{
-		AuthorizerUserID:       apiKey.CreatedByUserID,
-		DelegatedGrants:        apiKey.DelegatedGrants,
-		DelegatedGrantsVersion: apiKey.DelegatedGrantsVersion.Int32,
+		AuthorizerUserID:         apiKey.CreatedByUserID,
+		DelegatedGrants:          apiKey.DelegatedGrants,
+		DelegatedGrantsVersion:   apiKey.DelegatedGrantsVersion.Int32,
+		DerivesPolicyAtAdmission: false,
 	}, true, nil
 }
 

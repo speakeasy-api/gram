@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -22,6 +23,31 @@ import {
 } from "./assistanttoolsetref.js";
 
 /**
+ * NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted. This is configuration state, not permission to execute.
+ */
+export const IdentityState = {
+  NeverConfigured: "NEVER_CONFIGURED",
+  Active: "ACTIVE",
+  Unavailable: "UNAVAILABLE",
+} as const;
+/**
+ * NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted. This is configuration state, not permission to execute.
+ */
+export type IdentityState = OpenEnum<typeof IdentityState>;
+
+/**
+ * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.
+ */
+export const RuntimeVersion = {
+  Two: 2,
+  Three: 3,
+} as const;
+/**
+ * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.
+ */
+export type RuntimeVersion = OpenEnum<typeof RuntimeVersion>;
+
+/**
  * The assistant status.
  */
 export const AssistantStatus = {
@@ -31,9 +57,13 @@ export const AssistantStatus = {
 /**
  * The assistant status.
  */
-export type AssistantStatus = ClosedEnum<typeof AssistantStatus>;
+export type AssistantStatus = OpenEnum<typeof AssistantStatus>;
 
 export type Assistant = {
+  /**
+   * The assistant's dedicated agent ID, when it has one.
+   */
+  agentId?: string | undefined;
   /**
    * Creation timestamp.
    */
@@ -47,6 +77,10 @@ export type Assistant = {
    */
   id: string;
   /**
+   * NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted. This is configuration state, not permission to execute.
+   */
+  identityState?: IdentityState | undefined;
+  /**
    * The system instructions for the assistant.
    */
   instructions: string;
@@ -55,7 +89,7 @@ export type Assistant = {
    */
   maxConcurrency: number;
   /**
-   * MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+   * MCP servers attached to the assistant that are not hosted (toolset-backed); hosted servers are listed under toolsets.
    */
   mcpServers: Array<AssistantMCPServerRef>;
   /**
@@ -71,6 +105,10 @@ export type Assistant = {
    */
   projectId: string;
   /**
+   * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.
+   */
+  runtimeVersion: RuntimeVersion;
+  /**
    * Skills attached to the assistant.
    */
   skills: Array<AssistantSkillRef>;
@@ -79,7 +117,7 @@ export type Assistant = {
    */
   status: AssistantStatus;
   /**
-   * Toolsets available to the assistant.
+   * Hosted (toolset-backed) MCP servers attached to the assistant, by toolset slug.
    */
   toolsets: Array<AssistantToolsetRef>;
   /**
@@ -93,26 +131,42 @@ export type Assistant = {
 };
 
 /** @internal */
-export const AssistantStatus$inboundSchema: z.ZodMiniEnum<
-  typeof AssistantStatus
-> = z.enum(AssistantStatus);
+export const IdentityState$inboundSchema: z.ZodMiniType<
+  IdentityState,
+  unknown
+> = openEnums.inboundSchema(IdentityState);
+
+/** @internal */
+export const RuntimeVersion$inboundSchema: z.ZodMiniType<
+  RuntimeVersion,
+  unknown
+> = openEnums.inboundSchemaInt(RuntimeVersion);
+
+/** @internal */
+export const AssistantStatus$inboundSchema: z.ZodMiniType<
+  AssistantStatus,
+  unknown
+> = openEnums.inboundSchema(AssistantStatus);
 
 /** @internal */
 export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
   .pipe(
     z.object({
+      agent_id: z.optional(z.string()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
       created_by_user_id: z.optional(z.string()),
       id: z.string(),
+      identity_state: z.optional(IdentityState$inboundSchema),
       instructions: z.string(),
       max_concurrency: z.int(),
       mcp_servers: z.array(AssistantMCPServerRef$inboundSchema),
       model: z.string(),
       name: z.string(),
       project_id: z.string(),
+      runtime_version: RuntimeVersion$inboundSchema,
       skills: z.array(AssistantSkillRef$inboundSchema),
       status: AssistantStatus$inboundSchema,
       toolsets: z.array(AssistantToolsetRef$inboundSchema),
@@ -124,11 +178,14 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "agent_id": "agentId",
         "created_at": "createdAt",
         "created_by_user_id": "createdByUserId",
+        "identity_state": "identityState",
         "max_concurrency": "maxConcurrency",
         "mcp_servers": "mcpServers",
         "project_id": "projectId",
+        "runtime_version": "runtimeVersion",
         "updated_at": "updatedAt",
         "warm_ttl_seconds": "warmTtlSeconds",
       });

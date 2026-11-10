@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -108,12 +109,10 @@ func (s *ClientAdmissionService) Set(ctx context.Context, principal Principal, p
 		return ClientAdmission{}, err
 	}
 	q := usersessionsrepo.New(tx)
-	// The same row lock the dashboard's issuer writes take, so two concurrent
-	// mode changes serialize rather than interleave their audit snapshots.
-	if _, err := q.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{ID: issuerID, ProjectID: project.ID}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ClientAdmission{}, ErrRegistrationInvalid
-		}
+	// Take the lifecycle locks in advisory-then-row order. This serializes with
+	// EMA preparation and owner binding; the admission mode does not affect
+	// identity-chaining bindings, so changing it is not guarded.
+	if err := lifecycle.LockUserIssuer(ctx, tx, principal.OrganizationID, project.ID, issuerID); err != nil {
 		return ClientAdmission{}, fmt.Errorf("lock platform mcp client admission issuer: %w", err)
 	}
 	existing, err := q.GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{ID: issuerID, ProjectID: project.ID, OrganizationID: principal.OrganizationID})

@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -35,17 +34,16 @@ import (
 )
 
 type Service struct {
-	tracer          trace.Tracer
-	logger          *slog.Logger
-	db              *pgxpool.Pool
-	repo            *repo.Queries
-	variationsRepo  *vr.Queries
-	auth            *auth.Auth
-	authz           *authz.Engine
-	featureChecker  platformtools.FeatureChecker
-	platformExtras  []platformtools.ExternalTool
-	externalMcpRepo *externalmcprepo.Queries
-	templateRepo    *tplRepo.Queries
+	tracer         trace.Tracer
+	logger         *slog.Logger
+	db             *pgxpool.Pool
+	repo           *repo.Queries
+	variationsRepo *vr.Queries
+	auth           *auth.Auth
+	authz          *authz.Engine
+	featureChecker platformtools.FeatureChecker
+	platformExtras []platformtools.ExternalTool
+	templateRepo   *tplRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -62,17 +60,16 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("tools"))
 
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/tools"),
-		logger:          logger,
-		db:              db,
-		repo:            repo.New(db),
-		variationsRepo:  vr.New(db),
-		auth:            auth.New(logger, db, sessions, authzEngine),
-		authz:           authzEngine,
-		featureChecker:  featureChecker,
-		platformExtras:  platformExtras,
-		externalMcpRepo: externalmcprepo.New(db),
-		templateRepo:    tplRepo.New(db),
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/tools"),
+		logger:         logger,
+		db:             db,
+		repo:           repo.New(db),
+		variationsRepo: vr.New(db),
+		auth:           auth.New(logger, db, sessions, authzEngine),
+		authz:          authzEngine,
+		featureChecker: featureChecker,
+		platformExtras: platformExtras,
+		templateRepo:   tplRepo.New(db),
 	}
 }
 
@@ -129,9 +126,10 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		NextCursor: nil,
 	}
 
-	toolKinds := map[urn.ToolKind]any{}
+	toolKinds := make(map[urn.ToolKind]any)
 	for _, t := range payload.ToolTypes {
 		switch t {
+		// The external MCP kind stays a valid filter value but matches no tools.
 		case types.ToolType(urn.ToolKindHTTP),
 			types.ToolType(urn.ToolKindFunction),
 			types.ToolType(urn.ToolKindPrompt),
@@ -192,19 +190,6 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			s.featureChecker,
 			s.platformExtras...,
 		)...)
-	}
-
-	if _, ok := toolKinds[urn.ToolKindExternalMCP]; ok {
-		tools, err := s.getExternalMCPTools(ctx, getExternalMCPToolsParams{
-			projectID:    *authCtx.ProjectID,
-			urnPrefix:    urnPrefix,
-			deploymentID: payload.DeploymentID,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		result.Tools = append(result.Tools, tools...)
 	}
 
 	err := mv.ApplyVariations(ctx, s.logger, s.db, *authCtx.ProjectID, nil, result.Tools)
@@ -446,85 +431,6 @@ func (s *Service) getPromptTemplates(ctx context.Context, params getPromptTempla
 				Canonical:     nil,
 				Variation:     nil,
 				Annotations:   nil,
-			},
-		})
-	}
-
-	return result, nil
-}
-
-type getExternalMCPToolsParams struct {
-	projectID    uuid.UUID
-	urnPrefix    pgtype.Text
-	deploymentID *string
-}
-
-func (s *Service) getExternalMCPTools(
-	ctx context.Context,
-	params getExternalMCPToolsParams,
-) ([]*types.Tool, error) {
-	queryParams := externalmcprepo.ListDirectExternalMCPToolDefinitionsParams{
-		UrnPrefix:    params.urnPrefix,
-		ProjectID:    params.projectID,
-		DeploymentID: uuid.NullUUID{Valid: false, UUID: uuid.Nil},
-	}
-
-	if params.deploymentID != nil {
-		deploymentUUID, err := uuid.Parse(*params.deploymentID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid deployment ID").LogError(ctx, s.logger)
-		}
-		queryParams.DeploymentID = uuid.NullUUID{UUID: deploymentUUID, Valid: true}
-	}
-
-	tools, err := s.externalMcpRepo.ListDirectExternalMCPToolDefinitions(
-		ctx,
-		queryParams,
-	)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list external mcp tools").LogError(ctx, s.logger)
-	}
-
-	result := []*types.Tool{}
-	for _, tool := range tools {
-		result = append(result, &types.Tool{
-			ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{
-				ID:                         tool.ID.String(),
-				ProjectID:                  params.projectID.String(),
-				ToolUrn:                    tool.ToolUrn,
-				Type:                       &tool.Type,
-				Name:                       tool.Name.String,
-				CanonicalName:              tool.Name.String,
-				Description:                tool.Description.String,
-				Schema:                     string(tool.Schema),
-				SchemaVersion:              nil,
-				DeploymentExternalMcpID:    tool.ExternalMcpAttachmentID.String(),
-				DeploymentID:               tool.DeploymentID.String(),
-				RegistryID:                 conv.PtrValOrEmpty(conv.FromNullableUUID(tool.RegistryID), ""),
-				RegistryServerName:         tool.RegistryServerName,
-				RegistrySpecifier:          tool.RegistryServerSpecifier,
-				Slug:                       tool.Slug,
-				RemoteURL:                  tool.RemoteUrl,
-				TransportType:              tool.TransportType.String(),
-				RequiresOauth:              tool.RequiresOauth,
-				OauthVersion:               tool.OauthVersion,
-				OauthAuthorizationEndpoint: conv.FromPGText[string](tool.OauthAuthorizationEndpoint),
-				OauthTokenEndpoint:         conv.FromPGText[string](tool.OauthTokenEndpoint),
-				OauthRegistrationEndpoint:  conv.FromPGText[string](tool.OauthRegistrationEndpoint),
-				OauthScopesSupported:       tool.OauthScopesSupported,
-				CreatedAt:                  tool.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:                  tool.UpdatedAt.Time.Format(time.RFC3339),
-				Confirm:                    nil,
-				ConfirmPrompt:              nil,
-				Summarizer:                 nil,
-				Canonical:                  nil,
-				Variation:                  nil,
-				Annotations: conv.AnnotationsFromColumns(
-					tool.ReadOnlyHint,
-					tool.DestructiveHint,
-					tool.IdempotentHint,
-					tool.OpenWorldHint,
-				),
 			},
 		})
 	}

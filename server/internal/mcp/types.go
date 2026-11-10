@@ -84,6 +84,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 	}
 
 	return &mcpInputs{
+		request:          nil,
 		projectID:        m.ProjectID,
 		organizationID:   "",
 		toolset:          m.Toolset,
@@ -103,6 +104,8 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		// version, so they resolve to the unversioned default.
 		toolVariationsGroupID: nil,
 		mcpServerID:           nil,
+		mcpEndpointID:         nil,
+		attributionServerID:   nil,
 		wrapperRBACResourceID: "",
 		wrapperIsPublic:       nil,
 		metaMcpServerID:       "",
@@ -111,10 +114,12 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		// record some real client wrote for the same toolset and session,
 		// which would attribute an agent-workflow call to that client.
 		clientInfoScope:          internalClientInfoScope,
-		skipProxyTools:           false,
+		toolsetID:                uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		toolsetIsPublic:          nil,
 		tags:                     nil,
 		protocolVersion:          mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
 		identityCoverageRecorded: false,
 		toolSelection:            nil,
+		skillsOverMCP:            nil,
 	}
 }

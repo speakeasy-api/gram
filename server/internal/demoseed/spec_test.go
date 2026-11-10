@@ -1,6 +1,8 @@
 package demoseed
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -18,33 +20,18 @@ func TestDefaultSpecMatchesDemoConstant(t *testing.T) {
 	require.Equal(t, constants.DemoOrganizationID, DefaultSpec().OrgID)
 }
 
-// Production runs the scripts as written; a default rewrite that changed even
-// one byte would mean the daily prod run is executing something other than
-// what is reviewed in postgres.sql / clickhouse.sql.
-func TestDefaultSpecRewriteIsIdentity(t *testing.T) {
+// The seed must build every tenant identifier from its Spec. A demo
+// identifier hardcoded in the seed would write the local or test tenant's rows
+// into the demo org's scope — and, for the local seed, hand a developer's
+// writable org the demo org's id.
+func TestSeedSourceHasNoDemoIdentifiers(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, postgresSQL, DefaultSpec().Rewrite(postgresSQL))
-	require.Equal(t, clickhouseSQL, DefaultSpec().Rewrite(clickhouseSQL))
-}
-
-// A retargeted script must not keep ANY default identifier: one left behind
-// would write that tenant's rows into the demo org's scope — and, for the
-// local seed, would hand a developer's writable org the demo org's id.
-func TestLocalSpecRewritesEveryDefaultIdentifier(t *testing.T) {
-	t.Parallel()
-
-	spec := LocalSpec()
-	require.NoError(t, spec.Validate())
-
-	for _, script := range map[string]string{
-		"postgres.sql":   postgresSQL,
-		"clickhouse.sql": clickhouseSQL,
-	} {
-		rewritten := spec.Rewrite(script)
+	for _, path := range seedSourceFiles(t) {
+		code := stripComments(readFile(t, path))
 		for _, id := range DefaultSpec().Identifiers() {
-			require.NotContains(t, stripComments(rewritten), id,
-				"the local seed script still contains the demo identifier %q", id)
+			require.NotContains(t, code, id,
+				"%s hardcodes the demo identifier %q; build it from the seeder's Spec helpers", path, id)
 		}
 	}
 }
@@ -68,14 +55,45 @@ func TestSpecValidateRejectsCollisions(t *testing.T) {
 	require.NoError(t, DefaultSpec().Validate())
 }
 
-// stripComments drops -- line comments, which document the default tenant by
-// name and would otherwise trip the identifier check.
-func stripComments(script string) string {
-	var sb strings.Builder
-	for line := range strings.Lines(script) {
-		if !strings.HasPrefix(strings.TrimSpace(line), "--") {
-			sb.WriteString(line)
+// seedSourceFiles lists the seed's own code: the Go files that write rows and
+// the sqlc query files. Excluded: spec.go, which defines the identifiers;
+// demoseed.go, the runner, whose advisory lock name every tenant shares on
+// purpose; and tests.
+func seedSourceFiles(t *testing.T) []string {
+	t.Helper()
+
+	goFiles, err := filepath.Glob("*.go")
+	require.NoError(t, err)
+	sqlFiles, err := filepath.Glob("queries/*.sql")
+	require.NoError(t, err)
+
+	var out []string
+	for _, f := range goFiles {
+		if f != "spec.go" && f != "demoseed.go" && !strings.HasSuffix(f, "_test.go") {
+			out = append(out, f)
 		}
+	}
+	return append(out, sqlFiles...)
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return string(b)
+}
+
+// stripComments drops // and -- line comments, which document the default
+// tenant by name.
+func stripComments(code string) string {
+	var sb strings.Builder
+	for line := range strings.Lines(code) {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "--") {
+			continue
+		}
+		sb.WriteString(line)
 	}
 	return sb.String()
 }

@@ -25,13 +25,14 @@ type LogUserSessionClientRevokeEvent struct {
 	ActorSlug        *string
 
 	UserSessionClientURN urn.UserSessionClient
-	ClientID             string //nolint:glint // RFC 7591 client_id (DCR-issued opaque string), distinct from the resource's URN/UUID.
+	ClientID             string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (DCR-issued opaque string), distinct from the resource's URN/UUID.
 	ClientName           string
 }
 
 func (l *Logger) LogUserSessionClientRevoke(ctx context.Context, dbtx repo.DBTX, event LogUserSessionClientRevokeEvent) error {
 	action := ActionUserSessionClientRevoke
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -69,13 +70,14 @@ type LogUserSessionClientCIMDRefreshEvent struct {
 	ActorSlug        *string
 
 	UserSessionClientURN urn.UserSessionClient
-	ClientID             string //nolint:glint // RFC 7591 client_id (for a CIMD client, the metadata document URL), distinct from the resource's URN/UUID.
+	ClientID             string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (for a CIMD client, the metadata document URL), distinct from the resource's URN/UUID.
 	ClientName           string
 }
 
 func (l *Logger) LogUserSessionClientCIMDRefresh(ctx context.Context, dbtx repo.DBTX, event LogUserSessionClientCIMDRefreshEvent) error {
 	action := ActionUserSessionClientCIMDRefresh
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

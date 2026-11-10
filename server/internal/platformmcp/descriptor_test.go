@@ -31,7 +31,7 @@ func TestListProjectsDescriptionDoesNotAdvertiseHiddenResourceSignals(t *testing
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptors := registrar.Descriptors()
 	require.NotEmpty(t, descriptors, "the deployment registers tools even when every dependency is absent")
 
@@ -227,7 +227,7 @@ func TestExternalResourceRegistrationRequiresAuthorizationPolicy(t *testing.T) {
 func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	byName := map[string]ExternalAuthorization{}
 	for _, descriptor := range registrar.For(AudienceExternal) {
 		require.Contains(t, []ExternalAuthorization{ExternalAuthorizationMember, ExternalAuthorizationOrgAdmin}, descriptor.Meta.Authorization, descriptor.Name)
@@ -236,15 +236,36 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	for _, name := range []string{
 		"get_platform_context", "list_projects", "find_mcp", "get_mcp",
 		"request_mcp_review", "get_my_mcp_review_request",
-		"get_project_overview", "get_mcp_diagnostics", "list_recent_tool_calls",
-		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
+		"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls", "list_attribute_keys",
+		"search_speakeasy_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
-		"create_skill", "add_skill_version", "update_skill_metadata",
-		"list_my_sessions", "continue_session",
+		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
+		"list_my_sessions", "continue_session", "create_session_handoff_link", searchChatsToolName, readChatToolName,
+		// The analytics reads hold the caller to project:read in the handler.
+		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
+		// The widget tools hold the caller to project:read in the handler; the
+		// widgets service's creator-or-write rule decides updates and deletes.
+		listWidgetsToolName, getWidgetToolName, saveWidgetToolName, duplicateWidgetToolName, deleteWidgetToolName,
+		// The dashboard tools hold the caller to project:read; the
+		// dashboards service decides creator or project:write for a change.
+		listDashboardsToolName, getDashboardToolName, saveDashboardToolName, duplicateDashboardToolName,
+		deleteDashboardToolName, editDashboardLayoutToolName, saveDashboardFiltersToolName,
 	} {
 		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
 	}
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["distribute_skill"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["undistribute_skill"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["link_skill_to_mcp"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["unlink_skill_from_mcp"])
+	for _, name := range []string{"list_skill_insights", "compare_skill_versions"} {
+		require.Equal(t, ExternalAuthorizationOrgAdmin, byName[name], "session cost is organization spend: %s", name)
+	}
+	// The individual-call tools hold the caller to log:read on the project in
+	// the handler, matching the dashboard Tool Logs list. log:read is never a
+	// system-role default, so membership alone admits nobody to the rows.
+	for _, name := range []string{"search_tool_calls", "query_mcp_traces"} {
+		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
+	}
 	for _, resource := range registrar.resources {
 		if resource.Meta.servesAudience(AudienceExternal) {
 			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)
@@ -272,6 +293,15 @@ func TestGetPlatformContextPreservesAssistantCallsWithoutExternalGrants(t *testi
 	contextResult, ok := result.(PlatformContext)
 	require.True(t, ok)
 	require.Equal(t, principal.OrganizationID, contextResult.OrganizationID)
+	require.Contains(t, contextResult.Overview, "binding unlinking and rebinding are not available through this server")
+	require.Contains(t, contextResult.Overview, "where the catalogue lists get_xaa_readiness (organization administrators on external clients only)")
+	require.Contains(t, contextResult.Overview, "explicitly unlink affected bindings")
+	require.Contains(t, contextResult.Overview, "blocking_reason=identity_chaining and ema_binding_count greater than zero (can_delete=false)")
+	require.Contains(t, contextResult.Overview, "current generation before retrying deletion")
+	require.Contains(t, contextResult.Overview, "Client deletion and its live preflight are not exposed as Platform MCP tools")
+	require.Contains(t, contextResult.Overview, "do not infer a live binding count")
+	require.Contains(t, contextResult.Overview, "If that workflow is unavailable, stop and contact support")
+	require.Contains(t, contextResult.Overview, "never bypass the binding safeguard")
 	require.Empty(t, contextResult.AvailableWorkflows)
 	require.Empty(t, contextResult.RequestableWorkflows)
 }
@@ -286,8 +316,9 @@ func TestExternalCatalogueFiltersByLiveCapabilities(t *testing.T) {
 		{Name: "mcps", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryMCPRead}},
 		{Name: "skill_write", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoverySkillWrite}},
 		{Name: "admin", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly}},
+		{Name: "admin_mcp", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, DiscoveryScopes: discoveryMCPRead}},
 	}}
-	tools := []*mcp.Tool{{Name: "context"}, {Name: "projects"}, {Name: "mcps"}, {Name: "skill_write"}, {Name: "admin"}}
+	tools := []*mcp.Tool{{Name: "context"}, {Name: "projects"}, {Name: "mcps"}, {Name: "skill_write"}, {Name: "admin"}, {Name: "admin_mcp"}}
 
 	memberCtx := authz.GrantsToContext(t.Context(), []authz.Grant{
 		authz.NewGrant(authz.ScopeProjectRead, "project-1"),
@@ -303,9 +334,14 @@ func TestExternalCatalogueFiltersByLiveCapabilities(t *testing.T) {
 
 	adminCtx := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)})
 	require.Equal(t, []string{"context", "admin"}, toolNames(registrar.FilterExternalTools(adminCtx, principal, tools)))
+	adminMCPContext := authz.GrantsToContext(t.Context(), []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID),
+		authz.NewGrant(authz.ScopeMCPRead, "mcp-1"),
+	})
+	require.Equal(t, []string{"context", "mcps", "admin", "admin_mcp"}, toolNames(registrar.FilterExternalTools(adminMCPContext, principal, tools)))
 
 	rootCtx := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
-	require.Equal(t, []string{"context", "projects", "mcps", "skill_write", "admin"}, toolNames(registrar.FilterExternalTools(rootCtx, principal, tools)))
+	require.Equal(t, []string{"context", "projects", "mcps", "skill_write", "admin", "admin_mcp"}, toolNames(registrar.FilterExternalTools(rootCtx, principal, tools)))
 
 	require.Empty(t, registrar.FilterExternalTools(t.Context(), principal, tools), "missing prepared grants fail closed")
 }
@@ -374,28 +410,73 @@ func names(descriptors []Descriptor) []string {
 func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := map[string]bool{}
 	for _, descriptor := range registrar.For(AudienceAssistant) {
 		admitted[descriptor.Name] = true
 	}
 
-	// Named-plugin distribution is intentionally unavailable until
-	// compatibility deployment. Session recall stays external-only because it
-	// contains user-personal cross-project transcripts. Data exports stay
-	// external-only because creation can send future project data off-platform.
+	// Named-plugin distribution and assignment changes are intentionally
+	// unavailable until compatibility deployment. Session recall stays
+	// external-only because it contains user-personal cross-project
+	// transcripts. Data exports stay external-only because creation can send
+	// future project data off-platform. Network ingress status stays with
+	// connection-scoped org administration. Unlike connection-scoped tools,
+	// get_xaa_readiness reads an org-wide snapshot under live member org-admin
+	// authority, which managed assistants do not have; it stays external-only.
 	for _, name := range []string{
+		upgradeAssistantIdentityToolName,
+		"get_network_ingress",
+		"get_custom_domain_status",
+		"get_xaa_readiness",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
-		"list_plugin_assignments",
-		"list_plugins",
-		"get_plugin",
 		operationSetPluginAssignments,
+		operationCreatePlugin,
+		operationRenamePlugin,
+		operationSetPluginAutoSync,
+		operationRepublishPlugin,
 		"list_my_sessions",
 		"continue_session",
+		"create_session_handoff_link",
+		searchChatsToolName, readChatToolName,
 		"list_data_exports",
 		"create_data_export",
+		pauseDataExportToolName,
+		resumeDataExportToolName,
+		// Changing which tools a server exposes republishes every plugin that
+		// carries it to everyone holding one, so it stays on the surface an
+		// administrator drives directly, like the other distribution writes.
+		addToolsToMCPToolName,
+		removeToolsFromMCPToolName,
+		// Authoring a new server from a project's functions is the same kind
+		// of administrator decision.
+		createMCPFromFunctionsToolName,
+		// Gateways decide which servers people reach through one endpoint,
+		// the same kind of administrator decision.
+		createGatewayToolName,
+		setGatewayMembersToolName,
+		// An assistant is bound to its own project: creating another is
+		// outside its reach, and renaming its own is a decision for a person
+		// with write access to it, not for the assistant.
+		createProjectToolName,
+		renameProjectToolName,
+		// Widget writes are audited under a user; an assistant has no user identity.
+		listWidgetsToolName,
+		getWidgetToolName,
+		saveWidgetToolName,
+		duplicateWidgetToolName,
+		deleteWidgetToolName,
+		// Every dashboard write is audited under a user's email, and the
+		// assistant has no user identity; the reads stay with the writes.
+		listDashboardsToolName,
+		getDashboardToolName,
+		saveDashboardToolName,
+		duplicateDashboardToolName,
+		deleteDashboardToolName,
+		editDashboardLayoutToolName,
+		saveDashboardFiltersToolName,
 	} {
 		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}
@@ -403,14 +484,24 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	// The reads, registration paths, and persisted readiness projections are
 	// connection-less end to end. get_setup_handoff is admitted because the
 	// handoff only carries the caller to the dashboard, which completes setup
-	// under its own session.
+	// under its own session. Plugin reads are admitted so the assistant can
+	// resolve a plugin by name before distributing a skill to it.
 	for _, name := range []string{
 		"get_platform_context",
 		"list_projects",
 		"find_mcp",
 		"get_mcp",
+		"list_plugins",
+		"get_plugin",
+		"list_plugin_assignments",
 		"list_recent_tool_calls",
+		"get_tool_usage_summary",
 		"list_organization_events",
+		"list_chats",
+		"search_users",
+		"get_user_metrics_summary",
+		"search_tool_calls",
+		"list_attribute_keys",
 		"update_mcp_metadata",
 		"register_catalog_mcp",
 		"register_remote_mcp",
@@ -430,10 +521,22 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_risk_exclusions",
 		"get_risk_analysis_status",
 		"list_watchdog_findings",
+		"list_risk_presets",
+		"suggest_risk_policy",
+		"list_risk_findings",
+		"list_risk_findings_by_chat",
+		"get_risk_rule_breakdown",
 		"create_risk_policy",
 		"update_risk_policy",
 		"create_risk_exclusion",
 		"update_risk_exclusion",
+		"list_access_members",
+		"mark_risk_findings_false_positive",
+		"unmark_risk_findings_false_positive",
+		listProjectToolsToolName,
+		describeAnalyticsCatalogToolName,
+		listAnalyticsDimensionValuesToolName,
+		runAnalyticsQueryToolName,
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}
@@ -445,7 +548,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	bindExternalTestPrincipal(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 
@@ -602,4 +705,12 @@ func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
 	schema, err := jsonschema.For[SetMCPClientAdmissionToolInput](nil)
 	require.NoError(t, err)
 	require.Contains(t, schema.Properties["mode"].Description, "presets, open, or disabled")
+}
+
+func TestPlatformOverviewExplainsAssertionReuseSafeguards(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, platformOverview, "use set_workload_assertion_reuse only after explicit confirmation of the exact issuer, desired policy, and organization-wide impact")
+	require.Contains(t, platformOverview, "Reuse of assertions with jti or uti identifiers defaults to disabled")
+	require.Contains(t, platformOverview, "authorized workload administrator must explicitly opt in")
+	require.Contains(t, platformOverview, "Tokens without replay identifiers retain existing exact-token compatibility")
 }

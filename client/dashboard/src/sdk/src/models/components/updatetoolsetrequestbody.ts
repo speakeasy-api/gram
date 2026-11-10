@@ -4,10 +4,32 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * Deprecated: rejected; use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only
+ *
+ * @deprecated enum: Use mcpServers.update instead.
+ */
+export const UpdateToolsetRequestBodyNetworkAccessMode = {
+  PublicOnly: "public_only",
+  Dual: "dual",
+  PrivateOnly: "private_only",
+} as const;
+/**
+ * Deprecated: rejected; use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only
+ *
+ * @deprecated enum: Use mcpServers.update instead.
+ */
+export type UpdateToolsetRequestBodyNetworkAccessMode = ClosedEnum<
+  typeof UpdateToolsetRequestBodyNetworkAccessMode
+>;
 
 export type UpdateToolsetRequestBody = {
   /**
-   * The ID of the custom domain to use for the toolset
+   * Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset
+   *
+   * @deprecated field: Use mcpEndpoints.create or mcpEndpoints.update instead.
    */
   customDomainId?: string | undefined;
   /**
@@ -19,21 +41,33 @@ export type UpdateToolsetRequestBody = {
    */
   description?: string | undefined;
   /**
-   * Whether the toolset is enabled for MCP
+   * Deprecated: rejected; use mcpServers.update. Whether the toolset is enabled for MCP
+   *
+   * @deprecated field: Use mcpServers.update instead.
    */
   mcpEnabled?: boolean | undefined;
   /**
-   * Whether the toolset is public in MCP
+   * Deprecated: rejected; use mcpServers.update. Whether the toolset is public in MCP
+   *
+   * @deprecated field: Use mcpServers.update instead.
    */
   mcpIsPublic?: boolean | undefined;
   /**
-   * The slug of the MCP to use for the toolset
+   * Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset
+   *
+   * @deprecated field: Use mcpEndpoints.create or mcpEndpoints.update instead.
    */
   mcpSlug?: string | undefined;
   /**
    * The new name of the toolset
    */
   name?: string | undefined;
+  /**
+   * Deprecated: rejected; use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only
+   *
+   * @deprecated field: Use mcpServers.update instead.
+   */
+  networkAccessMode?: UpdateToolsetRequestBodyNetworkAccessMode | undefined;
   /**
    * List of prompt template names to include (note: for actual prompts, not tools)
    */
@@ -53,6 +87,12 @@ export type UpdateToolsetRequestBody = {
 };
 
 /** @internal */
+export const UpdateToolsetRequestBodyNetworkAccessMode$outboundSchema:
+  z.ZodMiniEnum<typeof UpdateToolsetRequestBodyNetworkAccessMode> = z.enum(
+    UpdateToolsetRequestBodyNetworkAccessMode,
+  );
+
+/** @internal */
 export type UpdateToolsetRequestBody$Outbound = {
   custom_domain_id?: string | undefined;
   default_environment_slug?: string | undefined;
@@ -61,6 +101,7 @@ export type UpdateToolsetRequestBody$Outbound = {
   mcp_is_public?: boolean | undefined;
   mcp_slug?: string | undefined;
   name?: string | undefined;
+  network_access_mode?: string | undefined;
   prompt_template_names?: Array<string> | undefined;
   resource_urns?: Array<string> | undefined;
   tool_selection_mode?: string | undefined;
@@ -80,6 +121,9 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodMiniType<
     mcpIsPublic: z.optional(z.boolean()),
     mcpSlug: z.optional(z.string()),
     name: z.optional(z.string()),
+    networkAccessMode: z.optional(
+      UpdateToolsetRequestBodyNetworkAccessMode$outboundSchema,
+    ),
     promptTemplateNames: z.optional(z.array(z.string())),
     resourceUrns: z.optional(z.array(z.string())),
     toolSelectionMode: z.optional(z.string()),
@@ -92,6 +136,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodMiniType<
       mcpEnabled: "mcp_enabled",
       mcpIsPublic: "mcp_is_public",
       mcpSlug: "mcp_slug",
+      networkAccessMode: "network_access_mode",
       promptTemplateNames: "prompt_template_names",
       resourceUrns: "resource_urns",
       toolSelectionMode: "tool_selection_mode",

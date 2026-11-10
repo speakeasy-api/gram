@@ -36,7 +36,11 @@ const HIDDEN_PROVIDER_IDS = new Set(["intune", "vanta"]);
 export function isProviderVisible(
   provider: DeviceIntegrationProvider,
 ): boolean {
-  return !HIDDEN_PROVIDER_IDS.has(provider.id);
+  return isProviderIdVisible(provider.id);
+}
+
+export function isProviderIdVisible(providerId: string): boolean {
+  return !HIDDEN_PROVIDER_IDS.has(providerId);
 }
 
 // Role-specific verbs, kept in one place so "synced" never leaks onto a sink

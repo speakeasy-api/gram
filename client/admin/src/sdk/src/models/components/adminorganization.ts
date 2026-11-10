@@ -30,9 +30,13 @@ export type TrialState = ClosedEnum<typeof TrialState>;
  */
 export type AdminOrganization = {
   /**
-   * Gram account type (e.g. free, pro, payg, enterprise).
+   * Speakeasy account type (e.g. free, pro, payg, enterprise).
    */
   accountType: string;
+  /**
+   * Staff-entered link to the organization's adoption dashboard. Absent when none has been set.
+   */
+  adoptionDashboardUrl?: string | undefined;
   /**
    * The creation date of the organization.
    */
@@ -62,9 +66,17 @@ export type AdminOrganization = {
    */
   slug: string;
   /**
+   * Link to the Stripe customer in the Stripe dashboard. Absent when the organization has no Stripe customer or the deployment has no Stripe API key configured.
+   */
+  stripeCustomerDashboardUrl?: string | undefined;
+  /**
    * Stripe customer ID, if billing metadata has a customer.
    */
   stripeCustomerId?: string | undefined;
+  /**
+   * Link to the Stripe subscription in the Stripe dashboard. Absent when the organization has no Stripe subscription or the deployment has no Stripe API key configured.
+   */
+  stripeSubscriptionDashboardUrl?: string | undefined;
   /**
    * Current Stripe subscription ID, if subscribed.
    */
@@ -98,6 +110,10 @@ export type AdminOrganization = {
    */
   whitelisted: boolean;
   /**
+   * Link to the organization in the WorkOS dashboard. Absent when the organization is not linked to WorkOS or the deployment has no WorkOS environment configured.
+   */
+  workosDashboardUrl?: string | undefined;
+  /**
    * WorkOS organization ID, if linked.
    */
   workosId?: string | undefined;
@@ -114,6 +130,7 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     account_type: z.string(),
+    adoption_dashboard_url: z.optional(z.string()),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -126,7 +143,9 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
     member_count: z.int(),
     name: z.string(),
     slug: z.string(),
+    stripe_customer_dashboard_url: z.optional(z.string()),
     stripe_customer_id: z.optional(z.string()),
+    stripe_subscription_dashboard_url: z.optional(z.string()),
     stripe_subscription_id: z.optional(z.string()),
     trial_converted_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -144,16 +163,20 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     whitelisted: z.boolean(),
+    workos_dashboard_url: z.optional(z.string()),
     workos_id: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "account_type": "accountType",
+      "adoption_dashboard_url": "adoptionDashboardUrl",
       "created_at": "createdAt",
       "creation_source": "creationSource",
       "disabled_at": "disabledAt",
       "member_count": "memberCount",
+      "stripe_customer_dashboard_url": "stripeCustomerDashboardUrl",
       "stripe_customer_id": "stripeCustomerId",
+      "stripe_subscription_dashboard_url": "stripeSubscriptionDashboardUrl",
       "stripe_subscription_id": "stripeSubscriptionId",
       "trial_converted_at": "trialConvertedAt",
       "trial_demoted_at": "trialDemotedAt",
@@ -161,6 +184,7 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
       "trial_state": "trialState",
       "trial_tier": "trialTier",
       "updated_at": "updatedAt",
+      "workos_dashboard_url": "workosDashboardUrl",
       "workos_id": "workosId",
     });
   }),

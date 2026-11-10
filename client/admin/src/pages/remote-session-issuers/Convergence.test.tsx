@@ -71,6 +71,62 @@ it("shows conflicting bindings and refuses unsafe migration", async () => {
   expect(api.migrate).not.toHaveBeenCalled();
 });
 
+it.each([
+  [1, "binding blocks", "this binding", "a new binding"],
+  [2, "bindings block", "these bindings", "new bindings"],
+] as const)(
+  "explains consolidation blocked only by %i identity-chaining bindings",
+  async (count, blocker, existing, replacement) => {
+    api.preflight.mockResolvedValue({
+      canMigrate: false,
+      clientCount: 1,
+      targetTenantClientCount: 0,
+      emaBindingCount: count,
+      mcpServerNames: [],
+      conflictingMcpServerNames: [],
+      endpointMismatches: [],
+      warnings: [],
+    });
+    mount();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain(
+      `${count} active identity-chaining ${blocker} consolidation.`,
+    );
+    expect(alert.textContent).toContain(
+      `Explicitly unlink ${existing} before consolidating`,
+    );
+    expect(alert.textContent).toContain(
+      `prepare ${replacement} for the target provider.`,
+    );
+    const confirm = screen.getByRole("button", { name: "Consolidate" });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(confirm);
+    expect(api.migrate).not.toHaveBeenCalled();
+  },
+);
+
+it("does not report an identity-chaining blocker with zero bindings", async () => {
+  api.preflight.mockResolvedValue({
+    canMigrate: true,
+    clientCount: 1,
+    targetTenantClientCount: 0,
+    emaBindingCount: 0,
+    mcpServerNames: [],
+    conflictingMcpServerNames: [],
+    endpointMismatches: [],
+    warnings: [],
+  });
+  mount();
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Consolidate" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByText(/active identity-chaining/)).toBeNull();
+});
+
 it("allows warnings only after preflight and reports migration races", async () => {
   api.preflight.mockResolvedValue({
     canMigrate: true,

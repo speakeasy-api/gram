@@ -1,12 +1,9 @@
 import { useRBAC } from "@/hooks/useRBAC";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
-import { useGramContext } from "@gram/client/react-query/_context.js";
 import {
-  buildListAPIKeysQuery,
-  invalidateListAPIKeys,
+  invalidateAllListAPIKeys,
   useListAPIKeys,
 } from "@gram/client/react-query/listAPIKeys";
-import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -23,21 +20,20 @@ export type UseAgentToken = {
   isError: boolean;
   /** Whether the caller may mint keys (requires the org:admin scope). */
   canGenerate: boolean;
-  /** Whether an agent key already exists — so the action rotates, not creates. */
+  /** Whether an agent key already exists — so the action re-generates. */
   hasExistingAgentKey: boolean;
-  /** Mint a fresh agent key (rotating: revokes prior agent keys on success). */
+  /** Mint an additional agent key. Existing agent keys keep working. */
   generate: () => void;
 };
 
 /**
- * useAgentToken mints — and rotates — the org's `agent`-scoped API key, i.e.
- * the device agent's `org_token`. On a successful mint it best-effort copies a
- * caller-built payload (e.g. a ready-to-paste managed.json) to the clipboard,
- * then revokes any prior agent key(s). Create runs before revoke so a failed
- * create never leaves the org without an agent key.
+ * useAgentToken mints the org's `agent`-scoped API key, i.e. the device agent's
+ * `org_token`. On a successful mint it best-effort copies a caller-built
+ * payload (e.g. a ready-to-paste managed.json) to the clipboard.
  *
- * Lives as a hook (rather than inline in the page) so the rotation invariant is
- * testable in isolation and reusable by other surfaces that mint agent keys.
+ * Minting never revokes existing agent keys: devices already deployed with an
+ * older token keep syncing. Retire old tokens explicitly under Settings → API
+ * Keys.
  */
 export function useAgentToken(opts: {
   /** Builds the text to copy once a token is minted (e.g. a managed.json). */
@@ -45,7 +41,6 @@ export function useAgentToken(opts: {
 }): UseAgentToken {
   const { buildCopyText } = opts;
   const queryClient = useQueryClient();
-  const client = useGramContext();
 
   // Gate on the org:admin scope, matching the API Keys page.
   const { hasAnyScope } = useRBAC();
@@ -62,7 +57,6 @@ export function useAgentToken(opts: {
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [autoCopied, setAutoCopied] = useState(false);
 
-  const revokeKeyMutation = useRevokeAPIKeyMutation();
   const createKeyMutation = useCreateAPIKeyMutation({
     onSuccess: async (data) => {
       if (!data.key) return;
@@ -76,36 +70,9 @@ export function useAgentToken(opts: {
       } catch {
         setAutoCopied(false);
       }
-      // Rotation: now that a fresh key exists, revoke the prior agent key(s).
-      // Revoking is a soft-delete; the partial unique index on (org, name) is
-      // WHERE deleted IS FALSE, so it also frees their names.
-      //
-      // Fetch the authoritative list rather than trusting the component's
-      // cached keysData: that query may not have loaded (or may be mid-refetch)
-      // when this fires, and an empty snapshot would silently skip rotation,
-      // leaving the old key(s) live. Exclude the key we just minted (data.id),
-      // which the fresh list now includes, so we never revoke it.
-      let stale = (keysData?.keys ?? []).filter(
-        (k) => k.id !== data.id && k.scopes.includes(AGENT_SCOPE),
-      );
-      try {
-        const fresh = await queryClient.fetchQuery(
-          buildListAPIKeysQuery(client),
-        );
-        stale = (fresh.keys ?? []).filter(
-          (k) => k.id !== data.id && k.scopes.includes(AGENT_SCOPE),
-        );
-      } catch {
-        // Fall back to cached keysData if the refresh fails.
-      }
-      for (const k of stale) {
-        revokeKeyMutation.mutate({
-          security: { sessionHeaderGramSession: "" },
-          request: { id: k.id },
-        });
-      }
-      // Refresh the cached key list so it reflects the new key + revocations.
-      await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
+      // Refresh every cached key list so it reflects the new key (and the
+      // button switches to "Re-generate token").
+      await invalidateAllListAPIKeys(queryClient);
     },
   });
 
@@ -115,8 +82,7 @@ export function useAgentToken(opts: {
       request: {
         createKeyForm: {
           // Unique per mint (to the second): the (org, name) unique index would
-          // otherwise reject a same-day re-create, and create runs before the
-          // old key is revoked.
+          // otherwise reject a second key minted the same day.
           name: `device-agent ${new Date()
             .toISOString()
             .slice(0, 19)

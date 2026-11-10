@@ -2,8 +2,10 @@ package outbox_test
 
 import (
 	"encoding/json"
+	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -11,7 +13,6 @@ import (
 
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -213,10 +214,14 @@ func (i *outboxTestInstance) seedOrg(t *testing.T) string {
 	t.Helper()
 
 	orgID := uuid.NewString()
-	_, err := orgsrepo.New(i.conn).UpsertOrganizationMetadata(t.Context(), orgsrepo.UpsertOrganizationMetadataParams{
-		ID:   orgID,
-		Name: orgID,
-		Slug: orgID,
+	// Keep producer fixtures free of unrelated organization-bootstrap events.
+	err := testrepo.New(i.conn).CreateOrganizationMetadataFixture(t.Context(), testrepo.CreateOrganizationMetadataFixtureParams{
+		GramAccountType:    "free",
+		FreeTrialStartedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		FreeTrialEndsAt:    pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
+		ID:                 orgID,
+		Name:               orgID,
+		Slug:               orgID,
 	})
 	require.NoError(t, err)
 

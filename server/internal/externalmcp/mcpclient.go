@@ -7,17 +7,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
+	"mime"
 	"net/http"
-	"strings"
 	"sync/atomic"
 
-	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"go.opentelemetry.io/otel"
 )
 
 // AuthRejectedError is returned when an MCP server rejects authentication (401 or 403).
@@ -34,33 +30,40 @@ func (e *AuthRejectedError) Error() string {
 
 // ClientOptions contains options for creating an MCP client.
 type ClientOptions struct {
-	// Metrics optionally injects recovery instruments; nil uses the process OTel provider.
-	Metrics *Metrics
-	// Authorization is the value for the Authorization header (e.g., "Bearer token").
-	// If empty, no Authorization header is sent.
-	Authorization string
-	// Headers contains additional HTTP headers to send with each request.
-	// Keys are header names, values are header values.
-	Headers map[string]string
-	// DisableRetries skips both the HTTP-transport retry layer and the MCP
-	// transport's own connection retries. The two compound (up to 4 HTTP
-	// attempts per MCP-level retry, each with its own backoff), which is
-	// fine for the resilient gateway proxy path but defeats a caller-imposed
-	// context deadline meant to bound a one-shot interactive probe — without
-	// this, an unreachable server can take minutes to report as such instead
-	// of the ~10s the probe intends.
-	DisableRetries bool
-	// MaxResponseBytes caps each HTTP response when greater than zero. It is
-	// intended for short-lived, untrusted probes; the long-lived gateway path
-	// leaves this at zero.
+	// MaxResponseBytes caps the total size of each HTTP response body,
+	// including a whole SSE stream, when greater than zero. It is intended for
+	// short-lived, untrusted probes.
 	MaxResponseBytes int64
+
+	// MaxMessageBytes caps each discrete upstream message: a whole non-SSE
+	// response body (results and error bodies alike) or a single SSE event.
+	// Zero or below selects defaultMaxMessageBytes. The cap cannot be disabled
+	// because the MCP SDK buffers every message in full before parsing it.
+	MaxMessageBytes int64
 }
+
+// defaultMaxMessageBytes bounds one upstream MCP message when the caller sets
+// no cap. Realistic messages sit well under it, while it keeps a hostile
+// server from growing the shared API or worker process without bound.
+const defaultMaxMessageBytes = 16 << 20 // 16 MiB
+
+// disabledTransportRetries turns off the transport's reconnect loop. Callers
+// bound a probe with their own deadline, and an unreachable host should spend
+// one connection attempt. The SDK reads zero as "use the default of 5".
+const disabledTransportRetries = -1
 
 var ErrResponseTooLarge = errors.New("external mcp response body exceeds the configured read limit")
 
 type bodyLimitRoundTripper struct {
-	base    http.RoundTripper
-	limit   int64
+	base http.RoundTripper
+
+	// messageLimit caps each non-SSE body and each SSE event.
+	messageLimit int64
+
+	// totalLimit caps each whole response body when greater than zero.
+	totalLimit int64
+
+	// tripped records that a limit rejected a response since the last request.
 	tripped atomic.Bool
 }
 
@@ -69,8 +72,73 @@ func (rt *bodyLimitRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 	if err != nil || resp == nil || resp.Body == nil {
 		return resp, err //nolint:wrapcheck // preserve the base transport's error
 	}
-	resp.Body = &limitedBody{ReadCloser: http.MaxBytesReader(nil, resp.Body, rt.limit), tripped: &rt.tripped}
+	body := resp.Body
+	if rt.totalLimit > 0 {
+		body = http.MaxBytesReader(nil, body, rt.totalLimit)
+	}
+	if isEventStream(resp) {
+		body = &sseEventLimiter{ReadCloser: body, limit: rt.messageLimit, eventBytes: 0, lineBlank: true, err: nil}
+	} else {
+		body = http.MaxBytesReader(nil, body, rt.messageLimit)
+	}
+	resp.Body = &limitedBody{ReadCloser: body, tripped: &rt.tripped}
 	return resp, nil
+}
+
+// isEventStream mirrors the SDK's dispatch: only a successful response whose
+// media type is text/event-stream is consumed event by event. The SDK buffers
+// every other body it reads, error bodies included, in full.
+func isEventStream(resp *http.Response) bool {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	return err == nil && mediaType == "text/event-stream"
+}
+
+// sseEventLimiter fails a text/event-stream body once a single event exceeds
+// limit bytes, so a long-lived stream stays usable while no one event can grow
+// the SDK's per-event buffer without bound. Like the SDK's scanner, it splits
+// lines on LF only and treats a line holding nothing but CR bytes as the blank
+// line that ends an event. Every byte since the previous blank line counts,
+// comment and field lines included.
+type sseEventLimiter struct {
+	io.ReadCloser
+
+	limit int64
+
+	// eventBytes counts the bytes read since the last blank line.
+	eventBytes int64
+
+	// lineBlank reports whether the current line holds only CR bytes so far.
+	lineBlank bool
+
+	// err is sticky: once the limit trips, every later read fails too.
+	err error
+}
+
+func (l *sseEventLimiter) Read(p []byte) (int, error) {
+	if l.err != nil {
+		return 0, l.err
+	}
+	n, err := l.ReadCloser.Read(p)
+	for i, b := range p[:n] {
+		l.eventBytes++
+		if l.eventBytes > l.limit {
+			l.err = &http.MaxBytesError{Limit: l.limit}
+			return i, l.err
+		}
+		switch {
+		case b == '\n':
+			if l.lineBlank {
+				l.eventBytes = 0
+			}
+			l.lineBlank = true
+		case b != '\r':
+			l.lineBlank = false
+		}
+	}
+	return n, err //nolint:wrapcheck // io.EOF must be returned unchanged
 }
 
 type limitedBody struct {
@@ -89,89 +157,55 @@ func (b *limitedBody) Read(p []byte) (int, error) {
 
 // Client represents an active connection to an external MCP server.
 type Client struct {
-	logger         *slog.Logger
-	guardianPolicy *guardian.Policy
-	remoteURL      string
-	session        *mcp.ClientSession
-	authRT         *authRoundTripper
-	bodyLimitRT    *bodyLimitRoundTripper
-	transportType  types.TransportType
-	options        ClientOptions
-	// Fresh definitions discovered on this isolated session override persisted metadata.
-	discovered map[string]json.RawMessage
+	logger      *slog.Logger
+	remoteURL   string
+	session     *mcp.ClientSession
+	authRT      *authRoundTripper
+	bodyLimitRT *bodyLimitRoundTripper
 }
 
 func classifyRequestError(op, remoteURL string, authRT *authRoundTripper, bodyLimitRT *bodyLimitRoundTripper, err error) error {
 	if authRT.authRejected {
 		return &AuthRejectedError{RemoteURL: remoteURL, StatusCode: authRT.statusCode, WWWAuthenticate: authRT.wwwAuthenticate}
 	}
-	if bodyLimitRT != nil && bodyLimitRT.tripped.Load() {
+	if bodyLimitRT.tripped.Load() {
 		return fmt.Errorf("%s: %w", op, ErrResponseTooLarge)
 	}
 	// SDK response decoding may include raw numeric values or remote field
-	// names. Retain typed protocol errors, but redact typed JSON diagnostics.
-	switch {
-	case isJSONDiagnostic(err):
+	// names, so redact typed JSON diagnostics.
+	if isJSONDiagnostic(err) {
 		err = safeJSONDiagnostic(err)
-	default:
-		if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok && rpcErr.Code == mcp.CodeHeaderMismatch {
-			err = &jsonrpc.Error{Code: rpcErr.Code, Message: "external MCP parameter header mismatch", Data: nil}
-		}
 	}
 	return fmt.Errorf("%s: %w", op, err)
 }
 
 func (c *Client) beginRequest() {
-	if c.bodyLimitRT != nil {
-		c.bodyLimitRT.tripped.Store(false)
-	}
+	c.bodyLimitRT.tripped.Store(false)
 }
 
 // NewClient creates a new client connection to an external MCP server.
 // This performs the MCP protocol initialization internally.
-func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, remoteURL string, transportType types.TransportType, opts *ClientOptions) (*Client, error) {
+func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, remoteURL string, opts *ClientOptions) (*Client, error) {
 	if opts == nil {
-		opts = &ClientOptions{
-			Metrics:          nil,
-			Authorization:    "",
-			Headers:          nil,
-			DisableRetries:   false,
-			MaxResponseBytes: 0,
-		}
+		opts = &ClientOptions{MaxResponseBytes: 0, MaxMessageBytes: 0}
 	}
-
-	// Recovery must retain the exact effective configuration, not a mutable caller map.
-	options := *opts
-	options.Headers = maps.Clone(opts.Headers)
-	if options.Metrics == nil {
-		options.Metrics = NewMetrics(otel.GetMeterProvider(), logger)
-	}
-	opts = &options
 
 	logger.InfoContext(ctx, "connecting to external MCP server", attr.SlogURL(remoteURL))
 
-	var httpClient *guardian.HTTPClient
-	if opts.DisableRetries {
-		httpClient = guardianPolicy.PooledClient()
-	} else {
-		httpClient = guardianPolicy.PooledClient(guardian.WithRetryConfig(discoverAwareRetryConfig(logger, remoteURL)))
-	}
-	trasnport := httpClient.Transport
+	httpClient := guardianPolicy.PooledClient(guardian.WithInternalCatalog())
 	authRT := &authRoundTripper{
-		base:            trasnport,
-		authorization:   opts.Authorization,
-		headers:         opts.Headers,
+		base:            httpClient.Transport,
 		authRejected:    false,
 		statusCode:      0,
 		wwwAuthenticate: "",
 	}
-	httpClient.Transport = authRT
-	var bodyLimitRT *bodyLimitRoundTripper
-	if opts.MaxResponseBytes > 0 {
-		//nolint:exhaustruct // atomic.Bool must retain its documented zero value.
-		bodyLimitRT = &bodyLimitRoundTripper{base: authRT, limit: opts.MaxResponseBytes}
-		httpClient.Transport = bodyLimitRT
+	messageLimit := opts.MaxMessageBytes
+	if messageLimit <= 0 {
+		messageLimit = defaultMaxMessageBytes
 	}
+	//nolint:exhaustruct // atomic.Bool must retain its documented zero value.
+	bodyLimitRT := &bodyLimitRoundTripper{base: authRT, messageLimit: messageLimit, totalLimit: opts.MaxResponseBytes}
+	httpClient.Transport = bodyLimitRT
 
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:        "gram-server",
@@ -182,31 +216,12 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 		Icons:       nil,
 	}, nil)
 
-	// mcp.StreamableClientTransport treats MaxRetries == 0 as "use the SDK's
-	// own default of 5" — a negative value is required to actually disable
-	// its reconnect-retry loop.
-	maxRetries := 3
-	if opts.DisableRetries {
-		maxRetries = -1
-	}
-
-	var transport mcp.Transport
-	switch transportType {
-	case types.TransportTypeStreamableHTTP:
-		transport = &mcp.StreamableClientTransport{
-			Endpoint:             remoteURL,
-			HTTPClient:           httpClient,
-			MaxRetries:           maxRetries,
-			DisableStandaloneSSE: true,
-			OAuthHandler:         nil,
-		}
-	case types.TransportTypeSSE:
-		transport = &mcp.SSEClientTransport{
-			Endpoint:   remoteURL,
-			HTTPClient: httpClient,
-		}
-	default:
-		return nil, fmt.Errorf("unsupported transport type: %s", transportType)
+	transport := &mcp.StreamableClientTransport{
+		Endpoint:             remoteURL,
+		HTTPClient:           httpClient,
+		MaxRetries:           disabledTransportRetries,
+		DisableStandaloneSSE: true,
+		OAuthHandler:         nil,
 	}
 
 	session, err := client.Connect(ctx, transport, nil)
@@ -217,15 +232,11 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 	logger.InfoContext(ctx, "connected to external MCP server")
 
 	return &Client{
-		logger:         logger,
-		guardianPolicy: guardianPolicy,
-		remoteURL:      remoteURL,
-		session:        session,
-		authRT:         authRT,
-		bodyLimitRT:    bodyLimitRT,
-		transportType:  transportType,
-		options:        options,
-		discovered:     make(map[string]json.RawMessage),
+		logger:      logger,
+		remoteURL:   remoteURL,
+		session:     session,
+		authRT:      authRT,
+		bodyLimitRT: bodyLimitRT,
 	}, nil
 }
 
@@ -259,28 +270,15 @@ const (
 	maxListedTools       = 1000    // 1,000 tools bounds retained definitions and per-tool validation.
 	maxListedPages       = 1000    // 1,000 pages also bounds empty-page requests and cursor storage.
 	maxListedSchemaBytes = 8 << 20 // 8 MiB caps aggregate schema bytes across pages, including skipped tools.
+	maxToolSchemaBytes   = 1 << 20 // 1 MiB skips a single oversized definition without failing the listing.
 )
 
-// ListTools lists available tools from the external MCP server.
+// ListTools lists available tools from the external MCP server, following
+// cursors until exhausted.
 func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
-	return c.listTools(ctx, "")
-}
-
-// listTools follows cursors until exhausted, or until the requested tool is found.
-// A fresh recovery Client is required: ListTools on this session can hit the SDK TTL cache.
-func (c *Client) listTools(ctx context.Context, target string) ([]Tool, error) {
-	// Do not consult a previous session listing when deciding whether this
-	// discovery found its target. Failed discovery also discards local metadata.
-	c.discovered = make(map[string]json.RawMessage)
 	var tools []Tool
 	schemaBytes := 0
 	listedTools := 0
-	complete := false
-	defer func() {
-		if !complete {
-			c.discovered = make(map[string]json.RawMessage)
-		}
-	}()
 	seen := make(map[string]bool)
 	cursor := ""
 	for page := 0; ; page++ {
@@ -314,17 +312,11 @@ func (c *Client) listTools(ctx context.Context, target string) ([]Tool, error) {
 			}
 			schemaBytes += len(schema)
 			// Within the aggregate budget, an unusable definition must not hide
-			// its neighbors. Never call this tool with incomplete headers.
-			if len(schema) > maxParameterHeaderSchemaBytes {
+			// its neighbors.
+			if len(schema) > maxToolSchemaBytes {
 				c.logger.WarnContext(ctx, "skipping oversized external mcp tool schema")
 				continue
 			}
-			if _, err := parameterHeaders(schema, nil); err != nil {
-				// Reject only this tool: never call it with incomplete parameter headers.
-				c.logger.WarnContext(ctx, "skipping unsafe external mcp tool schema", attr.SlogError(err))
-				continue
-			}
-			c.discovered[tool.Name] = schema
 
 			// Extract annotations from MCP tool response
 			var annotations *ToolAnnotations
@@ -346,11 +338,6 @@ func (c *Client) listTools(ctx context.Context, target string) ([]Tool, error) {
 			})
 		}
 
-		if target != "" {
-			if _, ok := c.discovered[target]; ok {
-				break
-			}
-		}
 		if toolsResult.NextCursor == "" {
 			break
 		}
@@ -361,221 +348,17 @@ func (c *Client) listTools(ctx context.Context, target string) ([]Tool, error) {
 		attr.SlogValueInt(len(tools)),
 	)
 
-	if target != "" {
-		if _, ok := c.discovered[target]; !ok {
-			return nil, errors.New("external mcp tool definition absent or invalid")
-		}
-	}
-	complete = true
 	return tools, nil
 }
 
-// CallToolResult represents the result of a tool call.
-type CallToolResult struct {
-	Content []json.RawMessage
-	IsError bool
-}
-
-// CallTool calls a tool on the external MCP server. A nil schema deliberately
-// sends an ordinary call first, without discovery. Only conformant pre-execution
-// HeaderMismatch responses permit one discovery and replay. Proxy schemas are not
-// persisted, so later isolated calls may need the same recovery again.
-func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.RawMessage, schema json.RawMessage) (*CallToolResult, error) {
-	c.logger.InfoContext(ctx, "calling tool on external MCP server",
-		attr.SlogToolName(toolName),
-	)
-
-	// Keep numbers as raw JSON, including integers beyond float64 precision.
-	var args map[string]json.RawMessage
-	if len(arguments) > 0 {
-		if err := json.Unmarshal(arguments, &args); err != nil {
-			return nil, fmt.Errorf("invalid external mcp tool arguments: %w", safeJSONDiagnostic(err))
-		}
-	} else {
-		arguments = json.RawMessage("{}")
-	}
-
-	// Fresh discovery is authoritative metadata, but the SDK's header generator
-	// is not: v1.7.0 drops all bindings when an unrelated property is a union or
-	// boolean schema. Derive complete request headers from the original schema
-	// in every path, including discovery and recovery.
-	if discovered, known := c.discovered[toolName]; known {
-		schema = discovered
-	}
-
-	callResult, err := c.callTool(ctx, toolName, arguments, schema)
-	if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok && rpcErr.Code == mcp.CodeHeaderMismatch {
-		// Do not log the upstream mismatch message: it can contain parameter values.
-		c.logger.InfoContext(ctx, "external mcp header mismatch; refreshing tool metadata")
-		c.options.Metrics.RecordRecoveryAttempt(ctx)
-		callResult, err = c.recoverTool(ctx, toolName, arguments)
-		outcome := "success"
-		if err != nil || callResult.IsError {
-			outcome = "failed"
-			c.options.Metrics.RecordRecoveryFailure(ctx)
-		} else {
-			c.options.Metrics.RecordRecoverySuccess(ctx)
-		}
-		c.logger.InfoContext(ctx, "external mcp header mismatch recovery completed", attr.SlogOutcome(outcome))
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	// Marshal each content item back to JSON
-	content := make([]json.RawMessage, 0, len(callResult.Content))
-	for _, item := range callResult.Content {
-		itemJSON, err := json.Marshal(item)
-		if err != nil {
-			return nil, fmt.Errorf("marshal external mcp tool result: %w", safeJSONDiagnostic(err))
-		}
-		content = append(content, itemJSON)
-	}
-
-	c.logger.InfoContext(ctx, "tool call completed",
-		attr.SlogToolName(toolName),
-	)
-
-	return &CallToolResult{
-		Content: content,
-		IsError: callResult.IsError,
-	}, nil
-}
-
-// recoverTool handles a conformant pre-execution HeaderMismatch rejection. It
-// creates a fresh authenticated session so tools/list cannot use the old SDK
-// session's cached definitions, discovers authoritative metadata, then replays
-// exactly once. It never retries transport failures or tool execution errors.
-// Successful recovery adopts this session locally; authenticated sessions and
-// discovered schemas are never shared between clients.
-func (c *Client) recoverTool(ctx context.Context, name string, arguments json.RawMessage) (*mcp.CallToolResult, error) {
-	delete(c.discovered, name)
-	recovery, err := NewClient(ctx, c.logger, c.guardianPolicy, c.remoteURL, c.transportType, &c.options)
-	if err != nil {
-		return nil, err
-	}
-	adopted := false
-	defer func() {
-		if !adopted {
-			_ = recovery.Close()
-		}
-	}()
-	if err := recovery.discoverTool(ctx, name); err != nil {
-		return nil, err
-	}
-	// Use only refreshed metadata, never the stale schema or generated headers.
-	result, err := recovery.callTool(ctx, name, arguments, recovery.discovered[name])
-	if err != nil {
-		// Only a replay mismatch exhausts recovery; discovery may independently
-		// fail with a protocol error before a second tools/call was attempted.
-		if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok && rpcErr.Code == mcp.CodeHeaderMismatch {
-			c.options.Metrics.RecordRecoveryExhaustion(ctx)
-		}
-		return nil, err
-	}
-	// A wire-level mismatch can close the SDK's original session. Transfer the
-	// successful isolated session and its metadata to this caller only, so reuse
-	// does not select stale schemas or a closed transport.
-	_ = c.session.Close()
-	c.session = recovery.session
-	c.authRT = recovery.authRT
-	c.bodyLimitRT = recovery.bodyLimitRT
-	c.discovered = recovery.discovered
-	adopted = true
-	return result, nil
-}
-
-func (c *Client) discoverTool(ctx context.Context, name string) error {
-	if _, err := c.listTools(ctx, name); err != nil {
-		return err
-	}
-	if _, ok := c.discovered[name]; !ok {
-		return errors.New("external mcp tool definition absent or invalid")
-	}
-	return nil
-}
-
-// callTool performs exactly one attempt. It must not invoke recovery recursively.
-func (c *Client) callTool(ctx context.Context, name string, arguments json.RawMessage, schema json.RawMessage) (*mcp.CallToolResult, error) {
-	var headers http.Header
-	if len(schema) > 0 {
-		var err error
-		headers, err = parameterHeaders(schema, arguments)
-		if err != nil {
-			return nil, err
-		}
-	}
-	ctx = context.WithValue(ctx, toolCallContextKey{}, headers)
-	c.beginRequest()
-	result, err := c.session.CallTool(ctx, &mcp.CallToolParams{Meta: nil, Name: name, Arguments: arguments, InputResponses: nil, RequestState: ""})
-	if err != nil {
-		// SDK mismatch messages can echo Mcp-Param values. Preserve the typed
-		// protocol code for recovery/callers, but never forward those values to logging.
-		if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok && rpcErr.Code == mcp.CodeHeaderMismatch {
-			c.options.Metrics.RecordHeaderMismatch(ctx)
-			err = &jsonrpc.Error{Code: rpcErr.Code, Message: "external MCP parameter header mismatch", Data: nil}
-		}
-		return nil, classifyRequestError("call tool on external mcp server", c.remoteURL, c.authRT, c.bodyLimitRT, err)
-	}
-	return result, nil
-}
-
-// Carries only request-local adapter headers, never values in shared transport configuration.
-// Its presence also disables generic HTTP retries for possibly effectful tools/call.
-type toolCallContextKey struct{}
-
 type authRoundTripper struct {
-	base          http.RoundTripper
-	authorization string
-	headers       map[string]string
-
+	base            http.RoundTripper
 	authRejected    bool
 	statusCode      int
 	wwwAuthenticate string
 }
 
 func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Configured headers are operator-supplied and are not yet reserved against
-	// the protocol's own header names, so a definition naming Mcp-Method would
-	// overwrite the SDK's value below. Classify the request from what the SDK
-	// sent, before that can happen.
-	sdkMethod := req.Header.Get(headerMCPMethod)
-	sdkProtocolVersion := req.Header.Get("Mcp-Protocol-Version")
-	discoverProbe := sdkMethod == methodServerDiscover
-
-	if rt.authorization != "" || len(rt.headers) > 0 {
-		req = req.Clone(req.Context())
-		if rt.authorization != "" {
-			req.Header.Set("Authorization", rt.authorization)
-		}
-		for k, v := range rt.headers {
-			// Reserve the parameter namespace, even when refreshed annotations vanish.
-			if !strings.HasPrefix(strings.ToLower(k), "mcp-param-") {
-				req.Header.Set(k, v)
-			}
-		}
-	}
-
-	if headers, ok := req.Context().Value(toolCallContextKey{}).(http.Header); ok &&
-		sdkMethod == "tools/call" && sdkProtocolVersion >= "2026-07-28" {
-		req = req.Clone(req.Context())
-		// Replace, do not merge with, SDK-generated parameters. The complete
-		// schema-derived set also clears stale/incorrect SDK values for removed
-		// annotations and absent arguments, and overrides its empty-string bug.
-		for name := range req.Header {
-			if strings.HasPrefix(strings.ToLower(name), "mcp-param-") {
-				delete(req.Header, name)
-			}
-		}
-		for name, values := range headers {
-			req.Header[name] = append([]string(nil), values...)
-		}
-	}
-
-	if discoverProbe {
-		req = req.WithContext(context.WithValue(req.Context(), discoverProbeContextKey{}, true))
-	}
-
 	resp, err := rt.base.RoundTrip(req)
 	if err != nil {
 		return nil, fmt.Errorf("external mcp round trip: %w", err)
@@ -591,65 +374,6 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	}
 
 	return resp, nil
-}
-
-const (
-	// headerMCPMethod mirrors the JSON-RPC method of an MCP request into an
-	// HTTP header. The SDK sets it only from protocol revision 2026-07-28
-	// onwards, so the legacy initialize handshake never carries it.
-	headerMCPMethod = "Mcp-Method"
-
-	// methodServerDiscover is the capability probe the SDK sends before every
-	// connect. An upstream that predates protocol revision 2026-07-28 rejects
-	// it, and the SDK then falls back to the legacy initialize handshake on
-	// the same connection.
-	methodServerDiscover = "server/discover"
-)
-
-// discoverProbeContextKey marks a request context as belonging to the
-// server/discover capability probe. The marker is set on the outbound request
-// and read back by the retry policy, which only receives a context and a
-// response and so cannot recognize the probe on a transport failure otherwise.
-type discoverProbeContextKey struct{}
-
-// discoverAwareRetryConfig disables generic retries for the capability probe
-// and effectful tools/call requests (which only recover typed HeaderMismatch).
-//
-// A rejected probe is the expected answer from any upstream that predates MCP
-// 2026-07-28, and the SDK answers it by falling back to the legacy initialize
-// handshake. Retrying a rejection that will not change spends the whole backoff
-// budget first: five attempts and roughly 15 seconds, on a client that connects
-// once per tool call. Discovery and the fallback handshake keep their retry
-// budget; ambiguous tools/call failures must not duplicate execution.
-func discoverAwareRetryConfig(logger *slog.Logger, remoteURL string) *guardian.RetryConfig {
-	config := guardian.DefaultRetryConfig()
-	checkRetry := config.CheckRetry
-
-	config.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
-		if _, call := ctx.Value(toolCallContextKey{}).(http.Header); call {
-			return false, nil
-		}
-		retry, checkErr := checkRetry(ctx, resp, err)
-		if !retry {
-			return retry, checkErr
-		}
-		if probe, _ := ctx.Value(discoverProbeContextKey{}).(bool); !probe {
-			return retry, checkErr
-		}
-
-		args := []any{attr.SlogURL(remoteURL)}
-		if resp != nil {
-			args = append(args, attr.SlogHTTPResponseStatusCode(resp.StatusCode))
-		}
-		if err != nil {
-			args = append(args, attr.SlogError(err))
-		}
-		logger.InfoContext(ctx, "external mcp server rejected the capability probe, falling back to the legacy handshake", args...)
-
-		return false, checkErr
-	}
-
-	return config
 }
 
 // safeJSONDiagnostic keeps useful decoder categories without copying raw values,

@@ -28,7 +28,7 @@ function policyStatusText(
         label: "Blocking",
         icon: "shield-check",
         description:
-          "Block policy is enabled. Servers without allow rules are not allowed.",
+          "Block policy is enabled. Servers without allow rules are blocked for the policy's audience.",
       };
     case "warning":
       return {

@@ -1,4 +1,3 @@
-import { Checkbox } from "@/components/ui/Checkbox";
 import {
   ToolSelectionPanel,
   type ToolAnnotation,
@@ -26,13 +25,15 @@ import type { ActivePanel, AnnotationHint, ResourceType } from "./types";
 import {
   ANNOTATION_TO_DISPOSITION,
   DISPOSITION_TO_ANNOTATION,
+  isProjectFilteredResourceType,
   isProjectSelectableResourceType,
   isUnrestrictedResourceType,
   unrestrictedResourceLabel,
 } from "./types";
-import { computePanelState } from "./computePanelState";
+import { computePanelState, isProjectWideSelector } from "./computePanelState";
 import { type ServerGroup, type ServerTool } from "./serverMerge";
 import { useOrgMcpServers } from "./useOrgMcpServers";
+import { useOrgAssistants } from "./useOrgAssistants";
 import { toolMetadataToServerTools } from "./remoteToolMetadata";
 
 /**
@@ -74,6 +75,12 @@ interface GrantRuleDrawerContentProps {
   /** When editing an exception rule, pass the allow rule's selectors here.
    *  The picker will filter projects/servers/tools to only those covered by the allow. */
   allowSelectors?: Selector[] | null;
+  /**
+   * Who the grant is for, as the copy names it. The picker is shared by the
+   * role editor and an agent's permissions, and "this role" on an agent
+   * names something that is not there.
+   */
+  subject?: "role" | "agent";
 }
 
 export function GrantRuleDrawerContent({
@@ -86,10 +93,12 @@ export function GrantRuleDrawerContent({
   isDeny: isDenyProp,
   allowedPanels,
   allowSelectors,
+  subject = "role",
 }: GrantRuleDrawerContentProps): JSX.Element {
   const organization = useOrganization();
   const inventory = useOrgMcpServers(resourceType === "mcp");
   const mcpServers = inventory.groups;
+  const assistantInventory = useOrgAssistants(resourceType === "assistant");
   // Project slug per id, so the tool picker can name each remote server's
   // project when fetching its (project-scoped) stored tool metadata.
   const projectSlugById = useMemo(
@@ -109,6 +118,7 @@ export function GrantRuleDrawerContent({
 
   const isMcpConnect = scope === "mcp:connect";
   const projectSelectable = isProjectSelectableResourceType(resourceType);
+  const projectFiltered = isProjectFilteredResourceType(resourceType);
 
   const panelState = computePanelState(selectors, resourceType);
   // Use override only when selectors are empty (user just switched mode)
@@ -187,16 +197,6 @@ export function GrantRuleDrawerContent({
     return projects.filter((p) => allowedProjectIds.has(p.id));
   }, [organization.projects, mcpServers, allowFilter]);
 
-  const filteredProjectList = useMemo(
-    () =>
-      resourceSearch
-        ? projectList.filter((p) =>
-            p.name.toLowerCase().includes(resourceSearch.toLowerCase()),
-          )
-        : projectList,
-    [projectList, resourceSearch],
-  );
-
   // Pre-filter mcpServers by allow scope, then apply search
   const scopedMcpServers = useMemo(() => {
     if (!allowFilter) return mcpServers;
@@ -243,8 +243,10 @@ export function GrantRuleDrawerContent({
   const selectedProjectIds = useMemo(
     () =>
       new Set(
+        // The same rule the panel state uses, so a project-wide selector
+        // stored without a resource id is ticked as well as counted.
         (selectors ?? []).flatMap((s) =>
-          s.projectId && s.resourceId === "*" ? [s.projectId] : [],
+          s.projectId && isProjectWideSelector(s) ? [s.projectId] : [],
         ),
       ),
     [selectors],
@@ -270,6 +272,26 @@ export function GrantRuleDrawerContent({
     [projectList, selectedResourceIds],
   );
 
+  // Selected projects already have pinned rows above the searchable list.
+  // Keep them visible through search without rendering a second toggle.
+  const filteredProjectList = useMemo(() => {
+    const pinnedIds = projectSelectable
+      ? selectedResourceIds
+      : selectedProjectIds;
+    const query = resourceSearch.toLowerCase();
+    return projectList.filter(
+      (project) =>
+        !pinnedIds.has(project.id) &&
+        project.name.toLowerCase().includes(query),
+    );
+  }, [
+    projectList,
+    projectSelectable,
+    selectedResourceIds,
+    selectedProjectIds,
+    resourceSearch,
+  ]);
+
   const selectedServerRows = useMemo(() => {
     if (selectedResourceIds.size === 0) return [];
     return mcpServers.flatMap((group) =>
@@ -278,6 +300,43 @@ export function GrantRuleDrawerContent({
         .map((server) => ({ server, projectName: group.projectName })),
     );
   }, [mcpServers, selectedResourceIds]);
+
+  const filteredAssistantGroups = useMemo(() => {
+    const scoped = allowFilter
+      ? assistantInventory.groups
+          .map((group) => {
+            if (allowFilter.projectIds?.has(group.projectId)) return group;
+            return {
+              ...group,
+              assistants: group.assistants.filter(
+                (a) => allowFilter.serverIds?.has(a.id) ?? false,
+              ),
+            };
+          })
+          .filter((g) => g.assistants.length > 0)
+      : assistantInventory.groups;
+    if (!resourceSearch) return scoped;
+    const q = resourceSearch.toLowerCase();
+    return scoped
+      .map((group) => ({
+        ...group,
+        assistants: group.assistants.filter(
+          (a) =>
+            a.name.toLowerCase().includes(q) ||
+            group.projectName.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((g) => g.assistants.length > 0);
+  }, [assistantInventory.groups, allowFilter, resourceSearch]);
+
+  const selectedAssistantRows = useMemo(() => {
+    if (selectedResourceIds.size === 0) return [];
+    return assistantInventory.groups.flatMap((group) =>
+      group.assistants
+        .filter((a) => selectedResourceIds.has(a.id))
+        .map((assistant) => ({ assistant, projectName: group.projectName })),
+    );
+  }, [assistantInventory.groups, selectedResourceIds]);
 
   // The "Specific tools" picker shows servers with enumerable deploy-time tools
   // plus remote/tunneled (dynamic-tools) servers. Remote-backed ones resolve
@@ -309,7 +368,8 @@ export function GrantRuleDrawerContent({
     );
   }
 
-  const resourceKind = projectSelectable ? resourceType : "mcp";
+  const resourceKind =
+    projectSelectable || projectFiltered ? resourceType : "mcp";
 
   // For MCP scopes, `id` is `Server.id`, which serverMerge.ts guarantees is
   // the id enforcement checks (toolset id for toolset-backed servers, the
@@ -344,14 +404,19 @@ export function GrantRuleDrawerContent({
     if (selectors === null) return;
     if (isProjectSelected(projectId)) {
       onChangeSelectors(
+        // The rule that ticked the project, so unticking removes what ticked it.
         selectors.filter(
-          (s) => !(s.projectId === projectId && s.resourceId === "*"),
+          (s) => !(s.projectId === projectId && isProjectWideSelector(s)),
         ),
       );
     } else {
       onChangeSelectors([
         ...selectors,
-        { resourceKind: "mcp", resourceId: "*", projectId },
+        {
+          resourceKind: projectFiltered ? resourceType : "mcp",
+          resourceId: "*",
+          projectId,
+        },
       ]);
     }
   };
@@ -376,31 +441,50 @@ export function GrantRuleDrawerContent({
     <div className="border-border divide-border shrink-0 divide-y border">
       {!isDenyProp && isPanelAllowed("all") && (
         <ScopeOption
-          label={projectSelectable ? "All projects" : "All servers"}
+          label={
+            resourceType === "inference"
+              ? "All projects"
+              : allScopeLabel(projectSelectable, projectFiltered)
+          }
           description={
-            projectSelectable
-              ? "Give access to every project in your org"
-              : "Give access to all servers in every project in your org"
+            resourceType === "inference"
+              ? "Run inference in every project"
+              : allScopeDescription(projectSelectable, projectFiltered)
           }
           selected={activePanel === "all"}
           onClick={() => switchPanel("all")}
         />
       )}
-      {resourceType === "mcp" && isPanelAllowed("projects") && (
+      {(resourceType === "mcp" || projectFiltered) &&
+        isPanelAllowed("projects") && (
+          <ScopeOption
+            label="Specific projects"
+            description={
+              resourceType === "inference"
+                ? "Run inference within specific projects in your org"
+                : projectFiltered
+                  ? "Give access to assistants within specific projects in your org"
+                  : "Give access to servers within specific projects in your org"
+            }
+            selected={activePanel === "projects"}
+            onClick={() => switchPanel("projects")}
+          />
+        )}
+      {resourceType !== "inference" && isPanelAllowed("servers") && (
         <ScopeOption
-          label="Specific projects"
-          description="Give access to servers within specific projects in your org"
-          selected={activePanel === "projects"}
-          onClick={() => switchPanel("projects")}
-        />
-      )}
-      {isPanelAllowed("servers") && (
-        <ScopeOption
-          label={projectSelectable ? "Specific projects" : "Specific servers"}
+          label={
+            projectFiltered
+              ? "Specific assistants"
+              : projectSelectable
+                ? "Specific projects"
+                : "Specific servers"
+          }
           description={
-            projectSelectable
-              ? "Give access to specific projects in your org"
-              : "Give access to specific servers across your org"
+            projectFiltered
+              ? "Give access to specific assistants across your org"
+              : projectSelectable
+                ? "Give access to specific projects in your org"
+                : "Give access to specific servers across your org"
           }
           selected={activePanel === "servers"}
           onClick={() => switchPanel("servers")}
@@ -417,7 +501,7 @@ export function GrantRuleDrawerContent({
     </div>
   );
 
-  const resourceList = activePanel === "servers" && (
+  const resourceList = activePanel === "servers" && !projectFiltered && (
     <>
       <div className="border-border mt-3 flex items-center gap-2 border border-b-0 px-4 py-2.5">
         <input
@@ -432,6 +516,7 @@ export function GrantRuleDrawerContent({
         {resourceSearch && (
           <button
             type="button"
+            aria-label="Clear search"
             onClick={() => setResourceSearch("")}
             className="text-muted-foreground hover:text-foreground shrink-0"
           >
@@ -450,7 +535,7 @@ export function GrantRuleDrawerContent({
               <ResourceCheckbox
                 key={`selected-${project.id}`}
                 id={project.id}
-                name={project.name}
+                label={project.name}
                 checked
                 onToggle={toggleResource}
               />
@@ -462,6 +547,8 @@ export function GrantRuleDrawerContent({
               <ResourceCheckbox
                 key={`selected-${server.id}`}
                 id={server.id}
+                label={server.name}
+                qualifier={projectName}
                 name={
                   <>
                     <span title={server.name}>{server.name}</span>
@@ -480,7 +567,8 @@ export function GrantRuleDrawerContent({
           </SelectedGroup>
         )}
         {projectSelectable ? (
-          filteredProjectList.length === 0 ? (
+          filteredProjectList.length === 0 &&
+          selectedResourceProjects.length === 0 ? (
             <div className="text-muted-foreground px-3 py-3 text-sm">
               {projectList.length === 0
                 ? "No projects found"
@@ -491,7 +579,7 @@ export function GrantRuleDrawerContent({
               <ResourceCheckbox
                 key={resource.id}
                 id={resource.id}
-                name={resource.name}
+                label={resource.name}
                 checked={isResourceSelected(resource.id)}
                 onToggle={toggleResource}
               />
@@ -520,9 +608,91 @@ export function GrantRuleDrawerContent({
                 <ResourceCheckbox
                   key={server.id}
                   id={server.id}
-                  name={server.name}
+                  label={server.name}
                   qualifier={group.projectName}
                   checked={isResourceSelected(server.id)}
+                  onToggle={toggleResource}
+                />
+              ))}
+            </div>
+          ))
+        )}
+      </div>
+    </>
+  );
+
+  const assistantPickerList = activePanel === "servers" && projectFiltered && (
+    <>
+      <div className="border-border mt-3 flex items-center gap-2 border border-b-0 px-4 py-2.5">
+        <input
+          type="text"
+          placeholder="Search assistants…"
+          value={resourceSearch}
+          onChange={(e) => setResourceSearch(e.target.value)}
+          className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
+        />
+        {resourceSearch && (
+          <button
+            type="button"
+            aria-label="Clear assistant search"
+            onClick={() => setResourceSearch("")}
+            className="text-muted-foreground hover:text-foreground shrink-0"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      <div
+        ref={resourceListRef}
+        onWheel={handleResourceWheel}
+        className="border-border divide-border min-h-0 flex-1 divide-y overflow-y-auto border"
+      >
+        <SelectedGroup count={selectedAssistantRows.length}>
+          {selectedAssistantRows.map(({ assistant, projectName }) => (
+            <ResourceCheckbox
+              key={`selected-${assistant.id}`}
+              id={assistant.id}
+              label={assistant.name}
+              qualifier={projectName}
+              name={
+                <>
+                  <span title={assistant.name}>{assistant.name}</span>
+                  <span
+                    title={projectName}
+                    className="text-muted-foreground ml-2 text-xs font-normal"
+                  >
+                    {projectName}
+                  </span>
+                </>
+              }
+              checked
+              onToggle={toggleResource}
+            />
+          ))}
+        </SelectedGroup>
+        {filteredAssistantGroups.length === 0 ? (
+          <div className="text-muted-foreground px-3 py-3 text-sm">
+            {assistantInventory.isError
+              ? "Assistants unavailable"
+              : !assistantInventory.settled
+                ? "Loading assistants…"
+                : assistantInventory.groups.length === 0
+                  ? "No assistants found"
+                  : "No matching assistants"}
+          </div>
+        ) : (
+          filteredAssistantGroups.map((group) => (
+            <div key={group.projectId}>
+              <div className="bg-muted/40 text-muted-foreground text-eyebrow border-border border-b px-4 py-1.5">
+                {group.projectName}
+              </div>
+              {group.assistants.map((assistant) => (
+                <ResourceCheckbox
+                  key={assistant.id}
+                  id={assistant.id}
+                  label={assistant.name}
+                  qualifier={group.projectName}
+                  checked={isResourceSelected(assistant.id)}
                   onToggle={toggleResource}
                 />
               ))}
@@ -546,6 +716,7 @@ export function GrantRuleDrawerContent({
         {resourceSearch && (
           <button
             type="button"
+            aria-label="Clear project search"
             onClick={() => setResourceSearch("")}
             className="text-muted-foreground hover:text-foreground shrink-0"
           >
@@ -563,13 +734,14 @@ export function GrantRuleDrawerContent({
             <ResourceCheckbox
               key={`selected-${project.id}`}
               id={project.id}
-              name={project.name}
+              label={project.name}
               checked
               onToggle={toggleProject}
             />
           ))}
         </SelectedGroup>
-        {filteredProjectList.length === 0 ? (
+        {filteredProjectList.length === 0 &&
+        selectedProjectRows.length === 0 ? (
           <div className="text-muted-foreground px-3 py-3 text-sm">
             {projectList.length === 0
               ? "No projects found"
@@ -580,7 +752,7 @@ export function GrantRuleDrawerContent({
             <ResourceCheckbox
               key={project.id}
               id={project.id}
-              name={project.name}
+              label={project.name}
               checked={isProjectSelected(project.id)}
               onToggle={toggleProject}
             />
@@ -598,6 +770,7 @@ export function GrantRuleDrawerContent({
       annotations={annotations}
       onChangeAnnotations={onChangeAnnotations}
       isDeny={!!isDenyProp}
+      subject={subject}
       onChangeSelectors={(sels) => onChangeSelectors(sels)}
       onToggleTool={(serverId, toolName) => {
         const sels = selectors ?? [];
@@ -654,9 +827,32 @@ export function GrantRuleDrawerContent({
   return (
     <div className="flex flex-1 flex-col px-1.5 pb-1.5">
       {renderScopeOptions()}
+      {/* Plugins are shared with roles, never with an agent. */}
+      {isMcpConnect && !isDenyProp && subject === "role" && (
+        <p className="text-muted-foreground mt-2 text-xs">
+          Plugins shared with this role receive the servers chosen here. Read
+          and write access also let members connect, but never add servers to
+          plugins.
+        </p>
+      )}
       {/* The server inventory is withheld unless both org listings succeeded,
           so say why the lists are empty rather than implying the org has no
           servers. */}
+      {assistantInventory.isError && (
+        <div
+          role="alert"
+          className="border-border text-muted-foreground mt-3 flex items-center justify-between gap-2 border px-3 py-2 text-sm"
+        >
+          <span>Could not load this organization&rsquo;s assistants.</span>
+          <button
+            type="button"
+            onClick={assistantInventory.refetch}
+            className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {inventory.isError && (
         <div
           role="alert"
@@ -681,13 +877,18 @@ export function GrantRuleDrawerContent({
           <div className="border-border text-muted-foreground flex flex-1 items-center justify-center border px-6 text-center text-sm">
             {isDenyProp
               ? "This exception covers everything the allow rule permits."
-              : projectSelectable
-                ? "This role reaches every project in the organization."
-                : "This role reaches every server in every project."}
+              : resourceType === "inference"
+                ? `This ${subject} can run inference in every project.`
+                : projectFiltered
+                  ? `This ${subject} reaches every assistant in every project.`
+                  : projectSelectable
+                    ? `This ${subject} reaches every project in the organization.`
+                    : `This ${subject} reaches every server in every project.`}
           </div>
         ) : (
           <>
             {resourceList}
+            {assistantPickerList}
             {projectPickerList}
             {activePanel === "tools" && (
               <div className="flex min-h-0 flex-1 flex-col">{customTabs()}</div>
@@ -783,7 +984,7 @@ function InspectTabLink({
   const routes = useRoutes({ projectSlug });
   return (
     <Link
-      to={routes.mcp.x.inspect.href(
+      to={routes.mcp.details.inspect.href(
         mcpServerRouteParam({ id: serverId, slug: serverSlug }),
       )}
       className="text-primary inline-flex items-center gap-1 hover:underline"
@@ -810,6 +1011,7 @@ function RoleToolSelectionPanel({
   onChangeAnnotations,
   onChangeSelectors,
   isDeny,
+  subject,
   className,
 }: {
   mcpServers: ServerGroup[];
@@ -825,6 +1027,7 @@ function RoleToolSelectionPanel({
   onChangeAnnotations?: (annotations: AnnotationHint[]) => void;
   onChangeSelectors?: (selectors: Selector[]) => void;
   isDeny?: boolean;
+  subject: "role" | "agent";
   className?: string;
 }): JSX.Element {
   const allServers = useMemo(
@@ -1038,8 +1241,8 @@ function RoleToolSelectionPanel({
         annotationsDescription="Tools can be annotated with labels that provide more context about the properties of the tool, such as if it's a destructive operation. OpenAPI sources are tagged automatically based on HTTP method. You can edit annotations on the MCP tools tab."
         toolsDescription={
           isDeny
-            ? "Select specific tools to exclude. Expand a server to choose which tools this role should not access."
-            : "Select specific tools to allow. Expand a server to choose which tools this role can access."
+            ? `Select specific tools to exclude. Expand a server to choose which tools this ${subject} should not access.`
+            : `Select specific tools to allow. Expand a server to choose which tools this ${subject} can access.`
         }
         toolCountByAnnotation={toolCountByAnnotation}
         onExpandedServersChange={handleExpandedServersChange}
@@ -1070,6 +1273,7 @@ function SelectedGroup({
 
 function ResourceCheckbox({
   id,
+  label,
   name,
   qualifier,
   checked,
@@ -1077,7 +1281,14 @@ function ResourceCheckbox({
   compact,
 }: {
   id: string;
-  name: React.ReactNode;
+  /**
+   * The resource's name, as the checkbox's own accessible name. Without it
+   * the name was pieced together from the row's text, so a pinned row read
+   * "LinearDefault".
+   */
+  label: string;
+  /** What the row shows, when it is more than the label. */
+  name?: React.ReactNode;
   /** Read out after the name, for lists whose grouping is only a heading. */
   qualifier?: string;
   checked: boolean;
@@ -1088,19 +1299,25 @@ function ResourceCheckbox({
     <button
       type="button"
       onClick={() => onToggle(id)}
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={qualifier ? `${label} in ${qualifier}` : label}
       className={cn(
         "hover:bg-accent flex w-full cursor-pointer items-center gap-3 px-4",
         compact ? "h-9 text-sm" : "py-1.5 text-sm",
         checked && "font-medium",
       )}
     >
-      <Checkbox
-        checked={checked}
-        className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
-        tabIndex={-1}
-      />
-      <span className="truncate">{name}</span>
-      {qualifier && <span className="sr-only">in {qualifier}</span>}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "border-primary flex size-4 shrink-0 items-center justify-center border",
+          checked && "bg-primary text-primary-foreground",
+        )}
+      >
+        {checked && <Check className="size-3" />}
+      </span>
+      <span className="truncate">{name ?? label}</span>
     </button>
   );
 }
@@ -1138,4 +1355,19 @@ function ScopeOption({
       </span>
     </button>
   );
+}
+
+function allScopeLabel(projectSelectable: boolean, projectFiltered: boolean) {
+  if (projectFiltered) return "All assistants";
+  return projectSelectable ? "All projects" : "All servers";
+}
+
+function allScopeDescription(
+  projectSelectable: boolean,
+  projectFiltered: boolean,
+) {
+  if (projectFiltered) return "Give access to every assistant in your org";
+  return projectSelectable
+    ? "Give access to every project in your org"
+    : "Give access to all servers in every project in your org";
 }

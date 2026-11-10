@@ -11,13 +11,23 @@ import (
 	"github.com/google/uuid"
 )
 
-// WaitIdentityRestatements blocks until every detached identity restatement has finished.
-func (s *RefreshService) WaitIdentityRestatements() { s.restatements.Wait() }
+// WaitIdentityRestatements blocks until every detached refresh and identity restatement has finished.
+func (s *RefreshService) WaitIdentityRestatements() {
+	s.refreshes.Wait()
+	s.restatements.Wait()
+}
 
 func (m *ChallengeManager) WaitIdentityRestatements() { m.refresher.WaitIdentityRestatements() }
 
+// SetCreateDiscoveryBudget shortens create-time discovery for timing tests.
+func (s *Service) SetCreateDiscoveryBudget(d time.Duration) { s.createDiscoveryBudget = d }
+
 // MaxEnrichmentBytes exposes the enrichment cap to e2e tests.
 const MaxEnrichmentBytes = maxEnrichmentBytes
+
+// ErrRemoteLoginWithoutOrganization is the refusal of a grant write that names
+// no organization.
+var ErrRemoteLoginWithoutOrganization = errRemoteLoginWithoutOrganization
 
 // PlanIssuerMetadataRefresh exposes the on-use decision to tests.
 func PlanIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) (reproject, fetch bool) {
@@ -111,3 +121,8 @@ func (e *SessionEnricher) JWTAccessToken(ctx context.Context, target JWTAccessTo
 // ClientRotationLeaseKey exposes the rotation lease key so a test can hold
 // the lease and drive the waiting side of a concurrent rotation.
 func ClientRotationLeaseKey(clientID uuid.UUID) string { return clientRotationLeaseKey(clientID) }
+
+// StoreRemoteSessionGrant exposes the consent write to tests.
+func StoreRemoteSessionGrant(ctx context.Context, q *repo.Queries, organizationID string, params repo.UpsertRemoteSessionParams) (repo.RemoteSession, error) {
+	return storeRemoteSessionGrant(ctx, q, organizationID, params)
+}

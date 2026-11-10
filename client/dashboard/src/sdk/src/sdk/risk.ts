@@ -3,6 +3,7 @@
  */
 
 import { ClientSDK } from "../lib/sdks.js";
+import { Approvals } from "./approvals.js";
 import { Blocks } from "./blocks.js";
 import { Categories } from "./categories.js";
 import { CustomRules } from "./customrules.js";
@@ -13,6 +14,7 @@ import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
 import { PolicyBypassRequests } from "./policybypassrequests.js";
 import { PolicyChallenges } from "./policychallenges.js";
+import { Presets } from "./presets.js";
 import { Results } from "./results.js";
 import { Rules } from "./rules.js";
 import { SessionQuarantines } from "./sessionquarantines.js";
@@ -51,6 +53,11 @@ export class Risk extends ClientSDK {
     return (this._policies ??= new Policies(this._options));
   }
 
+  private _approvals?: Approvals;
+  get approvals(): Approvals {
+    return (this._approvals ??= new Approvals(this._options));
+  }
+
   private _signals?: Signals;
   get signals(): Signals {
     return (this._signals ??= new Signals(this._options));
@@ -74,6 +81,11 @@ export class Risk extends ClientSDK {
   private _results?: Results;
   get results(): Results {
     return (this._results ??= new Results(this._options));
+  }
+
+  private _presets?: Presets;
+  get presets(): Presets {
+    return (this._presets ??= new Presets(this._options));
   }
 
   private _sessionQuarantines?: SessionQuarantines;

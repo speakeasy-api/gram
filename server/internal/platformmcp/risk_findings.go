@@ -3,7 +3,6 @@ package platformmcp
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -38,25 +36,20 @@ type findingPolicyReader interface {
 }
 
 type RiskFindingsService struct {
-	projects      riskProjectResolver
-	organizations OrganizationSlugResolver
-	flags         feature.Provider
-	policies      findingPolicyReader
-	findings      RiskFindingsReader
-	cursor        *riskCursorCodec
-	now           func() time.Time
+	projects riskProjectResolver
+	policies findingPolicyReader
+	findings RiskFindingsReader
+	cursor   *riskCursorCodec
+	now      func() time.Time
 }
 
-func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, flags feature.Provider, organizations OrganizationSlugResolver, key string) *RiskFindingsService {
-	codec, err := newRiskCursorCodec(key)
-	if db == nil || findings == nil || organizations == nil || err != nil {
-		return nil
-	}
-	return &RiskFindingsService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, organizations: organizations, flags: flags, policies: riskrepo.New(db), findings: findings, cursor: codec, now: time.Now}
+func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, key string) *RiskFindingsService {
+	codec := newRiskCursorCodec(key)
+	return &RiskFindingsService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, policies: riskrepo.New(db), findings: findings, cursor: codec, now: time.Now}
 }
 
 func (s *RiskFindingsService) valid() bool {
-	return s != nil && s.projects != nil && s.organizations != nil && s.policies != nil && s.findings != nil && s.cursor != nil && s.now != nil
+	return s != nil && s.findings != nil
 }
 
 type ListRiskFindingsInput struct {
@@ -173,15 +166,6 @@ func findingLabel(value string) string {
 	return string(runes) + "…#" + hex.EncodeToString(hash[:8])
 }
 
-func (s *RiskFindingsService) userReference(org, value string) string {
-	if value == "" {
-		return ""
-	}
-	mac := hmac.New(sha256.New, s.cursor.key)
-	_, _ = mac.Write([]byte("watchdog-user:" + org + "\x00" + value))
-	return "user:" + hex.EncodeToString(mac.Sum(nil)[:16])
-}
-
 func (s *RiskFindingsService) List(ctx context.Context, principal Principal, input ListRiskFindingsInput) (ListRiskFindingsOutput, error) {
 	var zero ListRiskFindingsOutput
 	if !s.valid() {
@@ -217,20 +201,14 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 	if err != nil {
 		return zero, fmt.Errorf("resolve risk findings project: %w", err)
 	}
-	orgSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil || orgSlug == "" {
-		return zero, ErrUnavailable
+	params := chrepo.RiskSignalWindowParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID.String(),
+		MCPServerID:    "",
+		WideFrom:       time.Time{},
+		From:           from,
+		To:             to,
 	}
-	for _, flag := range []feature.Flag{feature.FlagRiskWatchdog, feature.FlagRiskListFromClickHouse} {
-		evaluation, err := feature.EvaluateFlag(ctx, s.flags, flag, principal.OrganizationID, feature.OrgProjectGroups(orgSlug, project.Slug))
-		if err != nil {
-			return zero, fmt.Errorf("%w: evaluate findings capability", ErrUnavailable)
-		}
-		if evaluation != feature.EvaluationEnabled {
-			return zero, ErrRiskFeatureNotEnabled
-		}
-	}
-	params := chrepo.RiskSignalWindowParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), From: from, To: to}
 	policies, err := s.policies.ListRiskFindingPolicies(ctx, riskrepo.ListRiskFindingPoliciesParams{
 		ProjectID:      project.ID,
 		OrganizationID: principal.OrganizationID,
@@ -301,7 +279,7 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 			for _, bucket := range buckets {
 				value := findingLabel(bucket.Value)
 				if dimension == "user" {
-					value = s.userReference(principal.OrganizationID, bucket.Value)
+					value = riskUserReference(s.cursor.key, principal.OrganizationID, bucket.Value)
 				}
 				byRule[bucket.RuleID] = append(byRule[bucket.RuleID], RiskFindingGroup{Value: value, Count: bucket.Count})
 			}

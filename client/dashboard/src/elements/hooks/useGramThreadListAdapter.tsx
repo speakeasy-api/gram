@@ -1,16 +1,17 @@
+import type { ThreadMessage, ThreadHistoryAdapter } from "@assistant-ui/react";
 import {
   type RemoteThreadListAdapter,
-  ThreadMessage,
   RuntimeAdapterProvider,
-  ThreadHistoryAdapter,
   useAui,
   type AssistantClient,
 } from "@assistant-ui/react";
 import { createAssistantStream, type AssistantStream } from "assistant-stream";
-import {
+import type {
   GramChatOverview,
   GramChat,
   GramChatMessage,
+} from "@/elements/lib/messageConverter";
+import {
   convertGramMessagesToExported,
   convertGramMessagesToUIMessages,
 } from "@/elements/lib/messageConverter";
@@ -132,7 +133,7 @@ function readChatCreatedAt(chat: GramChatOverview): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-/** Reads a chat's creator (Gram user id) from the `chat.list` payload. */
+/** Reads a chat's creator (Speakeasy user id) from the `chat.list` payload. */
 function readChatUserId(chat: GramChatOverview): string | undefined {
   const raw = chat as unknown as Record<string, unknown>;
   const value = raw["user_id"] ?? raw["userId"];
@@ -206,7 +207,7 @@ async function loadFullChat(
 }
 
 /**
- * Thread history adapter that loads messages from Gram API.
+ * Thread history adapter that loads messages from Speakeasy API.
  * Note: We use `as ThreadHistoryAdapter` cast because the withFormat generic
  * signature doesn't match our concrete implementation, but it works at runtime.
  */
@@ -278,7 +279,7 @@ class GramThreadHistoryAdapter {
   }
 
   async append() {
-    // No-op: Gram persists messages server-side during streaming.
+    // No-op: Speakeasy persists messages server-side during streaming.
   }
 
   // Required by ThreadHistoryAdapter - wraps adapter with format conversion.
@@ -348,7 +349,7 @@ class GramThreadHistoryAdapter {
 }
 
 /**
- * Hook to create a Gram thread history adapter.
+ * Hook to create a Speakeasy thread history adapter.
  */
 function useGramThreadHistoryAdapter(
   optionsRef: React.RefObject<ThreadListAdapterOptions>,
@@ -368,7 +369,7 @@ function useGramThreadHistoryAdapter(
 }
 
 /**
- * Hook that creates a RemoteThreadListAdapter for the Gram API.
+ * Hook that creates a RemoteThreadListAdapter for the Speakeasy API.
  * This properly handles React component identity for the Provider.
  */
 export function useGramThreadListAdapter(

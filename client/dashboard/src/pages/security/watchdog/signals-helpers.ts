@@ -1,6 +1,6 @@
 import { ACCENT_RED, SEVERITY, TREND } from "@/components/chart/palette";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
-import type { SeverityRating } from "../risk-utils";
+import { scoreToRating, type SeverityRating } from "../risk-utils";
 
 /**
  * Score-number color per severity band, shared by the signal rows and the
@@ -38,7 +38,8 @@ export type SignalGroupMode =
   | "category"
   | "team"
   | "app"
-  | "principal";
+  | "principal"
+  | "server";
 
 /**
  * Group key for signals whose findings carry no team/app attribution (rows
@@ -133,7 +134,24 @@ function groupKeyForMode(signal: RiskSignal, mode: SignalGroupMode): string {
       return dominantApp(signal);
     case "principal":
       return dominantPrincipal(signal);
+    case "server":
+      // Server grouping files a signal under every server it was seen on
+      // (see groupKeysForMode); the first is only a fallback for callers that
+      // need a single key.
+      return signal.mcpServerIds[0] ?? UNATTRIBUTED_GROUP_KEY;
   }
+}
+
+/**
+ * Every group a signal belongs to. A signal spans several MCP servers, so under
+ * server grouping it appears once per server (finding counts on a row stay
+ * whole-signal); every other mode files it under exactly one group.
+ */
+function groupKeysForMode(signal: RiskSignal, mode: SignalGroupMode): string[] {
+  if (mode === "server" && signal.mcpServerIds.length > 0) {
+    return signal.mcpServerIds;
+  }
+  return [groupKeyForMode(signal, mode)];
 }
 
 /**
@@ -149,12 +167,13 @@ export function groupSignals(
 ): SignalGroup[] {
   const byKey = new Map<string, RiskSignal[]>();
   for (const signal of signals) {
-    const key = groupKeyForMode(signal, mode);
-    const bucket = byKey.get(key);
-    if (bucket) {
-      bucket.push(signal);
-    } else {
-      byKey.set(key, [signal]);
+    for (const key of groupKeysForMode(signal, mode)) {
+      const bucket = byKey.get(key);
+      if (bucket) {
+        bucket.push(signal);
+      } else {
+        byKey.set(key, [signal]);
+      }
     }
   }
 
@@ -206,4 +225,52 @@ export function toggleFilterValue(
   return selection.includes(value)
     ? selection.filter((entry) => entry !== value)
     : [...selection, value];
+}
+
+/** Server bucket count for signal sparklines (risk/signals_ch.go). */
+const SIGNAL_SPARK_BUCKETS = 24;
+
+/**
+ * Start time (ms) of each sparkline bucket, oldest first. Mirrors the server's
+ * bucketing in risk/signals_ch.go: width is the window split into 24 buckets
+ * (ceiling, whole seconds, at least 60s), and buckets are epoch-aligned, so the
+ * first one can start before `from`. The server sends only counts, so the
+ * timestamps are rebuilt here from the same window the page requested.
+ */
+export function signalBucketStarts(
+  from: Date,
+  to: Date,
+  length: number,
+): { starts: number[]; bucketMs: number } {
+  const windowSeconds = Math.trunc((to.getTime() - from.getTime()) / 1000);
+  const bucketSeconds = Math.max(
+    Math.floor(
+      (windowSeconds + SIGNAL_SPARK_BUCKETS - 1) / SIGNAL_SPARK_BUCKETS,
+    ),
+    60,
+  );
+  const fromSeconds = Math.floor(from.getTime() / 1000);
+  const alignedFrom = Math.floor(fromSeconds / bucketSeconds) * bucketSeconds;
+  const bucketMs = bucketSeconds * 1000;
+  return {
+    starts: Array.from({ length }, (_, i) => alignedFrom * 1000 + i * bucketMs),
+    bucketMs,
+  };
+}
+
+/** StatTile tone for the a risk score, mirroring the signal table's
+ * severity coding: red for high/critical bands, amber for medium, plain
+ * ink for low. */
+export function riskScoreTone(
+  score: number,
+): "destructive" | "warning" | "neutral" {
+  switch (scoreToRating(score)) {
+    case "critical":
+    case "high":
+      return "destructive";
+    case "medium":
+      return "warning";
+    case "low":
+      return "neutral";
+  }
 }

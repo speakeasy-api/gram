@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,18 +22,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 type agentConsentFixture struct {
-	toolset toolsetsrepo.Toolset
+	toolset hostedToolset
 	client  usersessionsrepo.UserSessionClient
 	stateID string
 	csrf    string
@@ -48,9 +53,6 @@ func newAgentConsentFixture(t *testing.T, ctx context.Context, ti *testInstance)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-
-	ti.features.SetFlag(feature.FlagAgentManagement, authCtx.ActiveOrganizationID, true)
-	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, authCtx.ActiveOrganizationID, true)
 
 	stateID := uuid.NewString()
 	csrf := "csrf-" + uuid.NewString()
@@ -70,7 +72,7 @@ func newAgentConsentFixture(t *testing.T, ctx context.Context, ti *testInstance)
 		AgentAuthorizationTarget: &target,
 		Endpoint: mcp.EndpointRef{
 			McpSlug:   toolset.McpSlug.String,
-			RouteBase: "mcp",
+			RouteBase: mcproute.MCP,
 		},
 		ClientID:            client.ClientID,
 		RedirectURI:         client.RedirectUris[0],
@@ -293,6 +295,118 @@ func TestConsentAgentApprovalCarriesFixedResultWithoutReusableConsent(t *testing
 	require.ElementsMatch(t, before, after, "consent must not grant or rewrite agent policy")
 }
 
+// seedAgentOutageConnection gives an approved agent the user's expired connection to a provider at providerURL.
+func seedAgentOutageConnection(t *testing.T, ctx context.Context, ti *testInstance, fx agentConsentFixture, providerURL string) (uuid.UUID, remotesessionsrepo.RemoteSession) {
+	t.Helper()
+
+	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
+	agent := createConsentAgent(t, ctx, ti, fx, "Approved agent")
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, fx.orgID, "agent-outage-"+uuid.NewString()[:8], providerURL, []uuid.UUID{fx.client.UserSessionIssuerID})
+	access, err := ti.enc.Encrypt([]byte("expired"))
+	require.NoError(t, err)
+	refresh, err := ti.enc.Encrypt([]byte("live-refresh"))
+	require.NoError(t, err)
+	_, err = remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		SubjectUrn: urn.NewUserSubject(fx.userID), UserSessionIssuerID: fx.client.UserSessionIssuerID, RemoteSessionClientID: clientID,
+		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{},
+	})
+	require.NoError(t, err)
+
+	session, err := remotesessionsrepo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{SubjectUrn: urn.NewUserSubject(fx.userID), RemoteSessionClientID: clientID})
+	require.NoError(t, err)
+	_, err = remotesessionsrepo.New(ti.conn).AttachPrincipalRemoteSessionBinding(ctx, remotesessionsrepo.AttachPrincipalRemoteSessionBindingParams{PrincipalID: agent.ID, SubjectUrn: urn.NewUserSubject(fx.userID).String(), ProjectID: *authCtx.ProjectID, OrganizationID: fx.orgID, UserSessionIssuerID: fx.client.UserSessionIssuerID, RemoteSessionID: session.ID})
+	require.NoError(t, err)
+	return agent.ID, session
+}
+
+// stepReasons lists the reasons recorded at step.
+func stepReasons(rec *mcpconnectionattemptstest.Recording, step mcpconnectionattempts.Step) []string {
+	var reasons []string
+	for _, row := range rec.Rows() {
+		if row.Step == step.String() {
+			reasons = append(reasons, row.Reason)
+		}
+	}
+	return reasons
+}
+
+// A provider outage while approving for an agent is the provider's, not a problem on our side.
+func TestConsentAgentApprovalDuringProviderOutageNamesTheProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(provider.Close)
+	agentID, _ := seedAgentOutageConnection(t, ctx, ti, fx, provider.URL)
+
+	_, err := serveAgentConsentPost(t, ctx, ti, fx, agentID)
+	require.Error(t, err)
+	page := httptest.NewRecorder()
+	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error { return err }).ServeHTTP(page, httptest.NewRequest(http.MethodPost, "/connect", nil))
+	require.Equal(t, http.StatusServiceUnavailable, page.Code, page.Body.String())
+	require.Contains(t, page.Body.String(), "available right now")
+	require.NotContains(t, page.Body.String(), "problem on our side")
+	upstream, err := url.Parse(provider.URL)
+	require.NoError(t, err)
+	require.Contains(t, page.Body.String(), upstream.Hostname(), "names the provider")
+	require.Equal(t, []string{mcpconnectionattempts.CodeRemoteSessionUnavailable.String()}, stepReasons(rec, mcpconnectionattempts.StepInboundConsent))
+}
+
+// A cooldown whose outage record Redis lost is still the provider's outage on the consent row.
+func TestConsentAgentApprovalDuringCooldownWithoutOutageRecord(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	var calls atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(provider.Close)
+	agentID, session := seedAgentOutageConnection(t, ctx, ti, fx, provider.URL)
+	require.NoError(t, ti.cacheAdapter.Set(ctx, remotesessions.RefreshCooldownKey(session), time.Now().Add(time.Minute), time.Minute))
+
+	_, err := serveAgentConsentPost(t, ctx, ti, fx, agentID)
+	require.Error(t, err)
+	require.Zero(t, calls.Load(), "the cooldown holds the refresh")
+	require.Equal(t, []string{mcpconnectionattempts.CodeRemoteSessionUnavailable.String()}, stepReasons(rec, mcpconnectionattempts.StepInboundConsent))
+}
+
+// Another request's refresh holds the lock: its row covers it, so consent writes none.
+func TestConsentAgentApprovalWhileRefreshLockHeldRecordsNoRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(provider.Close)
+	agentID, session := seedAgentOutageConnection(t, ctx, ti, fx, provider.URL)
+	held, err := ti.cacheAdapter.Add(ctx, remotesessions.RefreshLockKey(session.SubjectUrn, session.RemoteSessionClientID), time.Minute)
+	require.NoError(t, err)
+	require.True(t, held)
+
+	_, err = serveAgentConsentPost(t, ctx, ti, fx, agentID)
+	require.Error(t, err)
+	require.Empty(t, stepReasons(rec, mcpconnectionattempts.StepInboundConsent))
+}
+
 func TestConsentAgentApprovalRechecksLiveAgentPolicy(t *testing.T) {
 	t.Parallel()
 
@@ -374,27 +488,4 @@ func TestConsentAgentSelectionRejectsLegacyAuthorizerWithoutProvenance(t *testin
 	require.Empty(t, w.Header().Get("Location"))
 	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
 	require.NoError(t, err, "legacy-state rejection must not consume the challenge")
-}
-
-func TestConsentAgentSelectionFailsClosedWhenRolloutDisabled(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	fx := newAgentConsentFixture(t, ctx, ti)
-	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
-	agent := createConsentAgent(t, ctx, ti, fx, "Hidden agent")
-	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
-	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, fx.orgID, false)
-
-	w := serveAgentConsentGet(t, ctx, ti, fx)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.NotContains(t, w.Body.String(), "Authorize as")
-	require.NotContains(t, w.Body.String(), agent.Name)
-
-	w, err := serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
-	require.Error(t, err)
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeForbidden, shareable.Code)
-	require.Empty(t, w.Header().Get("Location"))
 }

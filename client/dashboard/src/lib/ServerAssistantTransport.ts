@@ -131,7 +131,7 @@ export function createServerAssistantTransport(
           (a): a is { assetId: string; name: string | undefined } =>
             a.assetId !== null,
         );
-      // A file whose URL carries no asset id was never stored in Gram, so the
+      // A file whose URL carries no asset id was never stored in Speakeasy, so the
       // turn cannot reference it. Name it rather than letting the send fail as
       // a bare "nothing to send".
       if (attachments.length < fileParts.length) {

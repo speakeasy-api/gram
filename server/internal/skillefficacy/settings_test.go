@@ -4,7 +4,6 @@ package skillefficacy_test
 import (
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -153,7 +152,7 @@ func TestConcurrentUpsertSettingsAuditsCommittedTransitions(t *testing.T) {
 			results <- callErr
 		})
 	}
-	require.Never(t, func() bool { return len(results) > 0 }, 100*time.Millisecond, 10*time.Millisecond)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(lockTx), len(payloads))
 	require.NoError(t, lockTx.Commit(ctx))
 	wg.Wait()
 	close(results)

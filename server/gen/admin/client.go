@@ -17,117 +17,229 @@ import (
 
 // Client is the "admin" service client.
 type Client struct {
-	LoginEndpoint                                 goa.Endpoint
-	CallbackEndpoint                              goa.Endpoint
-	LogoutEndpoint                                goa.Endpoint
-	GetSessionEndpoint                            goa.Endpoint
-	GetOrganizationFeaturesEndpoint               goa.Endpoint
-	SetOrganizationFeatureEndpoint                goa.Endpoint
-	GetOrganizationChatAnalysisSettingsEndpoint   goa.Endpoint
-	SetOrganizationChatAnalysisSettingsEndpoint   goa.Endpoint
-	TriggerOrganizationChatAnalysisEndpoint       goa.Endpoint
-	OpenOrganizationInDashboardEndpoint           goa.Endpoint
-	GetProjectEndpoint                            goa.Endpoint
-	UpdateOrganizationEndpoint                    goa.Endpoint
-	BulkUpdateAccountTypeEndpoint                 goa.Endpoint
-	DisableOrganizationEndpoint                   goa.Endpoint
-	EnableOrganizationEndpoint                    goa.Endpoint
-	GetOrganizationEndpoint                       goa.Endpoint
-	ListOrganizationMembersEndpoint               goa.Endpoint
-	ListOrganizationProjectsEndpoint              goa.Endpoint
-	ListOrganizationActivityEndpoint              goa.Endpoint
-	ListOrganizationsEndpoint                     goa.Endpoint
-	ExtendTrialEndpoint                           goa.Endpoint
-	CreateOrganizationEndpoint                    goa.Endpoint
-	RearmTrialEndpoint                            goa.Endpoint
-	GetOrganizationStatsEndpoint                  goa.Endpoint
-	GetInferenceKeysEndpoint                      goa.Endpoint
-	SetInferenceKeyMonthlyLimitEndpoint           goa.Endpoint
-	GetInferenceSpendHistoryEndpoint              goa.Endpoint
-	GetPaygBillingSummaryEndpoint                 goa.Endpoint
-	GetStripeCustomerEndpoint                     goa.Endpoint
-	SetStripeCustomerEndpoint                     goa.Endpoint
-	GetStripeSubscriptionEndpoint                 goa.Endpoint
-	CancelStripeSubscriptionEndpoint              goa.Endpoint
-	ResumeStripeSubscriptionEndpoint              goa.Endpoint
-	MarkEnterpriseTrialConvertedEndpoint          goa.Endpoint
-	CreateGlobalIssuerEndpoint                    goa.Endpoint
-	GetGlobalIssuerDuplicatePreflightEndpoint     goa.Endpoint
-	ListGlobalIssuersEndpoint                     goa.Endpoint
-	GetGlobalIssuerEndpoint                       goa.Endpoint
-	UpdateGlobalIssuerEndpoint                    goa.Endpoint
-	DeleteGlobalIssuerEndpoint                    goa.Endpoint
-	FetchGlobalIssuerMetadataEndpoint             goa.Endpoint
-	RefreshGlobalIssuerMetadataEndpoint           goa.Endpoint
-	ListGlobalIssuerConvergenceCandidatesEndpoint goa.Endpoint
-	GetGlobalIssuerMigratePreflightEndpoint       goa.Endpoint
-	MigrateToGlobalIssuerEndpoint                 goa.Endpoint
-	UploadPlatformImageEndpoint                   goa.Endpoint
-	ServeImageEndpoint                            goa.Endpoint
-	StartTrialEndpoint                            goa.Endpoint
-	ChangeTrialEndDateEndpoint                    goa.Endpoint
-	GetMeterUsageEndpoint                         goa.Endpoint
-	GetSpendBreakdownEndpoint                     goa.Endpoint
-	GetSupportMatrixEndpoint                      goa.Endpoint
-	UpdateSupportMatrixEndpoint                   goa.Endpoint
+	LoginEndpoint                                   goa.Endpoint
+	CallbackEndpoint                                goa.Endpoint
+	LogoutEndpoint                                  goa.Endpoint
+	GetSessionEndpoint                              goa.Endpoint
+	GetOrganizationFeaturesEndpoint                 goa.Endpoint
+	SetOrganizationProviderSetupEndpoint            goa.Endpoint
+	SetOrganizationFeatureEndpoint                  goa.Endpoint
+	GetOrganizationChatAnalysisSettingsEndpoint     goa.Endpoint
+	SetOrganizationChatAnalysisSettingsEndpoint     goa.Endpoint
+	TriggerOrganizationChatAnalysisEndpoint         goa.Endpoint
+	OpenOrganizationInDashboardEndpoint             goa.Endpoint
+	GetProjectEndpoint                              goa.Endpoint
+	UpdateOrganizationEndpoint                      goa.Endpoint
+	BulkUpdateAccountTypeEndpoint                   goa.Endpoint
+	DisableOrganizationEndpoint                     goa.Endpoint
+	EnableOrganizationEndpoint                      goa.Endpoint
+	GetOrganizationEndpoint                         goa.Endpoint
+	ListOrganizationMembersEndpoint                 goa.Endpoint
+	ListOrganizationProjectsEndpoint                goa.Endpoint
+	ListProjectMcpServersEndpoint                   goa.Endpoint
+	ListOrganizationActivityEndpoint                goa.Endpoint
+	ListUsersEndpoint                               goa.Endpoint
+	ListUserOrganizationsEndpoint                   goa.Endpoint
+	ListOrganizationsEndpoint                       goa.Endpoint
+	ExtendTrialEndpoint                             goa.Endpoint
+	CreateOrganizationEndpoint                      goa.Endpoint
+	RearmTrialEndpoint                              goa.Endpoint
+	GetOrganizationStatsEndpoint                    goa.Endpoint
+	RepairInferenceKeyEndpoint                      goa.Endpoint
+	GetInferenceKeysEndpoint                        goa.Endpoint
+	SetInferenceKeyMonthlyLimitEndpoint             goa.Endpoint
+	GetInferenceSpendHistoryEndpoint                goa.Endpoint
+	GetPaygBillingSummaryEndpoint                   goa.Endpoint
+	GetStripeCustomerEndpoint                       goa.Endpoint
+	SetStripeCustomerEndpoint                       goa.Endpoint
+	SetAdoptionDashboardURLEndpoint                 goa.Endpoint
+	GetStripeSubscriptionEndpoint                   goa.Endpoint
+	CancelStripeSubscriptionEndpoint                goa.Endpoint
+	ResumeStripeSubscriptionEndpoint                goa.Endpoint
+	MarkEnterpriseTrialConvertedEndpoint            goa.Endpoint
+	CreateGlobalIssuerEndpoint                      goa.Endpoint
+	GetGlobalIssuerDuplicatePreflightEndpoint       goa.Endpoint
+	ListGlobalIssuersEndpoint                       goa.Endpoint
+	GetGlobalIssuerEndpoint                         goa.Endpoint
+	UpdateGlobalIssuerEndpoint                      goa.Endpoint
+	DeleteGlobalIssuerEndpoint                      goa.Endpoint
+	FetchGlobalIssuerMetadataEndpoint               goa.Endpoint
+	RefreshGlobalIssuerMetadataEndpoint             goa.Endpoint
+	ListGlobalIssuerConvergenceCandidatesEndpoint   goa.Endpoint
+	GetGlobalIssuerMigratePreflightEndpoint         goa.Endpoint
+	MigrateToGlobalIssuerEndpoint                   goa.Endpoint
+	UploadPlatformImageEndpoint                     goa.Endpoint
+	ServeImageEndpoint                              goa.Endpoint
+	StartTrialEndpoint                              goa.Endpoint
+	ChangeTrialEndDateEndpoint                      goa.Endpoint
+	GetMeterUsageEndpoint                           goa.Endpoint
+	GetSpendBreakdownEndpoint                       goa.Endpoint
+	GetSupportMatrixEndpoint                        goa.Endpoint
+	UpdateSupportMatrixEndpoint                     goa.Endpoint
+	GetSupportCoverageEndpoint                      goa.Endpoint
+	DescribeMcpServerHealthEndpoint                 goa.Endpoint
+	SetMcpServerScopePinEndpoint                    goa.Endpoint
+	GetMcpServerToolCallsEndpoint                   goa.Endpoint
+	GetHookClientsEndpoint                          goa.Endpoint
+	GetOrganizationHookFleetEndpoint                goa.Endpoint
+	ListRegistryPromotionCandidatesEndpoint         goa.Endpoint
+	GetRegistryPromotionCandidateEndpoint           goa.Endpoint
+	PromoteRegistryCandidateEndpoint                goa.Endpoint
+	CurateRegistryPromotionCandidateEndpoint        goa.Endpoint
+	RetryRegistryPromotionDocsEndpoint              goa.Endpoint
+	GetRegistryOktaCandidatesEndpoint               goa.Endpoint
+	ListRegistryOktaUnmappedEndpoint                goa.Endpoint
+	ListRegistryEntriesEndpoint                     goa.Endpoint
+	GetRegistryEntryEndpoint                        goa.Endpoint
+	CreateRegistryEntryEndpoint                     goa.Endpoint
+	SaveRegistryEntryEndpoint                       goa.Endpoint
+	SetRegistryEntryPublishedEndpoint               goa.Endpoint
+	ListOnboardingStepsEndpoint                     goa.Endpoint
+	GetOnboardingStackOptionsEndpoint               goa.Endpoint
+	GetOrganizationOnboardingStackEndpoint          goa.Endpoint
+	SetOrganizationOnboardingStackEndpoint          goa.Endpoint
+	ListOnboardingUseCasesEndpoint                  goa.Endpoint
+	CreateOnboardingUseCaseEndpoint                 goa.Endpoint
+	UpdateOnboardingUseCaseEndpoint                 goa.Endpoint
+	DeleteOnboardingUseCaseEndpoint                 goa.Endpoint
+	ListOnboardingPlaybooksEndpoint                 goa.Endpoint
+	CreateOnboardingPlaybookEndpoint                goa.Endpoint
+	UpdateOnboardingPlaybookEndpoint                goa.Endpoint
+	DeleteOnboardingPlaybookEndpoint                goa.Endpoint
+	CloneOnboardingPlaybookEndpoint                 goa.Endpoint
+	GetOrganizationOnboardingPlaybookEndpoint       goa.Endpoint
+	AssignOrganizationOnboardingPlaybookEndpoint    goa.Endpoint
+	ListSignupOffersEndpoint                        goa.Endpoint
+	CreateSignupOfferEndpoint                       goa.Endpoint
+	UpdateSignupOfferEndpoint                       goa.Endpoint
+	ListPlatformMcpFeedbackEndpoint                 goa.Endpoint
+	GetStripeSubscriptionCandidateEndpoint          goa.Endpoint
+	SetStripeSubscriptionEndpoint                   goa.Endpoint
+	ListCustomerUsageEndpoint                       goa.Endpoint
+	ListUpstreamOAuthMigrationOrganizationsEndpoint goa.Endpoint
+	GetUpstreamOAuthMigrationStatusEndpoint         goa.Endpoint
+	RunUpstreamOAuthMigrationEndpoint               goa.Endpoint
+	EnableUpstreamAuthEnforcementEndpoint           goa.Endpoint
+	DisableUpstreamAuthEnforcementEndpoint          goa.Endpoint
+	BackfillMcpAuthGrantsEndpoint                   goa.Endpoint
+	BackfillMcpConnectGrantsEndpoint                goa.Endpoint
+	GetProjectRedeployPreviewEndpoint               goa.Endpoint
+	RedeployProjectEndpoint                         goa.Endpoint
+	ListCustomDomainsEndpoint                       goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationProviderSetup, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, repairInferenceKey, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, setAdoptionDashboardURL, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, setMcpServerScopePin, getMcpServerToolCalls, getHookClients, getOrganizationHookFleet, listRegistryPromotionCandidates, getRegistryPromotionCandidate, promoteRegistryCandidate, curateRegistryPromotionCandidate, retryRegistryPromotionDocs, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, listSignupOffers, createSignupOffer, updateSignupOffer, listPlatformMcpFeedback, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage, listUpstreamOAuthMigrationOrganizations, getUpstreamOAuthMigrationStatus, runUpstreamOAuthMigration, enableUpstreamAuthEnforcement, disableUpstreamAuthEnforcement, backfillMcpAuthGrants, backfillMcpConnectGrants, getProjectRedeployPreview, redeployProject, listCustomDomains goa.Endpoint) *Client {
 	return &Client{
-		LoginEndpoint:                                 login,
-		CallbackEndpoint:                              callback,
-		LogoutEndpoint:                                logout,
-		GetSessionEndpoint:                            getSession,
-		GetOrganizationFeaturesEndpoint:               getOrganizationFeatures,
-		SetOrganizationFeatureEndpoint:                setOrganizationFeature,
-		GetOrganizationChatAnalysisSettingsEndpoint:   getOrganizationChatAnalysisSettings,
-		SetOrganizationChatAnalysisSettingsEndpoint:   setOrganizationChatAnalysisSettings,
-		TriggerOrganizationChatAnalysisEndpoint:       triggerOrganizationChatAnalysis,
-		OpenOrganizationInDashboardEndpoint:           openOrganizationInDashboard,
-		GetProjectEndpoint:                            getProject,
-		UpdateOrganizationEndpoint:                    updateOrganization,
-		BulkUpdateAccountTypeEndpoint:                 bulkUpdateAccountType,
-		DisableOrganizationEndpoint:                   disableOrganization,
-		EnableOrganizationEndpoint:                    enableOrganization,
-		GetOrganizationEndpoint:                       getOrganization,
-		ListOrganizationMembersEndpoint:               listOrganizationMembers,
-		ListOrganizationProjectsEndpoint:              listOrganizationProjects,
-		ListOrganizationActivityEndpoint:              listOrganizationActivity,
-		ListOrganizationsEndpoint:                     listOrganizations,
-		ExtendTrialEndpoint:                           extendTrial,
-		CreateOrganizationEndpoint:                    createOrganization,
-		RearmTrialEndpoint:                            rearmTrial,
-		GetOrganizationStatsEndpoint:                  getOrganizationStats,
-		GetInferenceKeysEndpoint:                      getInferenceKeys,
-		SetInferenceKeyMonthlyLimitEndpoint:           setInferenceKeyMonthlyLimit,
-		GetInferenceSpendHistoryEndpoint:              getInferenceSpendHistory,
-		GetPaygBillingSummaryEndpoint:                 getPaygBillingSummary,
-		GetStripeCustomerEndpoint:                     getStripeCustomer,
-		SetStripeCustomerEndpoint:                     setStripeCustomer,
-		GetStripeSubscriptionEndpoint:                 getStripeSubscription,
-		CancelStripeSubscriptionEndpoint:              cancelStripeSubscription,
-		ResumeStripeSubscriptionEndpoint:              resumeStripeSubscription,
-		MarkEnterpriseTrialConvertedEndpoint:          markEnterpriseTrialConverted,
-		CreateGlobalIssuerEndpoint:                    createGlobalIssuer,
-		GetGlobalIssuerDuplicatePreflightEndpoint:     getGlobalIssuerDuplicatePreflight,
-		ListGlobalIssuersEndpoint:                     listGlobalIssuers,
-		GetGlobalIssuerEndpoint:                       getGlobalIssuer,
-		UpdateGlobalIssuerEndpoint:                    updateGlobalIssuer,
-		DeleteGlobalIssuerEndpoint:                    deleteGlobalIssuer,
-		FetchGlobalIssuerMetadataEndpoint:             fetchGlobalIssuerMetadata,
-		RefreshGlobalIssuerMetadataEndpoint:           refreshGlobalIssuerMetadata,
-		ListGlobalIssuerConvergenceCandidatesEndpoint: listGlobalIssuerConvergenceCandidates,
-		GetGlobalIssuerMigratePreflightEndpoint:       getGlobalIssuerMigratePreflight,
-		MigrateToGlobalIssuerEndpoint:                 migrateToGlobalIssuer,
-		UploadPlatformImageEndpoint:                   uploadPlatformImage,
-		ServeImageEndpoint:                            serveImage,
-		StartTrialEndpoint:                            startTrial,
-		ChangeTrialEndDateEndpoint:                    changeTrialEndDate,
-		GetMeterUsageEndpoint:                         getMeterUsage,
-		GetSpendBreakdownEndpoint:                     getSpendBreakdown,
-		GetSupportMatrixEndpoint:                      getSupportMatrix,
-		UpdateSupportMatrixEndpoint:                   updateSupportMatrix,
+		LoginEndpoint:                                   login,
+		CallbackEndpoint:                                callback,
+		LogoutEndpoint:                                  logout,
+		GetSessionEndpoint:                              getSession,
+		GetOrganizationFeaturesEndpoint:                 getOrganizationFeatures,
+		SetOrganizationProviderSetupEndpoint:            setOrganizationProviderSetup,
+		SetOrganizationFeatureEndpoint:                  setOrganizationFeature,
+		GetOrganizationChatAnalysisSettingsEndpoint:     getOrganizationChatAnalysisSettings,
+		SetOrganizationChatAnalysisSettingsEndpoint:     setOrganizationChatAnalysisSettings,
+		TriggerOrganizationChatAnalysisEndpoint:         triggerOrganizationChatAnalysis,
+		OpenOrganizationInDashboardEndpoint:             openOrganizationInDashboard,
+		GetProjectEndpoint:                              getProject,
+		UpdateOrganizationEndpoint:                      updateOrganization,
+		BulkUpdateAccountTypeEndpoint:                   bulkUpdateAccountType,
+		DisableOrganizationEndpoint:                     disableOrganization,
+		EnableOrganizationEndpoint:                      enableOrganization,
+		GetOrganizationEndpoint:                         getOrganization,
+		ListOrganizationMembersEndpoint:                 listOrganizationMembers,
+		ListOrganizationProjectsEndpoint:                listOrganizationProjects,
+		ListProjectMcpServersEndpoint:                   listProjectMcpServers,
+		ListOrganizationActivityEndpoint:                listOrganizationActivity,
+		ListUsersEndpoint:                               listUsers,
+		ListUserOrganizationsEndpoint:                   listUserOrganizations,
+		ListOrganizationsEndpoint:                       listOrganizations,
+		ExtendTrialEndpoint:                             extendTrial,
+		CreateOrganizationEndpoint:                      createOrganization,
+		RearmTrialEndpoint:                              rearmTrial,
+		GetOrganizationStatsEndpoint:                    getOrganizationStats,
+		RepairInferenceKeyEndpoint:                      repairInferenceKey,
+		GetInferenceKeysEndpoint:                        getInferenceKeys,
+		SetInferenceKeyMonthlyLimitEndpoint:             setInferenceKeyMonthlyLimit,
+		GetInferenceSpendHistoryEndpoint:                getInferenceSpendHistory,
+		GetPaygBillingSummaryEndpoint:                   getPaygBillingSummary,
+		GetStripeCustomerEndpoint:                       getStripeCustomer,
+		SetStripeCustomerEndpoint:                       setStripeCustomer,
+		SetAdoptionDashboardURLEndpoint:                 setAdoptionDashboardURL,
+		GetStripeSubscriptionEndpoint:                   getStripeSubscription,
+		CancelStripeSubscriptionEndpoint:                cancelStripeSubscription,
+		ResumeStripeSubscriptionEndpoint:                resumeStripeSubscription,
+		MarkEnterpriseTrialConvertedEndpoint:            markEnterpriseTrialConverted,
+		CreateGlobalIssuerEndpoint:                      createGlobalIssuer,
+		GetGlobalIssuerDuplicatePreflightEndpoint:       getGlobalIssuerDuplicatePreflight,
+		ListGlobalIssuersEndpoint:                       listGlobalIssuers,
+		GetGlobalIssuerEndpoint:                         getGlobalIssuer,
+		UpdateGlobalIssuerEndpoint:                      updateGlobalIssuer,
+		DeleteGlobalIssuerEndpoint:                      deleteGlobalIssuer,
+		FetchGlobalIssuerMetadataEndpoint:               fetchGlobalIssuerMetadata,
+		RefreshGlobalIssuerMetadataEndpoint:             refreshGlobalIssuerMetadata,
+		ListGlobalIssuerConvergenceCandidatesEndpoint:   listGlobalIssuerConvergenceCandidates,
+		GetGlobalIssuerMigratePreflightEndpoint:         getGlobalIssuerMigratePreflight,
+		MigrateToGlobalIssuerEndpoint:                   migrateToGlobalIssuer,
+		UploadPlatformImageEndpoint:                     uploadPlatformImage,
+		ServeImageEndpoint:                              serveImage,
+		StartTrialEndpoint:                              startTrial,
+		ChangeTrialEndDateEndpoint:                      changeTrialEndDate,
+		GetMeterUsageEndpoint:                           getMeterUsage,
+		GetSpendBreakdownEndpoint:                       getSpendBreakdown,
+		GetSupportMatrixEndpoint:                        getSupportMatrix,
+		UpdateSupportMatrixEndpoint:                     updateSupportMatrix,
+		GetSupportCoverageEndpoint:                      getSupportCoverage,
+		DescribeMcpServerHealthEndpoint:                 describeMcpServerHealth,
+		SetMcpServerScopePinEndpoint:                    setMcpServerScopePin,
+		GetMcpServerToolCallsEndpoint:                   getMcpServerToolCalls,
+		GetHookClientsEndpoint:                          getHookClients,
+		GetOrganizationHookFleetEndpoint:                getOrganizationHookFleet,
+		ListRegistryPromotionCandidatesEndpoint:         listRegistryPromotionCandidates,
+		GetRegistryPromotionCandidateEndpoint:           getRegistryPromotionCandidate,
+		PromoteRegistryCandidateEndpoint:                promoteRegistryCandidate,
+		CurateRegistryPromotionCandidateEndpoint:        curateRegistryPromotionCandidate,
+		RetryRegistryPromotionDocsEndpoint:              retryRegistryPromotionDocs,
+		GetRegistryOktaCandidatesEndpoint:               getRegistryOktaCandidates,
+		ListRegistryOktaUnmappedEndpoint:                listRegistryOktaUnmapped,
+		ListRegistryEntriesEndpoint:                     listRegistryEntries,
+		GetRegistryEntryEndpoint:                        getRegistryEntry,
+		CreateRegistryEntryEndpoint:                     createRegistryEntry,
+		SaveRegistryEntryEndpoint:                       saveRegistryEntry,
+		SetRegistryEntryPublishedEndpoint:               setRegistryEntryPublished,
+		ListOnboardingStepsEndpoint:                     listOnboardingSteps,
+		GetOnboardingStackOptionsEndpoint:               getOnboardingStackOptions,
+		GetOrganizationOnboardingStackEndpoint:          getOrganizationOnboardingStack,
+		SetOrganizationOnboardingStackEndpoint:          setOrganizationOnboardingStack,
+		ListOnboardingUseCasesEndpoint:                  listOnboardingUseCases,
+		CreateOnboardingUseCaseEndpoint:                 createOnboardingUseCase,
+		UpdateOnboardingUseCaseEndpoint:                 updateOnboardingUseCase,
+		DeleteOnboardingUseCaseEndpoint:                 deleteOnboardingUseCase,
+		ListOnboardingPlaybooksEndpoint:                 listOnboardingPlaybooks,
+		CreateOnboardingPlaybookEndpoint:                createOnboardingPlaybook,
+		UpdateOnboardingPlaybookEndpoint:                updateOnboardingPlaybook,
+		DeleteOnboardingPlaybookEndpoint:                deleteOnboardingPlaybook,
+		CloneOnboardingPlaybookEndpoint:                 cloneOnboardingPlaybook,
+		GetOrganizationOnboardingPlaybookEndpoint:       getOrganizationOnboardingPlaybook,
+		AssignOrganizationOnboardingPlaybookEndpoint:    assignOrganizationOnboardingPlaybook,
+		ListSignupOffersEndpoint:                        listSignupOffers,
+		CreateSignupOfferEndpoint:                       createSignupOffer,
+		UpdateSignupOfferEndpoint:                       updateSignupOffer,
+		ListPlatformMcpFeedbackEndpoint:                 listPlatformMcpFeedback,
+		GetStripeSubscriptionCandidateEndpoint:          getStripeSubscriptionCandidate,
+		SetStripeSubscriptionEndpoint:                   setStripeSubscription,
+		ListCustomerUsageEndpoint:                       listCustomerUsage,
+		ListUpstreamOAuthMigrationOrganizationsEndpoint: listUpstreamOAuthMigrationOrganizations,
+		GetUpstreamOAuthMigrationStatusEndpoint:         getUpstreamOAuthMigrationStatus,
+		RunUpstreamOAuthMigrationEndpoint:               runUpstreamOAuthMigration,
+		EnableUpstreamAuthEnforcementEndpoint:           enableUpstreamAuthEnforcement,
+		DisableUpstreamAuthEnforcementEndpoint:          disableUpstreamAuthEnforcement,
+		BackfillMcpAuthGrantsEndpoint:                   backfillMcpAuthGrants,
+		BackfillMcpConnectGrantsEndpoint:                backfillMcpConnectGrants,
+		GetProjectRedeployPreviewEndpoint:               getProjectRedeployPreview,
+		RedeployProjectEndpoint:                         redeployProject,
+		ListCustomDomainsEndpoint:                       listCustomDomains,
 	}
 }
 
@@ -232,6 +344,29 @@ func (c *Client) GetSession(ctx context.Context, p *GetSessionPayload) (res *Adm
 func (c *Client) GetOrganizationFeatures(ctx context.Context, p *GetOrganizationFeaturesPayload) (res *ProductFeatures, err error) {
 	var ires any
 	ires, err = c.GetOrganizationFeaturesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ProductFeatures), nil
+}
+
+// SetOrganizationProviderSetup calls the "setOrganizationProviderSetup"
+// endpoint of the "admin" service.
+// SetOrganizationProviderSetup may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetOrganizationProviderSetup(ctx context.Context, p *SetOrganizationProviderSetupPayload) (res *ProductFeatures, err error) {
+	var ires any
+	ires, err = c.SetOrganizationProviderSetupEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
@@ -535,6 +670,29 @@ func (c *Client) ListOrganizationProjects(ctx context.Context, p *ListOrganizati
 	return ires.(*AdminListOrganizationProjectsResult), nil
 }
 
+// ListProjectMcpServers calls the "listProjectMcpServers" endpoint of the
+// "admin" service.
+// ListProjectMcpServers may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListProjectMcpServers(ctx context.Context, p *ListProjectMcpServersPayload) (res *AdminListProjectMcpServersResult, err error) {
+	var ires any
+	ires, err = c.ListProjectMcpServersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminListProjectMcpServersResult), nil
+}
+
 // ListOrganizationActivity calls the "listOrganizationActivity" endpoint of
 // the "admin" service.
 // ListOrganizationActivity may return the following errors:
@@ -556,6 +714,51 @@ func (c *Client) ListOrganizationActivity(ctx context.Context, p *ListOrganizati
 		return
 	}
 	return ires.(*AdminListOrganizationActivityResult), nil
+}
+
+// ListUsers calls the "listUsers" endpoint of the "admin" service.
+// ListUsers may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListUsers(ctx context.Context, p *ListUsersPayload) (res *AdminListUsersResult, err error) {
+	var ires any
+	ires, err = c.ListUsersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminListUsersResult), nil
+}
+
+// ListUserOrganizations calls the "listUserOrganizations" endpoint of the
+// "admin" service.
+// ListUserOrganizations may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListUserOrganizations(ctx context.Context, p *ListUserOrganizationsPayload) (res *AdminListUserOrganizationsResult, err error) {
+	var ires any
+	ires, err = c.ListUserOrganizationsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminListUserOrganizationsResult), nil
 }
 
 // ListOrganizations calls the "listOrganizations" endpoint of the "admin"
@@ -669,6 +872,29 @@ func (c *Client) GetOrganizationStats(ctx context.Context, p *GetOrganizationSta
 		return
 	}
 	return ires.(*AdminOrganizationStats), nil
+}
+
+// RepairInferenceKey calls the "repairInferenceKey" endpoint of the "admin"
+// service.
+// RepairInferenceKey may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RepairInferenceKey(ctx context.Context, p *RepairInferenceKeyPayload) (res *AdminInferenceKeyRepairResult, err error) {
+	var ires any
+	ires, err = c.RepairInferenceKeyEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminInferenceKeyRepairResult), nil
 }
 
 // GetInferenceKeys calls the "getInferenceKeys" endpoint of the "admin"
@@ -806,6 +1032,29 @@ func (c *Client) GetStripeCustomer(ctx context.Context, p *GetStripeCustomerPayl
 func (c *Client) SetStripeCustomer(ctx context.Context, p *SetStripeCustomerPayload) (res *AdminOrganization, err error) {
 	var ires any
 	ires, err = c.SetStripeCustomerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
+}
+
+// SetAdoptionDashboardURL calls the "setAdoptionDashboardUrl" endpoint of the
+// "admin" service.
+// SetAdoptionDashboardURL may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetAdoptionDashboardURL(ctx context.Context, p *SetAdoptionDashboardURLPayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.SetAdoptionDashboardURLEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
@@ -1181,13 +1430,13 @@ func (c *Client) MigrateToGlobalIssuer(ctx context.Context, p *MigrateToGlobalIs
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) UploadPlatformImage(ctx context.Context, p *UploadPlatformImagePayload, req io.ReadCloser) (res *UploadImageResult, err error) {
+func (c *Client) UploadPlatformImage(ctx context.Context, p *UploadPlatformImagePayload, req io.ReadCloser) (res *AdminUploadImageResult, err error) {
 	var ires any
 	ires, err = c.UploadPlatformImageEndpoint(ctx, &UploadPlatformImageRequestData{Payload: p, Body: req})
 	if err != nil {
 		return
 	}
-	return ires.(*UploadImageResult), nil
+	return ires.(*AdminUploadImageResult), nil
 }
 
 // ServeImage calls the "serveImage" endpoint of the "admin" service.
@@ -1350,4 +1599,1155 @@ func (c *Client) UpdateSupportMatrix(ctx context.Context, p *UpdateSupportMatrix
 		return
 	}
 	return ires.(*SupportMatrix), nil
+}
+
+// GetSupportCoverage calls the "getSupportCoverage" endpoint of the "admin"
+// service.
+// GetSupportCoverage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetSupportCoverage(ctx context.Context, p *GetSupportCoveragePayload) (res *SupportCoverageResult, err error) {
+	var ires any
+	ires, err = c.GetSupportCoverageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SupportCoverageResult), nil
+}
+
+// DescribeMcpServerHealth calls the "describeMcpServerHealth" endpoint of the
+// "admin" service.
+// DescribeMcpServerHealth may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DescribeMcpServerHealth(ctx context.Context, p *DescribeMcpServerHealthPayload) (res *AdminMcpServerHealth, err error) {
+	var ires any
+	ires, err = c.DescribeMcpServerHealthEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminMcpServerHealth), nil
+}
+
+// SetMcpServerScopePin calls the "setMcpServerScopePin" endpoint of the
+// "admin" service.
+// SetMcpServerScopePin may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetMcpServerScopePin(ctx context.Context, p *SetMcpServerScopePinPayload) (res *AdminMcpServerResourceScopes, err error) {
+	var ires any
+	ires, err = c.SetMcpServerScopePinEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminMcpServerResourceScopes), nil
+}
+
+// GetMcpServerToolCalls calls the "getMcpServerToolCalls" endpoint of the
+// "admin" service.
+// GetMcpServerToolCalls may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetMcpServerToolCalls(ctx context.Context, p *GetMcpServerToolCallsPayload) (res *AdminMcpServerToolCalls, err error) {
+	var ires any
+	ires, err = c.GetMcpServerToolCallsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminMcpServerToolCalls), nil
+}
+
+// GetHookClients calls the "getHookClients" endpoint of the "admin" service.
+// GetHookClients may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetHookClients(ctx context.Context, p *GetHookClientsPayload) (res *AdminHookClientsResult, err error) {
+	var ires any
+	ires, err = c.GetHookClientsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminHookClientsResult), nil
+}
+
+// GetOrganizationHookFleet calls the "getOrganizationHookFleet" endpoint of
+// the "admin" service.
+// GetOrganizationHookFleet may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOrganizationHookFleet(ctx context.Context, p *GetOrganizationHookFleetPayload) (res *AdminHookFleetResult, err error) {
+	var ires any
+	ires, err = c.GetOrganizationHookFleetEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminHookFleetResult), nil
+}
+
+// ListRegistryPromotionCandidates calls the "listRegistryPromotionCandidates"
+// endpoint of the "admin" service.
+// ListRegistryPromotionCandidates may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRegistryPromotionCandidates(ctx context.Context, p *ListRegistryPromotionCandidatesPayload) (res *AdminRegistryPromotionCandidates, err error) {
+	var ires any
+	ires, err = c.ListRegistryPromotionCandidatesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryPromotionCandidates), nil
+}
+
+// GetRegistryPromotionCandidate calls the "getRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+// GetRegistryPromotionCandidate may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRegistryPromotionCandidate(ctx context.Context, p *GetRegistryPromotionCandidatePayload) (res *AdminRegistryPromotionCandidate, err error) {
+	var ires any
+	ires, err = c.GetRegistryPromotionCandidateEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryPromotionCandidate), nil
+}
+
+// PromoteRegistryCandidate calls the "promoteRegistryCandidate" endpoint of
+// the "admin" service.
+// PromoteRegistryCandidate may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) PromoteRegistryCandidate(ctx context.Context, p *PromoteRegistryCandidatePayload) (res *AdminRegistryPromotionCandidate, err error) {
+	var ires any
+	ires, err = c.PromoteRegistryCandidateEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryPromotionCandidate), nil
+}
+
+// CurateRegistryPromotionCandidate calls the
+// "curateRegistryPromotionCandidate" endpoint of the "admin" service.
+// CurateRegistryPromotionCandidate may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CurateRegistryPromotionCandidate(ctx context.Context, p *CurateRegistryPromotionCandidatePayload) (res *AdminRegistryPromotionCandidate, err error) {
+	var ires any
+	ires, err = c.CurateRegistryPromotionCandidateEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryPromotionCandidate), nil
+}
+
+// RetryRegistryPromotionDocs calls the "retryRegistryPromotionDocs" endpoint
+// of the "admin" service.
+// RetryRegistryPromotionDocs may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RetryRegistryPromotionDocs(ctx context.Context, p *RetryRegistryPromotionDocsPayload) (res *AdminRegistryPromotionCandidate, err error) {
+	var ires any
+	ires, err = c.RetryRegistryPromotionDocsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryPromotionCandidate), nil
+}
+
+// GetRegistryOktaCandidates calls the "getRegistryOktaCandidates" endpoint of
+// the "admin" service.
+// GetRegistryOktaCandidates may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRegistryOktaCandidates(ctx context.Context, p *GetRegistryOktaCandidatesPayload) (res *AdminRegistryOktaCandidates, err error) {
+	var ires any
+	ires, err = c.GetRegistryOktaCandidatesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryOktaCandidates), nil
+}
+
+// ListRegistryOktaUnmapped calls the "listRegistryOktaUnmapped" endpoint of
+// the "admin" service.
+// ListRegistryOktaUnmapped may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRegistryOktaUnmapped(ctx context.Context, p *ListRegistryOktaUnmappedPayload) (res *AdminRegistryOktaUnmapped, err error) {
+	var ires any
+	ires, err = c.ListRegistryOktaUnmappedEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryOktaUnmapped), nil
+}
+
+// ListRegistryEntries calls the "listRegistryEntries" endpoint of the "admin"
+// service.
+// ListRegistryEntries may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRegistryEntries(ctx context.Context, p *ListRegistryEntriesPayload) (res *AdminRegistryPage, err error) {
+	var ires any
+	ires, err = c.ListRegistryEntriesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryPage), nil
+}
+
+// GetRegistryEntry calls the "getRegistryEntry" endpoint of the "admin"
+// service.
+// GetRegistryEntry may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRegistryEntry(ctx context.Context, p *GetRegistryEntryPayload) (res *AdminRegistryEntry, err error) {
+	var ires any
+	ires, err = c.GetRegistryEntryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryEntry), nil
+}
+
+// CreateRegistryEntry calls the "createRegistryEntry" endpoint of the "admin"
+// service.
+// CreateRegistryEntry may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateRegistryEntry(ctx context.Context, p *CreateRegistryEntryPayload) (res *AdminRegistryEntry, err error) {
+	var ires any
+	ires, err = c.CreateRegistryEntryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryEntry), nil
+}
+
+// SaveRegistryEntry calls the "saveRegistryEntry" endpoint of the "admin"
+// service.
+// SaveRegistryEntry may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SaveRegistryEntry(ctx context.Context, p *SaveRegistryEntryPayload) (res *AdminRegistryEntry, err error) {
+	var ires any
+	ires, err = c.SaveRegistryEntryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryEntry), nil
+}
+
+// SetRegistryEntryPublished calls the "setRegistryEntryPublished" endpoint of
+// the "admin" service.
+// SetRegistryEntryPublished may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetRegistryEntryPublished(ctx context.Context, p *SetRegistryEntryPublishedPayload) (res *AdminRegistryEntry, err error) {
+	var ires any
+	ires, err = c.SetRegistryEntryPublishedEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryEntry), nil
+}
+
+// ListOnboardingSteps calls the "listOnboardingSteps" endpoint of the "admin"
+// service.
+// ListOnboardingSteps may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListOnboardingSteps(ctx context.Context, p *ListOnboardingStepsPayload) (res *AdminOnboardingStepList, err error) {
+	var ires any
+	ires, err = c.ListOnboardingStepsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingStepList), nil
+}
+
+// GetOnboardingStackOptions calls the "getOnboardingStackOptions" endpoint of
+// the "admin" service.
+// GetOnboardingStackOptions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOnboardingStackOptions(ctx context.Context, p *GetOnboardingStackOptionsPayload) (res *AdminOnboardingStackOptions, err error) {
+	var ires any
+	ires, err = c.GetOnboardingStackOptionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingStackOptions), nil
+}
+
+// GetOrganizationOnboardingStack calls the "getOrganizationOnboardingStack"
+// endpoint of the "admin" service.
+// GetOrganizationOnboardingStack may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOrganizationOnboardingStack(ctx context.Context, p *GetOrganizationOnboardingStackPayload) (res *AdminOnboardingStack, err error) {
+	var ires any
+	ires, err = c.GetOrganizationOnboardingStackEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingStack), nil
+}
+
+// SetOrganizationOnboardingStack calls the "setOrganizationOnboardingStack"
+// endpoint of the "admin" service.
+// SetOrganizationOnboardingStack may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetOrganizationOnboardingStack(ctx context.Context, p *SetOrganizationOnboardingStackPayload) (res *AdminOnboardingStack, err error) {
+	var ires any
+	ires, err = c.SetOrganizationOnboardingStackEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingStack), nil
+}
+
+// ListOnboardingUseCases calls the "listOnboardingUseCases" endpoint of the
+// "admin" service.
+// ListOnboardingUseCases may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListOnboardingUseCases(ctx context.Context, p *ListOnboardingUseCasesPayload) (res *AdminOnboardingUseCaseList, err error) {
+	var ires any
+	ires, err = c.ListOnboardingUseCasesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingUseCaseList), nil
+}
+
+// CreateOnboardingUseCase calls the "createOnboardingUseCase" endpoint of the
+// "admin" service.
+// CreateOnboardingUseCase may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateOnboardingUseCase(ctx context.Context, p *CreateOnboardingUseCasePayload) (res *AdminOnboardingUseCase, err error) {
+	var ires any
+	ires, err = c.CreateOnboardingUseCaseEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingUseCase), nil
+}
+
+// UpdateOnboardingUseCase calls the "updateOnboardingUseCase" endpoint of the
+// "admin" service.
+// UpdateOnboardingUseCase may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateOnboardingUseCase(ctx context.Context, p *UpdateOnboardingUseCasePayload) (res *AdminOnboardingUseCase, err error) {
+	var ires any
+	ires, err = c.UpdateOnboardingUseCaseEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingUseCase), nil
+}
+
+// DeleteOnboardingUseCase calls the "deleteOnboardingUseCase" endpoint of the
+// "admin" service.
+// DeleteOnboardingUseCase may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteOnboardingUseCase(ctx context.Context, p *DeleteOnboardingUseCasePayload) (res *AdminOnboardingUseCaseList, err error) {
+	var ires any
+	ires, err = c.DeleteOnboardingUseCaseEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingUseCaseList), nil
+}
+
+// ListOnboardingPlaybooks calls the "listOnboardingPlaybooks" endpoint of the
+// "admin" service.
+// ListOnboardingPlaybooks may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListOnboardingPlaybooks(ctx context.Context, p *ListOnboardingPlaybooksPayload) (res *AdminOnboardingPlaybookList, err error) {
+	var ires any
+	ires, err = c.ListOnboardingPlaybooksEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingPlaybookList), nil
+}
+
+// CreateOnboardingPlaybook calls the "createOnboardingPlaybook" endpoint of
+// the "admin" service.
+// CreateOnboardingPlaybook may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateOnboardingPlaybook(ctx context.Context, p *CreateOnboardingPlaybookPayload) (res *AdminOnboardingPlaybook, err error) {
+	var ires any
+	ires, err = c.CreateOnboardingPlaybookEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingPlaybook), nil
+}
+
+// UpdateOnboardingPlaybook calls the "updateOnboardingPlaybook" endpoint of
+// the "admin" service.
+// UpdateOnboardingPlaybook may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateOnboardingPlaybook(ctx context.Context, p *UpdateOnboardingPlaybookPayload) (res *AdminOnboardingPlaybook, err error) {
+	var ires any
+	ires, err = c.UpdateOnboardingPlaybookEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingPlaybook), nil
+}
+
+// DeleteOnboardingPlaybook calls the "deleteOnboardingPlaybook" endpoint of
+// the "admin" service.
+// DeleteOnboardingPlaybook may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteOnboardingPlaybook(ctx context.Context, p *DeleteOnboardingPlaybookPayload) (res *AdminOnboardingPlaybookList, err error) {
+	var ires any
+	ires, err = c.DeleteOnboardingPlaybookEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingPlaybookList), nil
+}
+
+// CloneOnboardingPlaybook calls the "cloneOnboardingPlaybook" endpoint of the
+// "admin" service.
+// CloneOnboardingPlaybook may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CloneOnboardingPlaybook(ctx context.Context, p *CloneOnboardingPlaybookPayload) (res *AdminOnboardingPlaybook, err error) {
+	var ires any
+	ires, err = c.CloneOnboardingPlaybookEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOnboardingPlaybook), nil
+}
+
+// GetOrganizationOnboardingPlaybook calls the
+// "getOrganizationOnboardingPlaybook" endpoint of the "admin" service.
+// GetOrganizationOnboardingPlaybook may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOrganizationOnboardingPlaybook(ctx context.Context, p *GetOrganizationOnboardingPlaybookPayload) (res *AdminOrganizationOnboardingPlaybook, err error) {
+	var ires any
+	ires, err = c.GetOrganizationOnboardingPlaybookEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganizationOnboardingPlaybook), nil
+}
+
+// AssignOrganizationOnboardingPlaybook calls the
+// "assignOrganizationOnboardingPlaybook" endpoint of the "admin" service.
+// AssignOrganizationOnboardingPlaybook may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) AssignOrganizationOnboardingPlaybook(ctx context.Context, p *AssignOrganizationOnboardingPlaybookPayload) (res *AdminOrganizationOnboardingPlaybook, err error) {
+	var ires any
+	ires, err = c.AssignOrganizationOnboardingPlaybookEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganizationOnboardingPlaybook), nil
+}
+
+// ListSignupOffers calls the "listSignupOffers" endpoint of the "admin"
+// service.
+// ListSignupOffers may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSignupOffers(ctx context.Context, p *ListSignupOffersPayload) (res *ListSignupOffersResult, err error) {
+	var ires any
+	ires, err = c.ListSignupOffersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSignupOffersResult), nil
+}
+
+// CreateSignupOffer calls the "createSignupOffer" endpoint of the "admin"
+// service.
+// CreateSignupOffer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateSignupOffer(ctx context.Context, p *CreateSignupOfferPayload) (res *AdminSignupOffer, err error) {
+	var ires any
+	ires, err = c.CreateSignupOfferEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminSignupOffer), nil
+}
+
+// UpdateSignupOffer calls the "updateSignupOffer" endpoint of the "admin"
+// service.
+// UpdateSignupOffer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateSignupOffer(ctx context.Context, p *UpdateSignupOfferPayload) (res *AdminSignupOffer, err error) {
+	var ires any
+	ires, err = c.UpdateSignupOfferEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminSignupOffer), nil
+}
+
+// ListPlatformMcpFeedback calls the "listPlatformMcpFeedback" endpoint of the
+// "admin" service.
+// ListPlatformMcpFeedback may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListPlatformMcpFeedback(ctx context.Context, p *ListPlatformMcpFeedbackPayload) (res *ListPlatformMcpFeedbackResult, err error) {
+	var ires any
+	ires, err = c.ListPlatformMcpFeedbackEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListPlatformMcpFeedbackResult), nil
+}
+
+// GetStripeSubscriptionCandidate calls the "getStripeSubscriptionCandidate"
+// endpoint of the "admin" service.
+// GetStripeSubscriptionCandidate may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetStripeSubscriptionCandidate(ctx context.Context, p *GetStripeSubscriptionCandidatePayload) (res *AdminStripeSubscriptionCandidate, err error) {
+	var ires any
+	ires, err = c.GetStripeSubscriptionCandidateEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminStripeSubscriptionCandidate), nil
+}
+
+// SetStripeSubscription calls the "setStripeSubscription" endpoint of the
+// "admin" service.
+// SetStripeSubscription may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetStripeSubscription(ctx context.Context, p *SetStripeSubscriptionPayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.SetStripeSubscriptionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
+}
+
+// ListCustomerUsage calls the "listCustomerUsage" endpoint of the "admin"
+// service.
+// ListCustomerUsage may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListCustomerUsage(ctx context.Context, p *ListCustomerUsagePayload) (res *AdminCustomerUsageResponse, err error) {
+	var ires any
+	ires, err = c.ListCustomerUsageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminCustomerUsageResponse), nil
+}
+
+// ListUpstreamOAuthMigrationOrganizations calls the
+// "listUpstreamOAuthMigrationOrganizations" endpoint of the "admin" service.
+// ListUpstreamOAuthMigrationOrganizations may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListUpstreamOAuthMigrationOrganizations(ctx context.Context, p *ListUpstreamOAuthMigrationOrganizationsPayload) (res *AdminUpstreamOAuthMigrationOrganizations, err error) {
+	var ires any
+	ires, err = c.ListUpstreamOAuthMigrationOrganizationsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminUpstreamOAuthMigrationOrganizations), nil
+}
+
+// GetUpstreamOAuthMigrationStatus calls the "getUpstreamOAuthMigrationStatus"
+// endpoint of the "admin" service.
+// GetUpstreamOAuthMigrationStatus may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetUpstreamOAuthMigrationStatus(ctx context.Context, p *GetUpstreamOAuthMigrationStatusPayload) (res *AdminUpstreamOAuthMigrationStatus, err error) {
+	var ires any
+	ires, err = c.GetUpstreamOAuthMigrationStatusEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminUpstreamOAuthMigrationStatus), nil
+}
+
+// RunUpstreamOAuthMigration calls the "runUpstreamOAuthMigration" endpoint of
+// the "admin" service.
+// RunUpstreamOAuthMigration may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RunUpstreamOAuthMigration(ctx context.Context, p *RunUpstreamOAuthMigrationPayload) (res *AdminUpstreamOAuthMigrationRun, err error) {
+	var ires any
+	ires, err = c.RunUpstreamOAuthMigrationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminUpstreamOAuthMigrationRun), nil
+}
+
+// EnableUpstreamAuthEnforcement calls the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+// EnableUpstreamAuthEnforcement may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) EnableUpstreamAuthEnforcement(ctx context.Context, p *EnableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error) {
+	var ires any
+	ires, err = c.EnableUpstreamAuthEnforcementEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminUpstreamOAuthMigrationStatus), nil
+}
+
+// DisableUpstreamAuthEnforcement calls the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+// DisableUpstreamAuthEnforcement may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DisableUpstreamAuthEnforcement(ctx context.Context, p *DisableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error) {
+	var ires any
+	ires, err = c.DisableUpstreamAuthEnforcementEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminUpstreamOAuthMigrationStatus), nil
+}
+
+// BackfillMcpAuthGrants calls the "backfillMcpAuthGrants" endpoint of the
+// "admin" service.
+// BackfillMcpAuthGrants may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) BackfillMcpAuthGrants(ctx context.Context, p *BackfillMcpAuthGrantsPayload) (res *AdminBackfillMCPAuthGrantsResult, err error) {
+	var ires any
+	ires, err = c.BackfillMcpAuthGrantsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminBackfillMCPAuthGrantsResult), nil
+}
+
+// BackfillMcpConnectGrants calls the "backfillMcpConnectGrants" endpoint of
+// the "admin" service.
+// BackfillMcpConnectGrants may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) BackfillMcpConnectGrants(ctx context.Context, p *BackfillMcpConnectGrantsPayload) (res *AdminBackfillMCPConnectGrantsResult, err error) {
+	var ires any
+	ires, err = c.BackfillMcpConnectGrantsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminBackfillMCPConnectGrantsResult), nil
+}
+
+// GetProjectRedeployPreview calls the "getProjectRedeployPreview" endpoint of
+// the "admin" service.
+// GetProjectRedeployPreview may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetProjectRedeployPreview(ctx context.Context, p *GetProjectRedeployPreviewPayload) (res *AdminProjectRedeployPreview, err error) {
+	var ires any
+	ires, err = c.GetProjectRedeployPreviewEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminProjectRedeployPreview), nil
+}
+
+// RedeployProject calls the "redeployProject" endpoint of the "admin" service.
+// RedeployProject may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RedeployProject(ctx context.Context, p *RedeployProjectPayload) (res *AdminProjectRedeployResult, err error) {
+	var ires any
+	ires, err = c.RedeployProjectEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminProjectRedeployResult), nil
+}
+
+// ListCustomDomains calls the "listCustomDomains" endpoint of the "admin"
+// service.
+// ListCustomDomains may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListCustomDomains(ctx context.Context, p *ListCustomDomainsPayload) (res *AdminListCustomDomainsResult, err error) {
+	var ires any
+	ires, err = c.ListCustomDomainsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminListCustomDomainsResult), nil
 }

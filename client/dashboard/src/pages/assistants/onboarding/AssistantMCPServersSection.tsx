@@ -14,11 +14,12 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { RESERVED_MCP_SEGMENTS, mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { useToolsets } from "@/pages/toolsets/useToolsets";
-import { Assistant } from "@gram/client/models/components/assistant.js";
-import { AssistantMCPServerRef } from "@gram/client/models/components/assistantmcpserverref.js";
-import { AssistantToolsetRef } from "@gram/client/models/components/assistanttoolsetref.js";
+import type { Assistant } from "@gram/client/models/components/assistant.js";
+import type { AssistantMCPServerRef } from "@gram/client/models/components/assistantmcpserverref.js";
+import type { AssistantToolsetRef } from "@gram/client/models/components/assistanttoolsetref.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
@@ -27,6 +28,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // The Select can't represent "no environment" with an empty value, so the
 // project-default choice gets a sentinel that is stripped before saving.
@@ -156,10 +158,11 @@ export function AssistantMCPServersSection({
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="text-eyebrow">MCP Servers ({attached.length})</div>
         <RequireScope
-          scope="project:write"
-          resourceId={project.id}
+          scope="assistant:write"
+          resourceId={assistant.id}
+          projectId={project.id}
           level="component"
-          reason="You need project write access to attach MCP servers."
+          reason="You need assistant write access to attach MCP servers."
         >
           <Button
             variant="tertiary"
@@ -184,6 +187,7 @@ export function AssistantMCPServersSection({
           {attached.map((ref) => (
             <AttachedServerRow
               key={`${ref.kind}:${ref.slug}`}
+              assistantId={assistant.id}
               serverRef={ref}
               environments={environments.map((env) => env.slug)}
               disabled={update.isPending}
@@ -208,12 +212,14 @@ export function AssistantMCPServersSection({
 }
 
 function AttachedServerRow({
+  assistantId,
   serverRef,
   environments,
   disabled,
   onEnvironmentChange,
   onRemove,
 }: {
+  assistantId: string;
   serverRef: AttachedRef;
   environments: string[];
   disabled: boolean;
@@ -222,22 +228,40 @@ function AttachedServerRow({
 }): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
+  const gramProject = useProjectSlugForRequests();
+  // Refs carry only a slug; a slug a static /mcp segment claims needs the id.
+  const reservedSlug =
+    serverRef.kind === "mcpServer" && RESERVED_MCP_SEGMENTS.has(serverRef.slug);
+  const { data: serversResult } = useMcpServers({ gramProject }, undefined, {
+    enabled: reservedSlug,
+    throwOnError: false,
+  });
+  const reservedServer = serversResult?.mcpServers.find(
+    (server) => server.slug === serverRef.slug,
+  );
+  const serverParam = reservedServer
+    ? mcpServerRouteParam(reservedServer)
+    : serverRef.slug;
+  const slugCode = <code className="truncate text-xs">{serverRef.slug}</code>;
 
   const link =
-    serverRef.kind === "toolset" ? (
-      <routes.mcp.details.Link
+    reservedSlug && !reservedServer ? (
+      // Unlinked until the id is known: the bare slug would open a static page.
+      <span className="min-w-0">{slugCode}</span>
+    ) : serverRef.kind === "toolset" ? (
+      <routes.toolset.Link
         params={[serverRef.slug]}
+        className="min-w-0 hover:no-underline"
+      >
+        <code className="truncate text-xs">{serverRef.slug}</code>
+      </routes.toolset.Link>
+    ) : (
+      <routes.mcp.details.Link
+        params={[serverParam]}
         className="min-w-0 hover:no-underline"
       >
         <code className="truncate text-xs">{serverRef.slug}</code>
       </routes.mcp.details.Link>
-    ) : (
-      <routes.mcp.x.Link
-        params={[serverRef.slug]}
-        className="min-w-0 hover:no-underline"
-      >
-        <code className="truncate text-xs">{serverRef.slug}</code>
-      </routes.mcp.x.Link>
     );
 
   return (
@@ -250,8 +274,9 @@ function AttachedServerRow({
         />
       </div>
       <RequireScope
-        scope="project:write"
-        resourceId={project.id}
+        scope="assistant:write"
+        resourceId={assistantId}
+        projectId={project.id}
         level="component"
         className="mt-2 w-full"
       >
@@ -338,7 +363,7 @@ function AddServersDialog({
 
   const options = useMemo(() => {
     // Mirror the attach-time validation in the assistants service: tunneled
-    // backends, disabled servers, and servers without a Gram-hosted endpoint
+    // backends, disabled servers, and servers without a Speakeasy-hosted endpoint
     // are rejected on write, so don't offer them.
     const serverIdsWithGramEndpoint = new Set(
       (endpointsResult?.mcpEndpoints ?? [])
@@ -354,6 +379,7 @@ function AddServersDialog({
         (server) =>
           !!server.slug &&
           !server.tunneledMcpServerId &&
+          server.toolsetId !== server.id &&
           server.visibility !== "disabled" &&
           serverIdsWithGramEndpoint.has(server.id),
       )
@@ -439,9 +465,11 @@ function DialogOptionsBody({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Text small muted>
-        Loading servers…
-      </Text>
+      <Skeleton label="Loading servers">
+        <div className="h-7 w-full" />
+        <div className="h-7 w-full" />
+        <div className="h-7 w-full" />
+      </Skeleton>
     );
   }
   if (isError) {

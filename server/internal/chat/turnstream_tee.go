@@ -38,6 +38,7 @@ type assembledCompletion struct {
 func (a assembledCompletion) Message() or.ChatMessages {
 	content := or.CreateChatAssistantMessageContentStr(a.Content)
 	msg := or.ChatAssistantMessage{
+		Model:            nil,
 		Role:             or.ChatAssistantMessageRoleAssistant,
 		Content:          optionalnullable.From(&content),
 		Name:             nil,
@@ -97,7 +98,7 @@ func teeCompletionStream(src io.Reader, onDelta func(string)) (assembledCompleti
 			continue
 		}
 		payload := strings.TrimPrefix(line, "data: ")
-		if payload == "[DONE]" {
+		if payload == completionStreamDone {
 			break
 		}
 

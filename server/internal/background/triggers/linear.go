@@ -156,7 +156,7 @@ func newLinearDefinition() Definition {
 	vendor := WebhookVendor{
 		Slug:            DefinitionSlugLinear,
 		Title:           "Linear",
-		Description:     "Receive Linear webhooks and map them to Gram trigger events.",
+		Description:     "Receive Linear webhooks and map them to Speakeasy trigger events.",
 		EventType:       reflect.TypeFor[linearTriggerEvent](),
 		EnvRequirements: []EnvRequirement{{Name: linearSigningSecretEnv, Description: "Linear webhook signing secret.", Required: true}},
 		SecretEnv:       linearSigningSecretEnv,
@@ -171,7 +171,7 @@ func newLinearDefinition() Definition {
 		},
 		SupportedEventTypes: supportedLinearEventTypes,
 		Authenticate:        nil,
-		PreVerify:           nil,
+		Handshake:           nil,
 		Ingest:              linearIngest,
 	}
 	return NewWebhookDefinition(vendor, schema, compiled, func(raw map[string]any) (Config, error) {

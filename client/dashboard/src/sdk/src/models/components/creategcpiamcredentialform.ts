@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateGcpIamCredentialForm = {
   /**
-   * The service account in your project that Gram impersonates. Grant Gram's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.
+   * The service account in your project that Speakeasy impersonates. Grant Speakeasy's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.
    */
   impersonateServiceAccount: string;
   /**

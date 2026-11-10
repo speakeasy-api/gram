@@ -3,6 +3,7 @@ package agentmanagement
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -13,7 +14,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -32,7 +32,6 @@ func newProjectScopedService(t *testing.T, conn *pgxpool.Pool) *Service {
 	t.Helper()
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	service := newTestService(conn, engine)
-	service.features = &recordingAgentManagementFeatures{evaluation: feature.EvaluationEnabled}
 	return service
 }
 
@@ -123,7 +122,12 @@ func TestCreateAgentRejectsProjectFromAnotherOrganization(t *testing.T) {
 	// exist, and naming it is the client being wrong, not a fault.
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	stored, err := repo.New(conn).ListManagedAgents(t.Context(), "org-agent-tenant-a")
+	stored, err := repo.New(conn).ListManagedAgents(t.Context(), repo.ListManagedAgentsParams{
+		OrganizationID: "org-agent-tenant-a",
+		Lifecycles:     []string{},
+		OwnerUserIds:   []string{},
+		PageLimit:      50,
+	})
 	require.NoError(t, err)
 	require.Empty(t, stored, "a rejected create must leave no agent behind")
 }
@@ -171,7 +175,55 @@ func TestCreateAgentRejectsDeletedProject(t *testing.T) {
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	stored, err := repo.New(conn).ListManagedAgents(t.Context(), "org-agent-deleted-project")
+	stored, err := repo.New(conn).ListManagedAgents(t.Context(), repo.ListManagedAgentsParams{
+		OrganizationID: "org-agent-deleted-project",
+		Lifecycles:     []string{},
+		OwnerUserIds:   []string{},
+		PageLimit:      50,
+	})
+	require.NoError(t, err)
+	require.Empty(t, stored)
+}
+
+// A soft delete keeps the foreign-key target alive. Creation must wait for
+// its transaction and then re-check liveness, rather than reading the old row.
+func TestCreateAgentSerializesWithConcurrentProjectDeletion(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	const organizationID = "org-agent-concurrent-delete"
+	seedOrganization(t, conn, organizationID)
+	seedOrganizationUser(t, conn, organizationID, "owner")
+	project := seedProject(t, conn, organizationID, "concurrent-delete")
+	service := newProjectScopedService(t, conn)
+	ctx := validatedHumanContext(t, organizationID, "owner")
+	projectID := project.ID.String()
+
+	// Hold the deletion transaction open to verify concurrent creation blocks.
+	deletion := testenv.BeginTx(t, t.Context(), conn)
+	_, err := projectsrepo.New(deletion).DeleteProject(t.Context(), project.ID)
+	require.NoError(t, err)
+	deletingPID := deletion.Conn().PgConn().PID()
+
+	created := make(chan error, 1)
+	go func() {
+		_, err := service.Create(ctx, &gen.CreatePayload{Name: "Concurrent agent", ProjectID: &projectID})
+		created <- err
+	}()
+	// Observe the actual database wait rather than relying on a scheduling sleep.
+	testenv.WaitForBackendsBlockedBy(t, ctx, conn, deletingPID, 1)
+	require.NoError(t, deletion.Commit(t.Context()))
+	select {
+	case err := <-created:
+		requireOopsCode(t, err, oops.CodeNotFound)
+	case <-time.After(5 * time.Second):
+		t.Fatal("agent creation did not resume after project deletion committed")
+	}
+	stored, err := repo.New(conn).ListManagedAgents(t.Context(), repo.ListManagedAgentsParams{
+		OrganizationID: organizationID,
+		Lifecycles:     []string{},
+		OwnerUserIds:   []string{},
+		PageLimit:      50,
+	})
 	require.NoError(t, err)
 	require.Empty(t, stored)
 }

@@ -31,14 +31,14 @@ import (
 //
 // Two categories of legitimate cross-origin browser traffic are exempt:
 //
-//   - Gram Elements, embedded on customer domains. Those requests carry a
+//   - Speakeasy Elements, embedded on customer domains. Those requests carry a
 //     chat-session token whose audience claim names the embedding origin;
 //     chatSessionsCORS validates Origin against that claim and marks the
 //     request trusted (see markChatSessionOriginTrusted). The audience claim,
 //     not this middleware, is the trusted-origin mechanism for Elements.
-//   - The Gram first-party origins passed as trustedOrigins. The dashboard's
+//   - The Speakeasy first-party origins passed as trustedOrigins. The dashboard's
 //     MCP inspection tabs connect to a customer's *custom domain*, which is
-//     cross-site from app.getgram.ai and cannot be rebased onto the Gram
+//     cross-site from app.getgram.ai and cannot be rebased onto the Speakeasy
 //     origin — mcp_endpoint rows are looked up by (slug, custom_domain_id),
 //     so the same slug does not resolve on the platform host. Trusting our own
 //     origin costs nothing an attacker could use: MCP auth reads only
@@ -49,7 +49,7 @@ import (
 // chatSessionsCORS and can observe the trust marker it sets. Non-MCP routes
 // are untouched; OPTIONS preflights never reach here for /mcp because
 // chatSessionsCORS answers them itself.
-func MCPSecurity(logger *slog.Logger, trustedOrigins []string) (func(http.Handler) http.Handler, error) {
+func MCPSecurity(logger *slog.Logger, trustedOrigins []string, safeNavigation func(*http.Request) bool) (func(http.Handler) http.Handler, error) {
 	protection := http.NewCrossOriginProtection()
 	for _, origin := range trustedOrigins {
 		if origin == "" {
@@ -74,7 +74,7 @@ func MCPSecurity(logger *slog.Logger, trustedOrigins []string) (func(http.Handle
 			}
 
 			if !chatSessionOriginTrusted(r.Context()) {
-				if err := protection.Check(originCheckProbe(r)); err != nil {
+				if err := protection.Check(originCheckProbe(r, safeNavigation)); err != nil {
 					logMCPSecurityRejection(r, logger, "cross_origin", err.Error())
 					http.Error(w, "forbidden: cross-origin request rejected", http.StatusForbidden)
 					return
@@ -107,7 +107,15 @@ func MCPSecurity(logger *slog.Logger, trustedOrigins []string) (func(http.Handle
 // Check. OPTIONS is left alone: a preflight must be answerable, and one never
 // reaches this middleware anyway because CORSMiddleware and chatSessionsCORS
 // both answer OPTIONS before calling next.
-func originCheckProbe(r *http.Request) *http.Request {
+//
+// safeNavigation names requests that keep safe-method semantics anyway: GETs
+// the route's own handler answers with a page rather than a stream, so a link
+// from another site can still open them.
+func originCheckProbe(r *http.Request, safeNavigation func(*http.Request) bool) *http.Request {
+	if safeNavigation != nil && safeNavigation(r) {
+		return r
+	}
+
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
 		probe := *r
@@ -152,7 +160,7 @@ func normalizeOrigin(raw string) (string, error) {
 //
 // This matches modelcontextprotocol/go-sdk, whose Streamable HTTP handler
 // rejects any POST whose base media type is not application/json with 415
-// (streamable.go:388). That handler already serves Gram's own /platform-mcp
+// (streamable.go:388). That handler already serves Speakeasy's own /platform-mcp
 // endpoint, so anything laxer here would leave the hosted MCP surfaces more
 // permissive than one we already ship.
 //

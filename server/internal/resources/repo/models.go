@@ -11,21 +11,38 @@ import (
 )
 
 type FunctionResourceDefinition struct {
-	ID           uuid.UUID
-	ResourceUrn  urn.Resource
-	ProjectID    uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: restricted
+	ResourceUrn urn.Resource
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	DeploymentID uuid.UUID
-	FunctionID   uuid.UUID
-	Runtime      string
-	Name         string
-	Description  string
-	Uri          string
-	Title        pgtype.Text
-	MimeType     pgtype.Text
-	Variables    []byte
-	Meta         []byte
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	Deleted      bool
+	// @access: confidential
+	FunctionID uuid.UUID
+	// @access: confidential
+	Runtime string
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description string
+	// @access: restricted
+	Uri string
+	// @access: confidential
+	Title pgtype.Text
+	// @access: confidential
+	MimeType pgtype.Text
+	// @access: opaque-restricted
+	Variables []byte
+	// @access: opaque-restricted
+	Meta []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

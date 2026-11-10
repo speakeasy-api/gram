@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { describe, expect, it } from "vitest";
 import { filterSkills, prioritizeAddableSkills } from "./skills-list-helpers";

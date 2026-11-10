@@ -7,11 +7,11 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpdateGcpKmsKeyRequestBody = {
   /**
-   * Optional. The Gram service-account email the customer granted on the key in an IAM binding. Not a secret.
+   * Optional. The Speakeasy service-account email the customer granted on the key in an IAM binding. Not a secret.
    */
   customerGrantReference?: string | undefined;
   /**
-   * The external credential Gram uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.
+   * The external credential Speakeasy uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.
    */
   externalCredentialId: string;
   /**

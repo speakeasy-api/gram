@@ -4,7 +4,6 @@ import { useQueries } from "@tanstack/react-query";
 import type { LiteLLMInstance } from "@gram/client/models/components/litellminstance.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { buildLiteLLMInstancesQuery } from "@gram/client/react-query/liteLLMInstances.js";
-import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
@@ -114,11 +113,6 @@ export function LiteLLMSetupStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <AgentProviderIcon source="litellm" className="h-6 w-6" />
-        </div>
-      }
       title="Set up LiteLLM"
       description="Point your LiteLLM proxy at Speakeasy so every request through it is scanned by your risk policies and its usage lands in observability. Create an instance to get an ingestion key, configure the proxy with it, and confirm events arrive."
       onContinue={onComplete}

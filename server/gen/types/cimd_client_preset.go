@@ -7,7 +7,7 @@
 
 package types
 
-// An entry in Gram's curated CIMD preset catalog.
+// An entry in Speakeasy's curated CIMD preset catalog.
 type CimdClientPreset struct {
 	// Stable identifier for the publishing vendor. Not unique — a vendor may
 	// publish several client documents.
@@ -24,6 +24,6 @@ type CimdClientPreset struct {
 	// widens the host.
 	IsPattern bool
 	// Whether presets-mode issuers currently admit this entry. Disabled entries
-	// are listed so operators can see that Gram knows about the vendor.
+	// are listed so operators can see that Speakeasy knows about the vendor.
 	Enabled bool
 }

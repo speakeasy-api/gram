@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -110,14 +112,18 @@ type ReadinessRecorder interface {
 type Runtime struct {
 	// registrar holds every tool this deployment composed, so an admitted
 	// audience can be served from the same pass that built the endpoint.
-	registrar            *Registrar
-	authenticator        Authenticator
-	gate                 Gate
-	authorizer           Authorizer
+	registrar     *Registrar
+	authenticator Authenticator
+	gate          Gate
+	authorizer    Authorizer
+	// protectedResourceURL is the RFC 9728 metadata URL advertised when a
+	// request carries no platform origin. Empty disables the challenge hint.
 	protectedResourceURL string
 	readiness            ReadinessRecorder
 	telemetry            OAuthTelemetry
 	server               *mcp.Server
+	// discovery picks and serves the small tool surface for budgeted hosts.
+	discovery DiscoveryConfig
 }
 
 func NewRuntime(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource) *Runtime {
@@ -133,15 +139,16 @@ func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, ga
 // identities and declared configuration fields, never an arbitrary endpoint or
 // provider credential.
 func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) *Runtime {
-	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate, nil, nil)
+	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, nil, plugins, sessionRecall, nil, candidate, nil, nil, nil, nil)
 }
 
-func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessReads *AccessReadService, accessRoleMutations *AccessRoleMutationService) *Runtime {
+func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessReads *AccessReadService, accessRoleMutations *AccessRoleMutationService, assistantIdentity *AssistantIdentityService, signalAuthoring *SignalAuthoringService, connectionMutations ...*MCPConnectionMutationService) *Runtime {
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		postgresReader.setInventoryCursorKey(cursorKeyMaterial)
 	}
-	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations)
+	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations, assistantIdentity, signalAuthoring, connectionMutations...)
 	registrar.withExternalAuthorizer(authorizer)
+	registrar.withLogger(logger)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
@@ -151,11 +158,19 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 		telemetry:            noopOAuthTelemetry{},
 		server:               server,
 		registrar:            registrar,
+		discovery:            DiscoveryConfig{},
 	}
-	// Register both wrappers together so their order is reviewable: readiness is
+	// Register the wrappers together so their order is reviewable: readiness is
 	// outside catalogue aggregation and therefore observes one completed external
 	// tools/list call, never the SDK pages the catalogue middleware reads inside.
-	middlewares := []mcp.Middleware{capabilityCatalogueMiddleware(registrar)}
+	// Discovery is outside the allowlist and catalogue, so a meta-tool's
+	// dispatched call passes through both like a direct call.
+	middlewares := []mcp.Middleware{discoveryMiddleware(runtime, logger), clientToolAllowlistMiddleware(registrar), capabilityCatalogueMiddleware(registrar)}
+	// Outside discovery, which replaces the instructions in its small modes:
+	// the caller's servers are appended to whichever instructions it chose.
+	if postgresReader, ok := reader.(*PostgresReader); ok && postgresReader.gatewayProxy.valid() {
+		middlewares = append([]mcp.Middleware{gatewayServersInstructionsMiddleware(postgresReader.gatewayProxy, logger, runtime.instructionBudget(logger))}, middlewares...)
+	}
 	if readiness != nil {
 		middlewares = append([]mcp.Middleware{readinessMiddleware(runtime, logger)}, middlewares...)
 	}
@@ -177,6 +192,44 @@ func readinessMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 				}
 			}
 			return result, err
+		}
+	}
+}
+
+// clientToolAllowlistMiddleware makes a client with a tool allowlist meet a
+// server that has only those tools. tools/list is narrowed by
+// FilterExternalTools; this covers the rest. A call to a tool outside the list
+// gets the same unknown-tool error the SDK returns for a name that was never
+// registered, and the server instructions drop every paragraph that points at
+// such a tool, so the client never meets a tool it was not shown.
+func clientToolAllowlistMiddleware(registrar *Registrar) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			// The small discovery surface already fits the hosts the allowlist
+			// was for, and reaches every tool by design.
+			if discoveryModeFromContext(ctx) != discoveryFull {
+				return next(ctx, method, req)
+			}
+			clientID := mustPrincipal(ctx).ClientID
+			if method == "tools/call" {
+				if callReq, ok := req.(*mcp.CallToolRequest); ok && callReq.Params != nil && !toolAllowedForClient(clientID, callReq.Params.Name) {
+					return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: fmt.Sprintf("unknown tool %q", callReq.Params.Name)}
+				}
+			}
+			result, err := next(ctx, method, req)
+			if err != nil {
+				return result, err
+			}
+			switch typed := result.(type) {
+			case *mcp.InitializeResult:
+				typed.Instructions = registrar.instructionsForClient(clientID, typed.Instructions)
+			case *mcp.DiscoverResult:
+				typed.Instructions = registrar.instructionsForClient(clientID, typed.Instructions)
+				// The instructions now depend on the caller, so no shared cache
+				// may hand one client's answer to another.
+				typed.CacheScope = "private"
+			}
+			return result, nil
 		}
 	}
 }
@@ -252,6 +305,16 @@ func (r *Runtime) WithOAuthTelemetry(telemetry OAuthTelemetry) *Runtime {
 	return r
 }
 
+// WithDashboardLinks lets result cards link to dashboard pages on the
+// dashboard the request arrived for. db resolves a project ID to its slug in
+// the caller's organization; it may be nil.
+func (r *Runtime) WithDashboardLinks(dashboardURL, serverURL *url.URL, db platformrepo.DBTX) *Runtime {
+	if r != nil && r.registrar != nil {
+		r.registrar.withDashboardLinks(newCardLinks(dashboardURL, serverURL, db))
+	}
+	return r
+}
+
 func (r *Runtime) WithRiskTelemetry(telemetry RiskTelemetry) *Runtime {
 	if r != nil && r.registrar != nil {
 		r.registrar.withRiskTelemetry(telemetry)
@@ -290,7 +353,13 @@ func (r *Runtime) Handler() http.Handler {
 			}
 			r.recordAuthOutcome(req.Context(), "unauthorized", "")
 			if r.protectedResourceURL != "" {
-				w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+r.protectedResourceURL+`"`)
+				// The metadata lives on the platform host the request arrived
+				// on, which is also the only host its tokens are valid for.
+				resourceMetadata := r.protectedResourceURL
+				if base := requestPlatformBaseURL(req.Context()); base != nil {
+					resourceMetadata = platformProtectedResourceMetadataURL(base)
+				}
+				w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+resourceMetadata+`"`)
 			}
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return

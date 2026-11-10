@@ -9,7 +9,7 @@ import (
 )
 
 // NewServerJWT provisions a JWT that can be used to make API calls to the
-// functions service on the Gram API.
+// functions service on the Speakeasy API.
 func NewServerJWT(ident RunnerIdentity, claims jwt.MapClaims) (string, error) {
 	sub := fmt.Sprintf("%s:%s:%s", ident.ProjectID, ident.DeploymentID, ident.FunctionID)
 	clone := make(jwt.MapClaims, len(claims)+1)

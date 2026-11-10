@@ -28,8 +28,8 @@ const integrationRedirectURI = "http://localhost:8080/callback"
 
 // TestServePublic_ExternalOAuth21_PassthroughAcceptsUpstreamToken drives
 // a full DCR + auth-code flow against dev-idp/oauth2-1, then sends the
-// resulting access token to /mcp/{slug} on a Gram external-mode toolset
-// wired to dev-idp's metadata. Gram passes the bearer through without
+// resulting access token to /mcp/{slug} on a Speakeasy external-mode toolset
+// wired to dev-idp's metadata. Speakeasy passes the bearer through without
 // validating it, so the request must not 401.
 func TestServePublic_ExternalOAuth21_PassthroughAcceptsUpstreamToken(t *testing.T) {
 	t.Parallel()
@@ -46,7 +46,7 @@ func TestServePublic_ExternalOAuth21_PassthroughAcceptsUpstreamToken(t *testing.
 		IsPublic: true,
 		Metadata: idp.OAuth21Metadata(t),
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.McpSlug
 
 	upstream := newUpstreamFlow(t, idp.OAuth21URL, true /* upstream rotates refresh */)
 	access := upstream.runFullFlow(t)
@@ -54,7 +54,7 @@ func TestServePublic_ExternalOAuth21_PassthroughAcceptsUpstreamToken(t *testing.
 	w, err := servePublicHTTP(t, t.Context(), ti, mcpSlug, makeInitializeBody(), access, nil)
 	require.NoError(t, err)
 	require.Empty(t, w.Header().Get("WWW-Authenticate"),
-		"upstream-issued access token should pass Gram's external-mode bearer check")
+		"upstream-issued access token should pass Speakeasy's external-mode bearer check")
 }
 
 // TestServePublic_ExternalOAuth21_RefreshRotatesUpstreamPair verifies
@@ -76,7 +76,7 @@ func TestServePublic_ExternalOAuth21_RefreshRotatesUpstreamPair(t *testing.T) {
 		IsPublic: true,
 		Metadata: idp.OAuth21Metadata(t),
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.McpSlug
 
 	upstream := newUpstreamFlow(t, idp.OAuth21URL, true)
 	upstream.runFullFlow(t)
@@ -100,7 +100,7 @@ func TestServePublic_ExternalOAuth21_RefreshRotatesUpstreamPair(t *testing.T) {
 }
 
 // TestServePublic_ExternalOAuth_RefreshDoesNotRotateUpstreamPair verifies
-// Gram tolerates an upstream that does not rotate refresh tokens — real
+// Speakeasy tolerates an upstream that does not rotate refresh tokens — real
 // authorization servers vary here, and OAuth 2.1 only recommends rotation.
 // The client registers with rotate_refresh_tokens=false, so dev-idp issues
 // a new access token on refresh but hands back the same refresh token.
@@ -118,7 +118,7 @@ func TestServePublic_ExternalOAuth_RefreshDoesNotRotateUpstreamPair(t *testing.T
 		IsPublic: true,
 		Metadata: idp.OAuth21Metadata(t),
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.McpSlug
 
 	upstream := newUpstreamFlow(t, idp.OAuth21URL, false /* upstream reuses refresh */)
 	upstream.runFullFlow(t)
@@ -136,9 +136,9 @@ func TestServePublic_ExternalOAuth_RefreshDoesNotRotateUpstreamPair(t *testing.T
 }
 
 // TestServePublic_ExternalOAuth21_PostRefreshTokenForwards simulates the
-// "client's upstream-token expired, refresh, retry" loop. Gram doesn't
+// "client's upstream-token expired, refresh, retry" loop. Speakeasy doesn't
 // track upstream token lifetimes in passthrough mode, so the test value
-// is that the rotated token works end-to-end with no Gram-side
+// is that the rotated token works end-to-end with no Speakeasy-side
 // cooperation needed.
 //
 // Distinct from TestServePublic_ExternalOAuth21_RefreshRotatesUpstreamPair:
@@ -146,7 +146,7 @@ func TestServePublic_ExternalOAuth_RefreshDoesNotRotateUpstreamPair(t *testing.T
 // (rotated pair != original AND original refresh is rejected post-rotation).
 // This test focuses on the client-side retry shape — a token obtained via
 // refresh (not the initial issuance) must be accepted by /mcp/{slug}
-// without any prior Gram-side handshake.
+// without any prior Speakeasy-side handshake.
 func TestServePublic_ExternalOAuth21_PostRefreshTokenForwards(t *testing.T) {
 	t.Parallel()
 
@@ -161,7 +161,7 @@ func TestServePublic_ExternalOAuth21_PostRefreshTokenForwards(t *testing.T) {
 		IsPublic: true,
 		Metadata: idp.OAuth21Metadata(t),
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.McpSlug
 
 	upstream := newUpstreamFlow(t, idp.OAuth21URL, true)
 	upstream.runFullFlow(t)
@@ -397,7 +397,7 @@ func pkceChallenge(verifier string) string {
 // TestServePublic_ExternalOAuth21_ExpiredUpstreamJWTStillForwarded pins
 // down the strongest form of the external-mode non-validation contract:
 // even a properly-formed JWT signed by dev-idp's actual key but with an
-// `exp` claim in the past is accepted at /mcp/{slug} without Gram doing
+// `exp` claim in the past is accepted at /mcp/{slug} without Speakeasy doing
 // any validation of its own.
 //
 // TestServePublic_ExternalOAuth21_PassthroughAcceptsUpstreamToken proves
@@ -407,7 +407,7 @@ func pkceChallenge(verifier string) string {
 // the remaining gap: a token that LOOKS valid (real signature, real
 // issuer claim) but is semantically expired must still flow through
 // untouched, because external-mode is non-validating by contract. If
-// Gram ever starts parsing JWT claims here, this test must be updated
+// Speakeasy ever starts parsing JWT claims here, this test must be updated
 // in the same change.
 func TestServePublic_ExternalOAuth21_ExpiredUpstreamJWTStillForwarded(t *testing.T) {
 	t.Parallel()
@@ -439,7 +439,7 @@ func TestServePublic_ExternalOAuth21_ExpiredUpstreamJWTStillForwarded(t *testing
 	expiredJWT, err := token.SignedString(idp.SigningKey())
 	require.NoError(t, err)
 
-	w, err := servePublicHTTP(t, t.Context(), ti, result.Toolset.McpSlug.String, makeInitializeBody(), expiredJWT, nil)
+	w, err := servePublicHTTP(t, t.Context(), ti, result.McpSlug, makeInitializeBody(), expiredJWT, nil)
 	require.NoError(t, err, "external/passthrough mode must NOT validate JWT claims; expired upstream JWT should be forwarded")
 	require.Empty(t, w.Header().Get("WWW-Authenticate"),
 		"WWW-Authenticate must NOT be set in passthrough mode regardless of bearer freshness")

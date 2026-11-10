@@ -1,0 +1,108 @@
+package adminmcp
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
+
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+)
+
+func TestStaffOAuthUsesCanonicalAdminOrigin(t *testing.T) {
+	t.Parallel()
+	base, err := url.Parse("https://admin.example.test/?ignored=true")
+	require.NoError(t, err)
+	cipher, err := encryption.NewWithBytes(make([]byte, 32))
+	require.NoError(t, err)
+	oauth, err := NewStaffOAuth(base, &pgxpool.Pool{}, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"), WriteConfig{}, testenv.NewLogger(t))
+	require.NoError(t, err)
+	require.Equal(t, "https://admin.example.test/admin-mcp", oauth.Resource())
+	require.Equal(t, "https://admin.example.test/admin-mcp/oauth", oauth.Issuer())
+	require.Equal(t, "https://admin.example.test/.well-known/oauth-protected-resource/admin-mcp", oauth.ProtectedResourceURL())
+	base.Path = "/unexpected-prefix"
+	_, err = NewStaffOAuth(base, &pgxpool.Pool{}, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"), WriteConfig{}, testenv.NewLogger(t))
+	require.Error(t, err)
+}
+
+func TestStaffOAuthMetadataURLs(t *testing.T) {
+	t.Parallel()
+
+	oauth := &StaffOAuth{
+		issuer:               "https://admin.example.test/admin-mcp/oauth",
+		resource:             "https://admin.example.test/admin-mcp",
+		protectedResourceURL: "https://admin.example.test/.well-known/oauth-protected-resource/admin-mcp",
+	}
+	require.Equal(t, "https://admin.example.test/.well-known/oauth-protected-resource/admin-mcp", oauth.ProtectedResourceURL())
+
+	for _, tt := range []struct {
+		path    string
+		handler http.Handler
+		want    map[string]any
+	}{
+		{
+			path:    "/.well-known/oauth-protected-resource/admin-mcp",
+			handler: oauth.ProtectedResourceHandler(),
+			want: map[string]any{
+				"resource":                 oauth.Resource(),
+				"authorization_servers":    []any{oauth.Issuer()},
+				"bearer_methods_supported": []any{"header"},
+			},
+		},
+		{
+			path:    "/.well-known/oauth-authorization-server/admin-mcp/oauth",
+			handler: oauth.AuthorizationServerHandler(),
+			want: map[string]any{
+				"issuer":                 oauth.Issuer(),
+				"authorization_endpoint": oauth.Resource() + "/authorize",
+				"token_endpoint":         oauth.Resource() + "/token",
+				"registration_endpoint":  oauth.Resource() + "/register",
+			},
+		},
+	} {
+		rec := httptest.NewRecorder()
+		tt.handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tt.path, nil))
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+		var metadata map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &metadata))
+		for key, value := range tt.want {
+			require.Equal(t, value, metadata[key], key)
+		}
+		require.Equal(t, []any{ScopeRead}, metadata["scopes_supported"], "writes are off by default")
+	}
+
+	oauth.writes = WriteConfig{Enabled: true}
+	rec := httptest.NewRecorder()
+	oauth.AuthorizationServerHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/admin-mcp/oauth", nil))
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &metadata))
+	require.Equal(t, []any{ScopeRead, ScopeWrite}, metadata["scopes_supported"])
+}
+
+func TestStaffOAuthServesConsentFonts(t *testing.T) {
+	t.Parallel()
+	mux := goahttp.NewMuxer()
+	(&StaffOAuth{}).Attach(mux)
+	fonts, err := consentpage.FontNames()
+	require.NoError(t, err)
+	require.NotEmpty(t, fonts)
+
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/mcp/consent-fonts/"+fonts[0], nil))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, "font/woff2", response.Header().Get("Content-Type"))
+	require.NotEmpty(t, response.Body.Bytes())
+
+	response = httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/mcp/consent-fonts/missing.woff2", nil))
+	require.Equal(t, http.StatusNotFound, response.Code)
+}

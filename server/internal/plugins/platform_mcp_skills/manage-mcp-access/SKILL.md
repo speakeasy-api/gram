@@ -5,6 +5,8 @@ description: Create or select a narrow custom AICP MCP access role, assign it to
 
 # Manage MCP access
 
+If this connection lists `call_platform_tool` instead of the tools this workflow names, find each named tool with `search_platform_tools`, describe it with `describe_platform_tool`, then run it with `call_platform_tool` and the same arguments. Whether a tool exists for you is decided by `describe_platform_tool` with its exact name, not by `tools/list` or one page of search results: a name returned in `not_found` is unavailable to you, so say so rather than guess. The call itself still checks your access. When `execute` is also listed, a multi-step read may run in `execute` with `tools.search`, `tools.describe` and `tools.call` on `platform--<tool name>` paths. End each `execute` run at a confirmation point and ask the user before any write.
+
 Use this workflow only through the authenticated Speakeasy AI Control Plane (AICP) Platform MCP. It mirrors the guarded dashboard workflow for giving one explicitly selected organization member access to one explicitly selected configured MCP through a custom role. Installing the package grants no organization or project access.
 
 ## Safety rules
@@ -18,6 +20,7 @@ Use this workflow only through the authenticated Speakeasy AI Control Plane (AIC
 - Stop if incomplete tool catalogue or unevaluated evidence prevents confirmation of exact scope. Never treat missing tools, `tools_truncated: true`, or `unevaluated_grants: true` as proof of narrow access.
 - Local role and membership reads describe local desired state only. Never claim provider synchronization has converged or that the member has effective provider access based on local reads, mutation success, or receipt replay.
 - If any read reports that the capability is unavailable, stop without claiming a change.
+- When the user asks what a permission or role means, or before confirming a role to create or assign, call `describe_access_permissions` and explain the permissions in its words. Name every permission it marks sensitive in the confirmation, with the reason it gives, and report `sensitive_scopes_added` from a role mutation result when it is present.
 
 ## Workflow
 
@@ -39,6 +42,6 @@ Use this workflow only through the authenticated Speakeasy AI Control Plane (AIC
     - Call `get_mcp_access` again and confirm the role remains eligible and still has exactly all confirmed grants for the selected MCP.
     - Call `list_access_members` again with the original identity query without a role filter. Preserve the original privacy cohort; do not filter by the newly assigned role. Confirm the selected masked member is listed with that role when privacy-safe enumeration is available.
     - If member enumeration is suppressed or any evidence is stale, incomplete, or inconsistent, report local verification as incomplete. Never bypass suppression by changing filters or infer membership from counts.
-12. Report the selected project, MCP, custom role, masked member, and confirmed grants as committed local desired state only when supported by the evidence. Clearly separate the historical commit from current local verification and pending or unverified provider synchronization. These tools do not verify provider convergence or effective provider access; do not claim either from their local results.
+12. Report the selected project, MCP, custom role, masked member, and confirmed grants as committed local desired state only when supported by the evidence. Clearly separate the historical commit from current local verification and pending or unverified provider synchronization. These tools do not verify provider convergence or effective provider access; do not claim either from their local results. A replayed result whose `reconciliation` is `rate_limited` or `unavailable` did not request provider synchronization again; report the commit as recorded and synchronization as unverified, and do not retry the same request just to resend it.
 
 Project, MCP, custom-role, masked-member, complete-grant, and final assignment choices all remain explicit conversation checkpoints. All selectors and mutation-control fields remain agent-operational.

@@ -1,0 +1,273 @@
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { renderWithApp } from "@/test/harness";
+
+vi.mock("./RegistryPromotionCandidates", () => ({
+  RegistryPromotionCandidates: () => null,
+}));
+
+const list = vi.hoisted(() => vi.fn());
+vi.mock("@gram/admin-client/react-query/adminListRegistryEntries.core", () => ({
+  buildAdminListRegistryEntriesQuery: (_client: unknown, request: unknown) => ({
+    queryKey: ["@gram/admin-client", "admin", "listRegistryEntries", request],
+    queryFn: () => list(request),
+  }),
+}));
+vi.mock(
+  "@gram/admin-client/react-query/adminListRegistryOktaUnmapped.core",
+  () => ({
+    buildAdminListRegistryOktaUnmappedQuery: () => ({
+      queryKey: ["@gram/admin-client", "admin", "listRegistryOktaUnmapped"],
+      queryFn: async () => ({ names: [] }),
+    }),
+  }),
+);
+import { QueryClient } from "@tanstack/react-query";
+import { RegistryList } from "./RegistryList";
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+it("bounds pages, sends search and publication filters, resets cursor and shows invalid summaries", async () => {
+  list.mockImplementation(
+    ({ cursor }) =>
+      new Promise((resolve) => {
+        setTimeout(
+          () =>
+            resolve({
+              entries: [
+                {
+                  id: "00000000-0000-4000-8000-000000000001",
+                  name: "example.test/demo",
+                  published: false,
+                  updatedAt: "opaque",
+                  issues: [{ path: "/server", message: "repair required" }],
+                },
+              ],
+              nextCursor: cursor ? undefined : "next-page",
+            }),
+          cursor ? 100 : 0,
+        );
+      }),
+  );
+  const { router } = await renderWithApp(<RegistryList />);
+  const replaceHistory = vi.spyOn(router.history, "replace");
+  expect(
+    screen.getByRole("heading", { name: "MCP Registry", level: 1 }),
+  ).toBeTruthy();
+  await screen.findByText("1 issues");
+  expect(list.mock.calls[0]?.[0]).toEqual({
+    query: undefined,
+    published: undefined,
+    cursor: undefined,
+    limit: 25,
+  });
+  expect(
+    (screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await waitFor(() =>
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: "next-page", limit: 25 }),
+    ),
+  );
+  expect(screen.getByText("Page 2")).toBeTruthy();
+  expect(replaceHistory).toHaveBeenCalled();
+  replaceHistory.mockRestore();
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true),
+  );
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+  await screen.findByText("Page 1");
+  expect(
+    (screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  await waitFor(() => expect(list.mock.lastCall?.[0].cursor).toBeUndefined());
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByText("Page 2");
+  fireEvent.change(screen.getByRole("textbox", { name: "Search registry" }), {
+    target: { value: "demo" },
+  });
+  await waitFor(() =>
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ query: "demo", cursor: undefined }),
+    ),
+  );
+  fireEvent.keyDown(screen.getByRole("combobox", { name: "Publication" }), {
+    key: "ArrowDown",
+  });
+  fireEvent.click(await screen.findByRole("option", { name: "Unpublished" }));
+  await waitFor(() =>
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "demo",
+        published: false,
+        cursor: undefined,
+      }),
+    ),
+  );
+  expect(screen.getByText("Page 1")).toBeTruthy();
+});
+
+it("retries a failed list request", async () => {
+  list
+    .mockRejectedValueOnce(new Error("List unavailable"))
+    .mockResolvedValue({ entries: [] });
+  await renderWithApp(<RegistryList />);
+  await screen.findByRole("alert");
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await screen.findByText("No entries found.");
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("shows an alert when a refetch of a cached empty list fails", async () => {
+  list
+    .mockResolvedValueOnce({ entries: [] })
+    .mockRejectedValue(new Error("List unavailable"));
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  await renderWithApp(<RegistryList />, { queryClient });
+  await screen.findByText("No entries found.");
+  await act(async () => {
+    await queryClient.invalidateQueries();
+  });
+  await screen.findByRole("alert");
+  expect(screen.queryByText("No entries found.")).toBeNull();
+});
+
+it("keeps accessible headers and a spanning cell while loading and empty", async () => {
+  list.mockImplementation(() => new Promise(() => {}));
+  const { unmount } = await renderWithApp(<RegistryList />);
+  expect(
+    screen.getAllByRole("columnheader").map((header) => header.textContent),
+  ).toEqual([
+    "Name",
+    "Publication",
+    "Validation",
+    "Actions",
+    "Okta name",
+    "Organizations",
+    "Sign-on modes",
+    "Proposed entry",
+  ]);
+  expect(
+    screen
+      .getByRole("cell", { name: "Loading registry…" })
+      .getAttribute("colspan"),
+  ).toBe("4");
+  unmount();
+  list.mockResolvedValue({ entries: [] });
+  await renderWithApp(<RegistryList />);
+  expect(
+    (
+      await screen.findByRole("cell", { name: "No entries found." })
+    ).getAttribute("colspan"),
+  ).toBe("4");
+});
+
+it("restores filters from the address and links entry pages with them", async () => {
+  list.mockResolvedValue({
+    entries: [
+      {
+        id: "00000000-0000-4000-8000-000000000001",
+        name: "example.test/demo",
+        published: false,
+        updatedAt: "opaque",
+        issues: [],
+      },
+    ],
+  });
+  await renderWithApp(<RegistryList />, {
+    initialPath: "/registry?q=demo&publication=unpublished",
+  });
+  const edit = await screen.findByRole("link", {
+    name: "Edit example.test/demo",
+  });
+  expect(list).toHaveBeenCalledWith(
+    expect.objectContaining({ query: "demo", published: false }),
+  );
+  expect(
+    (
+      screen.getByRole("textbox", {
+        name: "Search registry",
+      }) as HTMLInputElement
+    ).value,
+  ).toBe("demo");
+  expect(edit.getAttribute("href")).toBe(
+    "/registry/00000000-0000-4000-8000-000000000001?q=demo&publication=unpublished",
+  );
+  expect(
+    screen.getByRole("link", { name: "New entry" }).getAttribute("href"),
+  ).toBe("/registry/new?q=demo&publication=unpublished");
+});
+
+it("keeps a mid-string search edit in place while the address catches up, and follows outside navigation", async () => {
+  list.mockResolvedValue({ entries: [] });
+  const { router } = await renderWithApp(<RegistryList />, {
+    initialPath: "/registry?q=example",
+  });
+  const input = screen.getByRole("textbox", {
+    name: "Search registry",
+  }) as HTMLInputElement;
+  // The address updates in a transition, after the keystroke's event. The box
+  // must already hold the edit, or the caret jumps to the end.
+  fireEvent.change(input, { target: { value: "exaXmple" } });
+  expect(input.value).toBe("exaXmple");
+  fireEvent.change(input, { target: { value: "exaXYmple" } });
+  expect(input.value).toBe("exaXYmple");
+  await waitFor(() =>
+    expect(router.state.location.search).toEqual({ q: "exaXYmple" }),
+  );
+  expect(input.value).toBe("exaXYmple");
+  await act(() => router.navigate({ to: "/registry", search: {} }));
+  await waitFor(() => expect(input.value).toBe(""));
+});
+
+it("restores the cursor stack after leaving and remounting the list", async () => {
+  list.mockResolvedValue({ entries: [] });
+  const path = "/registry?q=demo&cursors=%5B%22page-two%22%5D";
+  const { unmount } = await renderWithApp(<RegistryList />, {
+    initialPath: path,
+  });
+  await waitFor(() =>
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: "page-two" }),
+    ),
+  );
+  expect(screen.getByText("Page 2")).toBeTruthy();
+  unmount();
+  list.mockClear();
+  await renderWithApp(<RegistryList />, { initialPath: path });
+  await waitFor(() =>
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: "page-two" }),
+    ),
+  );
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+  await waitFor(() => expect(screen.getByText("Page 1")).toBeTruthy());
+});

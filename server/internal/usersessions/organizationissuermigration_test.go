@@ -194,14 +194,14 @@ func TestOrganizationUserSessionIssuerMoveLocksTargetProject(t *testing.T) {
 		_, moveIssuerErr := ti.service.MoveIssuer(ctx, &orggen.MoveIssuerPayload{ID: issuer.ID, ProjectID: &target})
 		moveErr <- moveIssuerErr
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(clientLock), 1)
 
 	deleteErr := make(chan error, 1)
 	go func() {
 		_, deleteProjectErr := projectsrepo.New(ti.conn).DeleteProject(ctx, targetProjectID)
 		deleteErr <- deleteProjectErr
 	}()
-	require.Never(t, func() bool { return len(deleteErr) > 0 }, 250*time.Millisecond, 10*time.Millisecond, "target deletion must wait for the move transaction")
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(clientLock), 2)
 	require.NoError(t, clientLock.Commit(ctx))
 	require.Eventually(t, func() bool { return len(moveErr) > 0 }, 2*time.Second, 10*time.Millisecond)
 	require.NoError(t, <-moveErr)
@@ -241,13 +241,10 @@ func TestOrganizationUserSessionIssuerMigrateWidensScopeAndPreservesData(t *test
 	require.NoError(t, err)
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
-		Name: "Migration toolset", Slug: "migration-toolset", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: false,
+		Name: "Migration toolset", Slug: "migration-toolset", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: sourceID, Valid: true}, Slug: toolset.Slug, ProjectID: *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+	hostToolset(t, ctx, ti, toolset, uuid.NullUUID{UUID: sourceID, Valid: true})
 	mcpServerID := uuid.New()
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: mcpServerID, ProjectID: *authCtx.ProjectID,
@@ -299,10 +296,10 @@ func TestOrganizationUserSessionIssuerMigrateWidensScopeAndPreservesData(t *test
 	require.NoError(t, err)
 	require.Equal(t, targetID, cimdAfter.UserSessionIssuerID)
 	require.False(t, cimdAfter.ProjectID.Valid)
-	toolsetAfter, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndOrganization(ctx, toolsetsrepo.GetToolsetByIDAndOrganizationParams{ID: toolset.ID, OrganizationID: authCtx.ActiveOrganizationID})
+	hostedAfter, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: toolset.ID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
-	require.True(t, toolsetAfter.UserSessionIssuerID.Valid)
-	require.Equal(t, targetID, toolsetAfter.UserSessionIssuerID.UUID)
+	require.True(t, hostedAfter.UserSessionIssuerID.Valid)
+	require.Equal(t, targetID, hostedAfter.UserSessionIssuerID.UUID)
 	mcpServerAfter, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: mcpServerID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.True(t, mcpServerAfter.UserSessionIssuerID.Valid)
@@ -517,7 +514,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	}))
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
-		Name: "Remote migration toolset", Slug: "remote-migration-toolset", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: false,
+		Name: "Remote migration toolset", Slug: "remote-migration-toolset", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
 	mcpServerID := uuid.New()
@@ -652,7 +649,7 @@ func TestOrganizationUserSessionIssuerMigrateRejectsStaleClientRegistration(t *t
 		_, migrateIssuerErr := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID, ConfirmedWarningsFingerprint: &preflight.WarningsFingerprint})
 		migrateErr <- migrateIssuerErr
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(clientLock), 1)
 
 	// The late registration already resolved the source issuer as live.
 	registerErr := make(chan error, 1)
@@ -660,7 +657,7 @@ func TestOrganizationUserSessionIssuerMigrateRejectsStaleClientRegistration(t *t
 		_, seedErr := seedUserSessionClient(t, ctx, ti.conn, sourceID, "stale-registration-late")
 		registerErr <- seedErr
 	}()
-	require.Never(t, func() bool { return len(registerErr) > 0 }, 250*time.Millisecond, 10*time.Millisecond, "registration must wait behind the migration's issuer lock")
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(clientLock), 2)
 
 	require.NoError(t, clientLock.Commit(ctx))
 	require.Eventually(t, func() bool { return len(migrateErr) > 0 }, 5*time.Second, 10*time.Millisecond)

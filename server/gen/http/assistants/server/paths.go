@@ -22,6 +22,11 @@ func CreateAssistantAssistantsPath() string {
 	return "/rpc/assistants.create"
 }
 
+// UpgradeAssistantIdentityAssistantsPath returns the URL path to the assistants service upgradeAssistantIdentity HTTP endpoint.
+func UpgradeAssistantIdentityAssistantsPath() string {
+	return "/rpc/assistants.upgradeIdentity"
+}
+
 // UpdateAssistantAssistantsPath returns the URL path to the assistants service updateAssistant HTTP endpoint.
 func UpdateAssistantAssistantsPath() string {
 	return "/rpc/assistants.update"
@@ -50,4 +55,14 @@ func GetManagedAssistantAssistantsPath() string {
 // EnsureManagedAssistantAssistantsPath returns the URL path to the assistants service ensureManagedAssistant HTTP endpoint.
 func EnsureManagedAssistantAssistantsPath() string {
 	return "/rpc/assistants.ensureManagedAssistant"
+}
+
+// ListExecutionProfilesAssistantsPath returns the URL path to the assistants service listExecutionProfiles HTTP endpoint.
+func ListExecutionProfilesAssistantsPath() string {
+	return "/rpc/assistants.listExecutionProfiles"
+}
+
+// SetExecutionProfileChoiceAssistantsPath returns the URL path to the assistants service setExecutionProfileChoice HTTP endpoint.
+func SetExecutionProfileChoiceAssistantsPath() string {
+	return "/rpc/assistants.setExecutionProfileChoice"
 }

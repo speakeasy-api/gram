@@ -1,12 +1,15 @@
-import { useTheme } from "next-themes";
-import { Toaster as Sonner, ToasterProps } from "sonner";
+import { useConfig } from "@/components/ui/hooks/useConfig";
+import type { ToasterProps } from "sonner";
+import { Toaster as Sonner } from "sonner";
 
 const Toaster = ({ ...props }: ToasterProps): JSX.Element => {
-  const { theme = "system" } = useTheme();
+  // The app theme lives in ConfigContext, not next-themes (which has no
+  // provider here and would fall back to the OS scheme).
+  const { theme } = useConfig();
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={theme}
       className="toaster group"
       style={
         {

@@ -13,12 +13,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const maxRequestBytes = 10 * 1024 * 1024
 
-// Frame is the transcript Anthropic sends before inference.
+// Hook events carried in Frame.Type.
+const (
+	// frameTypePrompt is sent once per governed request, before inference.
+	frameTypePrompt = "prompt"
+
+	// frameTypeToolCall is sent before any tool call in a model response runs,
+	// when the organization has Validate tool calls on. One verdict covers
+	// every call in the frame.
+	frameTypeToolCall = "tool_call"
+)
+
+// Frame is the transcript Anthropic sends before inference or before tool calls run.
 type Frame struct {
 	// Type identifies the hook event; unknown events are forward compatible.
 	Type string `json:"type"`
@@ -35,7 +47,9 @@ type Frame struct {
 	// Source is advisory application metadata.
 	Source Source `json:"source"`
 
-	// Messages is the complete user-visible transcript before inference.
+	// Messages is the complete user-visible transcript before inference. A
+	// tool call frame ends with the assistant message holding the calls and
+	// omits the earlier conversation its prompt frame carried.
 	Messages []Message `json:"messages"`
 
 	// SessionID is opaque and may be absent.
@@ -43,6 +57,15 @@ type Frame struct {
 
 	// Model is the optional public model identifier.
 	Model string `json:"model"`
+
+	// conversation is the stored chat this frame resolved to. Service.Process
+	// sets it once per request so the store does not repeat the lookup; the
+	// zero value makes the store resolve it on demand. It never travels on the
+	// wire.
+	conversation uuid.UUID
+	// conversationOutcome is how conversation was resolved (see
+	// conversationOutcome* constants). Empty when conversation is unset.
+	conversationOutcome string
 }
 
 // Actor describes the principal asserted by the signed request.

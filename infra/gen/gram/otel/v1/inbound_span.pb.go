@@ -124,7 +124,7 @@ func (x InboundSpan_StatusCode) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// InboundSpan represents an OTLP span that has been received by Gram's ingest
+// InboundSpan represents an OTLP span that has been received by Speakeasy's ingest
 // edge.
 //
 // NOTICE: THIS IS A CARBON COPY OF `./span.proto` AND MUST BE KEPT IN SYNC.
@@ -133,7 +133,7 @@ func (x InboundSpan_StatusCode) Number() protoreflect.EnumNumber {
 // every field OTLP defines keeps OTLP's exact field number and scalar type, so
 // these bytes unmarshal directly into an OTLP Span and vice versa. That is why
 // the numbering below is not sequential — it is OTLP's numbering, not ours, and
-// it must not be renumbered. Everything Gram adds lives at 1000+, where an OTLP
+// it must not be renumbered. Everything Speakeasy adds lives at 1000+, where an OTLP
 // parser skips it as unknown fields.
 type InboundSpan struct {
 	state                             protoimpl.MessageState            `protogen:"opaque.v1"`
@@ -775,7 +775,7 @@ func (b0 InboundSpan_builder) Build() *InboundSpan {
 
 // Provenance is where a span came from: which component emitted it and
 // which tenant it belongs to. Its presence answers whether a span passed
-// through the Gram ingest edge at all — one relayed straight from an OTLP
+// through the Speakeasy ingest edge at all — one relayed straight from an OTLP
 // producer has none.
 //
 // Retention, data classification and anything else policy-derived does not

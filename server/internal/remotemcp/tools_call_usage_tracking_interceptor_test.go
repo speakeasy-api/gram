@@ -69,7 +69,7 @@ func newToolsCallResponseForInterceptor(t *testing.T, sessionID string) *proxy.T
 	resp, ok := rpcResp.(*jsonrpc.Response)
 	require.True(t, ok)
 
-	httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server-id", http.NoBody)
+	httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server-id", http.NoBody)
 	require.NoError(t, err)
 	if sessionID != "" {
 		httpReq.Header.Set("Mcp-Session-Id", sessionID)

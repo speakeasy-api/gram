@@ -1,9 +1,9 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Input } from "@/components/moon/input";
 import { Label } from "@/components/moon/label";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Loader2 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 interface PublishDialogProps {
@@ -254,12 +254,16 @@ export const PublishDialog = memo(function PublishDialog({
               </Dialog.Description>
               <Dialog.Description>
                 To view or remove existing collaborators, open the repository on
-                GitHub.
+                GitHub. ZIP recipients and Claude Code users installing through
+                the Speakeasy marketplace proxy do not each need to be GitHub
+                collaborators.
               </Dialog.Description>
               <Dialog.Description>
                 <strong className="text-foreground font-semibold">
-                  You will receive an email from GitHub inviting you to join the
-                  repository. Accept the invite in order to proceed.
+                  New collaborators may receive a GitHub invitation. Accept it
+                  in GitHub or via the notification before accessing the private
+                  repository directly. Existing collaborators need no new
+                  invitation.
                 </strong>
               </Dialog.Description>
             </>
@@ -271,9 +275,19 @@ export const PublishDialog = memo(function PublishDialog({
                 it to Cursor, Claude and other marketplaces.
               </Dialog.Description>
               <Dialog.Description>
-                At least one user in your organization will need to be given
-                access to connect the generated repository with their coding
-                agents.
+                The person importing this private repository into a vendor
+                marketplace needs GitHub repository access and permission to
+                authorize the vendor's GitHub App. ZIP recipients and Claude
+                Code users installing through the Speakeasy marketplace proxy do
+                not each need to be GitHub collaborators.
+              </Dialog.Description>
+              <Dialog.Description>
+                <strong className="text-foreground font-semibold">
+                  New collaborators may receive a GitHub invitation. Accept it
+                  in GitHub or via the notification before accessing the private
+                  repository directly. Existing collaborators need no new
+                  invitation.
+                </strong>
               </Dialog.Description>
             </>
           )}
@@ -336,7 +350,7 @@ export const PublishDialog = memo(function PublishDialog({
                 >
                   {searchLoading && (
                     <div className="text-muted-foreground flex items-center gap-2 px-2 py-1.5 text-xs">
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Spinner className="mr-0 h-3 w-3" />
                       Searching GitHub…
                     </div>
                   )}

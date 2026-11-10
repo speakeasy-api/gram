@@ -7,14 +7,17 @@ import { organizationsDisableWebhooks } from "../funcs/organizationsDisableWebho
 import { organizationsEnableWebhooks } from "../funcs/organizationsEnableWebhooks.js";
 import { organizationsGenerateWorkOSAdminPortalLink } from "../funcs/organizationsGenerateWorkOSAdminPortalLink.js";
 import { organizationsGet } from "../funcs/organizationsGet.js";
+import { organizationsGetGateway } from "../funcs/organizationsGetGateway.js";
 import { organizationsGetOnboardingStatus } from "../funcs/organizationsGetOnboardingStatus.js";
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
 import { organizationsListSetupTasks } from "../funcs/organizationsListSetupTasks.js";
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
 import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
+import { organizationsRevokeMemberSignIns } from "../funcs/organizationsRevokeMemberSignIns.js";
 import { organizationsSendEnterpriseAdminOnboardingEmail } from "../funcs/organizationsSendEnterpriseAdminOnboardingEmail.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
+import { organizationsSubmitOnboardingSurvey } from "../funcs/organizationsSubmitOnboardingSurvey.js";
 import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
 import { organizationsUpdateSetupTask } from "../funcs/organizationsUpdateSetupTask.js";
 import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsVerifyOnboardingHooksSetup.js";
@@ -26,7 +29,9 @@ import { ListSetupTasksResult } from "../models/components/listsetuptasksresult.
 import { ListUsersResult } from "../models/components/listusersresult.js";
 import { OnboardingStatusResult } from "../models/components/onboardingstatusresult.js";
 import { Organization } from "../models/components/organization.js";
+import { OrganizationGateway } from "../models/components/organizationgateway.js";
 import { OrganizationInvitation } from "../models/components/organizationinvitation.js";
+import { RevokeSignInsResult } from "../models/components/revokesigninsresult.js";
 import { SendEnterpriseAdminOnboardingEmailResult } from "../models/components/sendenterpriseadminonboardingemailresult.js";
 import { SetupTask } from "../models/components/setuptask.js";
 import { VerifyOnboardingHooksSetupResult } from "../models/components/verifyonboardinghookssetupresult.js";
@@ -55,6 +60,10 @@ import {
   GetOrganizationSecurity,
 } from "../models/operations/getorganization.js";
 import {
+  GetOrganizationGatewayRequest,
+  GetOrganizationGatewaySecurity,
+} from "../models/operations/getorganizationgateway.js";
+import {
   ListInvitesRequest,
   ListInvitesSecurity,
 } from "../models/operations/listinvites.js";
@@ -75,6 +84,10 @@ import {
   RevokeInviteSecurity,
 } from "../models/operations/revokeinvite.js";
 import {
+  RevokeOrganizationMemberSignInsRequest,
+  RevokeOrganizationMemberSignInsSecurity,
+} from "../models/operations/revokeorganizationmembersignins.js";
+import {
   SendEnterpriseAdminOnboardingEmailRequest,
   SendEnterpriseAdminOnboardingEmailSecurity,
 } from "../models/operations/sendenterpriseadminonboardingemail.js";
@@ -82,6 +95,10 @@ import {
   SendInviteRequest,
   SendInviteSecurity,
 } from "../models/operations/sendinvite.js";
+import {
+  SubmitOnboardingSurveyRequest,
+  SubmitOnboardingSurveySecurity,
+} from "../models/operations/submitonboardingsurvey.js";
 import {
   UpdateInviteRoleRequest,
   UpdateInviteRoleSecurity,
@@ -193,10 +210,29 @@ export class Organizations extends ClientSDK {
   }
 
   /**
+   * getGateway organizations
+   *
+   * @remarks
+   * Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.
+   */
+  async getGateway(
+    request?: GetOrganizationGatewayRequest | undefined,
+    security?: GetOrganizationGatewaySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<OrganizationGateway> {
+    return unwrapAsync(organizationsGetGateway(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getOnboardingStatus organizations
    *
    * @remarks
-   * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+   * Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.
    */
   async getOnboardingStatus(
     request?: GetOnboardingStatusRequest | undefined,
@@ -253,7 +289,7 @@ export class Organizations extends ClientSDK {
    * listUsers organizations
    *
    * @remarks
-   * List users in the active organization from Gram organization_user_relationships.
+   * List users in the active organization from Speakeasy organization_user_relationships.
    */
   async listUsers(
     request?: ListOrganizationUsersRequest | undefined,
@@ -272,7 +308,7 @@ export class Organizations extends ClientSDK {
    * removeUser organizations
    *
    * @remarks
-   * Remove a user from the active organization in Gram and delete their WorkOS organization membership.
+   * Remove a user from the active organization in Speakeasy and delete their WorkOS organization membership.
    */
   async removeUser(
     request: RemoveOrganizationUserRequest,
@@ -299,6 +335,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsRevokeInvite(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * revokeMemberSignIns organizations
+   *
+   * @remarks
+   * Revoke a member's sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.
+   */
+  async revokeMemberSignIns(
+    request: RevokeOrganizationMemberSignInsRequest,
+    security?: RevokeOrganizationMemberSignInsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RevokeSignInsResult> {
+    return unwrapAsync(organizationsRevokeMemberSignIns(
       this,
       request,
       security,
@@ -337,6 +392,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<OrganizationInvitation> {
     return unwrapAsync(organizationsSendInvite(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * submitOnboardingSurvey organizations
+   *
+   * @remarks
+   * Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.
+   */
+  async submitOnboardingSurvey(
+    request: SubmitOnboardingSurveyRequest,
+    security?: SubmitOnboardingSurveySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSetupTasksResult> {
+    return unwrapAsync(organizationsSubmitOnboardingSurvey(
       this,
       request,
       security,
@@ -386,7 +460,7 @@ export class Organizations extends ClientSDK {
    * verifyOnboardingHooksSetup organizations
    *
    * @remarks
-   * Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+   * Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Speakeasy. Polled from the confirm-traffic step.
    */
   async verifyOnboardingHooksSetup(
     request?: VerifyOnboardingHooksSetupRequest | undefined,

@@ -6,7 +6,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// spanCopy describes one self-contained Gram copy of the OTLP span schema.
+// spanCopy describes one self-contained Speakeasy copy of the OTLP span schema.
 // Both wire round-trip and descriptor drift tests range over this registry.
 type spanCopy struct {
 	name                 string

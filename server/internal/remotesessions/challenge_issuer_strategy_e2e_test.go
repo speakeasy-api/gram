@@ -3,9 +3,12 @@
 package remotesessions_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -53,24 +56,24 @@ func scopedToken(scope string) http.HandlerFunc {
 	}
 }
 
-func TestRemoteLogin_OpenIDRequestedOnlyWhenAdvertised(t *testing.T) {
+func TestRemoteLogin_ClientScopeIsSentAsSet(t *testing.T) {
 	t.Parallel()
 
+	// An operator's client scope is never widened, even with openid advertised.
 	_, advertised := newSyntheticExpiryEnv(t, "openid-advertised", scopelessToken,
 		withIssuerScopes("channels:history", "openid"),
 		withClientScope("channels:history"),
 	)
-	require.Equal(t, "channels:history openid", scopeOf(t, advertised.authURL))
+	require.Equal(t, "channels:history", scopeOf(t, advertised.authURL))
 	// RFC 6749 §5.1: no scope in the response means the requested scope was
 	// granted, and that is what the session carries for the consent page.
-	require.Equal(t, []string{"channels:history", "openid"}, advertised.session.Scopes)
+	require.Equal(t, []string{"channels:history"}, advertised.session.Scopes)
 
-	_, silent := newSyntheticExpiryEnv(t, "openid-silent", scopelessToken,
-		withIssuerScopes("channels:history"),
-		withClientScope("channels:history"),
+	_, chosen := newSyntheticExpiryEnv(t, "openid-chosen", scopelessToken,
+		withIssuerScopes("channels:history", "openid"),
+		withClientScope("channels:history", "openid"),
 	)
-	require.Equal(t, "channels:history", scopeOf(t, silent.authURL))
-	require.Equal(t, []string{"channels:history"}, silent.session.Scopes)
+	require.Equal(t, "channels:history openid", scopeOf(t, chosen.authURL))
 }
 
 func TestRemoteLogin_OfflineAccessRequestedOnlyWhenAdvertised(t *testing.T) {
@@ -93,11 +96,27 @@ func TestRemoteLogin_ScopeOverrideIsRequestedVerbatim(t *testing.T) {
 
 	_, env := newSyntheticExpiryEnv(t, "scope-override", scopelessToken,
 		withIssuerScopes("channels:history", "openid", "offline_access"),
-		withClientScope("channels:history"),
 		withScopeOverride("custom:one", "custom:two"),
 	)
 	require.Equal(t, "custom:one custom:two", scopeOf(t, env.authURL))
 	require.Equal(t, []string{"custom:one", "custom:two"}, env.session.Scopes)
+
+	// Without discovery the override still beats the client's own scope.
+	_, legacy := newSyntheticExpiryEnv(t, "scope-override-client-legacy", scopelessToken,
+		withIssuerScopes("channels:history", "openid", "offline_access"),
+		withClientScope("channels:history"),
+		withScopeOverride("custom:one", "custom:two"),
+	)
+	require.Equal(t, "custom:one custom:two", scopeOf(t, legacy.authURL))
+
+	// With discovery a client with its own scope keeps it; the override is the issuer-wide fallback.
+	_, scoped := newSyntheticExpiryEnv(t, "scope-override-client", scopelessToken,
+		withIssuerScopes("channels:history", "openid", "offline_access"),
+		withClientScope("channels:history"),
+		withScopeOverride("custom:one", "custom:two"),
+		withProber(),
+	)
+	require.Equal(t, "channels:history", scopeOf(t, scoped.authURL))
 }
 
 // Empty scopes_supported adds nothing; the NULL case exists only on Client (TestClientRequestedScopes).
@@ -220,6 +239,29 @@ func TestRemoteLoginCallback_InvalidTargetAtTokenEndpointRetriesWithoutResource(
 	require.Equal(t, resource, session.Resource.String, "the resource is still recorded so the grant stays routable")
 }
 
+// An issuer set to send no scope strips a scope baked into its authorization
+// endpoint on both legs of an invalid_target retry.
+func TestRemoteLoginCallback_InvalidTargetRetryKeepsScopeOmission(t *testing.T) {
+	t.Parallel()
+
+	var exchanges atomic.Int64
+	_, env, first, err := driveSyntheticLogin(t, "invalid-target-omit", resourceRejectingToken(&exchanges),
+		withResource("https://member.example.com/mcp"),
+		withIssuerScopes("baked", "other"),
+		withOmitScopeFallback(),
+		withAuthorizeQuery("?scope=baked"),
+	)
+	require.NoError(t, err)
+	firstLeg, err := url.Parse(env.authURL)
+	require.NoError(t, err)
+	require.False(t, firstLeg.Query().Has("scope"), "the first leg strips the endpoint's scope")
+
+	retryLocation(t, first)
+	retryLeg, err := url.Parse(first.Header().Get("Location"))
+	require.NoError(t, err)
+	require.False(t, retryLeg.Query().Has("scope"), "the retry leg keeps the omission")
+}
+
 // A second invalid_target fails the login rather than minting a third leg, and records nothing.
 func TestRemoteLoginCallback_InvalidTargetOnRetryLegIsRefused(t *testing.T) {
 	t.Parallel()
@@ -294,6 +336,22 @@ func TestRemoteLoginCallback_InvalidTargetOnAuthorizeRedirectRetriesOnce(t *test
 	require.Empty(t, second.Header().Get("Location"))
 	require.Equal(t, int64(0), exchanges.Load())
 	require.False(t, resourceIndicatorFlag(t, ctx, env).Valid)
+}
+
+func TestRemoteLoginCallback_InvalidTargetRetryKeepsForwardedClientName(t *testing.T) {
+	t.Parallel()
+
+	var exchanges atomic.Int64
+	_, _, first, err := driveSyntheticLogin(t, "invalid-target-client-name", resourceRejectingToken(&exchanges),
+		withResource("https://member.example.com/mcp"),
+		withForwardClientName(),
+		withParentClientName("Example Client"),
+	)
+	require.NoError(t, err)
+	retryLocation(t, first)
+	loc, err := url.Parse(first.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "Example Client", loc.Query().Get("speakeasy_client_name"))
 }
 
 // A successful retry after a redirect invalid_target completes the login and writes nothing.
@@ -403,48 +461,41 @@ func TestRemoteLoginCallback_IssRequiredWhenIssuerAdvertisesIt(t *testing.T) {
 	require.NotEqual(t, uuid.Nil, env.session.ID)
 }
 
-// RFC 9207 compares against the issuer identifier the authorization server
-// advertises, which can differ from the URL an operator typed.
-func TestRemoteLoginCallback_IssComparesAgainstAdvertisedIssuerIdentifier(t *testing.T) {
+// Retained legacy metadata cannot replace the configured issuer in RFC 9207 checks.
+func TestRemoteLoginCallback_IssMetadataCannotOverrideStoredIdentifier(t *testing.T) {
 	t.Parallel()
-
 	advertised := withIssuerMetadata(`{"issuer":"` + syntheticIssuerURL + `/"}`)
-
-	_, env := newSyntheticExpiryEnv(t, "iss-advertised-match", scopelessToken,
-		withIssParameterSupported(true),
-		advertised,
-		withCallbackQuery(func(q url.Values) { q.Set("iss", syntheticIssuerURL+"/") }),
-	)
-	require.NotEqual(t, uuid.Nil, env.session.ID)
-
-	_, _, w, err := driveSyntheticLogin(t, "iss-advertised-mismatch", scopelessToken,
-		withIssParameterSupported(true),
-		advertised,
+	_, env := newSyntheticExpiryEnv(t, "iss-stored-match", scopelessToken,
+		withIssParameterSupported(true), advertised,
 		withCallbackQuery(func(q url.Values) { q.Set("iss", syntheticIssuerURL) }),
 	)
-	require.Error(t, err, "the stored URL is not the identifier once a document names one")
+	require.NotEqual(t, uuid.Nil, env.session.ID)
+	_, _, w, err := driveSyntheticLogin(t, "iss-legacy-mismatch", scopelessToken,
+		withIssParameterSupported(true), advertised,
+		withCallbackQuery(func(q url.Values) { q.Set("iss", syntheticIssuerURL+"/") }),
+	)
+	require.Error(t, err, "a legacy document cannot override the configured identifier")
 	require.NotEqual(t, http.StatusSeeOther, w.Code)
 }
 
-// Without a document the stored URL stands in for the identifier, and a
-// trailing slash an operator typed does not make a correct iss mismatch.
-func TestRemoteLoginCallback_IssFallbackIgnoresTrailingSlashOnStoredURL(t *testing.T) {
+// Without metadata, the stored identifier is still exact, including trailing slashes.
+func TestRemoteLoginCallback_IssPreservesTrailingSlashOnStoredURL(t *testing.T) {
 	t.Parallel()
-
-	_, env := newSyntheticExpiryEnv(t, "iss-fallback-slash", scopelessToken,
+	_, env := newSyntheticExpiryEnv(t, "iss-stored-slash", scopelessToken,
 		withIssuerURL(syntheticIssuerURL+"/"),
 		withIssParameterSupported(true),
-		withCallbackQuery(func(q url.Values) { q.Set("iss", syntheticIssuerURL) }),
+		withCallbackQuery(func(q url.Values) { q.Set("iss", syntheticIssuerURL+"/") }),
 	)
 	require.NotEqual(t, uuid.Nil, env.session.ID)
-
-	_, _, w, err := driveSyntheticLogin(t, "iss-fallback-slash-mismatch", scopelessToken,
-		withIssuerURL(syntheticIssuerURL+"/"),
-		withIssParameterSupported(true),
-		withCallbackQuery(func(q url.Values) { q.Set("iss", "https://attacker.example.com") }),
-	)
-	require.Error(t, err)
-	require.NotEqual(t, http.StatusSeeOther, w.Code)
+	for _, issuer := range []string{syntheticIssuerURL, "https://attacker.example.com"} {
+		_, _, w, err := driveSyntheticLogin(t, "iss-stored-slash-mismatch", scopelessToken,
+			withIssuerURL(syntheticIssuerURL+"/"),
+			withIssParameterSupported(true),
+			withCallbackQuery(func(q url.Values) { q.Set("iss", issuer) }),
+		)
+		require.Error(t, err)
+		require.NotEqual(t, http.StatusSeeOther, w.Code)
+	}
 }
 
 func TestRemoteLoginCallback_IssIgnoredWhenIssuerDoesNotAdvertiseIt(t *testing.T) {
@@ -459,6 +510,115 @@ func TestRemoteLoginCallback_IssIgnoredWhenIssuerDoesNotAdvertiseIt(t *testing.T
 	require.NotEqual(t, uuid.Nil, unsupported.session.ID)
 }
 
+func TestRemoteLoginCallback_RejectedIssLogsWhatArrived(t *testing.T) {
+	t.Parallel()
+
+	const wrongIssuer = "https://attacker.example.com"
+	cases := []struct {
+		name      string
+		slug      string
+		editQuery func(url.Values)
+		wantLog   []string
+	}{
+		{
+			name:      "absent",
+			slug:      "iss-log-absent",
+			editQuery: func(url.Values) {},
+			wantLog:   []string{`"gram.oauth.failure_reason":"issuer_absent"`},
+		},
+		{
+			name:      "different",
+			slug:      "iss-log-different",
+			editQuery: func(q url.Values) { q.Set("iss", wrongIssuer) },
+			wantLog:   []string{`"gram.oauth.failure_reason":"issuer_mismatch"`, `"gram.oauth.response_issuer":"` + wrongIssuer + `"`},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var logs bytes.Buffer
+			_, env, _, err := driveSyntheticLogin(t, tc.slug, scopelessToken,
+				withIssParameterSupported(true),
+				withCallbackQuery(tc.editQuery),
+				withLogger(slog.New(slog.NewJSONHandler(&logs, nil))),
+			)
+			require.ErrorContains(t, err, "expected issuer")
+			env.mgr.WaitIdentityRestatements()
+
+			for _, want := range tc.wantLog {
+				require.Contains(t, logs.String(), want)
+			}
+		})
+	}
+}
+
+func TestRemoteLoginCallback_UnadvertisedIssIsLoggedAndNotEnforced(t *testing.T) {
+	t.Parallel()
+
+	const unadvertisedIssuer = "https://other.example.com"
+	var logs bytes.Buffer
+	_, env := newSyntheticExpiryEnv(t, "iss-log-unadvertised", scopelessToken,
+		withIssParameterSupported(false),
+		withCallbackQuery(func(q url.Values) { q.Set("iss", unadvertisedIssuer) }),
+		withLogger(slog.New(slog.NewJSONHandler(&logs, nil))),
+	)
+	env.mgr.WaitIdentityRestatements()
+
+	require.NotEqual(t, uuid.Nil, env.session.ID)
+	require.Contains(t, logs.String(), `"gram.oauth.response_issuer":"`+unadvertisedIssuer+`"`)
+}
+
+func TestRemoteLoginCallback_AbsentUnadvertisedIssIsNotLogged(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	_, env := newSyntheticExpiryEnv(t, "iss-log-silent", scopelessToken,
+		withIssParameterSupported(false),
+		withLogger(slog.New(slog.NewJSONHandler(&logs, nil))),
+	)
+	env.mgr.WaitIdentityRestatements()
+
+	require.NotEqual(t, uuid.Nil, env.session.ID)
+	require.NotContains(t, logs.String(), "gram.oauth.response_issuer")
+}
+
+func TestRemoteLoginCallback_OversizedIssIsTruncatedInLogs(t *testing.T) {
+	t.Parallel()
+
+	oversized := strings.Repeat("a", 4096)
+	var logs bytes.Buffer
+	_, env := newSyntheticExpiryEnv(t, "iss-log-oversized", scopelessToken,
+		withIssParameterSupported(false),
+		withCallbackQuery(func(q url.Values) { q.Set("iss", oversized) }),
+		withLogger(slog.New(slog.NewJSONHandler(&logs, nil))),
+	)
+	env.mgr.WaitIdentityRestatements()
+
+	require.Contains(t, logs.String(), `"gram.oauth.response_issuer":"aaaa`)
+	require.NotContains(t, logs.String(), oversized)
+}
+
+func TestRemoteLoginCallback_UnadvertisedIssOnDenialIsLogged(t *testing.T) {
+	t.Parallel()
+
+	const unadvertisedIssuer = "https://other.example.com"
+	var logs bytes.Buffer
+	_, env, _, err := driveSyntheticLogin(t, "iss-log-denied", scopelessToken,
+		withIssParameterSupported(false),
+		withCallbackQuery(func(q url.Values) {
+			q.Del("code")
+			q.Set("error", "access_denied")
+			q.Set("iss", unadvertisedIssuer)
+		}),
+		withLogger(slog.New(slog.NewJSONHandler(&logs, nil))),
+	)
+	require.NoError(t, err)
+	env.mgr.WaitIdentityRestatements()
+
+	require.Contains(t, logs.String(), `"gram.oauth.response_issuer":"`+unadvertisedIssuer+`"`)
+}
+
 // The error code on a denial redirect is browser-controlled text: only a code
 // an IETF RFC registered is echoed into the public message.
 func TestRemoteLoginCallback_DeniedEchoesOnlyRegisteredErrorCodes(t *testing.T) {
@@ -467,12 +627,12 @@ func TestRemoteLoginCallback_DeniedEchoesOnlyRegisteredErrorCodes(t *testing.T) 
 	_, _, w, err := driveSyntheticLogin(t, "denied-registered", scopelessToken,
 		withCallbackQuery(func(q url.Values) {
 			q.Del("code")
-			q.Set("error", "access_denied")
+			q.Set("error", "server_error")
 		}),
 	)
 	require.Error(t, err)
 	require.NotEqual(t, http.StatusSeeOther, w.Code)
-	require.Contains(t, err.Error(), "remote authn challenge denied: access_denied")
+	require.Contains(t, err.Error(), "The sign-in provider returned an error: server_error")
 
 	_, _, w, err = driveSyntheticLogin(t, "denied-unregistered", scopelessToken,
 		withCallbackQuery(func(q url.Values) {
@@ -515,4 +675,20 @@ func TestRemoteLoginCallback_BareStateDoesNotConsumeLogin(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotEqual(t, uuid.Nil, session.ID)
+}
+
+func TestRemoteLoginCallback_CancellationRejectsWrongIssuer(t *testing.T) {
+	t.Parallel()
+	spy := &exchangeSpy{}
+	_, _, response, err := driveSyntheticLogin(t, "cancel-wrong-issuer", spy.handler(),
+		withIssParameterSupported(true),
+		withCallbackQuery(func(q url.Values) {
+			q.Del("code")
+			q.Set("error", "access_denied")
+			q.Set("iss", "https://untrusted.example")
+		}),
+	)
+	require.ErrorContains(t, err, "expected issuer")
+	require.Empty(t, response.Header().Get("Location"))
+	require.Zero(t, spy.count())
 }

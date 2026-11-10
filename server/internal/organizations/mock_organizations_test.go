@@ -31,12 +31,13 @@ func newMockOrganizationProvider(t *testing.T) *MockOrganizationProvider {
 	return orgs
 }
 
-func (m *MockOrganizationProvider) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
+func (m *MockOrganizationProvider) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (*thirdpartyworkos.Member, error) {
 	args := m.Called(ctx, workosUserID, workosOrgID, roleSlug)
 	if err := args.Error(1); err != nil {
-		return "", fmt.Errorf("mock CreateOrganizationMembership: %w", err)
+		return nil, fmt.Errorf("mock CreateOrganizationMembership: %w", err)
 	}
-	return args.String(0), nil
+	member, _ := args.Get(0).(*thirdpartyworkos.Member)
+	return member, nil
 }
 
 func (m *MockOrganizationProvider) GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*thirdpartyworkos.Member, error) {

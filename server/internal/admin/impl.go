@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/assets"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"io"
 	"log/slog"
 	"math"
@@ -29,25 +27,32 @@ import (
 	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/chatanalysis"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -60,6 +65,8 @@ import (
 )
 
 type Service struct {
+	catalogPromotion     *catalogpromotion.Service
+	registry             *mcpregistry.Service
 	remoteSessions       *remotesessions.Service
 	assets               *assets.Service
 	tracer               trace.Tracer
@@ -73,6 +80,21 @@ type Service struct {
 	dashboardURL         *url.URL
 	supportHandoffIssuer supportHandoffIssuer
 
+	// mcpServerURL is the public Speakeasy server origin that platform-domain MCP
+	// URLs are built on. Nil leaves those URLs out.
+	mcpServerURL *url.URL
+
+	// workosEnvironmentID scopes WorkOS dashboard links. Empty leaves them out.
+	workosEnvironmentID string
+
+	// newOrganizationDefaultHost is recorded as the default host of
+	// organizations staff create. Null records none.
+	newOrganizationDefaultHost pgtype.Text
+
+	// stripeDashboardBase roots Stripe dashboard links in the API key's mode.
+	// Empty leaves them out.
+	stripeDashboardBase string
+
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
@@ -84,17 +106,42 @@ type Service struct {
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
 
+	// projectRedeployer redeploys projects. Nil when this server has no
+	// Temporal connection.
+	projectRedeployer ProjectRedeployer
+
 	audit *audit.Logger
 
 	trial   trialemails.Notifier
 	billing BillingOperations
+
+	supportCoverage SupportCoverageReader
+	mcpServerHealth MCPServerHealthReader
+
+	// scopes reads and writes remote MCP server scope pins.
+	scopes *remotemcp.StaffScopes
+	// HookClientsCache shares snapshot storage with the nightly worker.
+	*HookClientsCache
+
+	hookFleet         HookFleetReader
+	hookFleetVersions HookFleetVersions
+
+	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets. Empty leaves targets out of listCustomDomains.
+	customDomainTargetSuffix string
 }
 
 type BillingOperations interface {
 	GetPaygBillingSummaryForOrganization(context.Context, string) (*usage.PaygBillingSummary, error)
 	GetMeterUsageForOrganization(context.Context, string, *usagegen.GetMeterUsagePayload) (*usagegen.MeterUsageResponse, error)
 	GetSpendBreakdownForOrganization(context.Context, string, *usagegen.GetSpendBreakdownPayload) (*usagegen.SpendBreakdownResponse, error)
+	// GetCustomerUsage reads usage for many organizations in one query, returning one entry per organization in request order.
+	GetCustomerUsage(context.Context, []usage.CustomerUsageOrganization, usage.CustomerUsageInterval) (*usage.CustomerUsageReport, error)
 	GetStripeCustomer(context.Context, string) (*stripeclient.CustomerDetails, error)
+	// GetStripeSubscriptionByID loads a live Stripe subscription to verify its identity.
+	// Pass stripeclient.RequireAdoptionEligibility for catalog validation when linking;
+	// omit it for tolerant reads of an existing linked subscription.
+	GetStripeSubscriptionByID(context.Context, string, ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error)
 	GetStripeSubscriptionForOrganization(context.Context, string) (*usage.StripeSubscription, error)
 	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
 }
@@ -191,7 +238,10 @@ func NewService(
 	chatAnalysisSignaler analysis.Signaler,
 	openRouterSpendCap OpenRouterSpendCapScheduler,
 	billing BillingOperations,
+	supportCoverage SupportCoverageReader,
+	mcpServerHealth MCPServerHealthReader,
 	dashboardURL *url.URL,
+	registry *mcpregistry.Service,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -209,15 +259,16 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{remoteSessions: nil, assets: nil,
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
-		logger:         logger,
-		db:             db,
-		oidc:           oidcClient,
-		sessions:       sessionStore,
-		verifier:       NewVerifier(logger, sessionStore, oidcClient, adminCache),
-		allowedOrigins: allowedOrigins,
-		dashboardURL:   dashboardURL,
+	return &Service{catalogPromotion: nil, projectRedeployer: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
+		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
+		logger:                     logger,
+		db:                         db,
+		oidc:                       oidcClient,
+		sessions:                   sessionStore,
+		verifier:                   NewVerifier(logger, sessionStore, oidcClient, adminCache),
+		allowedOrigins:             allowedOrigins,
+		dashboardURL:               dashboardURL,
 		supportHandoffIssuer: supporthandoff.NewIssuer(
 			supporthandoff.NewStore(adminCache),
 		),
@@ -228,14 +279,27 @@ func NewService(
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,
 		audit:                audit.NewLogger(),
+		scopes:               remotemcp.NewStaffScopes(logger, db, audit.NewLogger()),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:   trialNotifier,
-		billing: billing,
+		trial:                    trialNotifier,
+		billing:                  billing,
+		supportCoverage:          supportCoverage,
+		mcpServerHealth:          mcpServerHealth,
+		HookClientsCache:         NewHookClientsCache(logger, adminCache, nil, nil),
+		hookFleet:                nil,
+		hookFleetVersions:        HookFleetVersions{Latest: nil, Minimum: nil},
+		customDomainTargetSuffix: "",
 	}
+}
+
+// SetNewOrganizationDefaultHost sets the default host recorded on
+// organizations staff create. Unset records none.
+func (s *Service) SetNewOrganizationDefaultHost(host pgtype.Text) {
+	s.newOrganizationDefaultHost = host
 }
 
 func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*gen.AdminSession, error) {
@@ -248,14 +312,19 @@ func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*ge
 
 func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *gen.ProductFeatures {
 	return &gen.ProductFeatures{
-		LogsEnabled: snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
+		ProviderSetupEnabled: new(snapshot.ProviderSetupEnabled),
+		LogsEnabled:          snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled: snapshot.AuthzChallengeLoggingEnabled, SsoEnabled: snapshot.SsoEnabled, ScimEnabled: snapshot.ScimEnabled,
 		HooksBrowserLoginEnabled: snapshot.HooksBrowserLoginEnabled, HooksFailOpenEnabled: snapshot.HooksFailOpenEnabled,
 		CustomModelKeysEnabled: snapshot.CustomModelKeysEnabled, SkillsEnabled: snapshot.SkillsEnabled, SkillCaptureMetadataOnly: snapshot.SkillCaptureMetadataOnly,
 		AiPlatformPushIntegrationsEnabled: snapshot.AiPlatformPushIntegrationsEnabled, PlatformMcpEnabled: snapshot.PlatformMcpEnabled,
 		CustomerManagedEncryptionKeysEnabled: snapshot.CustomerManagedEncryptionKeysEnabled, RemoteSessionAutoRefreshEnabled: snapshot.RemoteSessionAutoRefreshEnabled,
-		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled, ConsentToolFilteringEnabled: snapshot.ConsentToolFilteringEnabled,
-		NetworkIngressEnabled: snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled, DeviceAgent: snapshot.DeviceAgent,
+		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled,
+		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled,
+		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, OrganizationGatewayDisabled: snapshot.OrganizationGatewayDisabled,
+		CodeModeEnabled: snapshot.CodeModeEnabled, DeviceAgent: snapshot.DeviceAgent,
+		// Staff read enforcement through the upstream auth enforcement status.
+		UpstreamAuthEnforced: nil,
 	}
 }
 
@@ -263,6 +332,36 @@ func (s *Service) GetOrganizationFeatures(ctx context.Context, payload *gen.GetO
 	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
 	if err != nil {
 		return nil, err
+	}
+	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
+}
+
+// GetOrganizationFeaturesStrict is the staff MCP read path. An incomplete flag
+// lookup must not be reported as a set of disabled entitlements.
+func (s *Service) GetOrganizationFeaturesStrict(ctx context.Context, organizationID string) (*gen.ProductFeatures, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := s.productFeatures.SnapshotStrict(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("read organization features: %w", err)
+	}
+	return productFeaturesResult(snapshot), nil
+}
+
+func (s *Service) SetOrganizationProviderSetup(ctx context.Context, payload *gen.SetOrganizationProviderSetupPayload) (*gen.ProductFeatures, error) {
+	if _, ok := contextvalues.GetAdminAuthContext(ctx); !ok {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	actor, displayName, _ := adminActor(ctx)
+	err = productfeatures.NewMutator(s.productFeatures, s.audit).SetFeature(ctx, organizationID, productfeatures.FeatureProviderSetup, payload.Enabled, productfeatures.MutationActor{Principal: actor, DisplayName: displayName, Slug: nil})
+	if err != nil {
+		return nil, fmt.Errorf("set provider setup rollout: %w", err)
 	}
 	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
 }
@@ -370,17 +469,38 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// Goa lazily assigns a nil error formatter inside a shared request closure.
 	// Supply its default eagerly so concurrent error responses do not race.
 	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, goahttp.NewErrorResponse)
+	server.Callback = scopeMCPAdminCookie(server.Callback)
 	server.ListOrganizations = service.rejectEmptyOrganizationStatus(server.ListOrganizations)
 	server.GetSession = service.preauthorizeAdmin(server.GetSession)
+	server.GetOrganizationOnboardingStack = service.preauthorizeAdmin(server.GetOrganizationOnboardingStack)
+	server.SetOrganizationOnboardingStack = service.strictAdminJSON(server.SetOrganizationOnboardingStack, func() any { return new(adminserver.SetOrganizationOnboardingStackRequestBody) })
+	server.GetOnboardingStackOptions = service.preauthorizeAdmin(server.GetOnboardingStackOptions)
+	server.ListOnboardingSteps = service.preauthorizeAdmin(server.ListOnboardingSteps)
+	server.ListOnboardingUseCases = service.preauthorizeAdmin(server.ListOnboardingUseCases)
+	server.CreateOnboardingUseCase = service.strictAdminJSON(server.CreateOnboardingUseCase, func() any { return new(adminserver.CreateOnboardingUseCaseRequestBody) })
+	server.UpdateOnboardingUseCase = service.strictAdminJSON(server.UpdateOnboardingUseCase, func() any { return new(adminserver.UpdateOnboardingUseCaseRequestBody) })
+	server.DeleteOnboardingUseCase = service.strictAdminJSON(server.DeleteOnboardingUseCase, func() any { return new(adminserver.DeleteOnboardingUseCaseRequestBody) })
+	server.ListOnboardingPlaybooks = service.preauthorizeAdmin(server.ListOnboardingPlaybooks)
+	server.CreateOnboardingPlaybook = service.strictAdminJSON(server.CreateOnboardingPlaybook, func() any { return new(adminserver.CreateOnboardingPlaybookRequestBody) })
+	server.UpdateOnboardingPlaybook = service.strictAdminJSON(server.UpdateOnboardingPlaybook, func() any { return new(adminserver.UpdateOnboardingPlaybookRequestBody) })
+	server.DeleteOnboardingPlaybook = service.strictAdminJSON(server.DeleteOnboardingPlaybook, func() any { return new(adminserver.DeleteOnboardingPlaybookRequestBody) })
+	server.CloneOnboardingPlaybook = service.strictAdminJSON(server.CloneOnboardingPlaybook, func() any { return new(adminserver.CloneOnboardingPlaybookRequestBody) })
+	server.GetOrganizationOnboardingPlaybook = service.preauthorizeAdmin(server.GetOrganizationOnboardingPlaybook)
+	server.AssignOrganizationOnboardingPlaybook = service.strictAdminJSON(server.AssignOrganizationOnboardingPlaybook, func() any { return new(adminserver.AssignOrganizationOnboardingPlaybookRequestBody) })
 	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
 	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
 	server.GetStripeCustomer = service.preauthorizeAdmin(server.GetStripeCustomer)
 	server.GetMeterUsage = service.preauthorizeAdmin(server.GetMeterUsage)
 	server.GetSpendBreakdown = service.preauthorizeAdmin(server.GetSpendBreakdown)
+	server.ListCustomerUsage = service.preauthorizeAdmin(server.ListCustomerUsage)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
+	server.SetOrganizationProviderSetup = service.strictAdminJSON(server.SetOrganizationProviderSetup, func() any { return new(adminserver.SetOrganizationProviderSetupRequestBody) })
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
 	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
+	server.SetAdoptionDashboardURL = service.strictAdminJSON(server.SetAdoptionDashboardURL, func() any { return new(adminserver.SetAdoptionDashboardURLRequestBody) })
+	server.GetStripeSubscriptionCandidate = service.preauthorizeAdmin(server.GetStripeSubscriptionCandidate)
+	server.SetStripeSubscription = service.strictAdminJSON(server.SetStripeSubscription, func() any { return new(adminserver.SetStripeSubscriptionRequestBody) })
 	server.TriggerOrganizationChatAnalysis = service.strictAdminJSON(server.TriggerOrganizationChatAnalysis, func() any { return new(adminserver.TriggerOrganizationChatAnalysisRequestBody) })
 	server.CreateGlobalIssuer = service.strictAdminJSON(server.CreateGlobalIssuer, func() any { return new(adminserver.CreateGlobalIssuerRequestBody) })
 	server.GetGlobalIssuerDuplicatePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerDuplicatePreflight)
@@ -394,10 +514,65 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetGlobalIssuerMigratePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerMigratePreflight)
 	server.MigrateToGlobalIssuer = service.strictAdminJSON(server.MigrateToGlobalIssuer, func() any { return new(adminserver.MigrateToGlobalIssuerRequestBody) })
 	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
+	server.ListRegistryEntries = service.preauthorizeAdmin(server.ListRegistryEntries)
+	server.GetRegistryEntry = service.preauthorizeAdmin(server.GetRegistryEntry)
+	server.ListRegistryPromotionCandidates = service.preauthorizeAdmin(server.ListRegistryPromotionCandidates)
+	server.GetRegistryPromotionCandidate = service.strictAdminJSON(server.GetRegistryPromotionCandidate, func() any { return new(adminserver.GetRegistryPromotionCandidateRequestBody) })
+	server.RetryRegistryPromotionDocs = service.strictAdminJSON(server.RetryRegistryPromotionDocs, func() any { return new(adminserver.RetryRegistryPromotionDocsRequestBody) })
+	server.CurateRegistryPromotionCandidate = service.strictAdminJSON(server.CurateRegistryPromotionCandidate, func() any { return new(adminserver.CurateRegistryPromotionCandidateRequestBody) })
+	server.PromoteRegistryCandidate = service.strictAdminJSON(server.PromoteRegistryCandidate, func() any { return new(adminserver.PromoteRegistryCandidateRequestBody) })
+	server.CreateRegistryEntry = service.strictAdminJSONLimit(server.CreateRegistryEntry, func() any { return new(adminserver.CreateRegistryEntryRequestBody) }, 16<<20)
+	server.SaveRegistryEntry = service.strictAdminJSONLimit(server.SaveRegistryEntry, func() any { return new(adminserver.SaveRegistryEntryRequestBody) }, 16<<20)
+	server.SetRegistryEntryPublished = service.strictAdminJSON(server.SetRegistryEntryPublished, func() any { return new(adminserver.SetRegistryEntryPublishedRequestBody) })
 	server.GetSupportMatrix = service.preauthorizeAdmin(server.GetSupportMatrix)
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
+	server.SetMcpServerScopePin = service.strictAdminJSON(server.SetMcpServerScopePin, func() any { return new(adminserver.SetMcpServerScopePinRequestBody) })
+	server.CreateSignupOffer = service.strictAdminJSON(server.CreateSignupOffer, func() any { return new(adminserver.CreateSignupOfferRequestBody) })
+	server.UpdateSignupOffer = service.strictAdminJSON(server.UpdateSignupOffer, func() any { return new(adminserver.UpdateSignupOfferRequestBody) })
+	server.ListUpstreamOAuthMigrationOrganizations = service.preauthorizeAdmin(server.ListUpstreamOAuthMigrationOrganizations)
+	server.GetUpstreamOAuthMigrationStatus = service.preauthorizeAdmin(server.GetUpstreamOAuthMigrationStatus)
+	server.RunUpstreamOAuthMigration = service.strictAdminJSON(server.RunUpstreamOAuthMigration, func() any { return new(adminserver.RunUpstreamOAuthMigrationRequestBody) })
+	server.EnableUpstreamAuthEnforcement = service.strictAdminJSON(server.EnableUpstreamAuthEnforcement, func() any { return new(adminserver.EnableUpstreamAuthEnforcementRequestBody) })
+	server.DisableUpstreamAuthEnforcement = service.strictAdminJSON(server.DisableUpstreamAuthEnforcement, func() any { return new(adminserver.DisableUpstreamAuthEnforcementRequestBody) })
 	adminserver.Mount(mux, server)
 
+}
+
+// Keep the dashboard's /admin session cookie unchanged. A successful MCP
+// login also needs the same session on /admin-mcp for browser consent. A
+// dashboard login clears any older MCP-scoped browser cookie.
+func scopeMCPAdminCookie(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(&adminCallbackWriter{ResponseWriter: w}, r)
+	})
+}
+
+type adminCallbackWriter struct{ http.ResponseWriter }
+
+func (w *adminCallbackWriter) WriteHeader(status int) {
+	if status == http.StatusTemporaryRedirect {
+		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct // Only response headers are needed to parse cookies.
+			if cookie.Name != constants.AdminSessionCookie || cookie.Value == "" {
+				continue
+			}
+			mcpCookie := &http.Cookie{ //nolint:exhaustruct // No Domain so middleware controls cookie sharing.
+				Name:     constants.AdminSessionCookie,
+				Path:     "/admin-mcp",
+				Secure:   true,
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			}
+			location := w.Header().Get("Location")
+			if strings.HasPrefix(location, "/admin-mcp/connect?state=") {
+				mcpCookie.Value = cookie.Value
+			} else {
+				mcpCookie.MaxAge = -1
+			}
+			http.SetCookie(w.ResponseWriter, mcpCookie)
+			break
+		}
+	}
+	w.ResponseWriter.WriteHeader(status)
 }
 
 // Goa's optional string query decoder treats present-but-empty values as absent,
@@ -434,12 +609,16 @@ func (s *Service) preauthorizeAdmin(next http.Handler) http.Handler {
 const maxAdminJSONBodyBytes = 1 << 20
 
 func (s *Service) strictAdminJSON(next http.Handler, body func() any) http.Handler {
+	return s.strictAdminJSONLimit(next, body, maxAdminJSONBodyBytes)
+}
+
+func (s *Service) strictAdminJSONLimit(next http.Handler, body func() any, maxBytes int64) http.Handler {
 	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
 		ctx, err := s.authorizeAdminRequest(r)
 		if err != nil {
 			return err
 		}
-		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxAdminJSONBodyBytes))
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBytes))
 		if err != nil {
 			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 				return oops.E(oops.CodeRequestTooLarge, err, "read admin request body")
@@ -459,6 +638,9 @@ func (s *Service) strictAdminJSON(next http.Handler, body func() any) http.Handl
 		return nil
 	})
 }
+
+// Verifier exposes the live staff session verifier to the admin-only MCP transport.
+func (s *Service) Verifier() *Verifier { return s.verifier }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	if preauthorized, _ := ctx.Value(adminPreauthorizedKey{}).(bool); preauthorized {
@@ -656,13 +838,24 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.C(oops.CodeNotFound)
 	}
 
-	return adminProjectDetailFromIDRow(row), nil
+	detail := adminProjectDetailFromIDRow(row)
+	activeDeploymentID, err := deploymentsrepo.New(s.db).GetActiveDeploymentID(ctx, row.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup active deployment").LogError(ctx, s.logger)
+	default:
+		detail.ActiveDeploymentID = new(activeDeploymentID.String())
+	}
+
+	return detail, nil
 }
 
 func adminProjectDetailFromIDRow(row repo.AdminGetProjectDetailByIDRow) *gen.AdminProjectDetail {
 	logo := uuidPtr(row.LogoAssetID)
 	runner := conv.FromPGText[string](row.FunctionsRunnerVersion)
 	return &gen.AdminProjectDetail{
+		ActiveDeploymentID:     nil,
 		ID:                     row.ID.String(),
 		Name:                   row.Name,
 		Slug:                   row.Slug,
@@ -696,7 +889,7 @@ const (
 // The columns the ORDER BY ladder in AdminListOrganizations knows. The opaque
 // ids are absent on purpose: an order built from them tells an operator nothing.
 //
-// This map cannot widen what the ladder accepts. The ladder matches these seven
+// This map cannot widen what the ladder accepts. The ladder matches these eight
 // literals and nothing else. Unknown keys use the newest-first default below.
 // This is defense in depth, and the one
 // place a reader can see the accepted set without reading the SQL.
@@ -704,6 +897,7 @@ var listOrganizationsSortColumns = map[string]bool{
 	"name":          true,
 	"slug":          true,
 	"account_type":  true,
+	"account_tier":  true,
 	"member_count":  true,
 	"created_at":    true,
 	"disabled_at":   true,
@@ -821,7 +1015,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 
 	orgs := make([]*gen.AdminOrganization, len(rows))
 	for i := range rows {
-		orgs[i] = adminOrganizationFromRow(rows[i])
+		orgs[i] = s.adminOrganizationFromRow(rows[i])
 	}
 
 	return &gen.AdminListOrganizationsResult{
@@ -918,47 +1112,85 @@ func (s *Service) ListOrganizationProjects(ctx context.Context, payload *gen.Lis
 }
 
 func (s *Service) ListOrganizationActivity(ctx context.Context, payload *gen.ListOrganizationActivityPayload) (*gen.AdminListOrganizationActivityResult, error) {
+	return s.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{
+		OrganizationID: payload.OrganizationID, Cursor: payload.Cursor,
+		ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorID: nil, Action: nil,
+		SubjectType: nil, SubjectID: nil, ActingSurface: nil, From: nil, To: nil,
+	})
+}
+
+func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter OrganizationActivityFilter) (*gen.AdminListOrganizationActivityResult, error) {
 	_, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID: payload.OrganizationID, AllowSlug: false,
+		ID: filter.OrganizationID, AllowSlug: false,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization for activity").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization for activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+	}
+	if filter.ProjectID.Valid {
+		belongs, err := repo.New(s.db).AdminAuditProjectBelongsToOrganization(ctx, repo.AdminAuditProjectBelongsToOrganizationParams{
+			ProjectID: filter.ProjectID.UUID, OrganizationID: filter.OrganizationID,
+		})
+		switch {
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "lookup activity project organization").LogError(ctx, s.logger)
+		case !belongs:
+			return nil, oops.C(oops.CodeNotFound)
+		}
+	}
+	if filter.From != nil && filter.To != nil && !filter.From.Before(*filter.To) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "from must be before to")
 	}
 
 	params := auditrepo.ListAuditLogsParams{
-		OrganizationID:         payload.OrganizationID,
-		ProjectID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:         filter.OrganizationID,
+		ProjectID:              filter.ProjectID,
 		CursorSeq:              pgtype.Int8{Int64: 0, Valid: false},
-		ActorID:                pgtype.Text{String: "", Valid: false},
-		Action:                 pgtype.Text{String: "", Valid: false},
-		SubjectType:            pgtype.Text{String: "", Valid: false},
+		ActorID:                conv.PtrToPGTextEmpty(filter.ActorID),
+		Action:                 conv.PtrToPGTextEmpty(filter.Action),
+		SubjectType:            conv.PtrToPGTextEmpty(filter.SubjectType),
 		IncludeAssistantEvents: true,
-		SubjectID:              pgtype.Text{String: "", Valid: false},
+		IncludeInternalEvents:  true,
+		SubjectID:              conv.PtrToPGTextEmpty(filter.SubjectID),
 		SubjectIds:             nil,
-		ActingSurface:          pgtype.Text{String: "", Valid: false},
-		CreatedFrom:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
-		CreatedTo:              pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+		ActingSurface:          conv.PtrToPGTextEmpty(filter.ActingSurface),
+		Origin:                 pgtype.Text{String: "", Valid: false},
+		CreatedFrom:            conv.PtrToPGTimestamptz(filter.From),
+		CreatedTo:              conv.PtrToPGTimestamptz(filter.To),
 	}
-	if payload.Cursor != nil && *payload.Cursor != "" {
-		seq, err := audit.DecodeCursor(*payload.Cursor)
+	var cursor activityCursor
+	if filter.Cursor != nil && *filter.Cursor != "" {
+		cursor, err = decodeActivityCursor(*filter.Cursor)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogWarn(ctx, s.logger)
 		}
-		params.CursorSeq = pgtype.Int8{Int64: seq, Valid: true}
 	}
 
-	rows, err := auditrepo.New(s.db).ListAuditLogs(ctx, params)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization activity").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+	// Staff read the configuration and security logs as one timeline. Each log
+	// pages by its own seq, so the cursor carries a position in each.
+	var configuration, security []auditrepo.ListAuditLogsRow
+	if !cursor.configuration.done {
+		params.CursorSeq = cursor.configuration.seq
+		configuration, err = auditrepo.New(s.db).ListAuditLogs(ctx, params)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list organization activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+		}
+	}
+	if !cursor.security.done {
+		params.CursorSeq = cursor.security.seq
+		security, err = securityevent.List(ctx, s.db, params)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list organization security activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+		}
 	}
 
 	const pageSize = 50
-	logs := make([]*gen.AuditLog, 0, min(len(rows), pageSize))
-	for _, row := range rows[:min(len(rows), pageSize)] {
-		log, err := adminActivityLog(row)
+	page, next := mergeActivity(configuration, security, cursor, pageSize)
+	logs := make([]*gen.AdminAuditLog, 0, len(page))
+	for _, entry := range page {
+		log, err := adminActivityLog(entry.row, entry.category)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build organization activity response").LogError(ctx, s.logger)
 		}
@@ -966,15 +1198,14 @@ func (s *Service) ListOrganizationActivity(ctx context.Context, payload *gen.Lis
 	}
 
 	var nextCursor *string
-	if len(rows) > pageSize {
-		cursor := audit.EncodeCursor(rows[pageSize-1].Seq, rows[pageSize-1].ID.String())
-		nextCursor = &cursor
+	if next != nil {
+		nextCursor = new(next.encode())
 	}
 
 	return &gen.AdminListOrganizationActivityResult{Logs: logs, NextCursor: nextCursor}, nil
 }
 
-func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
+func adminActivityLog(row auditrepo.ListAuditLogsRow, category audit.Category) (*gen.AdminAuditLog, error) {
 	var metadata map[string]any
 	if len(row.Metadata) > 0 {
 		var decoded any
@@ -999,11 +1230,12 @@ func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		actingSurface = string(audit.SurfaceUnknown)
 	}
 
-	return &gen.AuditLog{
+	return &gen.AdminAuditLog{
 		ID: row.ID.String(), ProjectID: conv.FromNullableUUID(row.ProjectID), ProjectSlug: conv.FromPGText[string](row.ProjectSlug),
 		ActorID: row.ActorID, ActorType: row.ActorType, ActorDisplayName: actorDisplayName, ActorSlug: conv.FromPGText[string](row.ActorSlug),
-		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID),
-		SubjectID: row.SubjectID, SubjectType: row.SubjectType, SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName), SubjectSlug: conv.FromPGText[string](row.SubjectSlug),
+		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID), Category: new(string(category)),
+		IsInternal: new(row.IsInternal),
+		SubjectID:  row.SubjectID, SubjectType: row.SubjectType, SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName), SubjectSlug: conv.FromPGText[string](row.SubjectSlug),
 		BeforeSnapshot: row.BeforeSnapshot, AfterSnapshot: row.AfterSnapshot, Metadata: metadata, CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
@@ -1012,37 +1244,36 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	if payload.AccountType == nil && payload.Whitelisted == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type or whitelisted must be supplied")
 	}
+	if payload.AccountType == nil {
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "begin organization whitelist change").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		actor, displayName, _ := adminActor(ctx)
+		if _, err := SetOrganizationWhitelistTx(ctx, tx, s.audit, payload.ID, *payload.Whitelisted, actor, displayName); err != nil {
+			if errors.Is(err, ErrOrganizationWhitelistNotFound) {
+				return nil, oops.E(oops.CodeNotFound, err, "organization not found")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "set organization whitelist").LogError(ctx, s.logger)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "commit organization whitelist change").LogError(ctx, s.logger)
+		}
+		return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after whitelist change")
+	}
 	// See ExtendTrial: the design bounds this too, but generated validation only
 	// runs at the HTTP boundary.
 	if payload.AccountType != nil && !constants.IsAccountType(*payload.AccountType) {
 		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), *payload.AccountType)
 	}
 
-	if payload.AccountType != nil && *payload.AccountType == "enterprise" {
-		trial, trialErr := trialsRepo.New(s.db).GetTrial(ctx, payload.ID)
-		switch {
-		case trialErr == nil && trial.Tier == "enterprise":
-			return nil, oops.E(oops.CodeConflict, nil, "enterprise trial conversion and retries require MarkEnterpriseTrialConverted")
-		case trialErr != nil && !errors.Is(trialErr, pgx.ErrNoRows):
-			return nil, oops.E(oops.CodeUnexpected, trialErr, "check enterprise trial before organization update").LogError(ctx, s.logger)
-		}
+	updated, err := s.changeAccountTypes(ctx, []string{payload.ID}, *payload.AccountType, payload.Whitelisted)
+	if err != nil {
+		return nil, err
 	}
-
-	queries := repo.New(s.db)
-	if err := queries.AdminUpdateOrganization(ctx, repo.AdminUpdateOrganizationParams{
-		ID:          payload.ID,
-		AccountType: conv.PtrToPGText(payload.AccountType),
-		Whitelisted: conv.PtrToPGBool(payload.Whitelisted),
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update organization").LogError(ctx, s.logger)
-	}
-
-	// Setting account type is how a trial becomes a signed contract. Stop
-	// pending trial reminders; trialActive stays true otherwise.
-	if payload.AccountType != nil {
-		if err := s.trial.TrialInactive(ctx, payload.ID); err != nil {
-			s.logger.ErrorContext(ctx, "failed to notify trial inactive", attr.SlogError(err), attr.SlogOrganizationID(payload.ID))
-		}
+	if len(updated) == 0 {
+		return nil, oops.E(oops.CodeNotFound, nil, "organization not found")
 	}
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after update")
@@ -1053,29 +1284,9 @@ func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUp
 		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), payload.AccountType)
 	}
 
-	tx, err := s.db.Begin(ctx)
+	updated, err := s.changeAccountTypes(ctx, payload.Ids, payload.AccountType, nil)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin bulk account type update").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	queries := repo.New(tx)
-	if payload.AccountType == "enterprise" {
-		if trialID, lockErr := queries.LockEnterpriseTrialInOrganizations(ctx, payload.Ids); lockErr == nil {
-			return nil, oops.E(oops.CodeConflict, nil, "organization %s has an enterprise trial; use atomic enterprise conversion", trialID)
-		} else if !errors.Is(lockErr, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, lockErr, "check enterprise trials before bulk account type update").LogError(ctx, s.logger)
-		}
-	}
-
-	updated, err := queries.AdminBulkUpdateAccountType(ctx, repo.AdminBulkUpdateAccountTypeParams{
-		AccountType: payload.AccountType,
-		Ids:         payload.Ids,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "bulk update account type").LogError(ctx, s.logger)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit bulk account type update").LogError(ctx, s.logger)
+		return nil, err
 	}
 
 	written := make(map[string]struct{}, len(updated))
@@ -1109,27 +1320,96 @@ func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUp
 }
 
 func (s *Service) DisableOrganization(ctx context.Context, payload *gen.DisableOrganizationPayload) (*gen.AdminOrganization, error) {
-	rows, err := repo.New(s.db).AdminDisableOrganization(ctx, payload.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "disable organization").LogError(ctx, s.logger)
-	}
-	if rows == 0 {
-		return nil, oops.C(oops.CodeNotFound)
-	}
-
-	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after disable")
+	return s.setOrganizationAccess(ctx, payload.ID, false, "disable")
 }
 
 func (s *Service) EnableOrganization(ctx context.Context, payload *gen.EnableOrganizationPayload) (*gen.AdminOrganization, error) {
-	rows, err := repo.New(s.db).AdminEnableOrganization(ctx, payload.ID)
+	return s.setOrganizationAccess(ctx, payload.ID, true, "enable")
+}
+
+func (s *Service) setOrganizationAccess(ctx context.Context, organizationID string, enabled bool, operation string) (*gen.AdminOrganization, error) {
+	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "enable organization").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin organization access transaction").LogError(ctx, logger)
 	}
-	if rows == 0 {
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	actor, actorDisplayName, _ := adminActor(ctx)
+	_, err = SetOrganizationAccessTx(ctx, tx, s.audit, organizationID, enabled, actor, actorDisplayName)
+	if errors.Is(err, ErrOrganizationAccessNotFound) {
 		return nil, oops.C(oops.CodeNotFound)
 	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "%s organization", operation).LogError(ctx, logger)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit organization access change").LogError(ctx, logger)
+	}
+	return s.readOrganizationAfterWrite(ctx, organizationID, "fetch organization after "+operation)
+}
 
-	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enable")
+// TrialExtension is the trial end-date transition an extension wrote.
+type TrialExtension struct {
+	PreviousEndsAt time.Time
+	EndsAt         time.Time
+}
+
+// ErrTrialNotRunning reports that an organization has no running enterprise
+// trial to extend.
+var ErrTrialNotRunning = errors.New("organization has no running enterprise trial to extend")
+
+// TrialActor is who the trial extension audit entry names.
+type TrialActor struct {
+	Principal   urn.Principal
+	DisplayName *string
+}
+
+// ExtendTrialTx extends a running enterprise trial by days and records its
+// audit entry inside the caller's transaction; the caller commits. It returns
+// ErrTrialNotRunning when there is no running trial to extend. The admin API
+// passes the session operator, and the staff Admin MCP passes its own actor.
+func ExtendTrialTx(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, logger *slog.Logger, organizationID string, days int, actor TrialActor) (TrialExtension, error) {
+	// Checked on the wide value before narrowing; see ExtendTrial.
+	if days < constants.MinTrialExtensionDays || days > constants.MaxTrialExtensionDays {
+		return TrialExtension{}, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialExtensionDays, constants.MaxTrialExtensionDays)
+	}
+
+	extended, err := trialsRepo.New(tx).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
+		OrganizationID: organizationID,
+		ExtendByDays:   int32(days),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return TrialExtension{}, ErrTrialNotRunning
+	case err != nil:
+		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
+	}
+
+	// The customer's feed names the organization, not only its id, and extend
+	// writes nothing on organization_metadata to get those columns back from.
+	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        organizationID,
+		AllowSlug: false,
+	})
+	if err != nil {
+		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "read organization for trial extension").LogError(ctx, logger)
+	}
+
+	if err := auditLogger.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
+		OrganizationID:      organizationID,
+		Actor:               actor.Principal,
+		ActorDisplayName:    actor.DisplayName,
+		ActorSlug:           nil,
+		OrganizationName:    organization.Name,
+		OrganizationSlug:    organization.Slug,
+		ExtendedByDays:      days,
+		PreviousTrialEndsAt: extended.PreviousEndsAt.Time,
+		TrialEndsAt:         extended.EndsAt.Time,
+	}); err != nil {
+		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "log trial extension").LogError(ctx, logger)
+	}
+	return TrialExtension{PreviousEndsAt: extended.PreviousEndsAt.Time, EndsAt: extended.EndsAt.Time}, nil
 }
 
 func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPayload) (*gen.AdminOrganization, error) {
@@ -1155,12 +1435,10 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	extended, err := trialsRepo.New(tx).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
-		OrganizationID: payload.ID,
-		ExtendByDays:   int32(payload.Days),
-	})
+	actor, actorDisplayName, operatorEmail := adminActor(ctx)
+	_, err = ExtendTrialTx(ctx, tx, s.audit, logger, payload.ID, payload.Days, TrialActor{Principal: actor, DisplayName: actorDisplayName})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, ErrTrialNotRunning):
 		// rejectTrialChange reads on the pool, so this connection goes back
 		// before it asks for a second one. The deferred rollback is idempotent.
 		_ = tx.Rollback(ctx)
@@ -1168,32 +1446,7 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 			"look up organization after unextended trial",
 			"organization has no running enterprise trial to extend")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
-	}
-
-	// The customer's feed names the organization, not only its id, and extend
-	// writes nothing on organization_metadata to get those columns back from.
-	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID:        payload.ID,
-		AllowSlug: false,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read organization for trial extension").LogError(ctx, logger)
-	}
-
-	actor, actorDisplayName, operatorEmail := adminActor(ctx)
-	if err := s.audit.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
-		OrganizationID:      payload.ID,
-		Actor:               actor,
-		ActorDisplayName:    actorDisplayName,
-		ActorSlug:           nil,
-		OrganizationName:    organization.Name,
-		OrganizationSlug:    organization.Slug,
-		ExtendedByDays:      payload.Days,
-		PreviousTrialEndsAt: extended.PreviousEndsAt.Time,
-		TrialEndsAt:         extended.EndsAt.Time,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log trial extension").LogError(ctx, logger)
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1307,10 +1560,10 @@ func (s *Service) rejectTrialChange(ctx context.Context, logger *slog.Logger, or
 
 const organizationCreationUncertain = "Creation could not be confirmed. Check existing organizations before retrying."
 
-// CreateOrganization creates an organization in WorkOS and then in Gram.
+// CreateOrganization creates an organization in WorkOS and then in Speakeasy.
 //
 // The WorkOS create happens before the transaction opens, because it is the one
-// step that cannot be rolled back. Everything Gram stores is written inside a
+// step that cannot be rolled back. Everything Speakeasy stores is written inside a
 // single transaction afterwards. A transaction failure rolls back local writes;
 // a response read failure can occur after those writes have committed.
 //
@@ -1325,9 +1578,21 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		return nil, err
 	}
 
-	name, err := orgprovision.ValidateName(orgprovision.NameFromHostname(hostname))
+	requestedName := orgprovision.NameFromHostname(hostname)
+	if payload.Name != nil {
+		requestedName = *payload.Name
+	}
+	name, err := orgprovision.ValidateName(requestedName)
 	if err != nil {
 		return nil, err
+	}
+
+	requestedSlug := ""
+	if payload.Slug != nil {
+		requestedSlug, err = validateOrganizationSlug(*payload.Slug)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(ctx, s.workos, name, hostname)
@@ -1361,14 +1626,43 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 
 	// A row can already exist under the derived ID: WorkOS fires
 	// organization.created the moment the call above returns, so the sync
-	// activity can win the race to insert it. That row's slug is already in the
-	// organization's URL, and re-deriving one would find the base taken by that
-	// very row and write a suffixed variant over it.
+	// activity can win the race to insert it. Without an explicit slug, that
+	// row's slug is kept: re-deriving one would find the base taken by that very
+	// row and write a suffixed variant over it.
 	uniqueSlug := ""
+	if requestedSlug != "" {
+		if lockErr := queries.LockOrganizationSlug(ctx, requestedSlug); lockErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("lock requested organization slug: %w", lockErr), organizationCreationUncertain).LogError(ctx, logger)
+		}
+
+		atRequestedSlug, lookupErr := queries.GetOrganizationMetadataBySlug(ctx, requestedSlug)
+		switch {
+		case errors.Is(lookupErr, pgx.ErrNoRows):
+			uniqueSlug = requestedSlug
+		case lookupErr == nil && atRequestedSlug.ID == created.GramOrganizationID:
+			// The webhook can have inserted this same organization while the
+			// WorkOS request was in flight. In that case the requested slug is
+			// already ours, not a collision that needs a suffix.
+			uniqueSlug = requestedSlug
+		case lookupErr == nil:
+			found, findErr := orgslug.FindUnique(ctx, queries, requestedSlug)
+			if findErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find unique requested organization slug: %w", findErr), organizationCreationUncertain).LogError(ctx, logger)
+			}
+			uniqueSlug = found
+		default:
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("look up requested organization slug: %w", lookupErr), organizationCreationUncertain).LogError(ctx, logger)
+		}
+	}
+
 	existing, err := queries.GetOrganizationMetadata(ctx, created.GramOrganizationID)
 	switch {
-	case err == nil:
+	case err == nil && uniqueSlug == "":
 		uniqueSlug = existing.Slug
+	case (err == nil || errors.Is(err, pgx.ErrNoRows)) && uniqueSlug != "":
+		// The explicit slug wins over a row inserted by the WorkOS webhook for
+		// this same create. That row derived its slug from the display name and
+		// has not represented an operator choice yet.
 	case errors.Is(err, pgx.ErrNoRows):
 		// Seeded with the WorkOS organization ID rather than randomness so a
 		// retry of the same create competes for one advisory-lock key instead
@@ -1427,6 +1721,7 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// and that path records no source, so writing it here is what makes the
 		// two orderings agree.
 		CreationSource: conv.ToPGText(orgprovision.SourcePlatformAdmin),
+		DefaultHost:    s.newOrganizationDefaultHost,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create organization metadata: %w", err), organizationCreationUncertain).LogError(ctx, logger)
@@ -1434,6 +1729,9 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 
 	if err := authz.SeedSystemRoleGrantsTx(ctx, tx, org.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("provision organization access defaults: %w", err), organizationCreationUncertain).LogError(ctx, logger)
+	}
+	if err := authz.SeedPersonalAuthClientDefaultTx(ctx, tx, org.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("provision auth client defaults: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {
@@ -1722,7 +2020,7 @@ func (s *Service) reconcileRearmedTrialKeys(ctx context.Context, logger *slog.Lo
 }
 
 // adminActor identifies the operator behind an admin-app write. An admin session
-// carries an OIDC subject rather than a Gram user id, and a call without one
+// carries an OIDC subject rather than a Speakeasy user id, and a call without one
 // records the system actor the demotion sweeper uses. The email is returned
 // separately for private structured logs.
 func adminActor(ctx context.Context) (actor urn.Principal, displayName, operatorEmail *string) {
@@ -1754,7 +2052,7 @@ func (s *Service) readOrganizationAfterWrite(ctx context.Context, id string, err
 		return nil, oops.E(oops.CodeUnexpected, err, "%s", errMsg).LogError(ctx, s.logger)
 	}
 
-	return adminOrganizationFromGetRow(row), nil
+	return s.adminOrganizationFromGetRow(row), nil
 }
 
 func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizationPayload) (*gen.AdminOrganization, error) {
@@ -1768,54 +2066,62 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization by id or slug").LogError(ctx, s.logger)
 	}
-	return adminOrganizationFromGetRow(row), nil
+	return s.adminOrganizationFromGetRow(row), nil
 }
 
-func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
+func (s *Service) adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
-		ID:                   row.ID,
-		Name:                 row.Name,
-		Slug:                 row.Slug,
-		AccountType:          row.AccountType,
-		WorkosID:             conv.FromPGText[string](row.WorkosID),
-		StripeCustomerID:     conv.FromPGText[string](row.StripeCustomerID),
-		StripeSubscriptionID: conv.FromPGText[string](row.StripeSubscriptionID),
-		Whitelisted:          row.Whitelisted,
-		DisabledAt:           pgTimestampPtr(row.DisabledAt),
-		TrialState:           &row.TrialState,
-		TrialTier:            conv.FromPGText[string](row.TrialTier),
-		TrialEndsAt:          pgTimestampPtr(row.TrialEndsAt),
-		TrialConvertedAt:     pgTimestampPtr(row.TrialConvertedAt),
-		TrialDemotedAt:       pgTimestampPtr(row.TrialDemotedAt),
-		CreationSource:       conv.FromPGText[string](row.CreationSource),
-		MemberCount:          int(row.MemberCount),
-		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                             row.ID,
+		Name:                           row.Name,
+		Slug:                           row.Slug,
+		AccountType:                    row.AccountType,
+		WorkosID:                       conv.FromPGText[string](row.WorkosID),
+		WorkosDashboardURL:             s.workosDashboardURL(row.WorkosID),
+		StripeCustomerID:               conv.FromPGText[string](row.StripeCustomerID),
+		StripeSubscriptionID:           conv.FromPGText[string](row.StripeSubscriptionID),
+		StripeCustomerDashboardURL:     s.stripeCustomerDashboardURL(row.StripeCustomerID),
+		StripeSubscriptionDashboardURL: s.stripeSubscriptionDashboardURL(row.StripeSubscriptionID),
+		Whitelisted:                    row.Whitelisted,
+		DisabledAt:                     pgTimestampPtr(row.DisabledAt),
+		TrialState:                     &row.TrialState,
+		TrialTier:                      conv.FromPGText[string](row.TrialTier),
+		TrialEndsAt:                    pgTimestampPtr(row.TrialEndsAt),
+		TrialConvertedAt:               pgTimestampPtr(row.TrialConvertedAt),
+		TrialDemotedAt:                 pgTimestampPtr(row.TrialDemotedAt),
+		CreationSource:                 conv.FromPGText[string](row.CreationSource),
+		AdoptionDashboardURL:           conv.FromPGText[string](row.AdoptionDashboardUrl),
+		MemberCount:                    int(row.MemberCount),
+		CreatedAt:                      row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                      row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
-func adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {
+func (s *Service) adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
-		ID:                   row.ID,
-		Name:                 row.Name,
-		Slug:                 row.Slug,
-		AccountType:          row.AccountType,
-		WorkosID:             conv.FromPGText[string](row.WorkosID),
-		StripeCustomerID:     conv.FromPGText[string](row.StripeCustomerID),
-		StripeSubscriptionID: conv.FromPGText[string](row.StripeSubscriptionID),
-		Whitelisted:          row.Whitelisted,
-		DisabledAt:           pgTimestampPtr(row.DisabledAt),
-		TrialState:           &row.TrialState,
-		TrialTier:            nil,
-		TrialEndsAt:          pgTimestampPtr(row.TrialEndsAt),
-		TrialConvertedAt:     nil,
-		TrialDemotedAt:       nil,
+		ID:                             row.ID,
+		Name:                           row.Name,
+		Slug:                           row.Slug,
+		AccountType:                    row.AccountType,
+		WorkosID:                       conv.FromPGText[string](row.WorkosID),
+		WorkosDashboardURL:             s.workosDashboardURL(row.WorkosID),
+		StripeCustomerID:               conv.FromPGText[string](row.StripeCustomerID),
+		StripeSubscriptionID:           conv.FromPGText[string](row.StripeSubscriptionID),
+		StripeCustomerDashboardURL:     s.stripeCustomerDashboardURL(row.StripeCustomerID),
+		StripeSubscriptionDashboardURL: s.stripeSubscriptionDashboardURL(row.StripeSubscriptionID),
+		Whitelisted:                    row.Whitelisted,
+		DisabledAt:                     pgTimestampPtr(row.DisabledAt),
+		TrialState:                     &row.TrialState,
+		TrialTier:                      nil,
+		TrialEndsAt:                    pgTimestampPtr(row.TrialEndsAt),
+		TrialConvertedAt:               nil,
+		TrialDemotedAt:                 nil,
 		// The list does not select it. The record view asks for one organization
 		// and reads it there, like trial_tier above.
-		CreationSource: nil,
-		MemberCount:    int(row.MemberCount),
-		CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
+		CreationSource:       nil,
+		AdoptionDashboardURL: nil,
+		MemberCount:          int(row.MemberCount),
+		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

@@ -1,10 +1,14 @@
 package gram
 
 import (
+	"flag"
 	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 )
 
 func TestValidateServerURL(t *testing.T) {
@@ -41,4 +45,26 @@ func TestValidateServerURL(t *testing.T) {
 			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
+}
+
+func TestParsePlatformHostsRefusesAuthenticationHost(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://app.example.com")
+	require.NoError(t, err)
+	authenticationHost, err := mcp.NewAuthenticationHost("https://auth.example.com", serverURL, "prod")
+	require.NoError(t, err)
+
+	parse := func(hosts ...string) (map[string]string, error) {
+		set := flag.NewFlagSet("platform-hosts", flag.ContinueOnError)
+		require.NoError(t, (&cli.StringSliceFlag{Name: "platform-hosts", Value: cli.NewStringSlice(hosts...)}).Apply(set))
+		return parsePlatformHosts(cli.NewContext(nil, set, nil), authenticationHost)
+	}
+
+	hosts, err := parse("ai.example.com")
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"ai.example.com": "https://ai.example.com"}, hosts)
+
+	_, err = parse("ai.example.com", "auth.example.com")
+	require.EqualError(t, err, "invalid platform hosts: auth.example.com is the authentication host")
 }

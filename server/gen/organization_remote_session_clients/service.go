@@ -48,8 +48,8 @@ type Service interface {
 	CreateClient(context.Context, *CreateClientPayload) (res *types.RemoteSessionClient, err error)
 	// Register a standalone remote_session_client in Client ID Metadata Document
 	// (CIMD) mode under an existing remote_session_issuer in the caller's
-	// organization, with no user_session_issuer attachments. Gram generates the
-	// client_id and hosts the metadata document; the issuer must advertise
+	// organization, with no user_session_issuer attachments. Speakeasy generates
+	// the client_id and hosts the metadata document; the issuer must advertise
 	// client_id_metadata_document_supported. The client is project-scoped: it
 	// inherits a project-specific issuer's project, or the caller names a project
 	// (which must belong to the organization) when the issuer is
@@ -76,6 +76,20 @@ type Service interface {
 	// registered at the registration_endpoint the client's issuer publishes, so
 	// the issuer must publish one. Requires org:admin.
 	RotateClient(context.Context, *RotateClientPayload) (res *types.RemoteSessionClient, err error)
+	// Create a new standalone remote_session_client with a copy of an existing
+	// client's configuration in the caller's organization. The copy keeps the
+	// source's issuer, project, credential owner, authentication settings, key
+	// set, scopes, audience, and callback, and by default reuses its client_id and
+	// stored secret, so no secret is re-entered. A client metadata document (CIMD)
+	// client gets a new hosted document and client_id. To give the copy its own
+	// upstream registration instead, register one through /oauth/proxy-register
+	// and pass the returned credentials; this is refused for credential_owner self
+	// clients. A private_key_jwt client that is not a CIMD client cannot be
+	// duplicated, because the provider knows only the source's key set URL. The
+	// source is unchanged and the copy has no user_session_issuer attachments.
+	// Clients managed by an identity provider connection cannot be duplicated.
+	// Requires org:admin.
+	DuplicateClient(context.Context, *DuplicateClientPayload) (res *types.RemoteSessionClient, err error)
 	// Soft-delete a remote_session_client in the caller's organization. Cascades
 	// to the remote_sessions minted against it. Requires org:admin.
 	DeleteClient(context.Context, *DeleteClientPayload) (err error)
@@ -104,7 +118,7 @@ const ServiceName = "organizationRemoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"listClients", "getClient", "getClientDelegationStatus", "getClientDeletePreflight", "listClientMcpServers", "createClient", "createCimdClient", "updateClient", "attachClientKeySet", "detachClientKeySet", "rotateClient", "deleteClient", "removeClientFromMcpServer"}
+var MethodNames = [14]string{"listClients", "getClient", "getClientDelegationStatus", "getClientDeletePreflight", "listClientMcpServers", "createClient", "createCimdClient", "updateClient", "attachClientKeySet", "detachClientKeySet", "rotateClient", "duplicateClient", "deleteClient", "removeClientFromMcpServer"}
 
 // AttachClientKeySetPayload is the payload type of the
 // organizationRemoteSessionClients service attachClientKeySet method.
@@ -154,7 +168,7 @@ type CreateClientPayload struct {
 	ProjectID *string
 	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
 	ClientID string
-	// Optional client_secret supplied by the caller. Gram encrypts before
+	// Optional client_secret supplied by the caller. Speakeasy encrypts before
 	// persisting; the plaintext is never returned.
 	ClientSecret *string
 	// How the client authenticates at the issuer's token endpoint. Omit to default
@@ -164,12 +178,25 @@ type CreateClientPayload struct {
 	// the issuer identifier; token_endpoint is available for providers that
 	// require the token endpoint URL.
 	TokenEndpointAuthAudienceFormat *string
+	// Organization JSON Web Key Set to sign private_key_jwt assertions with.
+	// Required when token_endpoint_auth_method is private_key_jwt and optional
+	// otherwise, as with attachKeySet. Must belong to the caller's organization,
+	// which needs the customer-managed encryption keys entitlement.
+	JSONWebKeySetID *string
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string
+	// Who the upstream access credential belongs to, fixed at creation. subject
+	// (the default) means each caller connects their own upstream account through
+	// the client. self means the client obtains a credential for itself with the
+	// client_credentials grant and every caller shares it; it requires
+	// token_endpoint_auth_method client_secret_basic, client_secret_post (both
+	// with client_secret) or private_key_jwt (with json_web_key_set_id), and an
+	// issuer with a token_endpoint.
+	CredentialOwner string
 	// When the issuer reported issuing the client_id (RFC 7591
 	// client_id_issued_at). Omit to record the time of this call.
 	ClientIDIssuedAt *string
@@ -213,6 +240,30 @@ type DetachClientKeySetPayload struct {
 	ID           string
 	SessionToken *string
 	ApikeyToken  *string
+}
+
+// DuplicateClientPayload is the payload type of the
+// organizationRemoteSessionClients service duplicateClient method.
+type DuplicateClientPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+	// The remote_session_client id to duplicate.
+	ID string
+	// client_id of a fresh upstream registration, e.g. from /oauth/proxy-register.
+	// Omit to copy the source's client_id and secret.
+	ClientID *string
+	// client_secret of the fresh registration. Only with client_id. Speakeasy
+	// encrypts before persisting; the plaintext is never returned.
+	ClientSecret *string
+	// How the fresh registration authenticates at the issuer's token endpoint.
+	// Only with client_id; omit to keep the source's method.
+	TokenEndpointAuthMethod *string
+	// When the issuer reported issuing the client_id (RFC 7591
+	// client_id_issued_at). Omit to record the time of this call.
+	ClientIDIssuedAt *string
+	// When the issuer reported the client secret expires (RFC 7591
+	// client_secret_expires_at). Omit when the issuer reported no expiry.
+	ClientSecretExpiresAt *string
 }
 
 // GetClientDelegationStatusPayload is the payload type of the
@@ -303,6 +354,9 @@ type OrganizationClientDeletePreflight struct {
 	CanDelete bool
 	// Stable reason deletion is blocked. Present when can_delete is false.
 	BlockingReason *string
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount int64
 }
 
 // An MCP server attached to a remote_session_client, with the fields the
@@ -371,7 +425,15 @@ type UpdateClientPayload struct {
 	ApikeyToken  *string
 	// The remote_session_client id.
 	ID string
-	// Rotate the client secret. Gram re-encrypts before persisting.
+	// Correct the client_id registered with the issuer. Refused for Client ID
+	// Metadata Document (CIMD) clients and clients managed by an identity provider
+	// connection. A changed value revokes every remote session obtained through
+	// the client, so each user must reconnect. Omit to leave unchanged.
+	ClientID *string
+	// Replace the client's display name. Pass an empty string to clear it so the
+	// client shows its client_id. Omit to leave unchanged.
+	DisplayName *string
+	// Rotate the client secret. Speakeasy re-encrypts before persisting.
 	ClientSecret *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string
@@ -381,9 +443,18 @@ type UpdateClientPayload struct {
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
 	// unchanged.
 	Scope []string
-	// Replace the upstream OAuth audience sent for this client. Omit to leave
-	// unchanged.
+	// Replace the upstream OAuth audience sent for this client. Pass an empty
+	// string to clear it. Omit to leave unchanged.
 	Audience *string
+	// Send the connecting MCP client's self-reported name to this provider as
+	// speakeasy_client_name on /authorize. Only sent for anonymous sessions. Omit
+	// to leave unchanged.
+	ForwardClientName *bool
+	// Platform admins only. Set true to run the client in compatibility mode with
+	// the legacy callback URL, or false to migrate it to the current callback URL
+	// once that URL is registered with the identity provider. Omit to leave
+	// unchanged.
+	LegacyCallbackURL *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -40,35 +40,35 @@ type CreateSignedChatAttachmentURLRequestBody struct {
 // UploadImageResponseBody is the type of the "assets" service "uploadImage"
 // endpoint HTTP response body.
 type UploadImageResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
 
 // UploadFunctionsResponseBody is the type of the "assets" service
 // "uploadFunctions" endpoint HTTP response body.
 type UploadFunctionsResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
 
 // UploadOpenAPIv3ResponseBody is the type of the "assets" service
 // "uploadOpenAPIv3" endpoint HTTP response body.
 type UploadOpenAPIv3ResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
 
 // FetchImageFromURLResponseBody is the type of the "assets" service
 // "fetchImageFromURL" endpoint HTTP response body.
 type FetchImageFromURLResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
 
 // FetchOpenAPIv3FromURLResponseBody is the type of the "assets" service
 // "fetchOpenAPIv3FromURL" endpoint HTTP response body.
 type FetchOpenAPIv3FromURLResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
 
@@ -82,7 +82,7 @@ type ListAssetsResponseBody struct {
 // UploadChatAttachmentResponseBody is the type of the "assets" service
 // "uploadChatAttachment" endpoint HTTP response body.
 type UploadChatAttachmentResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 	// The URL to serve the chat attachment
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
@@ -2541,13 +2541,15 @@ func NewCreateSignedChatAttachmentURLRequestBody(p *assets.CreateSignedChatAttac
 
 // NewServeImageResultOK builds a "assets" service "serveImage" endpoint result
 // from a HTTP "OK" response.
-func NewServeImageResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string, crossOriginResourcePolicy string) *assets.ServeImageResult {
+func NewServeImageResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string, crossOriginResourcePolicy string, contentSecurityPolicy *string, xContentTypeOptions *string) *assets.ServeImageResult {
 	v := &assets.ServeImageResult{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
 	v.LastModified = lastModified
 	v.AccessControlAllowOrigin = accessControlAllowOrigin
 	v.CrossOriginResourcePolicy = crossOriginResourcePolicy
+	v.ContentSecurityPolicy = contentSecurityPolicy
+	v.XContentTypeOptions = xContentTypeOptions
 
 	return v
 }
@@ -4148,11 +4150,14 @@ func NewUploadChatAttachmentGatewayError(body *UploadChatAttachmentGatewayErrorR
 
 // NewServeChatAttachmentResultOK builds a "assets" service
 // "serveChatAttachment" endpoint result from a HTTP "OK" response.
-func NewServeChatAttachmentResultOK(contentType string, contentLength int64, lastModified string) *assets.ServeChatAttachmentResult {
+func NewServeChatAttachmentResultOK(contentType string, contentLength int64, lastModified string, contentDisposition string, contentSecurityPolicy string, xContentTypeOptions string) *assets.ServeChatAttachmentResult {
 	v := &assets.ServeChatAttachmentResult{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
 	v.LastModified = lastModified
+	v.ContentDisposition = contentDisposition
+	v.ContentSecurityPolicy = contentSecurityPolicy
+	v.XContentTypeOptions = xContentTypeOptions
 
 	return v
 }
@@ -4470,12 +4475,15 @@ func NewCreateSignedChatAttachmentURLGatewayError(body *CreateSignedChatAttachme
 
 // NewServeChatAttachmentSignedResultOK builds a "assets" service
 // "serveChatAttachmentSigned" endpoint result from a HTTP "OK" response.
-func NewServeChatAttachmentSignedResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string) *assets.ServeChatAttachmentSignedResult {
+func NewServeChatAttachmentSignedResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string, contentDisposition string, contentSecurityPolicy string, xContentTypeOptions string) *assets.ServeChatAttachmentSignedResult {
 	v := &assets.ServeChatAttachmentSignedResult{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
 	v.LastModified = lastModified
 	v.AccessControlAllowOrigin = accessControlAllowOrigin
+	v.ContentDisposition = contentDisposition
+	v.ContentSecurityPolicy = contentSecurityPolicy
+	v.XContentTypeOptions = xContentTypeOptions
 
 	return v
 }

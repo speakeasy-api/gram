@@ -68,15 +68,14 @@ type StagedTelemetryLogRow struct {
 const stagedTelemetryRowsLimit = 1000
 
 // InsertTelemetryLogsStaging inserts telemetry log records into the staging
-// table using a server-side async insert (async_insert=1,
-// wait_for_async_insert=0). The call is fire-and-forget from CH's perspective:
-// it acks once the rows are queued in CH's async insert buffer, not once they
-// are committed to disk. Staging has no read-your-writes requirement — the
-// promotion dispatcher sweeps it on a timer and each pass is idempotent.
+// table using a server-side async insert (async_insert=1). The connection sets
+// wait_for_async_insert: fire-and-forget on the server connection, acknowledged
+// on the test connection (see InsertTelemetryLogs). Staging has no
+// read-your-writes requirement — the promotion dispatcher sweeps it on a timer
+// and each pass is idempotent.
 func (q *Queries) InsertTelemetryLogsStaging(ctx context.Context, args []InsertTelemetryLogParams) error {
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
-		"async_insert":          1,
-		"wait_for_async_insert": 0,
+		"async_insert": 1,
 	}))
 	return q.insertTelemetryLogsInto(ctx, "telemetry_logs_staging", args)
 }

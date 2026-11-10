@@ -26,7 +26,9 @@ export const Default: Story = {
   render: () => (
     <SidebarProvider>
       <Sidebar>
-        <SidebarHeader className="px-4 py-3 font-medium">Gram</SidebarHeader>
+        <SidebarHeader className="px-4 py-3 font-medium">
+          Speakeasy
+        </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
             {["Overview", "Servers", "Tools", "Logs"].map((label) => (

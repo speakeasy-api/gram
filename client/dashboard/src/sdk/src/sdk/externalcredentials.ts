@@ -194,7 +194,7 @@ export class ExternalCredentials extends ClientSDK {
    * getGcpSetupInfo externalCredentials
    *
    * @remarks
-   * Report what the customer must grant in their own GCP project before Gram can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
+   * Report what the customer must grant in their own GCP project before Speakeasy can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
    */
   async getGcpSetupInfo(
     request?: GetGcpSetupInfoRequest | undefined,
@@ -308,7 +308,7 @@ export class ExternalCredentials extends ClientSDK {
    * verifyGcpIamCredential externalCredentials
    *
    * @remarks
-   * Probe that Gram can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.
+   * Probe that Speakeasy can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.
    */
   async verifyGcpIam(
     request: VerifyGcpIamCredentialRequest,

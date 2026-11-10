@@ -115,10 +115,10 @@ func (p *InMemoryGitHubPublisher) PushFiles(_ context.Context, _ int64, owner, r
 	defer p.mu.Unlock()
 	key := p.key(owner, repo, branch)
 	if p.root == "" {
-		p.files[key] = cloneFiles(files)
+		p.files[key] = cloneFiles(files, nil)
 		return "local-fixture", nil
 	}
-	if err := p.writeJSON(p.snapshotPath("repositories", key), cloneFiles(files)); err != nil {
+	if err := p.writeJSON(p.snapshotPath("repositories", key), cloneFiles(files, nil)); err != nil {
 		return "", fmt.Errorf("write local fixture repository: %w", err)
 	}
 	return "local-fixture", nil
@@ -165,7 +165,7 @@ func (p *InMemoryGitHubPublisher) HasDirectCollaborator(_ context.Context, _ int
 	return len(matches) > 0, nil
 }
 
-func (p *InMemoryGitHubPublisher) GetRepoFiles(_ context.Context, _ int64, owner, repo, branch string) (map[string][]byte, error) {
+func (p *InMemoryGitHubPublisher) GetRepoFiles(_ context.Context, _ int64, owner, repo, branch string, include func(path string) bool) (map[string][]byte, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	key := p.key(owner, repo, branch)
@@ -174,7 +174,7 @@ func (p *InMemoryGitHubPublisher) GetRepoFiles(_ context.Context, _ int64, owner
 		if !ok {
 			return nil, ghclient.ErrRepoNotFound
 		}
-		return cloneFiles(files), nil
+		return cloneFiles(files, include), nil
 	}
 
 	files := make(map[string][]byte)
@@ -184,18 +184,18 @@ func (p *InMemoryGitHubPublisher) GetRepoFiles(_ context.Context, _ int64, owner
 		}
 		return nil, fmt.Errorf("read local fixture repository: %w", err)
 	}
-	return cloneFiles(files), nil
+	return cloneFiles(files, include), nil
 }
 
 // MainBranchFiles exposes the current local fixture snapshot to the local-only
 // read-only Git HTTP server. It deliberately omits installation IDs because the
 // in-memory publisher has no remote authorization boundary.
 func (p *InMemoryGitHubPublisher) MainBranchFiles(ctx context.Context, owner, repo string) (map[string][]byte, error) {
-	return p.GetRepoFiles(ctx, 0, owner, repo, "main")
+	return p.GetRepoFiles(ctx, 0, owner, repo, "main", nil)
 }
 
 func (p *InMemoryGitHubPublisher) GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error) {
-	files, err := p.GetRepoFiles(ctx, installationID, owner, repo, branch)
+	files, err := p.GetRepoFiles(ctx, installationID, owner, repo, branch, func(candidate string) bool { return candidate == path })
 	if err != nil {
 		if errors.Is(err, ghclient.ErrRepoNotFound) {
 			return nil, ghclient.ErrFileNotFound
@@ -271,9 +271,12 @@ func (p *InMemoryGitHubPublisher) writeJSON(path string, value any) error {
 	return nil
 }
 
-func cloneFiles(files map[string][]byte) map[string][]byte {
+func cloneFiles(files map[string][]byte, include func(path string) bool) map[string][]byte {
 	cloned := make(map[string][]byte, len(files))
 	for path, content := range files {
+		if include != nil && !include(path) {
+			continue
+		}
 		cloned[path] = append([]byte(nil), content...)
 	}
 	return cloned

@@ -1,0 +1,445 @@
+//nolint:exhaustruct // The audit actor carries only the identity a toolset creation records.
+package toolsets
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/environments"
+	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
+)
+
+// ToolsetCreateInput is what one toolset creation needs once its caller has
+// authorized it. The caller owns the transaction and the authorization; this
+// owns every write and every rule a new toolset is subject to.
+type ToolsetCreateInput struct {
+	OrganizationID   string
+	OrganizationSlug string
+	ProjectID        uuid.UUID
+	// Authz authorizes the default environment against the caller's grants.
+	Authz                   *authz.Engine
+	ActorUserID             string
+	ActorEmail              *string
+	Name                    string
+	Description             *string
+	DefaultEnvironmentSlug  *string
+	OriginRegistrySpecifier *string
+	// ToolURNs and ResourceURNs seed the first version. Nil for both creates
+	// no version at all, exactly as the management API always has.
+	ToolURNs     []string
+	ResourceURNs []string
+}
+
+// ToolsetCreateResult reports what the creation decided as well as what it
+// wrote, because two of those decisions have consequences the caller has to act
+// on after commit: a toolset that joined the Default plugin owes a publish, and
+// pluginCreated means that plugin did not exist before.
+type ToolsetCreateResult struct {
+	Toolset repo.Toolset
+
+	// AddedToDefaultPlugin is what the attach actually did, not what the
+	// first-server rule implies: true only when the toolset joined the
+	// project's Default plugin in this transaction.
+	AddedToDefaultPlugin bool
+
+	// PluginCreated is true when that attach lazily created the Default plugin.
+	PluginCreated bool
+}
+
+// ErrToolsetSlugTaken is the toolset's derived slug colliding with a live
+// toolset in the same project. It is carried inside the oops conflict the
+// management API has always returned, so a second caller can tell it apart
+// from any other conflict without matching on message text.
+var ErrToolsetSlugTaken = errors.New("toolset slug already exists")
+
+// ErrToolsetInputInvalid marks a name or description the toolsets columns
+// cannot hold, refused before anything is written.
+var ErrToolsetInputInvalid = errors.New("invalid toolset input")
+
+// The limits the toolsets table's CHECK constraints enforce.
+const (
+	MaxToolsetNameLength        = 60
+	MaxToolsetSlugLength        = 60
+	MaxToolsetDescriptionLength = 250
+)
+
+// ToolsetSlugFromName derives a toolset's slug from its name and cuts it to
+// the column limit with trailing hyphens trimmed. The name itself is never
+// shortened; only the derived slug is.
+func ToolsetSlugFromName(name string) string {
+	slug := conv.ToSlug(name)
+	if len(slug) > MaxToolsetSlugLength {
+		// ToSlug keeps only ASCII letters, digits and hyphens, so a byte cut is
+		// a character cut.
+		slug = strings.TrimRight(slug[:MaxToolsetSlugLength], "-")
+	}
+	return slug
+}
+
+// CreateToolsetInTransaction is the one implementation of toolset creation.
+// The management API's createToolset and the Platform MCP's server authoring
+// both call it inside a transaction they own, so the slug rules, the private
+// MCP default, the default environment, the initial version, the audit entry
+// and the first-server Default plugin attachment cannot drift between them.
+//
+// It returns oops errors with the same codes the management API has always
+// returned, so that handler passes them straight through.
+func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, input ToolsetCreateInput) (ToolsetCreateResult, error) {
+	if tx == nil || logger == nil || auditLogger == nil || input.OrganizationID == "" || input.OrganizationSlug == "" || input.ProjectID == uuid.Nil || input.Authz == nil || input.ActorUserID == "" {
+		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, nil, "invalid toolset creation input")
+	}
+	// Checked here rather than left to the column CHECKs, which would turn an
+	// over-long name into an unexpected error instead of a readable refusal.
+	if input.Name == "" || utf8.RuneCountInString(input.Name) > MaxToolsetNameLength {
+		return ToolsetCreateResult{}, oops.E(oops.CodeBadRequest, ErrToolsetInputInvalid, "toolset name must be between 1 and %d characters", MaxToolsetNameLength)
+	}
+	// An empty or whitespace-only description is no description: the column
+	// refuses an empty string, and the caller did not give one.
+	if input.Description != nil && strings.TrimSpace(*input.Description) == "" {
+		input.Description = nil
+	}
+	if input.Description != nil && utf8.RuneCountInString(*input.Description) > MaxToolsetDescriptionLength {
+		return ToolsetCreateResult{}, oops.E(oops.CodeBadRequest, ErrToolsetInputInvalid, "toolset description must be at most %d characters", MaxToolsetDescriptionLength)
+	}
+	slug := ToolsetSlugFromName(input.Name)
+	if slug == "" {
+		return ToolsetCreateResult{}, oops.E(oops.CodeBadRequest, ErrToolsetInputInvalid, "toolset name must contain at least one letter or digit")
+	}
+
+	slugSuffix, err := conv.GenerateRandomSlug(5)
+	if err != nil {
+		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "failed to generate random slug").LogError(ctx, logger)
+	}
+	mcpSlug := input.OrganizationSlug + "-" + slugSuffix
+
+	params := repo.CreateToolsetParams{
+		OrganizationID:         input.OrganizationID,
+		ProjectID:              input.ProjectID,
+		Name:                   input.Name,
+		Slug:                   slug,
+		Description:            conv.PtrToPGText(input.Description),
+		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
+	}
+	// Only the first server in an organization joins the Default plugin, which
+	// publishes it to everyone holding that plugin; later servers reach nobody
+	// until they are put into a plugin. Joining is the widest reach a creation
+	// can have, so a failure to read the count fails the creation rather than
+	// defaulting to "first". The count is read before the insert, so it never
+	// includes the toolset being created.
+	enabled, err := usageRepo.New(tx).GetEnabledServerCount(ctx, input.OrganizationID)
+	if err != nil {
+		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "error getting enabled server count").LogError(ctx, logger)
+	}
+	joinsDefaultPlugin := enabled == 0
+
+	// A toolset's default environment reaches every tool it runs, so choosing
+	// one takes environment:read on it, as linking does.
+	if input.DefaultEnvironmentSlug != nil {
+		environment, err := environments.ResolveReadableEnvironment(ctx, logger, input.Authz, tx, input.ProjectID, toolconfig.Slug(*input.DefaultEnvironmentSlug))
+		if err != nil {
+			return ToolsetCreateResult{}, err
+		}
+		params.DefaultEnvironmentSlug = conv.ToPGText(environment.Slug)
+	} else {
+		listed, err := environmentsRepo.New(tx).ListEnvironments(ctx, input.ProjectID)
+		if err != nil {
+			return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "error listing environments")
+		}
+		for _, environment := range listed {
+			if environment.Slug == "default" { // autofill the default environment when one exists and the caller can read it
+				readable, err := canReadEnvironment(ctx, input.Authz, environment)
+				if err != nil {
+					return ToolsetCreateResult{}, err
+				}
+				if readable {
+					params.DefaultEnvironmentSlug = conv.ToPGText(environment.Slug)
+				}
+				break
+			}
+		}
+	}
+
+	if mcpSlug, err = ensureGeneratedMcpSlug(ctx, tx, logger, input.OrganizationSlug, input.OrganizationID, input.ProjectID, mcpSlug); err != nil {
+		return ToolsetCreateResult{}, err
+	}
+
+	tr := repo.New(tx)
+	created, err := tr.CreateToolset(ctx, params)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return ToolsetCreateResult{}, oops.E(oops.CodeConflict, ErrToolsetSlugTaken, "toolset slug already exists")
+		}
+		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "failed to create toolset").LogError(ctx, logger)
+	}
+
+	if input.OriginRegistrySpecifier != nil {
+		if _, err := tr.CreateToolsetOrigin(ctx, repo.CreateToolsetOriginParams{
+			OrganizationID:    input.OrganizationID,
+			ToolsetID:         created.ID,
+			RegistrySpecifier: *input.OriginRegistrySpecifier,
+		}); err != nil {
+			return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "failed to create toolset origin").LogError(ctx, logger)
+		}
+	}
+
+	if err := createToolsetVersionInTransaction(ctx, logger.With(attr.SlogProjectID(input.ProjectID.String())), tr, created.ID, input.ToolURNs, input.ResourceURNs); err != nil {
+		return ToolsetCreateResult{}, err
+	}
+
+	if err := auditLogger.LogToolsetCreate(ctx, tx, audit.LogToolsetCreateEvent{
+		OrganizationID:   input.OrganizationID,
+		ProjectID:        input.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID),
+		ActorDisplayName: input.ActorEmail,
+		ActorSlug:        nil,
+		ToolsetURN:       urn.NewToolset(created.ID),
+		ToolsetName:      created.Name,
+		ToolsetSlug:      created.Slug,
+	}); err != nil {
+		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
+	}
+	// Every new toolset is served as a private MCP server, so it is usable
+	// with credentials without a separate enable step.
+	if _, err := hostedmcp.CreateCanonical(ctx, tx, auditLogger, hostedmcp.Actor{UserID: input.ActorUserID, Email: input.ActorEmail, System: ""}, hostedmcp.CreateCanonicalInput{
+		Toolset: created, Slug: mcpSlug, Visibility: mcpservers.VisibilityPrivate,
+	}); err != nil {
+		return ToolsetCreateResult{}, err //nolint:wrapcheck // oops errors pass through.
+	}
+	created, err = repo.New(tx).GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: created.ID, ProjectID: created.ProjectID})
+	if err != nil {
+		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "reload created toolset").LogError(ctx, logger)
+	}
+
+	result := ToolsetCreateResult{Toolset: created, AddedToDefaultPlugin: false, PluginCreated: false}
+	if joinsDefaultPlugin {
+		projectID := input.ProjectID
+		actor := &contextvalues.AuthContext{ActiveOrganizationID: input.OrganizationID, UserID: input.ActorUserID, Email: input.ActorEmail, ProjectID: &projectID}
+		outcome, err := attachToDefaultPluginWithOutcome(ctx, tx, logger, auditLogger, actor, created.ID, created.Name)
+		if err != nil {
+			return ToolsetCreateResult{}, err
+		}
+		result.AddedToDefaultPlugin, result.PluginCreated = outcome.Attached, outcome.PluginCreated
+	}
+	return result, nil
+}
+
+// ensureGeneratedMcpSlug guards a generated platform slug against the unified
+// namespace and the project's server slugs, regenerating on the rare collision.
+func ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, orgSlug, orgID string, projectID uuid.UUID, slug string) (string, error) {
+	for attempt := 0; ; attempt++ {
+		if err := mcpendpoints.LockSlugScope(ctx, dbtx, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, slug); err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "lock mcp slug scope").LogError(ctx, logger)
+		}
+		available, err := mcpendpoints.CheckSlugAvailable(ctx, dbtx, mcpendpoints.SlugAvailabilityCheck{
+			Slug:                     slug,
+			CustomDomainID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			OrganizationID:           orgID,
+			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			SkipDomainOwnershipCheck: false,
+		})
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, logger)
+		}
+		if available {
+			_, err := mcpserversrepo.New(dbtx).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(slug), ProjectID: projectID})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				return slug, nil
+			case err != nil:
+				return "", oops.E(oops.CodeUnexpected, err, "check mcp server slug").LogError(ctx, logger)
+			}
+		}
+		if attempt == 2 {
+			return "", oops.E(oops.CodeConflict, nil, "could not generate a unique mcp slug").LogError(ctx, logger)
+		}
+		suffix, err := conv.GenerateRandomSlug(5)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "failed to generate random slug").LogError(ctx, logger)
+		}
+		slug = orgSlug + "-" + suffix
+	}
+}
+
+// attachToDefaultPluginInTransaction adds a newly MCP-enabled toolset to the
+// project's Default plugin and matching role-audience plugins so it's included
+// in the auto-published marketplace without a human visiting the Plugins page.
+// Returns pluginCreated=true if this call lazily created the Default
+// plugin (project predates this feature) — callers should enqueue an initial
+// publish for it, but only after their own transaction commits, since this
+// runs pre-commit and the DB writes could still roll back.
+func attachToDefaultPluginInTransaction(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
+	outcome, err := attachToDefaultPluginWithOutcome(ctx, dbtx, logger, auditLogger, authCtx, toolsetID, displayName)
+	return outcome.PluginCreated, err
+}
+
+func attachToDefaultPluginWithOutcome(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (plugins.DefaultPluginAttachOutcome, error) {
+	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, plugins.AttachToDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
+		McpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		DisplayName:    displayName,
+	}, nil)
+	if err != nil {
+		return plugins.DefaultPluginAttachOutcome{}, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, logger)
+	}
+	return outcome, nil
+}
+
+// createToolsetVersionInTransaction records a new version when the given URNs
+// differ from the latest one. A nil list for tools or resources inherits that
+// half from the latest version; an empty, non-nil list clears it.
+func createToolsetVersionInTransaction(ctx context.Context, logger *slog.Logger, tr *repo.Queries, toolsetID uuid.UUID, toolUrnStrings []string, resourceUrnStrings []string) error {
+	logger = logger.With(attr.SlogToolsetID(toolsetID.String()))
+
+	// Only create a version if URNs are provided (indicating a change). Check nil (not len==0) so that toolsets can be made empty.
+	if toolUrnStrings == nil && resourceUrnStrings == nil {
+		return nil
+	}
+
+	allToolUrns := []urn.Tool{}
+	for _, urnStr := range toolUrnStrings {
+		var toolUrn urn.Tool
+		if err := toolUrn.UnmarshalText([]byte(urnStr)); err != nil {
+			logger.WarnContext(ctx, "invalid tool URN", attr.SlogError(err), attr.SlogToolURN(urnStr))
+			continue
+		}
+		allToolUrns = append(allToolUrns, toolUrn)
+	}
+
+	allResourceUrns := []urn.Resource{}
+	for _, urnStr := range resourceUrnStrings {
+		var resourceUrn urn.Resource
+		if err := resourceUrn.UnmarshalText([]byte(urnStr)); err != nil {
+			logger.WarnContext(ctx, "invalid resource URN", attr.SlogError(err), attr.SlogResourceURN(urnStr))
+			continue
+		}
+		allResourceUrns = append(allResourceUrns, resourceUrn)
+	}
+
+	latestVersion, err := tr.GetLatestToolsetVersion(ctx, toolsetID)
+	latestVersionNumber := int64(0)
+	var predecessorID uuid.NullUUID
+	if err == nil {
+		predecessorID = uuid.NullUUID{UUID: latestVersion.ID, Valid: true}
+		latestVersionNumber = latestVersion.Version
+	}
+
+	if toolUrnStrings == nil && len(latestVersion.ToolUrns) > 0 {
+		allToolUrns = append(allToolUrns, latestVersion.ToolUrns...)
+	}
+
+	if resourceUrnStrings == nil && len(latestVersion.ResourceUrns) > 0 {
+		allResourceUrns = append(allResourceUrns, latestVersion.ResourceUrns...)
+	}
+
+	if err == nil && sameToolURNs(latestVersion.ToolUrns, allToolUrns) && sameResourceURNs(latestVersion.ResourceUrns, allResourceUrns) {
+		return nil // No change needed
+	}
+
+	if _, err := tr.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
+		ToolsetID:     toolsetID,
+		Version:       latestVersionNumber + 1,
+		ToolUrns:      allToolUrns,
+		ResourceUrns:  allResourceUrns,
+		PredecessorID: predecessorID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to create toolset version").LogError(ctx, logger)
+	}
+	return nil
+}
+
+func sameToolURNs(existing, next []urn.Tool) bool {
+	if len(existing) != len(next) {
+		return false
+	}
+	set := make(map[string]bool, len(existing))
+	for _, value := range existing {
+		set[value.String()] = true
+	}
+	for _, value := range next {
+		if !set[value.String()] {
+			return false
+		}
+	}
+	return true
+}
+
+func sameResourceURNs(existing, next []urn.Resource) bool {
+	if len(existing) != len(next) {
+		return false
+	}
+	set := make(map[string]bool, len(existing))
+	for _, value := range existing {
+		set[value.String()] = true
+	}
+	for _, value := range next {
+		if !set[value.String()] {
+			return false
+		}
+	}
+	return true
+}
+
+// canReadEnvironment reports whether the caller holds environment:read on
+// environment. Only a denial is false; any other failure is returned.
+func canReadEnvironment(ctx context.Context, engine *authz.Engine, environment environmentsRepo.Environment) (bool, error) {
+	err := engine.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, environment.ID.String(), environment.ProjectID.String()))
+	var shareable *oops.ShareableError
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden:
+		return false, nil
+	default:
+		return false, fmt.Errorf("authorize default environment: %w", err)
+	}
+}
+
+// readableDefaultEnvironmentSlug keeps a copied default environment only when
+// the caller can read it. A slug naming no live environment selects nothing
+// and is kept as is.
+func readableDefaultEnvironmentSlug(ctx context.Context, tx environmentsRepo.DBTX, engine *authz.Engine, projectID uuid.UUID, slug pgtype.Text) (pgtype.Text, error) {
+	if !slug.Valid {
+		return slug, nil
+	}
+	environment, err := environmentsRepo.New(tx).GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{Slug: slug.String, ProjectID: projectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return slug, nil
+	case err != nil:
+		return pgtype.Text{}, fmt.Errorf("load default environment: %w", err)
+	}
+	readable, err := canReadEnvironment(ctx, engine, environment)
+	if err != nil || !readable {
+		return pgtype.Text{}, err
+	}
+	return slug, nil
+}

@@ -1,4 +1,16 @@
-import { Book, ExternalLink, RefreshCw, Settings, Users } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
+import {
+  Book,
+  ChevronDown,
+  ExternalLink,
+  RefreshCw,
+  Settings,
+  Users,
+} from "lucide-react";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import { Badge } from "@/components/ui/Badge";
 
@@ -11,6 +23,7 @@ export function MarketplaceCard({
   onSync,
   isSyncing = false,
   observabilityEnabled = true,
+  pausedPluginNames = [],
 }: {
   publishStatus: PublishStatusResult;
   onManageCollaborators?: () => void;
@@ -20,33 +33,76 @@ export function MarketplaceCard({
   isSyncing?: boolean;
   /** Drives the copy: a disabled project's marketplace has no observability plugins in it. */
   observabilityEnabled?: boolean;
+  /** Plugins whose auto sync is off: their changes publish only on Sync changes. */
+  pausedPluginNames?: string[];
 }): JSX.Element {
   const description = observabilityEnabled
     ? "This repo is your team's plugin marketplace. The observability plugins are already inside, and any plugins you build in Speakeasy later will be published here too."
     : "This repo is your team's plugin marketplace. Any plugins you build in Speakeasy are published here; the observability plugins are disabled for this project.";
-  // upToDate is undefined/null when freshness can't be determined (a
-  // connection that predates fingerprinting) — only the explicit `false`
-  // case is a known, real drift worth warning about.
+  const freshnessKnown = typeof publishStatus.upToDate === "boolean";
+  const isCurrent = publishStatus.upToDate === true;
   const hasUnpublishedChanges = publishStatus.upToDate === false;
+  // False when the only pending changes belong to plugins whose auto sync is
+  // off: no automatic publish will send them.
+  const changesSyncAutomatically = publishStatus.automaticSyncPending !== false;
+  const statusDot = isCurrent
+    ? "bg-success-default"
+    : hasUnpublishedChanges
+      ? "bg-warning-default"
+      : "bg-muted-foreground";
+  const statusTextColor = isCurrent
+    ? "text-default-success"
+    : hasUnpublishedChanges
+      ? "text-default-warning"
+      : "text-muted-foreground";
+  let statusMessage = "Marketplace set up";
+  if (!freshnessKnown) {
+    statusMessage =
+      "Sync status is unavailable. Check again shortly or sync changes.";
+  } else if (hasUnpublishedChanges) {
+    statusMessage = changesSyncAutomatically
+      ? "Not up to date yet. Changes sync automatically, or click 'Sync changes' to publish now"
+      : "Not up to date. The waiting changes belong to plugins with auto sync off, so they publish only when you click 'Sync changes'";
+  }
 
   return (
-    <div className="border-border bg-card border p-4">
+    <Collapsible
+      defaultOpen={false}
+      className="border-border bg-card border p-4"
+    >
       <div>
-        <div className="mb-1.5 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <span className="text-muted-foreground font-mono text-xs font-medium tracking-wide uppercase">
             Your project marketplace
           </span>
-          {hasUnpublishedChanges ? (
-            <Badge variant="warning">
-              <Badge.Text>Needs syncing</Badge.Text>
-            </Badge>
-          ) : (
-            <Badge variant="success">
-              <Badge.Text>Up to date</Badge.Text>
-            </Badge>
-          )}
+          <Badge
+            variant={
+              hasUnpublishedChanges
+                ? "warning"
+                : isCurrent
+                  ? "success"
+                  : "neutral"
+            }
+          >
+            <Badge.Text>
+              {hasUnpublishedChanges
+                ? "Needs syncing"
+                : isCurrent
+                  ? "Up to date"
+                  : "Sync status unavailable"}
+            </Badge.Text>
+          </Badge>
+          <CollapsibleTrigger
+            aria-label="Toggle project marketplace details"
+            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring ml-auto flex size-8 shrink-0 items-center justify-center focus-visible:ring-2 focus-visible:outline-none [&[data-state=open]>svg]:rotate-180"
+          >
+            <ChevronDown
+              className="size-4 transition-transform"
+              aria-hidden="true"
+            />
+          </CollapsibleTrigger>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2">
           <Book className="text-muted-foreground h-4 w-4 flex-shrink-0" />
           <a
             href={publishStatus.repoUrl}
@@ -65,98 +121,105 @@ export function MarketplaceCard({
             Private
           </span>
         </div>
-        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          {description}
-        </p>
-        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          At least one member of your GitHub organization{" "}
-          <strong className="text-foreground font-semibold">
-            must be added as a collaborator
-          </strong>{" "}
-          to the marketplace repository so that the repository is discoverable
-          inside of Claude, Codex and other platforms when adding the plugin
-          repository. Collaborators are added as repository admins, which Cursor
-          requires to serve this marketplace to your team.
-        </p>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <span className="text-muted-foreground inline-flex items-center gap-1.5 text-sm">
-            <span className="relative flex h-2.5 w-2.5">
-              <span
-                className={
-                  hasUnpublishedChanges
-                    ? "absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-warning-default opacity-40"
-                    : "absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-success-default opacity-40"
-                }
-              />
-              <span
-                className={
-                  hasUnpublishedChanges
-                    ? "relative inline-flex h-2.5 w-2.5 rounded-full bg-warning-default"
-                    : "relative inline-flex h-2.5 w-2.5 rounded-full bg-success-default"
-                }
-              />
-            </span>
-            <span
-              className={
-                hasUnpublishedChanges
-                  ? "font-medium text-default-warning"
-                  : "font-medium text-default-success"
-              }
-            >
-              {hasUnpublishedChanges
-                ? "Not up to date. Click 'Sync changes' to publish"
-                : "Marketplace set up"}
-            </span>
-          </span>
-          <div className="flex flex-wrap items-center gap-2">
-            {hasUnpublishedChanges && onSync && (
-              <button
-                type="button"
-                onClick={onSync}
-                disabled={isSyncing}
-                className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                <RefreshCw
-                  className={isSyncing ? "h-4 w-4 animate-spin" : "h-4 w-4"}
+        <CollapsibleContent>
+          <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+            {description}
+          </p>
+          <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+            At least one member of your GitHub organization{" "}
+            <strong className="text-foreground font-semibold">
+              must be added as a collaborator
+            </strong>{" "}
+            to the marketplace repository so that the repository is discoverable
+            inside of Claude, Codex and other platforms when adding the plugin
+            repository. Collaborators are added as repository admins, which
+            Cursor requires to serve this marketplace to your team.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-muted-foreground inline-flex items-center gap-1.5 text-sm">
+              <span className="relative flex h-2.5 w-2.5">
+                {freshnessKnown && (
+                  <span
+                    className={`absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full opacity-40 ${statusDot}`}
+                  />
+                )}
+                <span
+                  className={`relative inline-flex h-2.5 w-2.5 rounded-full ${statusDot}`}
                 />
-                {isSyncing ? "Syncing..." : "Sync changes"}
-              </button>
-            )}
-            <a
-              href={publishStatus.repoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors"
-            >
-              <ExternalLink className="h-4 w-4" />
-              Open
-            </a>
-            <button
-              type="button"
-              onClick={onManageCollaborators}
-              disabled={!onManageCollaborators}
-              className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
-            >
-              <Users className="h-4 w-4" />
-              Manage collaborators
-            </button>
-            {onRename && (
-              <button
-                type="button"
-                onClick={onRename}
-                aria-label="Rename marketplace"
-                title="Rename marketplace"
+              </span>
+              <span className={`font-medium ${statusTextColor}`}>
+                {statusMessage}
+              </span>
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {!isCurrent && onSync && (
+                <button
+                  type="button"
+                  onClick={onSync}
+                  disabled={isSyncing}
+                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw
+                    className={isSyncing ? "h-4 w-4 animate-spin" : "h-4 w-4"}
+                  />
+                  {isSyncing ? "Syncing..." : "Sync changes"}
+                </button>
+              )}
+              <a
+                href={publishStatus.repoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors"
               >
-                <Settings className="h-4 w-4" />
-                Rename
+                <ExternalLink className="h-4 w-4" />
+                Open
+              </a>
+              <button
+                type="button"
+                onClick={onManageCollaborators}
+                disabled={!onManageCollaborators}
+                className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                <Users className="h-4 w-4" />
+                Manage collaborators
               </button>
-            )}
+              {onRename && (
+                <button
+                  type="button"
+                  onClick={onRename}
+                  aria-label="Rename marketplace"
+                  title="Rename marketplace"
+                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors"
+                >
+                  <Settings className="h-4 w-4" />
+                  Rename
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+          {pausedPluginNames.length > 0 && (
+            <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+              {pausedPluginsNote(pausedPluginNames)}
+            </p>
+          )}
+        </CollapsibleContent>
       </div>
-    </div>
+    </Collapsible>
   );
+}
+
+// pausedPluginsNote names the plugins whose auto sync is off, so the admin knows
+// the "changes sync automatically" promise above does not cover them.
+function pausedPluginsNote(names: string[]): string {
+  const listed =
+    names.length <= 3
+      ? new Intl.ListFormat("en", {
+          style: "long",
+          type: "conjunction",
+        }).format(names)
+      : `${names.length} plugins`;
+  const pronoun = names.length === 1 ? "its" : "their";
+  return `Auto sync is off for ${listed}, so ${pronoun} changes publish only when someone clicks Sync changes.`;
 }
 
 // The not-yet-connected / no-collaborators-yet counterpart to MarketplaceCard
@@ -190,17 +253,26 @@ export function UninitializedMarketplaceCard({
   const hasRepo = !!publishStatus.repoUrl;
 
   return (
-    <div className="border-border bg-card border p-4">
+    <Collapsible defaultOpen className="border-border bg-card border p-4">
       <div>
-        <div className="mb-1.5 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <span className="text-muted-foreground font-mono text-xs font-medium tracking-wide uppercase">
             Your project marketplace
           </span>
           <Badge variant="warning">
             <Badge.Text>Not published</Badge.Text>
           </Badge>
+          <CollapsibleTrigger
+            aria-label="Toggle project marketplace details"
+            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring ml-auto flex size-8 shrink-0 items-center justify-center focus-visible:ring-2 focus-visible:outline-none [&[data-state=open]>svg]:rotate-180"
+          >
+            <ChevronDown
+              className="size-4 transition-transform"
+              aria-hidden="true"
+            />
+          </CollapsibleTrigger>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2">
           <Book className="text-muted-foreground h-4 w-4 flex-shrink-0" />
           {hasRepo ? (
             <a
@@ -222,62 +294,64 @@ export function UninitializedMarketplaceCard({
             </span>
           )}
         </div>
-        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          {description}
-        </p>
-        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          At least one member of your GitHub organization{" "}
-          <strong className="text-foreground font-semibold">
-            must be added as a collaborator
-          </strong>{" "}
-          to the marketplace repository so that the repository is discoverable
-          inside of Claude, Codex and other platforms when adding the plugin
-          repository. Collaborators are added as repository admins, which Cursor
-          requires to serve this marketplace to your team.
-        </p>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <span className="text-muted-foreground inline-flex items-start gap-2 text-sm">
-            <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
-              <span className="absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-warning-default opacity-40" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-warning-default" />
+        <CollapsibleContent>
+          <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+            {description}
+          </p>
+          <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+            At least one member of your GitHub organization{" "}
+            <strong className="text-foreground font-semibold">
+              must be added as a collaborator
+            </strong>{" "}
+            to the marketplace repository so that the repository is discoverable
+            inside of Claude, Codex and other platforms when adding the plugin
+            repository. Collaborators are added as repository admins, which
+            Cursor requires to serve this marketplace to your team.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-muted-foreground inline-flex items-start gap-2 text-sm">
+              <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
+                <span className="absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-warning-default opacity-40" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-warning-default" />
+              </span>
+              <span className="font-medium text-default-warning">
+                {hasRepo ? (
+                  <>
+                    Marketplace doesn't have any active collaborators added.
+                    <br />
+                    Please ensure you have accepted the invite email.
+                  </>
+                ) : (
+                  "Marketplace not yet setup"
+                )}
+              </span>
             </span>
-            <span className="font-medium text-default-warning">
+            <div className="flex flex-wrap items-center gap-2">
               {hasRepo ? (
-                <>
-                  Marketplace doesn't have any active collaborators added.
-                  <br />
-                  Please ensure you have accepted the invite email.
-                </>
+                <button
+                  type="button"
+                  onClick={onAddCollaborators}
+                  disabled={!onAddCollaborators}
+                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <Users className="h-4 w-4" />
+                  Add collaborators
+                </button>
               ) : (
-                "Marketplace not yet setup"
+                <button
+                  type="button"
+                  onClick={onSetup}
+                  disabled={!onSetup}
+                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <Settings className="h-4 w-4" />
+                  Publish now
+                </button>
               )}
-            </span>
-          </span>
-          <div className="flex flex-wrap items-center gap-2">
-            {hasRepo ? (
-              <button
-                type="button"
-                onClick={onAddCollaborators}
-                disabled={!onAddCollaborators}
-                className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                <Users className="h-4 w-4" />
-                Add collaborators
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={onSetup}
-                disabled={!onSetup}
-                className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                <Settings className="h-4 w-4" />
-                Publish now
-              </button>
-            )}
+            </div>
           </div>
-        </div>
+        </CollapsibleContent>
       </div>
-    </div>
+    </Collapsible>
   );
 }

@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -18,7 +19,7 @@ export const Group = {
 /**
  * Which phase the step belongs to: connect (the service app the connection authenticates with) or cross_app_access (the AI agent).
  */
-export type Group = ClosedEnum<typeof Group>;
+export type Group = OpenEnum<typeof Group>;
 
 /**
  * Stable step identifier.
@@ -35,12 +36,13 @@ export const IdentityProviderConnectionChecklistItemKey = {
   LinkAgentApp: "link_agent_app",
   ActivateAgentApp: "activate_agent_app",
   RecordAiAgent: "record_ai_agent",
+  AddAgentPublicKey: "add_agent_public_key",
   FirstResourceConnection: "first_resource_connection",
 } as const;
 /**
  * Stable step identifier.
  */
-export type IdentityProviderConnectionChecklistItemKey = ClosedEnum<
+export type IdentityProviderConnectionChecklistItemKey = OpenEnum<
   typeof IdentityProviderConnectionChecklistItemKey
 >;
 
@@ -57,7 +59,7 @@ export type IdentityProviderConnectionChecklistItem = {
    */
   description: string;
   /**
-   * Sub-steps, in order. Empty when the description says it all.
+   * Supporting lines under the description: ordered sub-steps for the public-key step, otherwise notes or the values to enter. Empty when the description says it all.
    */
   details: Array<string>;
   /**
@@ -75,13 +77,13 @@ export type IdentityProviderConnectionChecklistItem = {
 };
 
 /** @internal */
-export const Group$inboundSchema: z.ZodMiniEnum<typeof Group> = z.enum(Group);
+export const Group$inboundSchema: z.ZodMiniType<Group, unknown> = openEnums
+  .inboundSchema(Group);
 
 /** @internal */
 export const IdentityProviderConnectionChecklistItemKey$inboundSchema:
-  z.ZodMiniEnum<typeof IdentityProviderConnectionChecklistItemKey> = z.enum(
-    IdentityProviderConnectionChecklistItemKey,
-  );
+  z.ZodMiniType<IdentityProviderConnectionChecklistItemKey, unknown> = openEnums
+    .inboundSchema(IdentityProviderConnectionChecklistItemKey);
 
 /** @internal */
 export const IdentityProviderConnectionChecklistItem$inboundSchema:

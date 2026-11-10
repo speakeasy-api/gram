@@ -23,9 +23,12 @@ var _ = Service("chat", func() {
 			security.ChatSessionsTokenPayload()
 			Attribute("search", String, "Search query (searches chat ID, user ID, user name, and title)")
 			Attribute("external_user_id", String, "Filter by external user ID")
-			Attribute("user_id", String, "Filter by Gram user ID")
+			Attribute("user_id", String, "Filter by Speakeasy user ID")
 			Attribute("source", String, "Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.")
 			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
+				Format(FormatUUID)
+			})
+			Attribute("agent_id", String, "Filter to chats produced by this agent (the agent principal recorded on the session at capture)", func() {
 				Format(FormatUUID)
 			})
 			Attribute("source_kind", String, "When set with assistant_id, list only that assistant's threads whose source_kind matches this value (e.g. 'setup' for onboarding threads). Empty for no filter.")
@@ -65,6 +68,9 @@ var _ = Service("chat", func() {
 				Enum("asc", "desc")
 				Default("desc")
 			})
+			Attribute("pinned_first", Boolean, "List pinned chats before unpinned ones, then apply sort_by and sort_order within each group", func() {
+				Default(false)
+			})
 		})
 
 		Result(ListChatsResult)
@@ -76,6 +82,7 @@ var _ = Service("chat", func() {
 			Param("user_id")
 			Param("source")
 			Param("assistant_id")
+			Param("agent_id")
 			Param("source_kind")
 			Param("exclude_source_kind")
 			Param("has_risk")
@@ -88,6 +95,7 @@ var _ = Service("chat", func() {
 			Param("offset")
 			Param("sort_by")
 			Param("sort_order")
+			Param("pinned_first")
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()
@@ -165,6 +173,34 @@ var _ = Service("chat", func() {
 		Meta("openapi:operationId", "getWorkUnitsTrend")
 		Meta("openapi:extension:x-speakeasy-name-override", "getWorkUnitsTrend")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkUnitsTrend", "type": "query"}`)
+	})
+
+	Method("loadChatOverview", func() {
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ChatSessionsToken)
+		Security(security.ByKey, security.ProjectSlug, func() { Scope("producer") })
+		Description("Load authorized chat overview metadata by exact ID without reading messages or recording a transcript-open audit event.")
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+			security.ByKeyPayload()
+			Attribute("id", String, "The ID of the chat")
+			Required("id")
+		})
+		Result(ChatOverview)
+		HTTP(func() {
+			GET("/rpc/chat.loadOverview")
+			Param("id")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "loadChatOverview")
+		Meta("openapi:extension:x-speakeasy-name-override", "loadOverview")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LoadChatOverview", "type": "query"}`)
 	})
 
 	Method("loadChat", func() {
@@ -455,6 +491,44 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatSources", "type": "query"}`)
 	})
 
+	Method("countByUser", func() {
+		Description("Count agent sessions per user for a time range. Uses the same population and visibility scoping as listChats, so each user's count matches listChats filtered to that user and the total matches the unfiltered listChats total.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+			Attribute("from", String, "Count chats last active after this timestamp (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Count chats created before this timestamp (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("limit", Int, "Maximum number of users to return", func() {
+				Default(10)
+				Minimum(1)
+				Maximum(100)
+			})
+		})
+
+		Result(CountChatsByUserResult)
+
+		HTTP(func() {
+			GET("/rpc/chat.countByUser")
+			Param("from")
+			Param("to")
+			Param("limit")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "countChatsByUser")
+		Meta("openapi:extension:x-speakeasy-name-override", "countByUser")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CountChatsByUser", "type": "query"}`)
+	})
+
 	Method("listSessionLinks", func() {
 		Description("List session-lineage links touching the given chats (session portability). A link records that a session was moved to another harness; the child side is present when the continuation's session id was known at move time. Returns every link where a requested chat is either the parent or the child, honoring the same visibility scoping as listChats.")
 
@@ -511,17 +585,17 @@ var WorkUnitsTrendResult = Type("WorkUnitsTrendResult", func() {
 })
 
 var ChatSessionLink = Type("ChatSessionLink", func() {
-	Attribute("parent_chat_id", String, "Chat id of the session the move originated from. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.", func() {
+	Attribute("parent_chat_id", String, "Chat id of the parent session in this relationship. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("child_chat_id", String, "Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.", func() {
+	Attribute("child_chat_id", String, "Chat id of the child session in this relationship. Absent when its session id was unknowable when the relationship was recorded (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("parent_title", String, "Title of the parent chat, when it has been captured and titled and the caller's visibility scope can read it.")
 	Attribute("child_title", String, "Title of the child chat, when it has been captured and titled and the caller's visibility scope can read it.")
 	Attribute("parent_captured", Boolean, "Whether the parent exists as a captured chat the caller can read, i.e. whether the parent side is navigable.")
 	Attribute("child_captured", Boolean, "Whether the continuation exists as a captured chat the caller can read, i.e. whether the child side is navigable.")
-	Attribute("kind", String, "Link kind. Currently always 'move'.")
+	Attribute("kind", String, "Link kind: move for continuations, recall for recalled context, or subagent for a helper session.")
 	Attribute("target_harness", String, "Harness the session was moved to (e.g. cursor, codex, claude-code).")
 	Attribute("source_surface", String, "Harness the session originated in, when known.")
 	Attribute("actor_email", String, "Email of the person who initiated the move, when known.")
@@ -541,6 +615,20 @@ var ListSessionLinksResult = Type("ListSessionLinksResult", func() {
 var ListSourcesResult = Type("ListSourcesResult", func() {
 	Attribute("sources", ArrayOf(String), "The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').")
 	Required("sources")
+})
+
+var ChatUserSessionCount = Type("ChatUserSessionCount", func() {
+	Attribute("user_id", String, "Speakeasy user ID. Empty for sessions with no Speakeasy user (external users, agent actors).")
+	Attribute("email", String, "The user's email, empty when unknown")
+	Attribute("display_name", String, "The user's display name, empty when unknown")
+	Attribute("count", Int, "Number of sessions; equals the chat.list total when filtered to this user")
+	Required("user_id", "email", "display_name", "count")
+})
+
+var CountChatsByUserResult = Type("CountChatsByUserResult", func() {
+	Attribute("users", ArrayOf(ChatUserSessionCount), "Users ranked by session count, highest first, truncated to the requested limit")
+	Attribute("total", Int, "Total sessions across all users; equals the unfiltered chat.list total for the same range")
+	Required("users", "total")
 })
 
 var ListChatsResult = Type("ListChatsResult", func() {
@@ -577,12 +665,19 @@ var SummarizeToolCallResult = Type("SummarizeToolCallResult", func() {
 })
 
 var ChatOverview = Type("ChatOverview", func() {
+	Attribute("slack_team_id", String, "Observed Slack workspace associated with this session.")
+	Attribute("slack_channel_id", String, "Observed Slack channel associated with this session.")
+	Attribute("slack_channel_name", String, "Observed Slack channel name as reported by the captured envelope.")
+	Attribute("participants", ArrayOf(ChatParticipant), "Distinct observed conversation participants across the session.")
 	Attribute("id", String, "The ID of the chat")
 	Attribute("title", String, "The title of the chat")
 	Attribute("user_id", String, "The ID of the user who created the chat")
 	Attribute("external_user_id", String, "The ID of the external user who created the chat")
 	Attribute("assistant_id", String, "The ID of the assistant that produced this chat, if any")
 	Attribute("assistant_name", String, "The name of the assistant that produced this chat, if any")
+	Attribute("assistant_agent_id", String, "The ID of the agent the assistant acts as, when the assistant has a dedicated agent identity")
+	Attribute("agent_id", String, "The ID of the agent that produced this session, recorded from the authenticated actor at capture. Set for sessions an agent drove directly, such as a channel session, which has no assistant record.")
+	Attribute("agent_name", String, "The current name of the agent that produced this session. Absent when the agent has since been deleted, in which case agent_id is still reported.")
 	Attribute("num_messages", Int, "The number of messages in the chat")
 	Attribute("source", String, "The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)")
 	Attribute("originating_client", String, "The supported client that originated a chat routed through the source, when known")
@@ -615,6 +710,15 @@ var ChatOverview = Type("ChatOverview", func() {
 	})
 
 	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
+})
+
+var ChatParticipant = Type("ChatParticipant", func() {
+	Attribute("provider", String, "Directory provider that identifies this conversation participant.")
+	Attribute("provider_user_id", String, "Provider identity observed in the message envelope.")
+	Attribute("provider_team_id", String, "Workspace resolved from the organization directory, when unambiguous.")
+	Attribute("user_id", String, "Explicitly mapped Speakeasy person at capture time; this attribution grants no permissions.")
+	Attribute("display_name", String, "Directory display name at capture time.")
+	Required("provider", "provider_user_id")
 })
 
 var Chat = Type("Chat", func() {
@@ -688,6 +792,7 @@ var ChatMessage = Type("ChatMessage", func() {
 	Attribute("prompt_id", String, "The agent prompt/turn ID associated with this message, when available.")
 	Attribute("user_id", String, "The ID of the user who created the message")
 	Attribute("external_user_id", String, "The ID of the external user who created the message")
+	Attribute("participants", ArrayOf(ChatParticipant), "Observed per-message conversation participants, independent of message ownership.")
 	Attribute("created_at", String, func() {
 		Description("When the message was created.")
 		Format(FormatDateTime)

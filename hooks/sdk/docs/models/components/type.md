@@ -1,6 +1,6 @@
 # Type
 
-Canonical Gram hook event type.
+Canonical Speakeasy hook event type.
 
 ## Example Usage
 
@@ -30,3 +30,4 @@ value := components.TypeSessionStarted
 | `TypeUsageReported`        | usage.reported             |
 | `TypeSkillActivated`       | skill.activated            |
 | `TypeNotificationReported` | notification.reported      |
+| `TypeClientDeliveryFailed` | client.delivery_failed     |

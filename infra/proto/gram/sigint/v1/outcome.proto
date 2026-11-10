@@ -1,0 +1,167 @@
+edition = "2024";
+
+package gram.sigint.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1;sigintv1";
+
+// Outcome records why one sensor's terminal evaluation of one source event
+// produced no Reading. Readings and outcomes together account for every sensor
+// decision the evaluator made, so coverage counts them instead of dropping them.
+// Retryable failures publish nothing: redelivery decides them later.
+// Delivery and evaluation are at-least-once, and an outcome shares its logical
+// identity with the reading the same sensor and event would produce, so storage
+// consumers choose the latest attempt across both topics.
+// Topic schemas are self-contained, so the nested context messages mirror
+// Reading's field for field. Field numbers match Reading where fields correspond.
+message Outcome {
+  // Mirrors Reading.Actor: actor attribution copied from the consumed source event.
+  message Actor {
+    // Speakeasy user ID attributed to the source event, not billing allocation.
+    string user_id = 1;
+    // Opaque user ID reported by the source system, interpreted within
+    // organization_id and source.
+    string external_user_id = 2;
+    // Actor email explicitly observed by ingestion.
+    string user_email = 3;
+  }
+  // Mirrors Reading.Account: the external AI account used for the source workload.
+  message Account {
+    // UUID of Speakeasy's user_accounts record representing the external AI account.
+    string user_account_id = 1;
+    // Ingestion-time classification: "team" or "personal".
+    string account_type = 2;
+    // External account billing: "metered", "flat_rate" or "unknown".
+    string billing_mode = 3;
+  }
+  // Mirrors Reading.Event: stable reference to the evaluated source event.
+  message Event {
+    // Stable source namespace, e.g. "conversation.message".
+    string kind = 1;
+    // Producer-assigned immutable logical event identity, unique within tenant
+    // and kind. Opaque: it need not be a UUID. Not a Pub/Sub delivery ID.
+    string id = 2;
+    // UTC RFC3339Nano event time, preserved across attempts so time-partitioned
+    // storage converges readings and outcomes in the same partition.
+    string occurred_at = 3;
+    oneof context {
+      ConversationMessage conversation_message = 4;
+      ToolCall tool_call = 5;
+    }
+  }
+  // Mirrors Reading.ConversationMessage. Event.id is the message UUID.
+  message ConversationMessage {
+    enum Role {
+      ROLE_UNSPECIFIED = 0;
+      ROLE_USER = 1;
+      ROLE_ASSISTANT = 2;
+    }
+    // Speakeasy conversation UUID, not the source system's session identifier.
+    string conversation_id = 1;
+    Role role = 2;
+    int32 generation = 3;
+    int64 sequence = 4;
+    string capture_kind = 5;
+    string original_message_id = 6;
+  }
+  // Mirrors Reading.ToolCall.
+  message ToolCall {
+    string tool_name = 1;
+    // Protocol call ID, scoped to its originating session/connection.
+    string tool_call_id = 2;
+    // Speakeasy MCP server UUID when the execution belongs to an MCP server.
+    string mcp_server_id = 3;
+  }
+  // Mirrors Reading.Input: classifier input supplied for this sensor.
+  message Input {
+    // Configured message context: "single_message" or "sliding_window".
+    string strategy = 1;
+    // Configured message count including the target; 1 for single_message.
+    int32 requested_message_count = 2;
+    // Messages supplied including the target.
+    int32 message_count = 3;
+    // The content budget excluded available history.
+    bool truncated = 4;
+  }
+
+  // Why the sensor has no answer for the event.
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    // The sensor's match expression excluded the event.
+    STATUS_NOT_APPLICABLE = 1;
+    // The sensor's definition is incomplete, so it cannot be evaluated.
+    STATUS_DRAFT = 2;
+    // Evaluation failed permanently; failure_reason says why.
+    STATUS_FAILED = 3;
+  }
+
+  // UUIDv5 identity of tenant, trigger, manual run when present, event kind,
+  // immutable event ID and sensor ID.
+  // Equal to the Reading.id of an answered attempt for the same sensor and event.
+  string id = 1;
+  // Fresh UUID for a logical event evaluation, shared by its readings and outcomes.
+  // A retry gets a new attempt ID even when the logical reading ID is unchanged.
+  string evaluation_attempt_id = 2;
+  // Speakeasy organization owning the source event and evaluation.
+  string organization_id = 3;
+  // Speakeasy project UUID owning the source event and sensor configuration.
+  string project_id = 4;
+  Event event = 5;
+  // Speakeasy sensor UUID; stable across display-name, slug and definition edits.
+  string sensor_id = 6;
+  // Sensor slug observed during evaluation.
+  string sensor_slug = 7;
+  string evaluated_at = 8; // UTC RFC3339Nano decision time.
+  // Same definition fingerprint as Reading.definition_hash. Empty for a draft,
+  // whose incomplete definition has no fingerprint.
+  string definition_hash = 9;
+  // Model requested for classification. Empty when classification did not run.
+  string configured_model = 10;
+  // Reported models for the whole logical event evaluation. Empty when
+  // classification did not run.
+  repeated string models = 11;
+  // Version of the sigint and classifier compilation logic. Empty when
+  // classification did not run.
+  string compiler_version = 12;
+  // Identity associated with the source event, preserved as observed at ingestion.
+  Actor actor = 13;
+  // Explicit usage allocation, as for Reading.billing_user_id. Absence means
+  // unassigned; consumers must not fall back to actor or an account owner.
+  string billing_user_id = 14;
+  // Canonical ingestion source; namespaces the external actor identity.
+  string source = 15;
+  // Source-session AI account context, preserved from the ingestion snapshot.
+  Account account = 16;
+  // Speakeasy assistant UUID associated with the workload, supplied by the producer.
+  string assistant_id = 17;
+  // Historical ingestion marker, not Pub/Sub redelivery.
+  bool replayed = 18;
+  // Never STATUS_UNSPECIFIED.
+  Status status = 19;
+  // Bounded snake_case evaluator reason, e.g. "classifier_rejected" or
+  // "content_too_large". Set only for STATUS_FAILED. Never contains message
+  // content, classifier output or credentials.
+  string failure_reason = 20;
+  reserved 21;
+  // Inference transport used for classification. Empty when classification did not run.
+  string provider = 22;
+  // Customer-defined labels captured with this evaluation, as for Reading.attributes.
+  map<string, string> attributes = 23;
+  // Classifier input supplied for this sensor in this attempt. Absent when the
+  // decision came before input was resolved.
+  Input input = 24;
+
+  // Required evaluation trigger: "stream" or "manual". Immutable across attempts.
+  string trigger_kind = 25;
+  // Nonzero UUID for a manual run. Absent for streaming evaluations.
+  // Request retries reuse the run ID and intentional new runs allocate another.
+  string run_id = 26;
+  // Required immutable UTC RFC3339Nano logical request time, shared with Reading.
+  // Preserved across attempts so both topics replace rows in the same partition.
+  string evaluation_requested_at = 27;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: { seconds: 345600 /* 4 days */ }
+  };
+}

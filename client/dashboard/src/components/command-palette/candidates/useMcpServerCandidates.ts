@@ -1,0 +1,165 @@
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
+import {
+  invalidateMcpServerQueries,
+  mcpServerVisibilityToast,
+  mcpServerVisibilityUpdateForm,
+} from "@/lib/mcp-server-visibility";
+import { mcpServerRouteParam } from "@/lib/sources";
+import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { useRoutes } from "@/routes";
+import {
+  listedMcpServers,
+  mcpServerDisplayName,
+} from "@/components/mcp/mcp-server-kind";
+import type {
+  McpServer,
+  McpServerVisibility,
+} from "@gram/client/models/components/mcpserver.js";
+import { buildGetMcpServerQuery } from "@gram/client/react-query/getMcpServer.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { toast } from "sonner";
+import type { LauncherCandidate, Verb } from "./types";
+
+const GROUP = "MCP Servers";
+
+function detailFor(server: McpServer): string {
+  return server.visibility === "disabled"
+    ? "MCP server · disabled"
+    : "MCP server · enabled";
+}
+
+function verbsFor(server: McpServer, canWrite: boolean): Verb[] {
+  if (!canWrite) return ["open"];
+  return ["open", server.visibility === "disabled" ? "enable" : "disable"];
+}
+
+/**
+ * MCP server candidates, one per /mcp listing row, each opening its server page; enabling a hosted server opens that page too.
+ *
+ * Verbs are gated per server (`hasScope("mcp:write", <grant resource>)`),
+ * the same check the server's own pages apply, so a grant scoped to some
+ * servers never attaches enable/disable to the others. The grant resource is
+ * the toolset id for a hosted server and the mcp_servers row id otherwise.
+ */
+export function useMcpServerCandidates({
+  enabled,
+}: {
+  enabled: boolean;
+}): LauncherCandidate[] {
+  const routes = useRoutes();
+  const queryClient = useQueryClient();
+  const client = useSdkClient();
+  const { hasScope } = useRBAC();
+  const gramProject = useProjectSlugForRequests();
+  // Keyed by project so caches never cross projects; a failed list yields no candidates.
+  const { data: mcpServersData } = useMcpServers({ gramProject }, undefined, {
+    enabled,
+    throwOnError: false,
+  });
+  const { mutateAsync: updateMcpServer } = useUpdateMcpServerMutation();
+
+  return useMemo(() => {
+    const servers = listedMcpServers(mcpServersData?.mcpServers ?? []);
+    // A hosted server is granted under its toolset id, not its wrapper row's
+    // (the server resolves the grant the same way: grantResourceID in
+    // server/internal/mcpservers/impl.go), so that is the id to check.
+    const canWrite = (server: McpServer) =>
+      hasScope("mcp:write", server.toolsetId ?? server.id);
+
+    // `offerUndo` is false for the undo itself, so the toasts do not loop.
+    const applyVisibility = async (
+      server: McpServer,
+      visibility: McpServerVisibility,
+      offerUndo: boolean,
+    ) => {
+      let previous: McpServerVisibility = server.visibility;
+      try {
+        // The update replaces the whole record, so it is built from the row
+        // as it is now rather than from the cached one the list rendered
+        // (the same refetch the server's Danger Zone makes), so a stale
+        // cache never overwrites configuration changed elsewhere.
+        const latest = await queryClient.fetchQuery({
+          ...buildGetMcpServerQuery(client, { id: server.id }),
+          staleTime: 0,
+        });
+        previous = latest.visibility;
+        if (latest.visibility !== visibility) {
+          await updateMcpServer({
+            request: {
+              updateMcpServerForm: mcpServerVisibilityUpdateForm(
+                latest,
+                visibility,
+              ),
+            },
+          });
+        }
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to update MCP server",
+        );
+        throw error;
+      }
+      // The toast comes before the cache refresh, and never waits on it: the
+      // update has already landed, so a sibling query that is slow to refetch
+      // or fails outright must not delay or swallow the only confirmation the
+      // user gets — which is also the only place Undo is offered.
+      // Undo restores the visibility the server actually had, which is not
+      // always the opposite verb: disabling a public server and undoing it
+      // must put it back to public, not to private.
+      toast.success(
+        mcpServerVisibilityToast(visibility),
+        offerUndo && previous !== visibility
+          ? {
+              action: {
+                label: "Undo",
+                onClick: () => {
+                  // applyVisibility toasts its own failure and rethrows, so
+                  // the rejection is consumed here rather than surfacing as
+                  // an unhandled one.
+                  void applyVisibility(server, previous, false).catch(() => {});
+                },
+              },
+            }
+          : undefined,
+      );
+      void invalidateMcpServerQueries(queryClient).catch(() => {});
+    };
+
+    const setVisibility = (server: McpServer, verb: Verb) =>
+      applyVisibility(server, verb === "enable" ? "private" : "disabled", true);
+
+    return servers.map(({ server }): LauncherCandidate => {
+      return {
+        id: `mcp:${server.id}`,
+        kind: "mcp_server",
+        title: mcpServerDisplayName(server),
+        detail: detailFor(server),
+        keywords: [
+          "mcp",
+          server.slug,
+          server.platformEndpointSlug,
+          server.toolset?.slug,
+          server.id,
+        ].filter((keyword): keyword is string => !!keyword),
+        verbs: verbsFor(server, canWrite(server)),
+        icon: "network",
+        group: GROUP,
+        run: (verb) => {
+          // Enabling a hosted server goes through its page's enable dialog and free-tier gate.
+          const opensServerPage =
+            verb === "enable" && standsInForToolset(server);
+          if (!opensServerPage && (verb === "enable" || verb === "disable")) {
+            return setVisibility(server, verb);
+          }
+          routes.mcp.details.overview.goTo(mcpServerRouteParam(server));
+        },
+      };
+    });
+  }, [mcpServersData, hasScope, routes, queryClient, client, updateMcpServer]);
+}

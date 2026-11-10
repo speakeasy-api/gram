@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,6 +24,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
+	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -52,12 +55,14 @@ func TestMain(m *testing.M) {
 }
 
 type chatTestInstance struct {
-	service   *chat.Service
-	sessions  *sessions.Manager
-	conn      *pgxpool.Pool
-	projectID uuid.UUID
-	orgID     string
-	assets    assets.BlobStore
+	service     *chat.Service
+	sessions    *sessions.Manager
+	conn        *pgxpool.Pool
+	chConn      clickhouse.Conn
+	projectID   uuid.UUID
+	projectSlug string
+	orgID       string
+	assets      assets.BlobStore
 }
 
 // newTestChatService builds a chat service with RBAC enforcement.
@@ -105,19 +110,25 @@ func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.Com
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
 	billingClient := billing.NewStubClient(logger, tp)
 	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
-	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger())
+	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger()).
+		WithRiskFindings(chatfindings.New(conn, riskchrepo.New(chConn)))
 
 	return &chatTestInstance{
-		service:   svc,
-		sessions:  mgr,
-		conn:      conn,
-		projectID: project.ID,
-		orgID:     orgID,
-		assets:    assetStorage,
+		service:     svc,
+		sessions:    mgr,
+		conn:        conn,
+		chConn:      chConn,
+		projectID:   project.ID,
+		projectSlug: project.Slug,
+		orgID:       orgID,
+		assets:      assetStorage,
 	}
 }

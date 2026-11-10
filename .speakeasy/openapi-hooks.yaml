@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
-  title: Gram API Description
-  description: Gram is the tools platform for AI agents
+  title: Speakeasy API Description
+  description: Speakeasy is the tools platform for AI agents
   version: 0.0.1
 servers:
   - url: https://app.getgram.ai
@@ -327,9 +327,110 @@ components:
         - timeout
         - fault
       x-speakeasy-name-override: ServiceError
+    HookDeliveryFailureData:
+      type: object
+      properties:
+        arch:
+          type: string
+          description: CPU architecture of the device.
+          maxLength: 32
+        attempted_at:
+          type: string
+          description: RFC3339 time the failed send started, on the device clock.
+          format: date-time
+        attempts:
+          type: integer
+          description: Number of send attempts the client made.
+          format: int64
+        binary_version:
+          type: string
+          description: speakeasy-hooks binary version that made the attempt.
+          maxLength: 64
+        cause:
+          type: string
+          description: Failure class the hook sender observed. http means the control plane answered with a retryable status.
+          enum:
+            - dns
+            - tls
+            - timeout
+            - canceled
+            - connection
+            - unreadable-response
+            - unknown
+            - http
+        delivery_phase:
+          type: string
+          description: Whether a failed send was a live hook or a spool-drain replay.
+          enum:
+            - live
+            - drain
+        elapsed_ms:
+          type: integer
+          description: Wall time the client spent on the send across its attempts, in milliseconds.
+          format: int64
+        failed_event_type:
+          type: string
+          description: Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.
+          enum:
+            - session.started
+            - session.updated
+            - session.ended
+            - mcp.inventory
+            - prompt.submitted
+            - tool.requested
+            - tool.completed
+            - tool.failed
+            - assistant.responded
+            - assistant.thought
+            - usage.reported
+            - skill.activated
+            - notification.reported
+        failed_idempotency_key:
+          type: string
+          description: Idempotency key of the event that failed, so the report joins to the row its eventual replay produces.
+          maxLength: 256
+        gating:
+          type: boolean
+          description: Whether the send gated an agent action (a verdict was awaited) rather than observing one.
+        harness:
+          type: string
+          description: Coding agent harness the hook ran under.
+          maxLength: 64
+        harness_variant:
+          type: string
+          description: Harness variant, when the harness distinguishes one.
+          maxLength: 64
+        harness_version:
+          type: string
+          description: Harness version, when known.
+          maxLength: 64
+        os:
+          type: string
+          description: Operating system of the device.
+          maxLength: 32
+        session_id:
+          type: string
+          description: Session id of the event that failed.
+          maxLength: 256
+        spool_depth:
+          type: integer
+          description: Events waiting in the device's offline spool when the report was written.
+          format: int64
+        status_code:
+          type: integer
+          description: HTTP status of the final attempt, 0 when no response arrived.
+          format: int64
+      description: Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
+      required:
+        - failed_event_type
+        - delivery_phase
+        - cause
+        - attempted_at
     HookIngestData:
       type: object
       properties:
+        delivery_failure:
+          $ref: '#/components/schemas/HookDeliveryFailureData'
         mcp:
           $ref: '#/components/schemas/HookMCPData'
         mcp_attribution:
@@ -372,7 +473,7 @@ components:
           format: date-time
         type:
           type: string
-          description: Canonical Gram hook event type.
+          description: Canonical Speakeasy hook event type.
           enum:
             - session.started
             - session.updated
@@ -387,7 +488,8 @@ components:
             - usage.reported
             - skill.activated
             - notification.reported
-      description: Canonical Gram feature event.
+            - client.delivery_failed
+      description: Canonical Speakeasy feature event.
       required:
         - type
     HookIngestSession:
@@ -424,7 +526,7 @@ components:
         user_email:
           type: string
           description: Self-reported email of the developer on the emitting machine (device agent or provider account), used for attribution when the API key is shared org-wide.
-      description: Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
+      description: Metadata about the local hook adapter that translated a provider event into the Speakeasy hook contract.
       required:
         - adapter
     HookMCPAttributionEntry:
@@ -732,11 +834,15 @@ components:
       in: header
     chat_sessions_token_header_Gram-Chat-Session:
       type: http
-      description: Gram Chat Sessions token based auth.
+      description: Speakeasy Chat Sessions token based auth.
+      scheme: bearer
+    device_agent_token_header_Authorization:
+      type: http
+      description: Device-agent token from the workload assertion grant at /oauth/workload/device-agent/{organization_id}/token.
       scheme: bearer
     function_token_header_Authorization:
       type: http
-      description: Gram Functions token based auth.
+      description: Speakeasy Functions token based auth.
       scheme: bearer
     project_slug_header_Gram-Project:
       type: apiKey
@@ -751,10 +857,8 @@ components:
 tags:
   - name: killswitches
     description: Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.
-  - name: access
-    description: Manage roles, team member access control, and authorization challenge events.
   - name: agent
-    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
+    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. A headless device enrolled as a workload may call getPlugins with a device-agent token instead. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
   - name: agents
     description: Human-only management of first-class agent principals.
   - name: aiIntegrations
@@ -762,7 +866,7 @@ tags:
   - name: analytics
     description: Query agent session data by dataset and field, never by table or SQL. The catalog describe serves is the contract.
   - name: assets
-    description: Manages assets used by Gram projects.
+    description: Manages assets used by Speakeasy projects.
   - name: organizationAssets
     description: Manages organization-tier assets — files owned by an organization rather than a single project, such as remote identity provider logos.
   - name: assistantMemories
@@ -770,9 +874,11 @@ tags:
   - name: assistants
     description: Manage assistants and their runtime configuration.
   - name: auditlogs
-    description: Manages audit logs in Gram.
+    description: Manages audit logs in Speakeasy.
   - name: auth
     description: Managed auth for gram producers and dashboard.
+  - name: authClients
+    description: Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned. Changes are to typed auth configuration and take effect only where typed auth client resolution is enforced, which is being rolled out in stages. They revoke no upstream credentials and remove no existing upstream OAuth associations; elsewhere, including in shadow mode, existing upstream configuration keeps serving.
   - name: businessMemories
     description: Inspect and semantically search business memories.
   - name: chat
@@ -780,7 +886,9 @@ tags:
   - name: chatSessions
     description: Manages chat session tokens for client-side authentication
   - name: cliAuth
-    description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+    description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for an API key of the scope requested at authorize, which is the device agent's per-user key by default or the Speakeasy CLI's organization-wide producer key.
+  - name: dashboards
+    description: 'Dashboards: a project''s layouts of saved widgets. Any member can make one; editing someone else''s needs project write access.'
   - name: dataExports
     description: Manage project-scoped data export destinations and routes.
   - name: deployments
@@ -791,32 +899,36 @@ tags:
     description: Manage custom domains for gram.
   - name: environments
     description: Managing toolset environments.
-  - name: explore
-    description: 'Queries: the saved questions Explore keeps. Explore''s only server-side surface; everything it shows comes from the analytics service.'
   - name: externalCredentials
-    description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
+    description: Manage organization-level external credentials — how Speakeasy authenticates into a customer's AWS or GCP account.
   - name: externalKeys
-    description: Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.
+    description: Manage organization-level external keys — externally-managed AWS or GCP KMS keys Speakeasy signs with.
   - name: mcpRegistries
     description: External MCP registry operations
   - name: functions
     description: Endpoints for working with functions.
+  - name: hiddenMcpServers
+    description: MCP servers the signed-in user hid. Gateways leave hidden servers out of the user's tools and list them last on the consent page. Each user manages only their own list.
   - name: hooksServerNames
     description: Manages display name overrides for hooks servers.
   - name: hooks
     description: Receives hook events from coding assistants for tool usage observability.
   - name: identity
-    description: Resolves the identifiers Gram records activity under into a single identity.
+    description: Resolves the identifiers Speakeasy records activity under into a single identity.
   - name: identityProviderConnections
     description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
   - name: instances
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations
-    description: Explore third-party tools in Gram.
+    description: Explore third-party tools in Speakeasy.
+  - name: internalSessionIssuers
+    description: 'Manage the organization''s internal session issuer: the permanent issuer URI Speakeasy signs enterprise-managed authorization assertions with, and its signing keys.'
   - name: jsonWebKeySets
     description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys
     description: Managing system api keys.
+  - name: launcher
+    description: Rank command palette candidates by the intent behind the text the user typed.
   - name: litellm
     description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
   - name: mcpApproval
@@ -825,6 +937,8 @@ tags:
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
   - name: mcpMetadata
     description: Manages metadata for the MCP install page shown to users.
+  - name: registryDiscovery
+    description: 'Authenticated discovery-only preview. Current records only: no version history, incremental synchronization or mirror guarantees. Uses Speakeasy credentials, not generic-client OAuth. Discovery errors use the pinned standard error envelope; authorization uses Speakeasy security.'
   - name: mcpServers
     description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
   - name: metaMcp
@@ -835,60 +949,68 @@ tags:
     description: Manage an organization's private network ingress desired state.
   - name: oktaResourceConnections
     description: 'Okta resource connections per MCP server: what the organization administrator still has to do in the identity provider console, what they confirmed, and what the exchange path observed. Advisory only; the exchange path never consults it.'
+  - name: oktaServerSuggestions
+    description: 'MCP servers suggested from the organization''s Okta applications: catalog entries whose staff-curated Okta mapping matches a synced, assigned application. Administrators accept by creating the server through the usual remote MCP flow, or dismiss; dismissals are remembered per organization and audited.'
   - name: organizations
     description: Organization membership, invitations, and directory.
+  - name: orgEncryption
+    description: 'Manage the key encryption key that protects an organization''s data: Speakeasy-managed by default, or a customer-managed GCP KMS key.'
   - name: otel
     description: Receives OpenTelemetry signals from LLM providers and harnesses.
   - name: packages
-    description: Manages packages in Gram.
+    description: Manages packages in Speakeasy.
   - name: adminAssets
     description: Platform-admin management of platform-tier assets — files shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminChatAnalysis
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminExternalCredentials
-    description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
+    description: Platform-admin management of platform external_credentials — how Speakeasy authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformKillswitches
-    description: Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Gram session.
+    description: Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Speakeasy session.
   - name: adminOpenRouterKeys
     description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformMcp
-    description: Session-authenticated onboarding and lifecycle projection for the organization-level Gram Platform MCP.
+    description: Session-authenticated onboarding and lifecycle projection for the organization-level Speakeasy Platform MCP.
   - name: plugins
     description: Manage distributable plugin bundles of MCP servers and hooks.
   - name: features
     description: Manage product level feature controls.
   - name: projects
-    description: Manages projects in Gram.
+    description: Manages projects in Speakeasy.
   - name: remoteMcp
     description: Managing remote MCP servers.
   - name: organizationRemoteSessionClients
     description: Manage remote_session_client records from the organization-administrator surface — clients across every project in the caller's organization. client_secret_encrypted is never returned.
   - name: remoteSessionClients
-    description: Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.
+    description: Manage remote_session_client records — credentials Speakeasy uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.
   - name: organizationRemoteSessionIssuers
     description: Manage organization-level remote_session_issuer records — cross-project upstream Authorization Server identity records inherited by every project in the organization.
   - name: remoteSessionIssuers
-    description: Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.
+    description: Manage remote_session_issuer records — upstream Authorization Server identity records that Speakeasy talks to as an OAuth client.
   - name: adminRemoteSessions
     description: Platform-admin management of global remote_session_issuer / remote_session_client records — shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: organizationRemoteSessions
-    description: Organization-administrator visibility into remote_sessions Gram is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.
+    description: Organization-administrator visibility into remote_sessions Speakeasy is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.
   - name: remoteSessions
-    description: Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.
+    description: Operator visibility into remote_sessions Speakeasy is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.
   - name: resources
     description: Dashboard API for interacting with resources.
   - name: risk
     description: Manage risk analysis policies and view scan results.
+  - name: sigint
+    description: Manage project-scoped custom signals and sensors. Signals are reusable live definitions; sensors attach an ordered set of signals in multi-label, exclusive, or ordered-score mode.
   - name: skillEfficacy
     description: Manage organization-wide skill efficacy sampling settings.
   - name: skills
     description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
+  - name: slackDirectoryConnections
+    description: Manage organization-wide Slack workspace authorizations, independently of project runtime installations.
   - name: spendRules
     description: Manage budget rules, view budget events, and preview actor targeting.
   - name: telemetry
-    description: Fetch telemetry data for tools in Gram.
+    description: Fetch telemetry data for tools in Speakeasy.
   - name: templates
-    description: Manages re-usable prompt templates and higher-order tools for a project.
+    description: Manages re-usable prompt templates for a project.
   - name: tokenExchange
     description: 'Device-agent token exchange: trade an org-scoped install credential (an API key with the ''agent'' scope) plus a vouched user email for a long-lived, per-user API key scoped for the device agent.'
   - name: tools
@@ -908,14 +1030,22 @@ tags:
   - name: userSessionConsents
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
   - name: userSessionIssuersCimdClients
-    description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.'
+    description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Speakeasy curates, plus per-issuer custom document URLs.'
   - name: userSessionIssuers
-    description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
+    description: Manage user_session_issuer records — Speakeasy-side authorization-server configuration that issues user sessions for an MCP server.
   - name: organizationUserSessionIssuers
     description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
+  - name: gatewaySessions
+    description: Sessions authorized for a project gateway or the Organization Gateway. Issuer-scoped sessions may authorize several endpoints; resource-bound sessions are restricted to the selected endpoint. Server filters describe configured upstream associations, not historical usage.
+  - name: widgets
+    description: 'Widgets: Explore''s saved questions, each kept with the chart that draws it.'
+  - name: workloadIdentities
+    description: 'Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.'
   - name: variations
     description: Manage variations of tools.
+  - name: access
+    description: Manage roles, team member access control, and authorization challenge events.
   - name: external
     description: Endpoints for external services to interact with gram.

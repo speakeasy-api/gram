@@ -9,7 +9,6 @@ import {
 } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskPoliciesDeleteMutation } from "@gram/client/react-query/riskPoliciesDelete.js";
 import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoliciesUpdate.js";
-import { invalidateAllRiskPoliciesStatus } from "@gram/client/react-query/riskPoliciesStatus.js";
 import {
   ShieldCheck,
   ShieldOff,
@@ -307,7 +306,6 @@ export function ConfigurePoliciesStep({
 
   const invalidatePolicies = () => {
     void invalidateAllRiskListPolicies(queryClient);
-    void invalidateAllRiskPoliciesStatus(queryClient);
   };
 
   const createPolicyMutation = useRiskCreatePolicyMutation({
@@ -568,11 +566,6 @@ export function ConfigurePoliciesStep({
     : false;
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <ShieldCheck className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Configure policies"
       description="Pick what Speakeasy should flag or block in agent traffic. You can refine actions, message scopes, and individual rules any time in the Policy Center."
       onContinue={onComplete}
@@ -979,6 +972,7 @@ const ACTION_PILL_VARIANT: Record<
   quarantine: "destructive",
   warn: "warning",
   flag: "neutral",
+  require_approval: "warning",
   off: "neutral",
 };
 
@@ -987,6 +981,7 @@ const ACTION_PILL_LABEL: Record<ActionPillKind, string> = {
   quarantine: "Quarantine",
   warn: "Warn",
   flag: "Flag",
+  require_approval: "Require approval",
   off: "Off",
 };
 

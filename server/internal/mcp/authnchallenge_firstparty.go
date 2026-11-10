@@ -1,7 +1,10 @@
 package mcp
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -10,23 +13,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // HandleFirstPartyConnect is the chi handler at
-// `GET /mcp/{mcpSlug}/connect/first-party` on the toolset-keyed surface. It
+// `GET /mcp/{mcpSlug}/connect/first-party`. It
 // resolves the slug to a `/mcp`-keyed ResolvedMcpEndpoint and delegates to
 // ServeFirstPartyConnect — the dashboard's entry point for linking an
-// issuer-gated toolset's upstream sessions. /x/mcp registers the equivalent
-// via its mcp_endpoint-keyed adapter (see xmcp.Service.handleFirstPartyConnect).
-func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request) error {
+// issuer-gated server's upstream sessions.
+func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request) (retErr error) {
+	defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
 		return err
 	}
@@ -36,7 +43,7 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 // ServeFirstPartyConnect is the dashboard's entry point for establishing the
 // upstream remote_sessions an issuer-gated MCP server needs. It mints a
 // first-party authn challenge and bounces through the gram server's own IDP
-// login — the same flow a real MCP client runs via /x/mcp/{slug}/authorize —
+// login — the same flow a real MCP client runs via /mcp/{slug}/authorize —
 // rather than borrowing the dashboard's gram_session.
 //
 // This is deliberately decoupled from the dashboard session: the subject is
@@ -49,9 +56,38 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 // No ClientID/RedirectURI: a first-party challenge has no MCP client to grant
 // to or redirect back to. Once the user links every card on the consent page,
 // the flow is terminal and the page closes its dashboard-opened tab.
-func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+//
+// On a gateway, a `server` query parameter names the server to connect, and
+// the flow lands on that server's connect page. A gateway tool call links here
+// when a server cannot be reached without the user's sign-in. A code_reconnect
+// ticket pins the user and server and takes precedence over the server parameter.
+func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (retErr error) {
+	defer func() { retErr = s.firstPartyBrowserError(retErr) }()
+	if s.redirectToAuthorizationServer(w, r, endpoint) {
+		return nil
+	}
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
+	query := r.URL.Query()
+	if query.Get("code_reconnect") != "" && (query.Get("workload_reconnect") != "" || query.Get("binding_refresh_attempt") != "" || query.Get("reauthenticate_client_id") != "") {
+		return oops.E(oops.CodeBadRequest, nil, "conflicting connection requests")
+	}
+	reconnect, err := s.consumeWorkloadReconnect(r, endpoint)
+	if err != nil {
+		return err
+	}
+
+	codeReconnect, err := s.codeReconnectTicket(r, endpoint, false)
+	if err != nil {
+		return err
+	}
+	focusServer := r.URL.Query().Get("server")
+	if codeReconnect != nil {
+		focusServer = codeReconnect.Server
+	}
+	if len(focusServer) > maxFocusServerLength {
+		return oops.E(oops.CodeBadRequest, nil, "server is too long").LogError(ctx, logger)
+	}
 
 	csrfToken, err := generateOpaqueToken()
 	if err != nil {
@@ -61,11 +97,25 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	baseURL := s.BaseURLForRequest(r)
 	flowID := uuid.NewString()
 	challengeID := uuid.NewString()
+	attemptID := r.URL.Query().Get("binding_refresh_attempt")
+	if attemptID != "" {
+		if s.bindingRefresh == nil {
+			return oops.C(oops.CodeUnavailable)
+		}
+	}
+	reauthenticateClientID := uuid.Nil
+	if requested := r.URL.Query().Get("reauthenticate_client_id"); requested != "" {
+		parsed, err := uuid.Parse(requested)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "invalid reconnect client")
+		}
+		reauthenticateClientID = parsed
+	}
 	endpointRef, err := endpoint.EndpointRef(ctx, s.db, baseURL)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "capture OAuth endpoint authority").LogWarn(ctx, logger)
 	}
-	challengeState := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+	challengeState := AuthnChallengeState{ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 		Browser:    nil,
 		Federation: nil,
 
@@ -74,6 +124,8 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
 		AuthorizerUserID:         "",
 		AuthorizerImpersonated:   nil,
+		SignInID:                 nil,
+		FreshLoginForced:         false,
 		AgentAuthorizationTarget: nil,
 		Endpoint:                 endpointRef,
 		ClientID:                 "",
@@ -84,49 +136,146 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		CSRFToken:                csrfToken,
 
 		// Subject is stamped by HandleIDPCallback from authoritative IDP claims.
-		Subject:    nil,
-		CreatedAt:  time.Now(),
-		FirstParty: true,
+		Subject:                 nil,
+		CreatedAt:               time.Now(),
+		FirstParty:              true,
+		BindingRefreshAttemptID: attemptID,
+		ReauthenticateClientID:  reauthenticateClientID,
+		WorkloadReconnect:       reconnect,
+		CodeReconnect:           codeReconnect,
 		// Auto-connect has not run for a challenge this new.
-		AutoConnectDone: false,
+		AutoConnectDone:      false,
+		FocusServer:          focusServer,
+		ConnectPendingSignIn: query.Get("setup") == pendingSignInSetupStep,
+	}
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppFirstParty), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.FromRequest(r))
+	defer t.Finish(ctx)
+	// A federated login replaces this binding with its own before any cookie is sent.
+	browserCookie, err := s.bindFirstPartyBrowser(endpoint, &challengeState, time.Now())
+	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return oops.E(oops.CodeUnexpected, err, "bind consent browser").LogError(ctx, logger)
 	}
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
 	}
 
+	attempt := challengeState.connectionAttempt(endpoint)
+	t.Attach(attempt)
+	t.Consumed()
+	defer func() {
+		if retErr != nil && codeReconnect != nil {
+			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+		}
+	}()
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
+	s.connections.Start(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 
 	federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
 	if err != nil {
 		_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+		t.Refuse(ctx, federatedHappened(err))
 		failureCode, cause := federatedFailure(err)
 		return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
+	}
+	idpURL := federatedURL
+	if idpURL == nil {
+		http.SetCookie(w, browserCookie)
+		// A browser whose consent and IdP callback hosts differ proves both
+		// cookies through the handoff before it signs in.
+		if challengeState.Browser.Handoff == browserHandoffBootstrap {
+			var handoff string
+			handoff, err = firstPartyBrowserHandoffURL(endpoint, challengeState)
+			if err == nil {
+				idpURL, err = url.Parse(handoff)
+			}
+		} else {
+			idpURL, err = s.firstPartyIDPAuthorizationURL(ctx, endpoint, challengeState)
+		}
+		if err != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+	}
+	// Claim only after all validation and login setup succeeded, so a failed
+	// preparation does not consume the dashboard's one-time decision.
+	if codeReconnect != nil {
+		claimed, err := s.codeReconnectTicket(r, endpoint, true)
+		if err != nil {
+			t.Refuse(ctx, ticketClaimHappened(err))
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			return err
+		}
+		if claimed == nil || *claimed != *codeReconnect {
+			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			return oops.E(oops.CodeBadRequest, nil, "connection request changed; request a new link")
+		}
+	}
+	if attemptID != "" {
+		if err := s.bindingRefresh.Start(ctx, attemptID, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID); err != nil {
+			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return fmt.Errorf("start attachment refresh: %w", err)
+		}
 	}
 	if federatedURL != nil {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		http.Redirect(w, r, federatedURL.String(), http.StatusFound)
-		return nil
 	}
-	callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
+
+	logger.InfoContext(ctx, "started first-party connect flow", attr.SlogOAuthFlowID(flowID))
+	t.Continue()
+	http.Redirect(w, r, idpURL.String(), http.StatusFound)
+	return nil
+}
+
+// firstPartyIDPAuthorizationURL sends a first-party challenge's browser to sign
+// in, forcing a fresh login once a revoked sign-in restarted it.
+func (s *Service) firstPartyIDPAuthorizationURL(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (*url.URL, error) {
+	callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
-		return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
+		return nil, err
+	}
+	prompt := ""
+	if state.FreshLoginForced {
+		prompt = "login"
 	}
 	idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
 		CallbackURL:     callbackURL,
 		Scope:           "",
-		State:           challengeID,
+		State:           state.ID,
 		ScopesSupported: nil,
 		LoginHint:       "",
 		ScreenHint:      "",
+		Prompt:          prompt,
 	})
 	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
-		return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
+		return nil, fmt.Errorf("identity resolver: %w", err)
 	}
+	return idpURL, nil
+}
 
-	logger.InfoContext(ctx, "started first-party connect flow", attr.SlogOAuthFlowID(flowID))
-	http.Redirect(w, r, idpURL.String(), http.StatusFound)
-	return nil
+func (s *Service) SetBindingRefreshAttempts(attempts *remotesessions.BindingRefreshAttempts) {
+	s.bindingRefresh = attempts
+}
+
+// firstPartyBrowserError offers a dashboard recovery action only for a known
+// first-party entry point or a challenge loaded from trusted flow state.
+func (s *Service) firstPartyBrowserError(err error) error {
+	if err == nil {
+		return nil
+	}
+	err = oops.WithBrowserClient(err, "Speakeasy dashboard")
+	if s.siteURL == nil {
+		return fmt.Errorf("recover dashboard connection: %w", err)
+	}
+	return fmt.Errorf("recover dashboard connection: %w", oops.WithBrowserRecovery(err, &oauthui.RecoveryLink{
+		URL:   s.siteURL.JoinPath("@self").String(),
+		Label: "Return to dashboard",
+	}))
 }

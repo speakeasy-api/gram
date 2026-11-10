@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Interactive TUI over `wt status`: live boot states, per-worktree logs, multi-select remove"
 //MISE dir="{{ config_root }}"
@@ -17,8 +17,10 @@
 
 import { execFile as execFileCb, spawn } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import { promisify } from "node:util";
+import { createPRLookup, type PrInfo } from "./worktree-prs.mts";
 
 const execFile = promisify(execFileCb);
 
@@ -48,51 +50,18 @@ const strip = (s: string) => s.replace(ANSI_RE, "");
 const link = (text: string, url: string) =>
   `\x1b]8;;${url}\x07${text}\x1b]8;;\x07`;
 
-// Open PR per branch, fetched from `gh pr list` — one call maps the whole
-// repo, refreshed on a slow cadence (PRs churn far less than boot state).
-type PrInfo = { number: number; url: string; state: string };
-const prByBranch = new Map<string, PrInfo>();
+const lookupPRs = createPRLookup();
+let prByBranch = new Map<string, PrInfo>();
 let prLoaded = false;
-// open > merged > closed when a branch has several PRs (gh lists newest
-// first, so within the same state the newest wins).
-const PR_RANK: Record<string, number> = {
-  open: 0,
-  draft: 0,
-  merged: 1,
-  closed: 2,
-};
-async function fetchPRs(): Promise<void> {
+let prFetching = false;
+async function fetchPRs(rows: Row[]): Promise<void> {
+  if (prFetching) return;
+  prFetching = true;
   try {
-    const { stdout } = await execFile(
-      "gh",
-      [
-        "pr",
-        "list",
-        "--state",
-        "all",
-        "--json",
-        "number,url,headRefName,state,isDraft",
-        "--limit",
-        "200",
-      ],
-      { maxBuffer: 8 * 1024 * 1024 },
-    );
-    prByBranch.clear();
-    for (const pr of JSON.parse(stdout)) {
-      const state =
-        pr.state === "OPEN"
-          ? pr.isDraft
-            ? "draft"
-            : "open"
-          : pr.state.toLowerCase();
-      const existing = prByBranch.get(pr.headRefName);
-      if (existing && PR_RANK[existing.state] <= PR_RANK[state]) continue;
-      prByBranch.set(pr.headRefName, { number: pr.number, url: pr.url, state });
-    }
-  } catch {
-    /* gh missing or offline — column stays empty */
+    prByBranch = await lookupPRs(rows.map((row) => row.branch));
   } finally {
     prLoaded = true; // stop the loader either way
+    prFetching = false;
   }
 }
 
@@ -217,33 +186,67 @@ async function bootState(
   return "";
 }
 
+// `wt list` builds its URL from the per-branch `siteport` var, which a plain
+// `git checkout` inside the worktree leaves behind (falling back to :5173).
+// The port itself belongs to the worktree: `zero:remap-ports` writes it to
+// mise.local.toml, and the parker listens on it. Read it from there.
+function sitePort(wtPath: string): string | undefined {
+  try {
+    const toml = fs.readFileSync(path.join(wtPath, "mise.local.toml"), "utf8");
+    return /^\s*GRAM_SITE_PORT\s*=\s*"?(\d+)"?/m.exec(toml)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+function listening(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: "127.0.0.1", port });
+    const done = (up: boolean) => {
+      socket.destroy();
+      resolve(up);
+    };
+    socket.setTimeout(1000, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
 async function collect(): Promise<Row[]> {
   const { stdout } = await execFile(
     "wt",
     ["--config-set", "list.json-schema=1", "list", "--format", "json"],
     {
       maxBuffer: 16 * 1024 * 1024,
+      // A hung `wt list` would otherwise hold the single-flight refresh
+      // forever and silently freeze the table. Rejecting keeps the last good
+      // frame and lets polling resume.
+      timeout: 120_000,
     },
   );
   const list = JSON.parse(strip(stdout));
   const rows: Row[] = [];
   for (const item of list) {
     if (!item.url) continue;
+    const port = sitePort(item.path);
+    const url = port ? `https://localhost:${port}` : item.url;
+    const urlActive =
+      url === item.url ? !!item.url_active : await listening(Number(port));
     const boot = await bootState(item.path);
     let state: string;
-    if (boot === "booting") state = item.url_active ? "seeding" : "booting";
+    if (boot === "booting") state = urlActive ? "seeding" : "booting";
     else if (boot === "failed") state = "failed";
-    // Outranks url_active: a paused worktree's site port is held by the
+    // Outranks urlActive: a paused worktree's site port is held by the
     // parker (`mise run park`), which answers with a wake page, not the
     // dashboard.
     else if (boot === "paused") state = "paused";
-    else state = item.url_active ? "up" : "down";
+    else state = urlActive ? "up" : "down";
     rows.push({
       branch: item.branch,
       path: item.path,
       isCurrent: !!item.is_current,
-      url: item.url,
-      urlActive: !!item.url_active,
+      url,
+      urlActive,
       state,
       dirty: !!(
         item.working_tree &&
@@ -364,8 +367,9 @@ function paneFrame(
 // --- main --------------------------------------------------------------------
 
 async function run() {
+  let rows: Row[] = await collect();
   if (process.env["usage_once"] === "true" || !process.stdout.isTTY) {
-    const [rows] = await Promise.all([collect(), fetchPRs()]);
+    await fetchPRs(rows);
     for (const r of rows) {
       const pr = prByBranch.get(r.branch);
       console.log(
@@ -376,12 +380,15 @@ async function run() {
   }
 
   // PRs load in the background — first frame renders without the column
-  // filled, then it appears on the next draw.
-  void fetchPRs();
-  const prPoll = setInterval(() => void fetchPRs(), 60_000);
+  // filled, then it appears as soon as the lookup finishes. `draw` is
+  // declared below; the arrow only runs after this function has defined it.
+  void fetchPRs(rows).then(() => draw());
+  const prPoll = setInterval(
+    () => void fetchPRs(rows).then(() => draw()),
+    60_000,
+  );
   prPoll.unref?.();
 
-  let rows: Row[] = await collect();
   let cursor = 0;
   const selected = new Set<string>();
   let view: "list" | "logs" | "remove" = "list";
@@ -551,23 +558,62 @@ async function run() {
     }
   };
 
+  // At most one `wt list` at a time. Listing can take far longer than the
+  // poll interval (each worktree runs `git diff-tree --patch` for squash-merge
+  // detection), and overlapping runs slow each other down until they pile up
+  // into dozens of processes and gigabytes of memory. An explicit refresh
+  // requested mid-flight (post-remove) runs once afterwards instead of in
+  // parallel.
+  let refreshing = false;
+  let refreshQueued = false;
   const refresh = async () => {
+    if (refreshing) {
+      refreshQueued = true;
+      return;
+    }
+    refreshing = true;
     try {
-      rows = await collect();
-      if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1);
-      for (const b of selected)
-        if (!rows.some((r) => r.branch === b)) selected.delete(b);
-    } catch {
-      /* keep last good frame; wt can be busy during removals */
+      do {
+        refreshQueued = false;
+        try {
+          rows = await collect();
+          if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1);
+          for (const b of selected)
+            if (!rows.some((r) => r.branch === b)) selected.delete(b);
+        } catch {
+          /* keep last good frame; wt can be busy during removals */
+        }
+        draw();
+      } while (refreshQueued);
+    } finally {
+      refreshing = false;
     }
-    // Keep the services pane live: refetch on the same cadence as the list.
-    if (view === "logs" && logMode === "services" && logTarget) {
-      void fetchServiceLogs(logTarget);
-    }
-    draw();
   };
 
-  const poll = setInterval(refresh, 2000);
+  // Poll 2s after the previous refresh settles rather than on a fixed
+  // interval, so a slow `wt list` stretches the cadence instead of running
+  // back to back. A tick that lands mid-refresh is dropped, not queued.
+  let poll: ReturnType<typeof setTimeout>;
+  const schedulePoll = () => {
+    poll = setTimeout(async () => {
+      try {
+        if (!refreshing) await refresh();
+      } finally {
+        schedulePoll();
+      }
+    }, 2000);
+  };
+  schedulePoll();
+
+  // Log panes stay live on their own cheap tick, independent of the slow
+  // `wt list` cycle: the services pane refetches pitchfork logs (single-flight
+  // via serviceFetching, and it draws when done), the boot pane re-reads
+  // stack.log on draw.
+  const logTick = setInterval(() => {
+    if (view !== "logs" || !logTarget) return;
+    if (logMode === "services") void fetchServiceLogs(logTarget);
+    else draw();
+  }, 2000);
 
   const startRemove = async (branches: string[]) => {
     view = "remove";
@@ -646,11 +692,16 @@ async function run() {
           : c.red(`✗ exited ${code} — press any key to go back`),
       );
       selected.clear();
-      // Success needs no reading — return to the list on the next refresh.
+      // Success needs no reading — return to the list shortly. Drop the
+      // removed rows right away rather than waiting a full `wt list` cycle,
+      // so they can't be re-selected for another (failing) remove meanwhile.
       // Failures stay up until a keypress so the error is actually seen.
       if (code === 0) {
+        rows = rows.filter((r) => !branches.includes(r.branch));
+        if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1);
         setTimeout(() => {
           if (view === "remove" && !removeRunning) view = "list";
+          draw();
           void refresh();
         }, 1500);
       } else {
@@ -664,7 +715,8 @@ async function run() {
   process.stdin.on("data", (buf: Buffer) => {
     const k = buf.toString();
     if (k === "\x03" || (k === "q" && !confirmRemove)) {
-      clearInterval(poll);
+      clearTimeout(poll);
+      clearInterval(logTick);
       process.exit(0);
     }
     if (confirmRemove) {

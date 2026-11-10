@@ -17,6 +17,10 @@ const mocks = vi.hoisted(() => ({
     impersonatorEmail: "",
   },
   scope: null as string | null,
+  target: {
+    url: "https://api.example/mcp/enabled-alternate",
+    userSessionIssuerId: "selected-issuer",
+  },
   list: vi.fn(),
   candidates: vi.fn(),
   listRemoteSessions: vi.fn(),
@@ -44,7 +48,11 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/components/dev-toolbar-utils", () => ({
   getRBACScopeOverrideHeader: () => mocks.scope,
 }));
-vi.mock("@/hooks/useToolsetUrl", () => ({ useInternalMcpUrl: () => "" }));
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  firstPartyConnectUrl: (url: string | undefined) =>
+    url ? `${url}/connect/first-party` : undefined,
+}));
 
 const agent = (id: string, authorize = true, lifecycle = "active") => ({
   id,
@@ -87,11 +95,18 @@ beforeEach(() => {
     impersonatorEmail: "",
   };
   mocks.scope = null;
+  // agents.list is paginated, so it resolves to pages, not to agents.
   mocks.list.mockResolvedValue([
-    agent("first"),
-    agent("second"),
-    agent("denied", false),
-    { ...agent("not-owned"), ownerUserId: "another-user" },
+    {
+      result: {
+        items: [
+          agent("first"),
+          agent("second"),
+          agent("denied", false),
+          { ...agent("not-owned"), ownerUserId: "another-user" },
+        ],
+      },
+    },
   ]);
   mocks.candidates.mockResolvedValue([
     { id: "session", remoteSessionClientId: "client", scopes: [] },
@@ -201,7 +216,7 @@ describe("AttachedUserSessions container", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
   });
   it("displays the canonical identity of a binding from a compatible source issuer", async () => {
-    mocks.list.mockResolvedValue([agent("first")]);
+    mocks.list.mockResolvedValue([{ result: { items: [agent("first")] } }]);
     mocks.candidates.mockResolvedValue([]);
     mocks.bindings.mockResolvedValue([
       {
@@ -215,7 +230,7 @@ describe("AttachedUserSessions container", () => {
           userSessionIssuerId: "source-issuer",
           upstreamDisplayName: "Example upstream user",
           upstreamEmail: "upstream@example.test",
-          subjectDisplayName: "Gram subject",
+          subjectDisplayName: "Speakeasy subject",
         },
       },
     ]);
@@ -227,11 +242,11 @@ describe("AttachedUserSessions container", () => {
       }),
     ).toBeTruthy();
     expect(
-      screen.queryByText(/Gram subject|source-issuer|target-issuer/),
+      screen.queryByText(/Speakeasy subject|source-issuer|target-issuer/),
     ).toBeNull();
   });
   it("does not label a tombstone as active when a new grant reuses its session ID", async () => {
-    mocks.list.mockResolvedValue([agent("first")]);
+    mocks.list.mockResolvedValue([{ result: { items: [agent("first")] } }]);
     mocks.bindings.mockResolvedValue([
       {
         id: "binding",
@@ -261,7 +276,9 @@ describe("AttachedUserSessions container", () => {
     expect(mocks.attach).not.toHaveBeenCalled();
   });
   it("keeps unavailable existing bindings detachable", async () => {
-    mocks.list.mockResolvedValue([agent("first", true, "disabled")]);
+    mocks.list.mockResolvedValue([
+      { result: { items: [agent("first", true, "disabled")] } },
+    ]);
     mocks.candidates.mockResolvedValue([]);
     mocks.bindings.mockResolvedValue([
       {
@@ -285,7 +302,9 @@ describe("AttachedUserSessions container", () => {
   });
   it("validates every selected agent before starting even earlier detach writes", async () => {
     const second = agent("second");
-    mocks.list.mockResolvedValue([agent("first"), second]);
+    mocks.list.mockResolvedValue([
+      { result: { items: [agent("first"), second] } },
+    ]);
     mocks.bindings.mockImplementation((id) =>
       Promise.resolve(
         id === "first"

@@ -3,7 +3,6 @@ packages:
   - sdks/*
   - ts-framework/*
   - ts-framework/create-function/*
-  - "!ts-framework/create-function/gram-template-*"
   - server
   - cli
   - tunnel
@@ -14,21 +13,32 @@ packages:
   - e2e
 
 catalog:
-  "@ai-sdk/react": ^4.0.100
+  "@ai-sdk/react": ^4.0.166
   "@cfworker/json-schema": ^4.1.1
-  "@modelcontextprotocol/sdk": ^1.30.0
+  "@modelcontextprotocol/sdk": ^1.32.0
   "@tailwindcss/vite": ^4.3.3
   "@tanstack/react-query": 5.102.8
   "@types/react": ^19.3.0
   "@types/react-dom": ^19.3.0
-  "@assistant-ui/react": ^0.15.18
+  "@assistant-ui/react": ^0.15.31
   "@vitejs/plugin-react": ^6.1.1
-  ai: ^7.0.97
+  ai: ^7.0.162
   "lucide-react": ^1.28.0
   typescript: 7.0.2
-  vite: ^8.3.0
+  vite: ^8.3.5
 
 autoInstallPeers: false
+
+# Without this, dashboard/admin vitest shares a @vitest/mocker built on the
+# functions workspace's @types/node 22 vite instead of its own 24 one.
+dedupePeerDependents: false
+
+# Preserve legacy Polar's Stripe dependencies alongside direct checkout's 7.0.0/10.1.0.
+packageExtensions:
+  "@polar-sh/checkout@0.4.3":
+    dependencies:
+      "@stripe/react-stripe-js": ^5.6.1
+      "@stripe/stripe-js": ^8.11.0
 
 minimumReleaseAge: 10080
 
@@ -37,22 +47,22 @@ minimumReleaseAgeExclude:
   - "@typescript/*"
   - "@oxfmt/*"
   - "oxfmt"
-  - "fast-uri"
   - "react-router"
   - "@chromatic-com/storybook"
 
 overrides:
-  # Keep assistant-ui's SDK dependencies aligned with the dashboard: newer AI
-  # stream chunks are not assignable to the older ChatTransport types.
-  ai: 7.0.97
-  "@ai-sdk/react": 4.0.100
+  ai: 7.0.162
+  "@ai-sdk/react": 4.0.166
   glob@>=10.0 <10.5.0: 10.5.0
-  fast-uri@<3.1.5: 3.1.5
+  fast-uri@<3.1.8: 3.1.8
+  # monaco-editor pins dompurify exactly; 3.4.15 has open XSS advisories.
+  # 3.4.17 also fixes GHSA-cg2g-xh64-v4q7 and GHSA-mrv2-3pqr-j5jr in 3.4.16.
+  dompurify@<3.4.17: 3.4.17
   # Radix sub-packages pin exact react-dismissable-layer versions, so mixed Radix
   # releases load multiple copies with separate layer-stack contexts — nested dismiss
   # layers then can't see each other (e.g. the filter sheet closing when dismissing a
   # dropdown inside it, DNO-393/AIS-168). Force one copy so all primitives share a stack.
-  "@radix-ui/react-dismissable-layer": 1.1.13
+  "@radix-ui/react-dismissable-layer": 1.2.1
   # Vite's optional Node types peer is runtime-irrelevant, but differing patch
   # versions mint separate Vite instances. TanStack Start checks its Vite
   # environment by identity, so keep the Vite peer set converged.
@@ -63,7 +73,7 @@ overrides:
   # distinct peer set — splitting the context and silently breaking chat
   # history loading (AGE-2977). Pin assistant-cloud's optional peer to a version
   # accepted by both runtime paths so core resolves with the same peer set.
-  assistant-cloud: 0.1.43
+  assistant-cloud: 0.2.1
 
 peerDependencyRules:
   allowedVersions:

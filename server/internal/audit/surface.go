@@ -29,14 +29,14 @@ const (
 	// SurfaceSystem, so an unknown surface is a gap worth chasing rather than
 	// the expected shape of a scheduled job.
 	SurfaceUnknown Surface = "unknown"
-	// SurfaceSystem is Gram acting on its own, with no request behind it: a
+	// SurfaceSystem is Speakeasy acting on its own, with no request behind it: a
 	// Temporal activity, a scheduled job, a reconciler. These writes have no
 	// session, API key or human actor to attribute, and saying so is more
 	// useful than leaving them indistinguishable from a classification miss.
 	SurfaceSystem Surface = "system"
 	// SurfaceDashboard is an authenticated dashboard session.
 	SurfaceDashboard Surface = "dashboard"
-	// SurfaceAPIKey is a Gram API key, used by the CLI and by automation.
+	// SurfaceAPIKey is a Speakeasy API key, used by the CLI and by automation.
 	SurfaceAPIKey Surface = "api_key"
 	// SurfacePlatformMCP is the OAuth-authenticated Platform MCP endpoint,
 	// where a third-party agent acts on a user's behalf.
@@ -46,6 +46,8 @@ const (
 	SurfaceProjectAssistant Surface = "project_assistant"
 	// SurfaceAdmin is the isolated Google-authenticated admin app.
 	SurfaceAdmin Surface = "admin"
+	// SurfaceAdminMCP is the staff-only Admin MCP endpoint.
+	SurfaceAdminMCP Surface = "admin_mcp"
 	// SurfacePlatformBreakGlass is the main-server platform-administrator
 	// killswitch recovery path. It remains distinct from customer management.
 	SurfacePlatformBreakGlass Surface = "platform_break_glass"
@@ -55,6 +57,12 @@ const (
 // against. A package marking a surface passes a plain string so it need not
 // depend on this one; anything not named here records an unknown surface
 // rather than widening what the column can hold.
+// IsStaffAdminSurface reports whether an audit surface represents staff acting
+// through a staff-only administrative interface.
+func IsStaffAdminSurface(surface Surface) bool {
+	return surface == SurfaceAdmin || surface == SurfaceAdminMCP
+}
+
 var knownSurfaces = map[Surface]struct{}{
 	SurfaceUnknown:            {},
 	SurfaceSystem:             {},
@@ -63,6 +71,7 @@ var knownSurfaces = map[Surface]struct{}{
 	SurfacePlatformMCP:        {},
 	SurfaceProjectAssistant:   {},
 	SurfaceAdmin:              {},
+	SurfaceAdminMCP:           {},
 	SurfacePlatformBreakGlass: {},
 }
 

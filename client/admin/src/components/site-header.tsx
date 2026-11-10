@@ -3,6 +3,7 @@ import { useQueries, type QueryKey } from "@tanstack/react-query";
 import {
   useLinkProps,
   useMatches,
+  useRouter,
   type LinkProps,
 } from "@tanstack/react-router";
 
@@ -28,8 +29,13 @@ function recordName(data: unknown): string | undefined {
   const record = data as {
     name?: unknown;
     issuer?: { name?: unknown; slug?: unknown };
+    server?: { name?: unknown };
   };
-  const name = record.name ?? record.issuer?.name ?? record.issuer?.slug;
+  const name =
+    record.name ??
+    record.issuer?.name ??
+    record.issuer?.slug ??
+    record.server?.name;
   return typeof name === "string" ? name : undefined;
 }
 
@@ -39,7 +45,10 @@ function recordName(data: unknown): string | undefined {
  */
 export type Crumb =
   | string
-  | ((params: Record<string, string | undefined>) => CrumbRecord | undefined);
+  | ((
+      params: Record<string, string | undefined>,
+      search: Record<string, unknown>,
+    ) => CrumbRecord | undefined);
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -54,15 +63,25 @@ declare module "@tanstack/react-router" {
 // record-nav.tsx:46 keeps the same rule for the nav's items.
 function CrumbLink({
   to,
+  search,
   children,
 }: {
   to: LinkProps["to"];
+  search: Record<string, unknown> | undefined;
   children: string;
 }): JSX.Element {
   // `exact` still earns its line, for the half of the guess this cannot take
   // back: every crumb's target is an ancestor of the address, so without it
   // every crumb would carry `data-status="active"` and the `active` class.
-  const linkProps = useLinkProps({ to, activeOptions: { exact: true } });
+  const linkProps = useLinkProps({
+    to,
+    // Without `search` the link carries none, which is what every crumb did
+    // before a route could keep its own.
+    // Cast for the reason `to` is: the bar only links to a route the operator
+    // is standing in, and this is that route's own validated search.
+    ...(search && { search: search as LinkProps["search"] }),
+    activeOptions: { exact: true },
+  });
 
   return (
     <BreadcrumbLink asChild>
@@ -73,15 +92,31 @@ function CrumbLink({
   );
 }
 
+// Only the search a route validates for itself, so a crumb returns to its view
+// as it was left (the MCP servers list keeps its project) without dragging a
+// deeper page's search along. A route that validates none gets none, which
+// leaves every other crumb as it was.
+function ownSearch(
+  route: { options: { validateSearch?: unknown } } | undefined,
+  search: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const validate = route?.options.validateSearch;
+  if (typeof validate !== "function") return undefined;
+  return (validate as (s: Record<string, unknown>) => Record<string, unknown>)(
+    search,
+  );
+}
+
 export function SiteHeader(): JSX.Element {
   const matches = useMatches();
+  const router = useRouter();
 
   // Each source keeps the index of the match that asked for it, so a resolved
   // name goes back to the right crumb.
   const sources = matches.flatMap((match, index) => {
     const { crumb } = match.staticData;
     if (typeof crumb !== "function") return [];
-    const query = crumb(match.params);
+    const query = crumb(match.params, match.search);
     return query ? [{ index, query }] : [];
   });
 
@@ -108,7 +143,14 @@ export function SiteHeader(): JSX.Element {
     if (!label) return [];
     // The cast holds because the bar only links to a route the operator is
     // already standing in; `useMatches` types the pathname as a plain string.
-    return [{ id: match.id, to: match.pathname as LinkProps["to"], label }];
+    return [
+      {
+        id: match.id,
+        to: match.pathname as LinkProps["to"],
+        search: ownSearch(router.routesById[match.routeId], match.search),
+        label,
+      },
+    ];
   });
 
   return (
@@ -121,7 +163,7 @@ export function SiteHeader(): JSX.Element {
         />
         <Breadcrumb>
           <BreadcrumbList className="text-base">
-            {crumbs.map(({ id, to, label }, index) => (
+            {crumbs.map(({ id, to, search, label }, index) => (
               <Fragment key={id}>
                 {index > 0 && <BreadcrumbSeparator />}
                 <BreadcrumbItem>
@@ -130,7 +172,9 @@ export function SiteHeader(): JSX.Element {
                       {label}
                     </BreadcrumbPage>
                   ) : (
-                    <CrumbLink to={to}>{label}</CrumbLink>
+                    <CrumbLink to={to} search={search}>
+                      {label}
+                    </CrumbLink>
                   )}
                 </BreadcrumbItem>
               </Fragment>

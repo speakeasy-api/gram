@@ -10,8 +10,9 @@ type Development struct {
 }
 
 var (
-	_ Provisioner = (*Development)(nil)
-	_ SpendClient = (*Development)(nil)
+	_ Provisioner       = (*Development)(nil)
+	_ ExistingKeyLookup = (*Development)(nil)
+	_ SpendClient       = (*Development)(nil)
 )
 
 func NewDevelopment(apiKey string) *Development {
@@ -20,6 +21,12 @@ func NewDevelopment(apiKey string) *Development {
 
 func (o *Development) ProvisionAPIKey(context.Context, string, KeyType) (string, error) {
 	return o.apiKey, nil
+}
+
+// LookupAPIKey returns the single development key; an empty key reads as
+// not provisioned.
+func (o *Development) LookupAPIKey(context.Context, string, KeyType) (string, bool, error) {
+	return o.apiKey, o.apiKey != "", nil
 }
 
 func (o *Development) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {

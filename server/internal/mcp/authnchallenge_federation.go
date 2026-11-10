@@ -11,9 +11,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -48,8 +52,8 @@ type FederatedConsentBinding struct {
 	Subject  string    `json:"subject"`
 }
 
-func (b *FederatedConsentBinding) matches(issuerID, clientID uuid.UUID) bool {
-	return b != nil && b.IssuerID != uuid.Nil && b.ClientID != uuid.Nil && b.IssuerID == issuerID && b.ClientID == clientID && b.Issuer != "" && b.Subject != ""
+func (b *FederatedConsentBinding) matches(issuerID, clientID uuid.UUID, provider *remotesessions.FederatedProvider) bool {
+	return b != nil && b.IssuerID != uuid.Nil && b.ClientID != uuid.Nil && b.IssuerID == issuerID && b.ClientID == clientID && b.Issuer != "" && b.Subject != "" && provider.ValidateResponseIssuer(b.Issuer) == nil
 }
 
 func (s *Service) federatedProvider(ctx context.Context, endpoint *ResolvedMcpEndpoint) (*remotesessions.FederatedProvider, uuid.UUID, uuid.UUID, string, error) {
@@ -63,16 +67,18 @@ func (s *Service) federatedProvider(ctx context.Context, endpoint *ResolvedMcpEn
 	if row.ProjectID.Valid || !row.OrganizationID.Valid || row.OrganizationID.String != endpoint.OrganizationID || !row.TrustedRemoteSessionIssuerID.Valid || s.remoteChallengeMgr == nil {
 		return nil, uuid.Nil, uuid.Nil, "", errors.New("invalid federated issuer configuration")
 	}
-	// Reject an unusable callback before discovery or any provider traffic. This
-	// check is deliberately after the unlinked branch, preserving WorkOS HTTP dev.
-	callback, err := endpoint.IDPCallbackURL(s.serverURL.String())
-	if err != nil {
-		return nil, uuid.Nil, uuid.Nil, "", remotesessions.ErrFederatedConfiguration
+	// Reject an unusable per-client callback before discovery or any provider
+	// traffic. This is deliberately after the unlinked branch, preserving WorkOS HTTP dev.
+	clientID := row.TrustedRemoteSessionClientID.UUID
+	checkCallback := func(base pgtype.Text) error {
+		callback, err := federatedIDPCallbackURL(s.federatedCallbackOrigin(base), clientID)
+		if err != nil {
+			return err
+		}
+		_, err = federatedCallbackURL(callback)
+		return err
 	}
-	if _, err := federatedCallbackURL(callback); err != nil {
-		return nil, uuid.Nil, uuid.Nil, "", fmt.Errorf("resolve federated login provider: %w", err)
-	}
-	provider, err := s.remoteChallengeMgr.LoadFederatedProvider(ctx, endpoint.OrganizationID, row.TrustedRemoteSessionIssuerID.UUID, row.TrustedRemoteSessionClientID.UUID)
+	provider, err := s.remoteChallengeMgr.LoadFederatedLoginProvider(ctx, endpoint.OrganizationID, row.TrustedRemoteSessionIssuerID.UUID, clientID, checkCallback)
 	if err != nil {
 		return nil, uuid.Nil, uuid.Nil, "", fmt.Errorf("resolve federated login provider: %w", err)
 	}
@@ -94,13 +100,16 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	if err != nil || provider == nil {
 		return nil, err
 	}
-	if retryHuman != "" && !state.FederatedBinding.matches(issuerID, clientID) {
+	if retryHuman != "" && !state.FederatedBinding.matches(issuerID, clientID, provider) {
 		return nil, remotesessions.ErrFederatedConfiguration
 	}
-	callback, err := endpoint.IDPCallbackURL(s.serverURL.String())
+	// The callback shares the trusted client's recorded callback origin, so the
+	// customer IdP app allowlists the same host as its remote_login_callback.
+	callback, err := federatedIDPCallbackURL(s.federatedCallbackOrigin(provider.CallbackBaseURL()), clientID)
 	if err != nil {
 		return nil, err
 	}
+	endpoint.LogWith(s.logger).InfoContext(ctx, "federated login started", attr.SlogOAuthFlowID(state.FlowID), attr.SlogOAuthResponseIssuerAdvertised(provider.AdvertisesResponseIssuer()))
 	target, err := federatedCallbackURL(callback)
 	if err != nil {
 		return nil, err
@@ -114,7 +123,12 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 		return nil, err
 	}
 	// Bind the initiating browser before exposing any transferable state URL.
-	origin, err := federatedCallbackURL(state.mintOriginOr(s.serverURL.String()))
+	// It holds the challenge on the host the flow started on, the authorization
+	// server's, whose consent page checks the binding. Its mint origin names
+	// the resource instead when that is on another host: for a challenge a
+	// shared authorization server minted, or one the authentication host
+	// serves.
+	origin, err := federatedCallbackURL(s.challengeAuthorizationServerBaseURL(endpoint, *state))
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +136,7 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return nil, err
 	}
-	state.Browser = &ChallengeBrowserBinding{CookieID: state.ID, OriginHash: sha256Hex(browser), CallbackHash: ""}
+	state.Browser = &ChallengeBrowserBinding{CookieID: state.ID, OriginHash: sha256Hex(browser), CallbackHash: "", CallbackOrigin: target.Scheme + "://" + target.Host, ConsentOrigin: "", Handoff: "", BoundAt: time.Time{}}
 	phase, callbackHash := "bootstrap", ""
 	if origin.Scheme == target.Scheme && origin.Host == target.Host {
 		phase, callbackHash = "ready", state.Browser.OriginHash
@@ -138,6 +152,72 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	http.SetCookie(w, federatedBrowserCookie(state.Browser.CookieID, browser, int(state.TTL().Seconds())))
 	target.RawQuery = url.Values{"state": {state.ID}, "federated_start": {"1"}}.Encode()
 	return target, nil
+}
+
+// federatedIDPCallbackURL is the per-client redirect URI every federated login mints (RFC 9700 4.4.2).
+func federatedIDPCallbackURL(origin *url.URL, clientID uuid.UUID) (string, error) {
+	if clientID == uuid.Nil {
+		return "", remotesessions.ErrFederatedConfiguration
+	}
+	return remotesessions.FederatedIDPCallbackURL(origin, clientID), nil
+}
+
+// recordedIDPCallbackOrigin validates the per-client IdP callback a federated
+// challenge was minted with and returns its origin. The challenge is the source
+// of truth: a replica configured with another outbound origin still completes
+// the login, as long as the URL is the client's callback.
+func recordedIDPCallbackOrigin(callback string, clientID uuid.UUID) (*url.URL, error) {
+	target, err := federatedCallbackURL(callback)
+	if err != nil {
+		return nil, err
+	}
+	origin := &url.URL{Scheme: target.Scheme, Host: target.Host}
+	if expected, err := federatedIDPCallbackURL(origin, clientID); err != nil || expected != callback {
+		return nil, remotesessions.ErrFederatedConfiguration
+	}
+	return origin, nil
+}
+
+// validateFederatedCallbackRoute requires the callback to arrive on exactly the recorded per-client path.
+func validateFederatedCallbackRoute(r *http.Request, callback string, clientID uuid.UUID, routeClientID string) error {
+	recorded, err := url.Parse(callback)
+	if err != nil || recorded.Path == "" || r.URL.Path != recorded.Path || routeClientID != clientID.String() || r.URL.Path != remotesessions.FederatedIDPCallbackPath(clientID) {
+		return remotesessions.ErrFederatedConfiguration
+	}
+	return nil
+}
+
+// federatedCallbackMisrouted reports, before state is consumed, a federated challenge arriving off its recorded callback.
+func federatedCallbackMisrouted(r *http.Request, federation *FederatedChallenge, routeClientID, requestBaseURL string) string {
+	recorded, err := recordedIDPCallbackOrigin(federation.CallbackURL, federation.ClientID)
+	if err != nil {
+		return "origin_mismatch"
+	}
+	// The middleware establishes the trusted scheme and hostname, but extra
+	// platform origins omit the request port. Recover only that validated
+	// authority's port; Host cannot replace the trusted hostname or scheme.
+	actual, err := url.Parse(requestBaseURL)
+	if err != nil {
+		return "origin_mismatch"
+	}
+	if origin, ok := requestorigin.FromContext(r.Context()); ok && origin.Surface == requestorigin.SurfacePlatform && actual.Port() == "" {
+		host, err := requestorigin.CanonicalHost(r.Host)
+		if err != nil || !strings.EqualFold(host, actual.Hostname()) {
+			return "origin_mismatch"
+		}
+		authority, err := url.Parse("https://" + r.Host)
+		if err != nil {
+			return "origin_mismatch"
+		}
+		actual.Host = authority.Host
+	}
+	if requestorigin.URLOrigin(recorded.String()) != requestorigin.URLOrigin(actual.String()) {
+		return "origin_mismatch"
+	}
+	if validateFederatedCallbackRoute(r, federation.CallbackURL, federation.ClientID, routeClientID) != nil {
+		return "route_mismatch"
+	}
+	return ""
 }
 
 func federationCookieName(id string) string { return "__Host-gram-federation-" + id }
@@ -277,11 +357,14 @@ func federatedCallbackURL(callback string) (*url.URL, error) {
 
 // Never retain arbitrary upstream error strings: they may contain credentials.
 func federatedFailure(cause error) (oops.Code, error) {
+	if errors.Is(cause, remotesessions.ErrFederatedUnavailable) {
+		if errors.Is(cause, remotesessions.ErrFederatedSigning) {
+			return oops.CodeUnavailable, errors.Join(remotesessions.ErrFederatedUnavailable, remotesessions.ErrFederatedSigning)
+		}
+		return oops.CodeUnavailable, remotesessions.ErrFederatedUnavailable
+	}
 	if errors.Is(cause, remotesessions.ErrFederatedSigning) {
 		return oops.CodeUnexpected, remotesessions.ErrFederatedSigning
-	}
-	if errors.Is(cause, remotesessions.ErrFederatedUnavailable) {
-		return oops.CodeUnavailable, remotesessions.ErrFederatedUnavailable
 	}
 	if errors.Is(cause, remotesessions.ErrFederatedConfiguration) {
 		return oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration
@@ -306,7 +389,7 @@ func (s *Service) finishFederatedFailure(w http.ResponseWriter, r *http.Request,
 	var responseErr error
 	var redirect string
 	if !state.FirstParty {
-		issuer, err := endpoint.RootURL(state.mintOriginOr(s.serverURL.String()))
+		issuer, err := s.issuerURL(endpoint, state.mintOriginOr(s.serverURL.String()))
 		if err == nil {
 			redirect, err = buildClientRedirect(clientRedirectParams{RedirectURI: state.RedirectURI, Issuer: issuer, Code: "", State: state.State, ErrorCode: oauthCode, ErrorDescription: message})
 		}
@@ -320,12 +403,21 @@ func (s *Service) finishFederatedFailure(w http.ResponseWriter, r *http.Request,
 	} else {
 		s.metrics.RecordOAuthFlowFailed(ctx, state.UserSessionIssuerID.String(), endpoint.Slug, stage)
 	}
-	failure := oops.E(code, cause, "%s", message).LogError(ctx, s.logger)
+	// Keep the OAuth redirect classification above while rendering browser
+	// request failures inline as 400 rather than an HTTP authentication challenge.
+	inlineCode := code
+	if state.FirstParty && inlineCode == oops.CodeUnauthorized {
+		inlineCode = oops.CodeBadRequest
+	}
+	failure := oops.E(inlineCode, cause, "%s", message).LogError(ctx, s.logger)
 	if responseErr != nil {
 		return responseErr
 	}
 	if state.FirstParty {
-		return failure
+		if declined {
+			return fmt.Errorf("complete identity login: %w", s.firstPartyBrowserError(oops.WithBrowserReason(failure, oauthui.ReasonCanceled)))
+		}
+		return s.firstPartyBrowserError(failure)
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
@@ -382,7 +474,7 @@ func (s *Service) retryFederatedDelegation(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeFailedPrecondition, nil, "Delegation retry is unavailable")
 	}
 	if state.Subject == nil || state.Subject.Kind != urn.SessionSubjectKindUser || state.AuthorizerUserID == "" || state.Subject.ID != state.AuthorizerUserID || state.Federation != nil || state.CreatedAt.IsZero() || time.Since(state.CreatedAt) > state.TTL() || state.CreatedAt.After(time.Now().Add(time.Minute)) {
-		return oops.E(oops.CodeUnauthorized, nil, "Delegation retry requires a resolved human login")
+		return oops.E(oops.CodeBadRequest, nil, "Delegation retry requires a resolved human login")
 	}
 	if state.AuthorizerImpersonated == nil || *state.AuthorizerImpersonated {
 		return oops.E(oops.CodeForbidden, nil, "Delegation retry requires a non-impersonated login")
@@ -406,15 +498,20 @@ func (s *Service) retryFederatedDelegation(w http.ResponseWriter, r *http.Reques
 	if provider == nil {
 		return oops.E(oops.CodeFailedPrecondition, nil, "Trusted login configuration is unavailable")
 	}
-	if !state.FederatedBinding.matches(issuerID, clientID) {
+	if !state.FederatedBinding.matches(issuerID, clientID, provider) {
 		return oops.E(oops.CodeFailedPrecondition, nil, "Trusted login binding changed. Restart login")
+	}
+	// Membership and provider resolution can outlive the action preflight.
+	// Recheck authority before spending the single-use retry challenge.
+	if err := endpoint.ValidateLiveChallenge(ctx, s.db, state.Endpoint); err != nil {
+		return oauthAuthorityError(err)
 	}
 	consumed, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+state.ID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, nil, "Delegation retry state was already consumed or expired")
+		return oops.E(oops.CodeBadRequest, nil, "Delegation retry state was already consumed or expired")
 	}
-	if consumed.Subject == nil || consumed.Subject.Kind != urn.SessionSubjectKindUser || consumed.Subject.ID != humanID || consumed.AuthorizerUserID != humanID || consumed.CSRFToken != state.CSRFToken || consumed.Federation != nil || consumed.AuthorizerImpersonated == nil || *consumed.AuthorizerImpersonated || consumed.DelegationRetryUsed || !consumed.FederatedBinding.matches(issuerID, clientID) {
-		return oops.E(oops.CodeUnauthorized, nil, "Delegation retry identity changed")
+	if consumed.Subject == nil || consumed.Subject.Kind != urn.SessionSubjectKindUser || consumed.Subject.ID != humanID || consumed.AuthorizerUserID != humanID || consumed.CSRFToken != state.CSRFToken || consumed.Federation != nil || consumed.AuthorizerImpersonated == nil || *consumed.AuthorizerImpersonated || consumed.DelegationRetryUsed || !consumed.FederatedBinding.matches(issuerID, clientID, provider) {
+		return oops.E(oops.CodeBadRequest, nil, "Delegation retry identity changed")
 	}
 	if err := endpoint.ValidateChallenge(ctx, consumed.Endpoint, consumed.UserSessionIssuerID); err != nil {
 		return oauthAuthorityError(err)

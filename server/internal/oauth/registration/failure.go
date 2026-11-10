@@ -42,7 +42,7 @@ const (
 	OutcomeUnreachable Outcome = "unreachable"
 
 	// OutcomeRefused means the provider rejected registration or returned a
-	// successful response that Gram cannot use.
+	// successful response that Speakeasy cannot use.
 	OutcomeRefused Outcome = "refused"
 )
 

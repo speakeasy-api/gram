@@ -13,13 +13,17 @@ import {
 } from "./trustedusersessionissuerreference.js";
 
 /**
- * Authoritative impact summary for deleting a remote_session_issuer: its client and trusted user-session-issuer references.
+ * Authoritative impact summary for deleting a remote_session_issuer: its client, trusted user-session-issuer, and active identity-chaining binding references.
  */
 export type OrganizationIssuerDeletePreflight = {
   /**
    * Number of non-deleted remote_session_clients registered with this issuer.
    */
   clientCount: number;
+  /**
+   * Active identity-chaining bindings that must be explicitly unlinked before deletion.
+   */
+  emaBindingCount: number;
   /**
    * Display names of MCP servers attached to this issuer's clients.
    */
@@ -37,6 +41,7 @@ export const OrganizationIssuerDeletePreflight$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     client_count: z.int(),
+    ema_binding_count: z.int(),
     mcp_server_names: z.array(z.string()),
     trusted_user_session_issuers: z.array(
       TrustedUserSessionIssuerReference$inboundSchema,
@@ -45,6 +50,7 @@ export const OrganizationIssuerDeletePreflight$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "client_count": "clientCount",
+      "ema_binding_count": "emaBindingCount",
       "mcp_server_names": "mcpServerNames",
       "trusted_user_session_issuers": "trustedUserSessionIssuers",
     });

@@ -22,6 +22,11 @@ func GetWorkUnitsTrendChatPath() string {
 	return "/rpc/chat.getWorkUnitsTrend"
 }
 
+// LoadChatOverviewChatPath returns the URL path to the chat service loadChatOverview HTTP endpoint.
+func LoadChatOverviewChatPath() string {
+	return "/rpc/chat.loadOverview"
+}
+
 // LoadChatChatPath returns the URL path to the chat service loadChat HTTP endpoint.
 func LoadChatChatPath() string {
 	return "/rpc/chat.load"
@@ -65,6 +70,11 @@ func SubmitFeedbackChatPath() string {
 // ListSourcesChatPath returns the URL path to the chat service listSources HTTP endpoint.
 func ListSourcesChatPath() string {
 	return "/rpc/chat.listSources"
+}
+
+// CountByUserChatPath returns the URL path to the chat service countByUser HTTP endpoint.
+func CountByUserChatPath() string {
+	return "/rpc/chat.countByUser"
 }
 
 // ListSessionLinksChatPath returns the URL path to the chat service listSessionLinks HTTP endpoint.

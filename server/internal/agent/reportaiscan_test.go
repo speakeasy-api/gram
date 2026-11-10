@@ -37,6 +37,7 @@ func aiDetectionSummaries(t *testing.T, ti *testInstance, orgID string) map[stri
 	t.Helper()
 	rows, err := telemetryrepo.New(ti.chConn).ListAIDetectionSummaries(t.Context(), telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       orgID,
+		TargetID:             "",
 		Categories:           nil,
 		UserEmails:           nil,
 		ExactUserEmail:       "",

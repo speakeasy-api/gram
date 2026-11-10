@@ -20,10 +20,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // serveRuntimeMethod invokes HandleGetServer or HandleDeleteServer with a
@@ -91,6 +91,11 @@ func TestRuntimeMethods_RemoteBacked_ProxiedUpstream(t *testing.T) {
 	}
 	var hits []upstreamHit
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The proxy's background metadata probe is not MCP traffic.
+		if r.URL.Path == wellknown.OAuthProtectedResourcePath {
+			http.NotFound(w, r)
+			return
+		}
 		hits = append(hits, upstreamHit{
 			method:  r.Method,
 			accept:  r.Header.Get("Accept"),
@@ -164,7 +169,7 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 	)
 
 	mux := goahttp.NewMuxer()
-	mcp.Attach(mux, ti.service, metadataService)
+	mcp.Attach(mux, ti.service.Service, metadataService)
 
 	req := httptest.NewRequest(http.MethodGet, "/mcp/no-such-slug-"+uuid.NewString(), nil).WithContext(ctx)
 	req.Header.Set("Accept", "text/event-stream")
@@ -184,13 +189,12 @@ func TestRuntimeMethods_ToolsetBacked_Keep405(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "toolset-slug-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "toolset-slug-"+uuid.NewString()[:8])
 	endpointSlug := "endpoint-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, uuid.Nil)
 

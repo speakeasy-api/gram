@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type failingSkillVersionConn struct {
@@ -108,7 +107,6 @@ func TestSkillObservationReconcilerSyncSessionVersionsInsertsBeforeMarkAndRetrie
 	require.NoError(t, err)
 	require.Zero(t, synced.Processed)
 
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 	var count uint64
 	err = chConn.QueryRow(ctx, "SELECT count() FROM skill_session_versions WHERE id = toUUID(?)", pending[0].ID.String()).Scan(&count)
 	require.NoError(t, err)

@@ -1,10 +1,13 @@
-import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminClient";
+import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
+import { GramError } from "@gram/admin-client/models/errors/gramerror";
 
-export { isRedirectingToLogin } from "@/lib/gramAdminClient";
+import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/adminAuth";
 
-// Gram admin API client.
+export { isRedirectingToLogin } from "@/lib/adminAuth";
+
+// Speakeasy admin API client.
 //
-// This app is served from the same origin as the Gram admin API (the admin
+// This app is served from the same origin as the Speakeasy admin API (the admin
 // Ingress puts both behind one host), so every path below is relative
 // and the `gram_admin` session cookie rides along as a first-party cookie.
 //
@@ -30,6 +33,10 @@ export class GramAdminError extends Error {
 // verb phrase the handler passed to oops.E, such as "list organizations"
 // (server/internal/admin/impl.go:343, surfaced by pp.go:83), which reads worse
 // than the status line. So trust the body below 500 and nowhere else.
+//
+// Generated ServiceError puts that verb on Error.message for every status, so
+// a 5xx from the SDK has to be rewritten to the status line the handwritten
+// client already used.
 export function errorMessage(e: unknown): string {
   if (
     e instanceof GramAdminError &&
@@ -39,6 +46,9 @@ export function errorMessage(e: unknown): string {
   ) {
     const message = (e.body as { message?: unknown }).message;
     if (typeof message === "string" && message) return message;
+  }
+  if (e instanceof GramError && e.statusCode >= 500) {
+    return `gram admin ${e.statusCode} ${e.rawResponse.statusText || "Internal Server Error"}`;
   }
   return e instanceof Error ? e.message : String(e);
 }
@@ -149,7 +159,7 @@ async function gramAdminSend(path: string, init?: RequestInit): Promise<void> {
 
 // Identity of the admin operator that owns the current session. The backend
 // reads it from the OIDC session record, so it names the identity-provider
-// account that signed in to this app, not any Gram customer account.
+// account that signed in to this app, not any Speakeasy customer account.
 export type AdminSessionInfo = {
   email: string;
   name?: string;
@@ -253,8 +263,15 @@ export type AdminOrganization = {
   slug: string;
   account_type: string;
   workos_id?: string;
+  // Absent unless the organization is linked to WorkOS and the deployment knows
+  // its WorkOS environment.
+  workos_dashboard_url?: string;
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
+  // Absent unless the matching Stripe ID is set and the deployment has a
+  // Stripe API key that says which dashboard mode the IDs belong to.
+  stripe_customer_dashboard_url?: string;
+  stripe_subscription_dashboard_url?: string;
   whitelisted: boolean;
   disabled_at?: string;
   trial_state?: TrialState;
@@ -266,6 +283,9 @@ export type AdminOrganization = {
   // and absent on every row the list endpoint returns: only the record read
   // selects it.
   creation_source?: string;
+  // Staff-entered link to the organization's adoption dashboard. Absent when
+  // none is set, and absent on list rows: only the record read selects it.
+  adoption_dashboard_url?: string;
   member_count: number;
   created_at: string;
   updated_at: string;
@@ -290,6 +310,25 @@ export function getStripeCustomer(
   return gramAdminFetch<AdminStripeCustomer>(
     `/admin/organization.stripeCustomer?${query}`,
     { cache: "no-store" },
+  );
+}
+
+export type SetAdoptionDashboardUrlRequest = {
+  organization_id: string;
+  // An https URL, or empty to clear the link.
+  adoption_dashboard_url: string;
+};
+
+export function setAdoptionDashboardUrl(
+  body: SetAdoptionDashboardUrlRequest,
+): Promise<AdminOrganization> {
+  return gramAdminMutation<AdminOrganization>(
+    "/admin/organization.setAdoptionDashboardUrl",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
   );
 }
 
@@ -512,6 +551,8 @@ export const MAX_TRIAL_START_DAYS = 365;
 
 export type CreateOrganizationRequest = {
   url: string;
+  name: string;
+  slug: string;
   ownership_confirmed: boolean;
 };
 
@@ -550,6 +591,95 @@ export function listOrganizationProjects(
   );
 }
 
+export type AdminProjectRedeployPreview = {
+  organization_id: string;
+  project_id: string;
+  project_name: string;
+  // Sent back as `expected_active_deployment_id`, so a redeploy clones the
+  // deployment the operator reviewed or refuses.
+  active_deployment_id: string;
+  openapi_assets: number;
+  function_assets: number;
+  packages: number;
+  external_mcps: number;
+};
+
+export function getProjectRedeployPreview(
+  organizationID: string,
+  projectID: string,
+): Promise<AdminProjectRedeployPreview> {
+  const qs = toSearchParams({
+    organization_id: organizationID,
+    project_id: projectID,
+  });
+  return gramAdminFetch<AdminProjectRedeployPreview>(
+    `/admin/project.redeployPreview?${qs}`,
+  );
+}
+
+export type RedeployProjectRequest = {
+  organization_id: string;
+  project_id: string;
+  expected_active_deployment_id: string;
+};
+
+export type AdminProjectRedeployResult = {
+  project_id: string;
+  source_deployment_id: string;
+  // Processing continues after this returns, and this deployment becomes active
+  // only if it succeeds.
+  deployment_id: string;
+};
+
+export function redeployProject(
+  body: RedeployProjectRequest,
+): Promise<AdminProjectRedeployResult> {
+  return gramAdminMutation<AdminProjectRedeployResult>(
+    "/admin/project.redeploy",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export type AdminMcpServerSource =
+  | "toolset"
+  | "remote"
+  | "tunneled"
+  | "unproxied"
+  | "toolset_only";
+
+export type AdminMcpServer = {
+  // The mcp_servers row id, or the toolset id for a toolset-only server.
+  id: string;
+  name: string;
+  // Omitted when the server has no routable address, such as an mcp_servers
+  // row with no endpoint.
+  url?: string;
+  visibility: "disabled" | "private" | "public";
+  source: AdminMcpServerSource;
+  created_at: string;
+};
+
+export type ListProjectMcpServersResult = {
+  mcp_servers: AdminMcpServer[];
+};
+
+export function listProjectMcpServers(
+  organizationID: string,
+  projectID: string,
+): Promise<ListProjectMcpServersResult> {
+  const qs = toSearchParams({
+    organization_id: organizationID,
+    project_id: projectID,
+  });
+  return gramAdminFetch<ListProjectMcpServersResult>(
+    `/admin/project.mcpServers?${qs}`,
+  );
+}
+
 export type AdminOrganizationMember = {
   id: string;
   email: string;
@@ -571,22 +701,6 @@ export function listOrganizationMembers(
     `/admin/organization.members?${qs}`,
   );
 }
-
-type AdminInferenceKeyResponse = {
-  key_type: string;
-  credits_used: number;
-  monthly_credits: number;
-  disabled: boolean;
-  disable_causes?: string[];
-  disable_causes_classified: boolean;
-};
-
-export type AdminInferenceKey = Omit<
-  AdminInferenceKeyResponse,
-  "disable_causes"
-> & {
-  disable_causes: string[] | null;
-};
 
 export type AdminChatAnalysisJudge = "work_units" | "business_memory";
 
@@ -646,27 +760,12 @@ export function setOrganizationChatAnalysisSetting(input: {
   );
 }
 
-export async function getInferenceKeys(
-  organizationID: string,
-): Promise<AdminInferenceKey[]> {
-  const qs = toSearchParams({ organization_id: organizationID });
-  const keys = await gramAdminFetch<AdminInferenceKeyResponse[]>(
-    `/admin/organization.inferenceKeys?${qs}`,
-  );
-  return keys.map((key) => ({
-    ...key,
-    disable_causes: key.disable_causes_classified
-      ? (key.disable_causes ?? [])
-      : null,
-  }));
-}
+export type AdminInferenceKeyType = RepairInferenceKeyRequestBody["keyType"];
 
-export type AdminInferenceKeyType = "chat" | "internal";
-
-export type AdminInferenceKeyLimit = Pick<
-  AdminInferenceKey,
-  "key_type" | "monthly_credits"
->;
+export type AdminInferenceKeyLimit = {
+  key_type: string;
+  monthly_credits: number;
+};
 
 export function setInferenceKeyMonthlyLimit(input: {
   organizationID: string;
@@ -779,5 +878,49 @@ export function resumeStripeSubscription(
   return updateStripeSubscription(
     "/admin/organization.resumeStripeSubscription",
     organizationID,
+  );
+}
+
+export type AdminUserOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  disabled_at?: string;
+};
+export type AdminUser = {
+  id: string;
+  display_name: string;
+  email: string;
+  last_login?: string;
+  organizations: AdminUserOrganization[];
+  organization_count: number;
+};
+export type AdminListUsersResult = {
+  users: AdminUser[];
+  total: number;
+  page: number;
+  limit: number;
+};
+export type AdminListUserOrganizationsResult = {
+  organizations: AdminUserOrganization[];
+  total: number;
+  page: number;
+  limit: number;
+};
+export function listUsers(
+  params: { q?: string; page?: number; limit?: number },
+  signal?: AbortSignal,
+): Promise<AdminListUsersResult> {
+  return gramAdminFetch(`/admin/users.list?${toSearchParams(params)}`, {
+    signal,
+  });
+}
+export function listUserOrganizations(
+  params: { user_id: string; page?: number; limit?: number },
+  signal?: AbortSignal,
+): Promise<AdminListUserOrganizationsResult> {
+  return gramAdminFetch(
+    `/admin/users.organizations.list?${toSearchParams(params)}`,
+    { signal },
   );
 }

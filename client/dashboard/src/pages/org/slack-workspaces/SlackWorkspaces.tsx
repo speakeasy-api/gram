@@ -1,0 +1,484 @@
+import { syncInProgress } from "./syncView";
+import {
+  APPROVAL_DM_SCOPE,
+  workspacesNeedingReinstall,
+} from "./approvalReadiness";
+import { Link, useSearchParams } from "react-router";
+import { SlackDirectory } from "./SlackDirectory";
+import { SlackSyncButton, SlackSyncStatus } from "./SlackSyncStatus";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { parseAsString, useQueryState } from "nuqs";
+import { Hash, Plus } from "lucide-react";
+import { toast } from "sonner";
+
+import { useOrganization } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { RequireScope } from "@/components/require-scope";
+import { Heading } from "@/components/ui/Heading";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import { ApiErrorAlert } from "@/components/api-error-alert";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { safeExternalHttpUrl } from "@/lib/safe-external-url";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Label } from "@/components/ui/Label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import type { SlackDirectoryConnection } from "@gram/client/models/components/slackdirectoryconnection.js";
+import { useBeginSlackDirectoryConnectionMutation } from "@gram/client/react-query/beginSlackDirectoryConnection.js";
+import { useDisconnectSlackDirectoryConnectionMutation } from "@gram/client/react-query/disconnectSlackDirectoryConnection.js";
+import { useSetSlackDirectoryDefaultProjectMutation } from "@gram/client/react-query/setSlackDirectoryDefaultProject.js";
+import {
+  invalidateAllSlackDirectoryConnections,
+  useSlackDirectoryConnections,
+} from "@gram/client/react-query/slackDirectoryConnections.js";
+import {
+  inlineError,
+  SESSION_SECURITY,
+} from "../identity-provider/identityProviderQueries";
+
+const outcomes: Record<string, string> = {
+  connected: "Slack workspace connected.",
+  cancelled:
+    "Slack authorization was cancelled. Your connections have not changed.",
+  invalid_state:
+    "This authorization link expired or belongs to another session. Connect Slack again.",
+  wrong_workspace:
+    "That is a different Slack workspace. Connect Slack again and choose the workspace shown here.",
+  connection_changed:
+    "The workspace state changed during authorization. Try connecting again.",
+  authorization_failed:
+    "Slack authorization failed. Try connecting again, or contact your administrator.",
+  unavailable:
+    "Slack connections are unavailable or your access changed. Return to Identity and try again.",
+};
+
+function connectionError(code?: string): string {
+  if (code === "authorization_expired")
+    return "Slack authorization expired. Connect Slack again and choose this workspace to restore access.";
+  if (code === "credential_unavailable")
+    return "Stored credentials are unavailable. Connect Slack again and choose this workspace.";
+  return "Authorize this workspace to restore access.";
+}
+function statusVariant(
+  status: SlackDirectoryConnection["status"],
+): "success" | "warning" | "neutral" {
+  if (status === "connected") return "success";
+  if (status === "reconnect_required") return "warning";
+  return "neutral";
+}
+function statusLabel(status: SlackDirectoryConnection["status"]): string {
+  if (status === "connected") return "Connected";
+  if (status === "disconnected") return "Disconnected";
+  return "Needs authorization";
+}
+
+const NO_DEFAULT_PROJECT = "none";
+
+// Picks the project whose managed assistant answers @Speakeasy mentions and
+// DMs in one workspace. A project can answer in at most one workspace, so
+// projects already chosen elsewhere are shown but disabled.
+function DefaultProjectSelect({
+  connection,
+  connections,
+  disabled,
+  onChange,
+}: {
+  connection: SlackDirectoryConnection;
+  connections: SlackDirectoryConnection[];
+  disabled: boolean;
+  onChange: (projectId: string | undefined) => void;
+}): JSX.Element {
+  const organization = useOrganization();
+  const projects = [...(organization.projects ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const current = connection.defaultProjectId ?? NO_DEFAULT_PROJECT;
+  const unavailable =
+    current !== NO_DEFAULT_PROJECT &&
+    !projects.some((project) => project.id === current);
+  const fieldId = `slack-default-project-${connection.id}`;
+  return (
+    <div className="space-y-1 pt-2">
+      <Label htmlFor={fieldId}>Default project</Label>
+      <p className="text-muted-foreground text-xs">
+        Project whose assistant answers @Speakeasy mentions and DMs in this
+        workspace.
+      </p>
+      <Select
+        value={current}
+        disabled={disabled}
+        onValueChange={(value) => {
+          if (value === current) return;
+          onChange(value === NO_DEFAULT_PROJECT ? undefined : value);
+        }}
+      >
+        <SelectTrigger id={fieldId} size="sm" className="min-w-56">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_DEFAULT_PROJECT}>None</SelectItem>
+          {projects.map((project) => {
+            const elsewhere = connections.find(
+              (other) =>
+                other.id !== connection.id &&
+                other.defaultProjectId === project.id,
+            );
+            return (
+              <SelectItem
+                key={project.id}
+                value={project.id}
+                disabled={elsewhere !== undefined}
+              >
+                {elsewhere
+                  ? `${project.name} (answers in ${elsewhere.workspaceName || elsewhere.workspaceId})`
+                  : project.name}
+              </SelectItem>
+            );
+          })}
+          {unavailable && (
+            <SelectItem value={current} disabled>
+              Unavailable project
+            </SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function SlackWorkspaces(): JSX.Element {
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <SlackWorkspacesContent />
+    </RequireScope>
+  );
+}
+function SlackWorkspacesContent(): JSX.Element {
+  const organization = useOrganization();
+  const isDemo = organization.slug === DEMO_ORG_SLUG;
+  const queryClient = useQueryClient();
+  const query = useSlackDirectoryConnections(undefined, SESSION_SECURITY, {
+    retry: false,
+    throwOnError: false,
+    refetchInterval: (query) =>
+      query.state.data?.connections.some(syncInProgress) ? 3000 : 60000,
+  });
+  const [result, setResult] = useQueryState("slack_result", parseAsString);
+  const [outcome, setOutcome] = useState(result);
+  useEffect(() => {
+    if (!result) return;
+    setOutcome(result);
+    void setResult(null);
+    void invalidateAllSlackDirectoryConnections(queryClient);
+  }, [result, setResult, queryClient]);
+  const [selected, setSelected] = useState<SlackDirectoryConnection | null>(
+    null,
+  );
+  const [redirectError, setRedirectError] = useState<string | null>(null);
+  const begin = useBeginSlackDirectoryConnectionMutation({
+    onError: inlineError,
+  });
+  const disconnect = useDisconnectSlackDirectoryConnectionMutation({
+    onError: () => {
+      void invalidateAllSlackDirectoryConnections(queryClient);
+    },
+    onSuccess: () => {
+      setSelected(null);
+      toast.success("Slack workspace disconnected");
+      void invalidateAllSlackDirectoryConnections(queryClient);
+    },
+  });
+  const setDefaultProject = useSetSlackDirectoryDefaultProjectMutation({
+    onError: () => {
+      void invalidateAllSlackDirectoryConnections(queryClient);
+    },
+    onSuccess: () => {
+      toast.success("Default project updated");
+      void invalidateAllSlackDirectoryConnections(queryClient);
+    },
+  });
+  // Disconnected workspaces keep their history but leave the UI; connecting again restores them.
+  const connections = (query.data?.connections ?? []).filter(
+    (connection) => connection.status !== "disconnected",
+  );
+  const configured = query.data?.authorizationConfigured === true;
+  // Approval DMs are behind the tool approvals rollout, so only orgs that can
+  // use them are asked to reinstall.
+  const toolApprovals =
+    useFeatureFlag(FEATURE_FLAGS.toolApprovals).status === "enabled";
+  const needsReinstall = toolApprovals
+    ? workspacesNeedingReinstall(connections)
+    : [];
+  // Connecting a workspace that is already listed reauthorizes it in place.
+  // Passing its connection preselects that workspace in Slack.
+  const start = (connectionId?: string) => {
+    if (isDemo) return;
+    setRedirectError(null);
+    begin.mutate(
+      {
+        request: {
+          beginSlackDirectoryConnectionRequestBody: connectionId
+            ? { connectionId }
+            : {},
+        },
+        security: SESSION_SECURITY,
+      },
+      {
+        onSuccess: (response) => {
+          const destination = safeExternalHttpUrl(response.authorizationUrl);
+          if (
+            !destination ||
+            new URL(destination).origin !== "https://slack.com" ||
+            new URL(destination).pathname !== "/oauth/v2/authorize"
+          ) {
+            setRedirectError(
+              "Slack returned an invalid authorization link. Please try again.",
+            );
+            return;
+          }
+          window.location.assign(destination);
+        },
+      },
+    );
+  };
+  const close = () => {
+    if (!disconnect.isPending) {
+      setSelected(null);
+      disconnect.reset();
+    }
+  };
+  const [params] = useSearchParams();
+  if (params.get("slack_view") === "members" && query.data && !query.isError)
+    return <SlackDirectory connections={connections} />;
+  const notice =
+    outcome && Object.hasOwn(outcomes, outcome) ? outcomes[outcome] : undefined;
+
+  return (
+    <section className="space-y-6" aria-label="Slack workspaces">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-xl space-y-2">
+          <Heading variant="h3">Slack workspaces</Heading>
+          <Text muted small>
+            Authorize the Slack workspaces your organization uses. You can
+            connect more than one workspace.
+          </Text>
+        </div>
+        <Button
+          onClick={() => start()}
+          disabled={isDemo || !configured || begin.isPending || query.isPending}
+        >
+          <Button.LeftIcon>
+            <Plus className="size-4" aria-hidden="true" />
+          </Button.LeftIcon>
+          <Button.Text>
+            {begin.isPending ? "Opening Slack…" : "Connect Slack"}
+          </Button.Text>
+        </Button>
+      </div>
+
+      {notice && (
+        <Alert
+          variant={outcome === "connected" ? "success" : "info"}
+          dismissible
+          onDismiss={() => setOutcome(null)}
+        >
+          {notice}
+        </Alert>
+      )}
+      <ApiErrorAlert
+        error={setDefaultProject.error ?? begin.error ?? query.error}
+      />
+      {redirectError && <Alert variant="error">{redirectError}</Alert>}
+      {query.isError && (
+        <Button
+          variant="secondary"
+          onClick={() => {
+            void query.refetch();
+          }}
+        >
+          Try again
+        </Button>
+      )}
+      {isDemo && (
+        <Alert variant="info" dismissible={false}>
+          Slack workspaces are read-only in the demo organization. Switch to
+          your organization to connect a workspace.
+        </Alert>
+      )}
+      {needsReinstall.length > 0 && !isDemo && (
+        <Alert variant="warning" dismissible={false}>
+          <div className="space-y-3">
+            <p>
+              Reinstall the Slack app so approvers get tool approval requests as
+              Slack messages. These workspaces granted access before Speakeasy
+              could send messages ({APPROVAL_DM_SCOPE}). Until you reinstall,
+              approvers decide in Speakeasy.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {needsReinstall.map((connection) => (
+                <Button
+                  key={connection.id}
+                  variant="secondary"
+                  size="sm"
+                  disabled={!configured || begin.isPending}
+                  onClick={() => start(connection.id)}
+                >
+                  {`Reinstall in ${connection.workspaceName || connection.workspaceId}`}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </Alert>
+      )}
+      {query.data && !configured && !isDemo && (
+        <Alert variant="info" dismissible={false}>
+          Ask your deployment administrator to configure the Slack directory app
+          before connecting a workspace.
+        </Alert>
+      )}
+
+      {query.isPending && (
+        <div role="status" aria-label="Loading workspaces">
+          <Skeleton>
+            <div className="h-24 w-full" />
+            <div className="h-24 w-full" />
+          </Skeleton>
+        </div>
+      )}
+      {query.data && connections.length === 0 && (
+        <InlineEmptyState
+          icon="hash"
+          heading="Connect your first workspace"
+          description="Choose a workspace in Slack and approve access to its member directory."
+        />
+      )}
+      {connections.length > 0 && (
+        <ul
+          className="border-border divide-border divide-y border"
+          aria-label="Slack workspaces"
+        >
+          {connections.map((connection) => (
+            <li
+              key={connection.id}
+              className="flex flex-wrap items-center justify-between gap-4 p-5"
+            >
+              <div className="flex min-w-0 items-center gap-4">
+                <Hash
+                  className="text-muted-foreground size-5 shrink-0"
+                  aria-hidden="true"
+                />
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="break-words font-medium">
+                      {connection.workspaceName || connection.workspaceId}
+                    </h3>
+                    <Badge variant={statusVariant(connection.status)}>
+                      {statusLabel(connection.status)}
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground font-mono text-xs">
+                    {connection.workspaceId}
+                  </p>
+                  <SlackSyncStatus connection={connection} />
+                  {connection.status === "reconnect_required" && (
+                    <p className="text-muted-foreground text-sm">
+                      {connectionError(connection.lastErrorCode)}
+                    </p>
+                  )}
+                  <DefaultProjectSelect
+                    connection={connection}
+                    connections={connections}
+                    disabled={isDemo || setDefaultProject.isPending}
+                    onChange={(projectId) => {
+                      setDefaultProject.mutate({
+                        request: {
+                          setSlackDirectoryDefaultProjectRequestBody: {
+                            id: connection.id,
+                            ...(projectId ? { projectId } : {}),
+                          },
+                        },
+                        security: SESSION_SECURITY,
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="tertiary" size="sm" asChild>
+                  <Link
+                    to={`?tab=slack-workspaces&slack_view=members&slack_workspace=${encodeURIComponent(connection.id)}`}
+                  >
+                    View members
+                  </Link>
+                </Button>
+                <SlackSyncButton connection={connection} />
+                {connection.status !== "disconnected" && (
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    disabled={isDemo}
+                    onClick={() => {
+                      disconnect.reset();
+                      setSelected(connection);
+                    }}
+                  >
+                    Disconnect
+                  </Button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-muted-foreground max-w-2xl text-sm">
+        Slack access is limited to reading workspace members and their email
+        addresses, and to sending tool approval requests to approvers as direct
+        messages.
+      </p>
+      <ConfirmDialog
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open) close();
+        }}
+        title={`Disconnect ${selected?.workspaceName || selected?.workspaceId || "workspace"}?`}
+        description="Speakeasy stops using this connection and deletes the workspace's synced members and every mapping to people, including manual ones. The app stays installed in Slack. Connecting the workspace again starts a fresh sync, which may map members to people by email again."
+        confirmLabel="Disconnect workspace"
+        isPending={disconnect.isPending}
+        error={disconnect.error?.message}
+        onConfirm={() => {
+          if (isDemo || !selected) return;
+          const current = connections.find(
+            (connection) => connection.id === selected.id,
+          );
+          if (current && current.generation !== selected.generation) {
+            disconnect.reset();
+            setSelected(current);
+            toast.info("The connection changed. Review it and confirm again.");
+            return;
+          }
+          disconnect.mutate({
+            request: {
+              disconnectSlackDirectoryConnectionRequestBody: {
+                id: selected.id,
+                generation: selected.generation,
+              },
+            },
+            security: SESSION_SECURITY,
+          });
+        }}
+      />
+    </section>
+  );
+}

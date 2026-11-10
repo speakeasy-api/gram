@@ -489,13 +489,14 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 				Generation:  0,
 				CreatedAt:   conv.ToPGTimestamptz(admittedAt[i]),
 			},
-			BillingUserID:  userID,
-			WorkloadSource: metering.WorkloadSourceImport,
-			UserEmail:      event.Actor.UserEmail,
-			Provider:       codexProviderOpenAI,
-			HookHostname:   "",
-			AccountType:    complianceAccountTypeTeam,
-			BillingMode:    src.cfg.BillingMode,
+			BillingUserID:     userID,
+			WorkloadSource:    metering.WorkloadSourceImport,
+			UserEmail:         event.Actor.UserEmail,
+			Provider:          codexProviderOpenAI,
+			InferenceProvider: codexProviderOpenAI,
+			HookHostname:      "",
+			AccountType:       complianceAccountTypeTeam,
+			BillingMode:       src.cfg.BillingMode,
 		})
 	}
 	if len(rows) == 0 {
@@ -544,7 +545,7 @@ func (src *codexCloudSource) upsertSessionChat(ctx context.Context, sessionID st
 		return err
 	}
 
-	chatID, err := chatrepo.New(src.svc.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
+	upserted, err := chatrepo.New(src.svc.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
 		ID:             uuid.New(),
 		ProjectID:      src.cfg.ProjectID,
 		OrganizationID: src.cfg.OrganizationID,
@@ -564,6 +565,7 @@ func (src *codexCloudSource) upsertSessionChat(ctx context.Context, sessionID st
 	if err != nil {
 		return fmt.Errorf("upsert codex cloud chat: %w", err)
 	}
+	chatID := upserted.ID
 	if !known {
 		if _, err := chatrepo.New(src.svc.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
 			AiIntegrationConfigID: src.cfg.ID,

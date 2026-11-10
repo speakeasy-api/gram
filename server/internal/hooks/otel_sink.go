@@ -95,6 +95,7 @@ func hooksSinkLogsPayload(payload *gen.LogsPayload) *gen.LogsPayload {
 	}
 	return &gen.LogsPayload{
 		ResourceLogs:     kept,
+		DeviceAgentToken: payload.DeviceAgentToken,
 		ApikeyToken:      payload.ApikeyToken,
 		ProjectSlugInput: payload.ProjectSlugInput,
 	}
@@ -115,6 +116,7 @@ func hooksSinkMetricsPayload(payload *gen.MetricsPayload) *gen.MetricsPayload {
 	}
 	return &gen.MetricsPayload{
 		ResourceMetrics:  kept,
+		DeviceAgentToken: payload.DeviceAgentToken,
 		ApikeyToken:      payload.ApikeyToken,
 		ProjectSlugInput: payload.ProjectSlugInput,
 	}

@@ -46,3 +46,8 @@ func LogsHooksPath() string {
 func MetricsHooksPath() string {
 	return "/rpc/hooks.otel/v1/metrics"
 }
+
+// GetStatusHooksPath returns the URL path to the hooks service getStatus HTTP endpoint.
+func GetStatusHooksPath() string {
+	return "/rpc/hooks.getStatus"
+}

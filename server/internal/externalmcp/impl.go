@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"strings"
 
@@ -25,43 +23,46 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 type Service struct {
-	tracer         trace.Tracer
-	logger         *slog.Logger
-	db             *pgxpool.Pool
-	repo           *repo.Queries
-	auth           *auth.Auth
-	authz          *authz.Engine
-	sessions       *sessions.Manager
-	registryClient *RegistryClient
-	catalog        *CatalogService
-	serverURL      *url.URL
+	tracer    trace.Tracer
+	logger    *slog.Logger
+	db        *pgxpool.Pool
+	repo      *repo.Queries
+	auth      *auth.Auth
+	authz     *authz.Engine
+	sessions  *sessions.Manager
+	cacheImpl cache.Cache
+	catalog   *CatalogService
+	// callbackOrigins resolves new-client redirect URIs shown in setup guides.
+	callbackOrigins remotesessions.CallbackOrigins
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, catalog *CatalogService, authzEngine *authz.Engine, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, cacheImpl cache.Cache, catalog *CatalogService, authzEngine *authz.Engine, callbackOrigin *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("external_mcp"))
 
 	return &Service{
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/externalmcp"),
-		logger:         logger,
-		db:             db,
-		repo:           repo.New(db),
-		auth:           auth.New(logger, db, sessions, authzEngine),
-		authz:          authzEngine,
-		sessions:       sessions,
-		registryClient: registryClient,
-		catalog:        catalog,
-		serverURL:      serverURL,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/externalmcp"),
+		logger:          logger,
+		db:              db,
+		repo:            repo.New(db),
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
+		sessions:        sessions,
+		cacheImpl:       cacheImpl,
+		catalog:         catalog,
+		callbackOrigins: remotesessions.DefaultCallbackOrigins(callbackOrigin),
 	}
 }
 
@@ -106,7 +107,7 @@ func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload
 		return oops.E(oops.CodeUnexpected, err, "get registry").LogError(ctx, s.logger)
 	}
 
-	if err := s.registryClient.ClearCache(ctx, registry.Url); err != nil {
+	if err := s.clearRegistryCache(ctx, registry.Url); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "clear registry cache").LogError(ctx, s.logger)
 	}
 
@@ -224,20 +225,15 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 	}
 
 	var details *serverDetailsResult
-	if _, ok := reader.(*RegistryClient); ok {
-		// Preserve the dashboard's existing Pulse detail projection, which includes
-		// every remote and the Pulse-specific per-remote tool metadata.
-		details, err = s.fetchServerDetails(ctx, source.Registry, payload.ServerSpecifier)
-	} else {
-		// Source-specific adapters normalize their selected detail result through
-		// the shared catalogue boundary, keeping reader selection aligned with
-		// source admission as new certified sources are enabled.
-		registryDetails, detailErr := s.catalog.Details(ctx, registryID, payload.ServerSpecifier, nil)
-		if detailErr != nil {
-			err = detailErr
+	if native, ok := reader.(*NativeRegistryReader); ok {
+		entry, lookupErr := native.discoveryEntry(ctx, payload.ServerSpecifier)
+		if lookupErr != nil {
+			err = lookupErr
 		} else {
-			details = serverDetailsResultFromRegistryDetails(registryDetails)
+			details, err = decodeDashboardDetails(entry.Data)
 		}
+	} else {
+		err = ErrUnknownRegistrySource
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch server details from registry").LogError(ctx, s.logger)
@@ -251,12 +247,16 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		ToolsetID:         nil,
 		McpServerID:       nil,
 		RegistryID:        &registryIDStr,
-		Title:             nil,
-		IconURL:           nil,
-		Meta:              nil,
-		Tools:             details.Tools,
+		Title:             details.Title,
+		IconURL:           details.IconURL,
+		Meta:              details.Meta,
+		Tools:             nil,
 		Remotes:           details.Remotes,
 	}, nil
+}
+
+func (s *Service) SetCallbackOrigins(origins remotesessions.CallbackOrigins) {
+	s.callbackOrigins = origins
 }
 
 func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPayload) (*gen.GetSetupDocsResult, error) {
@@ -275,9 +275,13 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of server_url or registry_specifier must be provided").LogError(ctx, s.logger)
 	}
 
-	// The one redirect_uri for every provider and slug. remotesessions/challenge.go,
-	// oauth/impl.go, and the dashboard derive it the same way.
-	callbackURL := s.serverURL.JoinPath("mcp", "remote_login_callback").String()
+	// The redirect_uri a newly created client registers, for every provider
+	// and slug. remotesessions and the dashboard derive it the same way.
+	base, err := s.callbackOrigins.ResolveNewClientBaseURL(ctx, s.db, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, s.logger)
+	}
+	callbackURL := remotesessions.RemoteLoginCallbackURL(s.callbackOrigins.ForClient(base))
 
 	return &gen.GetSetupDocsResult{
 		Guides: resolveSetupGuides(registrySpecifier, serverURL, callbackURL),
@@ -286,166 +290,61 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 
 // serverDetailsResult contains all details fetched from the registry for a server.
 type serverDetailsResult struct {
+	Title       *string
+	IconURL     *string
+	Meta        map[string]any
 	Name        string
 	Description string
 	Version     string
-	Tools       []*types.ExternalMCPTool
 	Remotes     []*types.ExternalMCPRemote
 }
 
-func serverDetailsResultFromRegistryDetails(details *ServerDetails) *serverDetailsResult {
-	if details == nil {
-		return nil
-	}
-
-	var tools []*types.ExternalMCPTool
-	if details.Tools != nil {
-		tools = make([]*types.ExternalMCPTool, 0, len(details.Tools))
-		for i := range details.Tools {
-			tool := &details.Tools[i]
-			tools = append(tools, &types.ExternalMCPTool{
-				Name:        &tool.Name,
-				Description: &tool.Description,
-				InputSchema: tool.InputSchema,
-				Annotations: tool.Annotations,
-			})
-		}
-	}
-
-	var remotes []*types.ExternalMCPRemote
-	if details.RemoteURL != "" {
-		remotes = []*types.ExternalMCPRemote{{
-			URL:           details.RemoteURL,
-			TransportType: string(details.TransportType),
-			Headers:       toExternalMCPRemoteHeaders(details.Headers),
-			Variables:     toExternalMCPRemoteVariables(details.Variables),
-		}}
-	}
-
-	return &serverDetailsResult{
-		Name:        details.Name,
-		Description: details.Description,
-		Version:     details.Version,
-		Tools:       tools,
-		Remotes:     remotes,
-	}
+// clearRegistryCache preserves invalidation of both generic registry cache namespaces.
+func (s *Service) clearRegistryCache(ctx context.Context, registryURL string) error {
+	var client RegistryClient
+	client.listCache = cache.NewTypedObjectCache[CachedListServers](s.logger, s.cacheImpl, cache.SuffixNone)
+	client.detailsCache = cache.NewTypedObjectCache[CachedServerDetailsResponse](s.logger, s.cacheImpl, cache.SuffixNone)
+	return client.ClearCache(ctx, registryURL)
 }
 
-// fetchServerDetails fetches all server details from the registry in a single HTTP call.
-func (s *Service) fetchServerDetails(ctx context.Context, registry Registry, serverName string) (*serverDetailsResult, error) {
-	registryURL, err := reviewedRegistryDetailsURL(registry.URL)
-	if err != nil {
-		return nil, err
-	}
-	requestURL := registryURL.JoinPath("v0.1", "servers", url.PathEscape(serverName), "versions", "latest")
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), http.NoBody)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	if s.registryClient.backend.Match(req) {
-		if err := s.registryClient.backend.Authorize(req); err != nil {
-			return nil, fmt.Errorf("authorize request: %w", err)
-		}
-	}
-
-	resp, err := s.registryClient.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	type remoteMeta struct {
-		Tools []struct {
-			Name        string          `json:"name"`
-			Description string          `json:"description"`
-			InputSchema json.RawMessage `json:"inputSchema"`
-			Annotations map[string]any  `json:"annotations"`
-		} `json:"tools"`
-	}
-	var serverResp struct {
+func decodeDashboardDetails(body []byte) (*serverDetailsResult, error) {
+	var enrichment struct {
 		Server struct {
-			Name        string             `json:"name"`
-			Description string             `json:"description"`
-			Version     string             `json:"version"`
-			Remotes     []serverRemoteJSON `json:"remotes"`
+			Title *string `json:"title"`
+			Icons []struct {
+				Src string `json:"src"`
+			} `json:"icons"`
 		} `json:"server"`
-		Meta struct {
-			Version struct {
-				FirstRemote  remoteMeta `json:"remotes[0]"`
-				SecondRemote remoteMeta `json:"remotes[1]"`
-				ThirdRemote  remoteMeta `json:"remotes[2]"`
-				FourthRemote remoteMeta `json:"remotes[3]"`
-				FifthRemote  remoteMeta `json:"remotes[4]"`
-			} `json:"com.pulsemcp/server-version"`
-		} `json:"_meta"`
+		Meta map[string]any `json:"_meta"`
 	}
+	if err := json.Unmarshal(body, &enrichment); err != nil {
+		return nil, fmt.Errorf("decode detail enrichment: %w", err)
+	}
+	var icon *string
+	if len(enrichment.Server.Icons) > 0 {
+		icon = &enrichment.Server.Icons[0].Src
+	}
+
+	var serverResp serverDetailsEntry
 	if err := json.Unmarshal(body, &serverResp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
-	// Convert remotes and find preferred remote index (streamable-http > sse)
 	var remotes []*types.ExternalMCPRemote
-	preferredIndex := -1
-	foundStreamable := false
-	for i, r := range serverResp.Server.Remotes {
+	for _, r := range serverResp.Server.Remotes {
 		remotes = append(remotes, &types.ExternalMCPRemote{
-			URL:           r.URL,
-			TransportType: r.Type,
-			Headers:       toExternalMCPRemoteHeaders(r.Headers),
-			Variables:     toExternalMCPRemoteVariables(r.Variables),
-		})
-		// Prefer first streamable-http; fall back to first sse.
-		// Can't break early because we need all remotes in the slice.
-		if r.Type == "streamable-http" && !foundStreamable {
-			preferredIndex = i
-			foundStreamable = true
-		} else if r.Type == "sse" && preferredIndex == -1 {
-			preferredIndex = i
-		}
-	}
-
-	// Get tools from the preferred remote (matching registryclient.go behavior)
-	var selectedRemote remoteMeta
-	switch preferredIndex {
-	case 0:
-		selectedRemote = serverResp.Meta.Version.FirstRemote
-	case 1:
-		selectedRemote = serverResp.Meta.Version.SecondRemote
-	case 2:
-		selectedRemote = serverResp.Meta.Version.ThirdRemote
-	case 3:
-		selectedRemote = serverResp.Meta.Version.FourthRemote
-	case 4:
-		selectedRemote = serverResp.Meta.Version.FifthRemote
-	}
-
-	// Convert tools
-	var tools []*types.ExternalMCPTool
-	for _, t := range selectedRemote.Tools {
-		tools = append(tools, &types.ExternalMCPTool{
-			Name:        &t.Name,
-			Description: &t.Description,
-			InputSchema: t.InputSchema,
-			Annotations: t.Annotations,
+			URL: r.URL, TransportType: r.Type,
+			Headers:   toExternalMCPRemoteHeaders(r.Headers),
+			Variables: toExternalMCPRemoteVariables(r.Variables),
 		})
 	}
-
+	// Tool declarations carried in _meta pass through as opaque metadata and are
+	// not interpreted. Live discovery is separate.
 	return &serverDetailsResult{
+		Title: enrichment.Server.Title, IconURL: icon, Meta: enrichment.Meta,
 		Name:        serverResp.Server.Name,
 		Description: serverResp.Server.Description,
 		Version:     serverResp.Server.Version,
-		Tools:       tools,
 		Remotes:     remotes,
 	}, nil
 }

@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// AuthenticatedUserPrincipalAdapter canonicalizes concrete Gram user
+// AuthenticatedUserPrincipalAdapter canonicalizes concrete Speakeasy user
 // principals and derives candidates only from authoritative user-session
 // provenance. Membership is revalidated against the organization on every
 // derivation and is never cached, so a removed member stops producing
@@ -116,7 +116,7 @@ func (a *AuthenticatedUserPrincipalAdapter) DeriveCandidates(ctx context.Context
 			return killswitches.PrincipalCandidateResult{}, fmt.Errorf("build principal candidate: %w", err)
 		}
 		return result, nil
-	case mcpidentity.KindAnonymous, mcpidentity.KindAPIKey, mcpidentity.KindAssistant, mcpidentity.KindAgent, mcpidentity.KindChatSession, mcpidentity.KindWorkload:
+	case mcpidentity.KindConsentDiscovery, mcpidentity.KindAnonymous, mcpidentity.KindAPIKey, mcpidentity.KindAssistant, mcpidentity.KindAgent, mcpidentity.KindChatSession, mcpidentity.KindWorkload:
 		return killswitches.UnsupportedPrincipalCandidateResult(), nil
 	default:
 		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("unknown identity provenance kind %q", identity.Kind())

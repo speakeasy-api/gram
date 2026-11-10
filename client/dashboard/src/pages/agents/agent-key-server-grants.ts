@@ -14,8 +14,8 @@ export interface CredentialServerResource {
 /**
  * Expand only discovered MCP grants into exact, selected server/project pairs.
  * Use the existing narrowing validator, never manufacture scopes or replace
- * pinned dimensions. The remaining tool/disposition dimensions stay available
- * to AgentGrantSelector. Unproxied servers do not consume Gram credentials.
+ * pinned dimensions. The remaining tool/disposition dimensions stay open for
+ * the caller to narrow. Unproxied servers do not consume Speakeasy credentials.
  */
 export function narrowGrantsToServers(
   grants: AgentPolicyGrantForm[],

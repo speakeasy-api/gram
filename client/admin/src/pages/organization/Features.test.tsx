@@ -34,7 +34,7 @@ const ORG = anOrganization();
 const FEATURES: ProductFeatures = {
   aiPlatformPushIntegrationsEnabled: false,
   authzChallengeLoggingEnabled: true,
-  consentToolFilteringEnabled: false,
+  codeModeEnabled: false,
   customModelKeysEnabled: true,
   customerManagedEncryptionKeysEnabled: false,
   deviceAgent: false,
@@ -42,12 +42,14 @@ const FEATURES: ProductFeatures = {
   hooksFailOpenEnabled: false,
   logsEnabled: true,
   networkIngressEnabled: false,
+  organizationGatewayDisabled: false,
   platformMcpEnabled: true,
   remoteSessionAutoRefreshEnabled: false,
   remoteSessionAutoRefreshEnforcedEnabled: false,
   scimEnabled: false,
   sessionCaptureEnabled: false,
   sessionPortabilityEnabled: false,
+  signalsIntelligenceEnabled: false,
   skillCaptureMetadataOnly: false,
   skillsEnabled: true,
   ssoEnabled: true,
@@ -57,7 +59,7 @@ const FEATURES: ProductFeatures = {
 const FEATURES_RESPONSE = {
   ai_platform_push_integrations_enabled: false,
   authz_challenge_logging_enabled: true,
-  consent_tool_filtering_enabled: false,
+  code_mode_enabled: false,
   custom_model_keys_enabled: true,
   customer_managed_encryption_keys_enabled: false,
   device_agent: false,
@@ -65,12 +67,14 @@ const FEATURES_RESPONSE = {
   hooks_fail_open_enabled: false,
   logs_enabled: true,
   network_ingress_enabled: false,
+  organization_gateway_disabled: false,
   platform_mcp_enabled: true,
   remote_session_auto_refresh_enabled: false,
   remote_session_auto_refresh_enforced_enabled: false,
   scim_enabled: false,
   session_capture_enabled: false,
   session_portability_enabled: false,
+  signals_intelligence_enabled: false,
   skill_capture_metadata_only: false,
   skills_enabled: true,
   sso_enabled: true,
@@ -92,6 +96,11 @@ const TOGGLE_FEATURES = [
     featureName: "customer_managed_encryption_keys",
     enabledKey: "customerManagedEncryptionKeysEnabled",
     label: "Customer-Managed Encryption Keys",
+  },
+  {
+    featureName: "code_mode",
+    enabledKey: "codeModeEnabled",
+    label: "Gateway Code Mode",
   },
   {
     featureName: "custom_model_keys",
@@ -118,6 +127,11 @@ const TOGGLE_FEATURES = [
     enabledKey: "sessionPortabilityEnabled",
     label: "Session Portability",
   },
+  {
+    featureName: "signals_intelligence",
+    enabledKey: "signalsIntelligenceEnabled",
+    label: "Signals Intelligence",
+  },
   { featureName: "sso", enabledKey: "ssoEnabled", label: "SSO" },
   { featureName: "scim", enabledKey: "scimEnabled", label: "SCIM" },
 ] as const satisfies readonly {
@@ -137,7 +151,7 @@ const OMITTED_FEATURES = {
   skills: "omitted",
   skill_capture_metadata_only: "omitted",
   remote_session_auto_refresh_enforced: "omitted",
-  consent_tool_filtering: "omitted",
+  organization_gateway_disabled: "omitted",
 } as const satisfies Record<Exclude<FeatureName, ToggleFeatureName>, "omitted">;
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -175,13 +189,22 @@ beforeEach(() => {
     const request = input as Request;
     if (request.method === "GET") return jsonResponse(FEATURES_RESPONSE);
 
+    if (new URL(request.url).pathname === "/admin/organization.providerSetup") {
+      const body = await request.clone().json();
+      return jsonResponse({
+        ...FEATURES_RESPONSE,
+        provider_setup_enabled: body.enabled,
+      });
+    }
+
     const body = (await request.clone().json()) as {
       enabled: boolean;
       feature_name: string;
     };
+    const responseKey = `${body.feature_name}_enabled`;
     return jsonResponse({
       ...FEATURES_RESPONSE,
-      [`${body.feature_name}_enabled`]: body.enabled,
+      [responseKey]: body.enabled,
     });
   });
   vi.stubGlobal("fetch", mocks.featureFetch);
@@ -203,16 +226,60 @@ async function renderFeatures(queryClient?: QueryClient): Promise<void> {
 }
 
 describe("Features", () => {
+  it("enables and disables provider setup using its staff rollout endpoint", async () => {
+    await renderFeatures();
+    const toggle = await screen.findByRole("switch", {
+      name: "Toggle MCP provider setup",
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    for (const enabled of [true, false]) {
+      fireEvent.click(toggle);
+      await waitFor(() =>
+        expect(toggle.getAttribute("aria-checked")).toBe(String(enabled)),
+      );
+      await waitFor(() => expect(toggle.hasAttribute("disabled")).toBe(false));
+      const request = mocks.featureFetch.mock.calls
+        .map(([request]) => request as Request)
+        .filter((request) => request.method === "POST")
+        .at(-1)!;
+      expect(new URL(request.url).pathname).toBe(
+        "/admin/organization.providerSetup",
+      );
+      expect(await request.clone().json()).toEqual({
+        organization_id: ORG.id,
+        enabled,
+      });
+    }
+  });
+
+  it("keeps the saved provider setup state and displays failed writes", async () => {
+    await renderFeatures();
+    const toggle = await screen.findByRole("switch", {
+      name: "Toggle MCP provider setup",
+    });
+    mocks.featureFetch.mockImplementation(async (request: Request) =>
+      request.method === "POST"
+        ? serviceError("Rollout unavailable", 403)
+        : jsonResponse(FEATURES_RESPONSE),
+    );
+    fireEvent.click(toggle);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Rollout unavailable",
+    );
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    await waitFor(() => expect(toggle.hasAttribute("disabled")).toBe(false));
+  });
+
   it("renders exactly the typed direct toggles", async () => {
     await renderFeatures();
 
     const switches = await screen.findAllByRole("switch");
-    expect(switches).toHaveLength(TOGGLE_FEATURES.length);
+    expect(switches).toHaveLength(TOGGLE_FEATURES.length + 1);
     expect(
       TOGGLE_FEATURES.map(({ label }) =>
         screen.getByRole("switch", { name: `Toggle ${label}` }),
       ),
-    ).toEqual(switches);
+    ).toEqual(switches.slice(1));
     expect(
       Object.values(OMITTED_FEATURES).filter(
         (classification) => classification === "omitted",
@@ -266,6 +333,10 @@ describe("Features", () => {
         organization_id: ORG.id,
         feature_name: featureName,
         enabled: true,
+      });
+      await waitFor(() => {
+        expect(queryClient.isMutating()).toBe(0);
+        expect(control.getAttribute("data-state")).toBe("checked");
       });
     },
   );

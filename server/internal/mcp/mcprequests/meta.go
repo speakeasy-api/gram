@@ -83,7 +83,7 @@ type SanitizedClientInfo struct {
 	Version string
 }
 
-// SanitizedMeta is the per-request metadata Gram reads from an MCP request's
+// SanitizedMeta is the per-request metadata Speakeasy reads from an MCP request's
 // params. Every field is sanitized on decode, so consumers may store or
 // record them directly.
 type SanitizedMeta struct {

@@ -1,5 +1,5 @@
-// Serve-path loading of the consent-screen tool selection. The session JWT
-// stays standard-claims-only, so the policy lives on the user_sessions row
+// Serve-path loading of consent-screen tool selection and refreshability.
+// The session JWT stays standard-claims-only, so policy lives on user_sessions
 // and is pulled per request through a short-TTL Redis cache keyed by
 // (issuer, jti). Failures reject the request (fail closed) — a policy store
 // outage must never widen a restrictive session to all tools.
@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -19,11 +20,11 @@ import (
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// sessionToolSelectionTTL bounds staleness of the cached policy. The jti in
+// sessionPolicyTTL bounds staleness of the cached policy. The jti in
 // the key rotates on every refresh-token slide, so a rotated session never
 // reads a predecessor's entry; the TTL only bounds how long a same-jti
 // revision (there are none today — rows are written once) could lag.
-const sessionToolSelectionTTL = 5 * time.Minute
+const sessionPolicyTTL = 5 * time.Minute
 
 // errToolSelectionResourceMismatch marks a restrictive selection presented
 // against an endpoint other than the one it was consented on. Session tokens
@@ -31,41 +32,71 @@ const sessionToolSelectionTTL = 5 * time.Minute
 // caller must 401 into reauth rather than reinterpret the policy.
 var errToolSelectionResourceMismatch = errors.New("session tool selection is bound to a different endpoint")
 
+// errSessionPolicyGone marks a bearer whose session row is gone: the token is no good, nothing is down.
+var errSessionPolicyGone = errors.New("session policy gone")
+
 // errToolSelectionLoad marks a post-validation policy-store failure. The
 // bearer token itself is valid; the request still fails closed, but logs must
 // distinguish this operational or stored-data failure from bad credentials.
 var errToolSelectionLoad = errors.New("load session tool selection")
 
-// sessionToolSelectionEntry is the cached (issuer, jti) -> raw policy row.
-type sessionToolSelectionEntry struct {
+// sessionPolicyEntry caches immutable issuance policy by issuer and JTI.
+type sessionPolicyEntry struct {
+	// IssuerID scopes this entry to the authorization server.
 	IssuerID string `json:"issuer_id"`
-	JTI      string `json:"jti"`
+
+	// JTI identifies the immutable session issuance.
+	JTI string `json:"jti"`
+
 	// Selection is the raw tool_selection document; empty means NULL (all
 	// tools). Kept raw so the cache round-trip cannot normalize away a parse
 	// failure — parsing (and its fail-closed error) happens on every read.
 	Selection []byte `json:"selection,omitempty"`
+
+	// Refreshable records whether issuance included an actual refresh token.
+	Refreshable bool `json:"refreshable"`
+
+	// CredentialID is the credential the session row belongs to, which
+	// refresh rotation keeps.
+	CredentialID uuid.UUID `json:"credential_id"`
 }
 
-func sessionToolSelectionCacheKey(issuerID, jti string) string {
-	return "sessionToolSelection:" + issuerID + ":" + jti
+// sessionPolicy is a validated session's immutable issuance policy.
+type sessionPolicy struct {
+	// selection is the consent-screen tool policy, nil for all tools.
+	selection *toolfilter.SessionPolicy
+
+	// refreshable reports that issuance included an actual refresh token.
+	refreshable bool
+
+	// credentialID is the credential the session row belongs to.
+	credentialID uuid.UUID
+}
+
+func sessionPolicyCacheKey(issuerID, jti string) string {
+	// The version excludes entries from older servers that lack fields this
+	// one reads.
+	return "sessionPolicy:v2:" + issuerID + ":" + jti
 }
 
 // CacheKey implements cache.CacheableObject.
-func (e sessionToolSelectionEntry) CacheKey() string {
-	return sessionToolSelectionCacheKey(e.IssuerID, e.JTI)
+func (e sessionPolicyEntry) CacheKey() string {
+	return sessionPolicyCacheKey(e.IssuerID, e.JTI)
 }
 
 // AdditionalCacheKeys implements cache.CacheableObject.
-func (e sessionToolSelectionEntry) AdditionalCacheKeys() []string { return []string{} }
+func (e sessionPolicyEntry) AdditionalCacheKeys() []string { return []string{} }
 
 // TTL implements cache.CacheableObject.
-func (e sessionToolSelectionEntry) TTL() time.Duration { return sessionToolSelectionTTL }
+func (e sessionPolicyEntry) TTL() time.Duration { return sessionPolicyTTL }
 
 // endpointToolSelectionResource is the server-authored identity a consent
 // selection binds to: the fronting mcp_server when there is one, else the
-// toolset. Empty when the endpoint has neither, as with meta-MCP.
+// toolset or gateway. Empty when the endpoint has no stored resource.
 func endpointToolSelectionResource(endpoint *ResolvedMcpEndpoint) string {
 	switch {
+	case endpoint.MetaMcpServerID.Valid:
+		return "meta_mcp_server:" + endpoint.MetaMcpServerID.UUID.String()
 	case endpoint.McpServerID.Valid:
 		return "mcp_server:" + endpoint.McpServerID.UUID.String()
 	case endpoint.ToolsetID.Valid:
@@ -89,41 +120,54 @@ func endpointAcceptsToolSelectionResource(endpoint *ResolvedMcpEndpoint, resourc
 	return endpoint.McpServerID.Valid && endpoint.ToolsetID.Valid && resource == "toolset:"+endpoint.ToolsetID.UUID.String()
 }
 
-// loadSessionToolSelection resolves the tool policy for a validated session
-// jti. Returns nil for an all-tools session. Any error means the request
+// liveSessionPolicyKey bypasses the short-lived HTTP policy cache during code callbacks.
+type liveSessionPolicyKey struct{}
+
+// loadSessionPolicy resolves tool selection and refreshability for a validated
+// session JTI. The selection is nil for an all-tools session. Any error means the request
 // must be rejected: missing row (a live jti always has one — refresh
 // rotation revokes the old jti before soft-deleting its row), database
 // failure, or a malformed stored policy.
-func (s *Service) loadSessionToolSelection(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (*toolfilter.SessionSelection, error) {
+func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (sessionPolicy, error) {
 	issuerID := endpoint.UserSessionIssuerID.String()
 
-	var raw []byte
-	if cached, err := s.toolSelectionCache.Get(ctx, sessionToolSelectionCacheKey(issuerID, jti)); err == nil {
-		raw = cached.Selection
-	} else {
-		row, derr := usersessions_repo.New(s.db).GetUserSessionToolSelectionByJTI(ctx, usersessions_repo.GetUserSessionToolSelectionByJTIParams{
+	var entry sessionPolicyEntry
+	live, _ := ctx.Value(liveSessionPolicyKey{}).(bool)
+	cachedPolicy := false
+	if !live {
+		if cached, err := s.sessionPolicyCache.Get(ctx, sessionPolicyCacheKey(issuerID, jti)); err == nil {
+			entry = cached
+			cachedPolicy = true
+		}
+	}
+	if !cachedPolicy {
+		row, derr := usersessions_repo.New(s.db).GetUserSessionPolicyByJTI(ctx, usersessions_repo.GetUserSessionPolicyByJTIParams{
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
 			Jti:                 jti,
 		})
 		if derr != nil {
 			if errors.Is(derr, pgx.ErrNoRows) {
-				return nil, fmt.Errorf("user session row not found for jti")
+				return sessionPolicy{}, fmt.Errorf("user session row not found for jti: %w", errSessionPolicyGone)
 			}
-			return nil, fmt.Errorf("load session tool selection: %w", derr)
+			return sessionPolicy{}, fmt.Errorf("load session policy: %w", derr)
 		}
-		raw = row.ToolSelection
-		if cerr := s.toolSelectionCache.Store(ctx, sessionToolSelectionEntry{
-			IssuerID:  issuerID,
-			JTI:       jti,
-			Selection: raw,
-		}); cerr != nil {
-			s.logger.WarnContext(ctx, "cache session tool selection", attr.SlogError(cerr))
+		entry = sessionPolicyEntry{
+			IssuerID:     issuerID,
+			JTI:          jti,
+			Selection:    row.ToolSelection,
+			Refreshable:  row.Refreshable,
+			CredentialID: row.CredentialID,
+		}
+		if !live {
+			if cerr := s.sessionPolicyCache.Store(ctx, entry); cerr != nil {
+				s.logger.WarnContext(ctx, "cache session policy", attr.SlogError(cerr))
+			}
 		}
 	}
 
-	sel, err := toolfilter.ParseSessionSelection(raw)
+	sel, err := toolfilter.ParseSessionPolicy(entry.Selection)
 	if err != nil {
-		return nil, fmt.Errorf("parse stored tool selection: %w", err)
+		return sessionPolicy{}, fmt.Errorf("parse stored tool selection: %w", err)
 	}
-	return sel, nil
+	return sessionPolicy{selection: sel, refreshable: entry.Refreshable, credentialID: entry.CredentialID}, nil
 }

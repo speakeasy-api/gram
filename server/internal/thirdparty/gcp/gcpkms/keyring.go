@@ -21,14 +21,18 @@ var ErrInvalidKeyRingName = errors.New("invalid gcp kms key ring name")
 // GCP KMS accepts.
 var ErrInvalidKeyID = errors.New("invalid gcp kms crypto key id")
 
-// ErrSigningKeyExists is returned when a key with the requested id already
+// ErrKeyExists is returned when a key with the requested id already
 // exists in the ring. Ids are random, so this indicates a collision or a retry
 // against a ring the caller does not own.
-var ErrSigningKeyExists = errors.New("gcp kms crypto key already exists")
+var ErrKeyExists = errors.New("gcp kms crypto key already exists")
 
 // SignerVerifierRole is the IAM role that permits signing with a key and
 // reading its public half, and nothing else on the ring.
 const SignerVerifierRole iam.RoleName = "roles/cloudkms.signerVerifier"
+
+// EncrypterDecrypterRole is the IAM role that permits encrypting and
+// decrypting with a symmetric key, and nothing else on the ring.
+const EncrypterDecrypterRole iam.RoleName = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
 
 // keyRingNamePattern matches a key ring resource name, the parent every
 // crypto key is created under.
@@ -64,17 +68,18 @@ func ValidateKeyName(name string) error {
 	return nil
 }
 
-// signingKeyIDRandomBytes is the entropy behind a generated key id: 128 bits,
-// so two provisioning runs can never collide within a ring.
-const signingKeyIDRandomBytes = 16
+// keyIDRandomBytes is the entropy behind a generated key id: 128 bits, so two
+// provisioning runs can never collide within a ring.
+const keyIDRandomBytes = 16
 
-// NewSigningKeyID returns a random crypto key id under prefix. The id is what
-// names the key in GCP, so it must never be derived from a row id that appears
-// in a public URL: a reader of the JWKS URL must not be able to name the key.
-func NewSigningKeyID(prefix string) (string, error) {
-	raw := make([]byte, signingKeyIDRandomBytes)
+// NewKeyID returns a random crypto key id under prefix, for signing and
+// encryption keys alike. The id is what names the key in GCP, so it must never
+// be derived from a row id that appears in a public URL: a reader of a JWKS URL
+// or an API response must not be able to name the key.
+func NewKeyID(prefix string) (string, error) {
+	raw := make([]byte, keyIDRandomBytes)
 	if _, err := rand.Read(raw); err != nil {
-		return "", fmt.Errorf("generate signing key id: %w", err)
+		return "", fmt.Errorf("generate key id: %w", err)
 	}
 
 	id := strings.TrimSpace(prefix) + "-" + hex.EncodeToString(raw)
@@ -90,7 +95,7 @@ type CreateSigningKeyParams struct {
 	// KeyRing is the fully-qualified ring the key is created in.
 	KeyRing string
 
-	// KeyID is the crypto key id within the ring, from NewSigningKeyID.
+	// KeyID is the crypto key id within the ring, from NewKeyID.
 	KeyID string
 
 	// Algorithm is the JOSE algorithm the key signs with. Only RS256 and ES256
@@ -103,7 +108,7 @@ type CreatedSigningKey struct {
 	// KeyName is the crypto key resource name, the target for IAM bindings.
 	KeyName string
 
-	// KeyVersionName is the first version's resource name, the value Gram
+	// KeyVersionName is the first version's resource name, the value Speakeasy
 	// records and signs with.
 	KeyVersionName string
 }
@@ -138,8 +143,8 @@ func validateCreateSigningKeyParams(params CreateSigningKeyParams) error {
 	return nil
 }
 
-// signingKeyVersionName is the resource name of a key's first version.
-func signingKeyVersionName(keyName string) string {
+// firstKeyVersionName is the resource name of a key's first version.
+func firstKeyVersionName(keyName string) string {
 	return keyName + "/cryptoKeyVersions/1"
 }
 

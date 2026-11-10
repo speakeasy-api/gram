@@ -75,6 +75,7 @@ SELECT
     d.provisioner_kind,
     d.ip_allowlist,
     d.deleted,
+    d.dns_target_token,
     COALESCE(root_endpoint.id, '00000000-0000-0000-0000-000000000000'::uuid) AS root_mcp_endpoint_id,
     COALESCE(root_endpoint.slug, '')::text AS root_slug
 FROM custom_domains AS d
@@ -93,7 +94,18 @@ LEFT JOIN LATERAL (
       AND e.deleted IS FALSE
     LIMIT 1
 ) AS root_endpoint ON TRUE
-WHERE d.id = @id;
+WHERE d.id = @id
+  AND d.organization_id = @organization_id;
+
+-- name: GetCustomDomainOrganizationIDForReconcile :one
+-- Internal reconcile workflow lookup. The workflow is keyed by custom domain
+-- ID alone, so this resolves the owning organization before the
+-- organization-scoped GetCustomDomainRouteConfig read. Not reachable from
+-- user-facing handlers. Includes deleted rows so reconciliation can clean up
+-- their resources.
+SELECT organization_id
+FROM custom_domains
+WHERE id = @id;
 
 -- name: LockRootMcpEndpointSelection :many
 -- The caller locks the parent custom-domain row first. Sort endpoint locks to
@@ -115,7 +127,8 @@ FOR UPDATE;
 -- can carry several endpoints on a domain: prefer the root one, then the
 -- oldest) so callers can distinguish attach-and-set from set. Slugless
 -- servers are omitted unless already attached: the by-server path needs a
--- slug to name the endpoint it creates.
+-- slug to name the endpoint it creates. A hosted server's canonical wrapper
+-- (id = toolset id) is offered only when its one endpoint is on this domain.
 SELECT
     s.id,
     s.name,
@@ -142,6 +155,7 @@ WHERE p.organization_id = @organization_id
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
   AND (COALESCE(s.slug, '') <> '' OR e.id IS NOT NULL)
+  AND (s.toolset_id IS DISTINCT FROM s.id OR e.id IS NOT NULL)
 ORDER BY p.name, s.name NULLS LAST, s.id;
 
 -- name: GetEligibleRootMcpServerForOrganization :one
@@ -251,8 +265,8 @@ WHERE d.activated IS TRUE
   AND d.ingress_name IS NOT NULL
   AND d.deleted IS FALSE;
 
--- name: GetOrganizationSlugForHealthNotification :one
-SELECT slug
+-- name: GetOrganizationForHealthNotification :one
+SELECT slug, default_host
 FROM organization_metadata
 WHERE id = @organization_id;
 
@@ -276,6 +290,9 @@ SET
     unhealthy_since = @unhealthy_since,
     certificate_expires_at = @certificate_expires_at,
     consecutive_failures = @consecutive_failures,
+    dns_routing_method = sqlc.narg(dns_routing_method),
+    dns_configuration_status = sqlc.narg(dns_configuration_status),
+    dns_checked_at = sqlc.narg(dns_checked_at),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
@@ -385,20 +402,36 @@ WHERE organization_id = @organization_id
 RETURNING *;
 
 -- name: DeleteCustomDomain :exec
+-- Clearing the DNS target token frees it from the live-row unique index and
+-- stops the tombstone from claiming a per-domain target.
 UPDATE custom_domains
-SET deleted_at = clock_timestamp()
+SET
+    deleted_at = clock_timestamp(),
+    dns_target_token = NULL
 WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
--- name: DisableCustomDomainForHealth :one
--- Clearing activated drops the domain from health sweeps; clearing verified
--- puts it back into the dashboard reverify flow. Caller tears down k8s.
+-- name: AssignCustomDomainDNSTargetToken :one
+-- Tokens are immutable once set: only a live row without one is updated, so
+-- concurrent assigners cannot overwrite each other. No row means the domain
+-- already has a token or is no longer live.
 UPDATE custom_domains
 SET
-    verified = FALSE,
-    activated = FALSE,
+    dns_target_token = @dns_target_token::text,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE
-RETURNING id;
+  AND dns_target_token IS NULL
+RETURNING dns_target_token;
+
+-- name: GetCustomDomainDNSTargetToken :one
+SELECT dns_target_token
+FROM custom_domains
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
+-- name: GetCustomDomainByDomainAndOrganization :one
+SELECT * FROM custom_domains
+WHERE domain = @domain AND organization_id = @organization_id AND deleted IS FALSE;

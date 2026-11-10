@@ -36,7 +36,7 @@ func (s *SearchLogs) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "logs",
 		HandlerName: "search_logs",
 		Name:        "platform_search_logs",
-		Description: "Search and inspect telemetry logs for the current project.",
+		Description: "Search and inspect telemetry logs for the current project. Requires log:read on the project.",
 		InputSchema: core.BuildInputSchema[searchLogsInput](
 			core.WithTypeSchema(reflect.TypeFor[telemetry.LogFilter](), core.PermissiveObjectSchema()),
 			core.WithTypeSchema(reflect.TypeFor[telemetry.SearchLogsFilter](), core.PermissiveObjectSchema()),
@@ -92,6 +92,9 @@ func (s *SearchLogs) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload
 	if err != nil {
 		if errors.Is(err, telemetryerrs.ErrLogsDisabled) {
 			return writeLogsDisabledResponse(wr)
+		}
+		if isForbidden(err) {
+			return writeLogReadRequiredResponse(wr)
 		}
 		return fmt.Errorf("search logs: %w", err)
 	}

@@ -26,7 +26,7 @@ type LogRecord struct {
 	ActorDisplayName *string
 	ActorDisplay     string
 	// The feed returns this alongside the display name, and the staff mask
-	// clears it only for an actor id that resolves to a Gram user.
+	// clears it only for an actor id that resolves to a Speakeasy user.
 	ActorSlug      string
 	SubjectID      string
 	SubjectType    string
@@ -49,7 +49,19 @@ func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Ac
 	if err != nil {
 		return LogRecord{}, fmt.Errorf("get latest audit log by action: %w", err)
 	}
+	return toLogRecord(row), nil
+}
 
+// LatestAuditLogByActionAndSubject picks one subject's row when a single call audits several.
+func LatestAuditLogByActionAndSubject(ctx context.Context, dbtx repo.DBTX, action audit.Action, subjectID string) (LogRecord, error) {
+	row, err := repo.New(dbtx).GetLatestAuditLogByActionAndSubject(ctx, repo.GetLatestAuditLogByActionAndSubjectParams{Action: string(action), SubjectID: subjectID})
+	if err != nil {
+		return LogRecord{}, fmt.Errorf("get latest audit log by action and subject: %w", err)
+	}
+	return toLogRecord(repo.GetLatestAuditLogByActionRow(row)), nil
+}
+
+func toLogRecord(row repo.GetLatestAuditLogByActionRow) LogRecord {
 	return LogRecord{
 		Action:           row.Action,
 		OrganizationID:   row.OrganizationID,
@@ -68,7 +80,7 @@ func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Ac
 		AfterSnapshot:    row.AfterSnapshot,
 		ActingSurface:    conv.FromPGText[string](row.ActingSurface),
 		ActingClientID:   conv.FromPGText[string](row.ActingClientID),
-	}, nil
+	}
 }
 
 func AuditLogCount(ctx context.Context, dbtx repo.DBTX) (int64, error) {
@@ -86,6 +98,25 @@ func AuditLogCountByAction(ctx context.Context, dbtx repo.DBTX, action audit.Act
 		return 0, fmt.Errorf("count audit logs by action: %w", err)
 	}
 
+	return count, nil
+}
+
+// LatestSecurityAuditLogByAction reads the newest security_audit_logs entry for
+// an action, recorded through the securityevent package.
+func LatestSecurityAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Action) (LogRecord, error) {
+	row, err := repo.New(dbtx).GetLatestSecurityAuditLogByAction(ctx, string(action))
+	if err != nil {
+		return LogRecord{}, fmt.Errorf("get latest security audit log by action: %w", err)
+	}
+	return toLogRecord(repo.GetLatestAuditLogByActionRow(row)), nil
+}
+
+// SecurityAuditLogCountByAction counts security_audit_logs entries for an action.
+func SecurityAuditLogCountByAction(ctx context.Context, dbtx repo.DBTX, action audit.Action) (int64, error) {
+	count, err := repo.New(dbtx).CountSecurityAuditLogsByAction(ctx, string(action))
+	if err != nil {
+		return 0, fmt.Errorf("count security audit logs by action: %w", err)
+	}
 	return count, nil
 }
 

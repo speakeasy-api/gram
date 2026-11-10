@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -28,11 +29,16 @@ const (
 	OwnedAgentTransfer  OwnerPredicate = "owned_agent_transfer"
 )
 
-// HumanContext is identity proven by an ordinary, nonsupport Gram session and
-// an active organization membership.
+// HumanContext is identity proven by an ordinary, nonsupport Speakeasy session or
+// scoped OAuth consent and an active organization membership.
 type HumanContext struct {
 	Auth   *contextvalues.AuthContext
 	grants []authz.Grant
+	// A permitted RBAC scope override only narrows agent management checks:
+	// they must pass both grants and overrideGrants. Delegation containment
+	// and LiveGrants always use the live grants, so an override never widens.
+	overridden     bool
+	overrideGrants []authz.Grant
 }
 
 // LiveGrants returns an isolated copy of the caller grants loaded by the
@@ -58,6 +64,7 @@ type AgentPermissions struct {
 
 type authorizationEngine interface {
 	EvaluateLoadedGrants(context.Context, []authz.Grant, ...authz.Check) error
+	GetScopeOverrides(context.Context) ([]authz.RoleGrant, bool)
 }
 
 // Authorizer implements the reusable human-only agent management seam.
@@ -70,7 +77,7 @@ func NewAuthorizer(engine authorizationEngine) *Authorizer {
 }
 
 // RequireHuman rejects credentials that only carry human attribution. Only an
-// ordinary validated Gram session with an active membership is accepted.
+// ordinary validated Speakeasy session with an active membership is accepted.
 func (a *Authorizer) RequireHuman(ctx context.Context, dbtx repo.DBTX) (HumanContext, error) {
 	return a.requireHumanWithMemberships(ctx, dbtx)
 }
@@ -85,6 +92,9 @@ func ordinaryHumanAuth(ctx context.Context) (*contextvalues.AuthContext, error) 
 	if authCtx.APIKeyID != "" || authCtx.APIKeyName != "" || len(authCtx.APIKeyScopes) != 0 || authCtx.OrgWidePluginHooksKey {
 		return nil, oops.C(oops.CodeForbidden)
 	}
+	if _, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok {
+		return nil, oops.C(oops.CodeForbidden)
+	}
 	if _, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
 		return nil, oops.C(oops.CodeForbidden)
 	}
@@ -92,9 +102,6 @@ func ordinaryHumanAuth(ctx context.Context) (*contextvalues.AuthContext, error) 
 		return nil, oops.C(oops.CodeForbidden)
 	}
 	if _, ok := contextvalues.GetActingSurface(ctx); ok {
-		return nil, oops.C(oops.CodeForbidden)
-	}
-	if _, ok := contextvalues.GetRBACScopeOverride(ctx); ok {
 		return nil, oops.C(oops.CodeForbidden)
 	}
 	if contextvalues.IsSupportSession(ctx) || contextvalues.IsLegacyImpersonatedSession(ctx) {
@@ -112,6 +119,12 @@ func (a *Authorizer) requireHumanWithMemberships(ctx context.Context, dbtx repo.
 	if err != nil {
 		return HumanContext{}, err
 	}
+	return a.lockHumanMemberships(ctx, dbtx, authCtx, otherUserIDs...)
+}
+
+// Both validated dashboard sessions and scoped consent use the same live
+// membership locks and grants. Authentication stays at their separate entry points.
+func (a *Authorizer) lockHumanMemberships(ctx context.Context, dbtx repo.DBTX, authCtx *contextvalues.AuthContext, otherUserIDs ...string) (HumanContext, error) {
 	userIDs := append([]string{authCtx.UserID}, otherUserIDs...)
 	slices.Sort(userIDs)
 	for _, userID := range slices.Compact(userIDs) {
@@ -136,7 +149,34 @@ func (a *Authorizer) requireHumanWithMemberships(ctx context.Context, dbtx repo.
 		return HumanContext{}, fmt.Errorf("load live authorization grants: %w", err)
 	}
 
-	return HumanContext{Auth: authCtx, grants: grants}, nil
+	human := HumanContext{Auth: authCtx, grants: grants, overridden: false, overrideGrants: nil}
+	if a.authz != nil {
+		if overrides, ok := a.authz.GetScopeOverrides(ctx); ok {
+			human.overridden = true
+			human.overrideGrants = authz.GrantsFromOverrides(overrides)
+		}
+	}
+	return human, nil
+}
+
+func (a *Authorizer) evaluate(ctx context.Context, human HumanContext, check authz.Check) error {
+	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, check); err != nil {
+		return fmt.Errorf("evaluate live grants: %w", err)
+	}
+	if !human.overridden {
+		return nil
+	}
+	if err := a.authz.EvaluateLoadedGrants(ctx, human.overrideGrants, check); err != nil {
+		return fmt.Errorf("evaluate scope override: %w", err)
+	}
+	return nil
+}
+
+func (h HumanContext) satisfies(check authz.Check) bool {
+	if !authz.GrantsSatisfy(h.grants, check) {
+		return false
+	}
+	return !h.overridden || authz.GrantsSatisfy(h.overrideGrants, check)
 }
 
 // RequireCreate authorizes a prospective agent ID and locks the eligible owner
@@ -154,7 +194,7 @@ func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, agentID 
 	if a.authz == nil {
 		return HumanContext{}, errors.New("agent authorization engine is unavailable")
 	}
-	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, agentCheck(authz.ScopeAgentWrite, agentID)); err != nil {
+	if err := a.evaluate(ctx, human, agentCheck(authz.ScopeAgentWrite, agentID)); err != nil {
 		return HumanContext{}, fmt.Errorf("authorize agent creation for another owner: %w", err)
 	}
 	return human, nil
@@ -194,8 +234,14 @@ func (a *Authorizer) requireAgent(ctx context.Context, dbtx repo.DBTX, agentID u
 // membership locks. Ownership changes during acquisition fail closed rather than
 // acquiring another membership out of order. Owner-loss recovery uses
 // RequireTransfer instead, which does not require an active previous owner.
+// Scoped OAuth consent is accepted only for the selected agent and authorize
+// predicate; it cannot authenticate general dashboard management operations.
 func (a *Authorizer) RequireAgentOwnerForUpdate(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, predicate OwnerPredicate) (HumanContext, repo.Agent, error) {
 	authCtx, err := ordinaryHumanAuth(ctx)
+	if consent, ok := contextvalues.GetConsentBindingAuthorization(ctx); ok && (predicate == OwnedAgentAuthorize || predicate == OwnedAgentSetup) && consent.AgentID == agentID {
+		authCtx, _ = contextvalues.GetAuthContext(ctx)
+		err = nil
+	}
 	if err != nil {
 		return HumanContext{}, repo.Agent{}, err
 	}
@@ -206,7 +252,7 @@ func (a *Authorizer) RequireAgentOwnerForUpdate(ctx context.Context, dbtx repo.D
 	if err != nil {
 		return HumanContext{}, repo.Agent{}, fmt.Errorf("observe selected agent owner: %w", err)
 	}
-	human, err := a.requireHumanWithMemberships(ctx, dbtx, observed.OwnerUserID)
+	human, err := a.lockHumanMemberships(ctx, dbtx, authCtx, observed.OwnerUserID)
 	if err != nil {
 		return HumanContext{}, repo.Agent{}, err
 	}
@@ -247,7 +293,7 @@ func (a *Authorizer) requireAgentWithHuman(ctx context.Context, dbtx repo.DBTX, 
 	if a.authz == nil {
 		return HumanContext{}, repo.Agent{}, errors.New("agent authorization engine is unavailable")
 	}
-	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, agentCheck(scope, agent.ID)); err != nil {
+	if err := a.evaluate(ctx, human, agentCheck(scope, agent.ID)); err != nil {
 		// Selected-agent denials deliberately do not distinguish absent,
 		// cross-tenant, or unauthorized resources.
 		return HumanContext{}, repo.Agent{}, oops.C(oops.CodeForbidden)
@@ -264,15 +310,15 @@ func (a *Authorizer) Permissions(ctx context.Context, human HumanContext, agent 
 	}
 
 	return AgentPermissions{
-		Read:      authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentRead, agent.ID)),
-		Write:     authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentWrite, agent.ID)),
-		Authorize: authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentAuthorize, agent.ID)),
-		Transfer:  authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentTransfer, agent.ID)),
+		Read:      human.satisfies(agentCheck(authz.ScopeAgentRead, agent.ID)),
+		Write:     human.satisfies(agentCheck(authz.ScopeAgentWrite, agent.ID)),
+		Authorize: human.satisfies(agentCheck(authz.ScopeAgentAuthorize, agent.ID)),
+		Transfer:  human.satisfies(agentCheck(authz.ScopeAgentTransfer, agent.ID)),
 	}, nil
 }
 
 func ownsUnblockedAgent(human HumanContext, agent repo.Agent) bool {
-	return human.Auth != nil && agent.OwnerUserID == human.Auth.UserID && !agent.OwnerReassignmentRequiredAt.Valid
+	return human.Auth != nil && agents.OwnsUnblocked(human.Auth.UserID, agent.OwnerUserID, agent.OwnerReassignmentRequiredAt)
 }
 
 func scopeForOwnerPredicate(predicate OwnerPredicate) (authz.Scope, bool) {

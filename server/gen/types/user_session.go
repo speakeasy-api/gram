@@ -18,9 +18,12 @@ type UserSession struct {
 	SubjectUrn string
 	// Current access-token JTI; used by the revocation path.
 	Jti string
-	// Next refresh deadline.
+	// Inbound authorization deadline. Refresh is possible until this time only
+	// when the session has a refresh grant.
 	RefreshExpiresAt string
-	// Terminal session expiry; ceiling on refresh_expires_at.
+	// Current access-token expiry. Sessions with a refresh grant may refresh
+	// before refresh_expires_at; workload and other sessions without a refresh
+	// grant cannot.
 	ExpiresAt string
 	CreatedAt string
 	UpdatedAt string
@@ -53,8 +56,8 @@ type UserSession struct {
 	SubjectType string
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string
-	// Avatar URL for the subject when it resolves to a Gram user with one. Null
-	// for API key and anonymous subjects, and for users who have no photo.
+	// Avatar URL for the subject when it resolves to a Speakeasy user with one.
+	// Null for API key and anonymous subjects, and for users who have no photo.
 	SubjectPhotoURL *string
 	// When the session was revoked, if it has been.
 	RevokedAt *string
@@ -63,10 +66,10 @@ type UserSession struct {
 	// that. Null means the session has not been used since the column was
 	// introduced — unknown, not never.
 	LastUsedAt *string
-	// The upstream providers Gram holds tokens for on this session's subject,
-	// through the same issuer. Empty when the session reaches only Gram-native
-	// tools. A session can have several: an issuer may have more than one
-	// remote_session_client attached.
+	// The upstream providers Speakeasy holds tokens for on this session's subject,
+	// through the same issuer. Empty when the session reaches only
+	// Speakeasy-native tools. A session can have several: an issuer may have more
+	// than one remote_session_client attached.
 	Upstreams []*UserSessionUpstream
 	// Set only when subject_type is 'workload': the external issuer that vouched
 	// for the machine, the subject it asserted, and the agent the workload

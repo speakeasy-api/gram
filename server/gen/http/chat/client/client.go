@@ -29,6 +29,10 @@ type Client struct {
 	// getWorkUnitsTrend endpoint.
 	GetWorkUnitsTrendDoer goahttp.Doer
 
+	// LoadChatOverview Doer is the HTTP client used to make requests to the
+	// loadChatOverview endpoint.
+	LoadChatOverviewDoer goahttp.Doer
+
 	// LoadChat Doer is the HTTP client used to make requests to the loadChat
 	// endpoint.
 	LoadChatDoer goahttp.Doer
@@ -65,6 +69,10 @@ type Client struct {
 	// endpoint.
 	ListSourcesDoer goahttp.Doer
 
+	// CountByUser Doer is the HTTP client used to make requests to the countByUser
+	// endpoint.
+	CountByUserDoer goahttp.Doer
+
 	// ListSessionLinks Doer is the HTTP client used to make requests to the
 	// listSessionLinks endpoint.
 	ListSessionLinksDoer goahttp.Doer
@@ -92,6 +100,7 @@ func NewClient(
 		ListChatsDoer:                  doer,
 		GetAssistantSessionSummaryDoer: doer,
 		GetWorkUnitsTrendDoer:          doer,
+		LoadChatOverviewDoer:           doer,
 		LoadChatDoer:                   doer,
 		GenerateTitleDoer:              doer,
 		CreditUsageDoer:                doer,
@@ -101,6 +110,7 @@ func NewClient(
 		SummarizeToolCallDoer:          doer,
 		SubmitFeedbackDoer:             doer,
 		ListSourcesDoer:                doer,
+		CountByUserDoer:                doer,
 		ListSessionLinksDoer:           doer,
 		RestoreResponseBody:            restoreBody,
 		scheme:                         scheme,
@@ -177,6 +187,30 @@ func (c *Client) GetWorkUnitsTrend() goa.Endpoint {
 		resp, err := c.GetWorkUnitsTrendDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "getWorkUnitsTrend", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// LoadChatOverview returns an endpoint that makes HTTP requests to the chat
+// service loadChatOverview server.
+func (c *Client) LoadChatOverview() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeLoadChatOverviewRequest(c.encoder)
+		decodeResponse = DecodeLoadChatOverviewResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildLoadChatOverviewRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.LoadChatOverviewDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "loadChatOverview", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -393,6 +427,30 @@ func (c *Client) ListSources() goa.Endpoint {
 		resp, err := c.ListSourcesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "listSources", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CountByUser returns an endpoint that makes HTTP requests to the chat service
+// countByUser server.
+func (c *Client) CountByUser() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCountByUserRequest(c.encoder)
+		decodeResponse = DecodeCountByUserResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCountByUserRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CountByUserDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "countByUser", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -142,7 +142,7 @@ type piSessionData struct {
 }
 
 // RunPiServe serves the Pi extension shim over NDJSON stdio, translating each
-// Pi event into the canonical Gram hook contract and answering with the
+// Pi event into the canonical Speakeasy hook contract and answering with the
 // server's verdict. It returns the process exit code.
 //
 // Frames are processed strictly in order: Pi awaits each handler, and a tool
@@ -172,8 +172,9 @@ func RunPiServe(ctx context.Context, cfg Config, stdin io.Reader, stdout io.Writ
 		if frame.Hook != piHookInitialize {
 			// The report precedes the tool call's verdict, so it gets the gate
 			// budget: a slow control plane must not push the verdict past the
-			// shim's deadline, where it dissolves into an allow.
-			inventoryCtx, cancel := context.WithTimeout(ctx, gateSendBudget)
+			// shim's deadline, where it dissolves into an allow. No deadline
+			// rides on this context, so the budget is the conservative floor.
+			inventoryCtx, cancel := context.WithTimeout(ctx, gateBudget(ctx))
 			inventory.report(inventoryCtx, r, frame)
 			cancel()
 			block, reason := r.dispatchPiFrame(ctx, frame)

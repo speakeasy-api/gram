@@ -1,14 +1,18 @@
 package remotesessions
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+)
 
 type TokenEndpointAuthMethod string
 
 const (
-	TokenEndpointAuthMethodBasic         TokenEndpointAuthMethod = "client_secret_basic"
-	TokenEndpointAuthMethodPost          TokenEndpointAuthMethod = "client_secret_post"
-	TokenEndpointAuthMethodNone          TokenEndpointAuthMethod = "none"
-	TokenEndpointAuthMethodPrivateKeyJWT TokenEndpointAuthMethod = "private_key_jwt" //nolint:gosec // G101 false positive: an RFC 7591 token_endpoint_auth_method name, not a credential.
+	TokenEndpointAuthMethodBasic         TokenEndpointAuthMethod = oauthwire.AuthMethodClientSecretBasic
+	TokenEndpointAuthMethodPost          TokenEndpointAuthMethod = oauthwire.AuthMethodClientSecretPost
+	TokenEndpointAuthMethodNone          TokenEndpointAuthMethod = oauthwire.AuthMethodNone
+	TokenEndpointAuthMethodPrivateKeyJWT TokenEndpointAuthMethod = oauthwire.AuthMethodPrivateKeyJWT
 )
 
 type TokenEndpointAuthAudienceFormat string

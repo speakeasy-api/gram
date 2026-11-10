@@ -19,8 +19,15 @@ import (
 const consentIdentityCopy = "Reconnect to add account details"
 
 // grantScoped writes a live session for the fixture subject on clientID that
-// carries the given scopes.
+// carries the given scopes and no resource.
 func grantScoped(t *testing.T, ctx context.Context, fx consentActionFixture, clientID uuid.UUID, scopes []string) {
+	t.Helper()
+	grantScopedTo(t, ctx, fx, clientID, scopes, "")
+}
+
+// grantScopedTo writes a live session for the fixture subject on clientID
+// that carries the given scopes, qualified to resource when not empty.
+func grantScopedTo(t *testing.T, ctx context.Context, fx consentActionFixture, clientID uuid.UUID, scopes []string, resource string) {
 	t.Helper()
 	encrypted, err := fx.ti.enc.Encrypt([]byte("token-" + clientID.String()))
 	require.NoError(t, err)
@@ -34,7 +41,7 @@ func grantScoped(t *testing.T, ctx context.Context, fx consentActionFixture, cli
 		AuthorizationExpiresAt: pgtype.Timestamptz{Valid: false},
 		RefreshExpiresAt:       pgtype.Timestamptz{Valid: false},
 		Scopes:                 scopes,
-		Resource:               conv.ToPGTextEmpty(""),
+		Resource:               conv.ToPGTextEmpty(resource),
 		AutoRefresh:            true,
 	})
 	require.NoError(t, err)
@@ -49,6 +56,16 @@ func advertise(t *testing.T, ctx context.Context, fx consentActionFixture, issue
 		ProjectID:       conv.ToNullUUID(fx.projectID),
 	})
 	require.NoError(t, err)
+}
+
+// focusClaimingMember gives the gateway a tunneled server signing in through
+// issuerID, which accepts an unqualified grant, and opens that server's
+// connect page, where the service's card renders.
+func focusClaimingMember(t *testing.T, ctx context.Context, fx consentActionFixture, metaID, issuerID uuid.UUID, slug string) consentActionFixture {
+	t.Helper()
+	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, slug, "urn:gram:tunnel:"+slug, conv.ToNullUUID(issuerID), 0)
+	fx.server = slug
+	return fx
 }
 
 func expectIdentityHint(t *testing.T, fx consentActionFixture, shown bool) {
@@ -67,7 +84,8 @@ func expectIdentityHint(t *testing.T, fx consentActionFixture, shown bool) {
 
 func TestServeConsent_OffersIdentityReconnectOnlyWhenOpenIDWouldBeRequested(t *testing.T) {
 	t.Parallel()
-	ctx, fx, _, clientID, issuerID := metaConsent(t, "identity-hint")
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "identity-hint")
+	fx = focusClaimingMember(t, ctx, fx, metaID, issuerID, "identity-hint-member")
 
 	// The issuer advertises nothing yet, so a reconnect would not add openid.
 	grantScoped(t, ctx, fx, clientID, []string{"read"})
@@ -84,7 +102,8 @@ func TestServeConsent_OffersIdentityReconnectOnlyWhenOpenIDWouldBeRequested(t *t
 
 func TestServeConsent_NoIdentityReconnectWhenOverrideOmitsOpenID(t *testing.T) {
 	t.Parallel()
-	ctx, fx, _, clientID, issuerID := metaConsent(t, "identity-override")
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "identity-override")
+	fx = focusClaimingMember(t, ctx, fx, metaID, issuerID, "identity-override-member")
 
 	advertise(t, ctx, fx, issuerID, []string{"read", "openid"})
 	_, err := remotesessions_repo.New(fx.ti.conn).UpdateRemoteSessionIssuer(ctx, remotesessions_repo.UpdateRemoteSessionIssuerParams{
@@ -102,7 +121,8 @@ func TestServeConsent_NoIdentityReconnectWhenOverrideOmitsOpenID(t *testing.T) {
 // issuer that now advertises openid earns the same reconnect offer.
 func TestServeConsent_OffersIdentityReconnectForGrantWithNoScopes(t *testing.T) {
 	t.Parallel()
-	ctx, fx, _, clientID, issuerID := metaConsent(t, "identity-no-scopes")
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "identity-no-scopes")
+	fx = focusClaimingMember(t, ctx, fx, metaID, issuerID, "identity-no-scopes-member")
 
 	advertise(t, ctx, fx, issuerID, []string{"read", "openid"})
 	grantScoped(t, ctx, fx, clientID, []string{})

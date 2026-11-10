@@ -37,7 +37,7 @@ Core rule: **Temporal is for durable, multi-step orchestration started once per 
 
 ```
 Temporal actions/month ≈ starts + activities (+retries) + timers + signals + child starts,
-per namespace (prod and dev; PR previews run in the dev namespace and each registers its own copy of every schedule).
+per namespace (prod and dev; PR previews run in the dev namespace and each registers its own copy of every queue-scoped schedule).
 Scales with: fixed | projects | orgs | messages | tool calls.
 ```
 
@@ -83,4 +83,5 @@ One activity returns only the rows that changed (SQL), fan out over that. Cadenc
 
 - Scope the ID by task queue: `fmt.Sprintf("v1:%s:%s", name, temporalEnv.Queue())`. PR previews share the dev namespace; an unscoped ID gets re-pointed by each preview's `Update` and deleted by the preview sweeper, orphaning the loop it tracked.
 - `Create`, then on `ErrScheduleAlreadyRunning` do nothing unless the spec changed. Never `Update` a shared schedule from a preview worker.
+- A fixed-ID (fleet-wide) schedule goes after the `sharedTaskQueue` gate in `registerSchedules`, so only the `main` worker registers it. Per-queue schedules go above the gate.
 - Every `ContinueAsNew` loop must exit on its own (max iterations or wall-clock) so a lost schedule cannot leave an immortal workflow behind.

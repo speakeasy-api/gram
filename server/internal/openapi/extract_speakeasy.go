@@ -107,6 +107,7 @@ func (c *concurrentSchemaCache) set(ctx context.Context, key string, val *oas3.J
 
 // operationWorkItem represents a single operation to process
 type operationWorkItem struct {
+	index            int
 	path             string
 	method           string
 	opID             string
@@ -116,26 +117,65 @@ type operationWorkItem struct {
 
 // operationResult represents the result of processing a single operation
 type operationResult struct {
+	method           string
+	path             string
+	opID             string
 	def              *repo.CreateOpenAPIv3ToolDefinitionParams
 	err              error
 	deploymentEvents []*repo.LogDeploymentEventParams
 }
 
-func (p *ToolExtractor) doSpeakeasy(
+// errSerializeGlobalSecurity marks a document whose top-level security
+// requirement could not be serialized, as opposed to one that failed to parse.
+var errSerializeGlobalSecurity = errors.New("serialize global security")
+
+// extractedDocumentSpeakeasy is everything the extractor derives from an
+// OpenAPI document before anything is written to the database.
+type extractedDocumentSpeakeasy struct {
+	// version is the OpenAPI version of the document after any upgrade.
+	version string
+
+	// upgradeOutcome is set when an OpenAPI 3.0 to 3.1 upgrade was attempted.
+	upgradeOutcome *o11y.Outcome
+
+	// upgradeDuration is how long the upgrade attempt took.
+	upgradeDuration time.Duration
+
+	// globalSecurity is the serialized document-level security requirement.
+	globalSecurity []byte
+
+	// securitySchemes holds the supported security schemes keyed by their
+	// name in components.securitySchemes.
+	securitySchemes map[string]*repo.CreateHTTPSecurityParams
+
+	// securitySchemeErrors lists schemes that could not be converted.
+	securitySchemeErrors []error
+
+	// defaultServerURL is the server URL tools call unless overridden.
+	defaultServerURL *string
+
+	// serverEnvVar is the environment variable that overrides defaultServerURL.
+	serverEnvVar string
+
+	// operations holds one result per non-deprecated operation, in document
+	// order.
+	operations []operationResult
+}
+
+// extractDocumentSpeakeasy converts an OpenAPI document into tool
+// definitions and security schemes without touching the database.
+func extractDocumentSpeakeasy(
 	ctx context.Context,
 	logger *slog.Logger,
 	tracer trace.Tracer,
-	tx *repo.Queries,
 	data []byte,
 	task ToolExtractorTask,
-) (*ToolExtractorResult, error) {
+) (*extractedDocumentSpeakeasy, error) {
 	docInfo := task.DocInfo
-
-	logger.InfoContext(ctx, fmt.Sprintf("[%s] processing OpenAPI source", docInfo.Name))
 
 	doc, err := parseSpeakeasy(ctx, tracer, bytes.NewReader(data))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document.\n%s", err.Error()).LogError(ctx, logger)
+		return nil, err
 	}
 
 	upgradeStart := time.Now()
@@ -167,27 +207,10 @@ func (p *ToolExtractor) doSpeakeasy(
 
 	globalSecurity, err := serializeSecuritySpeakeasy(doc.GetSecurity())
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error serializing global security").LogError(ctx, logger)
+		return nil, fmt.Errorf("%w: %w", errSerializeGlobalSecurity, err)
 	}
 
-	securitySchemesParams, errs := extractSecuritySchemesSpeakeasy(ctx, logger, docInfo, doc, task)
-	if len(errs) > 0 {
-		for _, err := range errs {
-			_ = oops.E(oops.CodeUnexpected, err, "%s: error parsing security schemes: %s", docInfo.Name, err.Error()).LogError(ctx, logger)
-		}
-	}
-
-	var writeErrCount int
-	var writeErr error
-	securitySchemes := make(map[string]repo.HttpSecurity, len(securitySchemesParams))
-	for key, scheme := range securitySchemesParams {
-		sec, err := tx.CreateHTTPSecurity(ctx, *scheme)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).LogError(ctx, logger)
-		}
-
-		securitySchemes[key] = sec
-	}
+	securitySchemes, securitySchemeErrors := extractSecuritySchemesSpeakeasy(ctx, logger, docInfo, doc, task)
 
 	globalServerEnvVar := strcase.ToSNAKE(string(docInfo.Slug) + "_SERVER_URL")
 	globalDefaultServer := extractDefaultServerSpeakeasy(ctx, logger, docInfo, doc.GetServers())
@@ -248,6 +271,7 @@ func (p *ToolExtractor) doSpeakeasy(
 			}
 
 			workItems = append(workItems, operationWorkItem{
+				index:            len(workItems),
 				path:             path,
 				method:           op.method,
 				opID:             opID,
@@ -259,7 +283,7 @@ func (p *ToolExtractor) doSpeakeasy(
 
 	numWorkers := runtime.GOMAXPROCS(0)
 	workChan := make(chan operationWorkItem, len(workItems))
-	resultChan := make(chan operationResult, len(workItems))
+	results := make([]operationResult, len(workItems))
 
 	var wg sync.WaitGroup
 	for range numWorkers {
@@ -303,7 +327,10 @@ func (p *ToolExtractor) doSpeakeasy(
 						),
 					)
 
-					resultChan <- operationResult{
+					results[item.index] = operationResult{
+						method:           item.method,
+						path:             item.path,
+						opID:             item.opID,
 						def:              nil,
 						err:              err,
 						deploymentEvents: events,
@@ -311,7 +338,10 @@ func (p *ToolExtractor) doSpeakeasy(
 					continue
 				}
 
-				resultChan <- operationResult{
+				results[item.index] = operationResult{
+					method:           item.method,
+					path:             item.path,
+					opID:             item.opID,
 					def:              &def,
 					err:              nil,
 					deploymentEvents: events,
@@ -324,14 +354,55 @@ func (p *ToolExtractor) doSpeakeasy(
 		workChan <- item
 	}
 	close(workChan)
+	wg.Wait()
 
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
+	return &extractedDocumentSpeakeasy{
+		version:              doc.OpenAPI,
+		upgradeOutcome:       upgradeOutcome,
+		upgradeDuration:      upgradeDuration,
+		globalSecurity:       globalSecurity,
+		securitySchemes:      securitySchemes,
+		securitySchemeErrors: securitySchemeErrors,
+		defaultServerURL:     globalDefaultServer,
+		serverEnvVar:         globalServerEnvVar,
+		operations:           results,
+	}, nil
+}
 
+func (p *ToolExtractor) doSpeakeasy(
+	ctx context.Context,
+	logger *slog.Logger,
+	tracer trace.Tracer,
+	tx *repo.Queries,
+	data []byte,
+	task ToolExtractorTask,
+) (*ToolExtractorResult, error) {
+	docInfo := task.DocInfo
+
+	logger.InfoContext(ctx, fmt.Sprintf("[%s] processing OpenAPI source", docInfo.Name))
+
+	extracted, err := extractDocumentSpeakeasy(ctx, logger, tracer, data, task)
+	switch {
+	case errors.Is(err, errSerializeGlobalSecurity):
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error serializing global security").LogError(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document.\n%s", err.Error()).LogError(ctx, logger)
+	}
+
+	for _, err := range extracted.securitySchemeErrors {
+		_ = oops.E(oops.CodeUnexpected, err, "%s: error parsing security schemes: %s", docInfo.Name, err.Error()).LogError(ctx, logger)
+	}
+
+	for _, scheme := range extracted.securitySchemes {
+		if _, err := tx.CreateHTTPSecurity(ctx, *scheme); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).LogError(ctx, logger)
+		}
+	}
+
+	var writeErrCount int
+	var writeErr error
 	var toolCount, toolSkippedCount int
-	for result := range resultChan {
+	for _, result := range extracted.operations {
 		for _, event := range result.deploymentEvents {
 			if err := tx.LogDeploymentEvent(ctx, *event); err != nil {
 				msg := "failed to log deployment event"
@@ -389,9 +460,9 @@ func (p *ToolExtractor) doSpeakeasy(
 	logger.InfoContext(ctx, fmt.Sprintf("[%s] processed OpenAPI source: %d tools created, %d tools skipped", docInfo.Name, toolCount, toolSkippedCount))
 
 	return &ToolExtractorResult{
-		DocumentVersion:         doc.OpenAPI,
-		DocumentUpgrade:         upgradeOutcome,
-		DocumentUpgradeDuration: upgradeDuration,
+		DocumentVersion:         extracted.version,
+		DocumentUpgrade:         extracted.upgradeOutcome,
+		DocumentUpgradeDuration: extracted.upgradeDuration,
 	}, nil
 }
 

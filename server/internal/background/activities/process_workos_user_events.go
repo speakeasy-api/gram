@@ -168,7 +168,7 @@ type workosUserEventPayload struct {
 	DeletedAt         time.Time `json:"deleted_at"`
 }
 
-func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, workosUserID string, event events.Event) (*workosUserExternalIDUpdate, error) {
+func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, workosUserID string, event events.Event) (*workosUserExternalIDUpdate, error) {
 	var payload workosUserEventPayload
 
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
@@ -268,7 +268,7 @@ func logRoleAssignmentLinkedToDifferentWorkOSUser(ctx context.Context, logger *s
 	return nil
 }
 
-func (p *ProcessWorkOSUserEvents) handleUserDeleted(ctx context.Context, dbtx database.DBTX, payload workosUserEventPayload) error {
+func (p *ProcessWorkOSUserEvents) handleUserDeleted(ctx context.Context, dbtx pgx.Tx, payload workosUserEventPayload) error {
 	ownerUserIDs, err := usersrepo.New(dbtx).DisableUser(ctx, usersrepo.DisableUserParams{
 		WorkosUpdatedAt: conv.ToPGTimestamptz(payload.UpdatedAt),
 		WorkosDeletedAt: conv.ToPGTimestamptz(payload.DeletedAt),

@@ -17,7 +17,9 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -42,32 +44,131 @@ type fakeServer struct {
 func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int, decision)) *fakeServer {
 	t.Helper()
 	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond, effects: nil}
-	fs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var p components.IngestRequestBody
-		_ = json.Unmarshal(body, &p)
-		fs.mu.Lock()
-		fs.requests = append(fs.requests, p)
-		fs.headers = append(fs.headers, r.Header.Clone())
-		fs.mu.Unlock()
-
-		status, dec := http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
-		if fs.respond != nil {
-			status, dec = fs.respond(p)
-		}
-		out := struct {
-			decision
-			Effects map[string]any `json:"effects,omitempty"`
-		}{decision: dec, Effects: nil}
-		if fs.effects != nil {
-			out.Effects = fs.effects(p)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(out)
-	}))
+	fs.Server = httptest.NewServer(http.HandlerFunc(fs.serve))
 	t.Cleanup(fs.Close)
 	return fs
+}
+
+// newPipeFakeServer is newFakeServer over in-memory connections, for tests
+// that run inside a synctest bubble.
+func newPipeFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int, decision)) *fakeServer {
+	t.Helper()
+	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond, effects: nil}
+	fs.Server = newPipeServer(t, http.HandlerFunc(fs.serve))
+	return fs
+}
+
+func (fs *fakeServer) serve(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(r.Body)
+	var p components.IngestRequestBody
+	_ = json.Unmarshal(body, &p)
+	fs.mu.Lock()
+	fs.requests = append(fs.requests, p)
+	fs.headers = append(fs.headers, r.Header.Clone())
+	fs.mu.Unlock()
+
+	status, dec := http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
+	if fs.respond != nil {
+		status, dec = fs.respond(p)
+	}
+	out := struct {
+		decision
+		Effects map[string]any `json:"effects,omitempty"`
+	}{decision: dec, Effects: nil}
+	if fs.effects != nil {
+		out.Effects = fs.effects(p)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// newPipeServer starts an httptest server on a pipeListener and routes the
+// relay's ingest dials to it for the rest of the test. Everything runs on the
+// real HTTP client and server stacks, so transport timeouts and the device
+// headers stay under test, while the connections stay in memory and count as
+// idle to synctest. The server closes during cleanup; a handler that blocks
+// must be released by a cleanup registered after this call.
+func newPipeServer(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	listener := newPipeListener()
+	srv := httptest.NewUnstartedServer(handler)
+	require.NoError(t, srv.Listener.Close())
+	srv.Listener = listener
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	prev := ingestDialContext
+	ingestDialContext = listener.DialContext
+	t.Cleanup(func() { ingestDialContext = prev })
+	return srv
+}
+
+// pipeListener is a net.Listener whose connections are net.Pipe pairs handed
+// over by DialContext.
+type pipeListener struct {
+	conns     chan net.Conn
+	closed    chan struct{}
+	closeOnce sync.Once
+}
+
+func newPipeListener() *pipeListener {
+	return &pipeListener{conns: make(chan net.Conn), closed: make(chan struct{}), closeOnce: sync.Once{}}
+}
+
+func (l *pipeListener) Accept() (net.Conn, error) {
+	select {
+	case conn := <-l.conns:
+		return conn, nil
+	case <-l.closed:
+		return nil, net.ErrClosed
+	}
+}
+
+func (l *pipeListener) Close() error {
+	l.closeOnce.Do(func() { close(l.closed) })
+	return nil
+}
+
+// Addr reports a loopback address so the server URL passes the relay's
+// plaintext-only-on-loopback check. The port is never dialed.
+func (l *pipeListener) Addr() net.Addr {
+	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1, Zone: ""}
+}
+
+// DialContext ignores the address and connects to this listener. Once the
+// listener is closed it refuses the dial the way a dead port does, so a closed
+// pipe server stands in for an unreachable control plane.
+func (l *pipeListener) DialContext(ctx context.Context, network, _ string) (net.Conn, error) {
+	refused := &net.OpError{Op: "dial", Net: network, Source: nil, Addr: l.Addr(), Err: syscall.ECONNREFUSED}
+	select {
+	case <-l.closed:
+		return nil, refused
+	default:
+	}
+
+	server, client := net.Pipe()
+	select {
+	case l.conns <- server:
+		return client, nil
+	case <-ctx.Done():
+		_ = server.Close()
+		_ = client.Close()
+		return nil, ctx.Err()
+	case <-l.closed:
+		_ = server.Close()
+		_ = client.Close()
+		return nil, refused
+	}
+}
+
+// refusedPipeURL is closedPortURL for tests inside a synctest bubble: a server
+// URL whose every ingest dial is refused without touching the network.
+func refusedPipeURL(t *testing.T) string {
+	t.Helper()
+	srv := newPipeServer(t, http.NotFoundHandler())
+	srv.Close()
+	return srv.URL
 }
 
 func (fs *fakeServer) count() int {
@@ -104,7 +205,7 @@ func setSpoolStateHome(t *testing.T) string {
 
 func invoke(t *testing.T, cfg Config, provider agenthooks.Provider, fixture string) agenthookstest.Result {
 	t.Helper()
-	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
 	if v := os.Getenv("XDG_STATE_HOME"); v == "" || v != spoolStateHome {
 		t.Setenv("XDG_STATE_HOME", t.TempDir())
 	}
@@ -115,9 +216,9 @@ func invoke(t *testing.T, cfg Config, provider agenthooks.Provider, fixture stri
 
 func authedConfig(t *testing.T, serverURL string) Config {
 	t.Helper()
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
-	t.Setenv("GRAM_HOOKS_API_KEY", "test-hooks-key")
-	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "test-hooks-key")
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
 	return Config{ServerURL: serverURL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 }
 
@@ -245,11 +346,19 @@ func TestEnvelopeCursorMCPRedactsRawTransport(t *testing.T) {
 // rewritten wherever a payload carries secret-bearing top-level keys, not only
 // when the structured mcp block was populated.
 func TestScrubRawPayloadRunsOnEveryEvent(t *testing.T) {
-	scrubbed := scrubRawPayload([]byte(`{"hook_event_name":"beforeShellExecution","command":"curl -H authorization: bearer sekrit-1"}`))
+	scrubbed := scrubRawPayload([]byte(`{"hook_event_name":"beforeShellExecution","command":"curl -H authorization: bearer sekrit-1"}`), agenthooks.ProviderCursor)
 	require.NotContains(t, string(scrubbed), "sekrit-1")
 
 	verbatim := []byte(`{"hook_event_name":"stop","final_message":"done",  "spacing":"preserved"}`)
-	require.Equal(t, string(verbatim), string(scrubRawPayload(verbatim)), "payloads needing no rewrite pass through verbatim")
+	require.Equal(t, string(verbatim), string(scrubRawPayload(verbatim, agenthooks.ProviderCursor)), "payloads needing no rewrite pass through verbatim")
+}
+
+// Only the OpenClaw shim's mcpServers list is dropped from the echo; another
+// provider's field of that name is its own and stays.
+func TestScrubRawPayloadDropsOnlyOpenClawMCPServers(t *testing.T) {
+	frame := []byte(`{"hook_event_name":"before_tool_call","mcpServers":[{"name":"speakeasy","url":"https://app.example.com/mcp"}]}`)
+	require.NotContains(t, string(scrubRawPayload(frame, agenthooks.ProviderOpenClaw)), "mcpServers")
+	require.Equal(t, string(frame), string(scrubRawPayload(frame, agenthooks.ProviderCursor)))
 }
 
 // TestSendRetriesTransientConnectionFailure pins the relay-level transport
@@ -367,8 +476,9 @@ func TestLegacyNonblockingEnforcesDeny(t *testing.T) {
 
 func TestRatchetNeverAuthedFailsOpen(t *testing.T) {
 	fs := newFakeServer(t, nil)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
-	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
@@ -383,8 +493,9 @@ func TestRatchetEstablishedFailsClosed(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
-	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
@@ -403,8 +514,9 @@ func TestRatchetCopilotFailsClosedWithoutExitingNonZero(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
-	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
@@ -428,7 +540,8 @@ func TestAuthRejectedForgetsCachedKey(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=revoked-key\nproject=default\n"), 0o600))
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
@@ -443,7 +556,8 @@ func TestAuthRejectedForgetsCachedKey(t *testing.T) {
 
 func TestOrgKeyFallbackSendsWithoutPersonalCredential(t *testing.T) {
 	fs := newFakeServer(t, nil)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "shared-org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
@@ -465,7 +579,8 @@ func TestRejectedCacheRetriesThroughOrgKeyWithCachedIdentity(t *testing.T) {
 	})
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=revoked-key\nproject=default\nemail=developer@example.com\norg=org-1\n"), 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "shared-org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
@@ -479,6 +594,81 @@ func TestRejectedCacheRetriesThroughOrgKeyWithCachedIdentity(t *testing.T) {
 	require.Equal(t, "developer@example.com", *fs.requests[1].Source.UserEmail)
 	require.NoFileExists(t, authFile)
 	require.FileExists(t, authFile+".reauth-needed")
+}
+
+// TestAgentKeyOutranksCachedSignIn: a plugin installed for an agent records
+// the agent's events under its own key even when a person has signed in on
+// the same machine, while the same cache still wins over a shared org key.
+func TestAgentKeyOutranksCachedSignIn(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=personal-key\nproject=default\nemail=developer@example.com\norg=org-1\n"), 0o600))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+
+	agentCfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "agent-key", AgentKey: true, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	res := invoke(t, agentCfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Equal(t, 0, res.ExitCode)
+
+	orgCfg := agentCfg
+	orgCfg.HooksAPIKey = "shared-org-key"
+	orgCfg.AgentKey = false
+	res = invoke(t, orgCfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Equal(t, 0, res.ExitCode)
+
+	require.Equal(t, 2, fs.count())
+	require.Equal(t, "agent-key", fs.headers[0].Get("Gram-Key"), "an agent's key must outrank a cached personal sign-in")
+	require.Equal(t, "personal-key", fs.headers[1].Get("Gram-Key"), "a cached sign-in still outranks the shared org key")
+	require.FileExists(t, authFile, "using the agent's key must leave the person's sign-in in place")
+}
+
+// TestEnvKeyOutranksAgentKey: SPEAKEASY_AI_HOOKS_API_KEY stays the explicit
+// top-priority credential, even over an agent's baked key.
+func TestEnvKeyOutranksAgentKey(t *testing.T) {
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "env-key")
+
+	c, ok := resolveAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "agent-key", AgentKey: true, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
+	require.True(t, ok)
+	require.Equal(t, "env-key", c.APIKey)
+	require.Equal(t, credEnv, c.Source)
+}
+
+// TestAgentKeyReadFromPluginConfig: the agent_key flag in speakeasy.json
+// reaches the relay config, and an env-supplied org key, which is never an
+// agent's, clears it.
+func TestAgentKeyReadFromPluginConfig(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://gram.test","project":"default","org":"org-1","hooks_api_key":"agent-key","agent_key":true}`), 0o600))
+
+	cfg, _ := SplitInlineFlags(Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--config=" + cfgPath})
+	require.Equal(t, "agent-key", cfg.HooksAPIKey)
+	require.True(t, cfg.AgentKey)
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "")
+	t.Setenv("GRAM_HOOKS_ORG_KEY", "")
+	require.True(t, LoadConfig(cfg).AgentKey)
+
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "env-org-key")
+	loaded := LoadConfig(cfg)
+	require.Equal(t, "env-org-key", loaded.HooksAPIKey)
+	require.False(t, loaded.AgentKey)
+}
+
+// TestInstallRouteReadFromPluginConfig: the install_route in speakeasy.json
+// reaches the relay config, and the environment can override it.
+func TestInstallRouteReadFromPluginConfig(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://gram.test","project":"default","install_route":"download"}`), 0o600))
+
+	cfg, _ := SplitInlineFlags(Config{}, []string{"--config=" + cfgPath})
+	require.Equal(t, "download", cfg.InstallRoute)
+	t.Setenv("SPEAKEASY_AI_HOOKS_INSTALL_ROUTE", "")
+	t.Setenv("GRAM_HOOKS_INSTALL_ROUTE", "")
+	require.Equal(t, "download", LoadConfig(cfg).InstallRoute)
+
+	t.Setenv("SPEAKEASY_AI_HOOKS_INSTALL_ROUTE", "mdm")
+	require.Equal(t, "mdm", LoadConfig(cfg).InstallRoute)
 }
 
 // TestServerErrorBlocksToolCall pins the non-2xx posture with credentials
@@ -501,15 +691,17 @@ func TestServerErrorBlocksToolCall(t *testing.T) {
 // unreachable server lets the gating event through — while a definitive 4xx
 // (TestLegacyNonblockingKeepsClientErrorsClosed) still blocks.
 func TestLegacyNonblockingFailsOpenOnOutage(t *testing.T) {
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	cfg.Nonblocking = true
-	fs.Close()
+	synctest.Test(t, func(t *testing.T) {
+		fs := newPipeFakeServer(t, nil)
+		cfg := authedConfig(t, fs.URL)
+		cfg.Nonblocking = true
+		fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+		require.Equal(t, 0, res.ExitCode)
+		require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	})
 }
 
 // TestLegacyNonblockingKeepsClientErrorsClosed: the legacy flag maps to
@@ -532,7 +724,7 @@ func TestLegacyNonblockingKeepsClientErrorsClosed(t *testing.T) {
 func TestCachedAuthUsesConfigProject(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://gram.test\napi_key=key-1\nproject=other-workspace\norg=org-1\n"), 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 
 	c, ok := readCachedAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "this-workspace", OrgID: "org-1", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
 	require.True(t, ok)
@@ -732,6 +924,7 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 				ProjectSlug:  "default",
 				OrgID:        "org-1",
 				HooksAPIKey:  "shared-key",
+				AgentKey:     false,
 				BrowserLogin: false,
 				BinaryPath:   "/tmp/speakeasy-hooks",
 			})
@@ -769,6 +962,7 @@ func TestWritePluginOpenCodeRendersShim(t *testing.T) {
 		ProjectSlug:  "default",
 		OrgID:        "org-1",
 		HooksAPIKey:  "shared-key",
+		AgentKey:     false,
 		BrowserLogin: false,
 		BinaryPath:   "/tmp/speakeasy-hooks",
 	})
@@ -785,6 +979,84 @@ func TestWritePluginOpenCodeRendersShim(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(b, &cfg))
 	require.Equal(t, "https://gram.test", cfg.ServerURL)
+}
+
+// TestWritePluginMarksAgentKey: a package written for an agent records the
+// agent_key marker, so its key outranks a cached personal sign-in.
+func TestWritePluginMarksAgentKey(t *testing.T) {
+	for _, agent := range []bool{true, false} {
+		dir := t.TempDir()
+		err := WritePlugin(t.Context(), "openclaw", dir, PluginConfig{
+			ServerURL:    "https://gram.test",
+			SiteURL:      "",
+			ProjectSlug:  "default",
+			OrgID:        "org-1",
+			HooksAPIKey:  "install-key",
+			AgentKey:     agent,
+			BrowserLogin: false,
+			BinaryPath:   "/tmp/speakeasy-hooks",
+		})
+		require.NoError(t, err)
+		info, err := os.Stat(filepath.Join(dir, configFileName))
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "speakeasy.json carries the key")
+
+		cfg, _ := SplitInlineFlags(Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--config=" + filepath.Join(dir, configFileName)})
+		require.Equal(t, "install-key", cfg.HooksAPIKey)
+		require.Equal(t, agent, cfg.AgentKey)
+	}
+}
+
+// TestAgentKeySessionStartSkipsBrowserLogin: an agent's plugin never opens a
+// browser sign-in, even with browser login on and no cached sign-in, because
+// its own key outranks any cache that sign-in would write.
+func TestAgentKeySessionStartSkipsBrowserLogin(t *testing.T) {
+	setSpoolStateHome(t)
+	unsetClaudeLaunch(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_FORCE", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_TIMEOUT_SECONDS", "1")
+	forceInteractiveEnv(t)
+	var opened atomic.Int32
+	orig := openBrowser
+	t.Cleanup(func() { openBrowser = orig })
+	openBrowser = func(string) { opened.Add(1) }
+
+	fs := newFakeServer(t, nil)
+	cfg := Config{ServerURL: fs.URL, SiteURL: "", ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "agent-key", AgentKey: true, BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	payload := []byte(`{"session_id":"agent-session","hook_event_name":"SessionStart","source":"startup"}`)
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Zero(t, opened.Load(), "an agent's plugin must not start a browser sign-in")
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	require.NotEmpty(t, fs.headers)
+	require.Equal(t, "agent-key", fs.headers[len(fs.headers)-1].Get("Gram-Key"))
+}
+
+// TestAgentKeyPluginSkipsLoginNudge: an agent's plugin with no usable key
+// still fails the prompt open, but never asks the person to sign in.
+func TestAgentKeyPluginSkipsLoginNudge(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	cfg := Config{ServerURL: fs.URL, SiteURL: "", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", AgentKey: true, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
+	require.Equal(t, 0, res.ExitCode)
+	require.NotContains(t, string(res.Stdout), "additionalContext")
+	require.NotContains(t, string(res.Stdout), "login")
 }
 
 // unsetClaudeLaunch clears the env a live Claude Code session exports. Launch
@@ -806,7 +1078,7 @@ func TestClaudeConfigChangeIsRelayedAfterMCPInventory(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("TMPDIR", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
 	t.Setenv("PATH", t.TempDir())
 	unsetClaudeLaunch(t)
 	payload := []byte(`{"session_id":"session-1","hook_event_name":"ConfigChange","source":"project_settings"}`)
@@ -835,11 +1107,12 @@ func TestLoginCommandQuotesUnsafePaths(t *testing.T) {
 
 func TestNudgeEmittedOncePerSession(t *testing.T) {
 	fs := newFakeServer(t, nil)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
-	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
 	// The nudge marker lands in os.TempDir keyed by the fixture's fixed
 	// session id; isolate it so reruns start unclaimed.
 	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
@@ -1256,18 +1529,19 @@ func TestMissingVerdictBlocksGatingEvent(t *testing.T) {
 // content type — e.g. an intercepting proxy) carries no verdict and must not
 // read as an implicit allow on a blocking hook.
 func TestUnparseable2xxBlocksGatingEvent(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte("<html>intercepted</html>"))
-	}))
-	t.Cleanup(srv.Close)
-	cfg := authedConfig(t, srv.URL)
-	// Cached posture: without it the cold-start pass would fail this open.
-	writeOrgSettings(cfg, false)
+	synctest.Test(t, func(t *testing.T) {
+		srv := newPipeServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html>intercepted</html>"))
+		}))
+		cfg := authedConfig(t, srv.URL)
+		// Cached posture: without it the cold-start pass would fail this open.
+		writeOrgSettings(cfg, false)
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
-	require.Contains(t, string(res.Stdout), "verdict")
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+		require.Contains(t, string(res.Stdout), "verdict")
+	})
 }
 
 // TestRejectedCachedKeyNudgesPromptReconnect covers the stale-cache recovery
@@ -1282,7 +1556,8 @@ func TestRejectedCachedKeyNudgesPromptReconnect(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=stale-key\nproject=default\n"), 0o600))
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	t.Setenv("TMPDIR", t.TempDir())
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
@@ -1312,7 +1587,8 @@ func TestRejectedCachedKeyStillBlocksToolUse(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=stale-key\nproject=default\n"), 0o600))
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
@@ -1331,7 +1607,7 @@ func TestRejectedCachedKeyStillBlocksToolUse(t *testing.T) {
 // TestWriteAuthClearsReauthMarker pins the recovery contract: a successful
 // sign-in ends the reconnect posture.
 func TestWriteAuthClearsReauthMarker(t *testing.T) {
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	markReauthNeeded()
 	require.True(t, reauthNeeded())
 	require.NoError(t, writeAuth(creds{ServerURL: "https://gram.test", APIKey: "k", Project: "p", Email: "", Org: "", Source: credCache}))
@@ -1339,7 +1615,7 @@ func TestWriteAuthClearsReauthMarker(t *testing.T) {
 }
 
 // TestEnvKeyRejectionNamesConfiguredKey: when the explicitly configured
-// GRAM_HOOKS_API_KEY is rejected, the failure must name the variable — a
+// SPEAKEASY_AI_HOOKS_API_KEY is rejected, the failure must name the variable — a
 // re-login cannot replace an env key, so pointing at the sign-in flow alone
 // would strand the user.
 func TestEnvKeyRejectionNamesConfiguredKey(t *testing.T) {
@@ -1350,14 +1626,15 @@ func TestEnvKeyRejectionNamesConfiguredKey(t *testing.T) {
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
-	require.Contains(t, string(res.Stdout), "GRAM_HOOKS_API_KEY")
+	require.Contains(t, string(res.Stdout), "SPEAKEASY_AI_HOOKS_API_KEY")
 	require.Contains(t, string(res.Stdout), "unauthorized: api_key not found", "the server response must ride along")
 }
 
 // TestResolveAuthIgnoresGenericGramAPIKey pins that the generic MCP credential
 // no longer authenticates hook telemetry.
 func TestResolveAuthIgnoresGenericGramAPIKey(t *testing.T) {
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_API_KEY", "mcp-key")
 
@@ -1385,8 +1662,8 @@ func TestInsecureServerURL(t *testing.T) {
 func TestInsecureServerURLFailsClosedWhenEstablished(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
-	t.Setenv("GRAM_HOOKS_API_KEY", "leaky-key")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "leaky-key")
 	cfg := Config{ServerURL: "http://gram.example.com", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -1398,8 +1675,8 @@ func TestInsecureServerURLFailsClosedWhenEstablished(t *testing.T) {
 // auth an insecure endpoint skips the network silently instead of bricking the
 // agent, so no key can leak either way.
 func TestInsecureServerURLFailsOpenNeverAuthed(t *testing.T) {
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
-	t.Setenv("GRAM_HOOKS_API_KEY", "leaky-key")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "leaky-key")
 	cfg := Config{ServerURL: "http://gram.example.com", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -1485,7 +1762,8 @@ func TestRejectedCachedKeyCursorPromptFailsOpen(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=stale-key\nproject=default\n"), 0o600))
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	t.Setenv("TMPDIR", t.TempDir())
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
@@ -1507,6 +1785,45 @@ func TestSplitInlineFlagsRecordsConfigError(t *testing.T) {
 	require.Equal(t, []string{"run"}, rest)
 }
 
+// TestLoadConfigReadsDebugLogFromEnv pins the support path for providers that
+// pass the hook environment through: diagnostics turn on without hand-editing
+// the generated hook command.
+func TestLoadConfigReadsDebugLogFromEnv(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hooks-debug.log")
+	t.Setenv("SPEAKEASY_AI_HOOKS_DEBUG_LOG", "  "+path+"  ")
+
+	cfg := LoadConfig(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
+	require.Equal(t, path, cfg.DebugLog)
+}
+
+// TestDebugLogFlagBeatsEnv pins the precedence: the flag is the only channel
+// that survives providers which scrub the hook environment, so a support
+// session that sets it must not be redirected by a stale env var.
+func TestDebugLogFlagBeatsEnv(t *testing.T) {
+	flagPath := filepath.Join(t.TempDir(), "flag.log")
+	t.Setenv("SPEAKEASY_AI_HOOKS_DEBUG_LOG", filepath.Join(t.TempDir(), "env.log"))
+
+	flagCfg, rest := SplitInlineFlags(Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--debug-log=" + flagPath, "run"})
+	require.Equal(t, []string{"run"}, rest)
+	require.Equal(t, flagPath, LoadConfig(flagCfg).DebugLog)
+}
+
+// TestDebugLogEnvRecordsEvent runs one hook event through the env-resolved
+// config a provider spawn would produce, and pins that the diagnostic line
+// actually lands on disk.
+func TestDebugLogEnvRecordsEvent(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	path := filepath.Join(t.TempDir(), "hooks-debug.log")
+	t.Setenv("SPEAKEASY_AI_HOOKS_DEBUG_LOG", path)
+	cfg := LoadConfig(authedConfig(t, fs.URL))
+
+	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(b), "event=PreToolUse")
+}
+
 // TestBrokenConfigFailsClosedWhenEstablished: with the plugin config
 // unreadable the deployment identity is unknown, so an established machine
 // must block without sending anything — a cached key for the fallback server
@@ -1516,7 +1833,8 @@ func TestBrokenConfigFailsClosedWhenEstablished(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=cached-key\nproject=other-project\n"), 0o600))
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}
 
@@ -1530,7 +1848,8 @@ func TestBrokenConfigFailsClosedWhenEstablished(t *testing.T) {
 // config stays silent — fail open, and no login nudge since sign-in cannot
 // recover the deployment identity.
 func TestBrokenConfigFailsOpenNeverAuthed(t *testing.T) {
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	t.Setenv("TMPDIR", t.TempDir())
 	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}
@@ -1544,31 +1863,34 @@ func TestBrokenConfigFailsOpenNeverAuthed(t *testing.T) {
 // accepts connections but never responds must not stack the SDK's internal
 // retry budget with the transport replays past a controlled deadline.
 func TestSendBoundsTotalRetryTime(t *testing.T) {
-	// The handler never reads the request body, so the server cannot see the
-	// client abandon the connection; cleanup runs LIFO, so close(hung) must be
-	// registered after srv.Close to release the handler before Close waits on
-	// its outstanding request.
-	hung := make(chan struct{})
-	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		<-hung
-	}))
-	t.Cleanup(srv.Close)
-	t.Cleanup(func() { close(hung) })
+	// End the budget during the second attempt so the overall deadline,
+	// rather than the attempt limit, must stop the retries.
+	synctest.Test(t, func(t *testing.T) {
+		// The handler never reads the request body, so the server cannot see
+		// the client abandon the connection; cleanup runs LIFO, so close(hung)
+		// is registered after newPipeServer to release the handler before the
+		// server's Close waits on its outstanding request.
+		hung := make(chan struct{})
+		srv := newPipeServer(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			<-hung
+		}))
+		t.Cleanup(func() { close(hung) })
 
-	cl := newClient(srv.URL)
-	cl.budget = 2 * time.Second
-	start := time.Now()
-	res := cl.send(t.Context(), creds{ServerURL: "", APIKey: "k", Project: "p", Email: "", Org: "", Source: credEnv}, components.IngestRequestBody{
-		SchemaVersion: schemaVersion,
-		Source:        components.HookIngestSource{Adapter: "claude", AdapterVersion: nil, RawEventName: nil, Hostname: nil, UserEmail: nil},
-		Session:       nil,
-		Event:         components.HookIngestEvent{Type: components.TypeSessionUpdated, OccurredAt: nil},
-		Data:          nil,
-		Raw:           nil,
-	}, newIdempotencyToken())
+		cl := newClient(srv.URL)
+		cl.budget = perAttemptTime + time.Second
+		start := time.Now()
+		res := cl.send(t.Context(), creds{ServerURL: "", APIKey: "k", Project: "p", Email: "", Org: "", Source: credEnv}, components.IngestRequestBody{
+			SchemaVersion: schemaVersion,
+			Source:        components.HookIngestSource{Adapter: "claude", AdapterVersion: nil, RawEventName: nil, Hostname: nil, UserEmail: nil},
+			Session:       nil,
+			Event:         components.HookIngestEvent{Type: components.TypeSessionUpdated, OccurredAt: nil},
+			Data:          nil,
+			Raw:           nil,
+		}, newIdempotencyToken())
 
-	require.Equal(t, 0, res.statusCode, "a hung endpoint yields a transport failure, not a verdict")
-	require.Less(t, time.Since(start), 10*time.Second, "the send budget must bound retries end to end")
+		require.Equal(t, 0, res.statusCode, "a hung endpoint yields a transport failure, not a verdict")
+		require.Equal(t, cl.budget, time.Since(start), "the send budget must bound retries end to end")
+	})
 }
 
 // TestEnvelopeReportsBinaryVersion keeps relay version skew diagnosable from
@@ -1652,7 +1974,7 @@ func TestRunnerRelaysMCPInventoryBeforeFirstMCPTool(t *testing.T) {
 
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
-	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
 	unsetClaudeLaunch(t)
 	payload := []byte(`{"session_id":"ordered-inventory-session","hook_event_name":"PreToolUse","tool_name":"mcp__remote__call","tool_input":{},"tool_use_id":"tool-1"}`)
 
@@ -1685,7 +2007,7 @@ func TestRunnerRelaysIncompleteEmptyMCPInventory(t *testing.T) {
 
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
-	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
 	payload := []byte(`{"session_id":"empty-inventory-session","hook_event_name":"SessionStart","source":"startup"}`)
 
 	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")

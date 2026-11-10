@@ -106,7 +106,7 @@ func TestRuleIDForKey(t *testing.T) {
 func TestCoveredSourcesRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, []string{"gitleaks", "presidio", "prompt_injection", "destructive_tool", "cli_destructive"}, llmanalyzer.CoveredSources)
+	require.Equal(t, []string{"gitleaks", "presidio", "destructive_tool", "cli_destructive", "prompt_injection"}, llmanalyzer.CoveredSources)
 	for _, source := range llmanalyzer.CoveredSources {
 		key, ok := llmanalyzer.RiskKeyForSource(source)
 		require.True(t, ok, "covered source %q must map to a risk key", source)
@@ -124,9 +124,9 @@ func TestAllRuleIDs(t *testing.T) {
 	require.Equal(t, []string{
 		llmanalyzer.RuleSecret,
 		llmanalyzer.RulePII,
-		llmanalyzer.RulePromptInjection,
 		llmanalyzer.RuleDestructiveTool,
 		llmanalyzer.RuleCLIDestructive,
+		llmanalyzer.RulePromptInjection,
 		llmanalyzer.RuleDeadLetter,
 	}, got)
 

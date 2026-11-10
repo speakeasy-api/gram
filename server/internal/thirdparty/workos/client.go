@@ -76,6 +76,10 @@ type ClientOpts struct {
 	Endpoint string
 	// ClientID is the IDP client ID (GRAM_IDP_CLIENT_ID), needed for SSO code exchange.
 	ClientID string
+
+	// RetryConfig overrides the retry policy of retried WorkOS calls. Nil uses
+	// [guardian.DefaultRetryConfig] with a 10 second WaitMax.
+	RetryConfig *guardian.RetryConfig
 }
 
 func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpts) *Client {
@@ -89,8 +93,11 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 		endpoint = opt.Endpoint
 	}
 
-	retryCfg := guardian.DefaultRetryConfig()
-	retryCfg.WaitMax = 10 * time.Second
+	retryCfg := opt.RetryConfig
+	if retryCfg == nil {
+		retryCfg = guardian.DefaultRetryConfig()
+		retryCfg.WaitMax = 10 * time.Second
+	}
 	httpClient := guardianPolicy.PooledClient(
 		guardian.WithRetryConfig(retryCfg),
 		guardian.WithResilience("workos", guardian.ResilienceConfig{

@@ -1,6 +1,6 @@
 # Debug MCP OAuth Flows
 
-Use this runbook to test an MCP OAuth flow with a local Gram server. Use a
+Use this runbook to test an MCP OAuth flow with a local Speakeasy server. Use a
 fixed HTTPS tunnel so that the OAuth provider can send redirects to the server.
 
 ## Prepare the local server
@@ -57,12 +57,12 @@ The response must be `401`. The `WWW-Authenticate` header must contain the
 curl -fsS "$RESOURCE_METADATA" | jq '{resource, authorization_servers}'
 ```
 
-| Mode            | `resource`       | `authorization_servers`    |
-| --------------- | ---------------- | -------------------------- |
-| Gram-hosted     | MCP resource URL | MCP resource URL           |
-| Upstream issuer | MCP resource URL | Configured upstream issuer |
+| Mode             | `resource`       | `authorization_servers`    |
+| ---------------- | ---------------- | -------------------------- |
+| Speakeasy-hosted | MCP resource URL | MCP resource URL           |
+| Upstream issuer  | MCP resource URL | Configured upstream issuer |
 
-Gram owns the MCP resource and its RFC 9728 metadata in both modes. In upstream
+Speakeasy owns the MCP resource and its RFC 9728 metadata in both modes. In upstream
 mode, only authorization-server discovery moves to the upstream issuer.
 
 ### 3. Check the authorization server metadata
@@ -128,7 +128,7 @@ Repair the affected local key set once, using an organization admin account:
    **Publish new key**. The new local signer publishes a different public key.
    If the set already has an active key, the new key starts as pending.
 2. Make the new public key available to the local dev-idp (or other test
-   verifier). A verifier using Gram's JWKS URI can fetch the updated set; if
+   verifier). A verifier using Speakeasy's JWKS URI can fetch the updated set; if
    the app was registered with an inline JWKS, update that registration with
    the new public key. Allow any JWKS cache to refresh before switching keys.
 3. **Activate** the new key. This retires the old active key and makes new

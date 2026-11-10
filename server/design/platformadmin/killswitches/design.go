@@ -90,7 +90,7 @@ func prescriptionIdentityPayload() {
 }
 
 var _ = Service("platformKillswitches", func() {
-	Description("Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Gram session.")
+	Description("Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Speakeasy session.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 	declareLifecycleErrors()

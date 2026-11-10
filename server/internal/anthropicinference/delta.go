@@ -42,13 +42,14 @@ func conversationMessages(messages []Message) []Message {
 	return kept
 }
 
-// currentTurnStart is the index of the first message after the last assistant
-// message: the input the model is about to act on. Earlier content is not
-// necessarily accepted; only an accepted checkpoint can establish that.
-func currentTurnStart(messages []Message) int {
+// latestExchangeStart is the index of the last assistant message. From there
+// on is the model output this frame delivers for the first time and the input
+// the model is about to act on. A frame without an assistant message is all
+// latest exchange.
+func latestExchangeStart(messages []Message) int {
 	for index, message := range slices.Backward(messages) {
 		if message.Role == "assistant" {
-			return index + 1
+			return index
 		}
 	}
 	return 0
@@ -100,7 +101,7 @@ func parseMessageIdentity(externalID string, content []byte) messageIdentity {
 //
 // This archival heuristic deliberately treats a new message identical to an
 // anchor as already stored. Rewritten newest messages can fall back to the next
-// few stored anchors. Enforcement uses acceptedPrefix, never this heuristic.
+// few stored anchors.
 func alignTranscript(stored []messageIdentity, frame []Message) (start int, prev []byte, ok bool) {
 	// Cache hashes lazily so fallback anchors do not rehash the same messages.
 	hashes := make([][]byte, len(frame))
@@ -119,4 +120,18 @@ func alignTranscript(stored []messageIdentity, frame []Message) (start int, prev
 		}
 	}
 	return 0, nil, false
+}
+
+// prefixIdentities returns the stored identity each prefix of messages would
+// carry when archived from the start of a conversation: index k holds the
+// chain of messages[:k+1]. A chat whose newest stored message has identity k
+// stores exactly messages[:k+1].
+func prefixIdentities(messages []Message) [][]byte {
+	chains := make([][]byte, len(messages))
+	var prev []byte
+	for index, msg := range messages {
+		prev = chainHash(prev, contentHash(msg))
+		chains[index] = prev
+	}
+	return chains
 }

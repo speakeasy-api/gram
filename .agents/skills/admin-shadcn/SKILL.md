@@ -1,6 +1,6 @@
 ---
 name: admin-shadcn
-description: 'Use when adding, changing, or styling UI in client/admin (the Gram admin dashboard) that touches shadcn/ui — a button, dialog, table, sidebar, badge, select, tabs, tooltip, card, sheet, or any file under client/admin/src/components/ui/. Triggers include "add a shadcn component", "install shadcn X", "npx shadcn add", "restyle this button", "change the dialog", "that variant does not exist", any edit to client/admin/src/components/ui/, and the errors "No components.json was found" or "sh: 1: oxfmt: not found".'
+description: 'Use when adding, changing, or styling UI in client/admin (the Speakeasy admin dashboard) that touches shadcn/ui — a button, dialog, table, sidebar, badge, select, tabs, tooltip, card, sheet, or any file under client/admin/src/components/ui/. Triggers include "add a shadcn component", "install shadcn X", "npx shadcn add", "restyle this button", "change the dialog", "that variant does not exist", any edit to client/admin/src/components/ui/, and the errors "No components.json was found" or "sh: 1: oxfmt: not found".'
 metadata:
   relevant_files:
     - "client/admin/**"

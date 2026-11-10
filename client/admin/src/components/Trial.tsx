@@ -108,3 +108,20 @@ export function Trial({ org }: { org: AdminOrganization }): JSX.Element {
     </span>
   );
 }
+
+// The trial state alone, for surfaces that show a badge only when there is a
+// trial to speak of. Nothing renders for `none` or a state this build does not
+// know, so a card is not cluttered with a dash.
+export function TrialStateBadge({
+  state,
+}: {
+  state: string;
+}): JSX.Element | null {
+  const display = displayFor(state);
+  if (!display) return null;
+  return (
+    <Badge variant="outline" className={badgeTone[display.tone]}>
+      Trial {display.label.toLowerCase()}
+    </Badge>
+  );
+}

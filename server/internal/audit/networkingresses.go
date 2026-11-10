@@ -48,6 +48,7 @@ type LogNetworkIngressDeleteEvent struct{ NetworkIngressEventBase }
 
 func networkIngressEntry(base NetworkIngressEventBase, action Action, metadata, before, after []byte) repo.InsertAuditLogParams {
 	return repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     base.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID:            base.Actor.ID,

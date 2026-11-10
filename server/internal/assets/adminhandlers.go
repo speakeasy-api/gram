@@ -1,11 +1,13 @@
 package assets
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"mime"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,10 +40,33 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		return nil, fmt.Errorf("authorize global operation: %w", err)
 	}
 
+	return s.StorePlatformImage(ctx, logger, operatorEmail, reader, payload.ContentLength, payload.ContentType)
+}
+
+// StorePlatformImage stores a publicly served platform-tier image. Callers
+// must already have authorized a platform-wide staff write for operatorEmail.
+func (s *Service) StorePlatformImage(ctx context.Context, logger *slog.Logger, operatorEmail string, reader io.Reader, contentLength int64, contentType string) (*admingen.UploadImageResult, error) {
+	// Bound and validate the original bytes before canonicalization changes their size.
+	if contentLength <= 0 || contentLength > MaxFileSizeImage {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid image content length")
+	}
+	data, err := io.ReadAll(io.LimitReader(reader, MaxFileSizeImage+1))
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "read image")
+	}
+	if int64(len(data)) != contentLength {
+		return nil, oops.E(oops.CodeBadRequest, nil, "image content length mismatch")
+	}
+	data, contentType, err = canonicalPlatformImage(data, contentType)
+	if err != nil {
+		return nil, err
+	}
+	contentLength = int64(len(data))
+	reader = bytes.NewReader(data)
 	result, err := s.downloadAuthorizedAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
-		contentLength: payload.ContentLength,
-		contentType:   payload.ContentType,
+		contentLength: contentLength,
+		contentType:   contentType,
 	})
 	if err != nil {
 		return nil, err
@@ -71,15 +96,15 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		}}, nil
 	}
 
-	inContentType, _, err := mime.ParseMediaType(payload.ContentType)
+	inContentType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse content type: %w", err), "error parsing content type")
 	}
 
 	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
-		contentLength: payload.ContentLength,
+		contentLength: contentLength,
 		inputMimeType: inContentType,
-		allowedTypes:  []string{"image/png", "image/jpeg", "image/gif", "image/webp"},
+		allowedTypes:  PlatformImageTypes,
 	})
 	if err != nil {
 		return nil, err
@@ -92,7 +117,7 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		organizationID: "",
 		filename:       filename,
 		contentType:    mimeType,
-		contentLength:  payload.ContentLength,
+		contentLength:  contentLength,
 		file:           result.file,
 	})
 	if err != nil {
@@ -105,7 +130,7 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		Sha256:        result.hash,
 		Kind:          "image",
 		ContentType:   inContentType,
-		ContentLength: payload.ContentLength,
+		ContentLength: contentLength,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create platform asset in database: %w", err), "error saving document info").LogError(ctx, logger)
@@ -152,4 +177,32 @@ func NewPlatformService(logger *slog.Logger, tp trace.TracerProvider, policy *gu
 		storage:        storage,
 		repo:           repo.New(db),
 	}
+}
+
+// canonicalPlatformImage validates XML candidates regardless of their declared MIME.
+// Raster declarations retain the existing upload behavior.
+func canonicalPlatformImage(data []byte, contentType string) ([]byte, string, error) {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return nil, "", oops.E(oops.CodeBadRequest, err, "error parsing content type")
+	}
+	// NUL padding can precede '<' in UTF-16/32 XML, including encoded
+	// leading whitespace. Recognize it as XML without decoding or accepting
+	// those encodings. The sanitizer still validates the original bytes.
+	candidate := strings.TrimLeft(strings.TrimSpace(string(data)), "\x00 \t\r\n")
+	// Reject BOMs outright; stripping leading NUL padding also exposes the
+	// UTF-32 BOMs as their UTF-16 counterparts. Raster signatures are unaffected.
+	for _, bom := range []string{"\xef\xbb\xbf", "\xff\xfe", "\xfe\xff"} {
+		if strings.HasPrefix(candidate, bom) {
+			return nil, "", oops.E(oops.CodeUnsupportedMedia, nil, "image encoding is unsupported")
+		}
+	}
+	if mediaType == "image/svg+xml" || strings.HasPrefix(candidate, "<") {
+		clean, err := sanitizeSVG(data)
+		if err != nil {
+			return nil, "", oops.E(oops.CodeUnsupportedMedia, err, staticSVGGuidance)
+		}
+		return clean, "image/svg+xml", nil
+	}
+	return data, mediaType, nil
 }

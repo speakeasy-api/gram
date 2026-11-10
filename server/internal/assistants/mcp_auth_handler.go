@@ -29,6 +29,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -89,6 +91,7 @@ func (e *mcpOAuthTokenError) Error() string {
 }
 
 type mcpAuthEventPayload struct {
+	ResumeUserID     string `json:"_gram_resume_user_id,omitempty"`
 	GramEventKind    string `json:"gram_event_kind"`
 	Status           string `json:"status"`
 	ServerID         string `json:"mcp_server_id"`
@@ -104,7 +107,7 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	authedCtx, claims, err := s.core.assistantTokens.Authorize(ctx, token)
+	authedCtx, claims, err := s.core.assistantTokens.AuthorizeRuntime(ctx, token)
 	if err != nil {
 		return fmt.Errorf("authorize assistant runtime token: %w", err)
 	}
@@ -151,10 +154,10 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	}
 
 	attemptID := uuid.NewString()
-	if s.core.serverURL == nil {
+	if s.core.mcpAuthOrigin() == nil {
 		return oops.E(oops.CodeUnexpected, nil, "assistant mcp auth callback base url not configured").LogError(ctx, s.logger)
 	}
-	redirectURI := s.core.serverURL.JoinPath("rpc", "assistantMcpAuth", principal.AssistantID.String(), "oauth", "callback").String()
+	redirectURI := s.core.mcpAuthRedirectURI(principal.AssistantID)
 	codeVerifier, codeChallenge, err := newPKCEPair()
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "generate PKCE verifier").LogError(ctx, s.logger)
@@ -234,27 +237,34 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	})
 }
 
-func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) (retErr error) {
 	ctx := r.Context()
+	var projectID, assistantID, threadID uuid.UUID
+	defer func() {
+		if retErr != nil {
+			retErr = oops.WithBrowserClient(retErr, "Speakeasy Assistant")
+			retErr = oops.WithBrowserRecovery(retErr, s.mcpAuthRecovery(ctx, projectID, assistantID, threadID))
+		}
+	}()
 	callbackID := chi.URLParam(r, "id")
 	state := r.URL.Query().Get("state")
 	claims, err := s.core.assistantTokens.ValidateMCPAuthFlow(state)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid mcp auth callback state").LogError(ctx, s.logger)
+		return fmt.Errorf("complete assistant connection: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid or expired mcp auth callback state").LogWarn(ctx, s.logger), oauthui.ReasonExpired))
 	}
 	if claims.FlowID != callbackID {
-		return oops.E(oops.CodeBadRequest, nil, "mcp auth callback flow mismatch").LogError(ctx, s.logger)
+		return fmt.Errorf("complete assistant connection: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "mcp auth callback flow mismatch").LogWarn(ctx, s.logger), oauthui.ReasonInvalidLink))
 	}
 
-	projectID, err := uuid.Parse(claims.ProjectID)
+	projectID, err = uuid.Parse(claims.ProjectID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid callback project id").LogError(ctx, s.logger)
 	}
-	assistantID, err := uuid.Parse(claims.AssistantID)
+	assistantID, err = uuid.Parse(claims.AssistantID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid callback assistant id").LogError(ctx, s.logger)
 	}
-	threadID, err := uuid.Parse(claims.ThreadID)
+	threadID, err = uuid.Parse(claims.ThreadID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid callback thread id").LogError(ctx, s.logger)
 	}
@@ -268,6 +278,7 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	}
 
 	payload := mcpAuthEventPayload{
+		ResumeUserID:     claims.UserID,
 		GramEventKind:    mcpAuthEventKind,
 		Status:           mcpAuthStatusSuccess,
 		ServerID:         claims.ServerID,
@@ -321,10 +332,84 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	if !eventCreated {
+		return fmt.Errorf("complete assistant connection: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "this connection callback was already processed"), oauthui.ReasonExpired))
+	}
+	if payload.Status == mcpAuthStatusFailed {
+		reason := oauthui.ReasonDefault
+		if payload.Error == oautherr.CodeAccessDenied {
+			reason = oauthui.ReasonCanceled
+		}
+		return fmt.Errorf("complete assistant connection: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "connection was not completed; return to your assistant conversation and try again"), reason))
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, "<!doctype html><title>Authentication complete</title><p>Authentication complete. You can close this window.</p>")
 	return nil
+}
+
+// mcpAuthRecovery resolves a dashboard destination from validated callback IDs.
+// Missing or stale context keeps the generic assistants entry point usable.
+func (s *Service) mcpAuthRecovery(ctx context.Context, projectID, assistantID, threadID uuid.UUID) *oauthui.RecoveryLink {
+	if s.core.siteURL == nil {
+		return nil
+	}
+	recovery := &oauthui.RecoveryLink{
+		URL:   s.core.siteURL.JoinPath("@self", "projects", "default", "assistants").String(),
+		Label: "Open assistants",
+	}
+	if projectID == uuid.Nil || assistantID == uuid.Nil || threadID == uuid.Nil {
+		return recovery
+	}
+	repo := assistantrepo.New(s.core.db)
+	thread, err := repo.LoadAssistantThreadForBootstrap(ctx, assistantrepo.LoadAssistantThreadForBootstrapParams{
+		ProjectID: projectID, ThreadID: threadID,
+	})
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "load assistant recovery thread", attr.SlogError(err))
+		}
+		return recovery
+	}
+	if thread.AssistantID != assistantID {
+		return recovery
+	}
+	assistant, err := repo.GetAssistantForClientMetadataDocument(ctx, assistantID)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "load assistant recovery destination", attr.SlogError(err))
+		}
+		return recovery
+	}
+	if assistant.ProjectID != projectID {
+		return recovery
+	}
+	destination := s.core.siteURL.JoinPath(assistant.OrganizationSlug, "projects", assistant.ProjectSlug, "assistants", assistantID.String())
+	recovery.Label = "Open assistant"
+	switch thread.SourceKind {
+	case sourceKindSetup:
+		query := destination.Query()
+		query.Set("threadId", thread.ChatID.String())
+		destination.RawQuery = query.Encode()
+		recovery.Label = "Return to conversation"
+	case sourceKindDashboard:
+		// The chat route serves only the project's managed assistant.
+		managed, err := repo.GetManagedAssistantByProject(ctx, projectID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "load managed assistant recovery destination", attr.SlogError(err))
+		}
+		if err == nil && managed.ID == assistantID {
+			destination = s.core.siteURL.JoinPath(assistant.OrganizationSlug, "projects", assistant.ProjectSlug, "chat", thread.ChatID.String())
+			recovery.Label = "Return to conversation"
+		}
+	default:
+		query := destination.Query()
+		query.Set("tab", "sessions")
+		destination.RawQuery = query.Encode()
+	}
+	recovery.URL = destination.String()
+	return recovery
 }
 
 func mcpAuthAttemptID(claims *assistanttokens.MCPAuthFlowClaims) string {
@@ -557,7 +642,7 @@ func (s *Service) completeMCPAuthClientRegistration(
 		registrationCtx,
 		registrationEndpoint,
 		redirectURI,
-		"Gram Assistant "+assistantID.String(),
+		"Speakeasy Assistant "+assistantID.String(),
 	)
 	cancel()
 	if err != nil {
@@ -625,10 +710,10 @@ func (s *Service) upsertMCPAuthCIMDClient(
 	usableAfter pgtype.Timestamptz,
 	claimLease pgtype.Interval,
 ) (mcpAuthClientCredentials, error) {
-	if s.core.serverURL == nil {
+	if s.core.mcpAuthOrigin() == nil {
 		return mcpAuthClientCredentials{}, fmt.Errorf("assistant mcp auth callback base url not configured")
 	}
-	clientID := AssistantClientMetadataDocumentURL(s.core.serverURL, assistantID)
+	clientID := AssistantClientMetadataDocumentURL(s.core.mcpAuthOrigin(), assistantID)
 	persistenceCtx, persistenceCancel := context.WithTimeout(context.WithoutCancel(ctx), mcpOAuthPersistenceMax)
 	defer persistenceCancel()
 	row, err := queries.UpsertAssistantMCPOAuthClientCIMD(persistenceCtx, assistantrepo.UpsertAssistantMCPOAuthClientCIMDParams{

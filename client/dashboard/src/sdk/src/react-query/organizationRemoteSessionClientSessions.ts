@@ -30,6 +30,8 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   ListOrganizationRemoteSessionClientSessionsRequest,
   ListOrganizationRemoteSessionClientSessionsSecurity,
+  QueryParamSort,
+  QueryParamStatus,
 } from "../models/operations/listorganizationremotesessionclientsessions.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -222,6 +224,11 @@ export function setOrganizationRemoteSessionClientSessionsData(
   queryKeyBase: [
     parameters: {
       clientId: string;
+      search?: string | undefined;
+      status?: QueryParamStatus | undefined;
+      createdAfter?: Date | undefined;
+      createdBefore?: Date | undefined;
+      sort?: QueryParamSort | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
@@ -243,6 +250,11 @@ export function invalidateOrganizationRemoteSessionClientSessions(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       clientId: string;
+      search?: string | undefined;
+      status?: QueryParamStatus | undefined;
+      createdAfter?: Date | undefined;
+      createdBefore?: Date | undefined;
+      sort?: QueryParamSort | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;

@@ -48,13 +48,20 @@ type UpdateToolsetRequestBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// List of resource URNs to include in the toolset
 	ResourceUrns []string `form:"resource_urns,omitempty" json:"resource_urns,omitempty" xml:"resource_urns,omitempty"`
-	// Whether the toolset is enabled for MCP
+	// Deprecated: rejected; use mcpServers.update. Whether the toolset is enabled
+	// for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
-	// The slug of the MCP to use for the toolset
+	// Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The
+	// slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
+	// Deprecated: rejected; use mcpServers.update. Whether the toolset is public
+	// in MCP
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// The ID of the custom domain to use for the toolset
+	// Deprecated: rejected; use mcpServers.update. Where the hosted MCP is
+	// accessible: public_only, dual, or private_only
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
+	// Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The ID
+	// of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
@@ -70,10 +77,10 @@ type AddExternalOAuthServerRequestBody struct {
 // UpdateExternalOAuthServerRequestBody is the type of the "toolsets" service
 // "updateExternalOAuthServer" endpoint HTTP request body.
 type UpdateExternalOAuthServerRequestBody struct {
-	// JSON object metadata to restore Gram-hosted compatibility mode. Supply
+	// JSON object metadata to restore Speakeasy-hosted compatibility mode. Supply
 	// exactly one of metadata and authorization_server_issuer.
 	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
-	// Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly
+	// Exact HTTPS issuer to set for provider-hosted discovery. Speakeasy strictly
 	// discovers and verifies it before the atomic update. Supply exactly one of
 	// authorization_server_issuer and metadata; clients may need to register or
 	// authenticate again after a mode change.
@@ -142,6 +149,8 @@ type CreateToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -150,8 +159,8 @@ type CreateToolsetResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -228,6 +237,8 @@ type UpdateToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -236,8 +247,8 @@ type UpdateToolsetResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -300,6 +311,8 @@ type GetToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -308,8 +321,8 @@ type GetToolsetResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -400,6 +413,8 @@ type CloneToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -408,8 +423,8 @@ type CloneToolsetResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -472,6 +487,8 @@ type AddExternalOAuthServerResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -480,8 +497,8 @@ type AddExternalOAuthServerResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -544,6 +561,8 @@ type UpdateExternalOAuthServerResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -552,8 +571,8 @@ type UpdateExternalOAuthServerResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -616,6 +635,8 @@ type RemoveOAuthServerResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -624,8 +645,8 @@ type RemoveOAuthServerResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -688,6 +709,8 @@ type SetUserSessionIssuerResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -696,8 +719,8 @@ type SetUserSessionIssuerResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -760,6 +783,8 @@ type SetToolVariationsGroupResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -768,8 +793,8 @@ type SetToolVariationsGroupResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -2239,196 +2264,6 @@ type ListToolSchemaStaticValuesUnexpectedResponseBody struct {
 // "toolsets" service "listToolSchemaStaticValues" endpoint HTTP response body
 // for the "gateway_error" error.
 type ListToolSchemaStaticValuesGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityUnauthorizedResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "unauthorized" error.
-type CheckMCPSlugAvailabilityUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityForbiddenResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "forbidden" error.
-type CheckMCPSlugAvailabilityForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityBadRequestResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "bad_request" error.
-type CheckMCPSlugAvailabilityBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityNotFoundResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "not_found" error.
-type CheckMCPSlugAvailabilityNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityConflictResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "conflict" error.
-type CheckMCPSlugAvailabilityConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityUnsupportedMediaResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "unsupported_media" error.
-type CheckMCPSlugAvailabilityUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityInvalidResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "invalid" error.
-type CheckMCPSlugAvailabilityInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityInvariantViolationResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "invariant_violation" error.
-type CheckMCPSlugAvailabilityInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityUnexpectedResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "unexpected" error.
-type CheckMCPSlugAvailabilityUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityGatewayErrorResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "gateway_error" error.
-type CheckMCPSlugAvailabilityGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4070,8 +3905,8 @@ type ExternalOAuthServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The slug of the external OAuth server
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly
-	// one of metadata and authorization_server_issuer is present.
+	// The validated RFC 8414 metadata Speakeasy hosts in compatibility mode.
+	// Exactly one of metadata and authorization_server_issuer is present.
 	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
 	// The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery.
 	// Exactly one of authorization_server_issuer and metadata is present; changing
@@ -4255,14 +4090,14 @@ type ToolsetOriginRequestBody struct {
 // ExternalOAuthServerFormRequestBody is used to define fields on request body
 // types.
 type ExternalOAuthServerFormRequestBody struct {
-	// Optional external OAuth server slug retained for compatibility. Gram
+	// Optional external OAuth server slug retained for compatibility. Speakeasy
 	// generates one from the toolset slug when omitted.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// JSON object metadata for Gram-hosted compatibility mode. Supply exactly one
-	// of metadata and authorization_server_issuer.
+	// JSON object metadata for Speakeasy-hosted compatibility mode. Supply exactly
+	// one of metadata and authorization_server_issuer.
 	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
-	// Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Gram fetches and
-	// strictly verifies this issuer before persistence. Supply exactly one of
+	// Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Speakeasy fetches
+	// and strictly verifies this issuer before persistence. Supply exactly one of
 	// authorization_server_issuer and metadata.
 	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
 }
@@ -4295,6 +4130,10 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -4471,6 +4310,10 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -4607,6 +4450,10 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -4800,6 +4647,10 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -4936,6 +4787,10 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -5075,6 +4930,10 @@ func NewUpdateExternalOAuthServerResponseBody(res *types.Toolset) *UpdateExterna
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -5211,6 +5070,10 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -5349,6 +5212,10 @@ func NewSetUserSessionIssuerResponseBody(res *types.Toolset) *SetUserSessionIssu
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -5485,6 +5352,10 @@ func NewSetToolVariationsGroupResponseBody(res *types.Toolset) *SetToolVariation
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -6732,156 +6603,6 @@ func NewListToolSchemaStaticValuesGatewayErrorResponseBody(res *goa.ServiceError
 	return body
 }
 
-// NewCheckMCPSlugAvailabilityUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityUnauthorizedResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityUnauthorizedResponseBody {
-	body := &CheckMCPSlugAvailabilityUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityForbiddenResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityForbiddenResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityForbiddenResponseBody {
-	body := &CheckMCPSlugAvailabilityForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityBadRequestResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityBadRequestResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityBadRequestResponseBody {
-	body := &CheckMCPSlugAvailabilityBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityNotFoundResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityNotFoundResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityNotFoundResponseBody {
-	body := &CheckMCPSlugAvailabilityNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityConflictResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityConflictResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityConflictResponseBody {
-	body := &CheckMCPSlugAvailabilityConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "checkMCPSlugAvailability" endpoint of
-// the "toolsets" service.
-func NewCheckMCPSlugAvailabilityUnsupportedMediaResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityUnsupportedMediaResponseBody {
-	body := &CheckMCPSlugAvailabilityUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityInvalidResponseBody builds the HTTP response body
-// from the result of the "checkMCPSlugAvailability" endpoint of the "toolsets"
-// service.
-func NewCheckMCPSlugAvailabilityInvalidResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityInvalidResponseBody {
-	body := &CheckMCPSlugAvailabilityInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "checkMCPSlugAvailability" endpoint of
-// the "toolsets" service.
-func NewCheckMCPSlugAvailabilityInvariantViolationResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityInvariantViolationResponseBody {
-	body := &CheckMCPSlugAvailabilityInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityUnexpectedResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityUnexpectedResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityUnexpectedResponseBody {
-	body := &CheckMCPSlugAvailabilityUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityGatewayErrorResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityGatewayErrorResponseBody {
-	body := &CheckMCPSlugAvailabilityGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewCloneToolsetUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "cloneToolset" endpoint of the "toolsets" service.
 func NewCloneToolsetUnauthorizedResponseBody(res *goa.ServiceError) *CloneToolsetUnauthorizedResponseBody {
@@ -7841,6 +7562,10 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 		mcpSlug := types.Slug(*body.McpSlug)
 		v.McpSlug = &mcpSlug
 	}
+	if body.NetworkAccessMode != nil {
+		networkAccessMode := types.NetworkAccessMode(*body.NetworkAccessMode)
+		v.NetworkAccessMode = &networkAccessMode
+	}
 	if body.PromptTemplateNames != nil {
 		v.PromptTemplateNames = make([]string, len(body.PromptTemplateNames))
 		for i, val := range body.PromptTemplateNames {
@@ -7882,7 +7607,7 @@ func NewDeleteToolsetPayload(slug string, sessionToken *string, apikeyToken *str
 // NewGetToolsetPayload builds a toolsets service getToolset endpoint payload.
 func NewGetToolsetPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.GetToolsetPayload {
 	v := &toolsets.GetToolsetPayload{}
-	v.Slug = types.Slug(slug)
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -7906,18 +7631,6 @@ func NewListToolFiltersPayload(slug string, sessionToken *string, apikeyToken *s
 // listToolSchemaStaticValues endpoint payload.
 func NewListToolSchemaStaticValuesPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.ListToolSchemaStaticValuesPayload {
 	v := &toolsets.ListToolSchemaStaticValuesPayload{}
-	v.Slug = types.Slug(slug)
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v
-}
-
-// NewCheckMCPSlugAvailabilityPayload builds a toolsets service
-// checkMCPSlugAvailability endpoint payload.
-func NewCheckMCPSlugAvailabilityPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.CheckMCPSlugAvailabilityPayload {
-	v := &toolsets.CheckMCPSlugAvailabilityPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -8045,6 +7758,11 @@ func ValidateUpdateToolsetRequestBody(body *UpdateToolsetRequestBody) (err error
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
+		}
+	}
+	if body.NetworkAccessMode != nil {
+		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 		}
 	}
 	return

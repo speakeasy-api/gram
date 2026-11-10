@@ -2162,6 +2162,14 @@ SELECT
     WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
   )::boolean AS has_valid_version,
   (
+    -- Same filter as GetSkillLastLoadedOverMCPAt.
+    SELECT MAX(so.seen_at)
+    FROM skill_observations so
+    WHERE so.project_id = s.project_id
+      AND so.skill_id = s.id
+      AND so.provider = 'mcp'
+  )::timestamptz AS last_loaded_over_mcp_at,
+  (
     SELECT COUNT(*)::bigint
     FROM skill_distributions sd
     JOIN assistants a
@@ -2199,12 +2207,13 @@ type GetSkillDetailsParams struct {
 }
 
 type GetSkillDetailsRow struct {
-	Skill           Skill
-	ShareToken      pgtype.Text
-	LatestVersionID uuid.UUID
-	VersionCount    int64
-	HasValidVersion bool
-	AssistantCount  int64
+	Skill               Skill
+	ShareToken          pgtype.Text
+	LatestVersionID     uuid.UUID
+	VersionCount        int64
+	HasValidVersion     bool
+	LastLoadedOverMcpAt pgtype.Timestamptz
+	AssistantCount      int64
 }
 
 func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams) (GetSkillDetailsRow, error) {
@@ -2229,6 +2238,7 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 		&i.LatestVersionID,
 		&i.VersionCount,
 		&i.HasValidVersion,
+		&i.LastLoadedOverMcpAt,
 		&i.AssistantCount,
 	)
 	return i, err
@@ -2720,6 +2730,29 @@ func (q *Queries) GetSkillForUpdate(ctx context.Context, arg GetSkillForUpdatePa
 	return i, err
 }
 
+const getSkillLastLoadedOverMCPAt = `-- name: GetSkillLastLoadedOverMCPAt :one
+SELECT MAX(so.seen_at)::timestamptz AS last_loaded_over_mcp_at
+FROM skill_observations so
+WHERE so.project_id = $1
+  AND so.skill_id = $2::uuid
+  AND so.provider = 'mcp'
+`
+
+type GetSkillLastLoadedOverMCPAtParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+}
+
+// The newest activation a Speakeasy-hosted MCP server recorded for one skill,
+// NULL when agents never loaded it over MCP. Same filter as the mcp_loads
+// lateral in ListActiveSkillDistributions.
+func (q *Queries) GetSkillLastLoadedOverMCPAt(ctx context.Context, arg GetSkillLastLoadedOverMCPAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getSkillLastLoadedOverMCPAt, arg.ProjectID, arg.SkillID)
+	var last_loaded_over_mcp_at pgtype.Timestamptz
+	err := row.Scan(&last_loaded_over_mcp_at)
+	return last_loaded_over_mcp_at, err
+}
+
 const getSkillName = `-- name: GetSkillName :one
 SELECT name
 FROM skills
@@ -2960,6 +2993,43 @@ func (q *Queries) GetValidSkillVersion(ctx context.Context, arg GetValidSkillVer
 	return id, err
 }
 
+const hasPublishedPluginDistributionForSkills = `-- name: HasPublishedPluginDistributionForSkills :one
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM skill_distributions sd
+    JOIN plugins p ON p.id = sd.plugin_id AND p.project_id = sd.project_id AND p.deleted IS FALSE
+    WHERE sd.project_id = $1
+      AND sd.skill_id = ANY($2::uuid[])
+      AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
+      AND sd.revoked_at IS NULL
+      AND (NOT $3::bool OR sd.pinned_version_id IS NULL)
+  )
+  AND EXISTS (
+    SELECT 1 FROM plugin_github_connections c WHERE c.project_id = $1
+  )
+)::bool AS published
+`
+
+type HasPublishedPluginDistributionForSkillsParams struct {
+	ProjectID  uuid.UUID
+	SkillIds   []uuid.UUID
+	LatestOnly bool
+}
+
+// Reports whether a change to any of the skills can move a published
+// marketplace package: the project has a marketplace connection and a live
+// plugin carries one of the skills. latest_only narrows the check to
+// distributions that follow the latest valid version, the only ones a new or
+// restored version changes.
+func (q *Queries) HasPublishedPluginDistributionForSkills(ctx context.Context, arg HasPublishedPluginDistributionForSkillsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPublishedPluginDistributionForSkills, arg.ProjectID, arg.SkillIds, arg.LatestOnly)
+	var published bool
+	err := row.Scan(&published)
+	return published, err
+}
+
 const insertCapturedSkillVersionOrigin = `-- name: InsertCapturedSkillVersionOrigin :exec
 INSERT INTO skill_version_origins (skill_version_id, skill_id, project_id, origin)
 SELECT sv.id, sv.skill_id, s.project_id, 'captured'
@@ -3125,7 +3195,8 @@ SELECT
   s.name AS skill_name,
   s.display_name AS skill_display_name,
   pl.name AS plugin_name,
-  resolved.id AS resolved_version_id
+  resolved.id AS resolved_version_id,
+  mcp_loads.last_loaded_over_mcp_at
 FROM skill_distributions sd
 JOIN plugins pl
   ON pl.id = sd.plugin_id
@@ -3148,6 +3219,13 @@ JOIN LATERAL (
   ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
+LEFT JOIN LATERAL (
+  SELECT MAX(so.seen_at)::timestamptz AS last_loaded_over_mcp_at
+  FROM skill_observations so
+  WHERE so.project_id = sd.project_id
+    AND so.skill_id = sd.skill_id
+    AND so.provider = 'mcp'
+) mcp_loads ON TRUE
 WHERE sd.project_id = $1
   AND sd.channel = 'plugin'
   AND sd.plugin_id IS NOT NULL
@@ -3176,13 +3254,19 @@ type ListActiveSkillDistributionsParams struct {
 }
 
 type ListActiveSkillDistributionsRow struct {
-	SkillDistribution SkillDistribution
-	SkillName         string
-	SkillDisplayName  string
-	PluginName        string
-	ResolvedVersionID uuid.UUID
+	SkillDistribution   SkillDistribution
+	SkillName           string
+	SkillDisplayName    string
+	PluginName          string
+	ResolvedVersionID   uuid.UUID
+	LastLoadedOverMcpAt pgtype.Timestamptz
 }
 
+// last_loaded_over_mcp_at is the newest activation a Speakeasy-hosted MCP
+// server recorded for the skill (provider 'mcp', the mcpskills resolver's
+// ObservationProvider). Those rows arrive reconciled with skill_id set, so the
+// provider filter alone tells MCP loads from hook-reported ones, and the
+// partial index on (project_id, skill_id, seen_at DESC) serves the MAX.
 func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActiveSkillDistributionsParams) ([]ListActiveSkillDistributionsRow, error) {
 	rows, err := q.db.Query(ctx, listActiveSkillDistributions,
 		arg.ProjectID,
@@ -3215,6 +3299,7 @@ func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActi
 			&i.SkillDisplayName,
 			&i.PluginName,
 			&i.ResolvedVersionID,
+			&i.LastLoadedOverMcpAt,
 		); err != nil {
 			return nil, err
 		}
@@ -3603,6 +3688,11 @@ WHERE so.project_id = $1
   AND so.efficacy_enqueued_at IS NULL
   AND so.session_id IS NOT NULL
   AND so.skill_version_id IS NOT NULL
+  -- Reads over a hosted MCP server carry the MCP session id, which names no
+  -- chat transcript to score, so they are not efficacy candidates. Belt and
+  -- braces: InsertMCPSkillObservation already stamps efficacy_enqueued_at, so
+  -- such a row never reaches this predicate.
+  AND so.provider <> 'mcp'
   AND (
     $2::timestamptz IS NULL
     OR (so.seen_at, so.id) > ($2::timestamptz, $3::uuid)
@@ -3708,6 +3798,12 @@ WHERE so.project_id = $1
   AND so.session_id IS NOT NULL
   AND so.skill_id IS NOT NULL
   AND so.skill_version_id IS NOT NULL
+  -- A read over a hosted MCP server arrives reconciled with the MCP session
+  -- id, which is neither a dev nor an assistant session: it belongs to no
+  -- surface the attribution join knows, so it never becomes a mapping.
+  -- Belt and braces: InsertMCPSkillObservation already stamps
+  -- metrics_synced_at, so such a row never reaches this predicate.
+  AND so.provider <> 'mcp'
 ORDER BY so.seen_at, so.id
 LIMIT $2
 `
@@ -4893,6 +4989,14 @@ SELECT
     WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
   )::boolean AS has_valid_version,
   (
+    -- Same filter as GetSkillLastLoadedOverMCPAt.
+    SELECT MAX(so.seen_at)
+    FROM skill_observations so
+    WHERE so.project_id = s.project_id
+      AND so.skill_id = s.id
+      AND so.provider = 'mcp'
+  )::timestamptz AS last_loaded_over_mcp_at,
+  (
     SELECT COUNT(*)
     FROM skills counted
     WHERE counted.project_id = $1
@@ -5002,12 +5106,13 @@ type ListSkillsParams struct {
 }
 
 type ListSkillsRow struct {
-	Skill           Skill
-	ShareToken      pgtype.Text
-	LatestVersionID uuid.UUID
-	VersionCount    int64
-	HasValidVersion bool
-	TotalCount      int64
+	Skill               Skill
+	ShareToken          pgtype.Text
+	LatestVersionID     uuid.UUID
+	VersionCount        int64
+	HasValidVersion     bool
+	LastLoadedOverMcpAt pgtype.Timestamptz
+	TotalCount          int64
 }
 
 func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListSkillsRow, error) {
@@ -5050,6 +5155,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 			&i.LatestVersionID,
 			&i.VersionCount,
 			&i.HasValidVersion,
+			&i.LastLoadedOverMcpAt,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

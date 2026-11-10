@@ -1,0 +1,367 @@
+package externalmcp
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
+	"github.com/stretchr/testify/require"
+)
+
+type nativeTestSource struct {
+	pages   []mcpregistry.DiscoveryPage
+	options []mcpregistry.DiscoveryOptions
+	entry   mcpregistry.Entry
+	name    string
+	err     error
+}
+
+func (s *nativeTestSource) Discover(_ context.Context, o mcpregistry.DiscoveryOptions) (mcpregistry.DiscoveryPage, error) {
+	s.options = append(s.options, o)
+	if s.err != nil {
+		return mcpregistry.DiscoveryPage{}, s.err
+	}
+	p := s.pages[0]
+	s.pages = s.pages[1:]
+	return p, nil
+}
+func (s *nativeTestSource) GetByName(_ context.Context, name string) (mcpregistry.Entry, error) {
+	s.name = name
+	return s.entry, s.err
+}
+
+const nativeRecord = `{"server":{"name":"io.example/native","title":"Native","description":"Synthetic registry server","version":"1","repository":{"url":"https://example.com/repo"},"remotes":[{"type":"sse","url":"https://example.com/first"},{"type":"sse","url":"https://example.com/last"},{"type":"streamable-http","url":"https://example.com/mcp","headers":[{"name":"X-Key","isSecret":true}],"variables":{"tenant":{"description":"Tenant"}}}]},"_meta":{"com.speakeasy.ai/icons":{"default":{"src":"https://assets.example/rpc/assets.serveImage?id=00000000-0000-4000-8000-000000000001","mimeType":"image/svg+xml","sizes":["any"]}},"custom.example/metadata":{"keep":true},"io.modelcontextprotocol.registry/official":{"status":"deprecated"},"com.pulsemcp/server-version":{"remotes[0]":{"tools":[{"name":"read","annotations":{"readOnlyHint":true}}]},"remotes[1]":{"tools":[]}}}}`
+
+func TestNativeList(t *testing.T) {
+	t.Parallel()
+	source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{NextCursor: "next"}, {Records: []json.RawMessage{json.RawMessage(nativeRecord)}}}}
+	registry := Registry{ID: uuid.New()}
+	search := "Native"
+	result, err := NewNativeRegistryReader(source).ListServers(t.Context(), registry, ListServersParams{Search: &search})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 1)
+	row := result.Servers[0]
+	require.Equal(t, registry.ID.String(), *row.RegistryID)
+	require.NotNil(t, row.Title)
+	require.Equal(t, "Native", *row.Title)
+	require.NotNil(t, row.Repository)
+	require.Nil(t, row.ToolCount)
+	require.Nil(t, row.IsReadOnly)
+	require.Equal(t, map[string]any{"keep": true}, nativeTestMap(t, row.Meta)["custom.example/metadata"])
+	require.Equal(t, map[string]any{"default": map[string]any{"src": "https://assets.example/rpc/assets.serveImage?id=00000000-0000-4000-8000-000000000001", "mimeType": "image/svg+xml", "sizes": []any{"any"}}}, nativeTestMap(t, row.Meta)[mcpregistry.IconsNamespace])
+	require.Equal(t, "next", source.options[1].Cursor)
+	require.False(t, source.options[0].IncludeDeleted)
+}
+
+// Native capability metadata controls listing eligibility, not live OAuth readiness.
+func TestNativeListSupportsDcr(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		catalog  map[string]any
+		pulse    bool
+		want     bool
+		wantCIMD bool
+		setup    string
+	}{
+		{name: "native true", catalog: map[string]any{"supportsDcr": true}, want: true},
+		{name: "native false", catalog: map[string]any{"supportsDcr": false}},
+		{name: "native false overrides Pulse", catalog: map[string]any{"supportsDcr": false}, pulse: true},
+		{name: "missing native metadata ignores legacy auth", pulse: true},
+		{name: "missing native field ignores legacy auth", catalog: map[string]any{}, pulse: true},
+		{name: "no capability metadata"},
+		{name: "unavailable", catalog: map[string]any{"authSetup": "unknown", "authDiscoveryStatus": "unavailable", "supportsDcr": false, "supportsCimd": false}},
+		{name: "partial", catalog: map[string]any{"authSetup": "unknown", "authDiscoveryStatus": "partial"}},
+		{name: "CIMD", catalog: map[string]any{"supportsCimd": true}, wantCIMD: true, setup: "cimd"},
+		{name: "complete manual", catalog: map[string]any{"supportsDcr": false, "supportsCimd": false, "authSetup": "manual"}, setup: "manual"},
+		{name: "explicit no auth", catalog: map[string]any{"authSetup": "none"}, setup: "none"},
+		{name: "unconfirmed dcr setup", catalog: map[string]any{"authSetup": "dcr"}},
+		{name: "unconfirmed cimd setup", catalog: map[string]any{"authSetup": "cimd", "supportsCimd": false}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var record map[string]any
+			require.NoError(t, json.Unmarshal([]byte(nativeRecord), &record))
+			meta := nativeTestMap(t, record["_meta"])
+			if tc.catalog != nil {
+				meta["com.speakeasy.ai/catalog"] = tc.catalog
+			}
+			if tc.pulse {
+				version := nativeTestMap(t, meta["com.pulsemcp/server-version"])
+				remote := map[string]any{}
+				version["remotes[2]"] = remote
+				remote["authOptions"] = []any{map[string]any{
+					"type": "oauth",
+					"detail": map[string]any{
+						"authorizationServerMetadata": map[string]any{"registration_endpoint": "https://example.com/register"},
+					},
+				}}
+			}
+			raw, err := json.Marshal(record)
+			require.NoError(t, err)
+			source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{Records: []json.RawMessage{raw}}}}
+			result, err := NewNativeRegistryReader(source).ListServers(t.Context(), Registry{ID: uuid.New()}, ListServersParams{})
+			require.NoError(t, err)
+			require.Len(t, result.Servers, 1)
+			require.Equal(t, tc.want, result.Servers[0].SupportsDcr)
+			require.Equal(t, tc.wantCIMD, *result.Servers[0].SupportsCimd)
+			expectedSetup := tc.setup
+			if expectedSetup == "" {
+				expectedSetup = "unknown"
+				if tc.want {
+					expectedSetup = "dcr"
+				}
+			}
+			require.Equal(t, expectedSetup, *result.Servers[0].AuthSetup)
+			var detail serverDetailsEntry
+			require.NoError(t, json.Unmarshal(raw, &detail))
+			projected := projectServerDetails(detail, nil)
+			require.Equal(t, tc.wantCIMD, projected.SupportsCIMD)
+			require.Equal(t, tc.want, projected.SupportsDCR)
+			require.Equal(t, expectedSetup, projected.AuthSetup)
+		})
+	}
+}
+
+func TestNativeDetailsRetainedRemoteSelection(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		allowed []string
+		url     string
+	}{
+		{name: "http preferred", url: "https://example.com/mcp"},
+		{name: "last SSE wins", allowed: []string{"https://example.com/first", "https://example.com/last"}, url: "https://example.com/last"},
+		{name: "no allowed match", allowed: []string{"https://example.com/none"}},
+		{name: "first tools", allowed: []string{"https://example.com/first"}, url: "https://example.com/first"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			source := &nativeTestSource{entry: mcpregistry.Entry{ID: uuid.New(), Data: json.RawMessage(nativeRecord), Published: false}}
+			details, err := NewNativeRegistryReader(source).GetServerDetails(t.Context(), Registry{ID: uuid.New()}, "io.example/native", tc.allowed)
+			require.NoError(t, err)
+			require.Equal(t, "io.example/native", source.name)
+			require.Equal(t, tc.url, details.RemoteURL)
+			if tc.url == "https://example.com/mcp" {
+				require.Len(t, details.Headers, 1)
+				require.Contains(t, details.Variables, "tenant")
+			}
+		})
+	}
+}
+
+func TestNativeErrors(t *testing.T) {
+	t.Parallel()
+	source := &nativeTestSource{err: mcpregistry.ErrNotFound}
+	reader := NewNativeRegistryReader(source)
+	_, err := reader.GetServerDetails(t.Context(), Registry{}, "missing", nil)
+	require.ErrorIs(t, err, mcpregistry.ErrNotFound)
+	source.err = errors.New("unavailable")
+	_, err = reader.ListServers(t.Context(), Registry{}, ListServersParams{})
+	require.ErrorIs(t, err, source.err)
+	source.err = nil
+	source.entry.Data = json.RawMessage(`{`)
+	_, err = reader.GetServerDetails(t.Context(), Registry{}, "broken", nil)
+	require.Error(t, err)
+}
+
+func TestNativeListIgnoresStaleLegacyLifecycle(t *testing.T) {
+	t.Parallel()
+	raw := strings.Replace(nativeRecord, `"status":"deprecated"`, `"status":"active"`, 1)
+	raw = strings.Replace(raw, `"com.pulsemcp/server-version":{`, `"com.pulsemcp/server-version":{"status":"deleted",`, 1)
+	source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{Records: []json.RawMessage{json.RawMessage(raw)}}}}
+	result, err := NewNativeRegistryReader(source).ListServers(t.Context(), Registry{ID: uuid.New()}, ListServersParams{})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 1)
+	require.Equal(t, "deleted", nativeTestMap(t, nativeTestMap(t, result.Servers[0].Meta)["com.pulsemcp/server-version"])["status"])
+}
+
+func TestNativeListPrunesToolsPreservingMetadata(t *testing.T) {
+	t.Parallel()
+	var record map[string]any
+	require.NoError(t, json.Unmarshal([]byte(nativeRecord), &record))
+	meta := nativeTestMap(t, record["_meta"])
+	version := nativeTestMap(t, meta["com.pulsemcp/server-version"])
+	auth := []any{map[string]any{"type": "oauth", "detail": map[string]any{"authorizationServerMetadata": map[string]any{"registration_endpoint": "https://example.com/register"}, "custom": true}}}
+	for _, key := range []string{"remotes[0]", "remotes[1]", "remotes[2]", "remotes[3]", "remotes[4]", "remotes[5]", "remotes[12]"} {
+		version[key] = map[string]any{"tools": []any{map[string]any{"name": "read", "inputSchema": map[string]any{"type": "object"}, "annotations": map[string]any{"readOnlyHint": true}}}, "authOptions": auth, "custom": "retained"}
+	}
+	raw, err := json.Marshal(record)
+	require.NoError(t, err)
+	original := string(raw)
+	source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{Records: []json.RawMessage{raw}}}}
+	result, err := NewNativeRegistryReader(source).ListServers(t.Context(), Registry{ID: uuid.New()}, ListServersParams{})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 1)
+	require.JSONEq(t, original, string(raw), "listing must not modify the stored record")
+	row := result.Servers[0]
+	require.Nil(t, row.ToolCount)
+	require.Nil(t, row.IsReadOnly)
+	require.False(t, row.SupportsDcr)
+	got := nativeTestMap(t, row.Meta)
+	require.Equal(t, meta["custom.example/metadata"], got["custom.example/metadata"])
+	require.Equal(t, meta["io.modelcontextprotocol.registry/official"], got["io.modelcontextprotocol.registry/official"])
+	for _, key := range []string{"remotes[0]", "remotes[1]", "remotes[2]", "remotes[3]", "remotes[4]", "remotes[5]", "remotes[12]"} {
+		remote := nativeTestMap(t, nativeTestMap(t, got["com.pulsemcp/server-version"])[key])
+		require.NotContains(t, remote, "tools", key)
+		require.Equal(t, auth, remote["authOptions"])
+		require.Equal(t, "retained", remote["custom"])
+	}
+}
+
+func TestNativeListSearch(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		search string
+		count  int
+	}{
+		{"IO.EXAMPLE", 1}, {"NATIVE", 1}, {"synthetic registry", 1}, {"not present", 0},
+	} {
+		t.Run(tc.search, func(t *testing.T) {
+			t.Parallel()
+			source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{Records: []json.RawMessage{json.RawMessage(nativeRecord)}}}}
+			result, err := NewNativeRegistryReader(source).ListServers(t.Context(), Registry{ID: uuid.New()}, ListServersParams{Search: &tc.search})
+			require.NoError(t, err)
+			require.Len(t, result.Servers, tc.count)
+		})
+	}
+}
+
+type nativeEvidenceTestSource struct {
+	nativeTestSource
+	evidencePages   []mcpregistry.Page
+	evidenceOptions []mcpregistry.ListOptions
+	listErr         error
+	names           []string
+}
+
+func (s *nativeEvidenceTestSource) List(_ context.Context, opts mcpregistry.ListOptions) (mcpregistry.Page, error) {
+	s.evidenceOptions = append(s.evidenceOptions, opts)
+	if s.listErr != nil || len(s.evidencePages) == 0 {
+		return mcpregistry.Page{}, s.listErr
+	}
+	page := s.evidencePages[0]
+	s.evidencePages = s.evidencePages[1:]
+	return page, nil
+}
+
+func (s *nativeEvidenceTestSource) GetByName(ctx context.Context, name string) (mcpregistry.Entry, error) {
+	s.names = append(s.names, name)
+	return s.nativeTestSource.GetByName(ctx, name)
+}
+
+func TestNativeListEvidenceServers(t *testing.T) {
+	t.Parallel()
+	const valid = `{"server":{"name":"io.example/evidence","description":"Evidence server","version":"1","remotes":[{"type":"streamable-http","url":"https://example.com/mcp"}]},"_meta":{"io.modelcontextprotocol.registry/official":{"status":"active"}}}`
+	summary := mcpregistry.Summary{Name: "io.example/evidence"}
+	sourceErr := errors.New("evidence source unavailable")
+	for _, tc := range []struct {
+		name        string
+		data        string
+		pages       []mcpregistry.Page
+		wantCount   int
+		wantLookups int
+		listErr     error
+		lookupErr   error
+		errorPrefix string
+		cursors     []string
+	}{
+		{name: "eligible unpublished", data: valid, pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{summary}}}, wantCount: 1, wantLookups: 1, cursors: []string{""}},
+		{name: "summary issues", data: valid, pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{{Name: summary.Name, Issues: []mcpregistry.Issue{{Message: "invalid"}}}}}}, cursors: []string{""}},
+		{name: "invalid stored record", data: `{}`, pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{summary}}}, wantLookups: 1, cursors: []string{""}},
+		{name: "deleted", data: strings.Replace(valid, "active", "deleted", 1), pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{summary}}}, wantLookups: 1, cursors: []string{""}},
+		{name: "deprecated retained", data: strings.Replace(valid, "active", "deprecated", 1), pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{summary}}}, wantCount: 1, wantLookups: 1, cursors: []string{""}},
+		{name: "pagination after filtered page", data: valid, pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{{Issues: []mcpregistry.Issue{{Message: "invalid"}}}}, NextCursor: "next"}, {Entries: []mcpregistry.Summary{summary}, NextCursor: "last"}, {Entries: []mcpregistry.Summary{summary}}}, wantCount: 2, wantLookups: 2, cursors: []string{"", "next", "last"}},
+		{name: "empty", data: valid, pages: []mcpregistry.Page{{}}, cursors: []string{""}},
+		{name: "exhausted pages", pages: []mcpregistry.Page{{NextCursor: "next"}}, cursors: []string{"", "next"}},
+		{name: "list failure", listErr: sourceErr, errorPrefix: "list retained evidence", cursors: []string{""}},
+		{name: "lookup failure", pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{summary}}}, lookupErr: sourceErr, errorPrefix: "read retained evidence", wantLookups: 1, cursors: []string{""}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			source := &nativeEvidenceTestSource{nativeTestSource: nativeTestSource{entry: mcpregistry.Entry{Data: json.RawMessage(tc.data)}, err: tc.lookupErr}, evidencePages: tc.pages, listErr: tc.listErr}
+			registry := Registry{ID: uuid.New()}
+			result, err := NewNativeRegistryReader(source).ListEvidenceServers(t.Context(), registry)
+			if tc.errorPrefix != "" {
+				require.ErrorIs(t, err, sourceErr)
+				require.ErrorContains(t, err, tc.errorPrefix)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Len(t, result.Servers, tc.wantCount)
+			require.Len(t, source.names, tc.wantLookups)
+			for _, name := range source.names {
+				require.Equal(t, summary.Name, name)
+			}
+			require.Len(t, source.evidenceOptions, len(tc.cursors))
+			for i, cursor := range tc.cursors {
+				require.Equal(t, mcpregistry.ListOptions{Limit: 50, Cursor: cursor}, source.evidenceOptions[i])
+			}
+			for _, server := range result.Servers {
+				require.Equal(t, registry.ID.String(), *server.RegistryID)
+			}
+		})
+	}
+}
+
+func nativeTestMap(t *testing.T, value any) map[string]any {
+	t.Helper()
+	result, ok := value.(map[string]any)
+	require.True(t, ok)
+	return result
+}
+
+func TestNativeDetailsPreservesCatalogAuthWithoutAllowedRemote(t *testing.T) {
+	t.Parallel()
+	for _, setup := range []string{"none", "manual", "cimd"} {
+		t.Run(setup, func(t *testing.T) {
+			t.Parallel()
+			var record map[string]any
+			require.NoError(t, json.Unmarshal([]byte(nativeRecord), &record))
+			nativeTestMap(t, record["_meta"])["com.speakeasy.ai/catalog"] = map[string]any{"authSetup": setup, "supportsCimd": setup == "cimd"}
+			raw, err := json.Marshal(record)
+			require.NoError(t, err)
+			var detail serverDetailsEntry
+			require.NoError(t, json.Unmarshal(raw, &detail))
+			projected := projectServerDetails(detail, []string{"https://other.example.test/mcp"})
+			require.Empty(t, projected.RemoteURL)
+			require.Equal(t, setup, projected.AuthSetup)
+			require.Equal(t, setup == "cimd", projected.SupportsCIMD)
+		})
+	}
+}
+
+// Mirrors promotion and curated seed output: auth metadata may be the only
+// augmentation. Lifecycle, vendor identity, popularity and tools are not promised.
+func TestNativeSparsePublication(t *testing.T) {
+	t.Parallel()
+	for _, catalog := range []string{
+		`{"supportsDcr":true}`,
+		`{"supportsDcr":false,"supportsCimd":false,"authSetup":"unknown","authDiscoveryStatus":"unavailable"}`,
+		`{"supportsDcr":false,"supportsCimd":false,"authSetup":"unknown","authDiscoveryStatus":"partial"}`,
+		`{"supportsDcr":false,"supportsCimd":false,"authSetup":"none","authDiscoveryStatus":"not_required"}`,
+	} {
+		t.Run(catalog, func(t *testing.T) {
+			t.Parallel()
+			raw := json.RawMessage(`{"server":{"name":"io.example/sparse","description":"Reviewed server","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.com/mcp"}]},"_meta":{"com.speakeasy.ai/catalog":` + catalog + `,"com.speakeasy.ai/registry":{"publishedAt":"2026-10-01T00:00:00Z"}}}`)
+			source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{Records: []json.RawMessage{raw}}}, entry: mcpregistry.Entry{Data: raw}}
+			reader := NewNativeRegistryReader(source)
+			list, err := reader.ListServers(t.Context(), Registry{ID: uuid.New()}, ListServersParams{})
+			require.NoError(t, err)
+			require.Len(t, list.Servers, 1)
+			row := list.Servers[0]
+			require.Nil(t, row.ToolCount)
+			require.Nil(t, row.IsReadOnly)
+			require.NotContains(t, nativeTestMap(t, row.Meta), "io.modelcontextprotocol.registry/official")
+			details, err := reader.GetServerDetails(t.Context(), Registry{}, "io.example/sparse", nil)
+			require.NoError(t, err)
+			require.Equal(t, *row.AuthSetup, details.AuthSetup)
+			require.Equal(t, row.SupportsDcr, details.SupportsDCR)
+			require.Equal(t, *row.SupportsCimd, details.SupportsCIMD)
+		})
+	}
+}

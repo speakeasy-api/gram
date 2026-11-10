@@ -267,7 +267,7 @@ func buildSkillVersionMetricsQuery(arg AttributeMetricsQueryParams, timeseries b
 			arg.IntervalSeconds,
 		))
 		groupColumns = append(groupColumns, "bucket_time_unix_nano")
-	} else {
+	} else if arg.IncludeDimensionValues {
 		outer = outer.Column(squirrel.Expr(skillVersionDimensionValuesExpr(arg.GroupBy)))
 	}
 	if grouped {

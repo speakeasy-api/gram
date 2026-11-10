@@ -36,10 +36,10 @@ from opentelemetry import metrics
 # the distribution can be split by path. Low cardinality by construction.
 OUTCOME_DETECTED: Final = "detected"  # findings were published
 OUTCOME_CLEAN: Final = "clean"  # scan succeeded, nothing detected
-OUTCOME_ERROR: Final = "error"  # scan failed and was swallowed
-# The scan never reached a pool worker within the slot budget; the message was
-# nacked for redelivery. This delivery's wall clock still records (it is real
-# latency), but split out so backlog requeues don't read as scan failures.
+OUTCOME_ERROR: Final = "error"  # unexpected handler failure
+OUTCOME_DROPPED: Final = "dropped"  # deterministic input failure was acked
+# The message was nacked for a transient failure. This delivery's wall clock
+# still records because it is real latency.
 OUTCOME_REQUEUED: Final = "requeued"
 
 _OUTCOME_ATTR: Final = "outcome"
@@ -141,7 +141,8 @@ def record_scan_duration(seconds: float, size_bucket: str) -> None:
 
     Recorded by the scanners on scan success only: a timed-out or failed scan
     never reports a duration (its cost shows up in ``process_duration`` under
-    ``outcome=error`` instead), so this distribution stays a clean read of what
-    completed scans cost.
+    ``outcome=dropped`` for an input failure or ``outcome=requeued`` for a
+    transient one), so this distribution stays a clean read of what completed
+    scans cost.
     """
     _scan_duration.record(seconds, {_SIZE_BUCKET_ATTR: size_bucket})

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/netip"
 	"os"
 	"runtime"
 	"slices"
@@ -15,6 +16,8 @@ import (
 	"time"
 
 	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
@@ -101,9 +104,10 @@ func retryDockerInfo(ctx context.Context, info func(context.Context) error) erro
 	}
 }
 
-// UsePublishedPorts reports whether test containers must publish host ports
-// for tests to reach them. Local rootful Linux can dial container IPs directly;
+// UsePublishedPorts reports whether tests must dial published host ports to
+// reach containers. Local rootful Linux can dial container IPs directly;
 // Docker Desktop, rootless, and remote daemons require published ports.
+// testcontainers publishes the ports either way (see [WithLoopbackPorts]).
 var UsePublishedPorts = sync.OnceValue(func() bool {
 	if runtime.GOOS != "linux" {
 		return true
@@ -130,21 +134,90 @@ var UsePublishedPorts = sync.OnceValue(func() bool {
 	return res.Info.OperatingSystem == "Docker Desktop" || slices.Contains(res.Info.SecurityOptions, "name=rootless")
 })
 
-// WithoutPublishedPorts strips module-declared exposed ports when tests can
-// route directly to container IPs. Containers using this option must retain a
-// log or exec wait strategy for unpublished-port readiness.
-func WithoutPublishedPorts() testcontainers.CustomizeRequestOption {
+// localDockerHost reports whether testcontainers reaches published ports on
+// this machine: the Docker daemon is local (a unix socket, including Docker
+// Desktop and rootless) and the tests are not running inside a container.
+var localDockerHost = sync.OnceValue(func() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	provider, err := testcontainers.NewDockerProvider()
+	if err != nil {
+		return false
+	}
+	defer func() { _ = provider.Close() }()
+
+	host, err := provider.DaemonHost(ctx)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.IsLoopback()
+})
+
+var loopbackIPv4 = netip.MustParseAddr("127.0.0.1")
+
+// WithLoopbackPorts binds the container's exposed ports to 127.0.0.1 when the
+// Docker daemon is local. testcontainers publishes every exposed port, and
+// Docker binds a published port on all interfaces by default, so a test
+// container would otherwise be reachable from the network while tests run.
+// Remote daemons
+// keep the default binding because tests dial the daemon's host.
+//
+// The request must list the ports it uses. When it lists none, testcontainers
+// publishes the image's ports, which this option cannot see.
+//
+// Apply it after any [testcontainers.WithHostConfigModifier], which replaces
+// the modifier this option installs.
+func WithLoopbackPorts() testcontainers.CustomizeRequestOption {
 	return func(req *testcontainers.GenericContainerRequest) error {
-		if !UsePublishedPorts() {
-			req.ExposedPorts = nil
+		if !localDockerHost() {
+			return nil
 		}
+
+		// Installing a modifier skips testcontainers' default one, which only
+		// copies deprecated request fields that these containers do not set.
+		prev := req.HostConfigModifier
+		req.HostConfigModifier = func(hostConfig *container.HostConfig) {
+			if prev != nil {
+				prev(hostConfig)
+			}
+			if hostConfig.PortBindings == nil {
+				hostConfig.PortBindings = network.PortMap{}
+			}
+			// Bindings from an earlier modifier keep their host port.
+			for _, bindings := range hostConfig.PortBindings {
+				for i := range bindings {
+					bindings[i].HostIP = loopbackIPv4
+				}
+			}
+			// The request is read here rather than when the option runs, so
+			// ports added by later options are bound too.
+			for _, spec := range req.ExposedPorts {
+				ports, err := network.ParsePortRange(spec)
+				if err != nil {
+					// testcontainers rejects the same spec before creating the
+					// container.
+					continue
+				}
+				for port := range ports.All() {
+					if len(hostConfig.PortBindings[port]) == 0 {
+						hostConfig.PortBindings[port] = []network.PortBinding{{HostIP: loopbackIPv4, HostPort: ""}}
+					}
+				}
+			}
+		}
+
 		return nil
 	}
 }
 
-// WithPublishedPortWait waits for Docker's host-port proxy only on platforms
-// that publish container ports. Host-port waits cannot be used when ports are
-// unpublished because testcontainers always resolves the mapped port first.
+// WithPublishedPortWait waits for Docker's host-port proxy only when tests dial
+// published ports. Elsewhere tests dial container IPs, so containers keep a
+// log or exec wait strategy for readiness.
 func WithPublishedPortWait(port nat.Port) testcontainers.CustomizeRequestOption {
 	return func(req *testcontainers.GenericContainerRequest) error {
 		if !UsePublishedPorts() {

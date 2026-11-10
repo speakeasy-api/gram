@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
-import { Operator } from "@gram/client/models/components/logfilter";
+import type { Operator } from "@gram/client/models/components/logfilter";
 import {
   isValidPreset,
   safeBase64Decode,
@@ -53,6 +53,12 @@ function parseDateRange(
     preset,
     customRange,
     customLabel: label ? safeBase64Decode(label) : null,
+    calendarEnd:
+      customRange &&
+      params.get("calendarEnd") &&
+      !isNaN(Date.parse(params.get("calendarEnd")!))
+        ? new Date(params.get("calendarEnd")!)
+        : undefined,
   };
 }
 
@@ -83,7 +89,19 @@ function parseValue(dim: FilterDimension, params: URLSearchParams): AnyValue {
   }
 }
 
+/** The search parameters a date range dimension is kept in. */
+export const DATE_RANGE_PARAMS = [
+  "range",
+  "from",
+  "to",
+  "label",
+  "calendarEnd",
+] as const;
+
 function writeDateRange(next: URLSearchParams, value: DateRangeValue): void {
+  if (value.customRange && value.calendarEnd)
+    next.set("calendarEnd", value.calendarEnd.toISOString());
+  else next.delete("calendarEnd");
   if (value.customRange) {
     next.set("from", value.customRange.from.toISOString());
     next.set("to", value.customRange.to.toISOString());
@@ -169,6 +187,8 @@ export interface UseFilterStateResult<T extends readonly FilterDimension[]> {
     value: FilterValues<T>[Id],
   ) => void;
   clearValue: (id: keyof FilterValues<T>) => void;
+  /** Set several dimensions in one URL update; the rest keep their values. */
+  setValues: (values: Partial<FilterValues<T>>) => void;
   clearAll: () => void;
   /** Arbitrary attribute filters (the `af` URL param). */
   customFilters: ActiveLogFilter[];
@@ -220,6 +240,28 @@ export function useFilterState<const T extends readonly FilterDimension[]>(
         (prev) => {
           const next = new URLSearchParams(prev);
           writeValue(next, dim, defaultValueForDimension(dim));
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [schema, setSearchParams],
+  );
+
+  const setValues = useCallback(
+    (values: Partial<FilterValues<T>>) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          for (const dim of schema) {
+            // A key left out, or present but undefined, keeps its value.
+            if (values[dim.id as keyof FilterValues<T>] === undefined) continue;
+            writeValue(
+              next,
+              dim,
+              values[dim.id as keyof FilterValues<T>] as AnyValue,
+            );
+          }
           return next;
         },
         { replace: true },
@@ -304,6 +346,7 @@ export function useFilterState<const T extends readonly FilterDimension[]>(
     values,
     setValue,
     clearValue,
+    setValues,
     clearAll,
     customFilters,
     addCustomFilter,

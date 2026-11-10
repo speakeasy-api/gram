@@ -92,6 +92,17 @@ type Service interface {
 	GetShared(context.Context, *GetSharedPayload) (res *SharedSkill, err error)
 	// List active plugin skill distributions for the current project.
 	ListDistributions(context.Context, *ListDistributionsPayload) (res *ListSkillDistributionsResult, err error)
+	// Link a skill to exactly one MCP surface that serves it over MCP. Repeating
+	// the request for the same skill and target updates the version pin or is a
+	// no-op. Requires the skills-over-mcp rollout for the organization.
+	Link(context.Context, *LinkPayload) (res *types.SkillLink, err error)
+	// Remove a skill link so its MCP surface stops serving the skill through it.
+	// Removing a link that is already gone is a no-op. Requires the
+	// skills-over-mcp rollout for the organization.
+	Unlink(context.Context, *UnlinkPayload) (err error)
+	// List the current project's live skill links, limited to MCP surfaces the
+	// caller can read. Requires the skills-over-mcp rollout for the organization.
+	ListLinks(context.Context, *ListLinksPayload) (res *ListSkillLinksResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -114,7 +125,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [23]string{"create", "addVersion", "restoreVersion", "update", "list", "listTags", "listSuggestions", "listFeedback", "triggerSuggestion", "approveSuggestion", "dismissSuggestion", "listSuggestionFeedback", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
+var MethodNames = [26]string{"create", "addVersion", "restoreVersion", "update", "list", "listTags", "listSuggestions", "listFeedback", "triggerSuggestion", "approveSuggestion", "dismissSuggestion", "listSuggestionFeedback", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions", "link", "unlink", "listLinks"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -260,6 +271,25 @@ type GetSkillResult struct {
 	PromptInjectionFindings []*SkillPromptInjectionFinding
 }
 
+// LinkPayload is the payload type of the skills service link method.
+type LinkPayload struct {
+	// The skill ID.
+	ID string
+	// The kind of MCP surface that serves the skill.
+	TargetKind string
+	// The MCP server that serves the skill. Required when target_kind is
+	// mcp_server.
+	McpServerID *string
+	// The gateway that serves the skill. Required when target_kind is
+	// meta_mcp_server.
+	MetaMcpServerID *string
+	// An optional valid version to pin instead of serving the latest valid version.
+	PinnedVersionID  *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // ListDistributionsPayload is the payload type of the skills service
 // listDistributions method.
 type ListDistributionsPayload struct {
@@ -290,6 +320,25 @@ type ListFeedbackPayload struct {
 	ProjectSlugInput *string
 }
 
+// ListLinksPayload is the payload type of the skills service listLinks method.
+type ListLinksPayload struct {
+	// Only return links of this skill.
+	SkillID *string
+	// Only return links to this MCP server.
+	McpServerID *string
+	// Only return links to this gateway.
+	MetaMcpServerID *string
+	// Only return links to this kind of MCP surface.
+	TargetKind *string
+	// Cursor for the next page of skill links.
+	Cursor *string
+	// The number of skill links to return per page.
+	Limit            int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // ListPayload is the payload type of the skills service list method.
 type ListPayload struct {
 	// Cursor for the next page of skills.
@@ -304,10 +353,10 @@ type ListPayload struct {
 	Classifications []string
 	// Only return skills that have any of these tags.
 	Tags []string
-	// Only return skills at least one of these Gram users is authorized to reach,
-	// through a grant on them or on a role they hold, less any blocking grant
-	// withdrawing the same scope. Plugin membership is distribution and does not
-	// widen it.
+	// Only return skills at least one of these Speakeasy users is authorized to
+	// reach, through a grant on them or on a role they hold, less any blocking
+	// grant withdrawing the same scope. Plugin membership is distribution and does
+	// not widen it.
 	AccessibleBy []string
 	// How to order skills.
 	Sort             string
@@ -332,6 +381,15 @@ type ListSkillFeedbackResult struct {
 	Metrics  *SkillFeedbackMetrics
 	Timeline []*SkillFeedbackTimelinePoint
 	Feedback []*SkillFeedback
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string
+}
+
+// ListSkillLinksResult is the result type of the skills service listLinks
+// method.
+type ListSkillLinksResult struct {
+	// The live skill links in this page.
+	Links []*types.SkillLink
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string
 }
@@ -674,6 +732,15 @@ type UnknownSkillActivation struct {
 	SeenAt string
 	// Why exact version attribution failed.
 	Reason string
+}
+
+// UnlinkPayload is the payload type of the skills service unlink method.
+type UnlinkPayload struct {
+	// The skill link ID.
+	LinkID           string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // UnsharePayload is the payload type of the skills service unshare method.

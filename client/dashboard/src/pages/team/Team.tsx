@@ -2,6 +2,7 @@ import { IdentityLink } from "@/components/identity-link";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ResourceListPage } from "@/components/page-templates";
+import { DirectoryPeopleSummary } from "@/pages/identities/DirectoryPeopleSummary";
 import { Dialog } from "@/components/ui/Dialog";
 import {
   Select,
@@ -29,8 +30,8 @@ import { useSendInviteMutation } from "@gram/client/react-query/sendInvite.js";
 import { useUpdateInviteRoleMutation } from "@gram/client/react-query/updateInviteRole.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { OrganizationInvitation } from "@gram/client/models/components/organizationinvitation.js";
-import { OrganizationUser } from "@gram/client/models/components/organizationuser.js";
+import type { OrganizationInvitation } from "@gram/client/models/components/organizationinvitation.js";
+import type { OrganizationUser } from "@gram/client/models/components/organizationuser.js";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -44,8 +45,11 @@ import {
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Stack } from "@/components/ui/Stack";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateAllDirectoryPeople } from "@gram/client/react-query/directoryPeople.js";
+import { directoryPeopleQueryKey } from "@/pages/identities/directoryPeople";
 import {
   ChevronLeft,
   ChevronRight,
@@ -73,16 +77,54 @@ import { cn } from "@/lib/utils";
 import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
-import { KillswitchUserStatusIcon } from "@/components/killswitch/KillswitchUserStatusIcon";
 import { killswitchCreateHref } from "@/components/killswitch/killswitch-routing";
-import { useKillswitchUserBadges } from "@/components/killswitch/KillswitchUserStatus";
+import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
+import {
+  allMemberRoleIds,
+  describeMemberRoleSource,
+  memberRoleSource,
+  shortMemberRoleSource,
+} from "@/lib/member-roles";
 
 /**
  * Everything from TeamInner's scope that the member actions menu needs,
  * so the dropdown render fn and MemberRowContextMenu can build the same
  * menu model for a member.
  */
+/**
+ * A role chip on a member's row. A role granted through a directory role
+ * mapping names where it comes from, including when it is also assigned
+ * directly, because the directory part cannot be removed from the member here.
+ */
+function MemberRoleLink({
+  href,
+  name,
+  sourceDescription,
+}: {
+  href: string;
+  name: string;
+  /** Undefined for a role that is only assigned directly. */
+  sourceDescription: string | undefined;
+}): JSX.Element {
+  const link = (
+    <Link
+      to={href}
+      className="text-foreground hover:text-primary border px-1.5 py-0.5 text-xs no-underline transition-colors"
+    >
+      {name}
+    </Link>
+  );
+  if (!sourceDescription) return link;
+  return <SimpleTooltip tooltip={sourceDescription}>{link}</SimpleTooltip>;
+}
+
+/** A role name in the Team page's overflow tooltip, noting where it comes from. */
+function overflowRoleLabel(name: string, source: string | undefined): string {
+  if (!source) return name;
+  return `${name} (${source})`;
+}
+
 type MemberMenuDeps = {
   accessMemberByUserId: Map<string, AccessMember>;
   adminCount: number;
@@ -139,6 +181,7 @@ function getMemberMenuModel(
           email: member.email,
           photoUrl: member.photoUrl,
           roleIds: memberRoleIds,
+          directoryRoleIds: [],
           joinedAt: member.createdAt,
         }
       : undefined);
@@ -319,12 +362,10 @@ function TeamInner() {
     (safePage + 1) * MEMBERS_PAGE_SIZE,
   );
   // Killswitches are managed on the person's own access tab, so every entry
-  // point here — the mark on the row, both menu items — goes to the same page.
+  // point here — both menu items — goes to the same page.
   const identityAccessHref = useIdentityHrefBuilder("access");
   const memberAccessHref = (userId: string) => identityAccessHref({ userId });
-  const killswitchBadges = useKillswitchUserBadges(
-    visibleMembers.map((member) => member.userId),
-  );
+  const killswitchAccess = useKillswitchAccess();
   const invites = invitesData?.invitations ?? [];
   const roles = rolesData?.roles ?? [];
   const accessMembers = accessMembersData?.members ?? [];
@@ -357,6 +398,17 @@ function TeamInner() {
     await Promise.all([
       invalidateAllListOrganizationUsers(queryClient),
       invalidateAllListInvites(queryClient),
+    ]);
+  };
+  // Removing a member moves their directory profile out of "member".
+  // Invitations change no directory state, so only removal does this.
+  const invalidateAfterRemoval = async () => {
+    await Promise.all([
+      invalidateTeamData(),
+      invalidateAllDirectoryPeople(queryClient),
+      queryClient.invalidateQueries({
+        queryKey: directoryPeopleQueryKey(organization.id),
+      }),
     ]);
   };
 
@@ -439,7 +491,7 @@ function TeamInner() {
       {
         onSuccess: () => {
           void (async () => {
-            await invalidateTeamData();
+            await invalidateAfterRemoval();
             toast.success(`${displayName} has been removed`);
             setMemberToRemove(null);
           })();
@@ -548,7 +600,7 @@ function TeamInner() {
     adminRoleId,
     challengesHref: orgRoutes.access.challenges.href(),
     identityAccessHref: memberAccessHref,
-    canUseKillswitch: killswitchBadges.canAccess,
+    canUseKillswitch: killswitchAccess.canAccess,
     navigate,
     roleIdsByUserId,
     scimManaged: Boolean(organization.scimEnabled),
@@ -594,13 +646,6 @@ function TeamInner() {
                   {member.name}
                 </IdentityLink>
               </Text>
-              <KillswitchUserStatusIcon
-                badge={killswitchBadges.badges.get(member.userId)}
-                unavailable={killswitchBadges.unavailableUserIds.has(
-                  member.userId,
-                )}
-                href={memberAccessHref(member.userId)}
-              />
             </div>
             <Text variant="body" className="text-muted-foreground text-sm">
               {member.email}
@@ -627,8 +672,11 @@ function TeamInner() {
       header: "Roles",
       width: "200px",
       render: (member) => {
-        const memberRoleIds = roleIdsByUserId.get(member.userId);
-        if (!memberRoleIds || memberRoleIds.length === 0)
+        const accessMember = accessMemberByUserId.get(member.userId);
+        const memberRoleIds = accessMember
+          ? allMemberRoleIds(accessMember)
+          : [];
+        if (memberRoleIds.length === 0)
           return <span className="text-muted-foreground">—</span>;
         const MAX_VISIBLE = 1;
         const visible = memberRoleIds.slice(0, MAX_VISIBLE);
@@ -636,17 +684,31 @@ function TeamInner() {
         return (
           <Stack direction="horizontal" gap={1} className="flex-wrap">
             {visible.map((roleId) => (
-              <Link
+              <MemberRoleLink
                 key={roleId}
-                to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
-                className="text-foreground hover:text-primary border px-1.5 py-0.5 text-xs no-underline transition-colors"
-              >
-                {getRoleName(roleId)}
-              </Link>
+                href={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
+                name={getRoleName(roleId)}
+                sourceDescription={
+                  accessMember &&
+                  describeMemberRoleSource(
+                    memberRoleSource(accessMember, roleId),
+                  )
+                }
+              />
             ))}
             {overflow.length > 0 && (
               <SimpleTooltip
-                tooltip={overflow.map((id) => getRoleName(id)).join(", ")}
+                tooltip={overflow
+                  .map((id) =>
+                    overflowRoleLabel(
+                      getRoleName(id),
+                      accessMember &&
+                        shortMemberRoleSource(
+                          memberRoleSource(accessMember, id),
+                        ),
+                    ),
+                  )
+                  .join(", ")}
               >
                 <span className="text-muted-foreground cursor-pointer border px-1.5 py-0.5 text-xs">
                   +{overflow.length} more
@@ -956,7 +1018,6 @@ function TeamInner() {
 
   return (
     <>
-      {killswitchBadges.loader}
       <ResourceListPage
         title="Team Members"
         description={`Manage who has access to ${organization.name}`}
@@ -980,6 +1041,9 @@ function TeamInner() {
                   Manage identity settings
                 </Link>
               </Alert>
+            )}
+            {organization.scimEnabled && (
+              <DirectoryPeopleSummary className="-mt-4 mb-8 text-sm" />
             )}
 
             <div className="relative">

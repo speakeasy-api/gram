@@ -150,7 +150,7 @@ func BuildCreatePluginPayload(pluginsCreatePluginBody string, pluginsCreatePlugi
 	{
 		err = json.Unmarshal([]byte(pluginsCreatePluginBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auto_sync_enabled\": false,\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -166,9 +166,10 @@ func BuildCreatePluginPayload(pluginsCreatePluginBody string, pluginsCreatePlugi
 		}
 	}
 	v := &plugins.CreatePluginPayload{
-		Name:        body.Name,
-		Slug:        body.Slug,
-		Description: body.Description,
+		Name:            body.Name,
+		Slug:            body.Slug,
+		Description:     body.Description,
+		AutoSyncEnabled: body.AutoSyncEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -184,7 +185,7 @@ func BuildUpdatePluginPayload(pluginsUpdatePluginBody string, pluginsUpdatePlugi
 	{
 		err = json.Unmarshal([]byte(pluginsUpdatePluginBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auto_sync_enabled\": false,\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
@@ -204,10 +205,11 @@ func BuildUpdatePluginPayload(pluginsUpdatePluginBody string, pluginsUpdatePlugi
 		}
 	}
 	v := &plugins.UpdatePluginPayload{
-		ID:          body.ID,
-		Name:        body.Name,
-		Slug:        body.Slug,
-		Description: body.Description,
+		ID:              body.ID,
+		Name:            body.Name,
+		Slug:            body.Slug,
+		Description:     body.Description,
+		AutoSyncEnabled: body.AutoSyncEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -255,7 +257,7 @@ func BuildAddPluginServerPayload(pluginsAddPluginServerBody string, pluginsAddPl
 	{
 		err = json.Unmarshal([]byte(pluginsAddPluginServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"policy\": \"optional\",\n      \"sort_order\": 1,\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"policy\": \"optional\",\n      \"sort_order\": 1,\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", body.PluginID, goa.FormatUUID))
 		if body.ToolsetID != nil {
@@ -263,6 +265,9 @@ func BuildAddPluginServerPayload(pluginsAddPluginServerBody string, pluginsAddPl
 		}
 		if body.McpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
+		if body.MetaMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
 		}
 		if !(body.Policy == "required" || body.Policy == "optional") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy", body.Policy, []any{"required", "optional"}))
@@ -284,12 +289,13 @@ func BuildAddPluginServerPayload(pluginsAddPluginServerBody string, pluginsAddPl
 		}
 	}
 	v := &plugins.AddPluginServerPayload{
-		PluginID:    body.PluginID,
-		ToolsetID:   body.ToolsetID,
-		McpServerID: body.McpServerID,
-		DisplayName: body.DisplayName,
-		Policy:      body.Policy,
-		SortOrder:   body.SortOrder,
+		PluginID:        body.PluginID,
+		ToolsetID:       body.ToolsetID,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		DisplayName:     body.DisplayName,
+		Policy:          body.Policy,
+		SortOrder:       body.SortOrder,
 	}
 	{
 		var zero string
@@ -414,12 +420,17 @@ func BuildSetPluginAssignmentsPayload(pluginsSetPluginAssignmentsBody string, pl
 	{
 		err = json.Unmarshal([]byte(pluginsSetPluginAssignmentsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_urns\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"install_modes\": {\n         \"abc123\": \"default\"\n      },\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_urns\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.PrincipalUrns == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("principal_urns", "body"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", body.PluginID, goa.FormatUUID))
+		for _, v := range body.InstallModes {
+			if !(v == "required" || v == "default" || v == "available") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.install_modes[key]", v, []any{"required", "default", "available"}))
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -446,6 +457,14 @@ func BuildSetPluginAssignmentsPayload(pluginsSetPluginAssignmentsBody string, pl
 		}
 	} else {
 		v.PrincipalUrns = []string{}
+	}
+	if body.InstallModes != nil {
+		v.InstallModes = make(map[string]string, len(body.InstallModes))
+		for key, val := range body.InstallModes {
+			tk := key
+			tv := val
+			v.InstallModes[tk] = tv
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -512,6 +531,44 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 	v := &plugins.DownloadPluginPackagePayload{}
 	v.PluginID = pluginID
 	v.Platform = platform
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRotateObservabilityCredentialPayload builds the payload for the plugins
+// rotateObservabilityCredential endpoint from CLI flags.
+func BuildRotateObservabilityCredentialPayload(pluginsRotateObservabilityCredentialBody string, pluginsRotateObservabilityCredentialSessionToken string, pluginsRotateObservabilityCredentialProjectSlugInput string) (*plugins.RotateObservabilityCredentialPayload, error) {
+	var err error
+	var body RotateObservabilityCredentialRequestBody
+	{
+		err = json.Unmarshal([]byte(pluginsRotateObservabilityCredentialBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"previous_key_fate\": \"grace\"\n   }'")
+		}
+		if !(body.PreviousKeyFate == "revoke_immediately" || body.PreviousKeyFate == "grace") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.previous_key_fate", body.PreviousKeyFate, []any{"revoke_immediately", "grace"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsRotateObservabilityCredentialSessionToken != "" {
+			sessionToken = &pluginsRotateObservabilityCredentialSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsRotateObservabilityCredentialProjectSlugInput != "" {
+			projectSlugInput = &pluginsRotateObservabilityCredentialProjectSlugInput
+		}
+	}
+	v := &plugins.RotateObservabilityCredentialPayload{
+		PreviousKeyFate: body.PreviousKeyFate,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

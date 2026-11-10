@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -55,7 +54,6 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	keyAuth        *auth.ByKey
-	features       *feature.InMemory
 }
 
 func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
@@ -83,9 +81,7 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	features := &feature.InMemory{}
-	features.SetFlag(feature.FlagAgentIdentityCredentials, authCtx.ActiveOrganizationID, true)
-	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger, features)
+	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger)
 	keyAuth := auth.NewKeyAuth(conn, logger, billingClient)
 
 	return ctx, &testInstance{
@@ -93,7 +89,6 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 		conn:           conn,
 		sessionManager: sessionManager,
 		keyAuth:        keyAuth,
-		features:       features,
 	}
 }
 

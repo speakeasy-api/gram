@@ -1,6 +1,13 @@
-import type {
-  SetResourceAudienceEntry,
+import {
+  ResourceAudienceEntryAppliesTo,
+  ResourceAudienceEntryKind,
+  type ResourceAudienceEntry,
+} from "@gram/client/models/components/resourceaudienceentry.js";
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
+import {
+  type SetResourceAudienceEntry,
   SetResourceAudienceEntryDispositions,
+  SetResourceAudienceEntryLevel,
 } from "@gram/client/models/components/setresourceaudienceentry.js";
 import type { AudienceLevel } from "./serverAudience";
 
@@ -22,7 +29,7 @@ export interface AudienceRule {
   principalUrn: string;
   level: AudienceLevel;
   tools?: string[] | undefined;
-  dispositions?: SetResourceAudienceEntryDispositions[] | undefined;
+  dispositions?: string[] | undefined;
 }
 
 /** The slice of rows one page shows, clamped so a stale page never blanks. */
@@ -48,9 +55,11 @@ export function pageCount(total: number, size = ACCESS_PAGE_SIZE): number {
 function toWriteEntry(entry: AudienceRule): SetResourceAudienceEntry {
   return {
     principalUrn: entry.principalUrn,
-    level: entry.level,
+    level: requireKnownEnumValue(SetResourceAudienceEntryLevel, entry.level),
     tools: entry.tools,
-    dispositions: entry.dispositions,
+    dispositions: entry.dispositions?.map((value) =>
+      requireKnownEnumValue(SetResourceAudienceEntryDispositions, value),
+    ),
   };
 }
 
@@ -79,7 +88,7 @@ export function withRule(
 ): SetResourceAudienceEntry[] {
   const written: SetResourceAudienceEntry = {
     principalUrn,
-    level,
+    level: requireKnownEnumValue(SetResourceAudienceEntryLevel, level),
     tools: narrowing?.tools ?? [],
     dispositions: narrowing?.dispositions ?? [],
   };
@@ -124,6 +133,31 @@ export function withAdded(
     ...entries.map(toWriteEntry),
     ...principalUrns
       .filter((urn) => !existing.has(urn))
-      .map((principalUrn) => ({ principalUrn, level })),
+      .map((principalUrn) => toWriteEntry({ principalUrn, level })),
   ];
+}
+
+/** Whole-audience replacement must not discard values this client cannot write. */
+export function supportsAudienceEditing(entries: AudienceRule[]): boolean {
+  return entries.every(
+    (entry) =>
+      isKnownEnumValue(SetResourceAudienceEntryLevel, entry.level) &&
+      (entry.dispositions ?? []).every((value) =>
+        isKnownEnumValue(SetResourceAudienceEntryDispositions, value),
+      ),
+  );
+}
+
+/** Read rules must have understood principal kinds and applicability to resolve reach. */
+export function supportsAudienceReading(
+  entries: ResourceAudienceEntry[],
+): boolean {
+  return (
+    supportsAudienceEditing(entries) &&
+    entries.every(
+      (entry) =>
+        isKnownEnumValue(ResourceAudienceEntryAppliesTo, entry.appliesTo) &&
+        isKnownEnumValue(ResourceAudienceEntryKind, entry.kind),
+    )
+  );
 }

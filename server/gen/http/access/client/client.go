@@ -37,9 +37,61 @@ type Client struct {
 	// endpoint.
 	DeleteRoleDoer goahttp.Doer
 
+	// ListDirectoryRoleMappings Doer is the HTTP client used to make requests to
+	// the listDirectoryRoleMappings endpoint.
+	ListDirectoryRoleMappingsDoer goahttp.Doer
+
+	// ListDirectoryPeople Doer is the HTTP client used to make requests to the
+	// listDirectoryPeople endpoint.
+	ListDirectoryPeopleDoer goahttp.Doer
+
+	// SyncDirectoryGroups Doer is the HTTP client used to make requests to the
+	// syncDirectoryGroups endpoint.
+	SyncDirectoryGroupsDoer goahttp.Doer
+
+	// SetDirectoryRoleMapping Doer is the HTTP client used to make requests to the
+	// setDirectoryRoleMapping endpoint.
+	SetDirectoryRoleMappingDoer goahttp.Doer
+
+	// SetDirectoryRoleMappings Doer is the HTTP client used to make requests to
+	// the setDirectoryRoleMappings endpoint.
+	SetDirectoryRoleMappingsDoer goahttp.Doer
+
+	// DeleteDirectoryRoleMapping Doer is the HTTP client used to make requests to
+	// the deleteDirectoryRoleMapping endpoint.
+	DeleteDirectoryRoleMappingDoer goahttp.Doer
+
+	// PreviewDirectoryRoleSetup Doer is the HTTP client used to make requests to
+	// the previewDirectoryRoleSetup endpoint.
+	PreviewDirectoryRoleSetupDoer goahttp.Doer
+
+	// ApplyDirectoryRoleSetup Doer is the HTTP client used to make requests to the
+	// applyDirectoryRoleSetup endpoint.
+	ApplyDirectoryRoleSetupDoer goahttp.Doer
+
+	// ListDirectoryReviewItems Doer is the HTTP client used to make requests to
+	// the listDirectoryReviewItems endpoint.
+	ListDirectoryReviewItemsDoer goahttp.Doer
+
+	// ResolveDirectoryReviewItem Doer is the HTTP client used to make requests to
+	// the resolveDirectoryReviewItem endpoint.
+	ResolveDirectoryReviewItemDoer goahttp.Doer
+
+	// GetDirectoryReviewSettings Doer is the HTTP client used to make requests to
+	// the getDirectoryReviewSettings endpoint.
+	GetDirectoryReviewSettingsDoer goahttp.Doer
+
+	// UpdateDirectoryReviewSettings Doer is the HTTP client used to make requests
+	// to the updateDirectoryReviewSettings endpoint.
+	UpdateDirectoryReviewSettingsDoer goahttp.Doer
+
 	// ListScopes Doer is the HTTP client used to make requests to the listScopes
 	// endpoint.
 	ListScopesDoer goahttp.Doer
+
+	// ListAgentPolicyScopes Doer is the HTTP client used to make requests to the
+	// listAgentPolicyScopes endpoint.
+	ListAgentPolicyScopesDoer goahttp.Doer
 
 	// ListMembers Doer is the HTTP client used to make requests to the listMembers
 	// endpoint.
@@ -85,6 +137,10 @@ type Client struct {
 	// the listEmployeeAIDetections endpoint.
 	ListEmployeeAIDetectionsDoer goahttp.Doer
 
+	// ListAIDetectionUsers Doer is the HTTP client used to make requests to the
+	// listAIDetectionUsers endpoint.
+	ListAIDetectionUsersDoer goahttp.Doer
+
 	// SetAIToolDecision Doer is the HTTP client used to make requests to the
 	// setAIToolDecision endpoint.
 	SetAIToolDecisionDoer goahttp.Doer
@@ -100,6 +156,10 @@ type Client struct {
 	// ListAudienceOptions Doer is the HTTP client used to make requests to the
 	// listAudienceOptions endpoint.
 	ListAudienceOptionsDoer goahttp.Doer
+
+	// ExplainResourceAccess Doer is the HTTP client used to make requests to the
+	// explainResourceAccess endpoint.
+	ExplainResourceAccessDoer goahttp.Doer
 
 	// RequestAccess Doer is the HTTP client used to make requests to the
 	// requestAccess endpoint.
@@ -120,6 +180,22 @@ type Client struct {
 	// ListIdentityAccess Doer is the HTTP client used to make requests to the
 	// listIdentityAccess endpoint.
 	ListIdentityAccessDoer goahttp.Doer
+
+	// CreateTemporaryGrant Doer is the HTTP client used to make requests to the
+	// createTemporaryGrant endpoint.
+	CreateTemporaryGrantDoer goahttp.Doer
+
+	// ListTemporaryGrants Doer is the HTTP client used to make requests to the
+	// listTemporaryGrants endpoint.
+	ListTemporaryGrantsDoer goahttp.Doer
+
+	// RenewTemporaryGrant Doer is the HTTP client used to make requests to the
+	// renewTemporaryGrant endpoint.
+	RenewTemporaryGrantDoer goahttp.Doer
+
+	// RevokeTemporaryGrant Doer is the HTTP client used to make requests to the
+	// revokeTemporaryGrant endpoint.
+	RevokeTemporaryGrantDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -146,7 +222,20 @@ func NewClient(
 		CreateRoleDoer:                           doer,
 		UpdateRoleDoer:                           doer,
 		DeleteRoleDoer:                           doer,
+		ListDirectoryRoleMappingsDoer:            doer,
+		ListDirectoryPeopleDoer:                  doer,
+		SyncDirectoryGroupsDoer:                  doer,
+		SetDirectoryRoleMappingDoer:              doer,
+		SetDirectoryRoleMappingsDoer:             doer,
+		DeleteDirectoryRoleMappingDoer:           doer,
+		PreviewDirectoryRoleSetupDoer:            doer,
+		ApplyDirectoryRoleSetupDoer:              doer,
+		ListDirectoryReviewItemsDoer:             doer,
+		ResolveDirectoryReviewItemDoer:           doer,
+		GetDirectoryReviewSettingsDoer:           doer,
+		UpdateDirectoryReviewSettingsDoer:        doer,
 		ListScopesDoer:                           doer,
+		ListAgentPolicyScopesDoer:                doer,
 		ListMembersDoer:                          doer,
 		ListGrantsDoer:                           doer,
 		UpdateMemberRolesDoer:                    doer,
@@ -158,15 +247,21 @@ func NewClient(
 		ResolveShadowMCPInventoryRequestDoer:     doer,
 		ListAIDetectionsDoer:                     doer,
 		ListEmployeeAIDetectionsDoer:             doer,
+		ListAIDetectionUsersDoer:                 doer,
 		SetAIToolDecisionDoer:                    doer,
 		ListResourceAudienceDoer:                 doer,
 		SetResourceAudienceDoer:                  doer,
 		ListAudienceOptionsDoer:                  doer,
+		ExplainResourceAccessDoer:                doer,
 		RequestAccessDoer:                        doer,
 		ListChallengesDoer:                       doer,
 		ListChallengeBucketsDoer:                 doer,
 		ResolveChallengeDoer:                     doer,
 		ListIdentityAccessDoer:                   doer,
+		CreateTemporaryGrantDoer:                 doer,
+		ListTemporaryGrantsDoer:                  doer,
+		RenewTemporaryGrantDoer:                  doer,
+		RevokeTemporaryGrantDoer:                 doer,
 		RestoreResponseBody:                      restoreBody,
 		scheme:                                   scheme,
 		host:                                     host,
@@ -295,6 +390,294 @@ func (c *Client) DeleteRole() goa.Endpoint {
 	}
 }
 
+// ListDirectoryRoleMappings returns an endpoint that makes HTTP requests to
+// the access service listDirectoryRoleMappings server.
+func (c *Client) ListDirectoryRoleMappings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDirectoryRoleMappingsRequest(c.encoder)
+		decodeResponse = DecodeListDirectoryRoleMappingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDirectoryRoleMappingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDirectoryRoleMappingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listDirectoryRoleMappings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDirectoryPeople returns an endpoint that makes HTTP requests to the
+// access service listDirectoryPeople server.
+func (c *Client) ListDirectoryPeople() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDirectoryPeopleRequest(c.encoder)
+		decodeResponse = DecodeListDirectoryPeopleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDirectoryPeopleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDirectoryPeopleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listDirectoryPeople", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SyncDirectoryGroups returns an endpoint that makes HTTP requests to the
+// access service syncDirectoryGroups server.
+func (c *Client) SyncDirectoryGroups() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSyncDirectoryGroupsRequest(c.encoder)
+		decodeResponse = DecodeSyncDirectoryGroupsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSyncDirectoryGroupsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SyncDirectoryGroupsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "syncDirectoryGroups", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetDirectoryRoleMapping returns an endpoint that makes HTTP requests to the
+// access service setDirectoryRoleMapping server.
+func (c *Client) SetDirectoryRoleMapping() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetDirectoryRoleMappingRequest(c.encoder)
+		decodeResponse = DecodeSetDirectoryRoleMappingResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetDirectoryRoleMappingRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetDirectoryRoleMappingDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "setDirectoryRoleMapping", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetDirectoryRoleMappings returns an endpoint that makes HTTP requests to the
+// access service setDirectoryRoleMappings server.
+func (c *Client) SetDirectoryRoleMappings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetDirectoryRoleMappingsRequest(c.encoder)
+		decodeResponse = DecodeSetDirectoryRoleMappingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetDirectoryRoleMappingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetDirectoryRoleMappingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "setDirectoryRoleMappings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteDirectoryRoleMapping returns an endpoint that makes HTTP requests to
+// the access service deleteDirectoryRoleMapping server.
+func (c *Client) DeleteDirectoryRoleMapping() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteDirectoryRoleMappingRequest(c.encoder)
+		decodeResponse = DecodeDeleteDirectoryRoleMappingResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteDirectoryRoleMappingRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteDirectoryRoleMappingDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "deleteDirectoryRoleMapping", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// PreviewDirectoryRoleSetup returns an endpoint that makes HTTP requests to
+// the access service previewDirectoryRoleSetup server.
+func (c *Client) PreviewDirectoryRoleSetup() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePreviewDirectoryRoleSetupRequest(c.encoder)
+		decodeResponse = DecodePreviewDirectoryRoleSetupResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPreviewDirectoryRoleSetupRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PreviewDirectoryRoleSetupDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "previewDirectoryRoleSetup", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ApplyDirectoryRoleSetup returns an endpoint that makes HTTP requests to the
+// access service applyDirectoryRoleSetup server.
+func (c *Client) ApplyDirectoryRoleSetup() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeApplyDirectoryRoleSetupRequest(c.encoder)
+		decodeResponse = DecodeApplyDirectoryRoleSetupResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildApplyDirectoryRoleSetupRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ApplyDirectoryRoleSetupDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "applyDirectoryRoleSetup", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDirectoryReviewItems returns an endpoint that makes HTTP requests to the
+// access service listDirectoryReviewItems server.
+func (c *Client) ListDirectoryReviewItems() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDirectoryReviewItemsRequest(c.encoder)
+		decodeResponse = DecodeListDirectoryReviewItemsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDirectoryReviewItemsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDirectoryReviewItemsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listDirectoryReviewItems", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ResolveDirectoryReviewItem returns an endpoint that makes HTTP requests to
+// the access service resolveDirectoryReviewItem server.
+func (c *Client) ResolveDirectoryReviewItem() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeResolveDirectoryReviewItemRequest(c.encoder)
+		decodeResponse = DecodeResolveDirectoryReviewItemResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildResolveDirectoryReviewItemRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ResolveDirectoryReviewItemDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "resolveDirectoryReviewItem", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetDirectoryReviewSettings returns an endpoint that makes HTTP requests to
+// the access service getDirectoryReviewSettings server.
+func (c *Client) GetDirectoryReviewSettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetDirectoryReviewSettingsRequest(c.encoder)
+		decodeResponse = DecodeGetDirectoryReviewSettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetDirectoryReviewSettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDirectoryReviewSettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "getDirectoryReviewSettings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateDirectoryReviewSettings returns an endpoint that makes HTTP requests
+// to the access service updateDirectoryReviewSettings server.
+func (c *Client) UpdateDirectoryReviewSettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateDirectoryReviewSettingsRequest(c.encoder)
+		decodeResponse = DecodeUpdateDirectoryReviewSettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateDirectoryReviewSettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateDirectoryReviewSettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "updateDirectoryReviewSettings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // ListScopes returns an endpoint that makes HTTP requests to the access
 // service listScopes server.
 func (c *Client) ListScopes() goa.Endpoint {
@@ -314,6 +697,30 @@ func (c *Client) ListScopes() goa.Endpoint {
 		resp, err := c.ListScopesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "listScopes", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAgentPolicyScopes returns an endpoint that makes HTTP requests to the
+// access service listAgentPolicyScopes server.
+func (c *Client) ListAgentPolicyScopes() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAgentPolicyScopesRequest(c.encoder)
+		decodeResponse = DecodeListAgentPolicyScopesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAgentPolicyScopesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAgentPolicyScopesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listAgentPolicyScopes", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -583,6 +990,30 @@ func (c *Client) ListEmployeeAIDetections() goa.Endpoint {
 	}
 }
 
+// ListAIDetectionUsers returns an endpoint that makes HTTP requests to the
+// access service listAIDetectionUsers server.
+func (c *Client) ListAIDetectionUsers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAIDetectionUsersRequest(c.encoder)
+		decodeResponse = DecodeListAIDetectionUsersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAIDetectionUsersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAIDetectionUsersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listAIDetectionUsers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // SetAIToolDecision returns an endpoint that makes HTTP requests to the access
 // service setAIToolDecision server.
 func (c *Client) SetAIToolDecision() goa.Endpoint {
@@ -674,6 +1105,30 @@ func (c *Client) ListAudienceOptions() goa.Endpoint {
 		resp, err := c.ListAudienceOptionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "listAudienceOptions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ExplainResourceAccess returns an endpoint that makes HTTP requests to the
+// access service explainResourceAccess server.
+func (c *Client) ExplainResourceAccess() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeExplainResourceAccessRequest(c.encoder)
+		decodeResponse = DecodeExplainResourceAccessResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildExplainResourceAccessRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ExplainResourceAccessDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "explainResourceAccess", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -794,6 +1249,102 @@ func (c *Client) ListIdentityAccess() goa.Endpoint {
 		resp, err := c.ListIdentityAccessDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "listIdentityAccess", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateTemporaryGrant returns an endpoint that makes HTTP requests to the
+// access service createTemporaryGrant server.
+func (c *Client) CreateTemporaryGrant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateTemporaryGrantRequest(c.encoder)
+		decodeResponse = DecodeCreateTemporaryGrantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateTemporaryGrantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateTemporaryGrantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "createTemporaryGrant", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListTemporaryGrants returns an endpoint that makes HTTP requests to the
+// access service listTemporaryGrants server.
+func (c *Client) ListTemporaryGrants() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListTemporaryGrantsRequest(c.encoder)
+		decodeResponse = DecodeListTemporaryGrantsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListTemporaryGrantsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListTemporaryGrantsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listTemporaryGrants", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RenewTemporaryGrant returns an endpoint that makes HTTP requests to the
+// access service renewTemporaryGrant server.
+func (c *Client) RenewTemporaryGrant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRenewTemporaryGrantRequest(c.encoder)
+		decodeResponse = DecodeRenewTemporaryGrantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRenewTemporaryGrantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RenewTemporaryGrantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "renewTemporaryGrant", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeTemporaryGrant returns an endpoint that makes HTTP requests to the
+// access service revokeTemporaryGrant server.
+func (c *Client) RevokeTemporaryGrant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeTemporaryGrantRequest(c.encoder)
+		decodeResponse = DecodeRevokeTemporaryGrantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeTemporaryGrantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeTemporaryGrantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "revokeTemporaryGrant", err)
 		}
 		return decodeResponse(resp)
 	}

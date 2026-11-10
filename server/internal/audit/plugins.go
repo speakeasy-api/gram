@@ -31,6 +31,10 @@ type PluginSnapshot struct {
 	Name        string  `json:"name"`
 	Slug        string  `json:"slug"`
 	Description *string `json:"description,omitempty"`
+
+	// AutoSyncEnabled reports whether the plugin's changes publish
+	// automatically. Nil when the entry predates the setting.
+	AutoSyncEnabled *bool `json:"auto_sync_enabled,omitempty"`
 }
 
 type LogPluginCreateEvent struct {
@@ -41,14 +45,25 @@ type LogPluginCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
+
+	// PluginSnapshotAfter is the created plugin, recording settings chosen at
+	// creation such as auto sync being off. Nil records no snapshot.
+	PluginSnapshotAfter *PluginSnapshot
 }
 
 func (l *Logger) LogPluginCreate(ctx context.Context, dbtx repo.DBTX, event LogPluginCreateEvent) error {
 	action := ActionPluginCreate
+
+	afterSnapshot, err := marshalAuditPayload(event.PluginSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -65,7 +80,7 @@ func (l *Logger) LogPluginCreate(ctx context.Context, dbtx repo.DBTX, event LogP
 		SubjectSlug:        conv.ToPGTextEmpty(event.PluginSlug),
 
 		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 
@@ -80,7 +95,7 @@ type LogPluginUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID       uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID       uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName     string
 	PluginSlug     string
 	SnapshotBefore *PluginSnapshot
@@ -101,6 +116,7 @@ func (l *Logger) LogPluginUpdate(ctx context.Context, dbtx repo.DBTX, event LogP
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -132,7 +148,7 @@ type LogPluginDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
 }
@@ -140,6 +156,7 @@ type LogPluginDeleteEvent struct {
 func (l *Logger) LogPluginDelete(ctx context.Context, dbtx repo.DBTX, event LogPluginDeleteEvent) error {
 	action := ActionPluginDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -163,16 +180,16 @@ func (l *Logger) LogPluginDelete(ctx context.Context, dbtx repo.DBTX, event LogP
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})
 }
 
-// pluginServerBackendMetadata augments base audit metadata with the URN of
-// whichever backend a plugin server targets. Exactly one of toolsetURN /
-// mcpServerURN is non-nil, mirroring the toolset_id XOR mcp_server_id
-// plugin_servers row.
-func pluginServerBackendMetadata(base map[string]any, toolsetURN *urn.Toolset, mcpServerURN *urn.McpServer) map[string]any {
+// pluginServerBackendMetadata identifies the backend of a plugin member.
+func pluginServerBackendMetadata(base map[string]any, toolsetURN *urn.Toolset, mcpServerURN *urn.McpServer, gatewayURN *urn.MetaMcpServer) map[string]any {
 	if toolsetURN != nil {
 		base["toolset_urn"] = toolsetURN.String()
 	}
 	if mcpServerURN != nil {
 		base["mcp_server_urn"] = mcpServerURN.String()
+	}
+	if gatewayURN != nil {
+		base["meta_mcp_server_urn"] = gatewayURN.String()
 	}
 	return base
 }
@@ -185,18 +202,17 @@ type LogPluginServerAddEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
 
-	ServerID          uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
+	ServerID          uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
 	ServerDisplayName string
 	ServerPolicy      string
 	ServerSortOrder   int32
-	// Exactly one of ToolsetURN / McpServerURN identifies the added server's
-	// backend, mirroring the toolset_id XOR mcp_server_id plugin_servers row.
-	ToolsetURN   *urn.Toolset
-	McpServerURN *urn.McpServer
+	ToolsetURN        *urn.Toolset
+	McpServerURN      *urn.McpServer
+	MetaMcpServerURN  *urn.MetaMcpServer
 }
 
 func (l *Logger) LogPluginServerAdd(ctx context.Context, dbtx repo.DBTX, event LogPluginServerAddEvent) error {
@@ -207,12 +223,13 @@ func (l *Logger) LogPluginServerAdd(ctx context.Context, dbtx repo.DBTX, event L
 		"server_display_name": event.ServerDisplayName,
 		"server_policy":       event.ServerPolicy,
 		"server_sort_order":   event.ServerSortOrder,
-	}, event.ToolsetURN, event.McpServerURN))
+	}, event.ToolsetURN, event.McpServerURN, event.MetaMcpServerURN))
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -244,30 +261,39 @@ type LogPluginServerUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
 
-	ServerID          uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
+	ServerID          uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
 	ServerDisplayName string
 	ServerPolicy      string
 	ServerSortOrder   int32
+
+	// McpServerURN and PreviousToolsetURN record a backend re-key; nil for ordinary updates.
+	McpServerURN       *urn.McpServer
+	PreviousToolsetURN *urn.Toolset
 }
 
 func (l *Logger) LogPluginServerUpdate(ctx context.Context, dbtx repo.DBTX, event LogPluginServerUpdateEvent) error {
 	action := ActionPluginServerUpdate
 
-	metadata, err := marshalAuditPayload(map[string]any{
+	base := map[string]any{
 		"server_id":           event.ServerID.String(),
 		"server_display_name": event.ServerDisplayName,
 		"server_policy":       event.ServerPolicy,
 		"server_sort_order":   event.ServerSortOrder,
-	})
+	}
+	if event.PreviousToolsetURN != nil {
+		base["previous_toolset_urn"] = event.PreviousToolsetURN.String()
+	}
+	metadata, err := marshalAuditPayload(pluginServerBackendMetadata(base, nil, event.McpServerURN, nil))
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -299,15 +325,14 @@ type LogPluginServerRemoveEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
 
-	ServerID uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
-	// Exactly one of ToolsetURN / McpServerURN identifies the removed server's
-	// backend, mirroring the toolset_id XOR mcp_server_id plugin_servers row.
-	ToolsetURN   *urn.Toolset
-	McpServerURN *urn.McpServer
+	ServerID         uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
+	ToolsetURN       *urn.Toolset
+	McpServerURN     *urn.McpServer
+	MetaMcpServerURN *urn.MetaMcpServer
 }
 
 func (l *Logger) LogPluginServerRemove(ctx context.Context, dbtx repo.DBTX, event LogPluginServerRemoveEvent) error {
@@ -315,12 +340,13 @@ func (l *Logger) LogPluginServerRemove(ctx context.Context, dbtx repo.DBTX, even
 
 	metadata, err := marshalAuditPayload(pluginServerBackendMetadata(map[string]any{
 		"server_id": event.ServerID.String(),
-	}, event.ToolsetURN, event.McpServerURN))
+	}, event.ToolsetURN, event.McpServerURN, event.MetaMcpServerURN))
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -352,24 +378,33 @@ type LogPluginAssignmentsSetEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
 
 	PrincipalURNs []string
+
+	// InstallModes maps each principal URN in PrincipalURNs to its install
+	// mode. Omitted from the record when nil.
+	InstallModes map[string]string
 }
 
 func (l *Logger) LogPluginAssignmentsSet(ctx context.Context, dbtx repo.DBTX, event LogPluginAssignmentsSetEvent) error {
 	action := ActionPluginAssignmentsSet
 
-	metadata, err := marshalAuditPayload(map[string]any{
+	payload := map[string]any{
 		"principal_urns": event.PrincipalURNs,
-	})
+	}
+	if event.InstallModes != nil {
+		payload["install_modes"] = event.InstallModes
+	}
+	metadata, err := marshalAuditPayload(payload)
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -425,6 +460,7 @@ func (l *Logger) LogPluginPublish(ctx context.Context, dbtx repo.DBTX, event Log
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -489,6 +525,7 @@ func (l *Logger) LogPluginMarketplaceSettingsUpdate(ctx context.Context, dbtx re
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

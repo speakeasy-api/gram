@@ -49,6 +49,7 @@ export function buildGetMcpServerQuery(
     queryKey: queryKeyGetMcpServer({
       id: request?.id,
       slug: request?.slug,
+      toolsetId: request?.toolsetId,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -81,6 +82,7 @@ export function queryKeyGetMcpServer(
   parameters: {
     id?: string | undefined;
     slug?: string | undefined;
+    toolsetId?: string | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

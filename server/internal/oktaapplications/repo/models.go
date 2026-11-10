@@ -10,20 +10,36 @@ import (
 )
 
 type OktaApplicationReconcileRun struct {
-	ID                           uuid.UUID
-	OrganizationID               string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
 	IdentityProviderConnectionID uuid.UUID
-	Status                       string
-	StartedAt                    pgtype.Timestamptz
-	FinishedAt                   pgtype.Timestamptz
-	ApplicationsSeen             int32
-	ApplicationsAdded            int32
-	ApplicationsRemoved          int32
-	AssignmentsAdded             int32
-	AssignmentsRemoved           int32
-	SkippedAppIds                []string
-	Truncated                    bool
-	Error                        pgtype.Text
-	CreatedAt                    pgtype.Timestamptz
-	UpdatedAt                    pgtype.Timestamptz
+	// @access: confidential
+	Status string
+	// @access: confidential
+	StartedAt pgtype.Timestamptz
+	// @access: confidential
+	FinishedAt pgtype.Timestamptz
+	// @access: confidential
+	ApplicationsSeen int32
+	// @access: confidential
+	ApplicationsAdded int32
+	// @access: confidential
+	ApplicationsRemoved int32
+	// @access: confidential
+	AssignmentsAdded int32
+	// @access: confidential
+	AssignmentsRemoved int32
+	// @access: confidential
+	SkippedAppIds []string
+	// @access: confidential
+	Truncated bool
+	// @access: confidential
+	Error pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

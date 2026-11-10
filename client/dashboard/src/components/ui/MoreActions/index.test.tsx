@@ -12,6 +12,39 @@ import { MoreActions } from ".";
 afterEach(cleanup);
 
 describe("MoreActions", () => {
+  it("renders a separator only before actions that request one", () => {
+    render(
+      <MoreActions
+        actions={[
+          { label: "Inspect", onClick: vi.fn<() => void>() },
+          {
+            label: "Edit",
+            onClick: vi.fn<() => void>(),
+            separatorBefore: false,
+          },
+          {
+            label: "Delete",
+            onClick: vi.fn<() => void>(),
+            separatorBefore: true,
+          },
+        ]}
+      />,
+    );
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Open menu" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    const separators = screen.getAllByRole("separator");
+    expect(separators).toHaveLength(1);
+    expect(separators[0]?.previousElementSibling).toBe(
+      screen.getByRole("menuitem", { name: "Edit" }),
+    );
+    expect(separators[0]?.nextElementSibling).toBe(
+      screen.getByRole("menuitem", { name: "Delete" }),
+    );
+  });
+
   it("restores trigger focus when an ordinary menu close finishes", async () => {
     render(<MoreActions actions={[{ label: "Inspect", onClick: () => {} }]} />);
     const trigger = screen.getByRole("button", { name: "Open menu" });

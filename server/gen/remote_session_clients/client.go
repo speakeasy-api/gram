@@ -16,6 +16,9 @@ import (
 
 // Client is the "remoteSessionClients" service client.
 type Client struct {
+	PrepareEMAEndpoint                goa.Endpoint
+	ReadEMAEndpoint                   goa.Endpoint
+	UnlinkEMAEndpoint                 goa.Endpoint
 	CreateRemoteSessionClientEndpoint goa.Endpoint
 	CreateCimdEndpoint                goa.Endpoint
 	UpdateRemoteSessionClientEndpoint goa.Endpoint
@@ -24,14 +27,18 @@ type Client struct {
 	AttachKeySetEndpoint              goa.Endpoint
 	DetachKeySetEndpoint              goa.Endpoint
 	ListRemoteSessionClientsEndpoint  goa.Endpoint
+	GetNewClientCallbackURLEndpoint   goa.Endpoint
 	GetRemoteSessionClientEndpoint    goa.Endpoint
 	DeleteRemoteSessionClientEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "remoteSessionClients" service client given the
 // endpoints.
-func NewClient(createRemoteSessionClient, createCimd, updateRemoteSessionClient, attachUserSessionIssuer, detachUserSessionIssuer, attachKeySet, detachKeySet, listRemoteSessionClients, getRemoteSessionClient, deleteRemoteSessionClient goa.Endpoint) *Client {
+func NewClient(prepareEMA, readEMA, unlinkEMA, createRemoteSessionClient, createCimd, updateRemoteSessionClient, attachUserSessionIssuer, detachUserSessionIssuer, attachKeySet, detachKeySet, listRemoteSessionClients, getNewClientCallbackURL, getRemoteSessionClient, deleteRemoteSessionClient goa.Endpoint) *Client {
 	return &Client{
+		PrepareEMAEndpoint:                prepareEMA,
+		ReadEMAEndpoint:                   readEMA,
+		UnlinkEMAEndpoint:                 unlinkEMA,
 		CreateRemoteSessionClientEndpoint: createRemoteSessionClient,
 		CreateCimdEndpoint:                createCimd,
 		UpdateRemoteSessionClientEndpoint: updateRemoteSessionClient,
@@ -40,9 +47,78 @@ func NewClient(createRemoteSessionClient, createCimd, updateRemoteSessionClient,
 		AttachKeySetEndpoint:              attachKeySet,
 		DetachKeySetEndpoint:              detachKeySet,
 		ListRemoteSessionClientsEndpoint:  listRemoteSessionClients,
+		GetNewClientCallbackURLEndpoint:   getNewClientCallbackURL,
 		GetRemoteSessionClientEndpoint:    getRemoteSessionClient,
 		DeleteRemoteSessionClientEndpoint: deleteRemoteSessionClient,
 	}
+}
+
+// PrepareEMA calls the "prepareEMA" endpoint of the "remoteSessionClients"
+// service.
+// PrepareEMA may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) PrepareEMA(ctx context.Context, p *PrepareEMAPayload) (res *IdentityChainingPreparation, err error) {
+	var ires any
+	ires, err = c.PrepareEMAEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*IdentityChainingPreparation), nil
+}
+
+// ReadEMA calls the "readEMA" endpoint of the "remoteSessionClients" service.
+// ReadEMA may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ReadEMA(ctx context.Context, p *ReadEMAPayload) (res *IdentityChainingPreparation, err error) {
+	var ires any
+	ires, err = c.ReadEMAEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*IdentityChainingPreparation), nil
+}
+
+// UnlinkEMA calls the "unlinkEMA" endpoint of the "remoteSessionClients"
+// service.
+// UnlinkEMA may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UnlinkEMA(ctx context.Context, p *UnlinkEMAPayload) (res *IdentityChainingPreparation, err error) {
+	var ires any
+	ires, err = c.UnlinkEMAEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*IdentityChainingPreparation), nil
 }
 
 // CreateRemoteSessionClient calls the "createRemoteSessionClient" endpoint of
@@ -229,6 +305,29 @@ func (c *Client) ListRemoteSessionClients(ctx context.Context, p *ListRemoteSess
 		return
 	}
 	return ires.(*ListRemoteSessionClientsResult), nil
+}
+
+// GetNewClientCallbackURL calls the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+// GetNewClientCallbackURL may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetNewClientCallbackURL(ctx context.Context, p *GetNewClientCallbackURLPayload) (res *NewClientCallbackURLResult, err error) {
+	var ires any
+	ires, err = c.GetNewClientCallbackURLEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*NewClientCallbackURLResult), nil
 }
 
 // GetRemoteSessionClient calls the "getRemoteSessionClient" endpoint of the

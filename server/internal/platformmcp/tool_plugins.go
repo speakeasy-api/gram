@@ -16,16 +16,23 @@ type pluginRefusalResult struct {
 	Message string `json:"message"`
 }
 
-// Plugin inventory is externalOnly: the managed assistant already reads a
-// project's plugins through platform_list_plugins in its own tool catalog, and
-// admitting a second name for the same capability would make the assistant
-// choose between two tools that answer the same question.
+// Plugin reads serve both audiences: the managed assistant resolves a plugin by
+// name before distributing a skill to it, and this catalogue is the rollout
+// replacement for the legacy toolset that carried platform_list_plugins, so an
+// assistant reaches one of the two and never sees both names. The assistant
+// adapter admits calls only from a live organization admin, so an assistant
+// read always takes the administrative branch below.
+//
+// Plugin mutations stay externalOnly. Changing who receives a plugin is a
+// confirmed, version-protected dashboard workflow that the assistant surface
+// has not been reviewed to carry.
 func registerPluginTools(reg *Registrar, plugins *PluginsService) {
-	setDescription := "Replace the complete assignment set of one exact plugin when assignment changes are enabled for its project. First read the plugin and current assignments. If this capability is available, explain the complete replacement and publication state, ask the user to confirm it, then call this with confirmed: true. Constraints: pass the assignment version from get_plugin, only opaque assignment references from get_plugin or list_plugin_assignments, and a stable idempotency key. An empty set removes every assignment and reaches nobody. This changes who can discover an already-published package; it does not publish package bytes. If the project is not enabled, this returns feature_unavailable without changing anything."
+	setDescription := "Replace the complete assignment set of one exact plugin when assignment changes are enabled for its project. First read the plugin and current assignments. If this capability is available, explain the complete replacement and publication state, ask the user to confirm it, then call this with confirmed: true. Constraints: pass the assignment version from get_plugin, only opaque assignment references from get_plugin or list_plugin_assignments, and a stable idempotency key. An empty set removes every assignment and reaches nobody. Optionally set install_modes, keyed by those same references, to choose how the Speakeasy device agent installs the plugin for each audience: required (installed, users can't turn it off), default (installed, users can turn it off), or available (not installed until a user turns it on). A reference left out keeps its current mode, or default when newly assigned. When someone is in several audiences, the strictest mode applies. Role audience changes also add or remove eligible servers from existing Use grants, without changing server permissions. Changed contents request a package update through the existing publication flow, which keeps a plugin whose auto sync is off as it was last published until someone syncs by hand. Two fields report that request, and neither means the update was published or reached installed clients: publication_request is the durable request recorded with the change (enqueued means a publish is queued; emission_disabled or not_configured means none was queued, and it is absent when contents did not change); publish_signal is the extra best-effort signal sent after the change committed, only when no durable request was queued (best_effort_requested means a publish was asked for but not confirmed queued, request_failed or unavailable means it was not sent, not_requested means none was needed). An unchanged audience does not restore deliberately removed contents. If the project is not enabled, this returns feature_unavailable without changing anything."
 	addTool(reg, &mcp.Tool{
 		Name:        operationSetPluginAssignments,
-		Title:       "Set Plugin Assignments",
+		Title:       "Choose Who Gets a Plugin",
 		Description: setDescription,
+		Annotations: setPluginAssignmentsAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetPluginAssignmentsInput) (*mcp.CallToolResult, SetPluginAssignmentsOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (SetPluginAssignmentsOutput, error) {
 			return plugins.SetPluginAssignments(ctx, principal, input)
@@ -34,10 +41,10 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "list_plugin_assignments",
-		Title:       "List Plugin Assignments",
+		Title:       "List Who Can Receive Plugins",
 		Description: "List up to 100 existing roles and directory assignment targets that can receive plugins in an explicit project. Each assignment has a short-lived opaque reference and, where available, a privacy-safe member count; Everyone has no member count. Raw principal identifiers are never returned. If truncated is true, use the dashboard to choose from the complete assignment set.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginAssignmentsInput) (*mcp.CallToolResult, ListPluginAssignmentsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginAssignmentsInput) (*mcp.CallToolResult, ListPluginAssignmentsOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (ListPluginAssignmentsOutput, error) {
 			return plugins.ListPluginAssignments(ctx, principal, input)
 		})
@@ -46,9 +53,9 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_plugins",
 		Title:       "List Plugins",
-		Description: "List plugins in an explicit project. Organization administrators see the administrative inventory. Other members see only published plugins currently assigned to their own user, role, directory audiences, email, or everyone; recipient counts and assignment details are withheld.",
+		Description: "List plugins in an explicit project. Organization administrators see the administrative inventory, including auto_sync_enabled: when false, the plugin's changes, including its first publish, wait until someone syncs by hand. Other members see only published plugins currently assigned to their own user, role, directory audiences, email, or everyone; recipient counts and assignment details are withheld.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginsInput) (*mcp.CallToolResult, ListPluginsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginsInput) (*mcp.CallToolResult, ListPluginsOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (ListPluginsOutput, error) {
 			admin, err := plugins.IsOrganizationAdmin(ctx, principal)
 			if err != nil {
@@ -63,10 +70,10 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_plugin",
-		Title:       "Get One Plugin",
-		Description: "Get one exact plugin in an explicit project. Organization administrators see its administrative inventory and assignment controls. Other members can read only a published plugin assigned to them, with its MCP servers and skills but no recipient identities, counts, assignment references, package location, repository details, or credentials.",
+		Title:       "Get a Plugin",
+		Description: "Get one exact plugin in an explicit project. Organization administrators see its administrative inventory, exact typed MCP membership IDs and targets, assignment controls including each current assignment's install mode, and publication evidence when configured. Admin membership results are cursor-paginated and complete beyond 100 entries, and a changed membership set requires restarting pagination. Publication evidence shows the addresses a package would contain now and compares its stored MCP fingerprints for this plugin alone: with auto sync on, fresh=true means an automatic publish would send nothing new for it, its package and the marketplace manifests alike; with auto sync off, fresh=true means its package matches what it was last published with. Another plugin's pending changes never make it fresh=false. fresh=false means different inputs, null means unknown. If unavailable=true, package inputs could not be resolved; do not treat an empty packages list as a package with no MCPs. This does not verify installed clients or live marketplace contents; publication=published alone does not mean addresses are current. Publication evidence also carries last_publish for the project's marketplace: last_recorded_publish_at (the last publish Speakeasy successfully recorded; it can lag the marketplace), and the latest publish attempt's state (none, queued, running, retrying, succeeded, failed) with a failure_category and a fixed failure_message when it failed. Read it together with fresh: fresh=false with queued, running, or retrying means an update is on its way; fresh=false with failed means the update did not reach the marketplace, and the remedy is to republish, then Speakeasy support if it keeps failing, except repository_conflict, which needs Speakeasy support and does not clear on republish; fresh=false with succeeded or none means no publish has picked up the latest change yet. Organization administrators also see the plugin's auto_sync_enabled. awaiting_manual_sync=true means its auto sync is off and its own package has changes waiting: no automatic publish will deliver them, so the remedy is a manual sync, not waiting. It stays true until a manual sync finishes, so while last_publish is queued, running, or retrying a sync may already be on its way: read get_plugin again later instead of offering another; on an external connection an administrator can instead turn auto sync back on with set_plugin_auto_sync, which publishes them too. An administrator republishes with republish_plugin, which is offered only on external Platform MCP connections; a managed assistant, which cannot call it, should direct the administrator to the AICP dashboard instead. When publication evidence has not_configured=true, no publish has ever been recorded and republish_plugin refuses the project, so for a failed first publish send the administrator straight to the AICP dashboard or Speakeasy support rather than offering it; follow failure_message, which offers republish_plugin only when a recorded publish proves it will be accepted. After republish_plugin returns enqueued, the request can be accepted before its run starts, so get_plugin may still describe the previous attempt: treat the request as pending until last_publish.requested_at is later than the republish or publication evidence reports fresh=true (a republish can fold into a run already in flight without moving requested_at), and do not read an older failed or succeeded attempt as the new request failing or being missed, or republish again on that basis. The marketplace repository is managed by Speakeasy, so there is no GitHub connection for the user to repair. If last_publish.unavailable=true, the attempt could not be read; do not infer a failure. Other members can read only a published plugin assigned to them, with its MCP servers and skills but no recipient identities, counts, assignment references, membership IDs, backend target IDs, package location, repository details, or credentials.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (GetPluginOutput, error) {
 			admin, err := plugins.IsOrganizationAdmin(ctx, principal)
 			if err != nil {
@@ -79,12 +86,14 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		})
 	})
 
+	registerRepublishPluginTool(reg, plugins)
+
 	addTool(reg, &mcp.Tool{
 		Name:        "get_my_install_instructions",
 		Title:       "Get My Install Instructions",
-		Description: "Get non-secret, client-specific installation guidance for one assigned published plugin or one configured MCP server the caller may connect to. Name exactly one target in an explicit project. Plugin guidance rechecks the caller's current recipient assignments; standalone MCP guidance rechecks mcp:connect. No marketplace token, repository credential, package bytes, API key, or OAuth credential is returned.",
+		Description: "Get non-secret, client-specific install guidance for one assigned published plugin or one configured MCP server the caller may connect to. Show each step's link as a clickable link and each snippet verbatim in a code block. Name exactly one target in a named project, or else the organization's default project; a registration_id target uses the project that owns that registration. Plugin guidance rechecks the caller's current recipient assignments; MCP guidance rechecks mcp:connect. No marketplace token, repository credential, package bytes, API key or OAuth credential is returned.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgReadOrMCPConnect}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyInstallInstructionsInput) (*mcp.CallToolResult, GetMyInstallInstructionsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeDefaultable, DiscoveryScopes: discoveryOrgReadOrMCPConnect}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyInstallInstructionsInput) (*mcp.CallToolResult, GetMyInstallInstructionsOutput, error) {
 		return principalToolCall(ctx, installInstructionToolResult, func(principal Principal) (GetMyInstallInstructionsOutput, error) {
 			return plugins.GetMyInstallInstructions(ctx, principal, input)
 		})
@@ -104,7 +113,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_my_mcp_connection_status",
 		Title:       "Check My MCP Connection",
-		Description: "Check only your current authorization state for one exact MCP server. Returns a bounded state and the canonical MCP endpoint for reconnecting through the existing client-owned OAuth flow. Never returns tokens, OAuth codes, secrets, account identities, upstream-granted scopes, raw sessions, provider diagnostics, or other users' connections.",
+		Description: "Check only your current authorization state for one exact MCP server. Returns a bounded state and the canonical MCP endpoint for reconnecting through the existing client-owned OAuth flow. Reason identity_chaining means an active credential from your organization's identity provider; identity_chaining_configured means it will supply access on your first call, so try the server before reconnecting. Never returns tokens, OAuth codes, secrets, account identities, upstream-granted scopes, raw sessions, provider diagnostics, or other users' connections.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMCPReadOrConnect}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyMCPStatusInput) (*mcp.CallToolResult, GetMyMCPConnectionStatusOutput, error) {
 		return principalToolCall(ctx, memberMCPStatusToolResult, func(principal Principal) (GetMyMCPConnectionStatusOutput, error) {
@@ -120,15 +129,15 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		description string
 		readOnly    bool
 	}{
-		{operationSetPluginAssignments, "Set Plugin Assignments", "Replace the complete assignment set of one exact plugin. This is not switched on for your organization yet.", false},
-		{"list_plugin_assignments", "List Plugin Assignments", "List the roles and directory assignment targets that can receive plugins. This is not switched on for your organization yet.", true},
+		{operationSetPluginAssignments, "Choose Who Gets a Plugin", "Replace the complete assignment set of one exact plugin. This is not switched on for your organization yet.", false},
+		{"list_plugin_assignments", "List Who Can Receive Plugins", "List the roles and directory assignment targets that can receive plugins. This is not switched on for your organization yet.", true},
 		{"list_plugins", "List Plugins", "List the plugins in a project. This is not switched on for your organization yet.", true},
-		{"get_plugin", "Get One Plugin", "Get one plugin and what it carries. This is not switched on for your organization yet.", true},
+		{"get_plugin", "Get a Plugin", "Get one plugin and what it carries. This is not switched on for your organization yet.", true},
 		{"get_my_install_instructions", "Get My Install Instructions", "Get non-secret install guidance for an assigned plugin or permitted MCP server. This is not switched on for your organization yet.", true},
 		{"get_my_mcp_access", "Check My MCP Access", "Check your access to one MCP server. This is not switched on for your organization yet.", true},
 		{"get_my_mcp_connection_status", "Check My MCP Connection", "Check your authorization state for one MCP server. This is not switched on for your organization yet.", true},
 	} {
-		manifest := &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}
+		manifest := &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: setPluginAssignmentsAnnotations()}
 		if tool.readOnly {
 			manifest.Annotations = readOnlyAnnotations()
 		}
@@ -145,8 +154,87 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		case "get_my_mcp_access", "get_my_mcp_connection_status":
 			discoveryScopes = discoveryMCPReadOrConnect
 		}
-		addTool(reg, manifest, ToolMeta{Authorization: authority, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryScopes}, unavailableTool("plugins"))
+		// Audiences match the live registration so an assistant in an
+		// organization without plugins sees a readable refusal rather than a
+		// tool that appears only once the feature is switched on.
+		audiences := externalOnly
+		if tool.name == "list_plugins" || tool.name == "get_plugin" || tool.name == "list_plugin_assignments" {
+			audiences = bothAudiences
+		}
+		// Same project scope as the live registration of each tool.
+		projectScope := ProjectScopeExplicit
+		if tool.name == "get_my_install_instructions" {
+			projectScope = ProjectScopeDefaultable
+		}
+		addTool(reg, manifest, ToolMeta{Authorization: authority, Audiences: audiences, ProjectScope: projectScope, DiscoveryScopes: discoveryScopes}, unavailableTool("plugins"))
 	}
+	registerRepublishPluginTool(reg, nil)
+}
+
+const republishPluginDescription = "Request a publish of an explicit project's plugin packages now, for a plugin whose published package is stale (get_plugin reports publication_evidence.fresh=false), instead of waiting for the periodic refresh. " +
+	"This is the AICP dashboard's Sync changes: it regenerates the whole project's plugin marketplace, so every plugin in the project is republished, not only the one named, and the changes waiting on plugins whose auto sync is off go out too. Tell the user that, ask them to confirm, then call this with confirmed: true and a stable idempotency key. " +
+	"Name the plugin exactly by ID, slug, or name; a name matching nothing is refused as not_found and one matching more than one plugin as ambiguous_target, with no fallback to the default plugin. " +
+	"If the plugin's package already matches its current inputs and no plugin whose auto sync is off has changes waiting, nothing is requested and the outcome is already_current. If the project has no package repository connected, this returns not_configured with a dashboard link. " +
+	"outcome=enqueued means a publish was requested, not that it has landed: it runs in the background, so call get_plugin later and report fresh=true only once it says so. A retry with the same idempotency key is safe."
+
+const unavailableRepublishPluginDescription = "Request a publish of a project's plugin packages now. This is not switched on for your organization yet; publish from the project's Plugins page in the AI Control Plane dashboard instead."
+
+// republishPluginAnnotations are shared by the live and unavailable
+// registrations. Republishing unchanged inputs is a no-op, so the tool is
+// idempotent, and it never removes anything.
+func republishPluginAnnotations() *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)}
+}
+
+// set_plugin_assignments replaces the whole set, so it can take a plugin away
+// from people who had it.
+func setPluginAssignmentsAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, true, false)
+}
+
+// registerRepublishPluginTool keeps one manifest for both registrations, so
+// composing the publish path changes what the tool answers rather than whether
+// it exists. Republishing stays external-only like the other plugin writes:
+// it reaches every person holding any plugin in the project.
+func registerRepublishPluginTool(reg *Registrar, plugins *PluginsService) {
+	manifest := &mcp.Tool{
+		Name:        operationRepublishPlugin,
+		Title:       "Republish a Project's Plugins",
+		Description: republishPluginDescription,
+		Annotations: republishPluginAnnotations(),
+	}
+	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}
+	if !plugins.republishValid() {
+		manifest.Description = unavailableRepublishPluginDescription
+		addTool(reg, manifest, meta, func(context.Context, *mcp.CallToolRequest, RepublishPluginInput) (*mcp.CallToolResult, RepublishPluginOutput, error) {
+			refusal, _ := republishPluginToolResult(pluginRepublishUnavailable(nil))
+			return refusal, RepublishPluginOutput{}, nil
+		})
+		return
+	}
+	addTool(reg, manifest, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input RepublishPluginInput) (*mcp.CallToolResult, RepublishPluginOutput, error) {
+		return principalToolCall(ctx, republishPluginToolResult, func(principal Principal) (RepublishPluginOutput, error) {
+			return plugins.RepublishPlugin(ctx, principal, input)
+		})
+	})
+}
+
+type pluginRepublishRefusalResult struct {
+	Code         string `json:"code"`
+	Message      string `json:"message"`
+	DashboardURL string `json:"dashboard_url,omitempty"`
+}
+
+func republishPluginToolResult(err error) (*mcp.CallToolResult, bool) {
+	republish, ok := errors.AsType[*PluginRepublishError](err)
+	if !ok {
+		return pluginToolResult(err)
+	}
+	content, marshalErr := json.Marshal(pluginRepublishRefusalResult{Code: republish.Code, Message: republish.Message, DashboardURL: republish.DashboardURL})
+	if marshalErr != nil {
+		return nil, false
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
 }
 
 func memberMCPStatusToolResult(err error) (*mcp.CallToolResult, bool) {
@@ -180,6 +268,8 @@ func pluginToolResult(err error) (*mcp.CallToolResult, bool) {
 	switch {
 	case errors.Is(err, ErrPluginProjectNotFound):
 		result = pluginRefusalResult{Code: "not_found", Message: "That project is not one you can use here. Pick one returned by list_projects."}
+	case errors.Is(err, ErrDefaultProjectNotFound):
+		result = pluginRefusalResult{Code: defaultProjectNotFoundResult.Code, Message: defaultProjectNotFoundResult.Message}
 	case errors.Is(err, ErrPluginNotFound):
 		result = pluginRefusalResult{Code: "not_found", Message: "No plugin in this project has that exact name. List the project's plugins with list_plugins and name one of them; nothing is picked by default."}
 	case errors.Is(err, ErrPluginAmbiguous):

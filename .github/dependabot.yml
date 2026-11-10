@@ -11,6 +11,8 @@ updates:
       - "/.github/workflows/composite/build-push"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       artifacts:
         patterns:
@@ -21,6 +23,8 @@ updates:
       - "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     ignore:
       # Bumped on release by speakeasy-api/mcp-setup-docs (go-module-consumer-bump).
       - dependency-name: "github.com/speakeasy-api/mcp-setup-docs/go"
@@ -52,6 +56,10 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+    ignore:
+      # @polar-sh/checkout does not support the next @stripe/* major yet.
+      - dependency-name: "@stripe/*"
+        update-types: ["version-update:semver-major"]
     groups:
       ai-sdk:
         patterns:
@@ -150,6 +158,8 @@ updates:
       - "/pystreams"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
   - package-ecosystem: "uv"
     directory: "/"
     schedule:

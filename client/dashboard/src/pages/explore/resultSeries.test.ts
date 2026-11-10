@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -5,6 +6,7 @@ import {
   bucketTitle,
   isSparse,
   MAX_SERIES,
+  otherLabel,
   seriesFromRows,
   sharedUnit,
   tupleLabel,
@@ -40,6 +42,26 @@ const dataset: AnalyticsDataset = {
     },
   ],
 };
+
+describe("UTC bucket labels", () => {
+  it("keeps a UTC month start in its calendar month", () => {
+    const label = bucketTick("2026-01-01T00:00:00Z", "month", "UTC");
+    expect(label).toContain("Jan");
+    expect(label).toContain("26");
+  });
+
+  it("keeps the hour on midnight hourly ticks", () => {
+    const label = bucketTick("2026-01-01T00:00:00Z", "hour", "UTC");
+    expect(label).toContain("Jan 1");
+    expect(label).toMatch(/00|24/);
+  });
+
+  it("includes the UTC date and year in daily titles", () => {
+    expect(bucketTitle("2026-01-01T00:00:00Z", "day", "UTC")).toContain(
+      "Jan 1, 2026",
+    );
+  });
+});
 
 describe("seriesFromRows", () => {
   it("pivots bucketed rows into one series per tuple, sorted buckets, gaps as null", () => {
@@ -129,6 +151,75 @@ describe("seriesFromRows", () => {
     expect(set.series).toHaveLength(MAX_SERIES);
     expect(set.series[0]?.label).toBe(`user-${MAX_SERIES + 2}`);
     expect(set.hidden).toBe(3);
+  });
+
+  it("folds the series past the cap into one Other series when asked", () => {
+    const rows = Array.from({ length: MAX_SERIES + 3 }, (_, i) => [
+      { time_bucket: "t1", user: `user-${i}`, count: i + 1 },
+      { time_bucket: "t2", user: `user-${i}`, count: i + 1 },
+    ]).flat();
+    const set = seriesFromRows(
+      rows,
+      ["user"],
+      [{ op: "count", field: "" }],
+      dataset,
+      true,
+    );
+    expect(set.series).toHaveLength(MAX_SERIES);
+    expect(set.hidden).toBe(4);
+    const other = set.series.at(-1);
+    expect(other).toMatchObject({ label: otherLabel(4), other: true });
+    expect(otherLabel(4)).toBe("Other (4 series)");
+    // The four smallest series are user-0 to user-3, with counts 1 to 4.
+    expect(other?.points).toEqual([10, 10]);
+    expect(set.series.slice(0, -1).every((s) => !s.other)).toBe(true);
+  });
+
+  it("folds nothing when the series fit, and leaves a bucket null that none of the folded had", () => {
+    const fitting = seriesFromRows(
+      Array.from({ length: MAX_SERIES }, (_, i) => ({
+        time_bucket: "t1",
+        user: `user-${i}`,
+        count: 1,
+      })),
+      ["user"],
+      [{ op: "count", field: "" }],
+      dataset,
+      true,
+    );
+    expect(fitting.series).toHaveLength(MAX_SERIES);
+    expect(fitting.series.some((s) => s.other)).toBe(false);
+    expect(fitting.hidden).toBe(0);
+
+    // The named series have a second bucket the folded ones never had.
+    const rows = [
+      ...Array.from({ length: MAX_SERIES + 1 }, (_, i) => ({
+        time_bucket: "t1",
+        user: `user-${i}`,
+        count: i + 1,
+      })),
+      { time_bucket: "t2", user: `user-${MAX_SERIES}`, count: 1 },
+    ];
+    const set = seriesFromRows(
+      rows,
+      ["user"],
+      [{ op: "count", field: "" }],
+      dataset,
+      true,
+    );
+    expect(set.series.at(-1)?.points).toEqual([1 + 2, null]);
+  });
+
+  it("never mistakes a dimension value called Other for the fold", () => {
+    const set = seriesFromRows(
+      [{ time_bucket: "t1", user: "Other", count: 1 }],
+      ["user"],
+      [{ op: "count", field: "" }],
+      dataset,
+      true,
+    );
+    expect(set.series[0]).toMatchObject({ label: "Other" });
+    expect(set.series[0]?.other).toBeUndefined();
   });
 
   it("labels the empty tuple as all and blanks as a dash", () => {

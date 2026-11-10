@@ -10,39 +10,68 @@ import (
 )
 
 type DeviceIntegrationConfig struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	Provider             string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Provider string
+	// @access: secret-restricted
 	CredentialsEncrypted string
-	Settings             []byte
-	Enabled              bool
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
+	// @access: opaque-restricted
+	Settings []byte
+	// @access: confidential
+	Enabled bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type DeviceIntegrationSchedule struct {
-	ID                        uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	DeviceIntegrationConfigID uuid.UUID
-	Schedule                  string
-	DisabledAt                pgtype.Timestamptz
-	CreatedAt                 pgtype.Timestamptz
-	UpdatedAt                 pgtype.Timestamptz
+	// @access: confidential
+	Schedule string
+	// @access: confidential
+	DisabledAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type DeviceIntegrationSync struct {
-	ID                          uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	DeviceIntegrationScheduleID uuid.UUID
-	PollWatermarkAt             pgtype.Timestamptz
-	NextPollAfter               pgtype.Timestamptz
-	LastPollSuccessAt           pgtype.Timestamptz
-	LastPollFailedAt            pgtype.Timestamptz
-	LastPollError               pgtype.Text
-	ConsecutiveFailures         int32
-	ConsecutiveAuthRejections   int32
-	LastPushDigest              pgtype.Text
-	AutoPausedAt                pgtype.Timestamptz
-	CreatedAt                   pgtype.Timestamptz
-	UpdatedAt                   pgtype.Timestamptz
+	// @access: confidential
+	PollWatermarkAt pgtype.Timestamptz
+	// @access: confidential
+	NextPollAfter pgtype.Timestamptz
+	// @access: confidential
+	LastPollSuccessAt pgtype.Timestamptz
+	// @access: confidential
+	LastPollFailedAt pgtype.Timestamptz
+	// @access: opaque-restricted
+	LastPollError pgtype.Text
+	// @access: confidential
+	ConsecutiveFailures int32
+	// @access: confidential
+	ConsecutiveAuthRejections int32
+	// @access: confidential
+	LastPushDigest pgtype.Text
+	// @access: confidential
+	AutoPausedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

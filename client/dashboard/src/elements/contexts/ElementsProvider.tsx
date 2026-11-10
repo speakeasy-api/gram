@@ -29,11 +29,11 @@ import { describeStreamError } from "@/elements/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
 import elementsSystemPrompt from "@/elements/prompts/system.txt?raw";
-import { ElementsConfig, Model } from "@/elements/types";
-import { Plugin } from "@/elements/types/plugins";
+import type { ElementsConfig, Model } from "@/elements/types";
+import type { Plugin } from "@/elements/types/plugins";
+import type { AssistantTool } from "@assistant-ui/react";
 import {
   AssistantRuntimeProvider,
-  AssistantTool,
   type AttachmentAdapter,
   useAuiState,
   useRemoteThreadListRuntime,
@@ -48,23 +48,22 @@ import {
   QueryClientContext,
   QueryClientProvider,
 } from "@tanstack/react-query";
+import type { LanguageModel, ToolSet } from "ai";
 import {
   convertToModelMessages,
   createUIMessageStream,
   lastAssistantMessageIsCompleteWithToolCalls,
-  LanguageModel,
   smoothStream,
   isStepCount,
   streamText,
-  ToolSet,
   toUIMessageStream,
   type ChatTransport,
   type UIMessage,
 } from "ai";
 
 type UIMessagePart = UIMessage["parts"][number];
+import type { ReactNode } from "react";
 import {
-  ReactNode,
   useCallback,
   useContext,
   useEffect,
@@ -186,6 +185,8 @@ function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
  * Delegates to either WithHistory or WithoutHistory based on config.
  */
 const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
+  // gramEnvironment is the deprecated name of environmentSlug.
+  const environmentSlug = config.environmentSlug || config.gramEnvironment;
   const apiUrl = getApiUrl(config);
   const auth = useAuth({
     auth: config.api,
@@ -257,7 +258,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     mcps: config.mcps,
     environment: config.environment ?? {},
     toolsToInclude: config.tools?.toolsToInclude,
-    gramEnvironment: config.gramEnvironment,
+    gramEnvironment: environmentSlug,
   });
   // Treat auth-loading as "tools not yet resolved" too — the MCP query is
   // disabled (and so not "loading") until auth settles, so without this a
@@ -385,8 +386,8 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           "Gram-Chat-ID": chatId,
           "X-Gram-Source": "elements",
           ...config.api?.headers, // We do this after X-Gram-Source so the playground can override it
-          ...(config.gramEnvironment && {
-            "Gram-Environment": config.gramEnvironment,
+          ...(environmentSlug && {
+            "Gram-Environment": environmentSlug,
           }),
         };
 
@@ -553,7 +554,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       config.contextCompaction?.maxTokens,
       config.contextCompaction?.compactAtFraction,
       config.contextCompaction?.keepRecent,
-      config.gramEnvironment,
+      environmentSlug,
       config.api?.headers,
       model,
       mcpTools,
@@ -642,7 +643,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
 
   const frontendTools = config.tools?.frontendTools ?? {};
 
-  // Composer attachments upload to Gram as soon as they are picked; the
+  // Composer attachments upload to Speakeasy as soon as they are picked; the
   // transport turns the resulting assets into turn attachments. `false`
   // disables them (the composer also hides the button in that case).
   const attachmentsConfig = config.composer?.attachments ?? true;
@@ -966,8 +967,8 @@ export const ElementsProvider = (
   props: ElementsProviderProps,
 ): React.JSX.Element => {
   // Share a host app's QueryClient so content rendered inside this provider
-  // (the dashboard mounts it around the page outlet) stays in one cache with
-  // the rest of the app. Standalone embeds get their own.
+  // and sibling content connected through the context bridge stay in one cache
+  // with the rest of the app. Standalone embeds get their own.
   const hostQueryClient = useContext(QueryClientContext);
   return (
     <QueryClientProvider client={hostQueryClient ?? standaloneQueryClient}>

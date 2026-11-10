@@ -1,4 +1,3 @@
-import { AssetImage } from "@/components/asset-image";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/Dialog";
@@ -21,10 +20,7 @@ import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useMoveOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/moveOrganizationRemoteSessionIssuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { useOrganizationRemoteSessionIssuerDeletePreflight } from "@gram/client/react-query/organizationRemoteSessionIssuerDeletePreflight.js";
-import {
-  invalidateAllOrganizationRemoteSessionIssuers,
-  useOrganizationRemoteSessionIssuers,
-} from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
+import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/refreshOrganizationRemoteSessionIssuerMetadata.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -36,20 +32,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Heading } from "@/components/ui/Heading";
-import { Icon } from "@/components/ui/Icon";
+import { IssuerLogo } from "@/lib/remote-identity";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CreateRemoteIdentityProviderSheet } from "./CreateRemoteIdentityProviderSheet";
 import { CreateRemoteSessionClientSheet } from "./CreateRemoteSessionClientSheet";
 import { issuerDisplayName } from "./issuerDisplay";
 import { MigrateIssuerDialog } from "./MigrateIssuerDialog";
+import { useOrganizationIssuerTier } from "./useOrganizationIssuerTier";
 import { migrationCandidates } from "./migrationCandidates";
-import { remoteSessionScopeTier } from "@/lib/sources";
 
 export function RemoteIdentityProvidersRoot(): JSX.Element {
   return <Outlet />;
@@ -65,7 +61,11 @@ export function RemoteIdentityProvidersPage(): JSX.Element {
 
 function RemoteIdentityProvidersOverview() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useOrganizationRemoteSessionIssuers({});
+  const organizationalTier = useOrganizationIssuerTier("organization", {
+    drain: true,
+  });
+  const projectTier = useOrganizationIssuerTier("project", { drain: true });
+  const platformTier = useOrganizationIssuerTier("platform", { drain: false });
   const [deleteTarget, setDeleteTarget] =
     useState<OrganizationRemoteSessionIssuer | null>(null);
   const [moveTarget, setMoveTarget] =
@@ -76,24 +76,18 @@ function RemoteIdentityProvidersOverview() {
     useState<OrganizationRemoteSessionIssuer | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const allItems = useMemo(() => data?.result.items ?? [], [data]);
-
-  // Three tenancy tiers. Platform issuers are inherited from the shared catalog
-  // and are read-only to the tenant, so they render in their own section without
-  // the move/consolidate/delete actions that would 404 against a global row.
-  const { platform, organizational, projectSpecific } = useMemo(
-    () => ({
-      platform: allItems.filter(
-        (item) => remoteSessionScopeTier(item.issuer) === "platform",
-      ),
-      organizational: allItems.filter(
-        (item) => remoteSessionScopeTier(item.issuer) === "organization",
-      ),
-      projectSpecific: allItems.filter(
-        (item) => remoteSessionScopeTier(item.issuer) === "project",
-      ),
-    }),
-    [allItems],
+  // Three tenancy tiers, each listed on its own. Platform issuers are
+  // inherited from the shared catalog and are read-only to the tenant, so they
+  // render in their own section without the move/consolidate/delete actions
+  // that would 404 against a global row.
+  const organizational = organizationalTier.items;
+  const projectSpecific = projectTier.items;
+  const platform = platformTier.items;
+  // Consolidation never targets a platform issuer, so the organization's own
+  // tiers, both loaded in full, are every possible candidate.
+  const consolidationPool = useMemo(
+    () => [...organizational, ...projectSpecific],
+    [organizational, projectSpecific],
   );
 
   // Promoting a project-specific issuer to organizational applies immediately
@@ -104,11 +98,13 @@ function RemoteIdentityProvidersOverview() {
       await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Provider is now organizational");
+      toast.success("Authorization server is now organizational");
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to move provider",
+        error instanceof Error
+          ? error.message
+          : "Failed to move authorization server",
       );
     },
   });
@@ -163,24 +159,25 @@ function RemoteIdentityProvidersOverview() {
   return (
     <>
       <ResourceListPage
-        title="Organizational Remote Identity Providers"
-        description="Identity providers shared across every project in the organization. Prefer creating clients on platform maintained providers when available unless client setup documentation needs customization for your organization workflows."
+        title="Organizational Authorization Servers"
+        description="Authorization servers shared across every project in the organization. Prefer creating clients on platform-maintained servers when available unless client setup documentation needs customization for your organization workflows."
         primaryAction={
           <RequireScope scope="org:admin" level="component">
             <Button size="sm" onClick={() => setCreateOpen(true)}>
               <Button.LeftIcon>
                 <Plus />
               </Button.LeftIcon>
-              <Button.Text>New Remote Identity Provider</Button.Text>
+              <Button.Text>New Authorization Server</Button.Text>
             </Button>
           </RequireScope>
         }
       >
         <IssuerTable
           items={organizational}
-          isLoading={isLoading}
+          isLoading={organizationalTier.isLoading}
+          isError={organizationalTier.isError}
           showProject={false}
-          emptyMessage="No organizational identity providers yet."
+          emptyMessage="No organizational authorization servers yet."
           onDelete={setDeleteTarget}
           onMakeOrganizational={handleMakeOrganizational}
           onMoveToProject={setMoveTarget}
@@ -194,20 +191,21 @@ function RemoteIdentityProvidersOverview() {
         <Stack gap={6} className="mt-3 mb-6">
           <div>
             <Heading variant="h4" className="mb-2">
-              Project-Specific Remote Identity Providers
+              Project-Specific Authorization Servers
             </Heading>
             <Text muted small className="max-w-2xl">
-              Identity providers within a single project in the organization.
-              Prefer creating clients on platform maintained providers when
+              Authorization servers within a single project in the organization.
+              Prefer creating clients on platform-maintained servers when
               available unless client setup documentation needs customization
               for your organization workflows.
             </Text>
           </div>
           <IssuerTable
             items={projectSpecific}
-            isLoading={isLoading}
+            isLoading={projectTier.isLoading}
+            isError={projectTier.isError}
             showProject
-            emptyMessage="No project-specific identity providers yet."
+            emptyMessage="No project-specific authorization servers yet."
             onDelete={setDeleteTarget}
             onMakeOrganizational={handleMakeOrganizational}
             onMoveToProject={setMoveTarget}
@@ -217,7 +215,7 @@ function RemoteIdentityProvidersOverview() {
           />
         </Stack>
 
-        {platform.length > 0 && (
+        {(platform.length > 0 || platformTier.isError) && (
           <Stack gap={6} className="mt-3 mb-6">
             <Stack
               direction="horizontal"
@@ -227,24 +225,28 @@ function RemoteIdentityProvidersOverview() {
             >
               <div className="min-w-0">
                 <Heading variant="h4" className="mb-2">
-                  Platform Remote Identity Providers
+                  Platform Authorization Servers
                 </Heading>
                 <Text muted small className="max-w-2xl">
-                  Common identity providers maintained by the platform
+                  Common authorization servers maintained by the platform
                   administrators for configuring your own clients. Prefer using
-                  these over creating duplicate providers unless the client
-                  setup documentation needs to be customized when creating MCP
-                  Servers.
+                  these over creating duplicate authorization servers unless the
+                  client setup documentation needs to be customized when
+                  creating MCP Servers.
                 </Text>
               </div>
             </Stack>
             <IssuerTable
               items={platform}
-              isLoading={isLoading}
+              isLoading={platformTier.isLoading}
+              isError={platformTier.isError}
+              hasMore={platformTier.hasMore}
+              loadingMore={platformTier.loadingMore}
+              onLoadMore={platformTier.loadMore}
               showProject={false}
               readOnly
               onAddClient={setAddClientTarget}
-              emptyMessage="No platform identity providers available."
+              emptyMessage="No platform authorization servers available."
               onDelete={setDeleteTarget}
               onMakeOrganizational={handleMakeOrganizational}
               onMoveToProject={setMoveTarget}
@@ -280,7 +282,7 @@ function RemoteIdentityProvidersOverview() {
       {migrateSource && (
         <MigrateIssuerDialog
           source={migrateSource}
-          candidates={migrationCandidates(migrateSource, allItems)}
+          candidates={migrationCandidates(migrateSource, consolidationPool)}
           onClose={() => setMigrateSource(null)}
         />
       )}
@@ -304,6 +306,10 @@ function RemoteIdentityProvidersOverview() {
 function IssuerTable({
   items,
   isLoading,
+  isError = false,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
   showProject,
   readOnly = false,
   onAddClient,
@@ -317,6 +323,11 @@ function IssuerTable({
 }: {
   items: OrganizationRemoteSessionIssuer[];
   isLoading: boolean;
+  isError?: boolean;
+  /** Paged tiers: more rows lie past what has loaded. */
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
   showProject: boolean;
   // readOnly drops the issuer-mutation actions for tiers the tenant cannot
   // change (platform issuers): the row still links to the detail view.
@@ -339,12 +350,16 @@ function IssuerTable({
   const actionsHeader = showActions ? [{ label: "" }] : [];
   const headers = showProject
     ? [
-        { label: "Provider" },
+        { label: "Authorization server" },
         { label: "Project" },
         { label: "Clients" },
         ...actionsHeader,
       ]
-    : [{ label: "Provider" }, { label: "Clients" }, ...actionsHeader];
+    : [
+        { label: "Authorization server" },
+        { label: "Clients" },
+        ...actionsHeader,
+      ];
 
   if (!isLoading && items.length === 0) {
     return (
@@ -353,82 +368,106 @@ function IssuerTable({
         align="center"
         justify="center"
       >
-        <Text variant="body" muted>
-          {emptyMessage}
-        </Text>
+        {isError ? (
+          <Text variant="body" className="text-destructive">
+            Failed to load authorization servers. Refresh the page to try again.
+          </Text>
+        ) : (
+          <Text variant="body" muted>
+            {emptyMessage}
+          </Text>
+        )}
       </Stack>
     );
   }
 
   return (
-    <DotTable headers={headers}>
-      {items.map((item) => (
-        <DotRow
-          key={item.issuer.id}
-          icon={
-            item.issuer.logoAssetId ? (
-              <AssetImage
-                assetId={item.issuer.logoAssetId}
-                alt=""
-                className="h-5 w-5 shrink-0 object-contain"
+    <>
+      <DotTable headers={headers}>
+        {items.map((item) => (
+          <DotRow
+            key={item.issuer.id}
+            icon={
+              <IssuerLogo
+                logoAssetId={item.issuer.logoAssetId}
+                name={issuerDisplayName(item.issuer)}
+                size="sm"
               />
-            ) : (
-              <Icon
-                name="fingerprint"
-                className="text-muted-foreground h-5 w-5"
-              />
-            )
-          }
-          href={issuerHref(item.issuer)}
-          ariaLabel={`View remote identity provider ${issuerDisplayName(item.issuer)}`}
-        >
-          <td className="px-3 py-3">
-            <Text
-              variant="subheading"
-              as="div"
-              className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
-            >
-              {issuerDisplayName(item.issuer)}
-            </Text>
-            <Text small muted as="div" className="truncate">
-              {item.issuer.issuer}
-            </Text>
-          </td>
-          {showProject && (
+            }
+            href={issuerHref(item.issuer)}
+            ariaLabel={`View authorization server ${issuerDisplayName(item.issuer)}`}
+          >
             <td className="px-3 py-3">
-              <Text small muted>
-                {item.projectName || "—"}
+              <Text
+                variant="subheading"
+                as="div"
+                className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
+              >
+                {issuerDisplayName(item.issuer)}
+              </Text>
+              <Text small muted as="div" className="truncate">
+                {item.issuer.issuer}
               </Text>
             </td>
-          )}
-          <td className="px-3 py-3">
-            <Text small muted>
-              {item.clientCount} {item.clientCount === 1 ? "client" : "clients"}
-            </Text>
-          </td>
-          {showActions && (
-            <td className="px-3 py-3 text-right">
-              {readOnly ? (
-                <InheritedIssuerRowActions
-                  issuerLabel={issuerDisplayName(item.issuer)}
-                  onAddClient={() => onAddClient?.(item)}
-                />
-              ) : (
-                <RowActions
-                  item={item}
-                  onDelete={() => onDelete(item)}
-                  onMakeOrganizational={() => onMakeOrganizational(item)}
-                  onMoveToProject={() => onMoveToProject(item)}
-                  onConsolidate={() => onConsolidate(item)}
-                  onRefreshMetadata={() => onRefreshMetadata(item)}
-                  refreshPending={refreshPending}
-                />
-              )}
+            {showProject && (
+              <td className="px-3 py-3">
+                <Text small muted>
+                  {item.projectName || "—"}
+                </Text>
+              </td>
+            )}
+            <td className="px-3 py-3">
+              <Text small muted>
+                {item.clientCount}{" "}
+                {item.clientCount === 1 ? "client" : "clients"}
+              </Text>
             </td>
-          )}
-        </DotRow>
-      ))}
-    </DotTable>
+            {showActions && (
+              <td className="px-3 py-3 text-right">
+                {readOnly ? (
+                  <InheritedIssuerRowActions
+                    issuerLabel={issuerDisplayName(item.issuer)}
+                    onAddClient={() => onAddClient?.(item)}
+                  />
+                ) : (
+                  <RowActions
+                    item={item}
+                    onDelete={() => onDelete(item)}
+                    onMakeOrganizational={() => onMakeOrganizational(item)}
+                    onMoveToProject={() => onMoveToProject(item)}
+                    onConsolidate={() => onConsolidate(item)}
+                    onRefreshMetadata={() => onRefreshMetadata(item)}
+                    refreshPending={refreshPending}
+                  />
+                )}
+              </td>
+            )}
+          </DotRow>
+        ))}
+      </DotTable>
+      {isError ? (
+        <Text small className="text-destructive py-2">
+          Couldn&apos;t load every authorization server. Refresh the page to try
+          again.
+        </Text>
+      ) : null}
+      {hasMore && onLoadMore ? (
+        <Stack
+          direction="horizontal"
+          justify="center"
+          className="border-t py-3"
+        >
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={loadingMore}
+            onClick={onLoadMore}
+          >
+            <Button.Text>{loadingMore ? "Loading…" : "Load more"}</Button.Text>
+          </Button>
+        </Stack>
+      ) : null}
+    </>
   );
 }
 
@@ -532,7 +571,7 @@ function RowActions({
               </>
             )}
             <DropdownMenuItem onClick={onConsolidate}>
-              Consolidate into another provider
+              Consolidate into another authorization server
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onDelete}>Delete</DropdownMenuItem>
@@ -576,11 +615,11 @@ function MoveToProjectDialog({
       await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Provider moved");
+      toast.success("Authorization server moved");
       onClose();
     },
     onError: (error) => {
-      console.error("Move remote identity provider failed", error);
+      console.error("Move authorization server failed", error);
     },
   });
 
@@ -615,9 +654,9 @@ function MoveToProjectDialog({
     >
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Move identity provider</Dialog.Title>
+          <Dialog.Title>Move authorization server</Dialog.Title>
           <Dialog.Description>
-            Choose a project to scope this provider to, or make it
+            Choose a project to scope this authorization server to, or make it
             organizational (inherited by every project).
           </Dialog.Description>
         </Dialog.Header>
@@ -686,7 +725,7 @@ export function DeleteIssuerDialog({
       await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Remote identity provider deleted");
+      toast.success("Authorization server deleted");
       onDeleted?.();
       onClose();
     },
@@ -694,7 +733,7 @@ export function DeleteIssuerDialog({
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to delete identity provider",
+          : "Failed to delete authorization server",
       );
     },
   });
@@ -708,11 +747,11 @@ export function DeleteIssuerDialog({
         if (!open) onClose();
       }}
       title={`Delete "${issuerLabel}"?`}
-      description="This permanently removes the remote identity provider. Clients must be deleted first."
-      confirmLabel="Delete provider"
+      description="This permanently removes the authorization server. Clients must be deleted first."
+      confirmLabel="Delete authorization server"
       isPending={deleteMutation.isPending}
       impact={{
-        summary: `${clientCount} ${clientCount === 1 ? "client is" : "clients are"} registered with this provider.`,
+        summary: `${clientCount} ${clientCount === 1 ? "client is" : "clients are"} registered with this authorization server.`,
         mcpServerNames: preflight?.mcpServerNames,
         isLoading: preflightLoading,
       }}

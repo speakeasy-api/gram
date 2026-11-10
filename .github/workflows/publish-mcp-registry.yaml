@@ -1,0 +1,64 @@
+name: Publish MCP Registry Listing
+
+# Publishes mcp-registry/platform/server.json to the official MCP registry
+# (registry.modelcontextprotocol.io). Manual only: the registry rejects a
+# version it already has, so bump "version" in server.json before each run.
+# MCP_REGISTRY_PRIVATE_KEY is a secret of the `mcp-registry` environment, which
+# must restrict deployments to `main`; runs from other branches are skipped.
+# Its public key must be live at https://ai.speakeasy.com/.well-known/mcp-registry-auth
+# (GRAM_MCP_REGISTRY_AUTH on the server) before the login step can pass.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-mcp-registry
+  cancel-in-progress: false
+
+env:
+  MCP_PUBLISHER_VERSION: "1.8.1"
+  # sha256 of mcp-publisher_linux_amd64.tar.gz from the release's checksums file.
+  MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+  # HTTP proof: /.well-known/mcp-registry-auth on this host grants com.speakeasy.ai/*.
+  REGISTRY_DOMAIN: ai.speakeasy.com
+
+jobs:
+  publish:
+    name: publish
+    if: github.ref == 'refs/heads/main'
+    environment: mcp-registry
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}/${archive}"
+          echo "${MCP_PUBLISHER_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" mcp-publisher
+
+      - name: Validate server.json
+        working-directory: mcp-registry/platform
+        run: '"$RUNNER_TEMP/mcp-publisher" validate server.json'
+
+      - name: Log in with the HTTP proof
+        env:
+          MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/mcp-publisher" login http \
+            --domain "$REGISTRY_DOMAIN" \
+            --private-key "$MCP_REGISTRY_PRIVATE_KEY"
+
+      - name: Publish
+        working-directory: mcp-registry/platform
+        run: '"$RUNNER_TEMP/mcp-publisher" publish server.json'

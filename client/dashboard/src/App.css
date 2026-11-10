@@ -44,6 +44,19 @@
 @source inline("{,sm:,md:,lg:,xl:,2xl:}size-{8,12,16,24,32}");
 
 @theme {
+  /* A slow rise and fall, so the agent wizard's sign-in path shows which hop
+     a step sets without anything moving across the page. */
+  --animate-sign-in-breathe: sign-in-breathe 3.2s ease-in-out infinite;
+  @keyframes sign-in-breathe {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
   --font-sans: var(--font-diatype);
   --font-mono: var(--font-diatype-mono);
   --font-display: var(--font-tobias);
@@ -123,6 +136,11 @@
     /* No rubber-band bounce: overscrolling the document drags the sticky
        header and mode switcher with it, so the top bar appears to shrink. */
     overscroll-behavior-y: none;
+  }
+  /* Headless mode scrolls inside its own pane, so the document never needs
+     the reserved gutter: it would sit empty beside the pane's scrollbar. */
+  html:has([data-headless-mode]) {
+    scrollbar-gutter: auto;
   }
   body[data-scroll-locked] {
     margin-right: 0 !important;
@@ -450,6 +468,15 @@ html.chat-launching::view-transition-new(root) {
   animation: nav-shimmer 1.2s ease-in-out infinite;
 }
 
+/* Corner radius of a pane parked on its mode-switch card. Registered so it can
+   transition alongside the pane's transform; descendants (the card's ring)
+   inherit the in-flight value even though their own transitions are frozen. */
+@property --mode-card-radius {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
 /* The Headless mode tab advertises itself while the user is anywhere else: the
    brand rainbow travels through the label and the rest of it stays the tab's
    own tone. Both background-clip spellings are set — without the -webkit one
@@ -547,7 +574,7 @@ html.chat-launching::view-transition-new(root) {
 
 
 /* Icon tile breathes while the pointer is over the card, alongside the
-   confetti. Paired with it rather than standing alone: the burst is the
+   halftone. Paired with it rather than standing alone: the halftone is the
    arrival, the pulse is what keeps the card feeling live during a long hover. */
 @keyframes icon-hover-pulse {
   0%,
@@ -567,4 +594,26 @@ html.chat-launching::view-transition-new(root) {
   .group:hover .icon-hover-pulse {
     animation: none;
   }
+}
+
+/* The Organization Gateway card's frame: the Speakeasy mark's border gradient
+   (SPEAKEASY_RAINBOW in components/icon-dither.tsx), static, with a faint,
+   even, zero-offset halo so the card stays flat. */
+.speakeasy-rainbow-frame {
+  border-image: linear-gradient(
+      90deg,
+      #320f1e,
+      #c83228,
+      #fb873f,
+      #d2dc91,
+      #5a8250,
+      #002314,
+      #00143c,
+      #2873d7,
+      #9bc3ff
+    )
+    1;
+  box-shadow:
+    0 0 8px 0 rgb(200 50 40 / 0.18),
+    0 0 8px 0 rgb(40 115 215 / 0.18);
 }

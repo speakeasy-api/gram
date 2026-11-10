@@ -30,7 +30,7 @@ import (
 // tools: reader (readOnlyHint true), writer and eraser (unannotated). Public
 // keeps RBAC out of the way and exercises the anonymous-subject path — the
 // one that early-returns before AuthContext is stamped.
-func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer) {
+func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (hostedToolset, usersessions_repo.UserSessionIssuer) {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -38,7 +38,7 @@ func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (
 	require.NotNil(t, authCtx.ProjectID)
 
 	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "selection-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "selection-"+uuid.NewString()[:8])
 
 	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      toolset.ProjectID,
@@ -103,19 +103,14 @@ func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (
 		SessionDuration:    pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Valid: true},
 	})
 	require.NoError(t, err)
-	toolset, err = toolsetsRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, toolset.ProjectID, toolset, issuer.ID)
 
 	return toolset, issuer
 }
 
 // mintSelectionSession signs a session JWT with the test signer and persists
 // its user_sessions row carrying the given raw tool_selection (nil = NULL).
-func mintSelectionSession(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, issuer usersessions_repo.UserSessionIssuer, selection []byte) string {
+func mintSelectionSession(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, issuer usersessions_repo.UserSessionIssuer, selection []byte) string {
 	t.Helper()
 
 	signer := usersessions.NewSigner("test-jwt-secret")
@@ -139,6 +134,7 @@ func mintSelectionSession(t *testing.T, ctx context.Context, ti *testInstance, t
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
 		ToolSelection:       selection,
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 	return access

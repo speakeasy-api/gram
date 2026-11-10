@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { adminOpenRouterKeyFromJSON } from "@gram/client/models/components/adminopenrouterkey.js";
 import { describe, expect, it } from "vitest";
 import {

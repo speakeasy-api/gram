@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
 import { useRevokeIdentityProviderConnectionMutation } from "@gram/client/react-query/revokeIdentityProviderConnection.js";
 
+import { usesClientSecret } from "../../connectionView";
 import {
   inlineError,
   invalidateIdentityProviderQueries,
@@ -42,6 +43,7 @@ export function RevokeConnectionButton({
   });
   const orgHost = orgHostOf(connection.orgUrl);
   const confirmed = typed.trim().toLowerCase() === orgHost;
+  const secretMode = usesClientSecret(connection);
   const close = () => {
     if (revoke.isPending) return;
     setOpen(false);
@@ -66,9 +68,10 @@ export function RevokeConnectionButton({
             <Dialog.Title>Revoke the Okta connection</Dialog.Title>
             <Dialog.Description>
               Speakeasy stops connecting to Okta and removes this
-              connection&apos;s public keys. Application sync stops, and
-              Speakeasy no longer tracks Cross App Access setup. You can
-              reconnect afterwards with a new client ID.
+              connection&apos;s {secretMode ? "client secret" : "public keys"}.
+              Application sync stops, and Speakeasy no longer tracks Cross App
+              Access setup. You can reconnect afterwards with a new client ID
+              {secretMode ? " and client secret" : ""}.
             </Dialog.Description>
           </Dialog.Header>
           <div className="space-y-3 py-2">

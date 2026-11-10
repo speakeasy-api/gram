@@ -25,13 +25,28 @@ export function SegmentedControl<T extends string>({
   options,
   disabled,
   className,
+  ariaLabel,
+  busy,
   trailing,
 }: {
-  value: T;
+  /** The active segment; null leaves every segment inactive, for a choice
+   *  that has not been made yet. */
+  value: T | null;
   onChange: (value: T) => void;
-  options: { value: T; label: ReactNode; tooltip?: string }[];
+  /** A disabled option stays hoverable so its tooltip can say why. */
+  options: {
+    value: T;
+    label: ReactNode;
+    tooltip?: string;
+    disabled?: boolean;
+  }[];
   disabled?: boolean;
   className?: string;
+  /** Names the control as a group for assistive technology. */
+  ariaLabel?: string;
+  /** Marks the group busy while a chosen value is still being saved, so
+   *  assistive technology knows why a press has no effect yet. */
+  busy?: boolean;
   // An extra control pinned inside the track after the options — for a set too
   // long to segment, where the tail lives behind an overflow menu. Style it with
   // SEGMENT_BASE + SEGMENT_INACTIVE so it reads as one of the segments.
@@ -39,6 +54,9 @@ export function SegmentedControl<T extends string>({
 }): JSX.Element {
   return (
     <div
+      role={ariaLabel ? "group" : undefined}
+      aria-label={ariaLabel}
+      aria-busy={busy || undefined}
       className={cn(
         "border-border bg-card divide-border inline-flex h-10 shrink-0 items-center divide-x border",
         disabled && "cursor-not-allowed opacity-50",
@@ -52,11 +70,15 @@ export function SegmentedControl<T extends string>({
             type="button"
             disabled={disabled}
             aria-pressed={active}
-            onClick={() => onChange(option.value)}
+            aria-disabled={option.disabled || undefined}
+            onClick={() => {
+              if (!option.disabled) onChange(option.value);
+            }}
             className={cn(
               SEGMENT_BASE,
               active ? SEGMENT_ACTIVE : SEGMENT_INACTIVE,
               disabled && "pointer-events-none",
+              option.disabled && "cursor-not-allowed opacity-50",
             )}
           >
             {option.label}

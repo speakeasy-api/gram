@@ -31,7 +31,7 @@ export type IngestRequestBody = {
    */
   data?: HookIngestData | undefined;
   /**
-   * Canonical Gram feature event.
+   * Canonical Speakeasy feature event.
    */
   event: HookIngestEvent;
   /**
@@ -47,7 +47,7 @@ export type IngestRequestBody = {
    */
   session?: HookIngestSession | undefined;
   /**
-   * Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
+   * Metadata about the local hook adapter that translated a provider event into the Speakeasy hook contract.
    */
   source: HookIngestSource;
 };

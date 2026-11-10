@@ -142,6 +142,13 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
+        fieldName: "Authorization",
+        type: "http:bearer",
+        value: security?.deviceAgentTokenHeaderAuthorization,
+      },
+    ],
+    [
+      {
         fieldName: "Gram-Key",
         type: "apiKey:header",
         value: security?.apikeyHeaderGramKey,

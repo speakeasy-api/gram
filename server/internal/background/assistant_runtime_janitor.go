@@ -29,28 +29,25 @@ const (
 	assistantRuntimeJanitorCatchupWindow = AssistantRuntimeJanitorInterval - time.Second
 
 	// AssistantRuntimeJanitorBatchSize caps rows reaped per sweep. Each row
-	// makes one or two Fly Machines API calls; per-call timeouts bound each
-	// call so the sweep can never wedge on a single row.
+	// makes backend API calls. GKE bounds individual delete calls; local
+	// Docker cleanup relies on activity-context cancellation.
 	AssistantRuntimeJanitorBatchSize int32 = 200
 
 	// assistantRuntimeJanitorActivityTimeout is the upper bound on a single
-	// sweep, sized for the pathological case where every row in the batch
-	// hits the per-call Fly timeout on every call (Destroy + List +
-	// DeleteApp). Liveness is enforced by the heartbeat timeout, not this
-	// ceiling.
+	// sweep. The heartbeat timeout detects a stalled sweep sooner; local
+	// cleanup commands stop when the activity context is canceled.
 	assistantRuntimeJanitorActivityTimeout = 6 * time.Hour
 
-	// assistantRuntimeJanitorHeartbeatTimeout must comfortably exceed the
-	// worst-case time the reap loop can spend on a single row. Each row
-	// makes up to three Fly calls (Destroy, List, DeleteApp), each
-	// bounded by flyRuntimeReapCallTimeout.
+	// assistantRuntimeJanitorHeartbeatTimeout allows normal per-row GKE
+	// cleanup calls to finish before detecting a stalled sweep. It is not a
+	// per-call deadline for local Docker cleanup.
 	assistantRuntimeJanitorHeartbeatTimeout = 3 * time.Minute
 
 	// AssistantRuntimeJanitorInactivityThreshold is the quiet period an
 	// assistant must have before its backend resources become eligible
 	// for collection. Long enough that a project's normal cold-warm-cold
 	// rhythm keeps it out of the candidate set; short enough that
-	// abandoned tenants don't sit on Fly apps for weeks.
+	// abandoned tenants don't retain runtime resources for weeks.
 	AssistantRuntimeJanitorInactivityThreshold = 7 * 24 * time.Hour
 
 	// AssistantRuntimeJanitorStoppedTTL is the age (against the row's own
@@ -76,8 +73,8 @@ type AssistantRuntimeJanitorWorkflowResult struct {
 	Errors int
 }
 
-// AssistantRuntimeJanitorWorkflow reaps orphaned backend resources (Fly
-// apps, long-lived runner state) whose Stop/Reap never completed — finalized
+// AssistantRuntimeJanitorWorkflow reaps orphaned backend resources (sandbox
+// claims, long-lived runner state) whose Stop/Reap never completed — finalized
 // runtime rows, plus live rows under soft-deleted assistants — once the
 // owning assistant has had no runtime activity for
 // AssistantRuntimeJanitorInactivityThreshold. A live runtime row under a
@@ -104,7 +101,7 @@ func AssistantRuntimeJanitorWorkflow(ctx workflow.Context, params AssistantRunti
 	// HeartbeatTimeout is the liveness signal; the reap loop beats after
 	// each row. StartToCloseTimeout is just a ceiling for the worst-case
 	// sweep wall time. MaximumAttempts is 2 so a transient DB error on the
-	// initial candidate list does not waste the hourly slot; per-row Fly
+	// initial candidate list does not waste the hourly slot; per-row backend
 	// failures are already swallowed inside the activity and do not retry.
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: assistantRuntimeJanitorActivityTimeout,

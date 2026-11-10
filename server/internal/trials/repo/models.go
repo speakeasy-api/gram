@@ -9,11 +9,18 @@ import (
 )
 
 type Trial struct {
+	// @access: confidential
 	OrganizationID string
-	Tier           string
-	EndsAt         pgtype.Timestamptz
-	ConvertedAt    pgtype.Timestamptz
-	DemotedAt      pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	// @access: confidential
+	Tier string
+	// @access: confidential
+	EndsAt pgtype.Timestamptz
+	// @access: confidential
+	ConvertedAt pgtype.Timestamptz
+	// @access: confidential
+	DemotedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

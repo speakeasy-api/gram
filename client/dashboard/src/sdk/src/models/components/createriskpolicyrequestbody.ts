@@ -11,22 +11,33 @@ import {
   RiskDetectionScope$outboundSchema,
 } from "./riskdetectionscope.js";
 import {
+  RiskMCPScope,
+  RiskMCPScope$Outbound,
+  RiskMCPScope$outboundSchema,
+} from "./riskmcpscope.js";
+import {
+  RiskPolicyApprovalConfig,
+  RiskPolicyApprovalConfig$Outbound,
+  RiskPolicyApprovalConfig$outboundSchema,
+} from "./riskpolicyapprovalconfig.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
+ * Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export const CreateRiskPolicyRequestBodyAction = {
   Flag: "flag",
   Warn: "warn",
   Block: "block",
   Quarantine: "quarantine",
+  RequireApproval: "require_approval",
 } as const;
 /**
- * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
+ * Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export type CreateRiskPolicyRequestBodyAction = ClosedEnum<
   typeof CreateRiskPolicyRequestBodyAction
@@ -57,22 +68,23 @@ export const PolicyType = {
 export type PolicyType = ClosedEnum<typeof PolicyType>;
 
 /**
- * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+ * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
  */
 export const ShadowMcpDisposition = {
   BlockAll: "block_all",
   AllowAll: "allow_all",
 } as const;
 /**
- * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+ * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
  */
 export type ShadowMcpDisposition = ClosedEnum<typeof ShadowMcpDisposition>;
 
 export type CreateRiskPolicyRequestBody = {
   /**
-   * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
+   * Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
    */
   action?: CreateRiskPolicyRequestBodyAction | undefined;
+  approvalConfig?: RiskPolicyApprovalConfig | undefined;
   /**
    * For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty/omitted leaves the domain rule inert.
    */
@@ -105,6 +117,7 @@ export type CreateRiskPolicyRequestBody = {
    * Whether the policy is active.
    */
   enabled?: boolean | undefined;
+  mcpScope?: RiskMCPScope | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name. If omitted, a name will be auto-generated.
@@ -143,7 +156,7 @@ export type CreateRiskPolicyRequestBody = {
    */
   shadowMcpBlockedUrls?: Array<string> | undefined;
   /**
-   * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+   * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
    */
   shadowMcpDisposition?: ShadowMcpDisposition | undefined;
   /**
@@ -177,6 +190,7 @@ export const ShadowMcpDisposition$outboundSchema: z.ZodMiniEnum<
 /** @internal */
 export type CreateRiskPolicyRequestBody$Outbound = {
   action: string;
+  approval_config?: RiskPolicyApprovalConfig$Outbound | undefined;
   approved_email_domains?: Array<string> | undefined;
   audience_principal_urns?: Array<string> | undefined;
   audience_type: string;
@@ -185,6 +199,7 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   detection_scopes?: Array<RiskDetectionScope$Outbound> | undefined;
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
+  mcp_scope?: RiskMCPScope$Outbound | undefined;
   model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name?: string | undefined;
   policy_type: string;
@@ -210,6 +225,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       CreateRiskPolicyRequestBodyAction$outboundSchema,
       "flag",
     ),
+    approvalConfig: z.optional(RiskPolicyApprovalConfig$outboundSchema),
     approvedEmailDomains: z.optional(z.array(z.string())),
     audiencePrincipalUrns: z.optional(z.array(z.string())),
     audienceType: z._default(AudienceType$outboundSchema, "everyone"),
@@ -218,6 +234,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     detectionScopes: z.optional(z.array(RiskDetectionScope$outboundSchema)),
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
+    mcpScope: z.optional(RiskMCPScope$outboundSchema),
     modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.optional(z.string()),
     policyType: z._default(PolicyType$outboundSchema, "standard"),
@@ -234,6 +251,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      approvalConfig: "approval_config",
       approvedEmailDomains: "approved_email_domains",
       audiencePrincipalUrns: "audience_principal_urns",
       audienceType: "audience_type",
@@ -241,6 +259,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       customRuleIds: "custom_rule_ids",
       detectionScopes: "detection_scopes",
       disabledRules: "disabled_rules",
+      mcpScope: "mcp_scope",
       modelConfig: "model_config",
       policyType: "policy_type",
       presidioEntities: "presidio_entities",

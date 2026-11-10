@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -28,7 +29,7 @@ export const RiskResultRedactedEnforcementOutcome = {
 /**
  * Recorded enforcement outcome, independent of policy configuration.
  */
-export type RiskResultRedactedEnforcementOutcome = ClosedEnum<
+export type RiskResultRedactedEnforcementOutcome = OpenEnum<
   typeof RiskResultRedactedEnforcementOutcome
 >;
 
@@ -66,7 +67,7 @@ export type RiskResultRedacted = {
    */
   enforcementOutcome?: RiskResultRedactedEnforcementOutcome | undefined;
   /**
-   * Identity of the concrete mediated execution.
+   * The mediated MCP execution (tool call, resource read or prompt get) that raised this finding. Filter listResults by it to list that execution's non-dismissed findings.
    */
   executionId?: string | undefined;
   /**
@@ -98,7 +99,7 @@ export type RiskResultRedacted = {
    */
   metaMcpServerId?: string | undefined;
   /**
-   * Execution phase inspected by risk.
+   * Which phase of the mediated MCP execution was scanned: its request or its response.
    */
   phase?: string | undefined;
   /**
@@ -148,9 +149,10 @@ export type RiskResultRedacted = {
 };
 
 /** @internal */
-export const RiskResultRedactedEnforcementOutcome$inboundSchema: z.ZodMiniEnum<
-  typeof RiskResultRedactedEnforcementOutcome
-> = z.enum(RiskResultRedactedEnforcementOutcome);
+export const RiskResultRedactedEnforcementOutcome$inboundSchema: z.ZodMiniType<
+  RiskResultRedactedEnforcementOutcome,
+  unknown
+> = openEnums.inboundSchema(RiskResultRedactedEnforcementOutcome);
 
 /** @internal */
 export const RiskResultRedacted$inboundSchema: z.ZodMiniType<

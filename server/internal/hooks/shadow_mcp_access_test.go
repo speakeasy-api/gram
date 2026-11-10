@@ -107,7 +107,7 @@ func TestEnforceShadowMCPToolAccess_URLScopedBypassGrantDoesNotAllowIdentityOnly
 	)
 
 	require.True(t, denied)
-	require.Contains(t, detail, "not Gram-hosted")
+	require.Contains(t, detail, "not Speakeasy-hosted")
 }
 
 func TestEnforceShadowMCPToolAccess_IdentityScopedBypassGrantAllowsIdentityOnlyTarget(t *testing.T) {
@@ -253,7 +253,7 @@ func TestEnforceShadowMCPToolAccess_NonGramURLBlocked(t *testing.T) {
 	)
 
 	require.True(t, denied)
-	require.Contains(t, detail, "not Gram-hosted")
+	require.Contains(t, detail, "not Speakeasy-hosted")
 }
 
 func TestEnforceShadowMCPToolAccess_NoURLServerBlocked(t *testing.T) {
@@ -275,7 +275,7 @@ func TestEnforceShadowMCPToolAccess_NoURLServerBlocked(t *testing.T) {
 	)
 
 	require.True(t, denied)
-	require.Contains(t, detail, "not Gram-hosted")
+	require.Contains(t, detail, "not Speakeasy-hosted")
 }
 
 // blockAllTestPolicy fabricates the block_all policy shape the enforcement

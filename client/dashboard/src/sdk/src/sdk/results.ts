@@ -7,12 +7,14 @@ import { riskResultsList } from "../funcs/riskResultsList.js";
 import { riskResultsListDismissed } from "../funcs/riskResultsListDismissed.js";
 import { riskResultsListForAgent } from "../funcs/riskResultsListForAgent.js";
 import { riskResultsMarkFalsePositive } from "../funcs/riskResultsMarkFalsePositive.js";
+import { riskResultsRevealPayload } from "../funcs/riskResultsRevealPayload.js";
 import { riskResultsUnmarkFalsePositive } from "../funcs/riskResultsUnmarkFalsePositive.js";
 import { riskResultsUnmask } from "../funcs/riskResultsUnmask.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListRiskResultsByChatResult } from "../models/components/listriskresultsbychatresult.js";
 import { ListRiskResultsForAgentResult } from "../models/components/listriskresultsforagentresult.js";
 import { ListRiskResultsResult } from "../models/components/listriskresultsresult.js";
+import { RiskRevealPayloadResult } from "../models/components/riskrevealpayloadresult.js";
 import { RiskUnmaskResultResult } from "../models/components/riskunmaskresultresult.js";
 import {
   ListDismissedRiskResultsRequest,
@@ -34,6 +36,10 @@ import {
   MarkRiskResultsFalsePositiveRequest,
   MarkRiskResultsFalsePositiveSecurity,
 } from "../models/operations/markriskresultsfalsepositive.js";
+import {
+  RevealRiskResultPayloadRequest,
+  RevealRiskResultPayloadSecurity,
+} from "../models/operations/revealriskresultpayload.js";
 import {
   UnmarkRiskResultsFalsePositiveRequest,
   UnmarkRiskResultsFalsePositiveSecurity,
@@ -141,6 +147,25 @@ export class Results extends ClientSDK {
   }
 
   /**
+   * revealRiskResultPayload risk
+   *
+   * @remarks
+   * Return the full scanned payload of the MCP tool call phase a risk result was raised on, so its findings can be shown in context. Positions of every finding with the same execution_id and phase index into the returned payload. Requires an unrestricted chat:read grant. Every successful reveal is audited.
+   */
+  async revealPayload(
+    request: RevealRiskResultPayloadRequest,
+    security?: RevealRiskResultPayloadSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RiskRevealPayloadResult> {
+    return unwrapAsync(riskResultsRevealPayload(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * unmarkRiskResultsFalsePositive risk
    *
    * @remarks
@@ -163,7 +188,7 @@ export class Results extends ClientSDK {
    * unmaskRiskResult risk
    *
    * @remarks
-   * Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
+   * Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.
    */
   async unmask(
     request: UnmaskRiskResultRequest,

@@ -349,7 +349,7 @@ func (s *Store) loadForOrgAndProviderRow(ctx context.Context, orgID string, prov
 	return cfg, &row, nil
 }
 
-func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, externalOrganizationID *string, billingMode *string, resetPollWatermarkAt *time.Time) (UpsertResult, error) {
+func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, externalOrganizationID *string, billingMode *string, resetPollWatermarkAt *time.Time, rejections []ScheduleRejection) (UpsertResult, error) {
 	provider, err := normalizeProvider(provider)
 	if err != nil {
 		return UpsertResult{}, err
@@ -498,6 +498,43 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			}); err != nil {
 				return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to reset ai integration sync watermark")
 			}
+		}
+	}
+
+	// Pause the schedules the provider refused at save time. This runs after
+	// the pause clear and watermark reset above, which would wipe it, and
+	// inside the same transaction: candidate selection and startUsagePoll
+	// both skip an auto-paused schedule, so committing the pause with the
+	// config leaves no window where the schedule is due but unmarked. It
+	// lands the state AutoPauseAfterRejectedPolls rejections would, minus the
+	// polls.
+	rejectedAt := time.Now().UTC()
+	for _, rejection := range rejections {
+		var errStr string
+		if rejection.Err != nil {
+			errStr = rejection.Err.Error()
+		}
+		nextPollAfter := conv.ToPGTimestamptz(rejectedAt.Add(pollIntervalForSchedule(rejection.Schedule)))
+		affected, err := q.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
+			AiIntegrationConfigID: row.ID,
+			Schedule:              rejection.Schedule,
+			NextPollAfter:         nextPollAfter,
+			LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
+			PauseAfter:            1,
+		})
+		if err != nil {
+			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to record rejected ai integration credentials")
+		}
+		// EnsureSync just created every schedule this provider runs, so a
+		// missing row means the rejection names one it does not.
+		if affected == 0 {
+			return UpsertResult{}, oops.E(oops.CodeUnexpected, nil, "failed to record rejected ai integration credentials: no %s schedule", rejection.Schedule)
+		}
+		if rejection.Schedule == providerSched.schedule {
+			syncRow.NextPollAfter = nextPollAfter
+			syncRow.LastPollError = conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage))
+			syncRow.LastPollFailedAt = conv.ToPGTimestamptz(rejectedAt)
+			syncRow.ConsecutiveFailures++
 		}
 	}
 
@@ -916,14 +953,21 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 		anchor = now
 	}
 
-	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
+	rows, err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
 		Schedule:              schedule,
 		NextPollAfter:         conv.ToPGTimestamptz(anchor.Add(retryDelay)),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 		PauseAfter:            pauseAfter,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("record ai integration sync schedule poll failure: %w", err)
+	}
+	// No row means the config or schedule went away under the poll: the
+	// failure has nowhere durable to live, so callers must not call it
+	// recorded and drop it.
+	if rows == 0 {
+		return fmt.Errorf("record ai integration sync schedule poll failure: no %s schedule for config %s", schedule, configID)
 	}
 	return nil
 }

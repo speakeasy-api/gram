@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -58,8 +60,8 @@ func seedSpoolEntryWithConfig(t *testing.T, serverURL string, age time.Duration,
 func drainEnv(t *testing.T) {
 	t.Helper()
 	setSpoolStateHome(t)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
-	t.Setenv("GRAM_HOOKS_API_KEY", "drain-key")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "drain-key")
 }
 
 // TestDrainReplaysOldestFirstWithStoredKeys pins the replay contract: entries
@@ -88,6 +90,24 @@ func TestDrainReplaysOldestFirstWithStoredKeys(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, marker, "replayed traffic must be distinguishable from live traffic")
 	}
+}
+
+// TestDrainWritesDebugLogFromEnv pins that the drain reports itself: it runs
+// as its own process, so the hook command's --debug-log never reaches it and
+// SPEAKEASY_AI_HOOKS_DEBUG_LOG is the only channel a support session can use.
+func TestDrainWritesDebugLogFromEnv(t *testing.T) {
+	drainEnv(t)
+	path := filepath.Join(t.TempDir(), "hooks-debug.log")
+	t.Setenv("SPEAKEASY_AI_HOOKS_DEBUG_LOG", path)
+	fs := newFakeServer(t, nil)
+	seedSpoolEntry(t, fs.URL, time.Hour, "sess-debug")
+
+	s := Drain(t.Context())
+	require.Equal(t, DrainSummary{Replayed: 1, Dropped: 0, Expired: 0, Skipped: 0, Remaining: 0, Aborted: false}, s)
+
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(b), "drain: replayed=1 dropped=0 expired=0 skipped=0 remaining=0 aborted=false")
 }
 
 func TestDrainReplaysSkillContent(t *testing.T) {
@@ -148,16 +168,18 @@ func TestDrainReplaysSkillContent(t *testing.T) {
 // TestDrainAbortsWhenServerStillDown pins backpressure: the first unsent
 // exchange stops the run and the backlog survives untouched.
 func TestDrainAbortsWhenServerStillDown(t *testing.T) {
-	drainEnv(t)
-	url := closedPortURL(t)
-	seedSpoolEntry(t, url, 2*time.Hour, "sess-1")
-	seedSpoolEntry(t, url, time.Hour, "sess-2")
+	synctest.Test(t, func(t *testing.T) {
+		drainEnv(t)
+		url := refusedPipeURL(t)
+		seedSpoolEntry(t, url, 2*time.Hour, "sess-1")
+		seedSpoolEntry(t, url, time.Hour, "sess-2")
 
-	s := Drain(t.Context())
-	require.True(t, s.Aborted)
-	require.Zero(t, s.Replayed)
-	require.Equal(t, 2, s.Remaining, "an aborted drain must keep the backlog")
-	require.Len(t, spoolFiles(t), 2)
+		s := Drain(t.Context())
+		require.True(t, s.Aborted)
+		require.Zero(t, s.Replayed)
+		require.Equal(t, 2, s.Remaining, "an aborted drain must keep the backlog")
+		require.Len(t, spoolFiles(t), 2)
+	})
 }
 
 // TestDrainDropsDefinitiveRejections: a 4xx answer means a replay would fail
@@ -241,7 +263,8 @@ func TestDrainSkipsUnparseableEntries(t *testing.T) {
 // the run was incomplete.
 func TestDrainSkipsWithoutCredentials(t *testing.T) {
 	setSpoolStateHome(t)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	fs := newFakeServer(t, nil)
 	seedSpoolEntry(t, fs.URL, time.Hour, "sess-1")
@@ -259,7 +282,8 @@ func TestDrainSkipsWithoutCredentials(t *testing.T) {
 // fallback a live send has.
 func TestDrainUsesConfigOrgKeyFallback(t *testing.T) {
 	setSpoolStateHome(t)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	fs := newFakeServer(t, nil)
 
@@ -273,6 +297,130 @@ func TestDrainUsesConfigOrgKeyFallback(t *testing.T) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	require.Equal(t, "org-key-1", fs.headers[0].Get("Gram-Key"))
+}
+
+// TestDrainAgentKeyOutranksDiskCache: replayed events from an agent's plugin
+// keep the agent's key, as a live send does, even with a person's sign-in
+// cached for the same deployment.
+func TestDrainAgentKeyOutranksDiskCache(t *testing.T) {
+	setSpoolStateHome(t)
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "")
+	t.Setenv("GRAM_HOOKS_ORG_KEY", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_SERVER_URL", "")
+	t.Setenv("GRAM_HOOKS_SERVER_URL", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_ID", "")
+	t.Setenv("GRAM_HOOKS_ORG_ID", "")
+	fs := newFakeServer(t, nil)
+
+	require.NoError(t, os.WriteFile(authFile, []byte(
+		"server_url="+fs.URL+"\napi_key=cached-personal-key\nproject=default\nemail=\norg=\n"), 0o600))
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"`+fs.URL+`","project":"default","hooks_api_key":"agent-key","agent_key":true}`), 0o600))
+	seedSpoolEntryWithConfig(t, fs.URL, time.Hour, "sess-1", cfgPath)
+
+	s := Drain(t.Context())
+	require.Equal(t, 1, s.Replayed)
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	require.Equal(t, "agent-key", fs.headers[0].Get("Gram-Key"))
+}
+
+func TestDrainOrgKeyOverrideReplacesAgentKey(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		cached      bool
+		rejectCache bool
+		wantKey     string
+	}{
+		{name: "no cached login", wantKey: "env-org-key"},
+		{name: "cached login wins", cached: true, wantKey: "cached-personal-key"},
+		{name: "rejected cache falls back", cached: true, rejectCache: true, wantKey: "env-org-key"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			setSpoolStateHome(t)
+			authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+			t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+			t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+			t.Setenv("GRAM_HOOKS_API_KEY", "")
+			t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "env-org-key")
+			var attempts atomic.Int32
+			fs := newFakeServer(t, func(_ components.IngestRequestBody) (int, decision) {
+				if attempt := attempts.Add(1); tt.rejectCache && attempt == 1 {
+					return http.StatusUnauthorized, decision{}
+				}
+				return http.StatusOK, decision{}
+			})
+			t.Setenv("SPEAKEASY_AI_HOOKS_SERVER_URL", fs.URL)
+			if tt.cached {
+				require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=cached-personal-key\nproject=default\n"), 0o600))
+			}
+			cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+			require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"`+fs.URL+`","hooks_api_key":"agent-key","agent_key":true}`), 0o600))
+			seedSpoolEntryWithConfig(t, fs.URL, time.Hour, "session-example", cfgPath)
+
+			s := Drain(t.Context())
+			require.Equal(t, 1, s.Replayed)
+			fs.mu.Lock()
+			defer fs.mu.Unlock()
+			require.Equal(t, tt.wantKey, fs.headers[len(fs.headers)-1].Get("Gram-Key"))
+		})
+	}
+}
+
+func TestDrainEnvironmentKeysStayWithinDeployment(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		url     string
+		org     string
+		wantKey string
+	}{
+		{name: "matching deployment", url: "https://example.test/", org: "org-example", wantKey: "env-api-key"},
+		{name: "different server", url: "https://other.example.test", org: "org-example", wantKey: "agent-key"},
+		{name: "different org", url: "https://example.test", org: "org-other", wantKey: "agent-key"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+			t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "env-api-key")
+			t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "env-org-key")
+			t.Setenv("SPEAKEASY_AI_HOOKS_SERVER_URL", tt.url)
+			t.Setenv("SPEAKEASY_AI_HOOKS_ORG_ID", tt.org)
+			cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+			require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://example.test","org":"org-example","hooks_api_key":"agent-key","agent_key":true}`), 0o600))
+			entry := spoolEntry{ServerURL: "https://example.test", OrgID: "org-example", ConfigPath: cfgPath}
+			auth := resolveDrainAuth(entry, drainAuthKey(entry), make(map[string]drainAuth))
+			require.True(t, auth.ok)
+			require.Equal(t, tt.wantKey, auth.c.APIKey)
+			if tt.wantKey == "agent-key" {
+				require.Equal(t, "agent-key", auth.orgKey, "the fallback must also stay within its deployment")
+			}
+		})
+	}
+}
+
+// TestDrainOrgKeyNeedsNamedDeployment: without SPEAKEASY_AI_HOOKS_SERVER_URL
+// the drain cannot tell which deployment the org key belongs to, so it keeps
+// the entry's baked key.
+func TestDrainOrgKeyNeedsNamedDeployment(t *testing.T) {
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "env-org-key")
+	t.Setenv("SPEAKEASY_AI_HOOKS_SERVER_URL", "")
+	t.Setenv("GRAM_HOOKS_SERVER_URL", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_ID", "")
+	t.Setenv("GRAM_HOOKS_ORG_ID", "")
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://other.example.test","org":"org-other","hooks_api_key":"agent-key","agent_key":true}`), 0o600))
+	entry := spoolEntry{ServerURL: "https://other.example.test", OrgID: "org-other", ConfigPath: cfgPath}
+
+	auth := resolveDrainAuth(entry, drainAuthKey(entry), make(map[string]drainAuth))
+	require.True(t, auth.ok)
+	require.Equal(t, "agent-key", auth.c.APIKey)
+	require.Equal(t, "agent-key", auth.orgKey)
 }
 
 // TestMaybeSpawnDrainAfterRecovery drives the real provider path: sends fail
@@ -355,7 +503,8 @@ func TestDrainAuthRejectionPreservesBacklog(t *testing.T) {
 func TestDrainAuthenticatesFromDiskCache(t *testing.T) {
 	setSpoolStateHome(t)
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	fs := newFakeServer(t, nil)
 
@@ -376,9 +525,9 @@ func TestDrainAuthenticatesFromDiskCache(t *testing.T) {
 // deployment's server — the entry resolves from its config org key instead.
 func TestDrainEnvKeyPinnedToItsDeployment(t *testing.T) {
 	setSpoolStateHome(t)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
-	t.Setenv("GRAM_HOOKS_API_KEY", "env-key-for-dev")
-	t.Setenv("GRAM_HOOKS_SERVER_URL", "http://127.0.0.1:1")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "env-key-for-dev")
+	t.Setenv("SPEAKEASY_AI_HOOKS_SERVER_URL", "http://127.0.0.1:1")
 	fs := newFakeServer(t, nil)
 
 	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
@@ -396,19 +545,21 @@ func TestDrainEnvKeyPinnedToItsDeployment(t *testing.T) {
 // TestRunDrainAbortExitsNonZero: unreachable mid-run is the one retryable
 // outcome, and the exit code says so.
 func TestRunDrainAbortExitsNonZero(t *testing.T) {
-	drainEnv(t)
-	seedSpoolEntry(t, closedPortURL(t), time.Hour, "sess-1")
-	var out bytes.Buffer
-	require.Equal(t, 1, RunDrain(t.Context(), &out))
-	require.Contains(t, out.String(), "aborted=true")
+	synctest.Test(t, func(t *testing.T) {
+		drainEnv(t)
+		seedSpoolEntry(t, refusedPipeURL(t), time.Hour, "sess-1")
+		var out bytes.Buffer
+		require.Equal(t, 1, RunDrain(t.Context(), &out))
+		require.Contains(t, out.String(), "aborted=true")
+	})
 }
 
-// TestDrainPinsEntryProject: a GRAM_HOOKS_PROJECT_SLUG inherited from the
+// TestDrainPinsEntryProject: a SPEAKEASY_AI_HOOKS_PROJECT_SLUG inherited from the
 // spawning session must not reroute another project's entries — the stored
 // deployment identity is the routing truth.
 func TestDrainPinsEntryProject(t *testing.T) {
 	drainEnv(t)
-	t.Setenv("GRAM_HOOKS_PROJECT_SLUG", "someone-elses-project")
+	t.Setenv("SPEAKEASY_AI_HOOKS_PROJECT_SLUG", "someone-elses-project")
 	fs := newFakeServer(t, nil)
 	seedSpoolEntry(t, fs.URL, time.Hour, "sess-1")
 

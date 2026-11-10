@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { queryKeyInstance } from "@gram/client/react-query/instance.js";
 import { queryKeyListTools } from "@gram/client/react-query/listTools.js";
 import { queryKeyToolset } from "@gram/client/react-query/toolset.js";

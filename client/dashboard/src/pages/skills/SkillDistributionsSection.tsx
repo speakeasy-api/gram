@@ -12,12 +12,12 @@ import {
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge } from "@/components/ui/Badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
+import { SkillDistributionVersionBadge } from "./skill-badges";
 
 /**
  * Lists the plugins an individual skill is distributed to and lets writers
@@ -50,7 +50,7 @@ export function SkillDistributionsSection({
   const handleUndistribute = async (
     distribution: PluginSkillDistribution,
   ): Promise<void> => {
-    if (!canWritePlugin) return;
+    if (!canWritePlugin || distribution.channel !== "plugin") return;
     try {
       await undistribute.mutateAsync({
         request: {
@@ -110,9 +110,17 @@ export function SkillDistributionsSection({
                 >
                   Distributed <HumanizeDateTime date={distribution.createdAt} />
                 </Text>
+                {distribution.channel !== "plugin" && (
+                  <Text small muted className="block text-xs">
+                    Refresh the page before changing this unsupported
+                    distribution channel.
+                  </Text>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <VersionTrackingBadge distribution={distribution} />
+                <SkillDistributionVersionBadge
+                  pinnedVersionId={distribution.pinnedVersionId}
+                />
                 <RequirePluginWrite>
                   <Button
                     type="button"
@@ -121,7 +129,10 @@ export function SkillDistributionsSection({
                     tooltip="Remove from plugin"
                     aria-label={`Remove from ${distribution.pluginName}`}
                     className="hover:text-destructive"
-                    disabled={undistribute.isPending}
+                    disabled={
+                      undistribute.isPending ||
+                      distribution.channel !== "plugin"
+                    }
                     onClick={() => void handleUndistribute(distribution)}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -147,19 +158,4 @@ export function SkillDistributionsSection({
       )}
     </div>
   );
-}
-
-function VersionTrackingBadge({
-  distribution,
-}: {
-  distribution: PluginSkillDistribution;
-}): JSX.Element {
-  if (distribution.pinnedVersionId) {
-    return (
-      <Badge variant="neutral" title={distribution.pinnedVersionId}>
-        Pinned
-      </Badge>
-    );
-  }
-  return <Badge variant="information">Latest</Badge>;
 }

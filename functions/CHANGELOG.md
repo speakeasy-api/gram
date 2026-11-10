@@ -1,5 +1,17 @@
 # function-runners
 
+## 0.4.2
+
+### Patch Changes
+
+- 5668a8c: Gram Functions tool calls and resource reads no longer fail with "argument list too long" when the request is larger than 128 KiB. The runner hands the request to the function on stdin instead of as a command-line argument, which Linux caps at 128 KiB per argument, so large inputs such as base64-encoded media now reach the function. Request bodies over 4 MiB are rejected with a 413.
+
+## 0.4.1
+
+### Patch Changes
+
+- eb3a5f0: Report a failed Gram Function tool call tersely. A JavaScript stack trace is no longer serialized into the failure response — it names minified frames inside the deployed bundle, which the tool's caller cannot act on — and is written to stderr instead, where it reaches the function's own logs. A failure caused by input validation now names each offending input on one line rather than repeating Zod's issue list as a pretty-printed JSON dump.
+
 ## 0.4.0
 
 ### Minor Changes

@@ -33,7 +33,7 @@ const (
 	stateReauthNeeded
 )
 
-// Relay translates coding-agent hook events into Gram ingest requests and
+// Relay translates coding-agent hook events into Speakeasy ingest requests and
 // enforces the server's verdict.
 type Relay struct {
 	cfg    Config
@@ -44,15 +44,20 @@ type Relay struct {
 	// that triggered the backfill in this same process. It was the turn's
 	// only prompt-policy check, so the deny gates that event instead.
 	backfillDeny string
+
+	// openclawPrompts records the OpenClaw runs whose user prompt was already
+	// reported, so that before_agent_run and llm_input report it once per run.
+	openclawPrompts *openclawPromptRuns
 }
 
 // NewRelay builds a Relay from the resolved config.
 func NewRelay(cfg Config) *Relay {
 	return &Relay{
-		cfg:          cfg,
-		client:       newClient(cfg.ServerURL),
-		login:        newLoginFlow(cfg),
-		backfillDeny: "",
+		cfg:             cfg,
+		client:          newClient(cfg.ServerURL),
+		login:           newLoginFlow(cfg),
+		backfillDeny:    "",
+		openclawPrompts: newOpenclawPromptRuns(),
 	}
 }
 
@@ -78,30 +83,36 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 		Timeout:         0,
 	}))
 
-	runner.OnPromptSubmitted(r.onPrompt)
-	runner.OnToolPre(r.onToolPre)
-	runner.OnPermission(r.onPermission)
-	runner.OnToolPost(r.onToolPost)
-	runner.OnToolError(r.onToolPost)
+	// Inside Claude's Cowork VM the relay only ships the session transcript
+	// from Stop (onStop); every other handler answers with its neutral
+	// decision and sends nothing. See coworkTranscriptMode.
+	runner.OnPromptSubmitted(outsideCowork(r.onPrompt, agenthooks.AcceptPrompt))
+	runner.OnToolPre(outsideCowork(r.onToolPre, agenthooks.NoDecision))
+	runner.OnPermission(outsideCowork(r.onPermission, agenthooks.NoDecision))
+	runner.OnToolPost(outsideCowork(r.onToolPost, agenthooks.Observed))
+	runner.OnToolError(outsideCowork(r.onToolPost, agenthooks.Observed))
 	runner.OnStop(r.onStop)
 	runner.OnSubagentStop(r.onStop)
-	runner.OnSessionStart(r.onSessionStart)
-	runner.OnMCPInventory(r.onMCPInventory)
-	runner.OnSessionEnd(func(ctx context.Context, e *agenthooks.SessionEndEvent) error {
+	runner.OnSessionStart(outsideCowork(r.onSessionStart, agenthooks.ContinueSession))
+	runner.OnMCPInventory(observeOutsideCowork(r.onMCPInventory))
+	runner.OnSessionEnd(observeOutsideCowork(func(ctx context.Context, e *agenthooks.SessionEndEvent) error {
 		return r.onObserve(ctx, e)
-	})
-	runner.OnNotification(func(ctx context.Context, e *agenthooks.NotificationEvent) error {
+	}))
+	runner.OnNotification(observeOutsideCowork(func(ctx context.Context, e *agenthooks.NotificationEvent) error {
 		return r.onObserve(ctx, e)
-	})
-	runner.OnOther("ConfigChange", func(ctx context.Context, e *agenthooks.Event) error {
+	}))
+	runner.OnOther("ConfigChange", observeOutsideCowork(func(ctx context.Context, e *agenthooks.Event) error {
 		return r.onObserve(ctx, e)
-	})
+	}))
 	// Cursor is the only provider whose rendered config subscribes
 	// model-response natives (afterAgentResponse/afterAgentThought); they carry
 	// the assistant message text and token usage.
 	runner.OnModelResponse(func(ctx context.Context, e *agenthooks.ModelEvent) error {
 		return r.onObserve(ctx, e)
 	})
+	// OpenClaw's Codex app-server harness fires no before_agent_run, so the
+	// relay reports the user prompt of those runs from llm_input.
+	runner.OnModelRequest(r.onModelRequest)
 
 	return runner
 }
@@ -122,7 +133,9 @@ const brokenAuthMessage = "Speakeasy hooks are configured for this workspace but
 
 const reauthNeededMessage = "Speakeasy hooks need to reconnect. Run the Speakeasy hooks login command to reconnect."
 
-const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in GRAM_HOOKS_API_KEY. Update or unset GRAM_HOOKS_API_KEY, then run the Speakeasy hooks login command to reconnect."
+const tokenRejectedMessage = "Speakeasy refused this device's hooks: the device may have been revoked, have no hooks project configured, or not be allowed to send hooks to that project. Contact your Speakeasy administrator."
+
+const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in SPEAKEASY_AI_HOOKS_API_KEY (or the deprecated GRAM_HOOKS_API_KEY). Update or unset it, then run the Speakeasy hooks login command to reconnect."
 
 // deliver relays one event to the server, returning the result and the
 // credential posture. It performs no work when the machine holds no credential
@@ -136,9 +149,9 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		r.debugf("event=%s config-error path=%s err=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ConfigPath, r.cfg.ConfigError)
 		if authEstablished() {
 			msg := fmt.Sprintf("Speakeasy hooks cannot read the plugin config at %q. Reinstall the Speakeasy hooks plugin.", r.cfg.ConfigPath)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateBroken
 		}
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateNeverAuthed
 	}
 
 	// Refuse to send credentials over plaintext HTTP before resolving them,
@@ -147,24 +160,43 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	if insecureServerURL(r.cfg.ServerURL) {
 		r.debugf("event=%s insecure-server-url server=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ServerURL)
 		if authEstablished() {
-			msg := fmt.Sprintf("Speakeasy hooks refused insecure Gram server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateBroken
+			msg := fmt.Sprintf("Speakeasy hooks refused insecure Speakeasy server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateBroken
 		}
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateNeverAuthed
 	}
 
 	c, ok := resolveAuth(r.cfg)
+	// A box refused since its last accepted token must not trust a cached
+	// bearer: ask for a fresh one, and stay closed unless the server accepts
+	// it. Otherwise a later outage would let a revoked box fail open.
+	rejectedBox := ok && c.Source == credToken && tokenRejected()
+	if rejectedBox {
+		argv, _ := tokenCommandArgv()
+		c, ok = resolveTokenAuth(r.cfg, argv, true)
+	}
+	if !ok && tokenCommandConfigured() {
+		if tokenRejected() {
+			// This box was definitively refused and has not been issued a token
+			// since: fail closed, and drop the event rather than spool it.
+			r.debugf("event=%s token-rejected", agenthooks.EventOf(typed).NativeName)
+			return tokenRejectedResult(), stateBroken
+		}
+		// No token is a missing verdict, not a missing credential: treat it like an
+		// outage (spool observe-only events, gate by the fail-open posture).
+		return r.tokenUnavailable(typed), stateReady
+	}
 	if !ok {
 		if reauthNeeded() {
 			r.debugf("event=%s no-creds state=reauth-needed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateReauthNeeded
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateReauthNeeded
 		}
 		if authEstablished() {
 			r.debugf("event=%s no-creds state=broken authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateBroken
 		}
 		r.debugf("event=%s no-creds state=never-authed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateNeverAuthed
 	}
 
 	payload := buildEnvelope(typed, hostname())
@@ -175,7 +207,8 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		}
 	}
 	base := agenthooks.EventOf(typed)
-	ctx = withHarnessInfo(ctx, base)
+	ctx = withHarnessInfo(ctx, base, r.cfg.InstallRoute)
+	ctx = withDailySnapshot(ctx, r.cfg)
 	promptAttachmentAdvance := promptAttachmentHighWaterAdvance{}
 	if entries, advance, err := collectClaudePromptAttachments(base); err == nil {
 		attachPromptAttachments(&payload, entries)
@@ -195,7 +228,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	res := r.send(ctx, c, payload, idemKey)
 	finalCreds := c
 	state := stateReady
-	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
+	r.debugf("event=%s type=%s server=%s authfile=%s status=%d cause=%s denied=%t detail=%s", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.cause, res.decision.denied(), res.causeDetail)
 	if res.authRejected && c.Source == credEnv {
 		// The configured key is authoritative and a re-login can never replace
 		// it, so name it in the failure instead of pointing at the cache flow.
@@ -204,6 +237,24 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		} else {
 			res.decision.Message = envKeyRejectedMessage
 		}
+	}
+	if res.authRejected && c.Source == credToken {
+		// A rejected token gets one fresh token and one retry. There is no
+		// key to fall back to: a token box authenticates as itself or not at
+		// all, so a second rejection stays a definitive, fail-closed 4xx.
+		res, finalCreds = recoverTokenRejection(r.cfg, c, res, func(fresh creds) ingestResult {
+			return r.send(ctx, fresh, payload, idemKey)
+		})
+		r.debugf("event=%s auth-retry=token status=%d cause=%s denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.cause, res.decision.denied())
+	}
+	if c.Source == credToken && res.accepted() {
+		clearTokenRejected()
+	}
+	if rejectedBox && !res.accepted() {
+		// Still refused, or no verdict: a refused box neither fails open nor
+		// keeps the event for replay until a token is accepted again.
+		r.debugf("event=%s token-rejected status=%d", agenthooks.EventOf(typed).NativeName, res.statusCode)
+		return tokenRejectedResult(), stateBroken
 	}
 	if res.authRejected && c.Source == credCache && !disableLocalAuth() {
 		// A rejected personal cache is forgotten. When the published plugin has
@@ -227,14 +278,14 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 			finalCreds = orgCreds
 			res = r.send(ctx, orgCreds, payload, idemKey)
 			state = stateReady
-			r.debugf("event=%s auth-retry=org status=%d denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.decision.denied())
+			r.debugf("event=%s auth-retry=org status=%d cause=%s denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.cause, res.decision.denied())
 		}
 	}
 	// The exchange is final: an unsent payload (unreachable/5xx/429/408) is
 	// kept for replay, a healthy exchange flushes any backlog, and a
 	// definitive 4xx does neither — the server answered, and would reject a
 	// replay identically.
-	r.finishExchange(idemKey, payload, res)
+	r.finishExchange(idemKey, payload, res, tokenProjectOf(finalCreds))
 	if res.accepted() || res.unsent() {
 		commitPromptAttachmentHighWater(promptAttachmentAdvance)
 	}
@@ -242,6 +293,35 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		r.debugf("skill upload: %v", err)
 	}
 	return res, state
+}
+
+// tokenUnavailable records an event the token command could not authenticate.
+// The payload is spooled exactly as an unreachable send would be, and the
+// drain replays it once the device agent produces a token again.
+func (r *Relay) tokenUnavailable(typed any) ingestResult {
+	payload := buildEnvelope(typed, hostname())
+	res := ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeCredential, causeDetail: "token command produced no usable token"}
+	r.debugf("event=%s token-unavailable", agenthooks.EventOf(typed).NativeName)
+	// Bind the entry to the project the box last authenticated for, so a
+	// replay after the box's configured hooks project changes cannot land in
+	// another project. An entry with no valid project is never replayed: the
+	// drain drops it.
+	st, _ := readTokenBox()
+	r.finishExchange(newIdempotencyToken(), payload, res, st.Project)
+	return res
+}
+
+func tokenRejectedResult() ingestResult {
+	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: tokenRejectedMessage}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}
+}
+
+// tokenProjectOf is the configured hooks project a token credential is bound to, or
+// "" for key credentials.
+func tokenProjectOf(c creds) string {
+	if c.Source == credToken {
+		return c.Project
+	}
+	return ""
 }
 
 // send posts one envelope through the ingest client and mirrors any
@@ -257,15 +337,16 @@ func (r *Relay) send(ctx context.Context, c creds, payload components.IngestRequ
 }
 
 // evaluate delivers a gating event and resolves the block decision under the
-// ratchet and the org's fail-open posture, bounded by gateSendBudget so the
+// ratchet and the org's fail-open posture, bounded by gateBudget so the
 // verdict beats the provider-side gate deadline.
 func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(ctx, gateSendBudget)
+	budget := gateBudget(ctx)
+	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	v := r.gateVerdict(ctx, typed)
-	r.debugf("gate event=%s elapsed_ms=%d block=%v",
-		agenthooks.EventOf(typed).NativeName, time.Since(start).Milliseconds(), v.block)
+	r.debugf("gate event=%s budget_ms=%d elapsed_ms=%d block=%v",
+		agenthooks.EventOf(typed).NativeName, budget.Milliseconds(), time.Since(start).Milliseconds(), v.block)
 	return v
 }
 
@@ -303,7 +384,7 @@ func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
 			// JSON, a skewed server) is not an allow.
 			msg := strings.TrimSpace(res.decision.Message)
 			if msg == "" {
-				msg = "Speakeasy hooks could not read the server's verdict."
+				msg = causeMessage(causeUnreadable)
 			}
 			return verdict{block: true, message: msg, nudge: false, blockEffect: nil}
 		}
@@ -319,13 +400,14 @@ func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
 	// key lands here as stateReady, and honoring fail-open for it would turn
 	// a broken credential into an enforcement bypass.
 	if (res.statusCode == 0 || res.statusCode >= 500) && failOpenAllowed(r.cfg) {
-		r.debugf("event=%s fail-open engaged status=%d", agenthooks.EventOf(typed).NativeName, res.statusCode)
+		r.debugf("event=%s fail-open engaged status=%d cause=%s", agenthooks.EventOf(typed).NativeName, res.statusCode, res.cause)
 		return verdict{block: false, message: "", nudge: false, blockEffect: nil}
 	}
 	return verdict{block: true, message: httpMessage(res), nudge: false, blockEffect: nil}
 }
 
 func (r *Relay) onPrompt(ctx context.Context, e *agenthooks.PromptEvent) (agenthooks.PromptDecision, error) {
+	r.noteOpenclawPrompt(e)
 	v := r.evaluate(ctx, e)
 	if e.Backfilled {
 		if v.block {
@@ -340,9 +422,10 @@ func (r *Relay) onPrompt(ctx context.Context, e *agenthooks.PromptEvent) (agenth
 	// fails the prompt open on every provider: blocking each turn on a
 	// credential the machine does not hold would brick the session, and the
 	// turn's tool events stay gated regardless. Only Claude can carry the
-	// context note that routes the user to sign-in.
+	// context note that routes the user to sign-in. An agent's plugin skips
+	// it: a personal sign-in would record the agent's events under that person.
 	if v.nudge {
-		if e.Provider == agenthooks.ProviderClaudeCode {
+		if e.Provider == agenthooks.ProviderClaudeCode && !r.cfg.AgentKey {
 			if note := r.loginNudge(e.Session.ID); note != "" {
 				return agenthooks.AcceptPrompt().WithContext(note), nil
 			}
@@ -416,18 +499,45 @@ func cursorMCPEcho(base *agenthooks.Event, toolName string) bool {
 }
 
 func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks.StopDecision, error) {
+	if coworkTranscriptMode(&e.Event) {
+		r.shipTranscript(ctx, e)
+		return agenthooks.Finish(), nil
+	}
 	r.deliver(ctx, e)
 	return agenthooks.Finish(), nil
+}
+
+// outsideCowork runs a decision handler everywhere but Claude's Cowork VM,
+// where it answers with the neutral decision instead.
+func outsideCowork[E any, D any](h func(context.Context, E) (D, error), neutral func() D) func(context.Context, E) (D, error) {
+	return func(ctx context.Context, e E) (D, error) {
+		if coworkTranscriptMode(agenthooks.EventOf(e)) {
+			return neutral(), nil
+		}
+		return h(ctx, e)
+	}
+}
+
+// observeOutsideCowork runs an observe-only handler everywhere but Claude's
+// Cowork VM.
+func observeOutsideCowork[E any](h func(context.Context, E) error) func(context.Context, E) error {
+	return func(ctx context.Context, e E) error {
+		if coworkTranscriptMode(agenthooks.EventOf(e)) {
+			return nil
+		}
+		return h(ctx, e)
+	}
 }
 
 // onSessionStart runs the interactive sign-in preflight whenever the machine
 // holds no usable credential — never authenticated, key lost or rejected, or a
 // shared cache minted for a different server or org — then relays the
 // session.started telemetry. Viability guards and the attempt cooldown keep
-// the browser from nagging.
+// the browser from nagging. An agent's plugin never opens one: its key
+// outranks any cache a sign-in would write.
 func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEvent) (agenthooks.SessionStartDecision, error) {
 	_, cached := readCachedAuth(r.cfg)
-	if r.cfg.BrowserLogin && strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY")) == "" && !cached {
+	if r.cfg.BrowserLogin && !r.cfg.AgentKey && Env("HOOKS_API_KEY") == "" && !cached {
 		r.login.tryInteractive(ctx)
 	}
 	r.deliver(ctx, e)
@@ -493,10 +603,17 @@ func sanitizeMarker(s string) string {
 // debugf appends a diagnostic line to the configured debug log, if any. It is a
 // best-effort aid for local troubleshooting and never affects hook behavior.
 func (r *Relay) debugf(format string, args ...any) {
-	if r.cfg.DebugLog == "" {
+	debugLogf(r.cfg.DebugLog, format, args...)
+}
+
+// debugLogf appends one line to the debug log at path, doing nothing when no
+// path is configured. Every failure is swallowed — an unwritable log must not
+// change what the hook does.
+func debugLogf(path string, format string, args ...any) {
+	if path == "" {
 		return
 	}
-	f, err := os.OpenFile(r.cfg.DebugLog, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return
 	}

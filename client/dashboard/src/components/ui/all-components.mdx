@@ -125,10 +125,10 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 
 Every component in `components/ui`, on one page, so the design-system
 components internalised from Moonshine can be compared side by side with the
-ones Gram already had. Each entry is tagged with where it came from:
+ones Speakeasy already had. Each entry is tagged with where it came from:
 
 - **DS** — internalised from the Moonshine design system.
-- **Gram** — written for the dashboard.
+- **Speakeasy** — written for the dashboard.
 
 Flip the theme with the toolbar's theme switcher to check both palettes.
 
@@ -157,12 +157,12 @@ export const Row = ({ name, origin, children }) => {
 
 ## Typography
 
-<Row name="Heading" origin="Gram">
+<Row name="Heading" origin="Speakeasy">
   <Heading variant="h3">Heading three</Heading>
   <Heading variant="h5">Heading five</Heading>
 </Row>
 
-<Row name="Text" origin="Gram">
+<Row name="Text" origin="Speakeasy">
   <Text variant="body">Body copy</Text>
   <Text variant="small" muted>{"Small muted"}</Text>
   <Text mono>mono</Text>
@@ -204,23 +204,23 @@ export const Row = ({ name, origin, children }) => {
   <Button size="lg">lg</Button>
 </Row>
 
-<Row name="CopyButton" origin="Gram">
+<Row name="CopyButton" origin="Speakeasy">
   <CopyButton text="https://app.getgram.ai/mcp/petstore" tooltip="Copy URL" />
 </Row>
 
-<Row name="ToggleButton" origin="Gram">
+<Row name="ToggleButton" origin="Speakeasy">
   <ToggleButton active onClick={() => {}}>{"Day"}</ToggleButton>
   <ToggleButton active={false} onClick={() => {}}>{"Week"}</ToggleButton>
 </Row>
 
-<Row name="ToggleGroup" origin="Gram">
+<Row name="ToggleGroup" origin="Speakeasy">
   <ToggleGroup type="single" defaultValue="list">
     <ToggleGroupItem value="list">List</ToggleGroupItem>
     <ToggleGroupItem value="grid">Grid</ToggleGroupItem>
   </ToggleGroup>
 </Row>
 
-<Row name="SegmentedControl" origin="Gram">
+<Row name="SegmentedControl" origin="Speakeasy">
   <SegmentedControl
     value="tokens"
     onChange={() => {}}
@@ -231,11 +231,11 @@ export const Row = ({ name, origin, children }) => {
   />
 </Row>
 
-<Row name="ViewToggle" origin="Gram">
+<Row name="ViewToggle" origin="Speakeasy">
   <ViewToggle value="grid" onChange={() => {}} />
 </Row>
 
-<Row name="MoreActions" origin="Gram">
+<Row name="MoreActions" origin="Speakeasy">
   <MoreActions
     actions={[
       { label: "Rename", icon: "pencil", onClick: () => {} },
@@ -287,7 +287,7 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="Spinner" origin="Gram">
+<Row name="Spinner" origin="Speakeasy">
   <Spinner />
 </Row>
 
@@ -302,20 +302,20 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="InputGroup" origin="Gram">
+<Row name="InputGroup" origin="Speakeasy">
   <InputGroup className="w-72">
     <InputGroupAddon>https://</InputGroupAddon>
     <InputGroupInput placeholder="api.example.com" />
   </InputGroup>
 </Row>
 
-<Row name="TextArea" origin="Gram">
+<Row name="TextArea" origin="Speakeasy">
   <div className="w-72">
     <TextArea placeholder="Describe this toolset…" rows={3} />
   </div>
 </Row>
 
-<Row name="Field" origin="Gram">
+<Row name="Field" origin="Speakeasy">
   <FieldGroup className="w-72">
     <Field>
       <FieldLabel htmlFor="all-slug">Server slug</FieldLabel>
@@ -325,11 +325,11 @@ export const Row = ({ name, origin, children }) => {
   </FieldGroup>
 </Row>
 
-<Row name="Label" origin="Gram">
+<Row name="Label" origin="Speakeasy">
   <Label>Environment</Label>
 </Row>
 
-<Row name="Checkbox / RadioGroup / Switch" origin="Gram">
+<Row name="Checkbox / RadioGroup / Switch" origin="Speakeasy">
   <Checkbox defaultChecked />
   <RadioGroup defaultValue="a" className="flex gap-2">
     <RadioGroupItem value="a" />
@@ -338,13 +338,13 @@ export const Row = ({ name, origin, children }) => {
   <Switch checked onCheckedChange={() => {}} aria-label="Enabled" />
 </Row>
 
-<Row name="Slider" origin="Gram">
+<Row name="Slider" origin="Speakeasy">
   <div className="w-64">
     <Slider value={40} onChange={() => {}} />
   </div>
 </Row>
 
-<Row name="Select" origin="Gram">
+<Row name="Select" origin="Speakeasy">
   <Select defaultValue="prod">
     <SelectTrigger className="w-56">
       <SelectValue placeholder="Environment" />
@@ -356,7 +356,7 @@ export const Row = ({ name, origin, children }) => {
   </Select>
 </Row>
 
-<Row name="SearchBar" origin="Gram">
+<Row name="SearchBar" origin="Speakeasy">
   <div className="w-72">
     <SearchBar value="" onChange={() => {}} placeholder="Search tools" />
   </div>
@@ -370,7 +370,7 @@ export const Row = ({ name, origin, children }) => {
   </SimpleTooltip>
 </Row>
 
-<Row name="Popover" origin="Gram">
+<Row name="Popover" origin="Speakeasy">
   <Popover>
     <PopoverTrigger asChild>
       <Button variant="secondary">Filters</Button>
@@ -379,7 +379,7 @@ export const Row = ({ name, origin, children }) => {
   </Popover>
 </Row>
 
-<Row name="HoverCard" origin="Gram">
+<Row name="HoverCard" origin="Speakeasy">
   <HoverCard>
     <HoverCardTrigger className="underline underline-offset-4">
       petstore.listPets
@@ -400,7 +400,7 @@ export const Row = ({ name, origin, children }) => {
   </DropdownMenu>
 </Row>
 
-<Row name="ContextMenu" origin="Gram">
+<Row name="ContextMenu" origin="Speakeasy">
   <ContextMenu>
     <ContextMenuTrigger className="flex h-16 w-64 items-center justify-center border border-dashed text-sm">
       Right-click here
@@ -431,7 +431,7 @@ export const Row = ({ name, origin, children }) => {
   </Dialog>
 </Row>
 
-<Row name="Sheet" origin="Gram">
+<Row name="Sheet" origin="Speakeasy">
   <Sheet>
     <Button variant="secondary" disabled>
       See the Sheet story
@@ -462,7 +462,7 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="DotTable / DotRow" origin="Gram">
+<Row name="DotTable / DotRow" origin="Speakeasy">
   <div className="w-full">
     <DotTable headers={[{ label: "Server" }, { label: "Tools" }]}>
       <DotRow icon={<Icon name="server" className="size-5" />}>
@@ -482,7 +482,7 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="Card.Dashboard" origin="Gram">
+<Row name="Card.Dashboard" origin="Speakeasy">
   <div className="w-80">
     <Card.Dashboard title="Tool calls">
       <div className="text-3xl font-semibold tabular-nums">12,480</div>
@@ -490,7 +490,7 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="Accordion / Collapsible" origin="Gram">
+<Row name="Accordion / Collapsible" origin="Speakeasy">
   <Accordion type="single" collapsible className="w-72">
     <AccordionItem value="a">
       <AccordionTrigger>What is a toolset?</AccordionTrigger>
@@ -507,7 +507,7 @@ export const Row = ({ name, origin, children }) => {
   </Collapsible>
 </Row>
 
-<Row name="Tabs" origin="Gram">
+<Row name="Tabs" origin="Speakeasy">
   <Tabs defaultValue="tools" className="w-96">
     <TabsList>
       <TabsTrigger value="tools">Tools</TabsTrigger>
@@ -528,7 +528,7 @@ export const Row = ({ name, origin, children }) => {
   </Tabs>
 </Row>
 
-<Row name="Command" origin="Gram">
+<Row name="Command" origin="Speakeasy">
   <Command className="w-72 border">
     <CommandInput placeholder="Search projects…" />
     <CommandList>
@@ -546,7 +546,7 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="Icon / McpIcon / Avatar" origin="DS / Gram / Gram">
+<Row name="Icon / McpIcon / Avatar" origin="DS / Speakeasy">
   <Icon name="server" />
   <Icon name="settings" />
   <McpIcon size={24} />
@@ -591,7 +591,7 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="XYFade" origin="Gram">
+<Row name="XYFade" origin="Speakeasy">
   <XYFade className="h-24 w-72 overflow-auto border p-3">
     <div className="flex flex-col gap-1 text-sm">
       {Array.from({ length: 12 }).map((_, i) => (

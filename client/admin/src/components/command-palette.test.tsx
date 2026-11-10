@@ -1,5 +1,7 @@
+import { queryOptions } from "@tanstack/react-query";
 import { detectPlatform } from "@tanstack/react-hotkeys";
 import {
+  act,
   cleanup,
   fireEvent,
   screen,
@@ -20,7 +22,11 @@ import { renderRouteTree } from "@/test/harness";
 type Mounted = Awaited<ReturnType<typeof renderRouteTree>>;
 
 const mocks = vi.hoisted(() => ({
+  listCustomDomains: vi.fn(),
   getSession: vi.fn(),
+  listUsers: vi
+    .fn()
+    .mockResolvedValue({ users: [], total: 0, page: 1, limit: 50 }),
   listOrganizations: vi.fn(),
   getOrganization: vi.fn(),
   getOrganizationStats: vi.fn(),
@@ -33,11 +39,28 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   return {
     ...actual,
     getSession: mocks.getSession,
+    listUsers: mocks.listUsers,
     listOrganizations: mocks.listOrganizations,
     getOrganization: mocks.getOrganization,
     getOrganizationStats: mocks.getOrganizationStats,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
+  };
+});
+
+vi.mock("@/pages/organization/Onboarding", () => ({
+  OnboardingRoute: () => <h1>Tenant onboarding</h1>,
+}));
+
+vi.mock("@/lib/adminQueries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/adminQueries")>();
+  return {
+    ...actual,
+    adminListCustomDomainsQuery: (request = {}) =>
+      queryOptions({
+        queryKey: ["customDomains", request],
+        queryFn: () => mocks.listCustomDomains(request),
+      }),
   };
 });
 
@@ -95,6 +118,30 @@ function type(term: string): void {
   });
 }
 
+// Fake only the search interval, never route loading or Testing Library's
+// async polling. Restore the clock even when an immediate assertion fails.
+function withSearchClock(run: () => void): void {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    run();
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+function advanceSearchClock(ms: number): void {
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+}
+
+function typeAndDebounce(term: string): void {
+  withSearchClock(() => {
+    type(term);
+    advanceSearchClock(200);
+  });
+}
+
 // Every term the palette asked the server about, in order. The table on the
 // page behind it shares this mock and sends no term, so carrying one is what
 // tells the palette's requests apart from its.
@@ -121,17 +168,19 @@ async function renderWithSubmitCaptured(): Promise<void> {
 }
 
 beforeEach(() => {
+  mocks.listCustomDomains.mockReset();
+  mocks.listCustomDomains.mockResolvedValue({ customDomains: [] });
   submitted = [];
   connectedAtSubmit = [];
   router = undefined;
-  vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(
-    function (this: HTMLFormElement) {
-      // The helper detaches the form immediately after this returns, so the
-      // element is held rather than its attributes read later off the document.
-      submitted.push(this);
-      connectedAtSubmit.push(this.isConnected);
-    },
-  );
+  vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(function (
+    this: HTMLFormElement,
+  ) {
+    // The helper detaches the form immediately after this returns, so the
+    // element is held rather than its attributes read later off the document.
+    submitted.push(this);
+    connectedAtSubmit.push(this.isConnected);
+  });
   mocks.getSession.mockReset();
   mocks.getSession.mockResolvedValue({
     email: "ops@example.test",
@@ -195,6 +244,16 @@ afterEach(() => {
 });
 
 describe("CommandPalette", () => {
+  it("offers the MCP Registry page for staff promotion reviews", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("MCP Registry");
+    expect(
+      await within(palette()).findByRole("option", { name: /MCP Registry/ }),
+    ).toBeTruthy();
+  });
+
   it("opens on the shortcut and closes on the same press", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -214,7 +273,9 @@ describe("CommandPalette", () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Search organizations and pages" }),
+      screen.getByRole("button", {
+        name: "Search organizations, custom domains, and pages",
+      }),
     );
 
     expect(await screen.findByRole("dialog")).toBeTruthy();
@@ -227,7 +288,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
 
     const result = await within(palette()).findByRole("option", {
       name: /^Northwind Logistics/,
@@ -247,7 +308,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type(ORG.id);
+    typeAndDebounce(ORG.id);
 
     expect(
       await within(palette()).findByRole("option", {
@@ -264,7 +325,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("umbrella");
+    typeAndDebounce("umbrella");
 
     expect(
       await within(palette()).findByRole("option", {
@@ -280,12 +341,30 @@ describe("CommandPalette", () => {
     );
   });
 
+  it("asks for paying organizations ahead of free ones", async () => {
+    // The palette shows a handful of rows, so the order is decided where the
+    // cut is made: on the server, before the limit applies.
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    typeAndDebounce("umbrella");
+
+    await within(palette()).findByRole("option", {
+      name: /^Umbrella Freight/,
+    });
+
+    expect(mocks.listOrganizations).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "umbrella", sort: "account_tier" }),
+    );
+  });
+
   it("says a disabled record is disabled", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("umbrella");
+    typeAndDebounce("umbrella");
 
     const result = await within(palette()).findByRole("option", {
       name: /^Umbrella Freight/,
@@ -299,10 +378,19 @@ describe("CommandPalette", () => {
     pressTheShortcut();
     await screen.findByRole("dialog");
 
-    type("n");
-    type("no");
-    type("nor");
-    type("northwind");
+    withSearchClock(() => {
+      type("n");
+      advanceSearchClock(50);
+      type("no");
+      advanceSearchClock(50);
+      type("nor");
+      advanceSearchClock(50);
+      type("northwind");
+      advanceSearchClock(199);
+      expect(searchedFor()).toEqual([]);
+      advanceSearchClock(1);
+      expect(searchedFor()).toEqual(["northwind"]);
+    });
 
     await within(palette()).findByRole("option", {
       name: /^Northwind Logistics/,
@@ -318,7 +406,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
     await within(palette()).findByRole("option", {
       name: /^Northwind Logistics/,
     });
@@ -346,7 +434,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
     const handoff = await within(palette()).findByRole("option", {
       name: /Open in Dashboard for Northwind Logistics/,
     });
@@ -367,7 +455,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("umbrella");
+    typeAndDebounce("umbrella");
 
     await within(palette()).findByRole("option", { name: /^Umbrella Freight/ });
     expect(
@@ -386,7 +474,7 @@ describe("CommandPalette", () => {
     await screen.findByRole("dialog");
     // A letter all three records carry. Two of them are active and get a
     // handoff row; the disabled one is listed without one.
-    type("r");
+    typeAndDebounce("r");
 
     await within(palette()).findByRole("option", {
       name: /Open in Dashboard for Northwind Logistics/,
@@ -417,7 +505,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
     const handoff = await within(palette()).findByRole("option", {
       name: /Open in Dashboard for Northwind Logistics/,
     });
@@ -436,7 +524,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("nothing-by-this-name");
+    typeAndDebounce("nothing-by-this-name");
 
     // Its own words, not the one the group shows while a request is open: an
     // operator told "Searching..." forever reads a finished search as a hung
@@ -466,7 +554,7 @@ describe("CommandPalette", () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
 
     // Wait for the request to actually be in flight rather than for the
     // debounce: before it is issued the group is legitimately "Searching...",
@@ -495,18 +583,23 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
     await within(palette()).findByRole("option", {
       name: /^Northwind Logistics/,
     });
 
-    type("umbrella");
+    withSearchClock(() => {
+      type("umbrella");
 
-    // Gone in the same commit the term changed in, rather than when the request
-    // for the new one lands.
-    expect(
-      within(palette()).queryByRole("option", { name: /^Northwind Logistics/ }),
-    ).toBeNull();
+      // Gone in the same commit the term changed in, rather than when the request
+      // for the new one lands.
+      expect(
+        within(palette()).queryByRole("option", {
+          name: /^Northwind Logistics/,
+        }),
+      ).toBeNull();
+      advanceSearchClock(200);
+    });
 
     expect(
       await within(palette()).findByRole("option", {
@@ -515,7 +608,7 @@ describe("CommandPalette", () => {
     ).toBeTruthy();
   });
 
-  it("goes to a top-level page", async () => {
+  it.each(["Projects", "Users"])("goes to the %s page", async (destination) => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
     });
@@ -524,11 +617,13 @@ describe("CommandPalette", () => {
     await screen.findByRole("dialog");
 
     fireEvent.click(
-      within(palette()).getByRole("option", { name: "Projects" }),
+      within(palette()).getByRole("option", { name: destination }),
     );
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/projects");
+      expect(router.state.location.pathname).toBe(
+        `/${destination.toLowerCase()}`,
+      );
     });
   });
 
@@ -566,6 +661,31 @@ describe("CommandPalette", () => {
     });
   });
 
+  it.each([
+    { idOrSlug: ORG.id, keyword: "steps" },
+    { idOrSlug: ORG.slug, keyword: "template" },
+  ])(
+    "finds onboarding by $keyword and preserves $idOrSlug",
+    async ({ idOrSlug, keyword }) => {
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${idOrSlug}`,
+      });
+      await screen.findByText(ORG.name);
+      pressTheShortcut();
+      await screen.findByRole("dialog");
+      type(keyword);
+      fireEvent.click(
+        await within(palette()).findByRole("option", { name: "Onboarding" }),
+      );
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe(
+          `/organizations/${idOrSlug}/onboarding`,
+        );
+      });
+      await screen.findByRole("heading", { name: "Tenant onboarding" });
+    },
+  );
+
   it("offers no record views off a record", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
@@ -575,6 +695,9 @@ describe("CommandPalette", () => {
     expect(
       within(palette()).queryByRole("option", { name: "Billing" }),
     ).toBeNull();
+    expect(
+      within(palette()).queryByRole("option", { name: "Onboarding" }),
+    ).toBeNull();
   });
 
   it("forgets the term when it closes", async () => {
@@ -582,7 +705,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
     await within(palette()).findByRole("option", {
       name: /^Northwind Logistics/,
     });
@@ -600,5 +723,68 @@ describe("CommandPalette", () => {
     expect(
       within(reopened).queryByRole("option", { name: /^Northwind Logistics/ }),
     ).toBeNull();
+  });
+});
+
+describe("custom domain search", () => {
+  it("waits until the palette opens and a search is entered", async () => {
+    await renderWithSubmitCaptured();
+    expect(mocks.listCustomDomains).not.toHaveBeenCalled();
+    pressTheShortcut();
+    expect(mocks.listCustomDomains).not.toHaveBeenCalled();
+    type("example.test");
+    await waitFor(() => expect(mocks.listCustomDomains).toHaveBeenCalledOnce());
+  });
+
+  it("matches a domain beyond the display limit and opens its own organization", async () => {
+    mocks.listCustomDomains.mockResolvedValue({
+      customDomains: [
+        ...Array.from({ length: 20 }, (_, i) => ({
+          id: `other_${i}`,
+          domain: `other${i}.example.test`,
+          organizationId: OTHER.id,
+          organizationName: OTHER.name,
+          organizationSlug: OTHER.slug,
+        })),
+        {
+          id: "domain_1",
+          domain: "mcp.example.test",
+          organizationId: ORG.id,
+          organizationName: ORG.name,
+          organizationSlug: ORG.slug,
+        },
+      ],
+    });
+    await renderWithSubmitCaptured();
+    pressTheShortcut();
+    type("MCP.EXAMPLE");
+    fireEvent.click(
+      await within(palette()).findByRole("option", {
+        name: /mcp.example.test/,
+      }),
+    );
+    await waitFor(() =>
+      expect(router?.state.location.pathname).toBe(
+        `/organizations/${ORG.slug}/custom-domain`,
+      ),
+    );
+    await waitFor(() =>
+      expect(mocks.listCustomDomains).toHaveBeenCalledWith({
+        organizationId: ORG.id,
+      }),
+    );
+  });
+
+  it("isolates a failed domain search from organization results", async () => {
+    mocks.listCustomDomains.mockRejectedValue(new Error("unavailable"));
+    await renderWithSubmitCaptured();
+    pressTheShortcut();
+    type(ORG.name);
+    await within(palette()).findByText("Could not search custom domains.");
+    expect(
+      await within(palette()).findByRole("option", {
+        name: new RegExp(`^${ORG.name}`),
+      }),
+    ).toBeTruthy();
   });
 });

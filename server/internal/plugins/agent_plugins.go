@@ -144,7 +144,7 @@ func classifyAgentPlugin(p PluginInfo) agentPluginCompatibility {
 		}
 		seenServers[server.DisplayName] = struct{}{}
 		if !server.IsUnproxied && !server.IsPublic && !server.IsOAuth {
-			reasons = append(reasons, "server requires a Gram credential")
+			reasons = append(reasons, "server requires a Speakeasy credential")
 		}
 		if len(server.EnvConfigs) > 0 {
 			reasons = append(reasons, "server requires environment-backed headers")
@@ -248,12 +248,13 @@ func compileAgentPlugin(p PluginInfo, cfg GenerateConfig, mode agentPluginCreden
 		}
 		files[".cursor-plugin/plugin.json"] = cursorJSON
 
-		legacyCodexFiles := make(map[string][]byte)
-		if err := generateCodexPluginInDir(legacyCodexFiles, "", p.Slug+"-codex", p, cfg); err != nil {
-			return nil, fmt.Errorf("generate shared Codex legacy overlay: %w", err)
+		// Retain the native MCP config for Cursor, but not a Codex manifest.
+		// Codex must use its dedicated native package, not this AP1.0 root.
+		cursorMCPFiles := make(map[string][]byte)
+		if err := generateCodexPluginInDir(cursorMCPFiles, "", p.Slug+"-codex", p, cfg); err != nil {
+			return nil, fmt.Errorf("generate shared Cursor MCP config: %w", err)
 		}
-		files[".codex-plugin/plugin.json"] = legacyCodexFiles[".codex-plugin/plugin.json"]
-		files[".mcp.json"] = legacyCodexFiles[".mcp.json"]
+		files[".mcp.json"] = cursorMCPFiles[".mcp.json"]
 	}
 
 	if err := validateAgentPluginDocument(agentPluginSchemaID, manifest); err != nil {

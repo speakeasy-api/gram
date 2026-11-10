@@ -10,12 +10,15 @@ WITH latest_deployments AS (
 toolset_metrics AS (
   SELECT 
     p.organization_id,
-    COUNT(CASE WHEN t.mcp_is_public = true AND t.mcp_slug IS NOT NULL THEN 1 END) as public_mcp_servers,
-    COUNT(CASE WHEN t.mcp_is_public = false AND t.mcp_slug IS NOT NULL THEN 1 END) as private_mcp_servers,
-    COUNT(CASE WHEN t.mcp_enabled = true THEN 1 END) as total_enabled_servers,
+    -- A hosted server counts by its canonical wrapper's visibility; a toolset without one is not hosted.
+    COUNT(CASE WHEN w.visibility = 'public' THEN 1 END) as public_mcp_servers,
+    COUNT(CASE WHEN w.visibility = 'private' THEN 1 END) as private_mcp_servers,
+    -- Matches GetEnabledServerCount.
+    COUNT(CASE WHEN w.visibility IN ('public', 'private') THEN 1 END)::bigint as total_enabled_servers,
     COUNT(t.id) as total_toolsets
   FROM projects p
   LEFT JOIN toolsets t ON p.id = t.project_id AND t.deleted = false
+  LEFT JOIN mcp_servers w ON w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
   GROUP BY p.organization_id
 ),
 tool_metrics AS (
@@ -150,14 +153,32 @@ SET
     updated_at = clock_timestamp()
 WHERE openrouter_spend_daily.spend_usd IS DISTINCT FROM @target_spend_usd;
 
+-- Partner conversion retains an immutable non-midnight anchor. All seven invoice
+-- day enumerations use the same UTC-day policy: waive the initial conversion
+-- day, and assign later boundary days to the following invoice. Keep exact
+-- Stripe periods unchanged for identity validation and native metered usage.
 -- name: GetOpenRouterDailySpendRecoveryStartDay :one
 -- Expand collection to the oldest unresolved invoice day. This heals outages
 -- beyond the normal overlap instead of permanently detecting the same gap.
 SELECT MIN(generated.source_timestamp)::date AS recovery_start_day
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
-  invoice.service_period_start,
-  invoice.service_period_end - interval '1 day',
+  GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
   interval '1 day'
 ) AS generated(source_timestamp)
 WHERE invoice.organization_id = @target_organization_id
@@ -192,8 +213,22 @@ WHERE invoice.organization_id = @target_organization_id
 SELECT COUNT(*)::bigint AS missing_count
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
-  invoice.service_period_start,
-  invoice.service_period_end - interval '1 day',
+  GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
   interval '1 day'
 ) AS generated(source_timestamp)
 LEFT JOIN openrouter_spend_daily spend
@@ -253,8 +288,22 @@ WHERE invoice.organization_id IS NOT NULL
     EXISTS (
       SELECT 1
       FROM generate_series(
-        invoice.service_period_start,
-        invoice.service_period_end - interval '1 day',
+        GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
       CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
@@ -271,8 +320,22 @@ WHERE invoice.organization_id IS NOT NULL
     OR EXISTS (
       SELECT 1
       FROM generate_series(
-        invoice.service_period_start,
-        invoice.service_period_end - interval '1 day',
+        GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
       CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
@@ -319,8 +382,22 @@ WHERE invoice.organization_id = @organization_id
     EXISTS (
       SELECT 1
       FROM generate_series(
-        invoice.service_period_start,
-        invoice.service_period_end - interval '1 day',
+        GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
       CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
@@ -337,8 +414,22 @@ WHERE invoice.organization_id = @organization_id
     OR EXISTS (
       SELECT 1
       FROM generate_series(
-        invoice.service_period_start,
-        invoice.service_period_end - interval '1 day',
+        GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
       CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
@@ -391,8 +482,22 @@ SELECT
   , frozen.source_snapshot_usd AS frozen_snapshot_usd
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
-  invoice.service_period_start,
-  invoice.service_period_end - interval '1 day',
+  GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
   interval '1 day'
 ) AS generated(source_timestamp)
 CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
@@ -739,12 +844,13 @@ WHERE om.id = ANY(@organization_ids::text[])
 -- Organizations that receive the weekly metered usage summary email: enabled
 -- enterprise organizations with an explicit billing alert email and enabled
 -- PAYG organizations (whose fallback audience is resolved by the activity).
--- The anchor day determines the billing-cycle windows; the slug builds the
--- billing page link.
+-- The anchor day determines the billing-cycle windows; the slug and default
+-- host build the billing page link.
 SELECT
     om.id AS organization_id,
     om.name AS organization_name,
     om.slug AS organization_slug,
+    om.default_host,
     om.gram_account_type,
     bm.alert_email,
     bm.billing_cycle_anchor_day
@@ -1029,7 +1135,13 @@ JOIN projects p ON p.id = t.project_id
     AND p.deleted IS FALSE
 JOIN organization_metadata om ON om.id = p.organization_id
 WHERE t.deleted IS FALSE
-  AND t.mcp_enabled IS TRUE
+  -- Only a toolset whose canonical wrapper serves it is hosted.
+  AND EXISTS (
+      SELECT 1
+      FROM mcp_servers w
+      WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
+        AND w.visibility IN ('public', 'private')
+  )
   AND NOT EXISTS (
       SELECT 1
       FROM openrouter_api_keys k
@@ -1077,7 +1189,13 @@ WITH latest_toolsets AS (
         LIMIT 1
     ) tv ON TRUE
     WHERE t.deleted IS FALSE
-      AND t.mcp_enabled IS TRUE
+      -- Only a toolset whose canonical wrapper serves it is hosted.
+      AND EXISTS (
+          SELECT 1
+          FROM mcp_servers w
+          WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
+            AND w.visibility IN ('public', 'private')
+      )
       AND NOT EXISTS (
           SELECT 1
           FROM openrouter_api_keys k
@@ -1160,33 +1278,13 @@ WHERE candidates.indexed IS NULL
             AND definitions.deployment_id = candidates.deployment_id
             AND definitions.deleted IS FALSE
       )
-      OR EXISTS (
-          SELECT 1
-          FROM external_mcp_tool_definitions definitions
-          JOIN external_mcp_attachments attachments
-            ON attachments.id = definitions.external_mcp_attachment_id
-           AND attachments.deployment_id = candidates.deployment_id
-           AND attachments.deleted IS FALSE
-          WHERE definitions.tool_urn = ANY(candidates.tool_urns)
-            AND definitions.type <> 'proxy'
-            AND definitions.deleted IS FALSE
-      )
   )
+  -- An external MCP URN resolves to no tool definition, so a version that still
+  -- selects one has tools the index could never cover.
   AND NOT EXISTS (
       SELECT 1
       FROM unnest(candidates.tool_urns) selected(tool_urn)
       WHERE selected.tool_urn LIKE 'tools:externalmcp:%'
-        AND NOT EXISTS (
-            SELECT 1
-            FROM external_mcp_tool_definitions definitions
-            JOIN external_mcp_attachments attachments
-              ON attachments.id = definitions.external_mcp_attachment_id
-             AND attachments.deployment_id = candidates.deployment_id
-             AND attachments.deleted IS FALSE
-            WHERE definitions.tool_urn = selected.tool_urn
-              AND definitions.type <> 'proxy'
-              AND definitions.deleted IS FALSE
-        )
   )
 -- Rotate the bounded scan each tick so already-running permanent-failure
 -- workflows cannot remain at the front and starve the rest of the backlog.

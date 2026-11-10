@@ -16,7 +16,7 @@ package admission
 // matched URL cannot go in a metric dimension (unbounded), and admissions
 // are too high-volume to log individually.
 //
-// Gram's own assistants are a third path: their documents are admitted
+// Speakeasy's own assistants are a third path: their documents are admitted
 // ahead of the catalog and custom URLs on every issuer that accepts CIMD,
 // and recorded as AdmitPlatformAssistant so first-party traffic never
 // reads as a catalog gap.
@@ -31,7 +31,7 @@ const (
 	// policy signal, and it is paired with an error log naming the cause.
 	AdmitOpen AdmitReason = "admitted_open"
 
-	// AdmitCatalogExact: an exact entry in Gram's curated catalog.
+	// AdmitCatalogExact: an exact entry in Speakeasy's curated catalog.
 	AdmitCatalogExact AdmitReason = "admitted_catalog_exact"
 
 	// AdmitCatalogPattern: a wildcard catalog entry, i.e. a vendor whose
@@ -39,9 +39,9 @@ const (
 	// pattern-only vendors are reaching the authorization server at all.
 	AdmitCatalogPattern AdmitReason = "admitted_catalog_pattern"
 
-	// AdmitPlatformAssistant: a Client ID Metadata Document Gram itself
+	// AdmitPlatformAssistant: a Client ID Metadata Document Speakeasy itself
 	// publishes for one of its assistants. Assistants only ever authenticate
-	// to Gram-hosted MCP servers, so their document is admitted on every
+	// to Speakeasy-hosted MCP servers, so their document is admitted on every
 	// issuer that accepts CIMD at all, regardless of the catalog or the
 	// issuer's custom URLs: a presets denial here would be a dead end with
 	// no client-side recovery and nothing for the operator to add.

@@ -30,7 +30,7 @@ func TestError_EnvelopeCodesAreClientFaults(t *testing.T) {
 			Error:            code,
 			Warning:          "",
 			ResponseMetadata: nil,
-		})
+		}, "")
 		require.True(t, err.ClientFault(), "%s is the caller's to fix", code)
 		require.True(t, oops.IsClientFault(err), "%s must be visible to error boundaries", code)
 	}
@@ -55,7 +55,7 @@ func TestError_SlackSideEnvelopeCodesStayServerFaults(t *testing.T) {
 			Error:            code,
 			Warning:          "",
 			ResponseMetadata: nil,
-		})
+		}, "")
 		require.False(t, err.ClientFault(), "%s is a Slack-side failure", code)
 		require.False(t, oops.IsClientFault(err))
 	}
@@ -67,7 +67,7 @@ func TestError_SlackMigrationEnvelopeCodeStaysServerFault(t *testing.T) {
 	err := newEnvelopeError("team.info", http.StatusOK, ResponseEnvelope{
 		Ok:    false,
 		Error: "team_added_to_org",
-	})
+	}, "")
 
 	require.False(t, err.ClientFault(), "a workspace migration is a Slack-side outage")
 	require.False(t, oops.IsClientFault(err))
@@ -81,9 +81,35 @@ func TestError_UnnamedEnvelopeFailureStaysServerFault(t *testing.T) {
 		Error:            "",
 		Warning:          "",
 		ResponseMetadata: nil,
-	})
+	}, "")
 	require.False(t, err.ClientFault(), "an unclassifiable refusal must keep error severity")
 	require.Equal(t, "slack reactions.add: request failed", err.Error())
+}
+
+func TestTokenNotConfiguredError_IsClientFault(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, oops.IsClientFault(&TokenNotConfiguredError{Kind: TokenPreferBot, Variables: nil}), "a missing token is the configuration's to fix")
+}
+
+func TestError_NeededOnlyForMissingScope(t *testing.T) {
+	t.Parallel()
+
+	missing := newEnvelopeError("conversations.list", http.StatusOK, ResponseEnvelope{
+		Ok:               false,
+		Error:            "missing_scope",
+		Warning:          "",
+		ResponseMetadata: nil,
+	}, "channels:read")
+	require.Equal(t, "channels:read", missing.Needed)
+
+	other := newEnvelopeError("conversations.list", http.StatusOK, ResponseEnvelope{
+		Ok:               false,
+		Error:            "invalid_auth",
+		Warning:          "",
+		ResponseMetadata: nil,
+	}, "channels:read")
+	require.Empty(t, other.Needed)
 }
 
 func TestError_StatusCodesFollowTheHTTPSplit(t *testing.T) {
@@ -117,7 +143,7 @@ func TestError_MessagesKeepTheirRefusalShape(t *testing.T) {
 		ResponseMetadata: &struct {
 			Messages []string `json:"messages,omitempty"`
 		}{Messages: []string{"no such thread"}},
-	})
+	}, "")
 	require.Equal(t, "slack conversations.replies: thread_not_found | no such thread", envelopeErr.Error())
 
 	statusErr := newStatusError("users.list", http.StatusBadGateway, []byte("bad gateway"))

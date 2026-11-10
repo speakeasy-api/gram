@@ -59,7 +59,7 @@ type DisableKeyResponseBody struct {
 	OrganizationName *string `form:"organization_name,omitempty" json:"organization_name,omitempty" xml:"organization_name,omitempty"`
 	// Slug of the owning organization.
 	OrganizationSlug *string `form:"organization_slug,omitempty" json:"organization_slug,omitempty" xml:"organization_slug,omitempty"`
-	// The organization's Gram account type (e.g. free, pro, enterprise).
+	// The organization's Speakeasy account type (e.g. free, pro, enterprise).
 	GramAccountType *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
 	// Which upstream key this row provisions: 'chat' pays for customer-facing
 	// completions, 'internal' pays for platform-initiated LLM usage.
@@ -86,7 +86,7 @@ type EnableKeyResponseBody struct {
 	OrganizationName *string `form:"organization_name,omitempty" json:"organization_name,omitempty" xml:"organization_name,omitempty"`
 	// Slug of the owning organization.
 	OrganizationSlug *string `form:"organization_slug,omitempty" json:"organization_slug,omitempty" xml:"organization_slug,omitempty"`
-	// The organization's Gram account type (e.g. free, pro, enterprise).
+	// The organization's Speakeasy account type (e.g. free, pro, enterprise).
 	GramAccountType *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
 	// Which upstream key this row provisions: 'chat' pays for customer-facing
 	// completions, 'internal' pays for platform-initiated LLM usage.
@@ -847,7 +847,7 @@ type AdminOpenRouterKeyResponseBody struct {
 	OrganizationName *string `form:"organization_name,omitempty" json:"organization_name,omitempty" xml:"organization_name,omitempty"`
 	// Slug of the owning organization.
 	OrganizationSlug *string `form:"organization_slug,omitempty" json:"organization_slug,omitempty" xml:"organization_slug,omitempty"`
-	// The organization's Gram account type (e.g. free, pro, enterprise).
+	// The organization's Speakeasy account type (e.g. free, pro, enterprise).
 	GramAccountType *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
 	// Which upstream key this row provisions: 'chat' pays for customer-facing
 	// completions, 'internal' pays for platform-initiated LLM usage.

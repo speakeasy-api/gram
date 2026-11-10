@@ -89,6 +89,7 @@ func newReconcile(t *testing.T, conn *pgxpool.Pool, ch *chrepo.Queries) *risk_ex
 		ch,
 		risk.Fingerprinter{},
 		nil,
+		false,
 	)
 }
 
@@ -122,7 +123,6 @@ func TestReconcile_RuleIDLifecycle(t *testing.T) {
 	matching := chFinding(tenant, "secret.github_pat", "gitleaks")
 	unrelated := chFinding(tenant, "secret.aws_access_key", "gitleaks")
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{matching, unrelated}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	pgRepo := riskrepo.New(conn)
 	exclusion, err := pgRepo.CreateRiskExclusion(ctx, riskrepo.CreateRiskExclusionParams{
@@ -184,7 +184,6 @@ func TestReconcile_WindowDaysBoundsClickHouseSweep(t *testing.T) {
 	// chFinding writes two days back, outside a one-day window.
 	older := chFinding(tenant, "secret.github_pat", "gitleaks")
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{older}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	exclusion, err := riskrepo.New(conn).CreateRiskExclusion(ctx, riskrepo.CreateRiskExclusionParams{
 		ProjectID:      tenant.projectID,
@@ -214,9 +213,9 @@ func TestReconcile_WindowDaysBoundsClickHouseSweep(t *testing.T) {
 	require.Equal(t, exclusion.ID.String(), latestExcludedBy(t, chConn, older.ID))
 }
 
-// TestReconcile_NilClickHouseDegrades pins the CH-less worker behavior: the
-// Postgres phases run and the activity succeeds without touching ClickHouse.
-func TestReconcile_NilClickHouseDegrades(t *testing.T) {
+// TestReconcile_DisabledClickHouse preserves the explicit kill switch:
+// Postgres phases run, but matching ClickHouse findings remain unchanged.
+func TestReconcile_DisabledClickHouse(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn := cloneDB(t)
@@ -234,11 +233,20 @@ func TestReconcile_NilClickHouseDegrades(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	reconcile := newReconcile(t, conn, nil)
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	chQueries := chrepo.New(chConn)
+	matching := chFinding(tenant, "secret.github_pat", "gitleaks")
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{matching}))
+	reconcile := risk_exclusion.NewReconcile(
+		testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t),
+		conn, chQueries, risk.Fingerprinter{}, nil, true,
+	)
 	require.NoError(t, runReconcile(t, reconcile, risk_exclusion.ReconcileArgs{
 		ProjectID:   tenant.projectID,
 		ExclusionID: exclusion.ID,
 	}))
+	require.Empty(t, latestExcludedBy(t, chConn, matching.ID))
 }
 
 // TestReconcile_ExactWithoutFingerprinterSkipsCH pins the degradation for
@@ -274,7 +282,6 @@ func TestReconcile_ExactWithoutFingerprinterSkipsCH(t *testing.T) {
 	heldAtIngest.ExcludedAt = &heldAt
 	heldAtIngest.ExclusionID = &exclusion.ID
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{visible, heldAtIngest}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	reconcile := newReconcile(t, conn, chQueries)
 	require.NoError(t, runReconcile(t, reconcile, risk_exclusion.ReconcileArgs{
@@ -361,7 +368,6 @@ func TestReconcile_RegexReversalNeverExposesUnprovableRows(t *testing.T) {
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		heldMatching, heldStale, heldOrphan, liveMatching,
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	reconcile := newReconcile(t, conn, chQueries)
 	require.NoError(t, runReconcile(t, reconcile, risk_exclusion.ReconcileArgs{

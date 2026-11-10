@@ -82,17 +82,16 @@ func TestService_HandleGetAuthorizationServer(t *testing.T) {
 
 		// Create a toolset without OAuth configuration
 		slug := "no-oauth-mcp-" + uuid.New().String()[:8]
-		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 			OrganizationID:         authCtx.ActiveOrganizationID,
 			ProjectID:              *authCtx.ProjectID,
 			Name:                   "No OAuth MCP",
 			Slug:                   slug,
 			Description:            conv.ToPGText("A test MCP without OAuth"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                conv.ToPGText(slug),
-			McpEnabled:             true,
 		})
 		require.NoError(t, err)
+		toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, slug, "private", noIssuer())
 
 		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+toolset.McpSlug.String, nil)
 
@@ -194,7 +193,7 @@ func TestClientDance_ExternalOAuth_FullFlow(t *testing.T) {
 	require.True(t, ok, "upstream metadata must carry an issuer")
 	require.NotEmpty(t, upstreamIssuer)
 
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.McpSlug
 
 	// 3. Send an initialize request WITHOUT a bearer token — expect 401.
 	w, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "", nil)
@@ -233,10 +232,10 @@ func TestClientDance_ExternalOAuth_FullFlow(t *testing.T) {
 	require.True(t, ok, "authorization_servers should be an array")
 	require.NotEmpty(t, authServers, "authorization_servers should not be empty")
 
-	// 7. Fetch the RFC 8414 authorization-server metadata. Gram re-serves the
+	// 7. Fetch the RFC 8414 authorization-server metadata. Speakeasy re-serves the
 	//    captured upstream document from its own well-known URL, so per
 	//    RFC 8414 §3.3 the served issuer must equal the resource URL the
-	//    protected-resource metadata advertises (the Gram URL), NOT the
+	//    protected-resource metadata advertises (the Speakeasy URL), NOT the
 	//    upstream issuer. The upstream's own endpoints stay verbatim.
 	asReq := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+mcpSlug, nil)
 	asRctx := chi.NewRouteContext()

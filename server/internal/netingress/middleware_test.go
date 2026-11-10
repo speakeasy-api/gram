@@ -189,3 +189,50 @@ func privateRequest() *http.Request {
 	request.Header.Set(AttestationHeader, "Bearer projected-token")
 	return request
 }
+
+func TestMiddlewareTailscaleIdentityValidation(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, displayName string
+		wantStatus        int
+	}{
+		{name: "encoded name and empty picture", displayName: "=?utf-8?q?=C3=89xample_User?=", wantStatus: http.StatusNoContent},
+		{name: "malformed Q payload", displayName: "=?utf-8?q?User=ZZ?=", wantStatus: http.StatusUnauthorized},
+		{name: "malformed base64 payload", displayName: "=?utf-8?b?%%%?=", wantStatus: http.StatusUnauthorized},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			verifier := &fakeWorkloadVerifier{ingress: Ingress{
+				ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale,
+				DNSName: "private.example.ts.net", IdentityRequired: true,
+			}}
+			nextCalled := false
+			var gotOrigin requestorigin.Origin
+			var gotOriginOK bool
+			var gotHeaders http.Header
+			next := http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+				nextCalled = true
+				gotOrigin, gotOriginOK = requestorigin.FromContext(request.Context())
+				gotHeaders = request.Header.Clone()
+				w.WriteHeader(http.StatusNoContent)
+			})
+			request := privateRequest()
+			request.Header.Set(TailscaleUserLoginHeader, "user@example.com")
+			request.Header.Set(TailscaleUserNameHeader, test.displayName)
+			request.Header.Set(TailscaleUserProfilePicHeader, "")
+			response := httptest.NewRecorder()
+			Middleware(verifier, IdentityParsers{ProviderTailscale: TailscaleIdentityParser{}})(next).ServeHTTP(response, request)
+			require.Equal(t, test.wantStatus, response.Code)
+			require.Equal(t, test.wantStatus == http.StatusNoContent, nextCalled)
+			if test.wantStatus == http.StatusUnauthorized {
+				require.Equal(t, "invalid network identity\n", response.Body.String())
+			} else {
+				require.True(t, gotOriginOK)
+				require.Equal(t, &requestorigin.NetworkIdentity{Login: "user@example.com", Name: "Éxample User"}, gotOrigin.NetworkIdentity)
+				require.NotContains(t, gotHeaders, TailscaleUserLoginHeader)
+				require.NotContains(t, gotHeaders, TailscaleUserNameHeader)
+				require.NotContains(t, gotHeaders, TailscaleUserProfilePicHeader)
+			}
+		})
+	}
+}

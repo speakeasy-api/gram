@@ -103,7 +103,7 @@ export class Assets extends ClientSDK {
    * fetchImageFromURL assets
    *
    * @remarks
-   * Fetch an image from a URL and upload it to Gram as an image asset.
+   * Fetch an image from a URL and upload it to Speakeasy as an image asset.
    */
   async fetchImageFromURL(
     request: FetchImageFromURLRequest,
@@ -122,7 +122,7 @@ export class Assets extends ClientSDK {
    * fetchOpenAPIv3FromURL assets
    *
    * @remarks
-   * Fetch an OpenAPI v3 document from a URL and upload it to Gram.
+   * Fetch an OpenAPI v3 document from a URL and upload it to Speakeasy.
    */
   async fetchOpenAPIv3FromURL(
     request: FetchOpenAPIv3FromURLRequest,
@@ -160,7 +160,7 @@ export class Assets extends ClientSDK {
    * serveChatAttachment assets
    *
    * @remarks
-   * Serve a chat attachment from Gram.
+   * Serve a chat attachment from Speakeasy.
    */
   async serveChatAttachment(
     request: ServeChatAttachmentRequest,
@@ -196,7 +196,7 @@ export class Assets extends ClientSDK {
    * serveFunction assets
    *
    * @remarks
-   * Serve a Gram Functions asset from Gram.
+   * Serve a Speakeasy Functions asset from Speakeasy.
    */
   async serveFunction(
     request: ServeFunctionRequest,
@@ -215,7 +215,7 @@ export class Assets extends ClientSDK {
    * serveImage assets
    *
    * @remarks
-   * Serve an image from Gram.
+   * Serve an image from Speakeasy.
    */
   async serveImage(
     request: ServeImageRequest,
@@ -232,7 +232,7 @@ export class Assets extends ClientSDK {
    * serveOpenAPIv3 assets
    *
    * @remarks
-   * Serve an OpenAPIv3 asset from Gram.
+   * Serve an OpenAPIv3 asset from Speakeasy.
    */
   async serveOpenAPIv3(
     request: ServeOpenAPIv3Request,
@@ -251,7 +251,7 @@ export class Assets extends ClientSDK {
    * uploadChatAttachment assets
    *
    * @remarks
-   * Upload a chat attachment to Gram.
+   * Upload a chat attachment to Speakeasy.
    */
   async uploadChatAttachment(
     request: UploadChatAttachmentRequest,
@@ -270,7 +270,7 @@ export class Assets extends ClientSDK {
    * uploadFunctions assets
    *
    * @remarks
-   * Upload functions to Gram.
+   * Upload functions to Speakeasy.
    */
   async uploadFunctions(
     request: UploadFunctionsRequest,
@@ -289,7 +289,7 @@ export class Assets extends ClientSDK {
    * uploadImage assets
    *
    * @remarks
-   * Upload an image to Gram.
+   * Upload an image to Speakeasy.
    */
   async uploadImage(
     request: UploadImageRequest,
@@ -308,7 +308,7 @@ export class Assets extends ClientSDK {
    * uploadOpenAPIv3 assets
    *
    * @remarks
-   * Upload an OpenAPI v3 document to Gram.
+   * Upload an OpenAPI v3 document to Speakeasy.
    */
   async uploadOpenAPIv3(
     request: UploadOpenAPIv3AssetRequest,

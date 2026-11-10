@@ -74,11 +74,7 @@ func TestUpdateMcpServer_DisableSerializesWithRootSelection(t *testing.T) {
 				disabled <- updateErr
 			}()
 
-			select {
-			case updateErr := <-disabled:
-				require.Failf(t, "disable returned before root selection committed", "error: %v", updateErr)
-			case <-time.After(100 * time.Millisecond):
-			}
+			testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(setterTx), 1)
 
 			require.NoError(t, setterTx.Commit(ctx))
 			select {
@@ -154,11 +150,7 @@ func TestUpdateMcpServer_DisableClearsNewlyCommittedRoot(t *testing.T) {
 		disabled <- updateErr
 	}()
 
-	select {
-	case updateErr := <-disabled:
-		require.Failf(t, "disable returned before new root committed", "error: %v", updateErr)
-	case <-time.After(100 * time.Millisecond):
-	}
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(setterTx), 1)
 
 	require.NoError(t, setterTx.Commit(ctx))
 	select {
@@ -222,7 +214,10 @@ func TestDeleteMcpServer_ClearsRootMappingWithEndpointCascade(t *testing.T) {
 
 	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: server.ID})
 	require.NoError(t, err)
-	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, domainID)
+	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, customdomainsrepo.GetCustomDomainRouteConfigParams{
+		ID:             domainID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	require.NoError(t, err)
 	require.Equal(t, uuid.Nil, route.RootMcpEndpointID)
 	_, err = mcpendpointsrepo.New(ti.conn).GetMCPEndpointByID(ctx, mcpendpointsrepo.GetMCPEndpointByIDParams{
@@ -276,7 +271,10 @@ func requireRootCleared(t *testing.T, ctx context.Context, ti *testInstance, dom
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, domainID)
+	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, customdomainsrepo.GetCustomDomainRouteConfigParams{
+		ID:             domainID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	require.NoError(t, err)
 	require.Equal(t, uuid.Nil, route.RootMcpEndpointID)
 	endpoint, err := mcpendpointsrepo.New(ti.conn).GetMCPEndpointByID(ctx, mcpendpointsrepo.GetMCPEndpointByIDParams{

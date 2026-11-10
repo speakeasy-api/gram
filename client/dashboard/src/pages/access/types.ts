@@ -1,4 +1,4 @@
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type {
   Disposition as SelectorDisposition,
   Selector,
@@ -25,18 +25,25 @@ export type ResourceType =
   | "mcp"
   | "environment"
   | "skill"
+  | "inference"
+  | "assistant"
   | "risk_policy"
   | "chat"
-  | "agent";
+  | "agent"
+  | "workload"
+  | "mcp_auth_client";
 
 export function isUnrestrictedResourceType(
   resourceType: ResourceType,
-): resourceType is "org" | "environment" | "chat" | "agent" {
+): resourceType is "org" | "environment" | "chat" | "agent" | "workload" {
   return (
     resourceType === "org" ||
     resourceType === "environment" ||
     resourceType === "chat" ||
-    resourceType === "agent"
+    resourceType === "agent" ||
+    // The trust policy is configured for the organization as a whole; there is
+    // no per-workload resource a grant could name.
+    resourceType === "workload"
   );
 }
 
@@ -51,6 +58,27 @@ export function isProjectSelectableResourceType(
   resourceType: ResourceType,
 ): boolean {
   return resourceType === "project" || resourceType === "skill";
+}
+
+/**
+ * Resource types whose grants narrow to projects through the `projectId`
+ * selector (`{ resourceId: "*", projectId }`) rather than storing the project
+ * id as the resource id, or name one resource by its own id.
+ */
+export function isProjectFilteredResourceType(
+  resourceType: ResourceType,
+): resourceType is "assistant" | "inference" {
+  return resourceType === "assistant" || resourceType === "inference";
+}
+
+/** Whether the role editor narrows this resource type by project. */
+export function isProjectScopedResourceType(
+  resourceType: ResourceType,
+): boolean {
+  return (
+    isProjectSelectableResourceType(resourceType) ||
+    isProjectFilteredResourceType(resourceType)
+  );
 }
 
 /** The 4 MCP tool annotation hint keys. */
@@ -95,15 +123,12 @@ export interface RoleGrant {
 
 /** Maps annotation hint keys to disposition values stored in selectors.
  * Must match the backend constants in authz/selector.go. */
-export const ANNOTATION_TO_DISPOSITION: Record<
-  AnnotationHint,
-  SelectorDisposition
-> = {
+export const ANNOTATION_TO_DISPOSITION = {
   readOnlyHint: "read_only",
   destructiveHint: "destructive",
   idempotentHint: "idempotent",
   openWorldHint: "open_world",
-};
+} as const satisfies Record<AnnotationHint, SelectorDisposition>;
 
 /** Reverse map: disposition value → annotation hint key. */
 export const DISPOSITION_TO_ANNOTATION: Record<string, AnnotationHint> = {
@@ -112,3 +137,19 @@ export const DISPOSITION_TO_ANNOTATION: Record<string, AnnotationHint> = {
   idempotent: "idempotentHint",
   open_world: "openWorldHint",
 };
+
+export function isKnownResourceType(value: string): value is ResourceType {
+  return [
+    "org",
+    "project",
+    "mcp",
+    "environment",
+    "skill",
+    "assistant",
+    "inference",
+    "risk_policy",
+    "chat",
+    "agent",
+    "workload",
+  ].includes(value);
+}

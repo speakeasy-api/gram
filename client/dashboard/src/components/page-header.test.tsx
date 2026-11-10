@@ -64,6 +64,14 @@ describe("PageHeader.Actions", () => {
 });
 
 describe("PageHeader", () => {
+  it("does not reserve an empty breadcrumb row on a setup page", () => {
+    const { container } = render(<PageHeader>{null}</PageHeader>, {
+      at: "/placeholder-organization/projects/placeholder-project/mcp/example/setup",
+    });
+    expect(
+      container.querySelector('[data-slot="page-breadcrumbs"]'),
+    ).toBeNull();
+  });
   // Inference going quiet is felt on whichever page the user was working on, so
   // the banners that explain it hang off the header rather than the billing
   // page.
@@ -123,6 +131,22 @@ describe("PageHeader.Breadcrumbs", () => {
     const back = screen.getByRole("link", { name: "Identities" });
     expect(back.getAttribute("href")).toBe(
       "/placeholder-organization/projects/placeholder-project/identities",
+    );
+  });
+
+  it("links a session client back to its identity provider", () => {
+    render(
+      <PageHeader>
+        <PageHeader.Breadcrumbs substitutions={{ "issuer-1": "Okta" }} />
+      </PageHeader>,
+      {
+        at: "/placeholder-organization/projects/placeholder-project/remote-identity-providers/issuer-1/clients/client-1/overview",
+      },
+    );
+
+    const back = screen.getByRole("link", { name: "Okta" });
+    expect(back.getAttribute("href")).toBe(
+      "/placeholder-organization/projects/placeholder-project/remote-identity-providers/issuer-1",
     );
   });
 

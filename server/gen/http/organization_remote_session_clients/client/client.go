@@ -62,6 +62,10 @@ type Client struct {
 	// rotateClient endpoint.
 	RotateClientDoer goahttp.Doer
 
+	// DuplicateClient Doer is the HTTP client used to make requests to the
+	// duplicateClient endpoint.
+	DuplicateClientDoer goahttp.Doer
+
 	// DeleteClient Doer is the HTTP client used to make requests to the
 	// deleteClient endpoint.
 	DeleteClientDoer goahttp.Doer
@@ -102,6 +106,7 @@ func NewClient(
 		AttachClientKeySetDoer:        doer,
 		DetachClientKeySetDoer:        doer,
 		RotateClientDoer:              doer,
+		DuplicateClientDoer:           doer,
 		DeleteClientDoer:              doer,
 		RemoveClientFromMcpServerDoer: doer,
 		RestoreResponseBody:           restoreBody,
@@ -372,6 +377,30 @@ func (c *Client) RotateClient() goa.Endpoint {
 		resp, err := c.RotateClientDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationRemoteSessionClients", "rotateClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DuplicateClient returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionClients service duplicateClient server.
+func (c *Client) DuplicateClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDuplicateClientRequest(c.encoder)
+		decodeResponse = DecodeDuplicateClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDuplicateClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DuplicateClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionClients", "duplicateClient", err)
 		}
 		return decodeResponse(resp)
 	}

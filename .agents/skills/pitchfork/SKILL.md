@@ -1,15 +1,15 @@
 ---
 name: pitchfork
-description: Manage Gram's local development services (server, worker, dashboard, streams, etc.) with pitchfork — start/stop/restart daemons, check health, and query their logs. Activate whenever you need to bring up the local dev stack, restart a service after a code change, check whether a service is running or why it failed, or read/search service logs — even if the user just says "start the server", "is the worker running?", or "check the logs".
+description: Manage Speakeasy's local development services (server, worker, dashboard, streams, etc.) with pitchfork — start/stop/restart daemons, check health, and query their logs. Activate whenever you need to bring up the local dev stack, restart a service after a code change, check whether a service is running or why it failed, or read/search service logs — even if the user just says "start the server", "is the worker running?", or "check the logs".
 ---
 
 # Pitchfork — Local Dev Services
 
-[Pitchfork](https://pitchfork.jdx.dev) is a daemon manager. All Gram local services are declared in `pitchfork.toml` at the repo root and run under a pitchfork supervisor. Each daemon's `run` command is a mise task (`mise run start:<name>`) and its readiness is polled via `mise run check:daemon --name <name>`, so `start` only returns once the service is actually healthy.
+[Pitchfork](https://pitchfork.jdx.dev) is a daemon manager. All Speakeasy local services are declared in `pitchfork.toml` at the repo root and run under a pitchfork supervisor. Each daemon's `run` command is a mise task (`mise run start:<name>`) and its readiness is polled via `mise run check:daemon --name <name>`, so `start` only returns once the service is actually healthy.
 
 ## How to interact with pitchfork (in order of preference)
 
-1. **MCP server** — if the `pitchfork` MCP tools are available (`pitchfork_status`, `pitchfork_logs`, `pitchfork_start`, `pitchfork_stop`, `pitchfork_restart`), use them. They return structured output and skip pager/formatting concerns entirely.
+1. **MCP server** — if the `pitchfork` MCP tools are available (`pitchfork_status`, `pitchfork_logs`, `pitchfork_start`, `pitchfork_stop`, `pitchfork_restart`), use them. They return structured output and skip pager/formatting concerns entirely. The repo runs the server with `--local`, so the tools only see and act on this worktree's daemons; use the CLI to reach another project.
 2. **CLI** — otherwise use the `pitchfork` CLI directly (commands below).
 3. **Mise tasks** — `mise run start` / `mise run stop` bring the whole stack up/down. Use these for whole-stack operations even when the MCP/CLI are available, because `mise run start` also starts the supervisor and cleans up stale daemon entries. If the `pitchfork` binary itself is missing, run `mise install` first (mise provides it).
 
@@ -19,7 +19,7 @@ Declared in `pitchfork.toml`. Names are shown namespaced by project (e.g. `gram/
 
 | Daemon                                      | What it is                                          |
 | ------------------------------------------- | --------------------------------------------------- |
-| `server`                                    | Main Gram API server                                |
+| `server`                                    | Main Speakeasy API server                           |
 | `worker`                                    | Temporal worker                                     |
 | `dashboard`                                 | Dashboard frontend dev server (depends on `server`) |
 | `streams`                                   | Go Pub/Sub consumers (`gram streams`)               |
@@ -62,7 +62,7 @@ pitchfork status server            # detail for one daemon, includes error/exit 
 
 `available` means defined in config but not started. `errored` includes the exit reason — follow up with logs.
 
-The MCP `pitchfork_status` tool returns a JSON array covering all daemons (equivalent to `pitchfork list --json`); there is no per-daemon MCP detail call, so use `pitchfork status <name>` on the CLI when you need one daemon's full detail.
+The MCP `pitchfork_status` tool returns a JSON array covering this project's daemons (equivalent to `pitchfork list --project --json`); there is no per-daemon MCP detail call, so use `pitchfork status <name>` on the CLI when you need one daemon's full detail.
 
 ## Logs
 

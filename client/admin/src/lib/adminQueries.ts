@@ -13,7 +13,6 @@ import {
   getOrganization,
   getOrganizationChatAnalysisSettings,
   getOrganizationStats,
-  getInferenceKeys,
   getInferenceSpendHistory,
   getPaygBillingSummary,
   getStripeSubscription,
@@ -22,8 +21,10 @@ import {
   listOrganizationMembers,
   listOrganizationProjects,
   listOrganizations,
+  listUsers,
+  listUserOrganizations,
+  listProjectMcpServers,
   omitUnset,
-  type AdminInferenceKey,
   type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
@@ -34,8 +35,12 @@ import {
   type ListOrganizationProjectsResult,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
+  type ListProjectMcpServersResult,
 } from "@/lib/gramAdminApi";
-import { organizationActivityQuery } from "@/lib/gramAdminClient";
+import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
+import { buildAdminListCustomDomainsQuery } from "@gram/admin-client/react-query/adminListCustomDomains.core";
+import type { AdminListCustomDomainsRequest } from "@gram/admin-client/models/operations/adminlistcustomdomains";
+import { redirecting, redirectingClient } from "@/lib/adminSdkClient";
 
 // What queryOptions infers, named so the exports can carry the return type that
 // `typescript/explicit-module-boundary-types` demands. Writing the shape out by
@@ -98,7 +103,9 @@ export function invalidateOrganizationActivity(
   organizationID: string,
 ): void {
   void qc.invalidateQueries({
-    queryKey: organizationActivityQuery(organizationID).queryKey,
+    queryKey: queryKeyAdminListOrganizationActivityInfinite({
+      organizationId: organizationID,
+    }),
     exact: true,
   });
 }
@@ -130,6 +137,23 @@ export function organizationProjectsQuery(
   });
 }
 
+export function projectMcpServersQuery(
+  organizationID: string,
+  projectID: string,
+): AdminQuery<
+  ListProjectMcpServersResult,
+  readonly ["gram-admin-project-mcp-servers", string, string]
+> {
+  return queryOptions({
+    queryKey: [
+      "gram-admin-project-mcp-servers",
+      organizationID,
+      projectID,
+    ] as const,
+    queryFn: () => listProjectMcpServers(organizationID, projectID),
+  });
+}
+
 export function organizationMembersQuery(
   organizationID: string,
 ): AdminQuery<
@@ -139,19 +163,6 @@ export function organizationMembersQuery(
   return queryOptions({
     queryKey: ["gram-admin-organization-members", organizationID] as const,
     queryFn: () => listOrganizationMembers(organizationID),
-  });
-}
-
-export function inferenceKeysQuery(
-  organizationID: string,
-): AdminQuery<
-  AdminInferenceKey[],
-  readonly ["gram-admin-inference-keys", string]
-> {
-  return queryOptions({
-    queryKey: ["gram-admin-inference-keys", organizationID] as const,
-    queryFn: () => getInferenceKeys(organizationID),
-    retry: false,
   });
 }
 
@@ -360,4 +371,57 @@ export function projectQuery(
     ] as const,
     queryFn: () => getProject(idOrSlug, organizationIdOrSlug),
   });
+}
+
+// A redeploy adds a deployment, so every read of a project's counts is stale.
+export function invalidateProjects(qc: QueryClient): Promise<void> {
+  return qc.invalidateQueries({ queryKey: ["gram-admin-project"] });
+}
+
+export function usersListQuery(
+  params: Parameters<typeof listUsers>[0],
+): AdminQuery<
+  Awaited<ReturnType<typeof listUsers>>,
+  readonly ["admin", "users", Parameters<typeof listUsers>[0]]
+> {
+  return queryOptions({
+    queryKey: ["admin", "users", params] as const,
+    queryFn: ({ signal }) => listUsers(params, signal),
+  });
+}
+export function userOrganizationsListQuery(
+  params: Parameters<typeof listUserOrganizations>[0],
+): AdminQuery<
+  Awaited<ReturnType<typeof listUserOrganizations>>,
+  readonly [
+    "admin",
+    "user-organizations",
+    Parameters<typeof listUserOrganizations>[0],
+  ]
+> {
+  return queryOptions({
+    queryKey: ["admin", "user-organizations", params] as const,
+    queryFn: ({ signal }) => listUserOrganizations(params, signal),
+  });
+}
+
+function createAdminListCustomDomainsQuery(
+  request: AdminListCustomDomainsRequest,
+) {
+  const generated = buildAdminListCustomDomainsQuery(
+    redirectingClient(),
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+// Every live custom domain, or the one an organization owns. Both filters are
+// applied by the server, so the query key carries them.
+export function adminListCustomDomainsQuery(
+  request: AdminListCustomDomainsRequest = {},
+): ReturnType<typeof createAdminListCustomDomainsQuery> {
+  return createAdminListCustomDomainsQuery(request);
 }

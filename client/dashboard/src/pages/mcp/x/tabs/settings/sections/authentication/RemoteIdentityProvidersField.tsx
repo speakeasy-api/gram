@@ -1,9 +1,10 @@
-import { AssetImage } from "@/components/asset-image";
+import { FieldError } from "@/components/ui/Field";
 import { RequireScope } from "@/components/require-scope";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { remoteSessionScopeTier } from "@/lib/sources";
-import { IssuerLink } from "@/pages/remote-identity-providers/IssuerLink";
-import { ScopeBadge } from "@/pages/remote-identity-providers/ScopeBadge";
+import { IssuerLink, IssuerLogo, ScopeBadge } from "@/lib/remote-identity";
+import { issuerDisplayName } from "@/pages/remote-identity-providers/issuerDisplay";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { Button } from "@/components/ui/Button";
 import { Plus, Trash2 } from "lucide-react";
@@ -13,6 +14,7 @@ import { AuthRow, ExplainerDialog } from "./AuthRow";
 export function RemoteIdentityProvidersField({
   associatedIssuers,
   isLoading,
+  isError = false,
   allowAdditionalProviders,
   projectId,
   onAdd,
@@ -22,6 +24,10 @@ export function RemoteIdentityProvidersField({
 }: {
   associatedIssuers: RemoteSessionIssuer[];
   isLoading: boolean;
+  /** An attached provider failed to load. Never rendered as the empty state,
+   * which would tell the user nothing is connected; providers that did load
+   * keep their rows. */
+  isError?: boolean;
   /** Gateways bind a provider per member; remote/tunneled servers have one
    * upstream, so only their empty state may offer an attach. */
   allowAdditionalProviders: boolean;
@@ -38,24 +44,30 @@ export function RemoteIdentityProvidersField({
         <Button.LeftIcon>
           <Plus className="size-4" />
         </Button.LeftIcon>
-        <Button.Text>Add provider</Button.Text>
+        <Button.Text>Add authorization server</Button.Text>
       </Button>
     </RequireScope>
+  );
+
+  const loadError = (
+    <FieldError>
+      Failed to load the authorization servers. Refresh the page to try again.
+    </FieldError>
   );
 
   let providerControls: ReactNode;
   if (isLoading) {
     providerControls = (
-      <Text muted small>
-        Loading…
-      </Text>
+      <Skeleton label="Loading authorization servers" className="h-9 w-48" />
     );
+  } else if (associatedIssuers.length === 0 && isError) {
+    providerControls = loadError;
   } else if (associatedIssuers.length === 0) {
     // The button is the empty state: "None yet." beside it says nothing the
     // absent list does not already say.
     providerControls = readOnly ? (
       <Text muted small>
-        No connected services.
+        No authorization servers.
       </Text>
     ) : (
       addButton
@@ -73,6 +85,7 @@ export function RemoteIdentityProvidersField({
             readOnly={readOnly}
           />
         ))}
+        {isError && loadError}
         {allowAdditionalProviders && !readOnly && addButton}
       </div>
     );
@@ -80,23 +93,21 @@ export function RemoteIdentityProvidersField({
 
   return (
     <AuthRow
-      label="Connected services"
+      label="Authorization servers"
       hint={
         <>
-          Rarely needed — only when the upstream service makes each user sign in
-          there themselves.
-          <ExplainerDialog title="Connected services">
+          Where each user signs in to the upstream service. Speakeasy keeps
+          their token and sends it with their requests.
+          <ExplainerDialog title="Authorization servers">
             <Text muted small className="block">
-              Some servers act on a user&apos;s own data in another system —
-              their Ashby account, their Linear workspace. That system decides
-              whether this particular person may do it, so each user signs in
-              there once and Speakeasy keeps that authorization alongside their
-              session.
+              An authorization server issues the OAuth tokens that let this
+              server act for each user in the upstream service — their Linear
+              workspace, their Ashby account. Each user signs in there once, and
+              Speakeasy keeps that authorization alongside their session.
             </Text>
             <Text muted small className="block">
-              Add a provider only when the upstream service asks every user to
-              sign in for themselves. A server that reaches its API with one
-              shared credential needs none.
+              The upstream service decides what each person may do, so every
+              user acts with their own permissions, not a shared credential.
             </Text>
           </ExplainerDialog>
         </>
@@ -130,12 +141,12 @@ function RemoteIdentityProviderRow({
   return (
     <div className="border p-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        {issuer.logoAssetId ? (
-          <AssetImage
-            assetId={issuer.logoAssetId}
-            className="size-8 shrink-0"
-          />
-        ) : null}
+        <IssuerLogo
+          logoAssetId={issuer.logoAssetId}
+          // The name IssuerLink shows beside it.
+          name={issuerDisplayName(issuer)}
+          size="md"
+        />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <Text small className="truncate font-medium">

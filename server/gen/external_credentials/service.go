@@ -14,8 +14,8 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manage organization-level external credentials — how Gram authenticates into
-// a customer's AWS or GCP account.
+// Manage organization-level external credentials — how Speakeasy authenticates
+// into a customer's AWS or GCP account.
 type Service interface {
 	// Create an AWS IAM external credential. Requires org:admin.
 	CreateAwsIamCredential(context.Context, *CreateAwsIamCredentialPayload) (res *AwsIamCredential, err error)
@@ -36,13 +36,14 @@ type Service interface {
 	GetAwsIamCredential(context.Context, *GetAwsIamCredentialPayload) (res *AwsIamCredential, err error)
 	// Get a GCP IAM external credential by ID. Requires org:read.
 	GetGcpIamCredential(context.Context, *GetGcpIamCredentialPayload) (res *GcpIamCredential, err error)
-	// Probe that Gram can impersonate the service account a GCP IAM credential
-	// names, and report the principal it resolves to. Ephemeral: nothing is
-	// persisted. Rate limited per organization. Requires org:admin.
+	// Probe that Speakeasy can impersonate the service account a GCP IAM
+	// credential names, and report the principal it resolves to. Ephemeral:
+	// nothing is persisted. Rate limited per organization. Requires org:admin.
 	VerifyGcpIamCredential(context.Context, *VerifyGcpIamCredentialPayload) (res *VerifyCredentialResult, err error)
-	// Report what the customer must grant in their own GCP project before Gram can
-	// impersonate a service account there. Readable before any credential exists,
-	// since impersonation is a precondition of creating one. Requires org:read.
+	// Report what the customer must grant in their own GCP project before
+	// Speakeasy can impersonate a service account there. Readable before any
+	// credential exists, since impersonation is a precondition of creating one.
+	// Requires org:read.
 	GetGcpSetupInfo(context.Context, *GetGcpSetupInfoPayload) (res *GcpSetupInfo, err error)
 	// Soft-delete an AWS IAM external credential by ID. Requires org:admin.
 	// Refused with a conflict while any live external key still names the
@@ -81,12 +82,13 @@ var MethodNames = [13]string{"createAwsIamCredential", "updateAwsIamCredential",
 // AwsIamCredential is the result type of the externalCredentials service
 // createAwsIamCredential method.
 type AwsIamCredential struct {
-	// The customer IAM role ARN Gram assumes.
+	// The customer IAM role ARN Speakeasy assumes.
 	AssumeRoleArn *string
-	// The Gram-generated ExternalId the customer must require in their role trust
-	// policy. Present when Gram assumes the role with an ExternalId.
+	// The Speakeasy-generated ExternalId the customer must require in their role
+	// trust policy. Present when Speakeasy assumes the role with an ExternalId.
 	ExternalID *string
-	// The OIDC audience. Present when Gram assumes the role with a web identity.
+	// The OIDC audience. Present when Speakeasy assumes the role with a web
+	// identity.
 	OidcAudience *string
 	// Optional OIDC subject pin (web-identity approach).
 	OidcSubject *string
@@ -112,7 +114,7 @@ type CreateAwsIamCredentialPayload struct {
 	SessionToken *string
 	// A human-readable name for the credential.
 	Name string
-	// The customer IAM role ARN Gram assumes. Omit for a KMS key-policy grant.
+	// The customer IAM role ARN Speakeasy assumes. Omit for a KMS key-policy grant.
 	AssumeRoleArn *string
 	// The OIDC audience. Provide (with assume_role_arn) to assume the role with a
 	// web identity.
@@ -129,9 +131,9 @@ type CreateGcpIamCredentialPayload struct {
 	SessionToken *string
 	// A human-readable name for the credential.
 	Name string
-	// The service account in your project that Gram impersonates. Grant Gram's own
-	// service account roles/iam.serviceAccountTokenCreator on it — see
-	// externalCredentials.getGcpSetupInfo.
+	// The service account in your project that Speakeasy impersonates. Grant
+	// Speakeasy's own service account roles/iam.serviceAccountTokenCreator on it —
+	// see externalCredentials.getGcpSetupInfo.
 	ImpersonateServiceAccount string
 }
 
@@ -170,8 +172,8 @@ type ExternalCredentialSummary struct {
 // GcpIamCredential is the result type of the externalCredentials service
 // createGcpIamCredential method.
 type GcpIamCredential struct {
-	// The service account Gram impersonates (impersonation approach, or the WIF
-	// hop).
+	// The service account Speakeasy impersonates (impersonation approach, or the
+	// WIF hop).
 	ImpersonateServiceAccount *string
 	// Workload Identity Federation pool ID.
 	WifPoolID *string
@@ -196,12 +198,14 @@ type GcpIamCredential struct {
 // GcpSetupInfo is the result type of the externalCredentials service
 // getGcpSetupInfo method.
 type GcpSetupInfo struct {
-	// Gram's own service account. Grant it roles/iam.serviceAccountTokenCreator on
-	// the service account you want Gram to impersonate. Empty when the running
-	// environment cannot report one (local development backed by a user login
-	// rather than a service-account key).
+	// Speakeasy's own service account. Grant it
+	// roles/iam.serviceAccountTokenCreator on the service account you want
+	// Speakeasy to impersonate. Empty when the running environment cannot report
+	// one (local development backed by a user login rather than a service-account
+	// key).
 	ServiceAccountEmail *string
-	// The IAM role to grant Gram's service account on the target service account.
+	// The IAM role to grant Speakeasy's service account on the target service
+	// account.
 	RequiredRole string
 }
 
@@ -262,7 +266,7 @@ type UpdateAwsIamCredentialPayload struct {
 	SessionToken *string
 	// A human-readable name for the credential.
 	Name string
-	// The customer IAM role ARN Gram assumes. Omit for a KMS key-policy grant.
+	// The customer IAM role ARN Speakeasy assumes. Omit for a KMS key-policy grant.
 	AssumeRoleArn *string
 	// The OIDC audience. Provide (with assume_role_arn) to assume the role with a
 	// web identity.
@@ -281,16 +285,16 @@ type UpdateGcpIamCredentialPayload struct {
 	SessionToken *string
 	// A human-readable name for the credential.
 	Name string
-	// The service account in your project that Gram impersonates. Grant Gram's own
-	// service account roles/iam.serviceAccountTokenCreator on it — see
-	// externalCredentials.getGcpSetupInfo.
+	// The service account in your project that Speakeasy impersonates. Grant
+	// Speakeasy's own service account roles/iam.serviceAccountTokenCreator on it —
+	// see externalCredentials.getGcpSetupInfo.
 	ImpersonateServiceAccount string
 }
 
 // VerifyCredentialResult is the result type of the externalCredentials service
 // verifyGcpIamCredential method.
 type VerifyCredentialResult struct {
-	// Whether Gram could assume the credential's identity.
+	// Whether Speakeasy could assume the credential's identity.
 	Verified bool
 	// The principal the credential resolves to — the impersonated service account.
 	Principal *string

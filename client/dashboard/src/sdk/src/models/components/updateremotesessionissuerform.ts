@@ -14,6 +14,10 @@ export type UpdateRemoteSessionIssuerForm = {
    */
   authorizationEndpoint?: string | undefined;
   /**
+   * Advertised grant profiles; metadata evidence is not client authorization or user access.
+   */
+  authorizationGrantProfilesSupported?: Array<string> | undefined;
+  /**
    * Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field leaves the stored value unchanged.
    */
   authorizationResponseIssParameterSupported?: boolean | undefined;
@@ -72,6 +76,10 @@ export type UpdateRemoteSessionIssuerForm = {
   name?: string | undefined;
   oidc?: boolean | undefined;
   /**
+   * When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Omit or send null to keep the stored value; false restores the default.
+   */
+  omitScopeFallback?: boolean | undefined;
+  /**
    * Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
    */
   opPolicyUri?: string | undefined;
@@ -124,6 +132,7 @@ export type UpdateRemoteSessionIssuerForm = {
 /** @internal */
 export type UpdateRemoteSessionIssuerForm$Outbound = {
   authorization_endpoint?: string | undefined;
+  authorization_grant_profiles_supported?: Array<string> | undefined;
   authorization_response_iss_parameter_supported?: boolean | undefined;
   backchannel_logout_supported?: boolean | undefined;
   claims_supported?: Array<string> | undefined;
@@ -140,6 +149,7 @@ export type UpdateRemoteSessionIssuerForm$Outbound = {
   logo_asset_id?: string | undefined;
   name?: string | undefined;
   oidc?: boolean | undefined;
+  omit_scope_fallback?: boolean | undefined;
   op_policy_uri?: string | undefined;
   op_tos_uri?: string | undefined;
   passthrough?: boolean | undefined;
@@ -164,6 +174,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorizationEndpoint: z.optional(z.string()),
+    authorizationGrantProfilesSupported: z.optional(z.array(z.string())),
     authorizationResponseIssParameterSupported: z.optional(z.boolean()),
     backchannelLogoutSupported: z.optional(z.boolean()),
     claimsSupported: z.optional(z.array(z.string())),
@@ -180,6 +191,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
     logoAssetId: z.optional(z.string()),
     name: z.optional(z.string()),
     oidc: z.optional(z.boolean()),
+    omitScopeFallback: z.optional(z.boolean()),
     opPolicyUri: z.optional(z.string()),
     opTosUri: z.optional(z.string()),
     passthrough: z.optional(z.boolean()),
@@ -199,6 +211,8 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       authorizationEndpoint: "authorization_endpoint",
+      authorizationGrantProfilesSupported:
+        "authorization_grant_profiles_supported",
       authorizationResponseIssParameterSupported:
         "authorization_response_iss_parameter_supported",
       backchannelLogoutSupported: "backchannel_logout_supported",
@@ -214,6 +228,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
         "introspection_endpoint_auth_methods_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",
+      omitScopeFallback: "omit_scope_fallback",
       opPolicyUri: "op_policy_uri",
       opTosUri: "op_tos_uri",
       registrationEndpoint: "registration_endpoint",

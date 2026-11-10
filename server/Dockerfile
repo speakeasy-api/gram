@@ -1,4 +1,5 @@
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:f7f8f729987ad0fdf6b05eeeae94b26e6a0f613bdf46feea7fc40f7bd72953e6
+# CA bundle excludes the eMudhra-compromised trust paths (see docs/runbooks/emudhra-ca-update.md).
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:516757106de35205efb70b91ba03f6f1298424a0678c603255cf2852a7000087
 
 WORKDIR /app
 

@@ -1,6 +1,6 @@
-# Debugging Gram Backend
+# Debugging Speakeasy Backend
 
-You can debug the Gram server and Temporal worker in your VSCode-compatible IDE
+You can debug the Speakeasy server and Temporal worker in your VSCode-compatible IDE
 by adding the following launch configurations to your `.vscode/launch.json`
 file:
 

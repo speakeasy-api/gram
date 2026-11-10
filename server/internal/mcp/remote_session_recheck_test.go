@@ -18,13 +18,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -32,7 +38,7 @@ import (
 const recheckTestInterval = 24 * time.Hour
 
 // shapeGrantForKeepalive turns one grant into the population the sweep owns: no access expiry, no refresh token (the
-// fixture never stores one), created age ago so it is past the interval, and a live Gram session for the subject.
+// fixture never stores one), created age ago so it is past the interval, and a live Speakeasy session for the subject.
 func shapeGrantForKeepalive(t *testing.T, ctx context.Context, ti *testInstance, projectID, issuerID, clientID uuid.UUID, subject urn.SessionSubject, age time.Duration, jti string) remotesessions_repo.RemoteSession {
 	t.Helper()
 	q := remotesessions_repo.New(ti.conn)
@@ -44,7 +50,7 @@ func shapeGrantForKeepalive(t *testing.T, ctx context.Context, ti *testInstance,
 		ID:              sess.ID,
 		ProjectID:       conv.ToNullUUID(projectID),
 	}))
-	require.NoError(t, q.SetRemoteSessionValidationTrackingFixture(ctx, remotesessions_repo.SetRemoteSessionValidationTrackingFixtureParams{
+	require.NoError(t, testrepo.New(ti.conn).SetRemoteSessionValidationTrackingFixture(ctx, testrepo.SetRemoteSessionValidationTrackingFixtureParams{
 		LastValidatedAt:      pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 		LastRefreshAttemptAt: pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 		CreatedAt:            conv.ToPGTimestamptz(time.Now().Add(-age)),
@@ -66,7 +72,7 @@ func ageIntoRecheckWindow(t *testing.T, ctx context.Context, fx validationFixtur
 	t.Helper()
 	sess := storedSession(t, ctx, fx)
 	ago := conv.ToPGTimestamptz(time.Now().Add(-(recheckTestInterval + time.Hour)))
-	require.NoError(t, remotesessions_repo.New(fx.ti.conn).SetRemoteSessionValidationTrackingFixture(ctx, remotesessions_repo.SetRemoteSessionValidationTrackingFixtureParams{
+	require.NoError(t, testrepo.New(fx.ti.conn).SetRemoteSessionValidationTrackingFixture(ctx, testrepo.SetRemoteSessionValidationTrackingFixtureParams{
 		LastValidatedAt:      ago,
 		LastRefreshAttemptAt: ago,
 		CreatedAt:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
@@ -140,6 +146,46 @@ func TestRemoteSessionRecheck_RevokedNoExpiryGrantReadsRejected(t *testing.T) {
 	sess = storedSession(t, ctx, fx)
 	require.Equal(t, string(remotesessions.ValidationOutcomeValid), sess.ValidationStatus.String)
 	require.Equal(t, map[string]int64{"rejected_by_member": 1, "valid": 1}, validationCounts(t, fx.reader))
+	require.NoError(t, fx.ti.service.Shutdown(ctx))
+}
+
+// A registration the server offers through a typed auth client is re-checked in
+// the background like a linked one: its own token is presented and the verdict
+// is recorded, with no user session issuer link.
+func TestRemoteSessionRecheck_ProbesAnOfferedRegistrationWithoutASignInLink(t *testing.T) {
+	t.Parallel()
+
+	prefix := "recheck-typed-" + uuid.NewString()[:8]
+	ctx, fx := seedStandaloneValidationFixture(t, prefix)
+	projectID, orgID := consentTestTenant(t, ctx)
+	shared := fx.endpoint.UserSessionIssuerID
+	q := remotesessions_repo.New(fx.ti.conn)
+	require.NoError(t, q.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, remotesessions_repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{RemoteSessionClientID: fx.clientID, ProjectID: conv.ToNullUUID(projectID)}))
+
+	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-typed", "", nil)
+	fixtures := authclientfixtures.New(fx.ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: fx.endpoint.McpServerID.UUID, AuthClientID: authClientID, Source: "admin"}))
+	fx.ti.service.SetAuthClientPermitted(true)
+	_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, shared, registration, fx.subject, "typed-token", fx.member.url)
+	shapeGrantForKeepalive(t, ctx, fx.ti, projectID, shared, registration, fx.subject, recheckTestInterval+time.Hour, "jti-"+prefix)
+	fx.clientID = registration
+
+	fx.member.set(memberRejects)
+	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, checked)
+	requireProbe(t, fx.member.drain(), "typed-token", false, false)
+
+	sess := storedSession(t, ctx, fx)
+	require.Equal(t, string(remotesessions.ValidationOutcomeRejectedByMember), sess.ValidationStatus.String)
+	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
+	linked, err := q.CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{RemoteSessionClientID: registration, UserSessionIssuerID: shared, ProjectID: projectID, OrganizationID: orgID})
+	require.NoError(t, err)
+	require.False(t, linked, "the sweep writes no link")
 	require.NoError(t, fx.ti.service.Shutdown(ctx))
 }
 
@@ -252,6 +298,9 @@ func TestRemoteSessionRecheck_UnusableEndpointDoesNotShadowLiveSibling(t *testin
 			prefix := "aim261-shadow-" + visibility
 			ctx, fx := seedStandaloneValidationFixture(t, prefix)
 			makeKeepaliveShaped(t, ctx, fx, prefix)
+			// The live server is configured before its sibling shares the
+			// issuer, as an organization migrated with one server would be.
+			fx.ti.service.migrate(ctx)
 			projectID := fx.endpoint.ProjectID
 			endpoints := mcpendpoints_repo.New(fx.ti.conn)
 
@@ -393,10 +442,14 @@ func createPrivateTunneledServer(t *testing.T, ctx context.Context, ti *testInst
 }
 
 // seedTunneledRecheckFixture: a private tunneled endpoint with a keepalive-shaped grant keyed by the tunnel's identifier.
-func seedTunneledRecheckFixture(t *testing.T, prefix, identifier string) (context.Context, validationFixture, uuid.UUID) {
+func seedTunneledRecheckFixture(t *testing.T, prefix, identifier string, callerIssuers ...*mcpauthz.Issuer) (context.Context, validationFixture, uuid.UUID) {
 	t.Helper()
 	reader, provider := newValidationMeterProvider()
-	ctx, ti := newTestMCPServiceWithMetaRuntime(t, provider, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationProbeTimeout, AutoVerifyWait: 0, RecheckInterval: recheckTestInterval})
+	var callerIssuer *mcpauthz.Issuer
+	if len(callerIssuers) > 0 {
+		callerIssuer = callerIssuers[0]
+	}
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), provider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{ValidationTimeout: validationProbeTimeout, RecheckInterval: recheckTestInterval}, testenv.NewTracerProvider(t), nil, callerIssuer, "")
 	projectID, orgID := consentTestTenant(t, ctx)
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	serverID, tunnelID := createPrivateTunneledServer(t, ctx, ti, projectID, shared, prefix+"-server", identifier)

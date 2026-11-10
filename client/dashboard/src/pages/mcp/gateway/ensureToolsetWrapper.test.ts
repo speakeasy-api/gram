@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, it, vi } from "vitest";
 import { ensureToolsetWrapper } from "./ensureToolsetWrapper";
 function setup(servers: { id: string }[] = []) {
@@ -44,4 +45,11 @@ it("creates a wrapper only on the initial attempt", async () => {
       visibility: "private",
     },
   });
+});
+it("never reuses the toolset's hosted server as a gateway member", async () => {
+  const { client, create } = setup([{ id: toolset.id }, { id: "member" }]);
+  await expect(ensureToolsetWrapper(client, toolset, true)).resolves.toBe(
+    "member",
+  );
+  expect(create).not.toHaveBeenCalled();
 });

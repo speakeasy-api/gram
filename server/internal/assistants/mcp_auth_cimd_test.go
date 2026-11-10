@@ -22,8 +22,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	goahttp "goa.design/goa/v3/http"
 )
 
 func newCIMDAuthTestService(t *testing.T, conn *pgxpool.Pool) *Service {
@@ -127,7 +129,7 @@ func TestBuildAssistantClientMetadataDocument(t *testing.T) {
 	var got map[string]any
 	require.NoError(t, json.Unmarshal(body, &got))
 	require.Equal(t, clientID, got["client_id"])
-	require.Equal(t, "Gram Assistant: Support Bot", got["client_name"])
+	require.Equal(t, "Speakeasy Assistant: Support Bot", got["client_name"])
 	require.Equal(t, clientURI, got["client_uri"])
 	require.Equal(t, []any{redirectURI}, got["redirect_uris"])
 	require.Equal(t, []any{"authorization_code"}, got["grant_types"])
@@ -138,7 +140,7 @@ func TestBuildAssistantClientMetadataDocument(t *testing.T) {
 func TestBuildAssistantClientMetadataDocumentOmitsEmptyClientURI(t *testing.T) {
 	t.Parallel()
 
-	doc := buildAssistantClientMetadataDocument("https://gram.example.com/.well-known/oauth-client/assistants/abc", "Gram Assistant", "", "https://gram.example.com/callback")
+	doc := buildAssistantClientMetadataDocument("https://gram.example.com/.well-known/oauth-client/assistants/abc", "Speakeasy Assistant", "", "https://gram.example.com/callback")
 	body, err := json.Marshal(doc)
 	require.NoError(t, err)
 	var got map[string]any
@@ -456,7 +458,7 @@ func TestHandleMCPAuthCallbackInvalidClientRetiresCIMDClient(t *testing.T) {
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 
 	service := newCIMDAuthTestService(t, conn)
-	service.core.assistantTokens = assistanttokens.New("test-jwt-secret", conn, nil)
+	service.core.assistantTokens = assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 	service.signaler = &stubWorkflowSignaler{signalledThreads: nil}
 	redirectURI := "https://gram.example.com/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback"
 	cimd, err := service.getOrRegisterMCPAuthClient(
@@ -489,8 +491,11 @@ func TestHandleMCPAuthCallbackInvalidClientRetiresCIMDClient(t *testing.T) {
 	rctx.URLParams.Add("id", "flow-1")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	rec := httptest.NewRecorder()
-	require.NoError(t, service.handleMCPAuthCallback(rec, req))
-	require.Equal(t, http.StatusOK, rec.Code)
+	mux := goahttp.NewMuxer()
+	Attach(mux, service)
+	mux.ServeHTTP(rec, req)
+	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorRecovery(t, rec, http.StatusBadRequest, "https://app.getgram.ai/@self/projects/default/assistants").Code)
+	require.NotContains(t, rec.Body.String(), "Authentication complete")
 
 	row, err := assistantrepo.New(conn).GetAssistantMCPOAuthClient(t.Context(), assistantrepo.GetAssistantMCPOAuthClientParams{
 		ProjectID:         projectID,
@@ -523,7 +528,7 @@ func TestHandleAssistantClientMetadataDocumentServesDocument(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 	wantClientID := AssistantClientMetadataDocumentURL(service.core.serverURL, assistantID)
 	require.Equal(t, wantClientID, got["client_id"])
-	require.Equal(t, "Gram Assistant: Assistant", got["client_name"])
+	require.Equal(t, "Speakeasy Assistant: Assistant", got["client_name"])
 	require.Equal(t, "https://app.getgram.ai/acme/projects/project/assistants/"+assistantID.String(), got["client_uri"])
 	require.Equal(t, []any{service.core.serverURL.JoinPath("rpc", "assistantMcpAuth", assistantID.String(), "oauth", "callback").String()}, got["redirect_uris"])
 	require.Equal(t, "none", got["token_endpoint_auth_method"])
@@ -559,4 +564,70 @@ func TestHandleAssistantClientMetadataDocumentNotFoundOnCustomDomain(t *testing.
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+// newPinnedCIMDAuthTestService moves the server URL to ai.example.test while
+// the outbound origin stays pinned to app.example.test.
+func newPinnedCIMDAuthTestService(t *testing.T, conn *pgxpool.Pool) *Service {
+	t.Helper()
+	svc := newCIMDAuthTestService(t, conn)
+	serverURL, err := url.Parse("https://ai.example.test")
+	require.NoError(t, err)
+	svc.core.serverURL = serverURL
+	outbound, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	svc.core.SetOutboundCallbackOrigin(outbound)
+	return svc
+}
+
+func TestMCPAuthURLsUsePinnedOutboundOrigin(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_mcp_oauth_pinned_origin")
+	require.NoError(t, err)
+	projectID, assistantID, _, _ := insertAssistantFixture(t, conn)
+	service := newPinnedCIMDAuthTestService(t, conn)
+
+	redirectURI := service.core.mcpAuthRedirectURI(assistantID)
+	require.Equal(t, "https://app.example.test/rpc/assistantMcpAuth/"+assistantID.String()+"/oauth/callback", redirectURI)
+
+	client, err := service.getOrRegisterMCPAuthClient(t.Context(), projectID, assistantID, "https://auth.example.com", "", redirectURI, true)
+	require.NoError(t, err)
+	require.Equal(t, "https://app.example.test/.well-known/oauth-client/assistants/"+assistantID.String(), client.ClientID)
+}
+
+func TestHandleAssistantClientMetadataDocumentUsesPinnedOutboundOrigin(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_mcp_oauth_cimd_document_pinned")
+	require.NoError(t, err)
+	seedAssistantOrgMetadata(t, conn)
+	_, assistantID, _, _ := insertAssistantFixture(t, conn)
+	service := newPinnedCIMDAuthTestService(t, conn)
+
+	// The same document is served on the server URL host and the pinned host.
+	for _, host := range []string{"ai.example.test", "app.example.test"} {
+		req := assistantCIMDDocumentRequest(t, assistantID.String(), false)
+		req.Host = host
+		rec := httptest.NewRecorder()
+		require.NoError(t, service.handleAssistantClientMetadataDocument(rec, req))
+		require.Equal(t, http.StatusOK, rec.Code)
+		var got map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+		require.Equal(t, "https://app.example.test/.well-known/oauth-client/assistants/"+assistantID.String(), got["client_id"], host)
+		require.Equal(t, []any{"https://app.example.test/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback"}, got["redirect_uris"], host)
+	}
+}
+
+func TestAssistantCIMDAllowedFollowsPinnedOutboundOrigin(t *testing.T) {
+	t.Parallel()
+
+	svc := newPinnedCIMDAuthTestService(t, nil)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagAssistantOAuthCIMD, "org-test", true)
+	svc.core.SetFeatureProvider(flags)
+	plain, err := url.Parse("http://localhost:8080")
+	require.NoError(t, err)
+	svc.core.serverURL = plain
+	require.True(t, svc.assistantCIMDAllowed(t.Context(), "org-test", "acme"), "client_id uses the pinned https origin")
 }

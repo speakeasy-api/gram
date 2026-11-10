@@ -16,6 +16,86 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildBeginBindingRefreshPayload builds the payload for the remoteSessions
+// beginBindingRefresh endpoint from CLI flags.
+func BuildBeginBindingRefreshPayload(remoteSessionsBeginBindingRefreshBody string, remoteSessionsBeginBindingRefreshSessionToken string, remoteSessionsBeginBindingRefreshProjectSlugInput string) (*remotesessions.BeginBindingRefreshPayload, error) {
+	var err error
+	var body BeginBindingRefreshRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionsBeginBindingRefreshBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"binding_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.principal_id", body.PrincipalID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.binding_id", body.BindingID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsBeginBindingRefreshSessionToken != "" {
+			sessionToken = &remoteSessionsBeginBindingRefreshSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsBeginBindingRefreshProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsBeginBindingRefreshProjectSlugInput
+		}
+	}
+	v := &remotesessions.BeginBindingRefreshPayload{
+		PrincipalID:         body.PrincipalID,
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		BindingID:           body.BindingID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCompleteBindingRefreshPayload builds the payload for the remoteSessions
+// completeBindingRefresh endpoint from CLI flags.
+func BuildCompleteBindingRefreshPayload(remoteSessionsCompleteBindingRefreshBody string, remoteSessionsCompleteBindingRefreshSessionToken string, remoteSessionsCompleteBindingRefreshProjectSlugInput string) (*remotesessions.CompleteBindingRefreshPayload, error) {
+	var err error
+	var body CompleteBindingRefreshRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionsCompleteBindingRefreshBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"attempt_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.principal_id", body.PrincipalID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.attempt_id", body.AttemptID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsCompleteBindingRefreshSessionToken != "" {
+			sessionToken = &remoteSessionsCompleteBindingRefreshSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsCompleteBindingRefreshProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsCompleteBindingRefreshProjectSlugInput
+		}
+	}
+	v := &remotesessions.CompleteBindingRefreshPayload{
+		PrincipalID:         body.PrincipalID,
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		AttemptID:           body.AttemptID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListBindingsPayload builds the payload for the remoteSessions
 // listBindings endpoint from CLI flags.
 func BuildListBindingsPayload(remoteSessionsListBindingsPrincipalID string, remoteSessionsListBindingsUserSessionIssuerID string, remoteSessionsListBindingsSessionToken string, remoteSessionsListBindingsProjectSlugInput string) (*remotesessions.ListBindingsPayload, error) {
@@ -137,6 +217,309 @@ func BuildDetachBindingPayload(remoteSessionsDetachBindingBody string, remoteSes
 	return v, nil
 }
 
+// BuildTestServerConnectionPayload builds the payload for the remoteSessions
+// testServerConnection endpoint from CLI flags.
+func BuildTestServerConnectionPayload(remoteSessionsTestServerConnectionBody string, remoteSessionsTestServerConnectionSessionToken string, remoteSessionsTestServerConnectionProjectSlugInput string) (*remotesessions.TestServerConnectionPayload, error) {
+	var err error
+	var body TestServerConnectionRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionsTestServerConnectionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsTestServerConnectionSessionToken != "" {
+			sessionToken = &remoteSessionsTestServerConnectionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsTestServerConnectionProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsTestServerConnectionProjectSlugInput
+		}
+	}
+	v := &remotesessions.TestServerConnectionPayload{
+		McpServerID: body.McpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCommitServerIdentityConfigurationPayload builds the payload for the
+// remoteSessions commitServerIdentityConfiguration endpoint from CLI flags.
+func BuildCommitServerIdentityConfigurationPayload(remoteSessionsCommitServerIdentityConfigurationBody string, remoteSessionsCommitServerIdentityConfigurationSessionToken string, remoteSessionsCommitServerIdentityConfigurationApikeyToken string, remoteSessionsCommitServerIdentityConfigurationProjectSlugInput string) (*remotesessions.CommitServerIdentityConfigurationPayload, error) {
+	var err error
+	var body CommitServerIdentityConfigurationRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionsCommitServerIdentityConfigurationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_configuration\": {\n         \"audience\": \"aaa\",\n         \"client_id\": \"abc123\",\n         \"client_secret\": \"abc123\",\n         \"scope\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"template_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"token_endpoint_auth_method\": \"client_secret_post\"\n      },\n      \"client_mode\": \"existing\",\n      \"create_provider\": {\n         \"authorization_endpoint\": \"abc123\",\n         \"authorization_grant_profiles_supported\": [\n            \"abc123\"\n         ],\n         \"authorization_response_iss_parameter_supported\": false,\n         \"backchannel_logout_supported\": false,\n         \"claims_supported\": [\n            \"abc123\"\n         ],\n         \"client_id_metadata_document_supported\": false,\n         \"client_setup_documentation_url\": \"abc123\",\n         \"code_challenge_methods_supported\": [\n            \"abc123\"\n         ],\n         \"grant_types_supported\": [\n            \"abc123\"\n         ],\n         \"id_token_signing_alg_values_supported\": [\n            \"abc123\"\n         ],\n         \"introspection_endpoint\": \"abc123\",\n         \"introspection_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ],\n         \"issuer\": \"abc123\",\n         \"jwks_uri\": \"abc123\",\n         \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"name\": \"abc123\",\n         \"oidc\": false,\n         \"omit_scope_fallback\": false,\n         \"op_policy_uri\": \"abc123\",\n         \"op_tos_uri\": \"abc123\",\n         \"passthrough\": false,\n         \"registration_endpoint\": \"abc123\",\n         \"resource_indicator_supported\": false,\n         \"response_types_supported\": [\n            \"abc123\"\n         ],\n         \"revocation_endpoint\": \"abc123\",\n         \"scope_override\": [\n            \"abc123\"\n         ],\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"service_documentation\": \"abc123\",\n         \"slug\": \"abc123\",\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ],\n         \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"userinfo_endpoint\": \"abc123\"\n      },\n      \"existing_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_method\": \"dcr\",\n      \"replace_client\": false,\n      \"replace_client_server_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"target_server_only\": false\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if body.ProviderID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.provider_id", *body.ProviderID, goa.FormatUUID))
+		}
+		if body.CreateProvider != nil {
+			if err2 := ValidateCreateRemoteSessionIssuerFormRequestBody(body.CreateProvider); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if !(body.ClientMode == "auto" || body.ClientMode == "existing" || body.ClientMode == "manual") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_mode", body.ClientMode, []any{"auto", "existing", "manual"}))
+		}
+		if body.ExistingClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.existing_client_id", *body.ExistingClientID, goa.FormatUUID))
+		}
+		if body.ClientConfiguration != nil {
+			if err2 := ValidateServerIdentityClientConfigurationRequestBody(body.ClientConfiguration); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if body.RegistrationMethod != nil {
+			if !(*body.RegistrationMethod == "cimd" || *body.RegistrationMethod == "dcr") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registration_method", *body.RegistrationMethod, []any{"cimd", "dcr"}))
+			}
+		}
+		for _, e := range body.ReplaceClientServerIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.replace_client_server_ids[*]", e, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsCommitServerIdentityConfigurationSessionToken != "" {
+			sessionToken = &remoteSessionsCommitServerIdentityConfigurationSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionsCommitServerIdentityConfigurationApikeyToken != "" {
+			apikeyToken = &remoteSessionsCommitServerIdentityConfigurationApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsCommitServerIdentityConfigurationProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsCommitServerIdentityConfigurationProjectSlugInput
+		}
+	}
+	v := &remotesessions.CommitServerIdentityConfigurationPayload{
+		McpServerID:        body.McpServerID,
+		ProviderID:         body.ProviderID,
+		TargetServerOnly:   body.TargetServerOnly,
+		ClientMode:         body.ClientMode,
+		ExistingClientID:   body.ExistingClientID,
+		RegistrationMethod: body.RegistrationMethod,
+		ReplaceClient:      body.ReplaceClient,
+	}
+	if body.CreateProvider != nil {
+		v.CreateProvider = marshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemoteSessionIssuerForm(body.CreateProvider)
+	}
+	if body.ClientConfiguration != nil {
+		v.ClientConfiguration = marshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerIdentityClientConfiguration(body.ClientConfiguration)
+	}
+	if body.ReplaceClientServerIds != nil {
+		v.ReplaceClientServerIds = make([]string, len(body.ReplaceClientServerIds))
+		for i, val := range body.ReplaceClientServerIds {
+			v.ReplaceClientServerIds[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetServerIdentityImpactPayload builds the payload for the
+// remoteSessions getServerIdentityImpact endpoint from CLI flags.
+func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUserSessionIssuerID string, remoteSessionsGetServerIdentityImpactMcpServerID string, remoteSessionsGetServerIdentityImpactChange string, remoteSessionsGetServerIdentityImpactProviderID string, remoteSessionsGetServerIdentityImpactClientID string, remoteSessionsGetServerIdentityImpactReplaceClient string, remoteSessionsGetServerIdentityImpactSessionToken string, remoteSessionsGetServerIdentityImpactApikeyToken string, remoteSessionsGetServerIdentityImpactProjectSlugInput string) (*remotesessions.GetServerIdentityImpactPayload, error) {
+	var err error
+	var userSessionIssuerID string
+	{
+		userSessionIssuerID = remoteSessionsGetServerIdentityImpactUserSessionIssuerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", userSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var mcpServerID *string
+	{
+		if remoteSessionsGetServerIdentityImpactMcpServerID != "" {
+			mcpServerID = &remoteSessionsGetServerIdentityImpactMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var change string
+	{
+		change = remoteSessionsGetServerIdentityImpactChange
+		if !(change == "replace" || change == "attach" || change == "detach") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("change", change, []any{"replace", "attach", "detach"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var providerID *string
+	{
+		if remoteSessionsGetServerIdentityImpactProviderID != "" {
+			providerID = &remoteSessionsGetServerIdentityImpactProviderID
+			err = goa.MergeErrors(err, goa.ValidateFormat("provider_id", *providerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var clientID *string
+	{
+		if remoteSessionsGetServerIdentityImpactClientID != "" {
+			clientID = &remoteSessionsGetServerIdentityImpactClientID
+			err = goa.MergeErrors(err, goa.ValidateFormat("client_id", *clientID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var replaceClient *bool
+	{
+		if remoteSessionsGetServerIdentityImpactReplaceClient != "" {
+			var val bool
+			val, err = strconv.ParseBool(remoteSessionsGetServerIdentityImpactReplaceClient)
+			replaceClient = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for replaceClient, must be BOOL")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsGetServerIdentityImpactSessionToken != "" {
+			sessionToken = &remoteSessionsGetServerIdentityImpactSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionsGetServerIdentityImpactApikeyToken != "" {
+			apikeyToken = &remoteSessionsGetServerIdentityImpactApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsGetServerIdentityImpactProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsGetServerIdentityImpactProjectSlugInput
+		}
+	}
+	v := &remotesessions.GetServerIdentityImpactPayload{}
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.McpServerID = mcpServerID
+	v.Change = change
+	v.ProviderID = providerID
+	v.ClientID = clientID
+	v.ReplaceClient = replaceClient
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListServerClientAssociationsPayload builds the payload for the
+// remoteSessions listServerClientAssociations endpoint from CLI flags.
+func BuildListServerClientAssociationsPayload(remoteSessionsListServerClientAssociationsMcpServerID string, remoteSessionsListServerClientAssociationsSessionToken string, remoteSessionsListServerClientAssociationsApikeyToken string, remoteSessionsListServerClientAssociationsProjectSlugInput string) (*remotesessions.ListServerClientAssociationsPayload, error) {
+	var err error
+	var mcpServerID string
+	{
+		mcpServerID = remoteSessionsListServerClientAssociationsMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsListServerClientAssociationsSessionToken != "" {
+			sessionToken = &remoteSessionsListServerClientAssociationsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionsListServerClientAssociationsApikeyToken != "" {
+			apikeyToken = &remoteSessionsListServerClientAssociationsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsListServerClientAssociationsProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsListServerClientAssociationsProjectSlugInput
+		}
+	}
+	v := &remotesessions.ListServerClientAssociationsPayload{}
+	v.McpServerID = mcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDetachServerClientAssociationPayload builds the payload for the
+// remoteSessions detachServerClientAssociation endpoint from CLI flags.
+func BuildDetachServerClientAssociationPayload(remoteSessionsDetachServerClientAssociationBody string, remoteSessionsDetachServerClientAssociationSessionToken string, remoteSessionsDetachServerClientAssociationApikeyToken string, remoteSessionsDetachServerClientAssociationProjectSlugInput string) (*remotesessions.DetachServerClientAssociationPayload, error) {
+	var err error
+	var body DetachServerClientAssociationRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionsDetachServerClientAssociationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", body.RemoteSessionClientID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsDetachServerClientAssociationSessionToken != "" {
+			sessionToken = &remoteSessionsDetachServerClientAssociationSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionsDetachServerClientAssociationApikeyToken != "" {
+			apikeyToken = &remoteSessionsDetachServerClientAssociationApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsDetachServerClientAssociationProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsDetachServerClientAssociationProjectSlugInput
+		}
+	}
+	v := &remotesessions.DetachServerClientAssociationPayload{
+		McpServerID:           body.McpServerID,
+		RemoteSessionClientID: body.RemoteSessionClientID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListRemoteSessionsPayload builds the payload for the remoteSessions
 // listRemoteSessions endpoint from CLI flags.
 func BuildListRemoteSessionsPayload(remoteSessionsListRemoteSessionsPrincipalID string, remoteSessionsListRemoteSessionsUserSessionIssuerID string, remoteSessionsListRemoteSessionsSubjectUrn string, remoteSessionsListRemoteSessionsRemoteSessionClientID string, remoteSessionsListRemoteSessionsCursor string, remoteSessionsListRemoteSessionsLimit string, remoteSessionsListRemoteSessionsSessionToken string, remoteSessionsListRemoteSessionsApikeyToken string, remoteSessionsListRemoteSessionsProjectSlugInput string) (*remotesessions.ListRemoteSessionsPayload, error) {
@@ -220,6 +603,45 @@ func BuildListRemoteSessionsPayload(remoteSessionsListRemoteSessionsPrincipalID 
 	v.RemoteSessionClientID = remoteSessionClientID
 	v.Cursor = cursor
 	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCountRemoteSessionsPayload builds the payload for the remoteSessions
+// countRemoteSessions endpoint from CLI flags.
+func BuildCountRemoteSessionsPayload(remoteSessionsCountRemoteSessionsRemoteSessionClientID string, remoteSessionsCountRemoteSessionsSessionToken string, remoteSessionsCountRemoteSessionsApikeyToken string, remoteSessionsCountRemoteSessionsProjectSlugInput string) (*remotesessions.CountRemoteSessionsPayload, error) {
+	var err error
+	var remoteSessionClientID string
+	{
+		remoteSessionClientID = remoteSessionsCountRemoteSessionsRemoteSessionClientID
+		err = goa.MergeErrors(err, goa.ValidateFormat("remote_session_client_id", remoteSessionClientID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsCountRemoteSessionsSessionToken != "" {
+			sessionToken = &remoteSessionsCountRemoteSessionsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionsCountRemoteSessionsApikeyToken != "" {
+			apikeyToken = &remoteSessionsCountRemoteSessionsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsCountRemoteSessionsProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsCountRemoteSessionsProjectSlugInput
+		}
+	}
+	v := &remotesessions.CountRemoteSessionsPayload{}
+	v.RemoteSessionClientID = remoteSessionClientID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

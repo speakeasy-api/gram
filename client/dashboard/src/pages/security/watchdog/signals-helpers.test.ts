@@ -1,9 +1,11 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import {
   filterSignalsByCategory,
   filterSignalsBySeverity,
   groupSignals,
+  signalBucketStarts,
   toggleFilterValue,
   trendPercent,
 } from "./signals-helpers";
@@ -16,6 +18,8 @@ function signal(overrides: Partial<RiskSignal>): RiskSignal {
     description: "",
     detectionSources: [],
     apps: [],
+    mcpServerIds: [],
+    toolNames: [],
     severity: "high",
     riskScore: 7.5,
     findings: 10,
@@ -29,6 +33,20 @@ function signal(overrides: Partial<RiskSignal>): RiskSignal {
     ...overrides,
   };
 }
+
+describe("groupSignals by server", () => {
+  it("files a signal under every server it was seen on, unattributed last", () => {
+    const a = signal({ key: "a", mcpServerIds: ["srv-1", "srv-2"] });
+    const b = signal({ key: "b", mcpServerIds: [] });
+    const c = signal({ key: "c", mcpServerIds: ["srv-2"] });
+    const groups = groupSignals([a, b, c], "server");
+    expect(groups.map((g) => [g.key, g.signals.map((s) => s.key)])).toEqual([
+      ["srv-1", ["a"]],
+      ["srv-2", ["a", "c"]],
+      ["", ["b"]],
+    ]);
+  });
+});
 
 describe("trendPercent", () => {
   it("computes within-window growth from segment means", () => {
@@ -189,5 +207,35 @@ describe("toggleFilterValue", () => {
   it("adds a missing value and removes a present one", () => {
     expect(toggleFilterValue([], "secrets")).toEqual(["secrets"]);
     expect(toggleFilterValue(["secrets", "pii"], "secrets")).toEqual(["pii"]);
+  });
+});
+
+describe("signalBucketStarts", () => {
+  it("splits a day into 24 hour-wide epoch-aligned buckets", () => {
+    const from = new Date("2026-08-01T10:30:00Z");
+    const to = new Date("2026-08-02T10:30:00Z");
+    const { starts, bucketMs } = signalBucketStarts(from, to, 25);
+    expect(bucketMs).toBe(3_600_000);
+    expect(starts).toHaveLength(25);
+    // Aligned down to the hour that contains `from`.
+    expect(new Date(starts[0]!).toISOString()).toBe("2026-08-01T10:00:00.000Z");
+    expect(new Date(starts[24]!).toISOString()).toBe(
+      "2026-08-02T10:00:00.000Z",
+    );
+  });
+
+  it("rounds the width up and floors it at a minute", () => {
+    const from = new Date("2026-08-01T00:00:00Z");
+    expect(
+      signalBucketStarts(from, new Date("2026-08-01T00:10:00Z"), 1).bucketMs,
+    ).toBe(60_000);
+    // 7 days / 24 = 25200s exactly.
+    expect(
+      signalBucketStarts(from, new Date("2026-08-08T00:00:00Z"), 24).bucketMs,
+    ).toBe(25_200_000);
+    // One extra second rounds the width up, never down.
+    expect(
+      signalBucketStarts(from, new Date("2026-08-08T00:00:01Z"), 24).bucketMs,
+    ).toBe(25_201_000);
   });
 });

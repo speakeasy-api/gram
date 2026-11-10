@@ -279,6 +279,53 @@ func TestJudgeReturnsUsageForCleanVerdict(t *testing.T) {
 	require.Equal(t, 168, verdict.TotalTokens)
 }
 
+// TestJudgeCapsGeneratedTokens pins the output cap. Without it OpenRouter
+// reserves the model's full ceiling against the key's limit and refuses every
+// call, degrading every policy to its fail mode.
+func TestJudgeCapsGeneratedTokens(t *testing.T) {
+	t.Parallel()
+
+	client := &successfulCompletionClient{body: `{"matched":false,"confidence":0.1,"rationale":"safe"}`}
+	j := newTestJudge(t, client)
+
+	_, err := j.Evaluate(t.Context(), promptpolicy.Input{
+		OrgID:     "org-a",
+		ProjectID: "proj",
+		Prompt:    "flag secrets",
+		Message:   judgemessage.New(message.User, "", "hello"),
+		Config:    promptpolicy.Config{Temperature: nil, FailOpen: true},
+	})
+	require.NoError(t, err)
+
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	require.NotNil(t, client.lastReq.MaxTokens)
+	require.Equal(t, maxVerdictTokens, *client.lastReq.MaxTokens)
+}
+
+// TestJudgeRejectsTruncatedVerdict covers the risk the cap introduces: a
+// truncated completion can still parse as a valid verdict.
+func TestJudgeRejectsTruncatedVerdict(t *testing.T) {
+	t.Parallel()
+
+	client := &successfulCompletionClient{
+		body:         `{"matched":true,"confidence":0.9,"rationale":"cut off`,
+		finishReason: new(openrouter.FinishReasonLength),
+	}
+	j := newTestJudge(t, client)
+
+	verdict, err := j.Evaluate(t.Context(), promptpolicy.Input{
+		OrgID:     "org-a",
+		ProjectID: "proj",
+		Prompt:    "flag secrets",
+		Message:   judgemessage.New(message.User, "", "hello"),
+		Config:    promptpolicy.Config{Temperature: nil, FailOpen: true},
+	})
+
+	require.Error(t, err, "a truncated completion is not a verdict")
+	require.Nil(t, verdict)
+}
+
 // newTestJudge builds a Judge with a Redis-backed judge limiter on its own
 // logical DB, isolated per test.
 func newTestJudge(t *testing.T, client openrouter.CompletionClient) *Judge {
@@ -359,8 +406,9 @@ func (c *countingCompletionClient) CreateEmbeddings(_ context.Context, _ string,
 }
 
 type successfulCompletionClient struct {
-	body  string
-	usage openrouter.Usage
+	body         string
+	usage        openrouter.Usage
+	finishReason *string
 
 	mu      sync.Mutex
 	lastReq openrouter.ObjectCompletionRequest
@@ -381,7 +429,7 @@ func (c *successfulCompletionClient) GetObjectCompletion(_ context.Context, req 
 		MessageID:    "",
 		Model:        "",
 		Usage:        c.usage,
-		FinishReason: nil,
+		FinishReason: c.finishReason,
 		ToolCalls:    nil,
 		Content:      "",
 	}, nil

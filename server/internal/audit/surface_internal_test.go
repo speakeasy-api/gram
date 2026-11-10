@@ -106,6 +106,14 @@ func TestActingIdentityFromContext_Derivation(t *testing.T) {
 			surface: SurfacePlatformMCP,
 		},
 		{
+			name: "Admin MCP is a distinct closed surface",
+			ctx: func(t *testing.T) context.Context {
+				t.Helper()
+				return contextvalues.SetActingSurface(sessionContext(t, sessionID), string(SurfaceAdminMCP))
+			},
+			surface: SurfaceAdminMCP,
+		},
+		{
 			name: "platform break glass is a distinct closed surface",
 			ctx: func(t *testing.T) context.Context {
 				t.Helper()
@@ -207,9 +215,10 @@ func TestSurfaceFromContext_MatchesDerivation(t *testing.T) {
 func TestKnownSurfaces_AreLowCardinality(t *testing.T) {
 	t.Parallel()
 
-	require.Len(t, knownSurfaces, 8)
+	require.Len(t, knownSurfaces, 9)
 	require.Contains(t, knownSurfaces, SurfaceUnknown)
 	require.Contains(t, knownSurfaces, SurfaceSystem)
 	require.Contains(t, knownSurfaces, SurfaceAdmin)
+	require.Contains(t, knownSurfaces, SurfaceAdminMCP)
 	require.Contains(t, knownSurfaces, SurfacePlatformBreakGlass)
 }

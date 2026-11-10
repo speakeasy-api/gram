@@ -15,6 +15,7 @@ import (
 
 const (
 	ActionRemoteSessionClientCreate                  Action = "remote-session-client:create"
+	ActionRemoteSessionClientDuplicate               Action = "remote-session-client:duplicate"
 	ActionRemoteSessionClientUpdate                  Action = "remote-session-client:update"
 	ActionRemoteSessionClientDelete                  Action = "remote-session-client:delete"
 	ActionRemoteSessionClientDetachMcpServer         Action = "remote-session-client:detach-mcp-server"
@@ -23,6 +24,10 @@ const (
 	ActionRemoteSessionClientDetachUserSessionIssuer Action = "remote-session-client:detach-user-session-issuer"
 	ActionRemoteSessionClientAttachJsonWebKeySet     Action = "remote-session-client:attach-json-web-key-set"
 	ActionRemoteSessionClientDetachJsonWebKeySet     Action = "remote-session-client:detach-json-web-key-set"
+
+	ActionRemoteSessionClientEnableIdentityChaining       Action = "remote-session-client:enable-identity-chaining"
+	ActionRemoteSessionClientUpdateIdentityChainingScopes Action = "remote-session-client:update-identity-chaining-scopes"
+	ActionRemoteSessionClientDisableIdentityChaining      Action = "remote-session-client:disable-identity-chaining"
 )
 
 type LogRemoteSessionClientCreateEvent struct {
@@ -34,12 +39,24 @@ type LogRemoteSessionClientCreateEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+
+	// SnapshotAfter is the created client, recording its credential owner and
+	// authentication settings. Nil when the caller records the create without
+	// one.
+	SnapshotAfter *types.RemoteSessionClient
 }
 
 func (l *Logger) LogRemoteSessionClientCreate(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientCreateEvent) error {
 	action := ActionRemoteSessionClientCreate
+
+	afterSnapshot, err := marshalAuditPayload(event.SnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -56,8 +73,94 @@ func (l *Logger) LogRemoteSessionClientCreate(ctx context.Context, dbtx repo.DBT
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
+}
+
+// RemoteSessionClientDuplicateRegistration names where a duplicated client's
+// upstream credentials came from.
+type RemoteSessionClientDuplicateRegistration string
+
+const (
+	// RemoteSessionClientDuplicateRegistrationCopied: the copy reuses the
+	// source's client_id and stored secret.
+	RemoteSessionClientDuplicateRegistrationCopied RemoteSessionClientDuplicateRegistration = "copied"
+
+	// RemoteSessionClientDuplicateRegistrationRegistered: the caller supplied a
+	// fresh upstream registration for the copy.
+	RemoteSessionClientDuplicateRegistrationRegistered RemoteSessionClientDuplicateRegistration = "registered"
+
+	// RemoteSessionClientDuplicateRegistrationMetadataDocument: the copy is a
+	// client metadata document client with its own hosted document.
+	RemoteSessionClientDuplicateRegistrationMetadataDocument RemoteSessionClientDuplicateRegistration = "metadata_document"
+)
+
+type LogRemoteSessionClientDuplicateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	// RemoteSessionClientURN is the new client.
+	RemoteSessionClientURN urn.RemoteSessionClient
+
+	// ClientID is the new client's upstream client_id.
+	ClientID string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+
+	// SourceRemoteSessionClientURN is the client the configuration was copied
+	// from, which is left unchanged.
+	SourceRemoteSessionClientURN urn.RemoteSessionClient
+
+	// Registration records where the new client's upstream credentials came from.
+	Registration RemoteSessionClientDuplicateRegistration
+
+	// SnapshotAfter is the created client.
+	SnapshotAfter *types.RemoteSessionClient
+}
+
+// LogRemoteSessionClientDuplicate records a client created as a copy of
+// another. The subject is the new client; the source is captured in metadata.
+func (l *Logger) LogRemoteSessionClientDuplicate(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientDuplicateEvent) error {
+	action := ActionRemoteSessionClientDuplicate
+
+	afterSnapshot, err := marshalAuditPayload(event.SnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"source_remote_session_client_id": event.SourceRemoteSessionClientURN.ID.String(),
+		"registration":                    string(event.Registration),
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.RemoteSessionClientURN.ID.String(),
+		SubjectType:        string(subjectTypeRemoteSessionClient),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ClientID),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
@@ -72,7 +175,7 @@ type LogRemoteSessionClientUpdateEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 
 	SnapshotBefore *types.RemoteSessionClient
 	SnapshotAfter  *types.RemoteSessionClient
@@ -92,6 +195,7 @@ func (l *Logger) LogRemoteSessionClientUpdate(ctx context.Context, dbtx repo.DBT
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -124,12 +228,13 @@ type LogRemoteSessionClientDeleteEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 }
 
 func (l *Logger) LogRemoteSessionClientDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientDeleteEvent) error {
 	action := ActionRemoteSessionClientDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -162,15 +267,16 @@ type LogRemoteSessionClientDetachMcpServerEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 	McpServerURN           urn.McpServer
 	McpServerName          string
 }
 
-// LogRemoteSessionClientDetachMcpServer records that an organization admin
-// detached a remote_session_client from an MCP server (clearing that server's
-// user_session_issuer link). The affected MCP server is captured in metadata so
-// the audit trail names the server whose authentication changed.
+// LogRemoteSessionClientDetachMcpServer records that a remote_session_client
+// was detached from an MCP server, either by an organization admin removing
+// the binding from the server's user session issuer or by removing the
+// server's own client association. The affected MCP server is captured in
+// metadata so the audit trail names the server whose authentication changed.
 func (l *Logger) LogRemoteSessionClientDetachMcpServer(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientDetachMcpServerEvent) error {
 	action := ActionRemoteSessionClientDetachMcpServer
 
@@ -183,6 +289,7 @@ func (l *Logger) LogRemoteSessionClientDetachMcpServer(ctx context.Context, dbtx
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -220,7 +327,7 @@ type LogRemoteSessionClientUserSessionIssuerAttachmentEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 	UserSessionIssuerURN   urn.UserSessionIssuer
 }
 
@@ -276,7 +383,7 @@ type LogRemoteSessionClientJsonWebKeySetAttachmentEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 	JsonWebKeySetURN       urn.JsonWebKeySet
 }
 
@@ -325,7 +432,7 @@ type LogRemoteSessionClientRevokeSessionsEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 	RevokedCount           int64
 }
 
@@ -344,6 +451,7 @@ func (l *Logger) LogRemoteSessionClientRevokeSessions(ctx context.Context, dbtx 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -388,6 +496,7 @@ type remoteSessionClientAttachment struct {
 // and JSON Web Key Set writers cannot drift apart as the row shape changes.
 func remoteSessionClientAttachmentRow(a remoteSessionClientAttachment) repo.InsertAuditLogParams {
 	return repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: a.organizationID,
 		ProjectID:      uuid.NullUUID{UUID: a.projectID, Valid: a.projectID != uuid.Nil},
 
@@ -407,4 +516,81 @@ func remoteSessionClientAttachmentRow(a remoteSessionClientAttachment) repo.Inse
 		AfterSnapshot:  nil,
 		Metadata:       a.metadata,
 	}
+}
+
+// LogRemoteSessionClientIdentityChainingEvent records a change to the identity
+// chaining binding that routes a user session issuer's users to a resource
+// through this client. The binding is captured in metadata; scopes carry the
+// requested scopes after the change and, for a scope update, before it.
+type LogRemoteSessionClientIdentityChainingEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RemoteSessionClientURN urn.RemoteSessionClient
+	ClientID               string    //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	BindingID              uuid.UUID //nolint:glint // auditeventurnnaming: EMA bindings have no URN; recorded in metadata only.
+	UserSessionIssuerURN   urn.UserSessionIssuer
+	RemoteSessionIssuerURN urn.RemoteSessionIssuer
+	Resource               string
+	Generation             int64
+	State                  string
+	ScopesBefore           []string
+	ScopesAfter            []string
+}
+
+func (l *Logger) LogRemoteSessionClientEnableIdentityChaining(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientIdentityChainingEvent) error {
+	return l.logRemoteSessionClientIdentityChaining(ctx, dbtx, ActionRemoteSessionClientEnableIdentityChaining, event)
+}
+
+func (l *Logger) LogRemoteSessionClientUpdateIdentityChainingScopes(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientIdentityChainingEvent) error {
+	return l.logRemoteSessionClientIdentityChaining(ctx, dbtx, ActionRemoteSessionClientUpdateIdentityChainingScopes, event)
+}
+
+func (l *Logger) LogRemoteSessionClientDisableIdentityChaining(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientIdentityChainingEvent) error {
+	return l.logRemoteSessionClientIdentityChaining(ctx, dbtx, ActionRemoteSessionClientDisableIdentityChaining, event)
+}
+
+func (l *Logger) logRemoteSessionClientIdentityChaining(ctx context.Context, dbtx repo.DBTX, action Action, event LogRemoteSessionClientIdentityChainingEvent) error {
+	payload := map[string]any{
+		"binding_id":               event.BindingID.String(),
+		"user_session_issuer_id":   event.UserSessionIssuerURN.ID.String(),
+		"remote_session_issuer_id": event.RemoteSessionIssuerURN.ID.String(),
+		"resource":                 event.Resource,
+		"generation":               event.Generation,
+		"state":                    event.State,
+		"scopes":                   scopesOrEmpty(event.ScopesAfter),
+	}
+	if action == ActionRemoteSessionClientUpdateIdentityChainingScopes {
+		payload["previous_scopes"] = scopesOrEmpty(event.ScopesBefore)
+	}
+	metadata, err := marshalAuditPayload(payload)
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	return l.log(ctx, dbtx, auditEntry{
+		Params: remoteSessionClientAttachmentRow(remoteSessionClientAttachment{
+			organizationID:   event.OrganizationID,
+			projectID:        event.ProjectID,
+			actor:            event.Actor,
+			actorDisplayName: event.ActorDisplayName,
+			actorSlug:        event.ActorSlug,
+			action:           action,
+			clientURN:        event.RemoteSessionClientURN,
+			clientID:         event.ClientID,
+			metadata:         metadata,
+		}),
+		OutboxEvent: events.RemoteSessionClientV1,
+	})
+}
+
+func scopesOrEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

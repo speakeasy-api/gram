@@ -13,16 +13,60 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// LogMcpServerPromoteCatalogueEvent identifies the source and staff actor without
+// copying public metadata or private connection configuration into tenant feeds.
+type LogMcpServerPromoteCatalogueEvent struct {
+	// OrganizationID scopes the source tenant.
+	OrganizationID string
+	// ProjectID scopes the source project.
+	ProjectID uuid.UUID
+	// Actor is the verified staff principal.
+	Actor urn.Principal
+	// McpServerURN identifies the source deployment.
+	McpServerURN urn.McpServer
+	// EligibilityOverridden records deliberate staff acceptance of failing health criteria.
+	EligibilityOverridden bool
+	// EligibilityReason is the bounded evidence code observed during promotion.
+	EligibilityReason string
+}
+
+// LogMcpServerPromoteCatalogue records promotion in the publication transaction.
+func (l *Logger) LogMcpServerPromoteCatalogue(ctx context.Context, dbtx repo.DBTX, event LogMcpServerPromoteCatalogueEvent) error {
+	metadata, err := marshalAuditPayload(struct {
+		EligibilityOverridden bool   `json:"eligibility_overridden"`
+		EligibilityReason     string `json:"eligibility_reason"`
+	}{EligibilityOverridden: event.EligibilityOverridden, EligibilityReason: event.EligibilityReason})
+	if err != nil {
+		return fmt.Errorf("encode catalogue promotion audit: %w", err)
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		IsInternal:     true,
+		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: event.ProjectID, Valid: true},
+		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""),
+		Action: string(ActionMcpServerPromoteCatalogue), SubjectID: event.McpServerURN.ID.String(), SubjectType: string(subjectTypeMcpServer),
+		SubjectDisplayName: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), BeforeSnapshot: nil, AfterSnapshot: nil, Metadata: metadata,
+	}, OutboxEvent: events.McpServerV1})
+}
+
 const (
 	ActionMcpServerCreate Action = "mcp-server:create"
 	ActionMcpServerUpdate Action = "mcp-server:update"
 	ActionMcpServerDelete Action = "mcp-server:delete"
+
+	// ActionMcpServerPromoteCatalogue records staff publication of a reviewed catalogue entry.
+	ActionMcpServerPromoteCatalogue Action = "mcp-server:promote-catalogue"
 
 	// ActionMcpServerToolMetadataUpdate is recorded once per mutation of an MCP
 	// server's tool metadata. The subject is the server itself: a batch write
 	// that touches fifty tools produces one entry carrying before and after
 	// snapshots of the whole collection, rather than fifty per-row entries.
 	ActionMcpServerToolMetadataUpdate Action = "mcp-server:update-tool-metadata"
+
+	// ActionMcpServerScopePinUpdate records a change to the scope pin on a remote-backed server's protected resource.
+	ActionMcpServerScopePinUpdate Action = "mcp-server:update-scope-pin"
+
+	// ActionMcpServerUpstreamAuthRequirementUpdate records whether a server declared that its upstream needs authentication.
+	ActionMcpServerUpstreamAuthRequirementUpdate Action = "mcp-server:update-upstream-auth-requirement"
 )
 
 type LogMcpServerCreateEvent struct {
@@ -41,6 +85,7 @@ type LogMcpServerCreateEvent struct {
 func (l *Logger) LogMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerCreateEvent) error {
 	action := ActionMcpServerCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -93,6 +138,7 @@ func (l *Logger) LogMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event L
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -145,6 +191,7 @@ func (l *Logger) LogMcpServerToolMetadataUpdate(ctx context.Context, dbtx repo.D
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -184,6 +231,7 @@ type LogMcpServerDeleteEvent struct {
 func (l *Logger) LogMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpServerDeleteEvent) error {
 	action := ActionMcpServerDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -202,6 +250,72 @@ func (l *Logger) LogMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event L
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})
+}
+
+type LogMcpServerScopePinUpdateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	McpServerURN  urn.McpServer
+	McpServerName string
+	McpServerSlug string
+	ResourceURL   string
+	// AffectedMcpServerIDs lists every live server sharing the resource, the subject included.
+	AffectedMcpServerIDs []string
+	ScopesBefore         []string
+	ScopesAfter          []string
+}
+
+// LogMcpServerScopePinUpdate records a change to the scope pin on the
+// protected resource a remote-backed MCP server's logins are for.
+func (l *Logger) LogMcpServerScopePinUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerScopePinUpdateEvent) error {
+	action := ActionMcpServerScopePinUpdate
+
+	beforeSnapshot, err := marshalAuditPayload(map[string]any{"pinned_scopes": conv.DefaultSlice(event.ScopesBefore, []string{})})
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(map[string]any{"pinned_scopes": conv.DefaultSlice(event.ScopesAfter, []string{})})
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"resource_url":   event.ResourceURL,
+		"mcp_server_ids": conv.DefaultSlice(event.AffectedMcpServerIDs, []string{}),
+	})
+	if err != nil {
+		return fmt.Errorf("build %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.McpServerURN.ID.String(),
+		SubjectType:        string(subjectTypeMcpServer),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.McpServerName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.McpServerSlug),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})

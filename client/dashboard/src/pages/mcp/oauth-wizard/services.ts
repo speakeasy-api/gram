@@ -3,13 +3,13 @@ import { buildCreateRemoteSessionClientMutation } from "@gram/client/react-query
 import { buildCreateRemoteSessionIssuerMutation } from "@gram/client/react-query/createRemoteSessionIssuer.js";
 import { buildCreateUserSessionIssuerMutation } from "@gram/client/react-query/createUserSessionIssuer.js";
 import { buildFetchRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/fetchRemoteSessionIssuerMetadata.js";
-import { buildSetToolsetUserSessionIssuerMutation } from "@gram/client/react-query/setToolsetUserSessionIssuer.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import type { Gram } from "@gram/client";
 import { fromPromise } from "xstate";
 
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
+import { linkToolsetUserSessionIssuer } from "@/lib/linkUserSessionIssuer";
 import {
   proxyRegisterUpstreamClient,
   registrationProvenance,
@@ -60,6 +60,7 @@ export type DiscoverExternalOAuthOutput = RemoteSessionIssuerDraft;
 // credentials, then links the toolset — the user-session-backed replacement
 // for the removed oauth_proxy_server creation.
 export type ProvisionUserSessionInput = {
+  toolsetId: string;
   toolsetSlug: string;
   authorizationEndpoint: string;
   tokenEndpoint: string;
@@ -168,23 +169,8 @@ export function createWizardServices(
       const issuerUrl =
         authServerOrigin(input.authorizationEndpoint, input.tokenEndpoint) ||
         input.authorizationEndpoint;
-      let draft: {
-        authorizationEndpoint?: string;
-        tokenEndpoint?: string;
-        registrationEndpoint?: string;
-        jwksUri?: string;
-        scopesSupported?: string[];
-        grantTypesSupported?: string[];
-        responseTypesSupported?: string[];
-        tokenEndpointAuthMethodsSupported?: string[];
-        userinfoEndpoint?: string;
-        introspectionEndpoint?: string;
-        introspectionEndpointAuthMethodsSupported?: string[] | null;
-        idTokenSigningAlgValuesSupported?: string[] | null;
-        claimsSupported?: string[] | null;
-        backchannelLogoutSupported?: boolean;
-        authorizationResponseIssParameterSupported?: boolean;
-      } = {};
+      let draft: Partial<RemoteSessionIssuerDraft> = {};
+      let discovered = false;
       if (issuerUrl) {
         try {
           draft = await buildFetchRemoteSessionIssuerMetadataMutation(
@@ -195,6 +181,7 @@ export function createWizardServices(
             },
             ...opts,
           });
+          discovered = true;
         } catch {
           // Keep the operator-supplied endpoints on discovery failure.
         }
@@ -212,17 +199,25 @@ export function createWizardServices(
             tokenEndpoint: draft.tokenEndpoint ?? input.tokenEndpoint,
             registrationEndpoint: draft.registrationEndpoint,
             jwksUri: draft.jwksUri,
+            // Operator-entered scopes stay explicit; the other lists restate the document.
             scopesSupported: draft.scopesSupported ?? parseScopes(input.scopes),
-            grantTypesSupported: draft.grantTypesSupported ?? [
-              "authorization_code",
-              "refresh_token",
-            ],
-            responseTypesSupported: draft.responseTypesSupported ?? ["code"],
+            grantTypesSupported:
+              draft.grantTypesSupported ??
+              (discovered ? [] : ["authorization_code", "refresh_token"]),
+            responseTypesSupported:
+              draft.responseTypesSupported ?? (discovered ? [] : ["code"]),
             tokenEndpointAuthMethodsSupported:
-              draft.tokenEndpointAuthMethodsSupported ?? [
-                input.tokenAuthMethod,
-              ],
+              draft.tokenEndpointAuthMethodsSupported ??
+              (discovered ? [] : [input.tokenAuthMethod]),
             // Discovery-only capabilities; all undefined when discovery failed.
+            authorizationGrantProfilesSupported: discovered
+              ? (draft.authorizationGrantProfilesSupported ?? [])
+              : undefined,
+            codeChallengeMethodsSupported:
+              draft.codeChallengeMethodsSupported ?? undefined,
+            clientIdMetadataDocumentSupported:
+              draft.clientIdMetadataDocumentSupported,
+            serviceDocumentation: draft.serviceDocumentation,
             userinfoEndpoint: draft.userinfoEndpoint,
             introspectionEndpoint: draft.introspectionEndpoint,
             introspectionEndpointAuthMethodsSupported:
@@ -255,13 +250,12 @@ export function createWizardServices(
         ...opts,
       });
 
-      await buildSetToolsetUserSessionIssuerMutation(client).mutationFn({
-        request: {
-          slug: input.toolsetSlug,
-          setUserSessionIssuerRequestBody: { userSessionIssuerId: issuer.id },
-        },
-        ...opts,
-      });
+      await linkToolsetUserSessionIssuer(
+        client,
+        { id: input.toolsetId },
+        issuer.id,
+        opts.options,
+      );
     },
   );
 

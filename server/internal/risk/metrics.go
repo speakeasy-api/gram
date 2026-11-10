@@ -13,17 +13,22 @@ import (
 const (
 	meterFindingCHMessagesInserted           = "gram.risk_findings.ch_messages_inserted"
 	meterFindingCHMessagesSkipped            = "gram.risk_findings.ch_messages_skipped"
+	meterFindingCHFiltered                   = "gram.risk_findings.ch_filtered"
 	meterFindingCHMessagesExcluded           = "gram.risk_findings.ch_messages_excluded"
 	meterFindingCHMessagesAttributionDropped = "gram.risk_findings.ch_messages_attribution_dropped"
+	meterFindingCHWebhooksDropped            = "gram.risk_findings.ch_webhooks_dropped"
 )
 
 type metrics struct {
 	chMessagesInserted metric.Int64Counter
 	chMessagesSkipped  metric.Int64Counter
+	chFiltered         metric.Int64Counter
 	chMessagesExcluded metric.Int64Counter
 	// chMessagesAttributionDropped is deliberately not a skipped reason: the
 	// finding still lands, only its carried chat attribution is dropped.
 	chMessagesAttributionDropped metric.Int64Counter
+	// chWebhooksDropped counts stored findings whose created webhook was skipped.
+	chWebhooksDropped metric.Int64Counter
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -48,6 +53,15 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingCHMessagesSkipped), attr.SlogError(err))
 	}
 
+	chFiltered, err := meter.Int64Counter(
+		meterFindingCHFiltered,
+		metric.WithDescription("Number of risk findings filtered by policy before being submitted to ClickHouse"),
+		metric.WithUnit("{finding}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingCHFiltered), attr.SlogError(err))
+	}
+
 	chMessagesExcluded, err := meter.Int64Counter(
 		meterFindingCHMessagesExcluded,
 		metric.WithDescription("Number of risk finding messages annotated as excluded before being submitted to ClickHouse"),
@@ -66,11 +80,22 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingCHMessagesAttributionDropped), attr.SlogError(err))
 	}
 
+	chWebhooksDropped, err := meter.Int64Counter(
+		meterFindingCHWebhooksDropped,
+		metric.WithDescription("Number of risk findings stored in ClickHouse whose created webhook was skipped"),
+		metric.WithUnit("{finding}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingCHWebhooksDropped), attr.SlogError(err))
+	}
+
 	return &metrics{
 		chMessagesInserted:           chMessagesInserted,
 		chMessagesSkipped:            chMessagesSkipped,
+		chFiltered:                   chFiltered,
 		chMessagesExcluded:           chMessagesExcluded,
 		chMessagesAttributionDropped: chMessagesAttributionDropped,
+		chWebhooksDropped:            chWebhooksDropped,
 	}
 }
 
@@ -94,6 +119,14 @@ func (m *metrics) RecordFindingCHSkipped(ctx context.Context, reason string) {
 	m.chMessagesSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(reason)))
 }
 
+// RecordFindingCHFiltered records a finding acknowledged without insertion.
+func (m *metrics) RecordFindingCHFiltered(ctx context.Context, reason string) {
+	if m.chFiltered == nil {
+		return
+	}
+	m.chFiltered.Add(ctx, 1, metric.WithAttributes(attr.Reason(reason)))
+}
+
 // RecordFindingCHUnverifiedAttribution records a finding whose carried chat
 // attribution failed project verification and was dropped. The finding itself
 // is still inserted, so this is its own counter rather than a skipped reason.
@@ -113,4 +146,12 @@ func (m *metrics) RecordFindingCHExcluded(ctx context.Context) {
 		return
 	}
 	m.chMessagesExcluded.Add(ctx, 1)
+}
+
+// RecordFindingCHWebhookDropped records a stored finding whose created webhook was skipped.
+func (m *metrics) RecordFindingCHWebhookDropped(ctx context.Context, reason string) {
+	if m.chWebhooksDropped == nil {
+		return
+	}
+	m.chWebhooksDropped.Add(ctx, 1, metric.WithAttributes(attr.Reason(reason)))
 }

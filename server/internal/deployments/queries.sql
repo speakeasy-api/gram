@@ -203,6 +203,24 @@ AND ds.status = 'completed'
 ORDER BY d.seq DESC
 LIMIT 1;
 
+-- name: GetInFlightDeploymentAfter :one
+-- A newer deployment of the project that has not finished processing.
+SELECT d.id
+FROM deployments d
+INNER JOIN LATERAL (
+  SELECT ds.status
+  FROM deployment_statuses ds
+  WHERE ds.deployment_id = d.id
+  ORDER BY ds.seq DESC
+  LIMIT 1
+) latest ON TRUE
+WHERE d.project_id = @project_id
+  AND d.seq > (SELECT a.seq FROM deployments a WHERE a.id = @after_deployment_id)
+  AND d.created_at > @created_after::timestamptz
+  AND latest.status IN ('created', 'pending')
+ORDER BY d.seq DESC
+LIMIT 1;
+
 -- name: GetDeploymentByIdempotencyKey :one
 WITH latest_status as (
     SELECT deployment_id, status
@@ -731,39 +749,6 @@ INSERT INTO functions_access (
 )
 RETURNING id;
 
--- name: UpsertDeploymentExternalMCP :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
-VALUES (@deployment_id, @registry_id, @name, @slug, @registry_server_specifier, @selected_remotes)
-ON CONFLICT (deployment_id, slug) WHERE deleted IS FALSE
-DO UPDATE SET
-  registry_id = EXCLUDED.registry_id,
-  name = EXCLUDED.name,
-  registry_server_specifier = EXCLUDED.registry_server_specifier,
-  selected_remotes = EXCLUDED.selected_remotes,
-  updated_at = clock_timestamp()
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at;
-
--- name: ListDeploymentExternalMCPs :many
-SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at
-FROM external_mcp_attachments
-WHERE deployment_id = @deployment_id AND deleted IS FALSE
-ORDER BY created_at ASC;
-
--- name: CloneDeploymentExternalMCPs :many
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
-SELECT
-  @clone_deployment_id
-  , current.registry_id
-  , current.name
-  , current.slug
-  , current.registry_server_specifier
-  , current.selected_remotes
-FROM external_mcp_attachments as current
-WHERE current.deployment_id = @original_deployment_id
-  AND current.deleted IS FALSE
-  AND current.slug <> ALL (@excluded_slugs::text[])
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes;
-
 -- name: InsertDeployment :one
 -- Inserts a minimal deployment row and returns its ID without the conflict
 -- handling of CreateDeployment.
@@ -774,3 +759,83 @@ RETURNING id;
 -- name: CreateDeploymentStatus :exec
 INSERT INTO deployment_statuses (deployment_id, status)
 VALUES (@deployment_id, @status);
+
+-- name: GetEvaluationBaseDeploymentID :one
+-- The deployment a deployment is compared with: the one it was cloned from,
+-- or else the latest earlier deployment that completed, so failed attempts
+-- in between are skipped.
+SELECT base.id
+FROM (
+  SELECT src.id, 0 AS preference
+  FROM deployments cur
+  JOIN deployments src ON src.id = cur.cloned_from AND src.project_id = @project_id
+  WHERE cur.id = @deployment_id AND cur.project_id = @project_id
+  UNION ALL
+  (
+    SELECT d.id, 1 AS preference
+    FROM deployments d
+    WHERE d.project_id = @project_id
+      AND d.seq < (
+        SELECT cur.seq FROM deployments cur
+        WHERE cur.id = @deployment_id AND cur.project_id = @project_id
+      )
+      AND (
+        SELECT ds.status FROM deployment_statuses ds
+        WHERE ds.deployment_id = d.id
+        ORDER BY ds.seq DESC
+        LIMIT 1
+      ) = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+  )
+) base
+ORDER BY base.preference
+LIMIT 1;
+
+-- name: ListProjectDeploymentOpenAPIv3 :many
+SELECT a.*
+FROM deployments_openapiv3_assets a
+JOIN deployments d ON d.id = a.deployment_id
+WHERE a.deployment_id = @deployment_id
+  AND d.project_id = @project_id;
+
+-- name: ListToolsetsUsingOpenAPIv3Source :many
+SELECT
+    t.id
+  , t.name
+  , t.slug
+  , COALESCE(addr.slug, '')::text AS mcp_slug
+  -- legacyalias: a hosted toolset without a servable endpoint takes its legacy alias as its address; drop with AIM-670.
+  , (cw.id IS NOT NULL)::BOOLEAN AS hosted
+  , (cw.id IS NOT NULL AND cw.visibility <> 'disabled')::BOOLEAN AS mcp_enabled
+  , (t.external_oauth_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
+  , ARRAY(
+      SELECT u FROM unnest(tv.tool_urns) AS u
+      WHERE starts_with(u, @tool_urn_prefix::TEXT)
+    )::TEXT[] AS source_tool_urns
+FROM toolsets t
+LEFT JOIN mcp_servers cw ON cw.id = t.id AND cw.toolset_id = t.id AND cw.project_id = t.project_id AND cw.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id AND cd.organization_id = t.organization_id
+    AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
+  WHERE e.mcp_server_id = cw.id AND e.project_id = t.project_id AND e.deleted IS FALSE
+    AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ORDER BY (e.custom_domain_id IS NOT NULL), e.created_at, e.id
+  LIMIT 1
+) addr ON TRUE
+JOIN LATERAL (
+  SELECT tool_urns
+  FROM toolset_versions
+  WHERE toolset_id = t.id AND deleted IS FALSE
+  ORDER BY version DESC
+  LIMIT 1
+) tv ON TRUE
+WHERE t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM unnest(tv.tool_urns) AS u
+    WHERE starts_with(u, @tool_urn_prefix::TEXT)
+  )
+ORDER BY t.name;
