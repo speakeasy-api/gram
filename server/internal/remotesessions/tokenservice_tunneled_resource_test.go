@@ -70,7 +70,7 @@ func TestFallbackResourceForClient_TunneledServerDerivesNothing(t *testing.T) {
 
 	// The grant stays unqualified, which is what the tunneled routing path
 	// accepts under the server's own issuer key.
-	resource, err := mgr.FallbackResourceForClient(ctx, clientID)
+	resource, err := mgr.FallbackResourceForClient(ctx, authCtx.ActiveOrganizationID, clientID)
 	require.NoError(t, err)
 	require.Empty(t, resource)
 }
@@ -93,7 +93,7 @@ func TestFallbackResourceForClient_TunneledIdentifierLeavesRemoteSiblingQualifie
 	seedRemoteMCPServerForIssuer(t, ctx, ti, userIssuerID, "mixed-remote-mcp", "https://remote.example.com/mcp")
 	seedTunneledMCPServerForIssuer(t, ctx, ti, userIssuerID, "mixed-tunnel-mcp", "https://tunneled.internal/mcp")
 
-	resource, err := mgr.FallbackResourceForClient(ctx, clientID)
+	resource, err := mgr.FallbackResourceForClient(ctx, authCtx.ActiveOrganizationID, clientID)
 	require.NoError(t, err)
 	require.Equal(t, "https://remote.example.com/mcp", resource,
 		"a tunneled sibling's identifier must not make the derivation ambiguous")

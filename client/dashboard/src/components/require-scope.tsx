@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { SplashScreen } from "@/components/ui/LogoLoader";
+import { Page, useInPageFrame } from "@/components/page-layout";
 import {
   breadthLabel,
   suggestRolesForScope,
@@ -99,7 +100,7 @@ export function RequireScope(
   switch (level) {
     case "page":
       return (
-        <>
+        <RestrictedPageFrame>
           {props.fallback ?? (
             <Unauthorized
               scopes={scopes}
@@ -108,7 +109,7 @@ export function RequireScope(
               projectId={projectId}
             />
           )}
-        </>
+        </RestrictedPageFrame>
       );
 
     case "section":
@@ -126,6 +127,28 @@ export function RequireScope(
         </ScopeDisabled>
       );
   }
+}
+
+/**
+ * Pages are gated from outside their `Page` frame so data hooks never run for
+ * people who can't view them, which left the restricted state without the
+ * page header — and without the project switcher, the one way into a project
+ * the viewer can open. Supply the frame when the gate sits outside one.
+ */
+function RestrictedPageFrame({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
+  if (useInPageFrame()) return <>{children}</>;
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>{children}</Page.Body>
+    </Page>
+  );
 }
 
 /**
