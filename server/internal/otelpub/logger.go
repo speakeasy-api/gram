@@ -77,17 +77,56 @@ func (l *Logger) Log(ctx context.Context, record log.Record) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), l.timeout)
 	defer cancel()
 
-	inbound, err := l.inbound(ctx, &record)
+	inbound, err := l.prepare(ctx, &record)
 	if err != nil {
 		return err
-	}
-	if err := otelsvc.ValidateInboundLogRecord(inbound); err != nil {
-		return fmt.Errorf("validate log record: %w", err)
 	}
 	if _, err := l.publisher.Publish(ctx, inbound).Get(ctx); err != nil {
 		return fmt.Errorf("publish log record: %w", err)
 	}
 	return nil
+}
+
+// Publish hands the record to Pub/Sub and returns without waiting for the ack, for
+// callers that must not block. The result settles with what Log would have returned;
+// the caller bounds how long it waits. Close does not wait for outstanding results.
+func (l *Logger) Publish(ctx context.Context, record log.Record) gcp.PublishResult {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	if l.closed {
+		return gcp.NewErrPublishResult(ErrClosed)
+	}
+	inbound, err := l.prepare(ctx, &record)
+	if err != nil {
+		return gcp.NewErrPublishResult(err)
+	}
+	return wrapPublishError{result: l.publisher.Publish(ctx, inbound)}
+}
+
+func (l *Logger) prepare(ctx context.Context, record *log.Record) (*otelv1.InboundLogRecord, error) {
+	inbound, err := l.inbound(ctx, record)
+	if err != nil {
+		return nil, err
+	}
+	if err := otelsvc.ValidateInboundLogRecord(inbound); err != nil {
+		return nil, fmt.Errorf("validate log record: %w", err)
+	}
+	return inbound, nil
+}
+
+// wrapPublishError labels a Pub/Sub failure the way Log always has.
+type wrapPublishError struct {
+	result gcp.PublishResult
+}
+
+func (w wrapPublishError) Ready() <-chan struct{} { return w.result.Ready() }
+
+func (w wrapPublishError) Get(ctx context.Context) (string, error) {
+	id, err := w.result.Get(ctx)
+	if err != nil {
+		return "", fmt.Errorf("publish log record: %w", err)
+	}
+	return id, nil
 }
 
 // Close waits for in-flight Log calls; later calls return ErrClosed.

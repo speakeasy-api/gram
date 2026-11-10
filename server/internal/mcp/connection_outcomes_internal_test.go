@@ -14,6 +14,7 @@ import (
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/stretchr/testify/require"
 	otellog "go.opentelemetry.io/otel/log"
 
@@ -699,11 +700,11 @@ type verdictExportSink struct {
 	records []otellog.Record
 }
 
-func (s *verdictExportSink) Publish(_ context.Context, _, _, _ string, record otellog.Record) error {
+func (s *verdictExportSink) Publish(_ context.Context, _, _, _ string, record otellog.Record) gcp.PublishResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.records = append(s.records, record)
-	return nil
+	return gcp.NewSuccessPublishResult()
 }
 
 func (*verdictExportSink) Close() {}

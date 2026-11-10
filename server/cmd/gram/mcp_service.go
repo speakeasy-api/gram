@@ -88,11 +88,8 @@ func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord]) m
 	})
 }
 
-func (e *connectionLogExport) Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) error {
-	if err := e.logs.Log(otelpub.WithRecordID(otelpub.WithTenant(ctx, organizationID, projectID), recordID), record); err != nil {
-		return fmt.Errorf("log connection attempt: %w", err)
-	}
-	return nil
+func (e *connectionLogExport) Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) gcp.PublishResult {
+	return e.logs.Publish(otelpub.WithRecordID(otelpub.WithTenant(ctx, organizationID, projectID), recordID), record)
 }
 
 func (e *connectionLogExport) Close() { e.logs.Close() }

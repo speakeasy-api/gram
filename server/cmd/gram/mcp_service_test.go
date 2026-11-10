@@ -48,7 +48,8 @@ func TestConnectionLogExport_PublishesUnderTheRowTenant(t *testing.T) {
 	t.Parallel()
 
 	export, published := newTestConnectionLogExport(t)
-	require.NoError(t, export.Publish(t.Context(), "org-row", "project-row", "attempt:step:reason", connectionLogTestRecord()))
+	_, err := export.Publish(t.Context(), "org-row", "project-row", "attempt:step:reason", connectionLogTestRecord()).Get(t.Context())
+	require.NoError(t, err)
 
 	require.Len(t, *published, 1)
 	record := (*published)[0]

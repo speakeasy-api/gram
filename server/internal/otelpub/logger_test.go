@@ -495,3 +495,55 @@ func TestLogRefusesForgedTenancyKeys(t *testing.T) {
 		require.Empty(t, *published, key)
 	}
 }
+
+// pendingResult never settles until released, like a publish Pub/Sub has not acked.
+type pendingResult struct{ ready chan struct{} }
+
+func (r pendingResult) Ready() <-chan struct{} { return r.ready }
+
+func (r pendingResult) Get(ctx context.Context) (string, error) {
+	select {
+	case <-r.ready:
+		return "server-id", nil
+	case <-ctx.Done():
+		return "", fmt.Errorf("wait for ack: %w", ctx.Err())
+	}
+}
+
+func TestPublishReturnsBeforeTheAck(t *testing.T) {
+	t.Parallel()
+
+	pending := pendingResult{ready: make(chan struct{})}
+	publisher, published := capture(t, pending)
+	ctx := WithTenant(t.Context(), testOrganizationID, testProjectID.String())
+
+	result := testLogger(publisher).Publish(ctx, toolCallRecord(time.Now()))
+	require.Len(t, *published, 1, "the record reached the publisher")
+	select {
+	case <-result.Ready():
+		require.Fail(t, "the result settled before Pub/Sub acked")
+	default:
+	}
+
+	close(pending.ready)
+	_, err := result.Get(t.Context())
+	require.NoError(t, err)
+}
+
+func TestPublishSettlesWithWhatLogWouldReturn(t *testing.T) {
+	t.Parallel()
+
+	publisher, published := capture(t, gcp.NewErrPublishResult(errors.New("pubsub unavailable")))
+	_, err := testLogger(publisher).Publish(t.Context(), toolCallRecord(time.Now())).Get(t.Context())
+	require.ErrorContains(t, err, "no tenancy in context")
+	require.Empty(t, *published)
+
+	ctx := WithTenant(t.Context(), testOrganizationID, testProjectID.String())
+	_, err = testLogger(publisher).Publish(ctx, toolCallRecord(time.Now())).Get(t.Context())
+	require.ErrorContains(t, err, "publish log record: pubsub unavailable")
+
+	logger := testLogger(publisher)
+	logger.Close()
+	_, err = logger.Publish(ctx, toolCallRecord(time.Now())).Get(t.Context())
+	require.ErrorIs(t, err, ErrClosed)
+}

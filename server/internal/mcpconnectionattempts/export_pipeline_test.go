@@ -2,7 +2,6 @@ package mcpconnectionattempts_test
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -40,11 +39,8 @@ import (
 // pipelineSink is the production adapter's shape, which lives in cmd/gram.
 type pipelineSink struct{ logs *otelpub.Logger }
 
-func (s pipelineSink) Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) error {
-	if err := s.logs.Log(otelpub.WithRecordID(otelpub.WithTenant(ctx, organizationID, projectID), recordID), record); err != nil {
-		return fmt.Errorf("log connection attempt: %w", err)
-	}
-	return nil
+func (s pipelineSink) Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) gcp.PublishResult {
+	return s.logs.Publish(otelpub.WithRecordID(otelpub.WithTenant(ctx, organizationID, projectID), recordID), record)
 }
 
 func (s pipelineSink) Close() { s.logs.Close() }

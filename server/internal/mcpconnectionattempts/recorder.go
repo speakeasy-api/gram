@@ -667,8 +667,8 @@ func (r *Recorder) Shutdown(ctx context.Context) error {
 // ShutdownAndWait drains until shortly before ctx ends, then cancels in-flight I/O,
 // counts the backlog as dropped for shutdown, and joins the writer so its datastore can
 // close. The join outlasts ctx, bounded by the insert timeout plus writerJoinGrace. The
-// logs callback and datastore driver must honor their operation contexts. A connection
-// log export still publishing is not joined; it never touches the datastore.
+// logs callback and datastore driver must honor their operation contexts. Connection
+// log exports still waiting for an ack stop waiting once the writer is cancelled.
 func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
 	if r == nil || r.stop == nil {
 		return nil

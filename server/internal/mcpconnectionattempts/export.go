@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/metric"
@@ -23,14 +24,14 @@ import (
 const (
 	meterNotExported = "mcp.connection.events.not_exported"
 
-	// exportQueueSize bounds rows waiting for the publisher. A full queue drops instead of blocking the writer.
-	exportQueueSize = 1024
-	exportWorkers   = 2
+	// exportMaxInFlight bounds publishes Pub/Sub has not acked yet. Past it rows drop
+	// instead of growing memory while Pub/Sub is slow.
+	exportMaxInFlight = 1024
 
-	// exportTimeout bounds the publish of one row.
+	// exportTimeout bounds how long one row waits for its ack.
 	exportTimeout = 15 * time.Second
 
-	// defaultExportDrain is how long queued rows may keep publishing at shutdown.
+	// defaultExportDrain is how long outstanding publishes may settle at shutdown.
 	defaultExportDrain = 5 * time.Second
 
 	exportLogInterval = time.Minute
@@ -52,16 +53,19 @@ const (
 	notExportedPanic     notExportedReason = "panic"
 )
 
-// ExportSink publishes connection logs. Publish may block, so only export workers call it.
+// ExportSink publishes connection logs. Publish must not wait for the ack: the writer
+// goroutine calls it, and the returned result settles once Pub/Sub has the record.
 type ExportSink interface {
-	Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) error
+	Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) gcp.PublishResult
 	Close()
 }
 
 type exporter struct {
 	sink        ExportSink
-	queue       chan Row
-	workers     sync.WaitGroup
+	maxInFlight int64
+	inFlight    atomic.Int64
+	// acks joins the goroutines waiting on outstanding results.
+	acks        sync.WaitGroup
 	notExported metric.Int64Counter
 	drain       time.Duration
 	lastLog     atomic.Int64
@@ -70,7 +74,7 @@ type exporter struct {
 // WithExport sends stored rows that an organization's admins can act on to sink.
 func WithExport(sink ExportSink) RecorderOption {
 	return func(r *Recorder) {
-		r.exporter = &exporter{sink: sink, queue: make(chan Row, exportQueueSize), workers: sync.WaitGroup{}, notExported: nil, drain: defaultExportDrain, lastLog: atomic.Int64{}}
+		r.exporter = &exporter{sink: sink, maxInFlight: exportMaxInFlight, inFlight: atomic.Int64{}, acks: sync.WaitGroup{}, notExported: nil, drain: defaultExportDrain, lastLog: atomic.Int64{}}
 	}
 }
 
@@ -85,25 +89,20 @@ func (r *Recorder) startExport(meter metric.Meter) {
 		r.logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterNotExported), attr.SlogError(err))
 	}
 	r.exporter.notExported = notExported
-
-	r.exporter.workers.Add(exportWorkers)
-	for range exportWorkers {
-		go r.exportWorker()
-	}
 }
 
-// stopExport runs once the writer is done, so nothing sends on the closed queue. It gives
-// queued rows their budget, then cancels; a publish still in flight ends on its own timeout.
+// stopExport runs once the writer is done, so no new publishes start. It gives outstanding
+// ones their budget, then cancels their waits, which count as shutdown; Pub/Sub may still
+// deliver what it holds. A result's Get must honor its context, so the join is prompt.
 func (r *Recorder) stopExport() {
 	if r.exporter == nil {
 		return
 	}
-	close(r.exporter.queue)
 
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
-		r.exporter.workers.Wait()
+		r.exporter.acks.Wait()
 		r.exporter.sink.Close()
 	}()
 
@@ -115,14 +114,12 @@ func (r *Recorder) stopExport() {
 	case <-budget.C:
 	case <-r.writerCtx.Done():
 	}
-
 	r.cancelWriter()
-	for row := range r.exporter.queue {
-		r.countNotExported(row, notExportedShutdown, nil)
-	}
+	<-finished
 }
 
-// exportRows runs on the writer goroutine, so it only filters and hands off.
+// exportRows runs on the writer goroutine. Publishing does not wait for Pub/Sub, so it
+// only builds each record and hands it over.
 func (r *Recorder) exportRows(rows []Row) {
 	if r.exporter == nil {
 		return
@@ -136,11 +133,12 @@ func (r *Recorder) exportRows(rows []Row) {
 			r.countNotExported(row, notExportedNoProject, nil)
 			continue
 		}
-		select {
-		case r.exporter.queue <- row:
-		default:
+		// Only the writer adds, so the check and the add do not race.
+		if r.exporter.inFlight.Load() >= r.exporter.maxInFlight {
 			r.countNotExported(row, notExportedQueueFull, nil)
+			continue
 		}
+		r.exportRow(row)
 	}
 }
 
@@ -165,39 +163,36 @@ func (r *Recorder) countNotExported(row Row, reason notExportedReason, cause err
 	r.logger.WarnContext(ctx, "connection log not exported; the attempt is stored", attrs...)
 }
 
-func (r *Recorder) exportWorker() {
-	defer r.exporter.workers.Done()
-
-	for row := range r.exporter.queue {
-		r.exportRowRecovering(row)
-	}
-}
-
-func (r *Recorder) exportRowRecovering(row Row) {
+// exportRow publishes one row. A panicking sink costs the row, never the writer.
+func (r *Recorder) exportRow(row Row) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			r.countNotExported(row, notExportedPanic, fmt.Errorf("connection log export: %v", recovered))
 		}
 	}()
-	r.exportRow(row)
-}
-
-func (r *Recorder) exportRow(row Row) {
 	if r.writerCtx.Err() != nil {
 		r.countNotExported(row, notExportedShutdown, nil)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.writerCtx, exportTimeout)
-	defer cancel()
-
 	record, ok := exportRecord(row)
 	if !ok {
 		return
 	}
-	ctx = withRowTrace(ctx, row)
-	if err := r.exporter.sink.Publish(ctx, row.OrganizationID, row.ProjectID.String(), exportRecordID(row), record); err != nil {
-		r.countNotExported(row, notExportedFailed, err)
-	}
+
+	result := r.exporter.sink.Publish(withRowTrace(r.writerCtx, row), row.OrganizationID, row.ProjectID.String(), exportRecordID(row), record)
+	r.exporter.inFlight.Add(1)
+	r.exporter.acks.Go(func() {
+		defer r.exporter.inFlight.Add(-1)
+		ctx, cancel := context.WithTimeout(r.writerCtx, exportTimeout)
+		defer cancel()
+		if _, err := result.Get(ctx); err != nil {
+			reason := notExportedFailed
+			if r.writerCtx.Err() != nil {
+				reason = notExportedShutdown
+			}
+			r.countNotExported(row, reason, err)
+		}
+	})
 }
 
 // exportRecordID stays stable across redelivery. The member and time keep one attempt's

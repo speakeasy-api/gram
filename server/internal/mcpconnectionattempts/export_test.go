@@ -3,6 +3,7 @@ package mcpconnectionattempts
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/log"
@@ -42,22 +44,51 @@ type fakeSink struct {
 	closed    int
 }
 
-func (s *fakeSink) Publish(_ context.Context, organizationID, projectID, recordID string, record log.Record) error {
-	if s.block != nil {
-		<-s.block
-	}
+// Publish settles at once, or once block is closed. Like a Pub/Sub result, Get gives up
+// when its context ends.
+func (s *fakeSink) Publish(_ context.Context, organizationID, projectID, recordID string, record log.Record) gcp.PublishResult {
 	if s.panics.Add(-1) >= 0 {
 		panic("sink panicked")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.err != nil {
-		return s.err
+	result := &fakeResult{ready: make(chan struct{}), err: nil}
+	settle := func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		result.err = s.err
+		if s.err == nil {
+			s.published = append(s.published, publishedLog{organizationID: organizationID, projectID: projectID, recordID: recordID, record: record})
+		}
+		close(result.ready)
 	}
-	s.published = append(s.published, publishedLog{organizationID: organizationID, projectID: projectID, recordID: recordID, record: record})
-	return nil
+	if s.block == nil {
+		settle()
+	} else {
+		go func() {
+			<-s.block
+			settle()
+		}()
+	}
+	return result
+}
+
+type fakeResult struct {
+	ready chan struct{}
+	err   error
+}
+
+func (r *fakeResult) Ready() <-chan struct{} { return r.ready }
+
+func (r *fakeResult) Get(ctx context.Context) (string, error) {
+	select {
+	case <-r.ready:
+		if r.err != nil {
+			return "", r.err
+		}
+		return "server-id", nil
+	case <-ctx.Done():
+		return "", fmt.Errorf("wait for ack: %w", ctx.Err())
+	}
 }
 
 func (s *fakeSink) Close() {
@@ -96,8 +127,8 @@ func withExportDrain(budget time.Duration) RecorderOption {
 	return func(r *Recorder) { r.exporter.drain = budget }
 }
 
-func withExportQueue(size int) RecorderOption {
-	return func(r *Recorder) { r.exporter.queue = make(chan Row, size) }
+func withExportInFlight(limit int64) RecorderOption {
+	return func(r *Recorder) { r.exporter.maxInFlight = limit }
 }
 
 func notExported(t *testing.T, r testRecorder, reason notExportedReason) int64 {
@@ -390,11 +421,11 @@ func TestExportRows_NoProjectIsSkippedAndCounted(t *testing.T) {
 	require.Equal(t, int64(1), notExported(t, recorder, notExportedNoProject))
 }
 
-func TestExportRows_FullQueueCountsAndNeverBlocks(t *testing.T) {
+func TestExportRows_TooManyInFlightCountsAndNeverBlocks(t *testing.T) {
 	t.Parallel()
 
 	sink := &fakeSink{block: make(chan struct{})}
-	recorder := newExportRecorder(t, &scriptedConn{}, sink, withExportQueue(1))
+	recorder := newExportRecorder(t, &scriptedConn{}, sink, withExportInFlight(3))
 	t.Cleanup(func() { close(sink.block) })
 
 	rows := make([]Row, 0, 10)
@@ -409,10 +440,10 @@ func TestExportRows_FullQueueCountsAndNeverBlocks(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		require.Fail(t, "exportRows blocked on a full queue")
+		require.Fail(t, "exportRows blocked with publishes in flight")
 	}
 
-	require.GreaterOrEqual(t, notExported(t, recorder, notExportedQueueFull), int64(7))
+	require.Equal(t, int64(7), notExported(t, recorder, notExportedQueueFull))
 	require.Zero(t, recorder.droppedTotal(t), "the rows were stored")
 }
 
@@ -507,7 +538,7 @@ func TestExport_PublishFailureIsNotAStorageLoss(t *testing.T) {
 	require.Zero(t, recorder.droppedTotal(t))
 }
 
-func TestExport_PanickingSinkIsCountedAndWorkersSurvive(t *testing.T) {
+func TestExport_PanickingSinkIsCountedAndTheWriterSurvives(t *testing.T) {
 	t.Parallel()
 
 	sink := &fakeSink{}
@@ -538,7 +569,7 @@ func TestExport_DrainStopsAtItsBudget(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	require.NoError(t, recorder.Shutdown(ctx), "the export budget ends before the caller's deadline")
-	require.GreaterOrEqual(t, notExported(t, recorder, notExportedShutdown), int64(4))
+	require.Equal(t, int64(6), notExported(t, recorder, notExportedShutdown))
 }
 
 func TestShutdownAndWait_ReturnsWithABlockedSink(t *testing.T) {
@@ -559,7 +590,7 @@ func TestShutdownAndWait_ReturnsWithABlockedSink(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		require.Fail(t, "ShutdownAndWait waited on a stuck export publish")
+		require.Fail(t, "ShutdownAndWait waited on an unacked export publish")
 	}
 
 	close(sink.block)
