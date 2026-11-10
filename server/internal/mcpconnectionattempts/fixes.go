@@ -160,23 +160,19 @@ type Change struct {
 	At time.Time
 }
 
-// configChangeVerbs are the action verbs that change configuration. An action counts
-// when any word after the colon, split on - and _, is listed, so plugin:server_update
-// counts and a new read-only action never does.
-var configChangeVerbs = []string{
-	"create", "update", "delete", "upsert", "set", "add", "remove", "attach", "detach",
-	"enable", "disable", "revoke", "rotate", "restore", "replace", "rename", "reset",
-	"pause", "resume", "archive", "migrate", "duplicate", "approve", "submit", "refresh",
-}
+// readOnlyWords mark audit actions that read rather than change. An action counts as a
+// change unless a word after the colon, split on - and _, is listed, so a new write
+// action counts without being added here.
+var readOnlyWords = []string{"read", "view", "list", "get", "access", "export", "reveal", "unmask", "observe", "call"}
 
 // IsConfigChange reports whether an audit action changed configuration rather than read it.
 func IsConfigChange(action string) bool {
 	_, tail, ok := strings.Cut(action, ":")
-	if !ok {
+	if !ok || tail == "" {
 		return false
 	}
-	return slices.ContainsFunc(strings.FieldsFunc(tail, func(r rune) bool { return r == '-' || r == '_' }), func(word string) bool {
-		return slices.Contains(configChangeVerbs, word)
+	return !slices.ContainsFunc(strings.FieldsFunc(tail, func(r rune) bool { return r == '-' || r == '_' }), func(word string) bool {
+		return slices.Contains(readOnlyWords, word)
 	})
 }
 
