@@ -359,9 +359,8 @@ open their effective assignments; the dropdown always offers compact member sear
     Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with
     Custom Headers directly after the Identity controls. In Postgres, only the
     Linear row in `mcp_servers` has `remote_session_issuer_id` set, to the
-    Example Workspace Identity provider, and every client bound to Linear's
-    user session issuer (the identity client and the attachment fixture's
-    client) sits under that same provider, so the stamp matches what
+    Example Workspace Identity provider, and the one client bound to Linear's
+    user session issuer sits under that same provider, so the stamp matches what
     `ResyncMCPServerRemoteSessionIssuers` would derive.
 
 20. **Billing meter usage** — select a custom trailing 14-day window. Storage
