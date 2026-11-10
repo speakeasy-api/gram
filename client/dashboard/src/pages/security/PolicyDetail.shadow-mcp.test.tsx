@@ -574,6 +574,23 @@ describe("StandardPolicyEditor existing Shadow MCP blocking policy", () => {
 
     await waitFor(() => expect(mocks.saveDisabledRenders.at(-1)).toBe(false));
   });
+
+  it.each([
+    ["another policy holds the slot", {}],
+    ["the policy list loads", { pending: true }],
+    ["the policy list fails", { failed: true }],
+  ])("keeps Flag saveable while %s", async (_, slot) => {
+    Object.assign(mocks.slot, slot);
+    // Assigning keeps the dirty name getter, so Save renders for this edit.
+    const policy = blockingPolicyWithDirtyDraftName();
+    policy.action = "flag";
+    const page = renderEdit(policy);
+
+    await waitFor(() => expect(mocks.saveDisabledRenders.at(-1)).toBe(false));
+    expect(
+      page.queryByText("Could not check for a Shadow MCP blocking policy"),
+    ).toBeNull();
+  });
 });
 
 describe("StandardPolicyEditor allow_all posture lock", () => {
