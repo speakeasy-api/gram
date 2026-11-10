@@ -63,18 +63,26 @@ func fixKeyOf(a AttemptSummary) fixKey {
 	return key
 }
 
-// Successes are connected attempts grouped by person, app and server, for pairing failures.
+// Successes are connected attempts grouped by person, app and server, for pairing
+// failures, with the failures that show when a reason was last seen.
 type Successes struct {
-	byKey map[fixKey][]AttemptSummary
-	now   time.Time
+	byKey    map[fixKey][]AttemptSummary
+	failures map[fixKey][]Ending
+	now      time.Time
 }
 
-// IndexSuccesses keeps the candidates that connected, as decided at now.
+// IndexSuccesses keeps the candidates that connected or failed, as decided at now.
 func IndexSuccesses(candidates []AttemptSummary, now time.Time) Successes {
-	index := Successes{byKey: map[fixKey][]AttemptSummary{}, now: now}
+	index := Successes{byKey: map[fixKey][]AttemptSummary{}, failures: map[fixKey][]Ending{}, now: now}
 	for _, c := range candidates {
-		if c.SubjectURN != "" && c.End(now).Outcome == OutcomeConnected {
+		if c.SubjectURN == "" {
+			continue
+		}
+		switch e := c.End(now); {
+		case e.Outcome == OutcomeConnected:
 			index.byKey[fixKeyOf(c)] = append(index.byKey[fixKeyOf(c)], c)
+		case e.NeedsFix():
+			index.failures[fixKeyOf(c)] = append(index.failures[fixKeyOf(c)], e)
 		}
 	}
 	return index
@@ -90,13 +98,17 @@ type Fix struct {
 
 	// Success is the earliest connected attempt after it.
 	Success AttemptSummary
+
+	// LastFailed is when the same reason last failed again before the success, zero
+	// for never. The fix came after it, so earlier changes did not fix it.
+	LastFailed time.Time
 }
 
 // Next pairs a failure with the earliest success by the same person, app and connection
 // that started after the failing row, within FixLookahead of the failure's start. A
 // failure with no person has none.
 func (s Successes) Next(failure AttemptSummary) (Fix, bool) {
-	fix := Fix{Failure: failure, Failed: failure.End(s.now), Success: AttemptSummary{}} //nolint:exhaustruct // filled when found
+	fix := Fix{Failure: failure, Failed: failure.End(s.now), Success: AttemptSummary{}, LastFailed: time.Time{}} //nolint:exhaustruct // filled when found
 	if failure.SubjectURN == "" {
 		return fix, false
 	}
@@ -110,7 +122,15 @@ func (s Successes) Next(failure AttemptSummary) (Fix, bool) {
 			fix.Success, found = c, true
 		}
 	}
-	return fix, found
+	if !found {
+		return fix, false
+	}
+	for _, e := range s.failures[fixKeyOf(failure)] {
+		if e.Reason == fix.Failed.Reason && e.At.After(fix.Failed.At) && e.At.Before(fix.Success.StartedAt) && e.At.After(fix.LastFailed) {
+			fix.LastFailed = e.At
+		}
+	}
+	return fix, true
 }
 
 // NextSuccess pairs a failure with the earliest success among candidates, as Successes.Next does.
@@ -126,18 +146,26 @@ func (f Fix) Targets() []string {
 }
 
 // FixedBy names what fixed the failure, given the audit changes in its organization.
-// Only changes after the failing row and before the success count. A change on
-// something either attempt touched counts, and so does an admin's change anywhere in
-// the organization that can fix the failure's reason. An admin's change wins over
+// Only changes after the failing row, and after any later failure of the same reason,
+// and before the success count. A change on something either attempt touched counts,
+// and so does an admin's change in the organization that can fix the failure's
+// reason; a change to one person's roles counts only on that person. Even so, an
+// unrelated admin change in that gap still gets the credit, so the gap is kept as
+// short as the attempts allow. An admin's change wins over
 // Speakeasy's, and a change wins over the person acting. Without a change, a failure
 // only an admin can fix is unattributed unless the person can get past it alone;
 // anything else is a reconnect when they signed in again, or a retry.
 func (f Fix) FixedBy(changes []Change) FixedBy {
 	targets := f.Targets()
 	fix := adminFixes[f.Failed.Reason]
+	from := f.Failed.At
+	if f.LastFailed.After(from) {
+		from = f.LastFailed
+	}
+	person := userID(f.Failure.SubjectURN)
 	system := false
 	for _, c := range changes {
-		if !c.At.After(f.Failed.At) || !c.At.Before(f.Success.StartedAt) {
+		if !c.At.After(from) || !c.At.Before(f.Success.StartedAt) {
 			continue
 		}
 		if _, ok := slices.BinarySearch(targets, c.SubjectID); ok {
@@ -147,7 +175,9 @@ func (f Fix) FixedBy(changes []Change) FixedBy {
 			system = true
 			continue
 		}
-		if c.ByAdmin && slices.ContainsFunc(fix.changes, func(a AuditAction) bool { return a.Action == c.Action }) {
+		if c.ByAdmin && slices.ContainsFunc(fix.changes, func(a AuditAction) bool {
+			return a.Action == c.Action && (!a.onPerson || (person != "" && c.SubjectID == person))
+		}) {
 			return FixedByAdminChange
 		}
 	}
@@ -197,10 +227,27 @@ func AuditActions(fixes []Fix) []AuditAction {
 type AuditAction struct {
 	SubjectType string
 	Action      string
+
+	// onPerson marks an action whose subject is one person's user ID, so it can fix
+	// only that person's failures.
+	onPerson bool
 }
 
 func auditAction(subjectType string, action audit.Action) AuditAction {
-	return AuditAction{SubjectType: subjectType, Action: string(action)}
+	return AuditAction{SubjectType: subjectType, Action: string(action), onPerson: false}
+}
+
+func personAction(subjectType string, action audit.Action) AuditAction {
+	return AuditAction{SubjectType: subjectType, Action: string(action), onPerson: true}
+}
+
+// userID is the user ID of a user subject, empty for anyone else.
+func userID(subjectURN string) string {
+	subject, err := urn.ParseSessionSubject(subjectURN)
+	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
+		return ""
+	}
+	return subject.ID
 }
 
 // personFix is how the person can get past an admin-fixable failure alone.
@@ -223,7 +270,7 @@ var (
 	accessChanges = []AuditAction{
 		auditAction("access_role", audit.ActionAccessRoleCreate),
 		auditAction("access_role", audit.ActionAccessRoleUpdate),
-		auditAction("access_member", audit.ActionAccessMemberRoleUpdate),
+		personAction("access_member", audit.ActionAccessMemberRoleUpdate),
 		auditAction("access_grant", audit.ActionAccessGrantCreateTemporary),
 		auditAction("access_grant", audit.ActionAccessGrantRenewTemporary),
 		auditAction("access_challenge", audit.ActionAccessChallengeResolve),
@@ -233,11 +280,20 @@ var (
 		auditAction("organization_invitation", audit.ActionOrganizationInviteCreate),
 		auditAction("organization_invitation", audit.ActionOrganizationInviteRoleUpdate),
 	}
+	workloadIssuerChanges = []AuditAction{
+		auditAction("workload_issuer", audit.ActionWorkloadIssuerCreate),
+		auditAction("workload_issuer", audit.ActionWorkloadIssuerUpdate),
+	}
+	credentialChoiceChanges = []AuditAction{
+		auditAction("issuance_selection_profile", audit.ActionIssuanceSelectionProfileCreate),
+		auditAction("issuance_selection_profile", audit.ActionIssuanceSelectionProfileUpdate),
+	}
 	renewedSignIn = adminFix{changes: nil, personFix: personSignsIn}
 )
 
 // adminFixes maps admin-fixable reasons to how they get fixed. A reason fixed only on
-// what the attempts touched, such as a server's or auth client's setup, is left out.
+// what the attempts touched, such as a server's or auth client's setup, is left out
+// and listed in touchedOnlyFixes in the tests.
 var adminFixes = map[string]adminFix{
 	CodeNoServerAccess.String():        {changes: accessChanges, personFix: personCannot},
 	CodeToolPermissionDenied.String():  {changes: accessChanges, personFix: personCannot},
@@ -259,7 +315,7 @@ var adminFixes = map[string]adminFix{
 	CodeMCPToolCallsPaused.String(): {changes: []AuditAction{
 		auditAction("killswitch_prescription", audit.ActionKillswitchChange),
 		auditAction("killswitch_prescription", audit.ActionKillswitchDeactivate),
-		auditAction("killswitch_prescription", audit.ActionKillswitchExpire),
+		// An expiry is left out: no one acted when it ran, so it is not the admin's change or Speakeasy's.
 	}, personFix: personCannot},
 	CodeUsageLimitReached.String(): {changes: []AuditAction{
 		auditAction("organization", audit.ActionOrganizationPaygActivated),
@@ -269,12 +325,11 @@ var adminFixes = map[string]adminFix{
 		auditAction("organization", audit.ActionOrganizationEnterpriseTrialRearmed),
 		auditAction("organization", audit.ActionOrganizationEnterpriseTrialConverted),
 	}, personFix: personCannot},
-	CodeSubjectNotAdmitted.String(): {changes: []AuditAction{
+	CodeSubjectNotAdmitted.String(): {changes: slices.Concat([]AuditAction{
 		auditAction(audit.SubjectTypeWorkloadAdmission, audit.ActionWorkloadAdmissionAdmit),
 		auditAction(audit.SubjectTypeWorkloadAdmission, audit.ActionWorkloadAdmissionUpdate),
-		auditAction("workload_issuer", audit.ActionWorkloadIssuerCreate),
-		auditAction("workload_issuer", audit.ActionWorkloadIssuerUpdate),
-	}, personFix: personCannot},
+	}, workloadIssuerChanges), personFix: personCannot},
+	CodeIssuerNotTrusted.String(): {changes: workloadIssuerChanges, personFix: personCannot},
 	CodeCIMDAdmissionDenied.String(): {changes: []AuditAction{
 		auditAction("user_session_issuer_cimd_client", audit.ActionUserSessionIssuerCimdClientAdd),
 	}, personFix: personCannot},
@@ -282,14 +337,16 @@ var adminFixes = map[string]adminFix{
 		auditAction("custom_domain", audit.ActionCustomDomainsCreate),
 		auditAction("custom_domain", audit.ActionCustomDomainsUpdate),
 	}, personFix: personCannot},
-	CodeTunnelAtCapacity.String():     {changes: nil, personFix: personRetries},
-	CodeUnrenewableToken.String():     renewedSignIn,
-	CodeUpstreamEMARefused.String():   renewedSignIn,
-	CodeRefreshRejected.String():      renewedSignIn,
-	CodeOfflineNotRequested.String():  renewedSignIn,
-	CodeOfflineUnsupported.String():   renewedSignIn,
-	CodeRenewalMisconfigured.String(): renewedSignIn,
-	CodeSignInRevokedByAdmin.String(): renewedSignIn,
+	CodeUpstreamCredentialDenied.String():    {changes: slices.Concat(accessChanges, credentialChoiceChanges), personFix: personCannot},
+	CodeUpstreamCredentialNotChosen.String(): {changes: credentialChoiceChanges, personFix: personCannot},
+	CodeTunnelAtCapacity.String():            {changes: nil, personFix: personRetries},
+	CodeUnrenewableToken.String():            renewedSignIn,
+	CodeUpstreamEMARefused.String():          renewedSignIn,
+	CodeRefreshRejected.String():             renewedSignIn,
+	CodeOfflineNotRequested.String():         renewedSignIn,
+	CodeOfflineUnsupported.String():          renewedSignIn,
+	CodeRenewalMisconfigured.String():        renewedSignIn,
+	CodeSignInRevokedByAdmin.String():        renewedSignIn,
 }
 
 // Change is one audit entry on something an attempt touched, or one of AuditActions.

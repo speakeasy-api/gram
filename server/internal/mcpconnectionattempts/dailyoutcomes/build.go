@@ -267,7 +267,7 @@ func (b *Builder) outcomes(ctx context.Context, day, now time.Time) ([]DayRow, e
 	var failures []mcpconnectionattempts.AttemptSummary
 	dayFilter := mcpconnectionattempts.AttemptFilter{
 		StartedFrom: day, StartedBefore: day.Add(day24h), OrganizationID: "", ExcludeOrganizationIDs: mcpconnectionattempts.ExcludedOrganizations(),
-		ProjectID: uuid.Nil, ServerID: "", PeopleFailingFrom: time.Time{}, PeopleFailingBefore: time.Time{}, ConnectedOnly: false,
+		ProjectID: uuid.Nil, ServerID: "", PeopleFailingFrom: time.Time{}, PeopleFailingBefore: time.Time{}, FixCandidatesOnly: false,
 	}
 	err := mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, dayFilter, func(a mcpconnectionattempts.AttemptSummary) {
 		e := a.End(now)
@@ -286,10 +286,10 @@ func (b *Builder) outcomes(ctx context.Context, day, now time.Time) ([]DayRow, e
 		successFilter := dayFilter
 		successFilter.StartedBefore = day.Add(day24h + mcpconnectionattempts.FixLookahead)
 		successFilter.PeopleFailingFrom, successFilter.PeopleFailingBefore = day, day.Add(day24h)
-		successFilter.ConnectedOnly = true
+		successFilter.FixCandidatesOnly = true
 		err = mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, successFilter, func(a mcpconnectionattempts.AttemptSummary) { candidates = append(candidates, a) })
 		if err != nil {
-			return nil, fmt.Errorf("read successes: %w", err)
+			return nil, fmt.Errorf("read fix candidates: %w", err)
 		}
 		if err := b.addFixes(ctx, counts, failures, mcpconnectionattempts.IndexSuccesses(candidates, now)); err != nil {
 			return nil, err

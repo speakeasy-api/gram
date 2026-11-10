@@ -142,6 +142,35 @@ func Grant(grantType string) Option {
 	}}
 }
 
+// RequestMethod labels the request a row is about. It is the sub-reason, and
+// Once folds repeats per method. The label must come from a fixed set.
+func RequestMethod(label string) Option {
+	return Option{apply: func(row *Row) {
+		if shortLabel.MatchString(label) {
+			row.SubReason = label
+			row.foldMethod = label
+		}
+	}}
+}
+
+// FoldRefusedSubjects folds a refused Once row's repeats across every subject that shares key,
+// for subjects anyone can mint, such as a public workload issuer's. A row that also stands for
+// held-back rows stores no subject, since theirs may differ. Successes still fold per subject.
+func FoldRefusedSubjects(key string) Option {
+	return Option{apply: func(row *Row) {
+		if row.Reason != "" && shortLabel.MatchString(key) {
+			row.foldSubjects = key
+		}
+	}}
+}
+
+// dropFoldedSubject clears the subject of a row folded across subjects that stands for others too.
+func (row *Row) dropFoldedSubject() {
+	if row.foldSubjects != "" {
+		row.SubjectURN = ""
+	}
+}
+
 // Detail is a finer label within the reason, such as org_lookup_failed. A value
 // that is not a short identifier is left out and the row is kept.
 func Detail(subReason string) Option {
@@ -245,6 +274,12 @@ type Row struct {
 	// client waits here for the writer to read it. It is never stored or logged.
 	client requestClient
 
+	// foldMethod separates Once repeats by request method. It is never stored.
+	foldMethod string
+
+	// foldSubjects replaces the subject when folding Once repeats. It is never stored.
+	foldSubjects string
+
 	// failedElsewhere is for the export only and is never stored.
 	failedElsewhere bool
 }
@@ -323,6 +358,8 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		Repeats:               0,
 		DeviceKey:             "",
 		client:                requestClient{present: false, userAgent: "", forwardedFor: "", appFamily: attempt.scope.appFamily, reported: nil},
+		foldMethod:            "",
+		foldSubjects:          "",
 		failedElsewhere:       false,
 	}
 	for _, opt := range opts {
@@ -669,6 +706,9 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 			return false
 		}
 		r.dropLostRepeats(ctx, decision.lost)
+		if decision.repeats > 0 {
+			row.dropFoldedSubject()
+		}
 		if !decision.allowed {
 			// Callers with no known subject fold together, so the shared id isn't this caller's.
 			if onceKeyOf(row).subject != "" {
@@ -1036,6 +1076,9 @@ func (r *Recorder) run() {
 	}
 	addPending := func(rows []Row) {
 		for _, row := range rows {
+			if row.Repeats > 0 {
+				row.dropFoldedSubject()
+			}
 			r.unfinished.Add(1)
 			add(row)
 		}

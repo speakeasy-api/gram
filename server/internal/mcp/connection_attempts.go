@@ -765,7 +765,7 @@ func tunneledProbeHappened(failure probeFailure) mcpconnectionattempts.Code {
 		return mcpconnectionattempts.CodeProviderUnreachable
 	}
 	credential := remotemcp.UpstreamCredentialSent{Attached: false, Self: false, Configured: false}
-	if code, ok := remotemcp.UpstreamFailureHappened(failure.status, credential, true, failure.tunnelError, failure.err); ok {
+	if code, ok := remotemcp.UpstreamFailureHappened(failure.status, false, credential, true, failure.tunnelError, failure.err); ok {
 		return code
 	}
 	// It answered, but not with a usable result.
@@ -814,4 +814,55 @@ func (s *Service) recordIDPAuthorityRefusal(ctx context.Context, logger *slog.Lo
 		return
 	}
 	s.endAttemptOnce(ctx, logger, state.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, code, detail, request)
+}
+
+// refuseWorkloadGrantRow records a refused workload or assistant token grant.
+func refuseWorkloadGrantRow(ctx context.Context, t *mcpconnectionattempts.Tracker, err error) {
+	code, detail := workloadGrantHappened(err)
+	t.Refuse(ctx, code, detail)
+}
+
+// workloadGrantHappened names a refused workload or assistant token grant; the detail is the logged reason.
+// Workload refusals before the assertion's signature verifies never reach it: they are a metric.
+func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnectionattempts.Option) {
+	if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
+		detail := mcpconnectionattempts.Detail(refusal.reason)
+		switch refusal.reason {
+		case "issuer_untrusted":
+			return mcpconnectionattempts.CodeIssuerNotTrusted, detail
+		case "subject_not_admitted":
+			return mcpconnectionattempts.CodeSubjectNotAdmitted, detail
+		case "endpoint_not_agent_addressable":
+			return mcpconnectionattempts.CodeEndpointNotAgentAddressable, detail
+		case "agent_admission_denied":
+			return mcpconnectionattempts.CodeNoServerAccess, detail
+		case "issuer_policy_changed":
+			return mcpconnectionattempts.CodeTransientFailure, detail
+		}
+		switch refusal.outcome {
+		case workloadGrantUnavailable, workloadGrantRateLimited:
+			return mcpconnectionattempts.CodeAssertionCheckUnavailable, detail
+		case workloadGrantRefused:
+		}
+		if strings.HasPrefix(refusal.reason, "assertion_") {
+			return mcpconnectionattempts.CodeAssertionInvalid, detail
+		}
+		return mcpconnectionattempts.CodeAssertionOther, detail
+	}
+	if problem, ok := errors.AsType[headlessChoiceError](err); ok {
+		detail := mcpconnectionattempts.Detail(string(problem))
+		switch problem {
+		case errChoiceNotSetUp, errChoiceNotReady, errChoiceNoneReady:
+			return mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail
+		case errChoiceDenied, errChoiceNoneAllowed:
+			return mcpconnectionattempts.CodeUpstreamCredentialDenied, detail
+		case errChoiceNotNamed:
+			return mcpconnectionattempts.CodeUpstreamCredentialNotChosen, detail
+		case errChoiceNotAccepted:
+			return mcpconnectionattempts.CodeUpstreamCredentialChoice, detail
+		case errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential:
+			return mcpconnectionattempts.CodeCredentialChoiceInvalid, detail
+		}
+	}
+	return mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("")
 }

@@ -119,7 +119,7 @@ func (m *tunnelManager) buildProxy(
 		return nil, oops.E(oops.CodeGatewayError, nil, "tunnel route store unavailable").LogError(ctx, logger)
 	}
 
-	candidates, err := m.routes.Candidates(ctx, tunnelID)
+	candidates, err := tunnelrouting.LookupRoutes(ctx, m.routes, tunnelID)
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "list tunnel routes").LogError(ctx, logger)
 	}
