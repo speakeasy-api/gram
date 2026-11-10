@@ -437,74 +437,6 @@ it.each([
   },
 );
 
-it.each([
-  ["github", "GitHub", "permission to manage OAuth apps"],
-  ["slack", "Slack", "permission to manage an app"],
-  ["salesforce", "Salesforce", "Salesforce System Administrator access"],
-] as const)(
-  "uses the shared setup-plan card with %s content",
-  (provider, name, requirement) => {
-    const s = { ...initialState(provider), step: "begin" };
-    const dispatch = vi.fn<(action: Action) => void>();
-    render(
-      <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
-        <ProviderTask serverName={name} />
-      </SetupContext>,
-    );
-    const heading = screen.getByRole("heading", {
-      name: `Let’s connect ${name} to Speakeasy.`,
-    });
-    expect(heading).toBeDefined();
-    expect(screen.getByText(requirement, { exact: false })).toBeDefined();
-    if (provider === "salesforce") {
-      expect(
-        screen.getByText("create your own External Client App", {
-          exact: false,
-        }),
-      ).toBeDefined();
-      expect(
-        screen.queryByText("Using an existing app or an IP allowlist?"),
-      ).toBeNull();
-      expect(screen.queryByText("Organization approval and SSO")).toBeNull();
-    }
-  },
-);
-
-it("renders the published installation link and support handoff details", async () => {
-  const user = userEvent.setup();
-  render(<SalesforceFixture step="choices" />);
-  await user.click(screen.getByText("Sandbox", { exact: true }));
-  await user.click(screen.getByText("Use Speakeasy’s app", { exact: true }));
-  await user.click(screen.getByRole("button", { name: "Continue" }));
-  await user.click(screen.getByRole("button", { name: "Continue" }));
-  expect(
-    screen
-      .getByRole("link", { name: "Open Salesforce installation" })
-      .getAttribute("href"),
-  ).toBe(
-    "https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2",
-  );
-  expect(
-    screen.getByText(/Installation alone does not complete OAuth/),
-  ).toBeDefined();
-  await user.click(screen.getByRole("button", { name: "Continue" }));
-  expect(
-    screen
-      .getByRole("link", { name: "Read support instructions" })
-      .getAttribute("href"),
-  ).toBe(
-    "https://www.speakeasy.com/docs/ai-control-plane/guides/salesforce#contact-speakeasy-support",
-  );
-  expect(screen.getByLabelText("Selected MCP endpoint")).toHaveProperty(
-    "value",
-    "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-reads",
-  );
-  expect(
-    screen.getByText(/Your next step is with Speakeasy support/),
-  ).toBeDefined();
-  expect(screen.queryByLabelText("Consumer Key")).toBeNull();
-});
-
 describe("Snowflake instructions", () => {
   it("keeps SQL workspace instructions on their own step without input fields", () => {
     const account = task("account");
@@ -724,6 +656,7 @@ it("renders the published installation link and support handoff details", async 
   render(<SalesforceFixture step="choices" />);
   await user.click(screen.getByText("Sandbox", { exact: true }));
   await user.click(screen.getByText("Use Speakeasy’s app", { exact: true }));
+  await user.click(screen.getByRole("button", { name: "Continue" }));
   await user.click(screen.getByRole("button", { name: "Continue" }));
   expect(
     screen
