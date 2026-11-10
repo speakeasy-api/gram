@@ -21,6 +21,9 @@ const (
 	// device and drained once it reconnects, so the series lags the failures
 	// it counts; the telemetry row carries the device-side attempt time.
 	meterHooksDeliveryFailure = "hooks.delivery_failure"
+	// meterHooksInstallFailure counts bootstrap install failure reports
+	// (client.install_failed).
+	meterHooksInstallFailure = "hooks.install_failure"
 
 	// hookMetricDimensionUnknown fills a delivery failure device dimension the
 	// report left empty or outside the known set, so a missing value is still
@@ -51,6 +54,16 @@ const (
 type metrics struct {
 	eventDuration    metric.Float64Histogram
 	deliveryFailures metric.Int64Counter
+	installFailures  metric.Int64Counter
+}
+
+// installFailureMetricParams are the dimensions of one install failure report.
+type installFailureMetricParams struct {
+	Cause   string
+	Harness string
+	OS      string
+	Version string
+	OrgSlug string
 }
 
 // deliveryFailureMetricParams are the dimensions of one delivery failure
@@ -102,10 +115,36 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterHooksDeliveryFailure), attr.SlogError(err))
 	}
 
+	installFailures, err := meter.Int64Counter(
+		meterHooksInstallFailure,
+		metric.WithDescription("Hooks binary install failures reported by plugin bootstrap scripts"),
+		metric.WithUnit("{failure}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterHooksInstallFailure), attr.SlogError(err))
+	}
+
 	return &metrics{
 		eventDuration:    eventDuration,
 		deliveryFailures: deliveryFailures,
+		installFailures:  installFailures,
 	}
+}
+
+func (m *metrics) RecordInstallFailure(ctx context.Context, params installFailureMetricParams) {
+	if m == nil || m.installFailures == nil {
+		return
+	}
+	attrs := []attribute.KeyValue{
+		attr.HookInstallCause(params.Cause),
+		attr.HookDeviceHarness(conv.Default(params.Harness, hookMetricDimensionUnknown)),
+		attr.HookDeviceOS(boundedDeviceOS(params.OS)),
+		attr.HookInstallVersion(boundedBinaryVersion(params.Version)),
+	}
+	if params.OrgSlug != "" {
+		attrs = append(attrs, attr.OrganizationSlug(params.OrgSlug))
+	}
+	m.installFailures.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
 
 func (m *metrics) RecordDeliveryFailure(ctx context.Context, params deliveryFailureMetricParams) {

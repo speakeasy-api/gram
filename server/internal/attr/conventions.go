@@ -999,6 +999,13 @@ const (
 	HookDeliveryFailedIdempotencyKeyKey = attribute.Key("gram.hook.delivery.failed_idempotency_key")
 	HookDeliverySessionIDKey            = attribute.Key("gram.hook.delivery.session_id")
 	HookDeliverySpoolDepthKey           = attribute.Key("gram.hook.delivery.spool_depth")
+	// Bootstrap install failure reports (client.install_failed): a plugin's
+	// bootstrap script could not install the hooks binary. Rows carrying
+	// these are diagnostic. The version the script tried to install is kept
+	// apart from gram.hook.device.binary_version, which names a binary that
+	// actually ran.
+	HookInstallCauseKey   = attribute.Key("gram.hook.install.cause")
+	HookInstallVersionKey = attribute.Key("gram.hook.install.version")
 	// Hardware identity the Speakeasy device agent (speakeasyd) reports via
 	// the Gram-Device-* headers, recorded on the request log for its
 	// endpoints so a fleet's requests can be counted and told apart per
@@ -1835,6 +1842,12 @@ func SlogHookDeliveryPhase(v string) slog.Attr      { return slog.String(string(
 
 func HookDeliveryCause(v string) attribute.KeyValue { return HookDeliveryCauseKey.String(v) }
 func SlogHookDeliveryCause(v string) slog.Attr      { return slog.String(string(HookDeliveryCauseKey), v) }
+
+func HookInstallCause(v string) attribute.KeyValue { return HookInstallCauseKey.String(v) }
+func SlogHookInstallCause(v string) slog.Attr      { return slog.String(string(HookInstallCauseKey), v) }
+
+func HookInstallVersion(v string) attribute.KeyValue { return HookInstallVersionKey.String(v) }
+func SlogHookInstallVersion(v string) slog.Attr      { return slog.String(string(HookInstallVersionKey), v) }
 
 func SlogHookDeliveryStatusCode(v int) slog.Attr {
 	return slog.Int(string(HookDeliveryStatusCodeKey), v)

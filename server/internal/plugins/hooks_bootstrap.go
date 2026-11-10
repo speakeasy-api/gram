@@ -134,7 +134,36 @@ install_failure_exit=%d
 install_failure() {
   printf 'speakeasy-hooks: %%s\n' "$1" >&2
   printf 'speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (SPEAKEASY_AI_HOOKS_HOME overrides the cache location)\n' >&2
+  [ -z "${2:-}" ] || report_install_failure "$2" || true
   exit "$install_failure_exit"
+}
+
+# Best effort: tell the control plane an install failed, with a short timeout,
+# using the key in the plugin's config. Never fails the script.
+report_config=
+report_harness=
+config_field() {
+  sed -n "s/^[[:space:]]*\"$1\":[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$report_config" 2>/dev/null | head -n 1
+}
+report_install_failure() {
+  command -v curl >/dev/null 2>&1 && [ -r "$report_config" ] || return 0
+  server_url=$(config_field server_url)
+  api_key=$(config_field hooks_api_key)
+  project=$(config_field project)
+  [ -n "$server_url" ] && [ -n "$api_key" ] || return 0
+  report_host=$(uname -n 2>/dev/null || true)
+  case "$report_host" in *[!A-Za-z0-9._-]*) report_host= ;; esac
+  case "$report_harness" in *[!A-Za-z0-9._-]*) report_harness= ;; esac
+  case "$api_key$project" in *[!A-Za-z0-9._-]*) return 0 ;; esac
+  now=$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)
+  body=$(printf '{"schema_version":"hook.ingest.v1","source":{"adapter":"bootstrap","hostname":"%%s"},"event":{"type":"client.install_failed","occurred_at":"%%s"},"data":{"install_failure":{"cause":"%%s","attempted_at":"%%s","version":"%%s","os":"%%s","arch":"%%s","harness":"%%s"}}}' \
+    "$report_host" "$now" "$1" "$now" "$version" "${os:-}" "${arch:-}" "$report_harness")
+  # Headers go through --config on stdin so the key never shows in ps.
+  {
+    printf 'header = "Gram-Key: %%s"\n' "$api_key"
+    [ -z "$project" ] || printf 'header = "Gram-Project: %%s"\n' "$project"
+  } | curl --config - --silent --output /dev/null --connect-timeout 2 --max-time 3 \
+    --header 'Content-Type: application/json' --data "$body" "${server_url%%/}/rpc/hooks.ingest" >/dev/null 2>&1 || true
 }
 
 # Codex plugin versions are disposable. When its inline command supplies a
@@ -259,6 +288,13 @@ if [ -n "${reexec_stable:-}" ]; then
   exec bash "$published_script" "$@"
 fi
 
+for arg in "$@"; do
+  case "$arg" in
+    --config=*) report_config=${arg#--config=} ;;
+    --provider=*) report_harness=${arg#--provider=} ;;
+  esac
+done
+
 case "$(uname -s)" in
   Darwin) os=darwin ;;
   Linux) os=linux ;;
@@ -362,7 +398,7 @@ if ! cache_valid; then
   # reasoning as the lock wait) so a stalled network lands on the configured
   # install-failure policy instead of an opaque provider timeout.
   if command -v curl >/dev/null 2>&1; then
-    curl --fail --silent --show-error --location --connect-timeout 10 --max-time 45 "$url" --output "$archive" || install_failure 'download failed'
+    curl --fail --silent --show-error --location --connect-timeout 10 --max-time 45 "$url" --output "$archive" || install_failure 'download failed' download
   elif command -v wget >/dev/null 2>&1; then
     # wget --timeout is a per-read timeout, not a wall-clock cap: a server that
     # trickles bytes resets it indefinitely. timeout(1) enforces the real
@@ -371,7 +407,7 @@ if ! cache_valid; then
     if command -v timeout >/dev/null 2>&1; then
       wget_cmd="timeout 45 $wget_cmd"
     fi
-    $wget_cmd "$url" -O "$archive" || install_failure 'download failed'
+    $wget_cmd "$url" -O "$archive" || install_failure 'download failed' download
   else
     install_failure 'curl or wget is required for first install'
   fi
@@ -390,7 +426,7 @@ if ! cache_valid; then
     install_failure 'no SHA-256 utility is available'
   fi
   if [ "$actual_sha" != "$expected_sha" ]; then
-    install_failure 'downloaded archive checksum mismatch'
+    install_failure 'downloaded archive checksum mismatch' checksum_mismatch
   fi
 
   extracted="${work}/${binary_name}"
@@ -468,10 +504,38 @@ $ForwardArgs = @($args)
 $Version = %q
 $InstallFailureExit = %d
 
-function Exit-InstallFailure([string]$Message) {
+function Exit-InstallFailure([string]$Message, [string]$Cause = "") {
     [Console]::Error.WriteLine("speakeasy-hooks: $Message")
     [Console]::Error.WriteLine("speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (SPEAKEASY_AI_HOOKS_HOME overrides the cache location)")
+    if ($Cause) { Send-InstallFailure $Cause }
     exit $InstallFailureExit
+}
+
+# Best effort: tell the control plane an install failed, with a short timeout,
+# using the key in the plugin's config. Never fails the script.
+function Send-InstallFailure([string]$Cause) {
+    try {
+        $ConfigPath = $null
+        $Harness = ""
+        foreach ($Arg in $ForwardArgs) {
+            if ($Arg.StartsWith("--config=", [StringComparison]::Ordinal)) { $ConfigPath = $Arg.Substring(9) }
+            elseif ($Arg.StartsWith("--provider=", [StringComparison]::Ordinal)) { $Harness = $Arg.Substring(11) }
+        }
+        if (-not $ConfigPath -or -not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) { return }
+        $Config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+        if (-not $Config.server_url -or -not $Config.hooks_api_key) { return }
+        $Now = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+        $Body = @{
+            schema_version = "hook.ingest.v1"
+            source = @{ adapter = "bootstrap"; hostname = [Environment]::MachineName }
+            event = @{ type = "client.install_failed"; occurred_at = $Now }
+            data = @{ install_failure = @{ cause = $Cause; attempted_at = $Now; version = $Version; os = "windows"; arch = "$Arch"; harness = $Harness } }
+        } | ConvertTo-Json -Depth 5 -Compress
+        $Headers = @{ "Gram-Key" = $Config.hooks_api_key }
+        if ($Config.project) { $Headers["Gram-Project"] = $Config.project }
+        $Uri = $Config.server_url.TrimEnd("/") + "/rpc/hooks.ingest"
+        Invoke-WebRequest -UseBasicParsing -Method Post -TimeoutSec 3 -Uri $Uri -Headers $Headers -ContentType "application/json" -Body $Body | Out-Null
+    } catch { }
 }
 
 # Codex supplies a version-independent plugin data directory. Publish this
@@ -720,16 +784,16 @@ try {
         try {
             if (-not (Wait-Job -Job $Download -Timeout 45)) {
                 Stop-Job -Job $Download
-                Exit-InstallFailure "download failed"
+                Exit-InstallFailure "download failed" "download"
             }
             Receive-Job -Job $Download -ErrorAction Stop | Out-Null
         } catch {
-            Exit-InstallFailure "download failed"
+            Exit-InstallFailure "download failed" "download"
         } finally {
             Remove-Job -Job $Download -Force -ErrorAction SilentlyContinue
         }
         $ActualSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Archive).Hash.ToLowerInvariant()
-        if ($ActualSha -ne $ExpectedSha) { Exit-InstallFailure "downloaded archive checksum mismatch" }
+        if ($ActualSha -ne $ExpectedSha) { Exit-InstallFailure "downloaded archive checksum mismatch" "checksum_mismatch" }
 
         $Extracted = Join-Path $Work "extracted"
         Expand-Archive -LiteralPath $Archive -DestinationPath $Extracted

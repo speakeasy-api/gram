@@ -2210,6 +2210,9 @@ func unmarshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRe
 	if v.DeliveryFailure != nil {
 		res.DeliveryFailure = unmarshalHookDeliveryFailureDataRequestBodyToHooksHookDeliveryFailureData(v.DeliveryFailure)
 	}
+	if v.InstallFailure != nil {
+		res.InstallFailure = unmarshalHookInstallFailureDataRequestBodyToHooksHookInstallFailureData(v.InstallFailure)
+	}
 
 	return res
 }
@@ -2398,6 +2401,25 @@ func unmarshalHookDeliveryFailureDataRequestBodyToHooksHookDeliveryFailureData(v
 		FailedIdempotencyKey: v.FailedIdempotencyKey,
 		SessionID:            v.SessionID,
 		SpoolDepth:           v.SpoolDepth,
+	}
+
+	return res
+}
+
+// unmarshalHookInstallFailureDataRequestBodyToHooksHookInstallFailureData
+// builds a value of type *hooks.HookInstallFailureData from a value of type
+// *HookInstallFailureDataRequestBody.
+func unmarshalHookInstallFailureDataRequestBodyToHooksHookInstallFailureData(v *HookInstallFailureDataRequestBody) *hooks.HookInstallFailureData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookInstallFailureData{
+		Cause:       hooks.HookInstallFailureCause(*v.Cause),
+		AttemptedAt: *v.AttemptedAt,
+		Version:     v.Version,
+		Os:          v.Os,
+		Arch:        v.Arch,
+		Harness:     v.Harness,
 	}
 
 	return res
