@@ -431,10 +431,9 @@ type Recorder struct {
 	referenceChecks singleflight.Group
 }
 
-// referableOrg is one logs answer and when it was read. off is a logs-off answer, not a failed check.
+// referableOrg is one logs answer and when it was read.
 type referableOrg struct {
 	allowed bool
-	off     bool
 	at      time.Time
 }
 
@@ -740,47 +739,36 @@ func FailureWorthAReference(what Happened) bool {
 
 // referenceLogsAnswer asks the logs setting off the writer's and record's panic guards, so it has
 // its own: a logs check that panics shows no reference.
-func (r *Recorder) referenceLogsAnswer(organizationID string) (reason dropReason) {
+func (r *Recorder) referenceLogsAnswer(organizationID string) (allowed bool) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			r.drop(context.Background(), dropPanic, 1, fmt.Errorf("connection reference logs check: %v", recovered))
-			reason = dropPanic
+			allowed = false
 		}
 	}()
-	reason, _ = r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
-	return reason
-}
-
-// rememberedLogsAnswer is the organization's logs answer while it is fresh.
-func (r *Recorder) rememberedLogsAnswer(organizationID string) (referableOrg, bool) {
-	r.referableMu.Lock()
-	cached, ok := r.referableOrgs.Get(organizationID)
-	r.referableMu.Unlock()
-	return cached, ok && time.Since(cached.at) < cached.ttl()
-}
-
-// checkLogs starts one background logs check per organization that remembers its answer.
-func (r *Recorder) checkLogs(organizationID string) <-chan singleflight.Result {
-	return r.referenceChecks.DoChan(organizationID, func() (any, error) {
-		reason := r.referenceLogsAnswer(organizationID)
-		answer := referableOrg{allowed: reason == "", off: reason == dropLogsOff, at: time.Now()}
-		r.referableMu.Lock()
-		r.referableOrgs.Add(organizationID, answer)
-		r.referableMu.Unlock()
-		return answer.allowed, nil
-	})
+	reason, _ := r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
+	return reason == ""
 }
 
 // logsAllowForReference waits a bounded time for one background logs check per organization.
 // A slow check answers false now and fills the cache for the next failure.
 func (r *Recorder) logsAllowForReference(ctx context.Context, organizationID string) bool {
 	if r.referableOrgs == nil {
-		return r.referenceLogsAnswer(organizationID) == ""
+		return r.referenceLogsAnswer(organizationID)
 	}
-	if cached, ok := r.rememberedLogsAnswer(organizationID); ok {
+	r.referableMu.Lock()
+	cached, ok := r.referableOrgs.Get(organizationID)
+	r.referableMu.Unlock()
+	if ok && time.Since(cached.at) < cached.ttl() {
 		return cached.allowed
 	}
-	answer := r.checkLogs(organizationID)
+	answer := r.referenceChecks.DoChan(organizationID, func() (any, error) {
+		allowed := r.referenceLogsAnswer(organizationID)
+		r.referableMu.Lock()
+		r.referableOrgs.Add(organizationID, referableOrg{allowed: allowed, at: time.Now()})
+		r.referableMu.Unlock()
+		return allowed, nil
+	})
 	timer := time.NewTimer(referenceLogsTimeout)
 	defer timer.Stop()
 	select {
