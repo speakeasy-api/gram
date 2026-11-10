@@ -135,3 +135,27 @@ func TestService_ListIdentityAccess_SkillWriteBlockLeavesReadGrant(t *testing.T)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{skill}, listedSkillIDs(result))
 }
+
+// Pins today's listing for a write-only grant under a write block. The engine
+// still lets this user read the skill, so the listing and the single-skill
+// check disagree here; the case is kept as it is until the two are reconciled.
+func TestService_ListIdentityAccess_SkillWriteBlockHidesWriteOnlyGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	blocked := seedSkill(t, ctx, ti.conn, orgID)
+	open := seedSkill(t, ctx, ti.conn, orgID)
+
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_skill_writer_blocked", "skill-writer-blocked@test.com", "Skill Writer Blocked", "workos_skill_writer_blocked", "membership_skill_writer_blocked")
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "local_skill_writer_blocked")
+	seedGrant(t, ctx, ti.conn, orgID, userPrincipal, authz.ScopeSkillWrite, authz.WildcardResource)
+	seedGrant(t, ctx, ti.conn, orgID, userPrincipal, authz.ScopeSkillBlockedWrite, blocked)
+
+	result, err := ti.service.ListIdentityAccess(ctx, &gen.ListIdentityAccessPayload{UserID: "local_skill_writer_blocked", SessionToken: nil})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{open}, listedSkillIDs(result))
+}

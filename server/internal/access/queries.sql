@@ -1451,10 +1451,15 @@ ORDER BY s.name;
 -- allow it, so distribution is not consulted. Principal precedence also
 -- matches: a direct grant naming the skill outranks an inherited block.
 --
--- Blocks pair with allows as the engine's exclusions do: skill:blocked_write
--- withdraws skill:write, and skill:blocked_read withdraws both skill:read and
--- skill:write, because a write check also honours a read block (see
--- scopeExpansions in authz/scopes.go).
+-- Blocks pair with allows by scope: skill:blocked_read withdraws skill:read and
+-- also skill:write, because a write check honours a read block (see
+-- scopeExpansions in authz/scopes.go), and skill:blocked_write withdraws
+-- skill:write. Callers read the result as "skills this user can reach", which
+-- is the skill:read check, and the engine does not withdraw that on
+-- skill:blocked_write. So a user whose only grant is skill:write, blocked by
+-- skill:blocked_write, is left out here although the engine lets them read the
+-- skill. That case is kept as it was until list and single-skill access are
+-- reconciled.
 WITH user_grants AS (
   SELECT
     pg.scope,
