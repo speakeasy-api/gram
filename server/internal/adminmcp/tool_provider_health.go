@@ -30,6 +30,9 @@ const (
 	// unknownReasonText stands in for a reason the catalog does not know, such as other.
 	unknownReasonText = "Unknown reason."
 
+	// minShownRate is the smallest rate shown as a number; one decimal would round smaller ones to 0.0%.
+	minShownRate = 0.001
+
 	// unknownWhoFixes is who fixes an unknown reason.
 	unknownWhoFixes = "unknown"
 )
@@ -63,7 +66,8 @@ type ProviderHealthOutput struct {
 	Providers []ProviderHealthEntry `json:"providers"`
 }
 
-// ProviderHealthThresholds are the outage rules. Meeting all is an outage, all but one is elevated.
+// ProviderHealthThresholds are the outage rules. The rate and both counts is an
+// outage; the rate and one count is elevated; without the rate it is normal.
 type ProviderHealthThresholds struct {
 	// StatusWindowMinutes is the recent stretch judged.
 	StatusWindowMinutes int `json:"status_window_minutes"`
@@ -289,8 +293,11 @@ func providerHealthSummary(report mcpconnectionattempts.ProviderHealthReport) st
 	}
 }
 
-// percent shows a rate, with one decimal below 1% so a small rate does not read as none.
+// percent shows a rate, with one decimal below 1% and a floor below 0.1%, so a small rate never reads as none.
 func percent(rate float64) string {
+	if rate > 0 && rate < minShownRate {
+		return "under 0.1%"
+	}
 	if rate > 0 && rate < 0.01 {
 		return fmt.Sprintf("%.1f%%", 100*rate)
 	}

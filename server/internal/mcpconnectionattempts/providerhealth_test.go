@@ -302,3 +302,24 @@ func TestProviderHealth_BlockedStopIsNotAFailure(t *testing.T) {
 	require.Empty(t, report.Failures, "a stop on a blocking reason is blocked, as End says")
 	require.Empty(t, report.Abandoned)
 }
+
+func TestProviderHealth_RelabelsStoredDailyProviders(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, LabelOther)
+	stray := "acme-" + uuid.NewString()[:8] + ".okta.com"
+	stored := f.provider
+	f.provider = stray
+	day := f.writeDay(2, string(OutcomeConnected), "", "", 4)
+	f.provider = stored
+
+	report := f.read(time.Hour, 7)
+	require.Equal(t, LabelOther, report.Provider)
+	found := false
+	for _, d := range report.Daily {
+		require.Equal(t, LabelOther, d.Provider, "a stored tenant host is shown as other")
+		found = found || d.Day.Equal(day)
+	}
+	require.True(t, found)
+	require.NotContains(t, fmt.Sprintf("%+v", report), stray)
+}

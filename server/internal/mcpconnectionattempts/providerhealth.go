@@ -395,13 +395,13 @@ func (h *ProviderHealth) read(ctx context.Context, query ProviderHealthQuery) ([
 	if err := h.readDetails(ctx, now, now.Add(-query.Window), query.Provider, keep, tally); err != nil {
 		return nil, err
 	}
-	if err := h.readBaseline(ctx, now, query.Provider, tally); err != nil {
+	if err := h.readBaseline(ctx, now, query.Provider, keep, tally); err != nil {
 		return nil, err
 	}
 	var daily map[string][]ProviderDay
 	if query.TrendDays > 0 {
 		var err error
-		daily, err = h.readDaily(ctx, now, query)
+		daily, err = h.readDaily(ctx, now, query, keep)
 		if err != nil {
 			return nil, err
 		}
@@ -546,12 +546,11 @@ func (t *providerTally) report(provider string, daily []ProviderDay) ProviderHea
 }
 
 // readBaseline adds the baseline days' ended attempts and provider-side failures.
-func (h *ProviderHealth) readBaseline(ctx context.Context, now time.Time, provider string, tally func(string) *providerTally) error {
+// Stored providers are labelled again, so a row that broke the daily job's rule
+// still cannot name a tenant host here.
+func (h *ProviderHealth) readBaseline(ctx context.Context, now time.Time, provider string, keep func(string) (string, bool), tally func(string) *providerTally) error {
 	today := now.Truncate(24 * time.Hour)
-	where, args := "day >= toDate(?) AND day < toDate(?)", []any{today.AddDate(0, 0, -outageBaselineDays), today}
-	if provider != "" {
-		where, args = where+" AND provider = ?", append(args, provider)
-	}
+	where, args := dailyProviderFilter(provider, "day >= toDate(?) AND day < toDate(?)", []any{today.AddDate(0, 0, -outageBaselineDays), today})
 	rows, err := h.conn.Query(ctx, `SELECT provider, reason, sum(attempts) AS reason_attempts
 	FROM `+OutcomesDailyTable+` WHERE `+where+` AND provider != ''
 	GROUP BY provider, reason`, args...)
@@ -560,10 +559,14 @@ func (h *ProviderHealth) readBaseline(ctx context.Context, now time.Time, provid
 	}
 	defer o11y.NoLogDefer(func() error { return rows.Close() })
 	for rows.Next() {
-		var label, reason string
+		var stored, reason string
 		var attempts uint64
-		if err := rows.Scan(&label, &reason, &attempts); err != nil {
+		if err := rows.Scan(&stored, &reason, &attempts); err != nil {
 			return fmt.Errorf("scan provider baseline: %w", err)
+		}
+		label, ok := keep(stored)
+		if !ok || label == "" {
+			continue
 		}
 		t := tally(label)
 		t.counts.BaselineAttempts += attempts
@@ -577,13 +580,20 @@ func (h *ProviderHealth) readBaseline(ctx context.Context, now time.Time, provid
 	return nil
 }
 
-func (h *ProviderHealth) readDaily(ctx context.Context, now time.Time, query ProviderHealthQuery) (map[string][]ProviderDay, error) {
+// dailyProviderFilter pushes a known provider down. other also gathers any stray
+// stored host, so it is filtered after labelling.
+func dailyProviderFilter(provider, where string, args []any) (string, []any) {
+	if provider == "" || provider == LabelOther {
+		return where, args
+	}
+	return where + " AND provider = ?", append(args, provider)
+}
+
+// readDaily returns the daily trend per provider label, oldest first, labelling stored providers again.
+func (h *ProviderHealth) readDaily(ctx context.Context, now time.Time, query ProviderHealthQuery, keep func(string) (string, bool)) (map[string][]ProviderDay, error) {
 	today := now.Truncate(24 * time.Hour)
 	from := today.AddDate(0, 0, -query.TrendDays)
-	where, args := "day >= toDate(?) AND day < toDate(?)", []any{from, today}
-	if query.Provider != "" {
-		where, args = where+" AND provider = ?", append(args, query.Provider)
-	}
+	where, args := dailyProviderFilter(query.Provider, "day >= toDate(?) AND day < toDate(?)", []any{from, today})
 	rows, err := h.conn.Query(ctx, `SELECT day, provider,
 		sum(attempts) AS day_attempts,
 		sumIf(attempts, outcome = 'failed') AS day_failed,
@@ -602,10 +612,20 @@ func (h *ProviderHealth) readDaily(ctx context.Context, now time.Time, query Pro
 		if err := rows.ScanStruct(&day); err != nil {
 			return nil, fmt.Errorf("scan daily provider outcome: %w", err)
 		}
-		if day.Provider == "" {
+		label, ok := keep(day.Provider)
+		if !ok || label == "" {
 			continue
 		}
-		daily[day.Provider] = append(daily[day.Provider], day)
+		day.Provider = label
+		days := daily[label]
+		if n := len(days); n > 0 && days[n-1].Day.Equal(day.Day) {
+			days[n-1].Attempts += day.Attempts
+			days[n-1].Failed += day.Failed
+			days[n-1].Abandoned += day.Abandoned
+			days[n-1].Fixed += day.Fixed
+			continue
+		}
+		daily[label] = append(days, day)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read daily provider outcomes: %w", err)

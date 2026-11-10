@@ -162,6 +162,7 @@ func TestPercent_KeepsASmallRateVisible(t *testing.T) {
 
 	require.Equal(t, "0%", percent(0))
 	require.Equal(t, "0.4%", percent(0.004))
+	require.Equal(t, "under 0.1%", percent(1.0/3000))
 	require.Equal(t, "25%", percent(0.25))
 }
 
