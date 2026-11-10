@@ -137,7 +137,7 @@ func (m *metrics) RecordInstallFailure(ctx context.Context, params installFailur
 	}
 	attrs := []attribute.KeyValue{
 		attr.HookInstallCause(params.Cause),
-		attr.HookDeviceHarness(conv.Default(params.Harness, hookMetricDimensionUnknown)),
+		attr.HookDeviceHarness(boundedInstallHarness(params.Harness)),
 		attr.HookDeviceOS(boundedDeviceOS(params.OS)),
 		attr.HookInstallVersion(boundedBinaryVersion(params.Version)),
 	}
@@ -182,6 +182,19 @@ var knownDeviceOS = map[string]struct{}{
 var releaseVersionPattern = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]{1,32})?$`)
 
 const devBinaryVersion = "dev"
+
+// knownInstallHarnesses are the --provider values the bootstrap scripts are
+// launched with; the install report's harness is free-form otherwise.
+var knownInstallHarnesses = map[string]struct{}{
+	"claude": {}, "claude-code": {}, "codex": {}, "copilot": {}, "cursor": {}, "openclaw": {}, "opencode": {},
+}
+
+func boundedInstallHarness(v string) string {
+	if _, ok := knownInstallHarnesses[v]; ok {
+		return v
+	}
+	return hookMetricDimensionUnknown
+}
 
 // boundedDeviceOS maps a reported OS onto a known GOOS or "unknown", keeping
 // the counter's OS series finite.

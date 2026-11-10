@@ -4860,3 +4860,55 @@ func TestHooksPowerShellBootstrapReportsInstallFailures(t *testing.T) {
 	require.Contains(t, script, `type = "client.install_failed"`)
 	require.Contains(t, script, `-TimeoutSec 3`)
 }
+
+func TestHooksBootstrapRejectsUnsafeReportURL(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	server, reports := installFailureServer(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+	disguised := strings.Replace(server.URL, "http://", "http://localhost:pw@", 1)
+	config := writeInstallFailureConfig(t, disguised, "gram_test_key")
+	script := renderHooksBootstrapForRelease("0.3.46", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: strings.Repeat("0", 64)},
+	}, false, "releases.test")
+
+	out, err := runHooksBootstrap(t, script, t.TempDir(), "payload", "--config="+config, "agenthooks", "run", "--provider=claude")
+	require.Error(t, err, string(out))
+	require.Empty(t, reports)
+}
+
+func TestHooksBootstrapReportsInstallFailureWithWget(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("wget"); err != nil {
+		t.Skip("wget is not installed")
+	}
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nexit 0\n"))
+	server, reports := installFailureServer(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(archive) })
+	config := writeInstallFailureConfig(t, server.URL, "gram_test_key")
+	script := renderHooksBootstrapForRelease("0.3.46", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: strings.Repeat("0", 64)},
+	}, false, "releases.test")
+
+	path := hooksBootstrapToolPath(t)
+	require.NoError(t, os.Remove(filepath.Join(path, "curl")))
+	for _, tool := range []string{"wget", "sed", "head", "date", "timeout", "cat"} {
+		if resolved, err := exec.LookPath(tool); err == nil {
+			require.NoError(t, os.Symlink(resolved, filepath.Join(path, tool)))
+		}
+	}
+
+	out, err := runHooksBootstrapWithEnv(t, script, []string{"SPEAKEASY_AI_HOOKS_HOME=" + t.TempDir(), "PATH=" + path}, "payload", "--config="+config, "agenthooks", "run", "--provider=claude")
+	require.Error(t, err, string(out))
+
+	var report installFailureReport
+	select {
+	case report = <-reports:
+	default:
+		require.FailNow(t, "no install failure report was sent", string(out))
+	}
+	require.Equal(t, "gram_test_key", report.key)
+	require.Equal(t, "default", report.project)
+	data, _ := report.body["data"].(map[string]any)
+	install, _ := data["install_failure"].(map[string]any)
+	require.Equal(t, "checksum_mismatch", install["cause"])
+}

@@ -145,12 +145,21 @@ report_harness=
 config_field() {
   sed -n "s/^[[:space:]]*\"$1\":[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$report_config" 2>/dev/null | head -n 1
 }
+report_url_ok() {
+  case "$1" in
+    *@*) return 1 ;;
+    https://*) return 0 ;;
+    http://127.0.0.1 | http://127.0.0.1[:/]* | http://localhost | http://localhost[:/]* | 'http://[::1]' | 'http://[::1]'[:/]*) return 0 ;;
+  esac
+  return 1
+}
 report_install_failure() {
-  command -v curl >/dev/null 2>&1 && [ -r "$report_config" ] || return 0
+  [ -r "$report_config" ] || return 0
   server_url=$(config_field server_url)
   api_key=$(config_field hooks_api_key)
   project=$(config_field project)
   [ -n "$server_url" ] && [ -n "$api_key" ] || return 0
+  report_url_ok "$server_url" || return 0
   report_host=$(uname -n 2>/dev/null || true)
   case "$report_host" in *[!A-Za-z0-9._-]*) report_host= ;; esac
   case "$report_harness" in *[!A-Za-z0-9._-]*) report_harness= ;; esac
@@ -158,12 +167,26 @@ report_install_failure() {
   now=$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)
   body=$(printf '{"schema_version":"hook.ingest.v1","source":{"adapter":"bootstrap","hostname":"%%s"},"event":{"type":"client.install_failed","occurred_at":"%%s"},"data":{"install_failure":{"cause":"%%s","attempted_at":"%%s","version":"%%s","os":"%%s","arch":"%%s","harness":"%%s"}}}' \
     "$report_host" "$now" "$1" "$now" "$version" "${os:-}" "${arch:-}" "$report_harness")
-  # Headers go through --config on stdin so the key never shows in ps.
-  {
-    printf 'header = "Gram-Key: %%s"\n' "$api_key"
-    [ -z "$project" ] || printf 'header = "Gram-Project: %%s"\n' "$project"
-  } | curl --config - --silent --output /dev/null --connect-timeout 2 --max-time 3 \
-    --header 'Content-Type: application/json' --data "$body" "${server_url%%/}/rpc/hooks.ingest" >/dev/null 2>&1 || true
+  report_endpoint="${server_url%%/}/rpc/hooks.ingest"
+  # Headers go through a config file or stdin so the key never shows in ps.
+  if command -v curl >/dev/null 2>&1; then
+    {
+      printf 'header = "Gram-Key: %%s"\n' "$api_key"
+      [ -z "$project" ] || printf 'header = "Gram-Project: %%s"\n' "$project"
+    } | curl --config - --silent --output /dev/null --connect-timeout 2 --max-time 3 \
+      --header 'Content-Type: application/json' --data "$body" "$report_endpoint" >/dev/null 2>&1 || true
+  elif command -v wget >/dev/null 2>&1; then
+    report_rc=$(umask 077 && mktemp 2>/dev/null) || return 0
+    {
+      printf 'header = Gram-Key: %%s\n' "$api_key"
+      [ -z "$project" ] || printf 'header = Gram-Project: %%s\n' "$project"
+      printf 'header = Content-Type: application/json\n'
+    } >"$report_rc"
+    report_wget="wget -q -O /dev/null --tries=1 --timeout=3"
+    ! command -v timeout >/dev/null 2>&1 || report_wget="timeout 3 $report_wget"
+    WGETRC="$report_rc" $report_wget --post-data="$body" "$report_endpoint" >/dev/null 2>&1 || true
+    rm -f "$report_rc"
+  fi
 }
 
 # Codex plugin versions are disposable. When its inline command supplies a
@@ -524,6 +547,10 @@ function Send-InstallFailure([string]$Cause) {
         if (-not $ConfigPath -or -not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) { return }
         $Config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
         if (-not $Config.server_url -or -not $Config.hooks_api_key) { return }
+        $Parsed = $null
+        if (-not [Uri]::TryCreate([string]$Config.server_url, [UriKind]::Absolute, [ref]$Parsed)) { return }
+        if ($Parsed.UserInfo) { return }
+        if ($Parsed.Scheme -ne "https" -and -not ($Parsed.Scheme -eq "http" -and $Parsed.IsLoopback)) { return }
         $Now = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
         $Body = @{
             schema_version = "hook.ingest.v1"
