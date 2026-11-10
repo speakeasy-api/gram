@@ -66,14 +66,15 @@ var (
 	AppOtherMetadataURL = App{"other_metadata_url", ""}
 )
 
-// ClientIDCheck says whether Speakeasy resolved and admitted a client_id.
+// ClientIDCheck says whether Speakeasy resolved and admitted a client_id. It is about client_id
+// admission only, not the request's final outcome.
 type ClientIDCheck bool
 
 const (
 	// ClientIDAdmitted is a client_id Speakeasy resolved and admitted.
 	ClientIDAdmitted ClientIDCheck = true
 
-	// ClientIDNotAdmitted is a client_id that a refused or failed request only presented.
+	// ClientIDNotAdmitted is a client_id the request presented but Speakeasy did not admit.
 	ClientIDNotAdmitted ClientIDCheck = false
 )
 
@@ -190,9 +191,6 @@ func (a Attempt) ID() uuid.UUID { return a.id }
 
 // StartedAt is when the attempt started.
 func (a Attempt) StartedAt() time.Time { return a.startedAt }
-
-// Scope is what every step of the attempt shares.
-func (a Attempt) Scope() Scope { return a.scope }
 
 // IsZero reports an attempt that was never begun. Recording on it does nothing.
 func (a Attempt) IsZero() bool { return a.id == uuid.Nil }
