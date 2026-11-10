@@ -1139,6 +1139,19 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(committed().clientConfiguration.audience).toBeUndefined();
     });
 
+    it("holds Save when a method that sends a secret has none typed or copied", () => {
+      connectClient();
+      withStored(stored());
+      const { result } = startFrom("stored-client");
+      expect(result.current.canSave).toBe(true);
+
+      act(() => result.current.setClientId("ANOTHER-APP"));
+      expect(result.current.canSave).toBe(false);
+
+      act(() => result.current.setClientSecret("TYPED-SECRET"));
+      expect(result.current.canSave).toBe(true);
+    });
+
     it("registers a hosted document client again instead of copying it", async () => {
       autoConfigurableProvider();
       withStored(

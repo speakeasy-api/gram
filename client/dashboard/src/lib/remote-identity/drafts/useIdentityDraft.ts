@@ -1125,6 +1125,19 @@ export function useUserIdentityDraft({
   let choiceComplete = choice !== null;
   if (choice === "existing") choiceComplete = !!template;
   if (manualNeeded) choiceComplete &&= clientId.trim() !== "";
+  // A method that sends a secret needs one: typed, or the stored one the
+  // server copies for the same registration. Whether that registration holds
+  // a secret is not readable here, so the server has the last word on it.
+  if (
+    template &&
+    !template.clientIdMetadataUri &&
+    (startingAuthMethod === "client_secret_basic" ||
+      startingAuthMethod === "client_secret_post") &&
+    clientSecret.trim() === "" &&
+    !sameRegistration
+  ) {
+    choiceComplete = false;
+  }
 
   const pendingChange = touched && status.kind !== "done";
 
