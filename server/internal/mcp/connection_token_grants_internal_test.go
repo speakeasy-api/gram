@@ -116,7 +116,7 @@ func TestAssistantClientCredentialsRecordsSuccess(t *testing.T) {
 	require.Equal(t, oauthwire.GrantTypeClientCredentials, row.GrantType)
 	require.Equal(t, urn.NewAgentSubject(agentID).String(), row.SubjectURN)
 	require.Equal(t, c.client.ID.String(), row.UserSessionClientID)
-	require.Equal(t, mcpconnectionattempts.AppOf(c.client.ClientID).String(), row.AppKey)
+	require.Equal(t, mcpconnectionattempts.AppOf(c.client.ClientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
 	require.Len(t, rec.Rows(), 1)
 }
 

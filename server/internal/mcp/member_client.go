@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 // memberSessionCloseTimeout bounds best-effort legacy session cleanup after a call.
@@ -50,6 +51,8 @@ type memberAttempt struct {
 	rejected        int
 	lastTunnelError string
 	lastStatus      int
+	// lastForwarded marks a latest exchange whose answer a tunnel client sent, even one that failed after.
+	lastForwarded bool
 	// lastRetryAfter is the latest recorded exchange's Retry-After header.
 	lastRetryAfter string
 	// lastErr is the transport failure of the latest recorded exchange, if any.
@@ -66,7 +69,7 @@ type memberAttempt struct {
 type memberAttemptKey struct{}
 
 func newMemberAttempt(build memberProxyBuilder) *memberAttempt {
-	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, rejectedAnswer: memberRejection{challenges: nil, authorizationSent: false, configuredSent: false}, lastStatus: 0, lastTunnelError: "", lastRetryAfter: "", lastErr: nil, refused: false, sentCall: false}
+	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, rejectedAnswer: memberRejection{challenges: nil, authorizationSent: false, configuredSent: false}, lastStatus: 0, lastTunnelError: "", lastForwarded: false, lastRetryAfter: "", lastErr: nil, refused: false, sentCall: false}
 }
 
 func (a *memberAttempt) memberRefused() bool {
@@ -90,6 +93,7 @@ type memberOutcome interface {
 	rejectedBy() memberRejection
 	status() int
 	tunnelError() string
+	forwarded() bool
 	retryAfter(now time.Time) time.Duration
 }
 
@@ -157,13 +161,13 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		attempt = perCall
 	}
 	// The SDK falls back to initialize after any server/discover failure, and
-	// cleanup must not overwrite the outcome of the call, so neither is recorded.
-	record := req.Method != http.MethodDelete && rpc.Method != "server/discover"
+	// cleanup and a cancellation notice must not overwrite the outcome of the call, so none is recorded.
+	record := req.Method != http.MethodDelete && rpc.Method != "server/discover" && rpc.Method != mcpversions.MethodNotificationsCancelled
 
 	p, err := attempt.build(ctx)
 	if err != nil {
 		err = fmt.Errorf("%w: %w", errMemberUnroutable, err)
-		attempt.recordFailure(record, err)
+		attempt.recordFailure(record, false, err)
 		return nil, err
 	}
 	if capture, ok := ctx.Value(memberToolResultKey{}).(*memberToolResult); ok {
@@ -186,6 +190,7 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	tunnelError := ""
 	answered := memberRejection{challenges: nil, authorizationSent: false, configuredSent: false}
 	answeredStatus := 0
+	forwarded := false
 	interceptResponse := p.UpstreamResponseInterceptor
 	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
 		answeredStatus = resp.StatusCode
@@ -198,6 +203,8 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 				answered.authorizationSent, answered.configuredSent = remotemcp.CredentialHeadersSent(resp.Request.Header, p.Headers)
 			}
 		}
+		// The gateway names the agent session only on a forward, and its own failures carry an error.
+		forwarded = tunnelError == "" && resp.Header.Get(wire.HeaderTunnelAgentSession) != ""
 		if interceptResponse != nil {
 			return interceptResponse(ctx, resp)
 		}
@@ -213,7 +220,7 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		exchangeErr = errMemberResponseTooLarge
 	}
 	if exchangeErr != nil {
-		attempt.recordFailure(record, exchangeErr)
+		attempt.recordFailure(record, forwarded, exchangeErr)
 		// A 401 or 403 whose body then failed is still the member's answer.
 		attempt.recordRejection(record, answeredStatus, answered)
 		return nil, exchangeErr
@@ -222,6 +229,7 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	if record {
 		attempt.lastStatus = rec.status
 		attempt.lastTunnelError = tunnelError
+		attempt.lastForwarded = forwarded
 		attempt.lastRetryAfter = rec.header.Get("Retry-After")
 		attempt.lastErr = nil
 	}
@@ -246,8 +254,9 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 }
 
 // recordFailure marks the latest exchange as unanswered, so classification
-// does not report the status of an earlier exchange for it.
-func (a *memberAttempt) recordFailure(record bool, err error) {
+// does not report the status of an earlier exchange for it. forwarded keeps
+// that a tunnel client had started answering it.
+func (a *memberAttempt) recordFailure(record, forwarded bool, err error) {
 	if !record {
 		return
 	}
@@ -255,6 +264,7 @@ func (a *memberAttempt) recordFailure(record bool, err error) {
 	defer a.mu.Unlock()
 	a.lastStatus = 0
 	a.lastTunnelError = ""
+	a.lastForwarded = forwarded
 	a.lastRetryAfter = ""
 	a.lastErr = err
 }
@@ -297,6 +307,12 @@ func (a *memberAttempt) tunnelError() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.lastTunnelError
+}
+
+func (a *memberAttempt) forwarded() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastForwarded
 }
 
 // retryAfter is the latest exchange's Retry-After delay, as seconds or an HTTP
@@ -413,6 +429,23 @@ func (e memberDiscoveryError) Unwrap() error { return e.metaMemberError }
 // transient HTTP statuses included. The member never said it.
 const sdkTransportRejected = "rejected by transport"
 
+// memberDeadlineRanOut reports that the member call's own deadline ended it with nothing on
+// our side to blame: no tunnel gateway status and no forwarding setup failure. A tunneled
+// member also needs a tunnel client to have answered; a gateway that hangs is ours.
+func memberDeadlineRanOut(ctx context.Context, rt memberOutcome, dial memberDial, err, exchangeErr error) bool {
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return false
+	}
+	if dial.tunneled && !rt.forwarded() {
+		return false
+	}
+	if _, gateway := tunnelrouting.FailureHappened(rt.tunnelError(), err, exchangeErr); gateway {
+		return false
+	}
+	_, setup := errors.AsType[*proxy.ForwardSetupError](errors.Join(err, exchangeErr))
+	return !setup
+}
+
 // memberClientFailure keeps transport failures scoped to a member and preserves
 // the distinction between an absent credential and a rejected routed credential.
 // Failures it cannot attribute to the member are logged, since they may be ours.
@@ -464,6 +497,9 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false)
 	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
 		code, _ := remotemcp.UpstreamFailureHappened(0, false, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
+		if memberDeadlineRanOut(ctx, rt, dial, err, exchangeErr) {
+			code = mcpconnectionattempts.CodeProviderUnreachable
+		}
 		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false), code}
 	case errors.Is(err, errMemberResponseTooLarge) || errors.Is(exchangeErr, errMemberResponseTooLarge):
 		return upstreamFailure(fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug), false)

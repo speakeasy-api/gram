@@ -41,6 +41,7 @@ const (
 	relayReasonHTTP5xx            relayReason = "http-5xx"
 	relayReasonPermanentHTTPError relayReason = "permanent-http-error"
 	relayReasonExcluded           relayReason = "excluded"
+	relayReasonBelowSeverity      relayReason = "below-severity"
 	relayReasonDeadLetter         relayReason = "dead-letter"
 	relayReasonStateChange        relayReason = "state-change"
 	relayReasonShadow             relayReason = "shadow"

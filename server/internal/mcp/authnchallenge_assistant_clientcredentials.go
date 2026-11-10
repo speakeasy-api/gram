@@ -75,7 +75,7 @@ type AssistantWorkloadTokenIssuer interface {
 }
 
 func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, client *usersessions_repo.UserSessionClient, baseURL, presentedAuthMethod string, logger *slog.Logger) error {
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(client.ClientID)), mcpconnectionattempts.StepInboundToken,
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(client.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeClientCredentials),
 		mcpconnectionattempts.UserSessionClient(client.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 	defer t.Finish(ctx)

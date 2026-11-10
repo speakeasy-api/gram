@@ -59,8 +59,12 @@ func TestAppOf(t *testing.T) {
 		clientID string
 		want     App
 	}{
-		{"catalog app", "https://claude.ai/oauth/claude-code-client-metadata", App{"claude.ai"}},
-		{"catalog pattern", "https://chatgpt.com/oauth/abc123/client.json", App{"chatgpt.com"}},
+		{"catalog app", "https://claude.ai/oauth/claude-code-client-metadata", App{"claude.ai", FamilyClaudeCode}},
+		{"same host, other product", "https://claude.ai/oauth/mcp-oauth-client-metadata", App{"claude.ai", FamilyClaudeAI}},
+		{"catalog pattern", "https://chatgpt.com/oauth/abc123/client.json", App{"chatgpt.com", FamilyOpenAIConnector}},
+		{"shared connector document", "https://chatgpt.com/oauth/client.json", App{"chatgpt.com", FamilyOpenAIConnector}},
+		{"literal beats an overlapping pattern", "https://chatgpt.com/oauth/codex/client.json", App{"chatgpt.com", FamilyCodexCLI}},
+		{"catalog app with no family", "https://goose-docs.ai/oauth/client-metadata.json", App{"goose-docs.ai", ""}},
 		{"host outside the catalog", "https://client.example.com/path/meta.json", AppOtherMetadataURL},
 		{"catalog host with another path", "https://claude.ai/anything/a/caller/chooses", AppOtherMetadataURL},
 		{"dynamically registered", "3fa85f64-5717-4562-b3fc-2c963f66afa6", AppDCR},
@@ -72,7 +76,7 @@ func TestAppOf(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, AppOf(tc.clientID))
+			require.Equal(t, tc.want, AppOf(tc.clientID, ClientIDAdmitted))
 		})
 	}
 }
@@ -106,15 +110,17 @@ func TestAttempt_MalformedStateReadsAsZero(t *testing.T) {
 func TestAttempt_SurvivesSignInStateUnchanged(t *testing.T) {
 	t.Parallel()
 
-	attempt := Begin(OrganizationGatewayScope("org-test", uuid.New(), AppOf("https://client.example.com/m")))
-	raw, err := json.Marshal(signInState{ID: "s", Attempt: attempt})
-	require.NoError(t, err)
+	for _, clientID := range []string{"https://client.example.com/m", "https://claude.ai/oauth/claude-code-client-metadata"} {
+		attempt := Begin(OrganizationGatewayScope("org-test", uuid.New(), AppOf(clientID, ClientIDAdmitted)))
+		raw, err := json.Marshal(signInState{ID: "s", Attempt: attempt})
+		require.NoError(t, err)
 
-	var decoded signInState
-	require.NoError(t, json.Unmarshal(raw, &decoded))
-	require.Equal(t, attempt.ID(), decoded.Attempt.ID())
-	require.Equal(t, attempt.scope, decoded.Attempt.scope)
-	require.True(t, attempt.StartedAt().Equal(decoded.Attempt.StartedAt()))
+		var decoded signInState
+		require.NoError(t, json.Unmarshal(raw, &decoded))
+		require.Equal(t, attempt.ID(), decoded.Attempt.ID())
+		require.Equal(t, attempt.scope, decoded.Attempt.scope)
+		require.True(t, attempt.StartedAt().Equal(decoded.Attempt.StartedAt()))
+	}
 
 	empty, err := json.Marshal(signInState{ID: "s", Attempt: NoAttempt})
 	require.NoError(t, err)
@@ -169,7 +175,7 @@ func TestAttempt_SurvivesTheRedisCache(t *testing.T) {
 	t.Parallel()
 
 	states := cache.NewTypedObjectCache[cachedSignInState](testenv.NewLogger(t), redisCache(t), cache.SuffixNone)
-	attempt := Begin(OrganizationGatewayScope("org-test", uuid.New(), AppOf("https://client.example.com/m")))
+	attempt := Begin(OrganizationGatewayScope("org-test", uuid.New(), AppOf("https://client.example.com/m", ClientIDAdmitted)))
 	id := uuid.NewString()
 	require.NoError(t, states.Store(t.Context(), cachedSignInState{ID: id, Attempt: attempt}))
 

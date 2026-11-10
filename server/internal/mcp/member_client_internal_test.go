@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 // A buffered tools/call failure must leave session cleanup to the SDK, which
@@ -449,7 +450,7 @@ func TestMemberClientFailureRetriesOnlyTransportFailuresARetryCanChange(t *testi
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			attempt := newMemberAttempt(nil)
-			attempt.recordFailure(true, tc.err)
+			attempt.recordFailure(true, false, tc.err)
 			got := memberClientFailure(t.Context(), testenv.NewLogger(t), attempt, memberDial{}, metaMember{slug: "fixture"}, tc.err)
 			require.EqualError(t, got, `server "fixture" did not answer: upstream unreachable or timed out`)
 			failure, ok := errors.AsType[memberDiscoveryError](got)
@@ -528,6 +529,7 @@ func TestMemberClientFailureRecordsOnlyRejectedCredentials(t *testing.T) {
 		challenge string
 		redirect  bool
 		bodyFails bool
+		tunneled  bool
 		want      mcpconnectionattempts.Code
 	}{
 		"401":                             {status: http.StatusUnauthorized, want: mcpconnectionattempts.CodeProviderRejected},
@@ -537,6 +539,7 @@ func TestMemberClientFailureRecordsOnlyRejectedCredentials(t *testing.T) {
 		"401 after cross-origin redirect": {status: http.StatusUnauthorized, redirect: true, want: mcpconnectionattempts.Code{}},
 		"401 whose body fails":            {status: http.StatusUnauthorized, bodyFails: true, want: mcpconnectionattempts.CodeProviderRejected},
 		"403 invalid_token, body fails":   {status: http.StatusForbidden, challenge: `Bearer error="invalid_token"`, bodyFails: true, want: mcpconnectionattempts.CodeProviderRejected},
+		"tunneled 401 after a forward":    {status: http.StatusUnauthorized, tunneled: true, want: mcpconnectionattempts.CodeProviderRejected},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -546,6 +549,9 @@ func TestMemberClientFailureRecordsOnlyRejectedCredentials(t *testing.T) {
 				sawAuthorization.Store(r.Header.Get("Authorization") != "", true)
 				if tc.challenge != "" {
 					w.Header().Set("WWW-Authenticate", tc.challenge)
+				}
+				if tc.tunneled {
+					w.Header().Set(wire.HeaderTunnelAgentSession, "agent-session")
 				}
 				if tc.bodyFails {
 					w.Header().Set("Content-Type", "application/json")
@@ -586,9 +592,65 @@ func TestMemberClientFailureRecordsOnlyRejectedCredentials(t *testing.T) {
 				_, stripped := sawAuthorization.Load(false)
 				require.True(t, stripped, "the redirect must reach the server without the credential")
 			}
-			got := memberClientFailure(ctx, testenv.NewLogger(t), rt, memberDial{build: withToken, anonymous: false}, metaMember{slug: "fixture"}, err)
+			require.Equal(t, tc.tunneled, rt.forwarded())
+			got := memberClientFailure(ctx, testenv.NewLogger(t), rt, memberDial{build: withToken, anonymous: false, tunneled: tc.tunneled}, metaMember{slug: "fixture"}, err)
 			failure, ok := errors.AsType[memberConnectionError](got)
 			require.True(t, ok, "%v", got)
+			require.Equal(t, tc.want, failure.code)
+		})
+	}
+}
+
+// A tunneled call that hits its deadline is the provider's only once the tunnel forwarded an answer.
+func TestMemberClientTunneledDeadlineNeedsAForward(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		forward bool
+		want    mcpconnectionattempts.Code
+	}{
+		"gateway holds the call":           {forward: false, want: mcpconnectionattempts.CodeInternalError},
+		"server behind the tunnel is slow": {forward: true, want: mcpconnectionattempts.CodeProviderUnreachable},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var req struct {
+					ID     json.RawMessage `json:"id"`
+					Method string          `json:"method"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				switch req.Method {
+				case "server/discover":
+					_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"fixture","version":"1"}}}}`, req.ID)
+				case "tools/call":
+					if tc.forward {
+						w.Header().Set(wire.HeaderTunnelAgentSession, "agent-session")
+						w.Header().Set("Content-Type", "text/event-stream")
+						w.WriteHeader(http.StatusOK)
+						http.NewResponseController(w).Flush() //nolint:errcheck // a test server flush
+					}
+					<-r.Context().Done()
+				}
+			}))
+			t.Cleanup(upstream.Close)
+			service, build := memberClientFixture(t, upstream.URL)
+			session, _, err := service.connectMetaMember(t.Context(), testenv.NewLogger(t), build, time.Second)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = session.Close() })
+
+			attempt := newMemberAttempt(build)
+			ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), memberAttemptKey{}, attempt), 300*time.Millisecond)
+			defer cancel()
+			_, err = callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+			require.Error(t, err)
+			require.Equal(t, tc.forward, attempt.forwarded())
+
+			failure, ok := errors.AsType[memberConnectionError](memberClientFailure(ctx, testenv.NewLogger(t), attempt, memberDial{tunneled: true}, metaMember{slug: "fixture"}, err))
+			require.True(t, ok)
 			require.Equal(t, tc.want, failure.code)
 		})
 	}

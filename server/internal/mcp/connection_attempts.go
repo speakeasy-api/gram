@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -645,8 +646,10 @@ func (s *Service) recordTokenClientRefusal(r *http.Request, endpoint *ResolvedMc
 	}
 	app := mcpconnectionattempts.AppUnverified
 	switch what {
-	case mcpconnectionattempts.CodeCIMDMetadataInvalid, mcpconnectionattempts.CodeCIMDAdmissionDenied, mcpconnectionattempts.CodeAIToolBlocked:
-		app = mcpconnectionattempts.AppOf(clientID)
+	case mcpconnectionattempts.CodeCIMDMetadataInvalid, mcpconnectionattempts.CodeCIMDAdmissionDenied:
+		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDNotAdmitted)
+	case mcpconnectionattempts.CodeAIToolBlocked:
+		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDAdmitted)
 	}
 	s.connections.Once(r.Context(), connectionScope(endpoint, app), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType), mcpconnectionattempts.Detail(reason))
 }
@@ -679,11 +682,11 @@ func (s *Service) recordTokenClientFailure(r *http.Request, endpoint *ResolvedMc
 	if grantType != oauthwire.GrantTypeAuthorizationCode {
 		return
 	}
-	what := mcpconnectionattempts.CodeAIToolCheckUnavailable
+	what, check := mcpconnectionattempts.CodeAIToolCheckUnavailable, mcpconnectionattempts.ClientIDAdmitted
 	if reason == mcpmetrics.IDJAGRejectionClientMetadataUnavailable {
-		what = mcpconnectionattempts.CodeCIMDFetchFailed
+		what, check = mcpconnectionattempts.CodeCIMDFetchFailed, mcpconnectionattempts.ClientIDNotAdmitted
 	}
-	s.connections.Once(r.Context(), connectionScope(endpoint, mcpconnectionattempts.AppOf(clientID)), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType))
+	s.connections.Once(r.Context(), connectionScope(endpoint, mcpconnectionattempts.AppOf(clientID, check)), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType))
 }
 
 // recordRemoteSessionVerdict records the check of a provider sign-in on its
@@ -697,19 +700,22 @@ func (s *Service) recordRemoteSessionVerdict(
 	target validationTarget,
 	remoteSessionID uuid.UUID,
 	verdict remotesessions.ValidationOutcome,
+	failure probeFailure,
 	trigger remotesessionmetrics.ValidationTrigger,
 ) {
 	if verdict == remotesessions.ValidationOutcomeUnknown && errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
-	what := verdictHappened(verdict, target.tunnelID.Valid)
+	what := verdictHappened(verdict, target.tunnelID.Valid, failure)
 	if verdict == remotesessions.ValidationOutcomeUnknown && target.setupFailed {
 		what = mcpconnectionattempts.CodeMemberToolsMissing
 	}
-	s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, what,
-		mcpconnectionattempts.Member(target.memberID),
-		mcpconnectionattempts.RemoteSession(remoteSessionID),
-	)
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Member(target.memberID), mcpconnectionattempts.RemoteSession(remoteSessionID)}
+	// Only an inactive verdict came from the issuer; the others are about the MCP server.
+	if verdict != remotesessions.ValidationOutcomeInactive {
+		opts = append(opts, mcpconnectionattempts.FailedElsewhere())
+	}
+	s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, what, opts...)
 }
 
 // recordRemoteSessionCheck writes one check's row on the challenge's attempt; a keepalive writes none.
@@ -737,7 +743,7 @@ func (s *Service) recordRemoteSessionCheck(
 	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepProviderSignIn, what, opts...)
 }
 
-func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool) mcpconnectionattempts.Happened {
+func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool, failure probeFailure) mcpconnectionattempts.Happened {
 	switch verdict {
 	case remotesessions.ValidationOutcomeValid:
 		return mcpconnectionattempts.ResultAllowed
@@ -748,16 +754,29 @@ func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool) mc
 	case remotesessions.ValidationOutcomeUnknown:
 	}
 	if tunneled {
-		return mcpconnectionattempts.CodeTunnelUnavailable
+		return tunneledProbeHappened(failure)
 	}
 	return mcpconnectionattempts.CodeProviderUnavailable
+}
+
+// tunneledProbeHappened blames the tunnel only when it reported the failure itself.
+func tunneledProbeHappened(failure probeFailure) mcpconnectionattempts.Code {
+	if failure.status == 0 && failure.tunnelError == "" && errors.Is(failure.err, context.DeadlineExceeded) {
+		return mcpconnectionattempts.CodeProviderUnreachable
+	}
+	credential := remotemcp.UpstreamCredentialSent{Attached: false, Self: false, Configured: false}
+	if code, ok := remotemcp.UpstreamFailureHappened(failure.status, false, credential, true, failure.tunnelError, failure.err); ok {
+		return code
+	}
+	// It answered, but not with a usable result.
+	return mcpconnectionattempts.CodeProviderServerError
 }
 
 // recordListingFailures writes one row per member a Direct listing lost. Sign-ins not done yet are not failures.
 func (s *Service) recordListingFailures(ctx context.Context, gate *metaGateContext, unavailable []unavailableMember) {
 	app := mcpconnectionattempts.AppUnverified
 	if clientID, ok := contextvalues.GetOAuthClientID(ctx); ok {
-		app = mcpconnectionattempts.AppOf(clientID)
+		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDAdmitted)
 	}
 	scope := mcpconnectionattempts.GatewayScope(gate.organizationID, gate.projectID, gate.metaServerID, app)
 	if gate.projectID == uuid.Nil {

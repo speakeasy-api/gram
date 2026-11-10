@@ -5,13 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -21,6 +24,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -234,4 +238,52 @@ func TestRefreshFailureRecorded_UnmarkedErrors(t *testing.T) {
 	}
 	require.False(t, RefreshFailureRecorded(nil))
 	require.False(t, RefreshFailureRecorded(fmt.Errorf("unrelated: %w", ErrRemoteSessionUnavailable)))
+}
+
+// stalledPool is a pool whose database accepts connections and never answers.
+func stalledPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	var mu sync.Mutex
+	var held []net.Conn
+	t.Cleanup(func() {
+		_ = listener.Close()
+		mu.Lock()
+		defer mu.Unlock()
+		for _, conn := range held {
+			_ = conn.Close()
+		}
+	})
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			held = append(held, conn)
+			mu.Unlock()
+		}
+	}()
+	pool, err := pgxpool.New(t.Context(), "postgres://stalled:stalled@"+listener.Addr().String()+"/stalled?sslmode=disable")
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+func boundSession() remotesessions_repo.RemoteSession {
+	return remotesessions_repo.RemoteSession{RemoteSessionClientID: uuid.New(), UserSessionIssuerID: uuid.New()}
+}
+
+// A database that accepts and never answers holds the refresh only for the lookup's bound.
+func TestInvalidClientHappened_AStalledLookupDoesNotHoldTheRefresh(t *testing.T) {
+	t.Parallel()
+	s := &RefreshService{db: stalledPool(t), connections: mcpconnectionattemptstest.New(t).Recorder}
+
+	started := time.Now()
+	what := s.invalidClientHappened(t.Context(), boundSession())
+
+	require.Equal(t, mcpconnectionattempts.CodeProviderOAuthInvalidClient, what, "an unknown binding never recommends re-registration")
+	require.Less(t, time.Since(started), 3*time.Second, "well under the old 5 second wait")
 }
