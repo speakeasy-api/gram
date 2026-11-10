@@ -263,15 +263,13 @@ function DeploymentsTable() {
     {
       key: "assetCount",
       header: "Assets",
-      render: (row) =>
-        row.openapiv3AssetCount + row.functionsAssetCount,
+      render: (row) => row.openapiv3AssetCount + row.functionsAssetCount,
       width: "150px",
     },
     {
       key: "toolCount",
       header: "Tools",
-      render: (row) =>
-        row.openapiv3ToolCount + row.functionsToolCount,
+      render: (row) => row.openapiv3ToolCount + row.functionsToolCount,
       width: "120px",
     },
     {

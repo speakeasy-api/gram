@@ -346,7 +346,6 @@ describe("oauthWizardMachine — path selection", () => {
     actor.send({ type: "SELECT_EXTERNAL" });
     expect(actor.getSnapshot().matches({ external: "source" })).toBe(true);
   });
-
 });
 
 // ---------------------------------------------------------------------------
