@@ -124,7 +124,7 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 	reader := NewPostgresReader(logger, pool).
 		WithAuthorization(liveEngine).
 		WithDataExports(encryption, dashboardURL).
-		WithDataExportMutations(auditLogger, dashboardURL, &feature.InMemory{}).
+		WithDataExportMutations(auditLogger, dashboardURL).
 		WithDataExportRouteToggle(routeToggle).
 		WithNetworkIngressStatus(dashboardURL).
 		WithRiskAnalysisStatus(NewRiskAnalysisStatusService(logger, pool, nil)).

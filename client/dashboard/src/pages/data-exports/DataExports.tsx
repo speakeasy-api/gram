@@ -298,12 +298,6 @@ function DataExportsInner(): JSX.Element {
     };
   });
 
-  // Only for adding a route: a route that already exists keeps its label and settings.
-  const addableDataSources = DATA_SOURCE_OPTIONS.filter(
-    (source) =>
-      source.value !== DataSource.McpConnectionLogs ||
-      exportsQuery.data?.mcpConnectionLogsAvailable === true,
-  );
   const orderedProjectExports = projectExports.toSorted(
     (left, right) =>
       Number(right.exports.length > 0) - Number(left.exports.length > 0),
@@ -316,7 +310,7 @@ function DataExportsInner(): JSX.Element {
     (state) =>
       !state.pending &&
       !state.error &&
-      addableDataSources.some(
+      DATA_SOURCE_OPTIONS.some(
         (source) =>
           !state.routes.some((route) => route.dataSource === source.value),
       ),
@@ -365,7 +359,6 @@ function DataExportsInner(): JSX.Element {
       )
     : linkedDataSourceOptions.filter(
         (source) =>
-          addableDataSources.some((item) => item.value === source.value) &&
           !configureState?.routes.some(
             (route) => route.dataSource === source.value,
           ),

@@ -40,8 +40,6 @@ import (
 // pipelineSink is the production adapter's shape, which lives in cmd/gram.
 type pipelineSink struct{ logs *otelpub.Logger }
 
-func (pipelineSink) Enabled(context.Context, string) (bool, error) { return true, nil }
-
 func (s pipelineSink) Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) error {
 	if err := s.logs.Log(otelpub.WithRecordID(otelpub.WithTenant(ctx, organizationID, projectID), recordID), record); err != nil {
 		return fmt.Errorf("log connection attempt: %w", err)

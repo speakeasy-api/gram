@@ -33,18 +33,14 @@ type publishedLog struct {
 }
 
 type fakeSink struct {
-	enabled    bool
-	enabledErr error
-	err        error
-	panics     atomic.Int64
-	block      chan struct{}
+	err    error
+	panics atomic.Int64
+	block  chan struct{}
 
 	mu        sync.Mutex
 	published []publishedLog
 	closed    int
 }
-
-func (s *fakeSink) Enabled(context.Context, string) (bool, error) { return s.enabled, s.enabledErr }
 
 func (s *fakeSink) Publish(_ context.Context, organizationID, projectID, recordID string, record log.Record) error {
 	if s.block != nil {
@@ -366,7 +362,7 @@ func TestExportRecordID_KeepsAnAttemptsRowsApart(t *testing.T) {
 func TestExportRows_LeavesOutWhatDidNotFail(t *testing.T) {
 	t.Parallel()
 
-	sink := &fakeSink{enabled: true}
+	sink := &fakeSink{}
 	recorder := newExportRecorder(t, &scriptedConn{}, sink)
 
 	recorder.exportRows([]Row{
@@ -382,7 +378,7 @@ func TestExportRows_LeavesOutWhatDidNotFail(t *testing.T) {
 func TestExportRows_NoProjectIsSkippedAndCounted(t *testing.T) {
 	t.Parallel()
 
-	sink := &fakeSink{enabled: true}
+	sink := &fakeSink{}
 	recorder := newExportRecorder(t, &scriptedConn{}, sink)
 
 	row, err := RowAt(Begin(OrganizationGatewayScope("org-gateway-test", uuid.New(), AppDCR)), StepInboundToken, CodeIDPUnavailable, true, time.Now())
@@ -397,7 +393,7 @@ func TestExportRows_NoProjectIsSkippedAndCounted(t *testing.T) {
 func TestExportRows_FullQueueCountsAndNeverBlocks(t *testing.T) {
 	t.Parallel()
 
-	sink := &fakeSink{enabled: true, block: make(chan struct{})}
+	sink := &fakeSink{block: make(chan struct{})}
 	recorder := newExportRecorder(t, &scriptedConn{}, sink, withExportQueue(1))
 	t.Cleanup(func() { close(sink.block) })
 
@@ -423,7 +419,7 @@ func TestExportRows_FullQueueCountsAndNeverBlocks(t *testing.T) {
 func TestExport_PublishesUnderTheRowTenantAfterAStoredInsert(t *testing.T) {
 	t.Parallel()
 
-	sink := &fakeSink{enabled: true}
+	sink := &fakeSink{}
 	recorder := newExportRecorder(t, clickhouseConn(t), sink)
 	scope := testScope()
 	attempt := Begin(scope)
@@ -442,7 +438,7 @@ func TestExport_PublishesUnderTheRowTenantAfterAStoredInsert(t *testing.T) {
 func TestExport_FailedInsertExportsNothing(t *testing.T) {
 	t.Parallel()
 
-	sink := &fakeSink{enabled: true}
+	sink := &fakeSink{}
 	recorder := newExportRecorder(t, &scriptedConn{err: errors.New("clickhouse down")}, sink)
 
 	recorder.End(t.Context(), Begin(testScope()), StepProviderToken, CodeIDPUnavailable)
@@ -455,7 +451,7 @@ func TestExport_FailedInsertExportsNothing(t *testing.T) {
 func TestExport_LogsOffExportsNothing(t *testing.T) {
 	t.Parallel()
 
-	sink := &fakeSink{enabled: true}
+	sink := &fakeSink{}
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	logsOff := func(context.Context, string) (bool, error) { return false, nil }
@@ -471,7 +467,7 @@ func TestExport_OnceAndHeldBackRepeatsCarryTheirCount(t *testing.T) {
 	t.Parallel()
 
 	const attempts = 12
-	sink := &fakeSink{enabled: true}
+	sink := &fakeSink{}
 	recorder := newExportRecorder(t, clickhouseConn(t), sink)
 	scope := testScope()
 
@@ -498,37 +494,10 @@ func TestExport_OnceAndHeldBackRepeatsCarryTheirCount(t *testing.T) {
 	require.Len(t, recordIDs, len(published))
 }
 
-func TestExport_FlagOffExportsNothing(t *testing.T) {
-	t.Parallel()
-
-	sink := &fakeSink{enabled: false}
-	recorder := newExportRecorder(t, &scriptedConn{}, sink)
-
-	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true)})
-	require.NoError(t, recorder.Shutdown(t.Context()))
-
-	require.Empty(t, sink.snapshot())
-	require.Zero(t, notExported(t, recorder, notExportedFlag))
-	require.Equal(t, 1, sink.closes())
-}
-
-func TestExport_UnknownFlagIsCounted(t *testing.T) {
-	t.Parallel()
-
-	sink := &fakeSink{enabled: false, enabledErr: errors.New("flag unknown")}
-	recorder := newExportRecorder(t, &scriptedConn{}, sink)
-
-	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true)})
-	require.NoError(t, recorder.Shutdown(t.Context()))
-
-	require.Empty(t, sink.snapshot())
-	require.Equal(t, int64(1), notExported(t, recorder, notExportedFlag))
-}
-
 func TestExport_PublishFailureIsNotAStorageLoss(t *testing.T) {
 	t.Parallel()
 
-	sink := &fakeSink{enabled: true, err: errors.New("pubsub down")}
+	sink := &fakeSink{err: errors.New("pubsub down")}
 	recorder := newExportRecorder(t, &scriptedConn{}, sink)
 
 	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true)})
@@ -541,7 +510,7 @@ func TestExport_PublishFailureIsNotAStorageLoss(t *testing.T) {
 func TestExport_PanickingSinkIsCountedAndWorkersSurvive(t *testing.T) {
 	t.Parallel()
 
-	sink := &fakeSink{enabled: true}
+	sink := &fakeSink{}
 	sink.panics.Store(1)
 	recorder := newExportRecorder(t, &scriptedConn{}, sink)
 
@@ -556,7 +525,7 @@ func TestExport_PanickingSinkIsCountedAndWorkersSurvive(t *testing.T) {
 func TestExport_DrainStopsAtItsBudget(t *testing.T) {
 	t.Parallel()
 
-	sink := &fakeSink{enabled: true, block: make(chan struct{})}
+	sink := &fakeSink{block: make(chan struct{})}
 	recorder := newExportRecorder(t, &scriptedConn{}, sink, withExportDrain(20*time.Millisecond))
 	t.Cleanup(func() { close(sink.block) })
 
@@ -575,7 +544,7 @@ func TestExport_DrainStopsAtItsBudget(t *testing.T) {
 func TestShutdownAndWait_ReturnsWithABlockedSink(t *testing.T) {
 	t.Parallel()
 
-	sink := &fakeSink{enabled: true, block: make(chan struct{})}
+	sink := &fakeSink{block: make(chan struct{})}
 	recorder := newExportRecorder(t, &scriptedConn{}, sink)
 
 	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true), exportTestRow(t, CodeIDPUnavailable, true), exportTestRow(t, CodeIDPUnavailable, true)})

@@ -75,38 +75,17 @@ func newToolCallLogs(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *otelpub
 }
 
 // connectionLogExport publishes failed connection attempts to the otel pipeline
-// under the row's own organization and project, for organizations with the flag.
+// under the row's own organization and project.
 type connectionLogExport struct {
-	logs     *otelpub.Logger
-	features feature.Provider
+	logs *otelpub.Logger
 }
 
-var errConnectionLogExportFlagUnknown = errors.New("connection log export flag could not be evaluated")
-
-func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord], features feature.Provider) mcpconnectionattempts.RecorderOption {
+func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord]) mcpconnectionattempts.RecorderOption {
 	return mcpconnectionattempts.WithExport(&connectionLogExport{
 		logs: otelpub.NewLogger(publisher,
 			resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
 			dialect.ConnectionLogScope),
-		features: features,
 	})
-}
-
-func (e *connectionLogExport) Enabled(ctx context.Context, organizationID string) (bool, error) {
-	evaluation, err := feature.EvaluateFlag(ctx, e.features, feature.FlagMCPConnectionLogExport, organizationID, nil)
-	if err != nil {
-		return false, fmt.Errorf("evaluate connection log export flag: %w", err)
-	}
-	switch evaluation {
-	case feature.EvaluationEnabled:
-		return true, nil
-	case feature.EvaluationDisabled:
-		return false, nil
-	case feature.EvaluationIndeterminate:
-		return false, errConnectionLogExportFlagUnknown
-	default:
-		return false, errConnectionLogExportFlagUnknown
-	}
 }
 
 func (e *connectionLogExport) Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) error {

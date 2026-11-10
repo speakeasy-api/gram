@@ -12,12 +12,11 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 )
 
-func newTestConnectionLogExport(t *testing.T, organizationID string, enabled bool) (*connectionLogExport, *[]*otelv1.InboundLogRecord) {
+func newTestConnectionLogExport(t *testing.T) (*connectionLogExport, *[]*otelv1.InboundLogRecord) {
 	t.Helper()
 
 	published := &[]*otelv1.InboundLogRecord{}
@@ -29,13 +28,10 @@ func newTestConnectionLogExport(t *testing.T, organizationID string, enabled boo
 			*published = append(*published, record)
 		}).Return(gcp.NewSuccessPublishResult()).Maybe()
 
-	features := &feature.InMemory{}
-	features.SetFlag(feature.FlagMCPConnectionLogExport, organizationID, enabled)
 	return &connectionLogExport{
 		logs: otelpub.NewLogger(publisher,
 			resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
 			dialect.ConnectionLogScope),
-		features: features,
 	}, published
 }
 
@@ -51,7 +47,7 @@ func connectionLogTestRecord() log.Record {
 func TestConnectionLogExport_PublishesUnderTheRowTenant(t *testing.T) {
 	t.Parallel()
 
-	export, published := newTestConnectionLogExport(t, "org-row", true)
+	export, published := newTestConnectionLogExport(t)
 	require.NoError(t, export.Publish(t.Context(), "org-row", "project-row", "attempt:step:reason", connectionLogTestRecord()))
 
 	require.Len(t, *published, 1)
@@ -60,27 +56,4 @@ func TestConnectionLogExport_PublishesUnderTheRowTenant(t *testing.T) {
 	require.Equal(t, "project-row", record.GetProvenance().GetProjectId())
 	require.Equal(t, "attempt:step:reason", record.GetRecordId())
 	require.Equal(t, dialect.ConnectionLogScope, record.GetScope().GetName())
-}
-
-func TestConnectionLogExport_FlagIsPerOrganization(t *testing.T) {
-	t.Parallel()
-
-	export, _ := newTestConnectionLogExport(t, "org-on", true)
-	enabled, err := export.Enabled(t.Context(), "org-on")
-	require.NoError(t, err)
-	require.True(t, enabled)
-
-	export, _ = newTestConnectionLogExport(t, "org-off", false)
-	enabled, err = export.Enabled(t.Context(), "org-off")
-	require.NoError(t, err)
-	require.False(t, enabled)
-}
-
-func TestConnectionLogExport_UnknownFlagIsAnError(t *testing.T) {
-	t.Parallel()
-
-	export, _ := newTestConnectionLogExport(t, "org-on", true)
-	enabled, err := export.Enabled(t.Context(), "org-without-an-entry")
-	require.ErrorIs(t, err, errConnectionLogExportFlagUnknown)
-	require.False(t, enabled)
 }

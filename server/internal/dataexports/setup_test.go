@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -43,7 +42,6 @@ type testInstance struct {
 	service *dataexports.Service
 	conn    *pgxpool.Pool
 	enc     *encryption.Client
-	flags   *feature.InMemory
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -63,9 +61,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	enc := testenv.NewEncryptionClient(t)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	flags := &feature.InMemory{}
-	service := dataexports.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc, flags)
-	return ctx, &testInstance{service: service, conn: conn, enc: enc, flags: flags}
+	service := dataexports.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc)
+	return ctx, &testInstance{service: service, conn: conn, enc: enc}
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

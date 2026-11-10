@@ -176,13 +176,6 @@ const (
 	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
 
-	// FlagMCPConnectionLogExport gates exporting failed MCP connection attempts,
-	// and adding routes for them, per organization while it is dogfooded. Evaluated server-side with the
-	// organization id as the distinct id and no groups, because the recorder
-	// has no org slug, so the PostHog flag must be person-aggregated and match
-	// distinct_id in a list of organization ids. Fails closed.
-	FlagMCPConnectionLogExport Flag = "mcp-connection-log-export"
-
 	// FlagSignInEnforcement turns on, per organization (keyed by its id),
 	// linking MCP grants to sign-ins, sign-in evidence lookups, sign out
 	// everywhere, member sign-in revocation and revocation on deprovisioning.

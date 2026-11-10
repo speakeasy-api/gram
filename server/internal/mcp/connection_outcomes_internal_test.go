@@ -658,8 +658,6 @@ type verdictExportSink struct {
 	records []otellog.Record
 }
 
-func (*verdictExportSink) Enabled(context.Context, string) (bool, error) { return true, nil }
-
 func (s *verdictExportSink) Publish(_ context.Context, _, _, _ string, record otellog.Record) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

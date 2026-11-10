@@ -3,7 +3,6 @@
  */
 
 import * as z from "zod/v4-mini";
-import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -19,10 +18,6 @@ export type ListDataExportsForOrgResult = {
    */
   destinations: Array<Destination>;
   /**
-   * Whether this organization can add routes for MCP connection logs.
-   */
-  mcpConnectionLogsAvailable?: boolean | undefined;
-  /**
    * Active data export routes across the active organization.
    */
   routes: Array<DataExportRoute>;
@@ -32,18 +27,10 @@ export type ListDataExportsForOrgResult = {
 export const ListDataExportsForOrgResult$inboundSchema: z.ZodMiniType<
   ListDataExportsForOrgResult,
   unknown
-> = z.pipe(
-  z.object({
-    destinations: z.array(Destination$inboundSchema),
-    mcp_connection_logs_available: z.optional(z.boolean()),
-    routes: z.array(DataExportRoute$inboundSchema),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      "mcp_connection_logs_available": "mcpConnectionLogsAvailable",
-    });
-  }),
-);
+> = z.object({
+  destinations: z.array(Destination$inboundSchema),
+  routes: z.array(DataExportRoute$inboundSchema),
+});
 
 export function listDataExportsForOrgResultFromJSON(
   jsonString: string,

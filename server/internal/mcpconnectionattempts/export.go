@@ -27,7 +27,7 @@ const (
 	exportQueueSize = 1024
 	exportWorkers   = 2
 
-	// exportTimeout bounds the flag check and publish of one row.
+	// exportTimeout bounds the publish of one row.
 	exportTimeout = 15 * time.Second
 
 	// defaultExportDrain is how long queued rows may keep publishing at shutdown.
@@ -48,15 +48,12 @@ const (
 	notExportedNoProject notExportedReason = "no_project"
 	notExportedQueueFull notExportedReason = "export_queue_full"
 	notExportedFailed    notExportedReason = "export_failed"
-	notExportedFlag      notExportedReason = "flag_unavailable"
 	notExportedShutdown  notExportedReason = "shutdown"
 	notExportedPanic     notExportedReason = "panic"
 )
 
-// ExportSink publishes connection logs. Enabled and Publish may block, so only export
-// workers call them. Enabled returns an error when the organization's setting is unknown.
+// ExportSink publishes connection logs. Publish may block, so only export workers call it.
 type ExportSink interface {
-	Enabled(ctx context.Context, organizationID string) (bool, error)
 	Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) error
 	Close()
 }
@@ -193,14 +190,6 @@ func (r *Recorder) exportRow(row Row) {
 	ctx, cancel := context.WithTimeout(r.writerCtx, exportTimeout)
 	defer cancel()
 
-	enabled, err := r.exporter.sink.Enabled(ctx, row.OrganizationID)
-	if err != nil {
-		r.countNotExported(row, notExportedFlag, err)
-		return
-	}
-	if !enabled {
-		return
-	}
 	record, ok := exportRecord(row)
 	if !ok {
 		return

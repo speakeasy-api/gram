@@ -115003,9 +115003,6 @@ components:
                     items:
                         $ref: '#/components/schemas/Destination'
                     description: Active data export destinations across the active organization.
-                mcp_connection_logs_available:
-                    type: boolean
-                    description: Whether this organization can add routes for MCP connection logs.
                 routes:
                     type: array
                     items:
