@@ -3,6 +3,7 @@ package background
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -18,26 +19,29 @@ import (
 
 func TestHookFleetMetricsWorkflowRetries(t *testing.T) {
 	t.Parallel()
-	for _, failures := range []int{0, 2, 3} {
-		var suite testsuite.WorkflowTestSuite
-		env := suite.NewTestWorkflowEnvironment()
-		calls := 0
-		env.RegisterActivityWithOptions(func(context.Context) error {
-			calls++
-			if calls <= failures {
-				return errors.New("clickhouse unavailable")
+	for _, failures := range []int{0, hookFleetMetricsMaxAttempts - 1, hookFleetMetricsMaxAttempts} {
+		t.Run(fmt.Sprintf("%d failures", failures), func(t *testing.T) {
+			t.Parallel()
+			var suite testsuite.WorkflowTestSuite
+			env := suite.NewTestWorkflowEnvironment()
+			calls := 0
+			env.RegisterActivityWithOptions(func(context.Context) error {
+				calls++
+				if calls <= failures {
+					return errors.New("clickhouse unavailable")
+				}
+				return nil
+			}, activity.RegisterOptions{Name: hookFleetMetricsActivity})
+			env.ExecuteWorkflow(HookFleetMetricsWorkflow)
+			require.True(t, env.IsWorkflowCompleted())
+			if failures == hookFleetMetricsMaxAttempts {
+				require.Error(t, env.GetWorkflowError())
+				require.Equal(t, hookFleetMetricsMaxAttempts, calls)
+			} else {
+				require.NoError(t, env.GetWorkflowError())
+				require.Equal(t, failures+1, calls)
 			}
-			return nil
-		}, activity.RegisterOptions{Name: hookFleetMetricsActivity})
-		env.ExecuteWorkflow(HookFleetMetricsWorkflow)
-		require.True(t, env.IsWorkflowCompleted())
-		if failures == hookFleetMetricsMaxAttempts {
-			require.Error(t, env.GetWorkflowError())
-			require.Equal(t, hookFleetMetricsMaxAttempts, calls)
-		} else {
-			require.NoError(t, env.GetWorkflowError())
-			require.Equal(t, failures+1, calls)
-		}
+		})
 	}
 }
 
