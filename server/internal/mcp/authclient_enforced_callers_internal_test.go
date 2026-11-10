@@ -908,7 +908,7 @@ func TestEnforcedAgentKeyServiceAccountMember(t *testing.T) {
 		require.NotContains(t, err.Error(), testAgentSignIn)
 		_, reconnect := errors.AsType[agentCredentialError](err)
 		require.False(t, reconnect, "connection_status must not offer the agent's sign-in step")
-		row := memberFailureSignIn(gate, member, err)
+		row := memberFailureSignIn(t.Context(), gate, member, err)
 		require.False(t, row.Reconnect)
 	})
 }
