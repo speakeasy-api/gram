@@ -604,7 +604,7 @@ func TestShutdownAndWait_ReturnsWithABlockedSink(t *testing.T) {
 // PipelineInfra lets the external pipeline test reach this package's containers.
 func PipelineInfra() *testenv.Environment { return infra }
 
-func TestExportRows_PublishesOnlyErrorAndAbove(t *testing.T) {
+func TestExportRows_PublishesEveryLevelForTheRelayToFilter(t *testing.T) {
 	t.Parallel()
 
 	sink := &fakeSink{}
@@ -613,12 +613,15 @@ func TestExportRows_PublishesOnlyErrorAndAbove(t *testing.T) {
 	recorder.exportRows([]Row{
 		exportTestRow(t, CodeNoServerAccess, true),
 		exportTestRow(t, CodeIDPUnavailable, true),
+		exportTestRow(t, CodeCanceled, true),
 	})
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
-	published := sink.snapshot()
-	require.Len(t, published, 1, "a blocked attempt is stored but not published")
-	require.Equal(t, log.SeverityError, published[0].record.Severity())
+	severities := make([]log.Severity, 0, 3)
+	for _, published := range sink.snapshot() {
+		severities = append(severities, published.record.Severity())
+	}
+	require.ElementsMatch(t, []log.Severity{log.SeverityWarn, log.SeverityError, log.SeverityInfo}, severities)
 }
 
 // panicResult settles at once and panics when read.

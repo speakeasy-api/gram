@@ -28,9 +28,8 @@ const (
 	// instead of growing memory while Pub/Sub is slow.
 	exportMaxInFlight = 1024
 
-	// minExportSeverity is the lowest severity published. Blocked and declined rows keep their
-	// severity for when a destination can ask for them; until then publishing them is waste.
-	minExportSeverity = log.SeverityError
+	// minExportSeverity is the lowest severity published. The relay drops what is below each route's level.
+	minExportSeverity = log.SeverityInfo
 
 	// defaultExportDrain is how long outstanding publishes may settle at shutdown.
 	defaultExportDrain = 5 * time.Second
