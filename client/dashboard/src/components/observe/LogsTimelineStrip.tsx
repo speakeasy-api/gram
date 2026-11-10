@@ -5,6 +5,7 @@ import {
 } from "@/components/observe/toolUsageTimeSeriesChartData";
 import { useOtherSeriesColor } from "@/components/chart/useSeriesColors";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
 import { format } from "date-fns";
@@ -36,6 +37,8 @@ export function LogsTimelineStrip({
   failed = false,
   onRetry,
   height = 88,
+  maximised = false,
+  onToggleMaximised,
 }: {
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
@@ -53,6 +56,9 @@ export function LogsTimelineStrip({
   onRetry?: () => void;
   /** Shorter on a short viewport, where the list needs the pixels more. */
   height?: number;
+  /** The strip spans the panel, with the summary stats in a row above it. */
+  maximised?: boolean;
+  onToggleMaximised?: () => void;
 }): JSX.Element {
   // The series is filtered server-side by the same payload the rows are, and
   // every outcome the status filter can express has its own count — so the
@@ -188,6 +194,17 @@ export function LogsTimelineStrip({
           {isZoomed && onResetRange && (
             <Button variant="tertiary" size="sm" onClick={onResetRange}>
               Reset range
+            </Button>
+          )}
+          {onToggleMaximised && (
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={onToggleMaximised}
+              aria-label={maximised ? "Minimize timeline" : "Maximize timeline"}
+              aria-pressed={maximised}
+            >
+              <Icon name={maximised ? "minimize-2" : "maximize-2"} />
             </Button>
           )}
         </div>

@@ -1407,6 +1407,9 @@ function LogsToolsContent({
   const [summaryOpen, setSummaryOpen] = useSummaryPanelOpen();
   const [railWidth, setRailWidth] = useRailWidth();
   const stripHeight = useIsShortViewport() ? 40 : 56;
+  // Maximised, the strip takes the panel's full width and the stats sit in a
+  // row above it, at every breakpoint rather than only below 2xl.
+  const [timelineMaximised, setTimelineMaximised] = useState(false);
 
   const rail = (
     <LogsFacetRail
@@ -1528,8 +1531,20 @@ function LogsToolsContent({
                     </Button>
                   </div>
                 )}
-                <div className="border-border flex flex-col border-t 2xl:flex-row">
-                  <div className="divide-border border-border grid shrink-0 grid-cols-2 divide-x sm:grid-cols-5 max-2xl:border-b 2xl:border-r">
+                <div
+                  className={cn(
+                    "border-border flex flex-col border-t",
+                    !timelineMaximised && "2xl:flex-row",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "divide-border border-border grid shrink-0 grid-cols-2 divide-x sm:grid-cols-5",
+                      timelineMaximised
+                        ? "border-b"
+                        : "max-2xl:border-b 2xl:border-r",
+                    )}
+                  >
                     <SummaryStat
                       label="Tool calls"
                       value={
@@ -1600,6 +1615,10 @@ function LogsToolsContent({
                       onRangeSelect={onRangeSelect}
                       onResetRange={onResetRange}
                       isZoomed={isZoomed}
+                      maximised={timelineMaximised}
+                      onToggleMaximised={() =>
+                        setTimelineMaximised(!timelineMaximised)
+                      }
                     />
                   </div>
                 </div>
