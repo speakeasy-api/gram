@@ -46,8 +46,12 @@ const (
 	mcpConnectionOutcomesPlanTimeout   = dailyoutcomes.ReadsPerBuild*dailyoutcomes.ReadTimeout + time.Minute
 	mcpConnectionOutcomesDayRunTimeout = mcpConnectionOutcomesBuildMaxAttempts*mcpConnectionOutcomesBuildTimeout + 10*time.Minute
 
-	// A backfill runs about seven waves of days one after another.
-	mcpConnectionOutcomesSweepRunTimeout = 8 * time.Hour
+	// mcpConnectionOutcomesMaxWaves is how many waves the largest plan, a first-deploy
+	// backfill of every day raw events still hold, runs one after another.
+	mcpConnectionOutcomesMaxWaves = (dailyoutcomes.RawSafeDays + 1 + mcpConnectionOutcomesConcurrency - 1) / mcpConnectionOutcomesConcurrency
+
+	// The sweep outlasts its plan and every wave at its worst, so no planned day is left unstarted.
+	mcpConnectionOutcomesSweepRunTimeout = mcpConnectionOutcomesPlanTimeout + mcpConnectionOutcomesMaxWaves*mcpConnectionOutcomesDayRunTimeout + 30*time.Minute
 )
 
 // MCPConnectionOutcomesDayParams names the UTC day to build.

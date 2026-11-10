@@ -27,8 +27,9 @@ const (
 	// rawRetentionDays is the raw events table's TTL.
 	rawRetentionDays = 30
 
-	// rawSafeDays is the oldest day built: day partitions drop whole parts, so D is complete until D+30.
-	rawSafeDays = 29
+	// RawSafeDays is the oldest day built: day partitions drop whole parts, so D is
+	// complete until D+30. A plan lists at most RawSafeDays+1 days.
+	RawSafeDays = 29
 
 	// scheduleInterval is how often the job runs.
 	scheduleInterval = 24 * time.Hour
@@ -160,7 +161,7 @@ func consistentContext(ctx context.Context) context.Context {
 func (b *Builder) DaysToBuild(ctx context.Context, now time.Time) ([]time.Time, error) {
 	today := StartOfDay(now)
 	scanFrom := maxTime(b.backfillStart, today.AddDate(0, 0, -rawRetentionDays))
-	first := maxTime(b.backfillStart, today.AddDate(0, 0, -rawSafeDays))
+	first := maxTime(b.backfillStart, today.AddDate(0, 0, -RawSafeDays))
 	last := StartOfDay(now.Add(-day24h - DayCloseDelay))
 	if last.Before(scanFrom) {
 		return nil, nil
@@ -244,14 +245,16 @@ func (b *Builder) BuildDay(ctx context.Context, day, now time.Time) (Result, err
 		// so a wrong day is not left in place. A day still wrong after every attempt
 		// stays wrong until a later run rebuilds it, or for good once its rebuild window ends.
 		b.logger.WarnContext(ctx, "stored connection outcomes day did not match its build, publishing again", attr.SlogValueString(day.Format(time.DateOnly)), attr.SlogError(err))
+		swapped := result.Swapped
 		result, err = b.publish(ctx, day, rows, totalsOf(rows))
+		result.Swapped = result.Swapped || swapped
 	}
 	return result, err
 }
 
 // checkRawWhole refuses a day whose raw events may already be partly expired by the wall clock.
 func (b *Builder) checkRawWhole(day time.Time) error {
-	if day.Before(StartOfDay(b.clock()).AddDate(0, 0, -rawSafeDays)) {
+	if day.Before(StartOfDay(b.clock()).AddDate(0, 0, -RawSafeDays)) {
 		return fmt.Errorf("build %s: %w", day.Format(time.DateOnly), ErrDayExpiring)
 	}
 	return nil
