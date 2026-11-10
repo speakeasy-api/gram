@@ -20,6 +20,8 @@ type SlackDirectoryConnection struct {
 	SlackTeamName pgtype.Text
 	// @access: secret-restricted
 	CredentialsEncrypted pgtype.Text
+	// @access: secret-restricted
+	CredentialsOrgEncrypted pgtype.Text
 	// @access: opaque-restricted
 	GrantedScopes []string
 	// @access: confidential

@@ -2789,6 +2789,11 @@ CREATE TABLE IF NOT EXISTS network_ingresses (
   -- selected provider adapter owns its plaintext shape; APIs expose only
   -- configured/not-configured state.
   credentials_encrypted TEXT,
+  -- The same credential document sealed under the organization's own
+  -- encryption key. Written alongside credentials_encrypted while
+  -- organizations move to organization encryption; cleared whenever
+  -- credentials_encrypted is.
+  credentials_org_encrypted TEXT,
   attestor_namespace TEXT NOT NULL,
   attestor_service_account TEXT NOT NULL,
   provider_resources JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -2816,6 +2821,7 @@ COMMENT ON COLUMN network_ingresses.custom_domain_id IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.enabled IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.identity_required IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.credentials_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN network_ingresses.credentials_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN network_ingresses.attestor_namespace IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.attestor_service_account IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.provider_resources IS '@access: confidential';
@@ -7973,6 +7979,10 @@ CREATE TABLE IF NOT EXISTS slack_directory_connections (
   -- refresh credentials when present. Clear it on disconnect and exclude it
   -- from directory API responses.
   credentials_encrypted TEXT,
+  -- The same token bundle sealed under the organization's own encryption key.
+  -- Written alongside credentials_encrypted while organizations move to
+  -- organization encryption; cleared whenever credentials_encrypted is.
+  credentials_org_encrypted TEXT,
   granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   -- Replace this value on disconnect, reconnect, or replacement authorization
   -- so an earlier sync cannot write into the new connection state.
@@ -8006,6 +8016,7 @@ COMMENT ON COLUMN slack_directory_connections.organization_id IS '@access: confi
 COMMENT ON COLUMN slack_directory_connections.slack_team_id IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.slack_team_name IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.credentials_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN slack_directory_connections.credentials_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN slack_directory_connections.granted_scopes IS '@access: opaque-restricted';
 COMMENT ON COLUMN slack_directory_connections.generation IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.health IS '@access: confidential';
@@ -13474,6 +13485,10 @@ CREATE TABLE IF NOT EXISTS device_integration_configs (
   -- only: the management API never returns the value, only whether one is
   -- set.
   credentials_encrypted TEXT NOT NULL,
+  -- The same credential document sealed under the organization's own
+  -- encryption key. Written alongside credentials_encrypted while
+  -- organizations move to organization encryption.
+  credentials_org_encrypted TEXT,
   -- Non-secret, admin-visible provider settings (e.g. the Jamf instance URL
   -- or Drata region). Split from credentials_encrypted so the dashboard can
   -- redisplay them; validated against the provider's credential spec in
@@ -13494,6 +13509,7 @@ COMMENT ON COLUMN device_integration_configs.id IS '@access: confidential';
 COMMENT ON COLUMN device_integration_configs.organization_id IS '@access: confidential';
 COMMENT ON COLUMN device_integration_configs.provider IS '@access: confidential';
 COMMENT ON COLUMN device_integration_configs.credentials_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN device_integration_configs.credentials_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN device_integration_configs.settings IS '@access: opaque-restricted';
 COMMENT ON COLUMN device_integration_configs.enabled IS '@access: confidential';
 COMMENT ON COLUMN device_integration_configs.created_at IS '@access: confidential';
