@@ -4,8 +4,8 @@
 
 -- MCP servers and the Gateway Endpoint fronting them (AGE-3299).
 -- Two backends so the gateway's member table shows both classes: the
--- toolset-backed pair executes in-process, the third-party remotes are
--- proxied. URLs are the vendors' public MCP endpoints: no credentials,
+-- toolset-backed pair (the hosted toolsets' canonical wrappers below)
+-- executes in-process, the third-party remotes are proxied. URLs are the vendors' public MCP endpoints: no credentials,
 -- and nothing here connects on its own.
 -- name: ServersInsertRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
@@ -41,21 +41,17 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
 
 -- name: ServersInsertMCPServers :exec
-INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+INSERT INTO mcp_servers (id, project_id, name, slug,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
-  (@support_id::uuid, @project_id::uuid, 'Acme Support Tools',
-   'acme-support-tools', @toolset_1::uuid, NULL, NULL, 'private'),
-  (@ops_id::uuid, @project_id::uuid, 'Acme Ops', 'acme-ops',
-   @toolset_2::uuid, NULL, NULL, 'private'),
   (@linear_id::uuid, @project_id::uuid, 'Linear', 'linear',
-   NULL, @remote_linear_id::uuid,
+   @remote_linear_id::uuid,
    @issuer_linear_id::uuid, 'private'),
   (@slack_id::uuid, @project_id::uuid, 'Slack', 'slack',
-   NULL, @remote_slack_id::uuid,
+   @remote_slack_id::uuid,
    @issuer_slack_id::uuid, 'private'),
   (@github_id::uuid, @project_id::uuid, 'GitHub', 'github',
-   NULL, @remote_github_id::uuid,
+   @remote_github_id::uuid,
    @issuer_workforce_id::uuid, 'private');
 
 -- name: ServersInsertRegistryPromotionCandidate :exec
@@ -66,7 +62,8 @@ ON CONFLICT (project_id,mcp_server_id) DO NOTHING;
 
 -- Each hosted toolset owns a canonical wrapper (id = the toolset id) that
 -- holds its hosting state, and one platform endpoint at the wrapper's slug.
--- The fresh-id servers above stay separate servers over the same toolsets.
+-- The wrapper is the toolset's only MCP server: a second server over the
+-- same toolset shows up as a duplicate in every server picker.
 -- name: ServersInsertHostedToolsetMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          user_session_issuer_id, visibility)
@@ -146,9 +143,10 @@ JOIN organization_roles r ON a.principal_urn = 'role:organization:' || r.id
 CROSS JOIN mcp_servers s
 WHERE p.organization_id = @org_id::text AND p.project_id = @project_id::uuid
   AND s.project_id = @project_id::uuid
-  -- Canonical hosted wrappers share their toolset's name with the
-  -- fresh-id servers above; distribute those servers only.
-  AND s.id IS DISTINCT FROM s.toolset_id
+  -- Of the hosted toolsets' wrappers, distribute Acme Support Tools and
+  -- Acme Ops; the partner and OAuth discovery toolsets stay out of plugins.
+  AND (s.id IS DISTINCT FROM s.toolset_id
+       OR s.id IN (@support_server_id::uuid, @ops_server_id::uuid))
   AND EXISTS (
     SELECT 1 FROM principal_grants g
     WHERE g.organization_id = @org_id::text AND g.principal_urn = a.principal_urn
