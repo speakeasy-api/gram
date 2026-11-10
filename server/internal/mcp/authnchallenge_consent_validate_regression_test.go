@@ -36,6 +36,41 @@ func TestConsentValidationRefusesAGatewayMemberWithAmbiguousClients(t *testing.T
 	require.Empty(t, fx.member.drain(), "ambiguous credentials must not reach the backend")
 }
 
+// On a gateway, a member associated with the card's client verifies with
+// that client's credential even when the sign-in also binds two clients of
+// another authorization server for other servers. Those clients are never
+// resolved for this member, so they cannot fail its check.
+func TestConsentValidationVerifiesAnAssociatedGatewayMemberBesideAnotherProvidersDuplicateClients(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedMetaValidationFixture(t, "validate-associated-meta")
+	projectID, orgID := consentTestTenant(t, ctx)
+
+	member, err := mcpservers_repo.New(fx.ti.conn).GetMCPServerBySlug(ctx, mcpservers_repo.GetMCPServerBySlugParams{Slug: conv.ToPGText("validate-associated-meta-member"), ProjectID: projectID})
+	require.NoError(t, err)
+	_, err = upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: member.ID, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err)
+
+	first := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-associated-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+	otherIssuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, first)
+	q := remotesessionsrepo.New(fx.ti.conn)
+	second, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(orgID),
+		RemoteSessionIssuerID: otherIssuer,
+		ClientID:              "validate-associated-other-second-external-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		CallbackBaseUrl:       conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: second.ID,
+		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
+	}))
+
+	requireValidated(t, fx)
+	requireProbe(t, fx.member.drain(), "token-validate-associated-meta", true, true)
+}
+
 // A standalone server verifies the card's own client with that client's
 // credential alone; another client's grant for the same upstream is never a
 // competing candidate.
