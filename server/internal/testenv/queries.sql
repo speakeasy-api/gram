@@ -2705,3 +2705,9 @@ JOIN remote_session_clients idp_client ON idp_client.id = usi.trusted_remote_ses
 JOIN remote_session_issuers vendor ON vendor.id = b.remote_session_issuer_id
 JOIN remote_session_clients vendor_client ON vendor_client.id = b.remote_session_client_id
 WHERE b.id = @id;
+
+-- name: SetCustomDomainHealthWithoutDNSObservation :exec
+-- Models a worker that does not write the independent DNS observation columns.
+UPDATE custom_domains
+SET health_status = 'unhealthy', health_issue = 'check_failed', health_checked_at = @checked_at
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;

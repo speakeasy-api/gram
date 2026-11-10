@@ -232,6 +232,7 @@ describe("AppSidebar", () => {
             label: "Upstream OAuth migration",
             href: "/upstream-oauth-migration",
           },
+          { label: "Custom domains", href: "/custom-domains" },
           { label: "Fleet health", href: "/fleet-health" },
           {
             label: "Platform MCP feedback",

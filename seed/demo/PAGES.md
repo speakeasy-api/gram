@@ -448,6 +448,16 @@ agent-backed assistant conversation, alongside the legacy dashboard assistant
 conversation. Filter by Speakeasy Slackbot to verify separate attribution; the
 underlying inference messages still use the assistants billing source.
 
+### [x] Custom domain diagnostics
+
+Network Access settings show a tenant-specific reserved example hostname with a saved
+unconfirmed DNS observation alongside healthy infrastructure. This demonstrates
+that proxies or flattened DNS can hide a target without proving a service outage.
+The fixture is not activated and creates no public route or certificate.
+Verified with the Custom domain diagnostics check in `verify.md`: two local/demo
+seed runs, both organizations at desktop and narrow widths, DNS records, no
+recheck action for the inactive fixture, and the seed safety suite.
+
 ## Agent MCP sign-in tab servers
 
 The Auto-Configured OAuth Server has its own `<org>-auto-configured-oauth`

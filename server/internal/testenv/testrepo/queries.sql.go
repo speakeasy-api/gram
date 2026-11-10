@@ -6840,6 +6840,24 @@ func (q *Queries) SetCapturedAgentChatSummaryFixture(ctx context.Context, arg Se
 	return err
 }
 
+const setCustomDomainHealthWithoutDNSObservation = `-- name: SetCustomDomainHealthWithoutDNSObservation :exec
+UPDATE custom_domains
+SET health_status = 'unhealthy', health_issue = 'check_failed', health_checked_at = $1
+WHERE id = $2 AND organization_id = $3 AND deleted IS FALSE
+`
+
+type SetCustomDomainHealthWithoutDNSObservationParams struct {
+	CheckedAt      pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Models a worker that does not write the independent DNS observation columns.
+func (q *Queries) SetCustomDomainHealthWithoutDNSObservation(ctx context.Context, arg SetCustomDomainHealthWithoutDNSObservationParams) error {
+	_, err := q.db.Exec(ctx, setCustomDomainHealthWithoutDNSObservation, arg.CheckedAt, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const setDelegationProjectFixture = `-- name: SetDelegationProjectFixture :exec
 UPDATE trusted_issuer_sessions SET project_id = $1 WHERE id = $2
 `

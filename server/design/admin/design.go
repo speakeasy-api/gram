@@ -1499,4 +1499,5 @@ var _ = Service("admin", func() {
 	mcpAuthBackfillMethods()
 	mcpConnectBackfillMethods()
 	projectRedeployMethods()
+	customDomainMethods()
 })
