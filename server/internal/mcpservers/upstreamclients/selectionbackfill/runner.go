@@ -3,7 +3,9 @@
 // reports the pairs existing configuration does not decide. It records
 // through the same statement issuance uses, so a run is idempotent and agrees
 // with what a new sign-in would record. It runs after the association
-// backfill, since a choice is only recorded for an associated client.
+// backfill, since a choice is only recorded for an associated client. For an
+// organization enforcing upstream auth, coverage and writes read the auth
+// clients a server offers instead of its associations, as issuance does there.
 package selectionbackfill
 
 import (
@@ -12,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -35,11 +38,13 @@ const (
 	OutcomeUnusableClient Outcome = "unusable_client"
 
 	// OutcomeClient is a pair whose server has exactly one associated client
-	// the credential's issuer also binds; that client is chosen.
+	// the credential's issuer also binds; that client is chosen. Under
+	// enforcement the server's clients are the ones it offers.
 	OutcomeClient Outcome = "client"
 
-	// OutcomeNoAuth is a pair whose server has no associated client; an
-	// explicit no-auth choice is recorded.
+	// OutcomeNoAuth is a pair whose server has no associated client, or under
+	// enforcement offers no enabled OAuth-backed auth client; an explicit
+	// no-auth choice is recorded.
 	OutcomeNoAuth Outcome = "no_auth"
 
 	// OutcomeAmbiguous is a pair with several eligible clients. Only the
@@ -154,6 +159,9 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 	q := New(db)
 	sessions := usersessionsrepo.New(db)
 	cursor := uuid.Nil
+	// One run reads each organization's enforcement once, so a run with no
+	// organization decides every credential by its own organization.
+	enforcement := map[string]bool{}
 	for {
 		credentials, err := q.ListLiveUserSessionCredentials(ctx, ListLiveUserSessionCredentialsParams{
 			Cursor:         cursor,
@@ -167,10 +175,19 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			return report, nil
 		}
 		for _, credential := range credentials {
+			typedOnly, known := enforcement[credential.OrganizationID]
+			if !known {
+				typedOnly, err = authenforcement.ReadEnforced(ctx, db, credential.OrganizationID)
+				if err != nil {
+					return report, fmt.Errorf("read enforcement for credential %s: %w", credential.CredentialID, err)
+				}
+				enforcement[credential.OrganizationID] = typedOnly
+			}
 			coverageParams := ListUpstreamClientSelectionCoverageParams{
 				UserSessionIssuerID: credential.UserSessionIssuerID,
 				CredentialKind:      upstreamclients.CredentialKindUserSession,
 				CredentialID:        credential.CredentialID,
+				TypedOnly:           typedOnly,
 			}
 			coverage, err := q.ListUpstreamClientSelectionCoverage(ctx, coverageParams)
 			if err != nil {
@@ -195,6 +212,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 					PickedClientIds:     []uuid.UUID{},
 					PickedAuthClientIds: nil,
 					ScopeMcpServerIds:   nil,
+					TypedOnly:           typedOnly,
 				})
 				if err != nil {
 					return report, fmt.Errorf("record selections for credential %s: %w", credential.CredentialID, err)

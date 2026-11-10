@@ -27,6 +27,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -642,6 +643,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		UpstreamClientPicks:    nil,
 		AuthClientPicks:        nil,
 		Catalog:                nil,
+		TypedOnly:              false,
 	}
 }
 
@@ -783,6 +785,11 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		}
 		grant.session.UpstreamClientPicks = upstreamPicks
 		grant.session.AuthClientPicks = authClientPicks
+	}
+	// Read before the issuer lock: all database work after it uses dbtx.
+	grant.session.TypedOnly, err = authenforcement.ReadEnforced(ctx, s.db, organizationID)
+	if err != nil {
+		return nil, workloadGrantStageUnavailable("upstream_choice_unavailable", err)
 	}
 
 	// A database that cannot start or commit the transaction is an outage,

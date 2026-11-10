@@ -471,3 +471,51 @@ func TestRun_ChoicesAreNotMappedAfterAFailedPhase(t *testing.T) { //nolint:paral
 	require.Zero(t, report.SelectionsMapped)
 	require.False(t, f.selection(credential, server).AuthClientID.Valid)
 }
+
+// For an organization enforcing upstream auth, an association neither makes a
+// no-auth choice stale nor rejects an unmapped client choice. The issuer binding
+// and the auth clients the server offers still decide.
+func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
+	t.Parallel()
+	issuer, candidate := uuid.New(), uuid.New()
+	for name, tc := range map[string]struct {
+		row       ListSelectionMappingsRow
+		typedOnly bool
+		want      SelectionOutcome
+	}{
+		"no-auth beside an association, not enforcing": {
+			row:  ListSelectionMappingsRow{NoAuth: true, ServerHasAssociations: true},
+			want: SelectionStaleNoAuth,
+		},
+		"no-auth beside an association, enforcing": {
+			row:       ListSelectionMappingsRow{NoAuth: true, ServerHasAssociations: true},
+			typedOnly: true,
+			want:      SelectionNoAuth,
+		},
+		"no-auth beside an offered OAuth client, enforcing": {
+			row:       ListSelectionMappingsRow{NoAuth: true, ServerHasOauthClients: true},
+			typedOnly: true,
+			want:      SelectionStaleNoAuth,
+		},
+		"unmapped client without an association, not enforcing": {
+			row:  ListSelectionMappingsRow{RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
+			want: SelectionUnusable,
+		},
+		"unmapped client without an association, enforcing": {
+			row:       ListSelectionMappingsRow{RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
+			typedOnly: true,
+			want:      SelectionMap,
+		},
+		"unmapped client the issuer does not bind, enforcing": {
+			row:       ListSelectionMappingsRow{CandidateIds: []uuid.UUID{candidate}},
+			typedOnly: true,
+			want:      SelectionUnusable,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got, _ := decideSelection(tc.row, issuer, tc.typedOnly)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}

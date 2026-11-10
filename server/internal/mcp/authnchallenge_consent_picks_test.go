@@ -169,6 +169,64 @@ func TestHandleToken_RecordsTheConsentPickAsTheChoice(t *testing.T) {
 	require.Equal(t, uuid.NullUUID{UUID: fx.clientB, Valid: true}, choice.RemoteSessionClientID)
 }
 
+// Where typed auth clients are enforced, redeeming a code with no pick records
+// the choice from the auth clients the server offers. Two associations would
+// leave the choice undecided; the one offered client decides it.
+func TestHandleToken_RecordsChoicesFromAuthClientsUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedTwoClientConsentEndpoint(t, "typed-redeem")
+	client, err := usersessions_repo.New(fx.ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{UserSessionIssuerID: fx.shared, ClientID: "age3328-mcp-client"})
+	require.NoError(t, err)
+	serverID := fx.endpoint.McpServerID.UUID
+	_, err = mcpendpointsrepo.New(fx.ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:       fx.projectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     conv.ToNullUUID(serverID),
+		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:            fx.endpoint.Slug,
+	})
+	require.NoError(t, err)
+	fixtures := authclientfixtures.New(fx.ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: fx.clientB, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
+	_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+
+	verifier := "verifier-" + uuid.NewString()
+	sum := sha256.Sum256([]byte(verifier))
+	code := "code-" + uuid.NewString()
+	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](fx.ti.logger, fx.ti.cacheAdapter, cache.SuffixNone)
+	require.NoError(t, grantCache.Store(ctx, mcp.UserSessionGrant{
+		Code:                code,
+		UserSessionIssuerID: fx.shared,
+		UserSessionClientID: client.ID,
+		ClientID:            client.ClientID,
+		RedirectURI:         client.RedirectUris[0],
+		CodeChallenge:       base64.RawURLEncoding.EncodeToString(sum[:]),
+		CodeChallengeMethod: "S256",
+		Subject:             fx.subject,
+		CreatedAt:           time.Now(),
+	}))
+
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", client.RedirectUris[0])
+	form.Set("client_id", client.ClientID)
+	form.Set("code_verifier", verifier)
+	w := postForm(t, fx.ti, fx.endpoint.Slug, "token", form)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	sessions, err := testrepo.New(fx.ti.conn).ListUserSessionCredentialsForSubjectFixture(ctx, fx.subject)
+	require.NoError(t, err)
+	require.Len(t, sessions, 1)
+	choice, err := fixtures.GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: sessions[0].CredentialID, McpServerID: serverID})
+	require.NoError(t, err)
+	require.Equal(t, uuid.NullUUID{UUID: fx.clientB, Valid: true}, choice.RemoteSessionClientID)
+	require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, choice.AuthClientID)
+}
+
 // Where typed auth clients are enforced, a personal client an administrator
 // offered on the server is connected and chosen on its consent page even
 // though the sign-in does not link its registration and no older association

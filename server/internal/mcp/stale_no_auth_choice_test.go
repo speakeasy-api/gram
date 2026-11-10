@@ -683,6 +683,46 @@ func TestStaleNoAuthDirectServerKeepsReconnectChallenge(t *testing.T) {
 	}
 }
 
+// An administrator detached the only auth client a server offered, leaving the
+// association it was copied from. Under enforcement the server needs no upstream
+// authentication, so a session recorded from typed state reaches the upstream.
+// One recorded from the association, as a stale read of the enforcement state
+// would, names no auth client and fails closed until it reconnects.
+func TestEnforcedNoAuthServerIgnoresALeftoverAssociation(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSelectionFixture(t)
+	issuerID := createUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
+	upstream := newRecordingUpstream(t, "ping")
+	slug := "leftover-" + uuid.NewString()[:8]
+	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
+	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "leftover", "", []uuid.UUID{issuerID})
+	f.associate(t, ctx, server.ID, registration)
+	fixtures := authclientfixtures.New(f.ti.conn)
+	authClient, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server.ID, AuthClientID: authClient, Source: "admin"}))
+	require.NoError(t, fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, server.ID))
+	_, err = productfeaturesrepo.New(f.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, f.ti.service.Service, nil)
+	call := func(bearer string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug, bytes.NewReader(makeMetaRPCBody(t, "tools/call", map[string]any{"name": "ping", "arguments": map[string]any{}}))).WithContext(t.Context())
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	w := call(f.issue(t, ctx, slug, issuerID, createTestUser(t, ctx, f.ti, "leftover-"+uuid.NewString())))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	w = call(f.issueFrom(t, ctx, slug, issuerID, createTestUser(t, ctx, f.ti, "leftover-"+uuid.NewString()), nil, false))
+	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+}
+
 func TestStaleNoAuthEnforcedRealPermitAllowsReconnect(t *testing.T) {
 	t.Parallel()
 	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect)

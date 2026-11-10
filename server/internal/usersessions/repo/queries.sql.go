@@ -5165,6 +5165,29 @@ eligible AS (
       ON link.remote_session_client_id = a.remote_session_client_id
      AND link.user_session_issuer_id = $4
     WHERE a.deleted IS FALSE
+      AND NOT $9::boolean
+    UNION ALL
+    SELECT DISTINCT l.mcp_server_id,
+           ac.remote_session_client_id
+    FROM mcp_server_auth_clients AS l
+    JOIN reachable AS r
+      ON r.id = l.mcp_server_id
+    JOIN mcp_auth_clients AS ac
+      ON ac.id = l.auth_client_id
+     AND ac.organization_id = l.organization_id
+     AND (ac.project_id IS NULL OR ac.project_id = r.project_id)
+     AND ac.deleted IS FALSE
+     AND ac.enabled
+     AND ac.client_type IN ('remote_session', 'service_account')
+    JOIN remote_session_clients AS c
+      ON c.id = ac.remote_session_client_id
+     AND c.deleted IS FALSE
+    JOIN remote_session_client_user_session_issuers AS binding
+      ON binding.remote_session_client_id = ac.remote_session_client_id
+     AND binding.user_session_issuer_id = $4
+    WHERE l.deleted IS FALSE
+      AND l.organization_id = (SELECT organization_id FROM session_issuer)
+      AND $9::boolean
 ),
 decided AS (
     SELECT r.id AS mcp_server_id,
@@ -5204,12 +5227,25 @@ decided AS (
                LIMIT 1
              )
            ) END AS remote_session_client_id,
-           NOT EXISTS (
+           CASE WHEN $9::boolean THEN NOT EXISTS (
+             SELECT 1
+             FROM mcp_server_auth_clients AS l
+             JOIN mcp_auth_clients AS ac
+               ON ac.id = l.auth_client_id
+              AND ac.organization_id = l.organization_id
+              AND (ac.project_id IS NULL OR ac.project_id = r.project_id)
+              AND ac.deleted IS FALSE
+              AND ac.enabled
+              AND ac.client_type NOT IN ('static_credential', 'pass_through')
+             WHERE l.mcp_server_id = r.id
+               AND l.organization_id = (SELECT organization_id FROM session_issuer)
+               AND l.deleted IS FALSE
+           ) ELSE NOT EXISTS (
              SELECT 1
              FROM mcp_server_remote_session_clients AS a
              WHERE a.mcp_server_id = r.id
                AND a.deleted IS FALSE
-           ) AS no_auth
+           ) END AS no_auth
     FROM reachable AS r
     LEFT JOIN picked AS pick ON pick.mcp_server_id = r.id
 ),
@@ -5383,6 +5419,7 @@ type RecordUpstreamClientSelectionsParams struct {
 	PickedMcpServerIds  []uuid.UUID
 	PickedClientIds     []uuid.UUID
 	PickedAuthClientIds []uuid.UUID
+	TypedOnly           bool
 }
 
 // Records, for one inbound credential, the upstream OAuth client it uses for
@@ -5428,6 +5465,14 @@ type RecordUpstreamClientSelectionsParams struct {
 // client only fills choices recorded without one. A recorded choice naming
 // any auth client, explicit or mapped, is never replaced here: only an
 // untyped no-auth choice is.
+//
+// With typed_only, which the caller sets for an organization enforcing upstream
+// auth, upstream OAuth client associations decide nothing. A server's clients
+// are the registrations of the live, enabled remote_session and service_account
+// auth clients it offers, and no-auth is chosen when it offers no enabled
+// OAuth-backed auth client. The credential's issuer must still bind a
+// registration for it to be chosen without a person picking it, which only
+// ever withholds a choice: a pick on the consent page does not need the binding.
 // The typed auth client each decided choice names, by the rule the auth
 // client backfill maps recorded choices with, so a choice recorded now is the
 // choice the backfill would map: a client choice names the live, enabled
@@ -5452,6 +5497,7 @@ func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg Record
 		arg.PickedMcpServerIds,
 		arg.PickedClientIds,
 		arg.PickedAuthClientIds,
+		arg.TypedOnly,
 	)
 	if err != nil {
 		return 0, err

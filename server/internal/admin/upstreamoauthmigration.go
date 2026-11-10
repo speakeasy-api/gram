@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 func (s *Service) ListUpstreamOAuthMigrationOrganizations(ctx context.Context, _ *gen.ListUpstreamOAuthMigrationOrganizationsPayload) (*gen.AdminUpstreamOAuthMigrationOrganizations, error) {
@@ -83,7 +84,11 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 	// Typed auth clients last, from the associations just recorded. A failure
 	// here is reported beside the run and never fails the migration above.
 	var authClientsError *string
-	authClients, err := authclientbackfill.Run(migrationCtx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
+	var authClients authclientbackfill.Report
+	enforced, err := s.productFeatures.IsFeatureEnabledUncached(migrationCtx, organizationID, productfeatures.FeatureUpstreamAuthEnforced)
+	if err == nil {
+		authClients, err = authclientbackfill.Run(migrationCtx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: enforced})
+	}
 	switch {
 	case errors.Is(err, authclientbackfill.ErrRunInProgress):
 		logger.WarnContext(ctx, "record typed auth clients", attr.SlogError(err))
@@ -220,7 +225,12 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 // leaves it out, and a failed phase is named beside the others' counts.
 func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID string) *gen.AdminUpstreamOAuthMigrationAuthClients {
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
-	report, err := authclientbackfill.Run(ctx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0})
+	enforced, err := s.productFeatures.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeatureUpstreamAuthEnforced)
+	if err != nil {
+		logger.ErrorContext(ctx, "read upstream auth enforcement", attr.SlogError(err))
+		return nil
+	}
+	report, err := authclientbackfill.Run(ctx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: enforced})
 	switch {
 	case errors.Is(err, authclientbackfill.ErrRunInProgress):
 		return &gen.AdminUpstreamOAuthMigrationAuthClients{

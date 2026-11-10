@@ -45,7 +45,7 @@ func migrateUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		return err
 	}
 
-	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
+	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: false})
 	if err != nil {
 		return fmt.Errorf("record typed auth clients: %w", err)
 	}
@@ -126,7 +126,7 @@ func upstreamAuthReadiness(ctx context.Context, logger *slog.Logger, db *pgxpool
 		}
 	}
 
-	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0})
+	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: false})
 	if err != nil {
 		return fmt.Errorf("check typed auth clients: %w", err)
 	}

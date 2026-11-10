@@ -11,11 +11,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -261,4 +264,34 @@ func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, status.AuthClients.InProgress)
 	require.Empty(t, status.AuthClients.Warnings)
+}
+
+// Under enforcement a no-auth choice on a server whose auth client was detached
+// is what issuance records, whatever association remains, so the migration
+// status does not read it as pending or as a gap.
+func TestUpstreamOAuthMigration_EnforcedNoAuthChoiceBesideAnAssociationIsCovered(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+	org := newMigrationOrg(t, ctx, db, "enforced-detached")
+	issuer := org.issuer()
+	server := org.server(issuer)
+	registration := org.client(issuer)
+	require.NoError(t, org.q.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{ProjectID: org.projectID, OrganizationID: org.id, McpServerID: server, RemoteSessionClientID: registration}))
+
+	_, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	_, err = authclientsrepo.New(db).DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{AuthClientID: authclientbackfill.OAuthClientID(org.id, registration, authclientbackfill.TypeRemoteSession), McpServerID: server, OrganizationID: org.id})
+	require.NoError(t, err)
+	_, err = productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: org.id, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	org.session(issuer)
+
+	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), run.SelectionsWritten)
+	require.Zero(t, run.Status.PendingSelections)
+	require.Zero(t, run.Status.ReconnectCredentials)
+	require.NotNil(t, run.Status.AuthClients)
+	require.Zero(t, *run.Status.AuthClients.SelectionGapCount, run.Status.AuthClients.SelectionGaps)
 }

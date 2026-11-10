@@ -160,10 +160,13 @@ type liveCredential struct {
 // resolver reads it, whatever the legacy issuer binding. An unmapped OAuth
 // choice holds while its registration is associated with the server and
 // bound to issuer, which is what the upstream client choice serves it on.
-func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID) (SelectionOutcome, uuid.UUID) {
+// For an organization enforcing upstream auth (typedOnly), a server's upstream
+// OAuth client associations make no choice stale or rejected, as issuance reads
+// them there.
+func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID, typedOnly bool) (SelectionOutcome, uuid.UUID) {
 	readsNoAuth := row.NoAuth || row.NamesHeaders
-	staleNoAuth := readsNoAuth && (row.ServerHasAssociations || row.ServerHasOauthClients || slices.Contains(row.EmaGatewayIssuerIds, issuer))
-	oauthRejected := !readsNoAuth && (!row.RegistrationAssociated || !slices.Contains(row.RegistrationIssuerIds, issuer))
+	staleNoAuth := readsNoAuth && ((row.ServerHasAssociations && !typedOnly) || row.ServerHasOauthClients || slices.Contains(row.EmaGatewayIssuerIds, issuer))
+	oauthRejected := !readsNoAuth && ((!row.RegistrationAssociated && !typedOnly) || !slices.Contains(row.RegistrationIssuerIds, issuer))
 	switch {
 	case staleNoAuth:
 		return SelectionStaleNoAuth, uuid.Nil
@@ -236,7 +239,7 @@ func runSelections(ctx context.Context, q *Queries, opts Options, size int32, wr
 }
 
 func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write bool, credential liveCredential, row ListSelectionMappingsRow, report *Report) error {
-	outcome, clientID := decideSelection(row, credential.issuer)
+	outcome, clientID := decideSelection(row, credential.issuer, opts.TypedOnly)
 	counts := report.selectionClass(credential.class)
 	counts.Selections++
 	if outcome == SelectionMap {
@@ -299,7 +302,7 @@ func mapSelection(ctx context.Context, q *Queries, opts Options, credential live
 	if len(fresh) == 0 {
 		return false, SelectionSkippedRace, nil
 	}
-	outcome, decided := decideSelection(fresh[0], credential.issuer)
+	outcome, decided := decideSelection(fresh[0], credential.issuer, opts.TypedOnly)
 	switch {
 	case outcome != SelectionMap:
 		return false, outcome, nil

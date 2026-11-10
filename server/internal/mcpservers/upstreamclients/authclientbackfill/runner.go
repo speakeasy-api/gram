@@ -212,6 +212,12 @@ type Options struct {
 
 	// PageSize overrides defaultPageSize when positive.
 	PageSize int
+
+	// TypedOnly decides credential choices without reading upstream OAuth client
+	// associations, for an organization enforcing upstream auth. The caller reads
+	// it: this package is a dependency of the product features that hold the
+	// flag.
+	TypedOnly bool
 }
 
 // Result is one decision. Results carry ids only.
@@ -665,7 +671,7 @@ func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 // clientsRecorded dry-runs every phase but grants, to tell whether key
 // policies written now would be complete.
 func clientsRecorded(ctx context.Context, db TxStarter, organizationID string) (Report, error) {
-	return runPhases(ctx, db, Options{OrganizationID: organizationID, Apply: false, PageSize: 0}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
+	return runPhases(ctx, db, Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
 }
 
 // sharedReady reports whether the recorded auth clients and links are current
