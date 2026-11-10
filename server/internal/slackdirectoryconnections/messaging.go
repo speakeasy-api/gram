@@ -57,7 +57,7 @@ func (s *DirectorySync) MessagingWorkspaces(ctx context.Context, organizationID,
 		if !slices.Contains(row.GrantedScopes, scope) {
 			continue
 		}
-		tokens, err := usableTokens(s.encryption, row)
+		tokens, err := usableTokens(ctx, s.credentials, row)
 		if err != nil {
 			continue
 		}

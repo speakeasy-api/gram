@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
@@ -52,8 +52,8 @@ type slackDirectoryActivities struct {
 	db   *pgxpool.Pool
 }
 
-func newSlackDirectoryActivities(db *pgxpool.Pool, enc *encryption.Client, httpClient *guardian.HTTPClient, refresher slackdirectoryconnections.TokenRefresher) *slackDirectoryActivities {
-	return &slackDirectoryActivities{db: db, sync: slackdirectoryconnections.NewDirectorySync(db, enc, slackdirectoryconnections.NewDirectoryProvider(slackapi.NewClient("", httpClient)), audit.NewLogger(), refresher)}
+func newSlackDirectoryActivities(db *pgxpool.Pool, credentials *integrationcredentials.Cipher, httpClient *guardian.HTTPClient, refresher slackdirectoryconnections.TokenRefresher) *slackDirectoryActivities {
+	return &slackDirectoryActivities{db: db, sync: slackdirectoryconnections.NewDirectorySync(db, credentials, slackdirectoryconnections.NewDirectoryProvider(slackapi.NewClient("", httpClient)), audit.NewLogger(), refresher)}
 }
 
 const (

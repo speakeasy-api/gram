@@ -18,6 +18,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -58,12 +61,26 @@ type fixture struct {
 	db        *pgxpool.Pool
 	provider  *mockProvider
 	enc       *encryption.Client
+	creds     *integrationcredentials.Cipher
+	orgKeys   *orgencryptiontest.Fixture
 	cache     cache.Cache
 	auth      *contextvalues.AuthContext
 	scheduler *testSyncScheduler
 }
 
 func newService(t *testing.T) (context.Context, *fixture) {
+	t.Helper()
+	return newServiceWithOrgEncryption(t, false)
+}
+
+// newOrgEncryptedService is newService for an organization enrolled in
+// organization encryption.
+func newOrgEncryptedService(t *testing.T) (context.Context, *fixture) {
+	t.Helper()
+	return newServiceWithOrgEncryption(t, true)
+}
+
+func newServiceWithOrgEncryption(t *testing.T, enrolled bool) (context.Context, *fixture) {
 	t.Helper()
 	db, err := infra.CloneTestDatabase(t, "slackdirectory")
 	require.NoError(t, err)
@@ -78,6 +95,14 @@ func newService(t *testing.T) (context.Context, *fixture) {
 	ctx = contextvalues.SetAuthContext(ctx, ac)
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
+	creds := integrationcredentials.New(logger, enc, nil, nil, nil)
+	var orgKeys *orgencryptiontest.Fixture
+	if enrolled {
+		orgKeys = orgencryptiontest.New(t, db)
+		features := &feature.InMemory{}
+		features.SetFlag(feature.FlagOrgEncryptedIntegrationCredentials, ac.ActiveOrganizationID, true)
+		creds = integrationcredentials.New(logger, enc, orgKeys.Service, orgKeys.Provisioner, features)
+	}
 	provider := &mockProvider{}
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	store := cache.NewRedisCacheAdapter(redis)
@@ -85,9 +110,9 @@ func newService(t *testing.T) (context.Context, *fixture) {
 	require.NoError(t, err)
 	scheduler := &testSyncScheduler{}
 	build := func(oauth slackdirectoryconnections.Provider) *slackdirectoryconnections.Service {
-		return slackdirectoryconnections.NewService(logger, tp, db, sessions, engine, audit.NewLogger(), store, enc, oauth, site, scheduler)
+		return slackdirectoryconnections.NewService(logger, tp, db, sessions, engine, audit.NewLogger(), store, creds, oauth, site, scheduler)
 	}
-	return ctx, &fixture{build: build, service: build(provider), scheduler: scheduler, db: db, provider: provider, enc: enc, cache: store, auth: ac}
+	return ctx, &fixture{build: build, service: build(provider), scheduler: scheduler, db: db, provider: provider, enc: enc, creds: creds, orgKeys: orgKeys, cache: store, auth: ac}
 }
 func begin(t *testing.T, ctx context.Context, f *fixture, id *string) string {
 	t.Helper()

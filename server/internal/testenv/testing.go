@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -46,6 +47,14 @@ func NewEncryptionClient(t *testing.T) *encryption.Client {
 	enc, err := encryption.New("dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=")
 	require.NoError(t, err)
 	return enc
+}
+
+// NewIntegrationCredentials returns an integration credentials cipher over
+// NewEncryptionClient's key, with organization encryption off.
+func NewIntegrationCredentials(t *testing.T) *integrationcredentials.Cipher {
+	t.Helper()
+
+	return integrationcredentials.New(NewLogger(t), NewEncryptionClient(t), nil, nil, nil)
 }
 
 func NewLogger(*testing.T) *slog.Logger {

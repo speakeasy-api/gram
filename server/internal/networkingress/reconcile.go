@@ -13,7 +13,7 @@ import (
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -63,14 +63,16 @@ func (e *ReconcileError) Error() string { return "network ingress reconciliation
 
 // Executor reconciles one ingress at a time across all workers and attempts.
 type Executor struct {
-	db       *pgxpool.Pool
-	enc      *encryption.Client
-	registry *k8s.NetworkIngressProvisionerRegistry
-	options  ExecutorOptions
+	db          *pgxpool.Pool
+	credentials *integrationcredentials.Cipher
+	registry    *k8s.NetworkIngressProvisionerRegistry
+	options     ExecutorOptions
 }
 
-func NewExecutor(db *pgxpool.Pool, enc *encryption.Client, registry *k8s.NetworkIngressProvisionerRegistry, options ExecutorOptions) *Executor {
-	return &Executor{db: db, enc: enc, registry: registry, options: options}
+// NewExecutor builds the reconciler. A nil credentials cipher leaves provider
+// mutations unavailable.
+func NewExecutor(db *pgxpool.Pool, credentials *integrationcredentials.Cipher, registry *k8s.NetworkIngressProvisionerRegistry, options ExecutorOptions) *Executor {
+	return &Executor{db: db, credentials: credentials, registry: registry, options: options}
 }
 
 func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid.UUID) (ReconcileResult, error) {
@@ -155,13 +157,16 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 		}
 		gateCode = e.applyGate(ctx)
 		if gateCode == "" {
-			credentials, err := e.enc.Decrypt(row.CredentialsEncrypted.String)
-			if err != nil || !row.CredentialsEncrypted.Valid || credentials == "" {
+			credentials, err := e.credentials.Open(ctx, row.OrganizationID, integrationcredentials.ColumnNetworkIngresses, integrationcredentials.Stored{Legacy: row.CredentialsEncrypted, Org: row.CredentialsOrgEncrypted})
+			if err != nil && !errors.Is(err, integrationcredentials.ErrUnreadable) && !errors.Is(err, integrationcredentials.ErrMissing) {
+				return ReconcileResult{Requeue: false}, reconcileFailure("credentials_unavailable")
+			}
+			if err != nil || len(credentials) == 0 {
 				return e.record(ctx, conn, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure("invalid_credentials"), "")
 			}
 			callCtx, callCancel := context.WithTimeout(ctx, 2*time.Minute)
 			observation, operationErr = provider.Apply(callCtx, k8s.NetworkIngressDesired{
-				ID: row.ID, Provider: row.Provider, Hostname: row.Hostname, Credentials: []byte(credentials), Resources: resources,
+				ID: row.ID, Provider: row.Provider, Hostname: row.Hostname, Credentials: credentials, Resources: resources,
 				AttestorImage: e.options.Image, BackendService: e.options.BackendService, BackendPort: e.options.BackendPort,
 			})
 			callCancel()
@@ -193,7 +198,7 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 }
 
 func (e *Executor) applyGate(ctx context.Context) string {
-	if e.enc == nil || e.options.Queue == "" || e.options.Image == "" || e.options.BackendService == "" || e.options.BackendPort <= 0 || e.options.BackendPort > 65535 {
+	if e.credentials == nil || e.options.Queue == "" || e.options.Image == "" || e.options.BackendService == "" || e.options.BackendPort <= 0 || e.options.BackendPort > 65535 {
 		return "provider_configuration_unavailable"
 	}
 	if e.options.CanApply == nil || e.options.CanApply(ctx) != nil {

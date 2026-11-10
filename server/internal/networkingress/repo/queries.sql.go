@@ -27,6 +27,7 @@ const clearDeletedNetworkIngressResources = `-- name: ClearDeletedNetworkIngress
 UPDATE network_ingresses
 SET
     credentials_encrypted = NULL,
+    credentials_org_encrypted = NULL,
     provider_resources = '{}'::jsonb,
     last_error = NULL,
     updated_at = clock_timestamp()
@@ -116,6 +117,7 @@ INSERT INTO network_ingresses (
     enabled,
     identity_required,
     credentials_encrypted,
+    credentials_org_encrypted,
     attestor_namespace,
     attestor_service_account,
     provider_resources
@@ -131,24 +133,26 @@ INSERT INTO network_ingresses (
     $9,
     $10,
     $11,
-    $12
+    $12,
+    $13
 )
 RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateNetworkIngressParams struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	Provider               string
-	Hostname               string
-	EndpointNamespaceKind  string
-	CustomDomainID         uuid.NullUUID
-	Enabled                bool
-	IdentityRequired       bool
-	CredentialsEncrypted   pgtype.Text
-	AttestorNamespace      string
-	AttestorServiceAccount string
-	ProviderResources      []byte
+	ID                      uuid.UUID
+	OrganizationID          string
+	Provider                string
+	Hostname                string
+	EndpointNamespaceKind   string
+	CustomDomainID          uuid.NullUUID
+	Enabled                 bool
+	IdentityRequired        bool
+	CredentialsEncrypted    pgtype.Text
+	CredentialsOrgEncrypted pgtype.Text
+	AttestorNamespace       string
+	AttestorServiceAccount  string
+	ProviderResources       []byte
 }
 
 func (q *Queries) CreateNetworkIngress(ctx context.Context, arg CreateNetworkIngressParams) (NetworkIngress, error) {
@@ -162,6 +166,7 @@ func (q *Queries) CreateNetworkIngress(ctx context.Context, arg CreateNetworkIng
 		arg.Enabled,
 		arg.IdentityRequired,
 		arg.CredentialsEncrypted,
+		arg.CredentialsOrgEncrypted,
 		arg.AttestorNamespace,
 		arg.AttestorServiceAccount,
 		arg.ProviderResources,
@@ -786,21 +791,23 @@ const rotateNetworkIngressCredentials = `-- name: RotateNetworkIngressCredential
 UPDATE network_ingresses
 SET
     credentials_encrypted = $1,
+    credentials_org_encrypted = $2,
     status = 'pending',
     last_error = NULL,
     updated_at = clock_timestamp()
-WHERE organization_id = $2
+WHERE organization_id = $3
   AND deleted IS FALSE
 RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
 `
 
 type RotateNetworkIngressCredentialsParams struct {
-	CredentialsEncrypted pgtype.Text
-	OrganizationID       string
+	CredentialsEncrypted    pgtype.Text
+	CredentialsOrgEncrypted pgtype.Text
+	OrganizationID          string
 }
 
 func (q *Queries) RotateNetworkIngressCredentials(ctx context.Context, arg RotateNetworkIngressCredentialsParams) (NetworkIngress, error) {
-	row := q.db.QueryRow(ctx, rotateNetworkIngressCredentials, arg.CredentialsEncrypted, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, rotateNetworkIngressCredentials, arg.CredentialsEncrypted, arg.CredentialsOrgEncrypted, arg.OrganizationID)
 	var i NetworkIngress
 	err := row.Scan(
 		&i.ID,

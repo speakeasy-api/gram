@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -196,8 +197,16 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if k8sClient.Clientset == nil || k8sClient.DynamicClient == nil {
 				return errors.New("private ingress reconciler requires in-cluster Kubernetes clients")
 			}
+			// Organization encryption is not configured in this process, so it
+			// reads the application-key copy of the credentials, which every
+			// write keeps current while organizations move to organization
+			// encryption.
+			var credentials *integrationcredentials.Cipher
+			if encryptionClient != nil {
+				credentials = integrationcredentials.New(logger, encryptionClient, nil, nil, nil)
+			}
 			publicationRequester := plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}
-			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, config, publicationRequester)
+			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, credentials, k8sClient, config, publicationRequester)
 			if err != nil {
 				return err
 			}

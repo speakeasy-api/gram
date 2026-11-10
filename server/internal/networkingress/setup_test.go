@@ -19,10 +19,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -47,11 +50,13 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service  *networkingress.Service
-	conn     *pgxpool.Pool
-	features *productfeatures.Client
-	orgID    string
-	orgSlug  string
+	service     *networkingress.Service
+	conn        *pgxpool.Pool
+	features    *productfeatures.Client
+	orgID       string
+	orgSlug     string
+	credentials *integrationcredentials.Cipher
+	orgKeys     *orgencryptiontest.Fixture
 }
 
 func TestValidateLiveRejectsDisabledDeletedAndMismatchedAuthority(t *testing.T) {
@@ -112,6 +117,18 @@ func newTestServiceWithRuntime(t *testing.T, enabled bool) (context.Context, *te
 
 func newTestServiceWithRequester(t *testing.T, enabled bool, requester networkingress.ReconcileRequester, publicationRequester networkingress.PublicationRequester) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestServiceWithOptions(t, enabled, requester, publicationRequester, false)
+}
+
+// newOrgEncryptedTestService is newTestService for an organization enrolled
+// in organization encryption.
+func newOrgEncryptedTestService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestServiceWithOptions(t, true, networkingress.NewOutboxRequester("test-network-ingress"), nil, true)
+}
+
+func newTestServiceWithOptions(t *testing.T, enabled bool, requester networkingress.ReconcileRequester, publicationRequester networkingress.PublicationRequester, orgEncrypted bool) (context.Context, *testInstance) {
+	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -136,10 +153,17 @@ func newTestServiceWithRequester(t *testing.T, enabled bool, requester networkin
 
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	admission := networkingress.NewExpansionAdmission(features, true, enabled)
-	enc := testenv.NewEncryptionClient(t)
-	service := networkingress.NewServiceWithPublication(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, audit.NewLogger(), admission, requester, publicationRequester, nil)
+	credentials := testenv.NewIntegrationCredentials(t)
+	var orgKeys *orgencryptiontest.Fixture
+	if orgEncrypted {
+		orgKeys = orgencryptiontest.New(t, conn)
+		flags := &feature.InMemory{}
+		flags.SetFlag(feature.FlagOrgEncryptedIntegrationCredentials, orgID, true)
+		credentials = integrationcredentials.New(logger, testenv.NewEncryptionClient(t), orgKeys.Service, orgKeys.Provisioner, flags)
+	}
+	service := networkingress.NewServiceWithPublication(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), credentials, audit.NewLogger(), admission, requester, publicationRequester, nil)
 
-	ti := &testInstance{service: service, conn: conn, features: features, orgID: orgID, orgSlug: orgSlug}
+	ti := &testInstance{service: service, conn: conn, features: features, orgID: orgID, orgSlug: orgSlug, credentials: credentials, orgKeys: orgKeys}
 	productfeaturestest.Enable(t, ctx, conn, features, orgID, productfeatures.FeatureNetworkIngress)
 	return ctx, ti
 }

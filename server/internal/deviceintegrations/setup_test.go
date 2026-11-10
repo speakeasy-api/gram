@@ -172,7 +172,7 @@ func newStoreTestDB(t *testing.T) (context.Context, *pgxpool.Pool, *Store, strin
 	})
 	require.NoError(t, err)
 
-	store := NewStore(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t))
+	store := NewStore(testenv.NewLogger(t), conn, testenv.NewIntegrationCredentials(t))
 	return ctx, conn, store, orgID
 }
 
