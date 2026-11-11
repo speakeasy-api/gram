@@ -1,0 +1,773 @@
+{
+  "assistant:blocked_read": {
+    "requested": [
+      {
+        "scope": "assistant:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "assistant:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      },
+      {
+        "scope": "assistant:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      }
+    ]
+  },
+  "assistant:blocked_write": {
+    "requested": [
+      {
+        "scope": "assistant:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "assistant:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      }
+    ]
+  },
+  "assistant:read": {
+    "requested": [
+      {
+        "scope": "assistant:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "assistant:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      }
+    ]
+  },
+  "assistant:write": {
+    "requested": [
+      {
+        "scope": "assistant:write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "assistant:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      },
+      {
+        "scope": "assistant:write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      }
+    ]
+  },
+  "concrete mcp:write on one tool": {
+    "requested": [
+      {
+        "scope": "mcp:write",
+        "selector": {
+          "project_id": "project-1",
+          "resource_id": "server-1",
+          "resource_kind": "mcp",
+          "tool": "tool-a"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "mcp:read",
+        "selector": {
+          "project_id": "project-1",
+          "resource_id": "server-1",
+          "resource_kind": "mcp",
+          "tool": "tool-a"
+        }
+      },
+      {
+        "scope": "mcp:write",
+        "selector": {
+          "project_id": "project-1",
+          "resource_id": "server-1",
+          "resource_kind": "mcp",
+          "tool": "tool-a"
+        }
+      }
+    ]
+  },
+  "environment:blocked_read": {
+    "requested": [
+      {
+        "scope": "environment:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "environment"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "environment:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "environment"
+        }
+      },
+      {
+        "scope": "environment:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "environment"
+        }
+      }
+    ]
+  },
+  "environment:blocked_write": {
+    "requested": [
+      {
+        "scope": "environment:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "environment"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "environment:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "environment"
+        }
+      }
+    ]
+  },
+  "environment:read": {
+    "requested": [
+      {
+        "scope": "environment:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "environment"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "environment:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "environment"
+        }
+      }
+    ]
+  },
+  "environment:write": {
+    "requested": [
+      {
+        "scope": "environment:write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "environment"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "environment:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "environment"
+        }
+      },
+      {
+        "scope": "environment:write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "environment"
+        }
+      }
+    ]
+  },
+  "inference:execute": {
+    "requested": [
+      {
+        "scope": "inference:execute",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "inference"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "inference:execute",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "inference"
+        }
+      }
+    ]
+  },
+  "mcp:auth": {
+    "requested": [
+      {
+        "scope": "mcp:auth",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp_auth_client"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "mcp:auth",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp_auth_client"
+        }
+      }
+    ]
+  },
+  "mcp:blocked_auth": {
+    "requested": [
+      {
+        "scope": "mcp:blocked_auth",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp_auth_client"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "mcp:blocked_auth",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp_auth_client"
+        }
+      }
+    ]
+  },
+  "mcp:blocked_connect": {
+    "requested": [
+      {
+        "scope": "mcp:blocked_connect",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "mcp:blocked_connect",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      }
+    ]
+  },
+  "mcp:blocked_read": {
+    "requested": [
+      {
+        "scope": "mcp:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "mcp:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      }
+    ]
+  },
+  "mcp:blocked_write": {
+    "requested": [
+      {
+        "scope": "mcp:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "mcp:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      }
+    ]
+  },
+  "mcp:connect": {
+    "requested": [
+      {
+        "scope": "mcp:connect",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "mcp:connect",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      }
+    ]
+  },
+  "mcp:read": {
+    "requested": [
+      {
+        "scope": "mcp:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "mcp:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      }
+    ]
+  },
+  "mcp:write": {
+    "requested": [
+      {
+        "scope": "mcp:write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "mcp:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      },
+      {
+        "scope": "mcp:write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp"
+        }
+      }
+    ]
+  },
+  "org:blocked_admin": {
+    "requested": [
+      {
+        "scope": "org:blocked_admin",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "org:blocked_admin",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ]
+  },
+  "org:blocked_read": {
+    "requested": [
+      {
+        "scope": "org:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "org:blocked_admin",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      },
+      {
+        "scope": "org:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ]
+  },
+  "org:device_agent_sync": {
+    "requested": [
+      {
+        "scope": "org:device_agent_sync",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "org:device_agent_sync",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ]
+  },
+  "org:hooks_ingest": {
+    "requested": [
+      {
+        "scope": "org:hooks_ingest",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "org:hooks_ingest",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ]
+  },
+  "org:read": {
+    "requested": [
+      {
+        "scope": "org:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "org:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ]
+  },
+  "project:blocked_read": {
+    "requested": [
+      {
+        "scope": "project:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "project"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "project:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "project"
+        }
+      },
+      {
+        "scope": "project:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "project"
+        }
+      }
+    ]
+  },
+  "project:blocked_write": {
+    "requested": [
+      {
+        "scope": "project:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "project"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "project:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "project"
+        }
+      }
+    ]
+  },
+  "project:read": {
+    "requested": [
+      {
+        "scope": "project:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "project"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "project:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "project"
+        }
+      }
+    ]
+  },
+  "project:write": {
+    "requested": [
+      {
+        "scope": "project:write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "project"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "project:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "project"
+        }
+      },
+      {
+        "scope": "project:write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "project"
+        }
+      }
+    ]
+  },
+  "retired and unknown entries": {
+    "requested": [
+      {
+        "scope": "future:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "future"
+        }
+      },
+      {
+        "scope": "mcp_approval:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp_approval"
+        }
+      },
+      {
+        "scope": "project:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "project"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "future:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "future"
+        }
+      },
+      {
+        "scope": "mcp_approval:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp_approval"
+        }
+      },
+      {
+        "scope": "project:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "project"
+        }
+      }
+    ]
+  },
+  "risk_policy:evaluate": {
+    "requested": [
+      {
+        "scope": "risk_policy:evaluate",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "risk_policy"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "risk_policy:evaluate",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "risk_policy"
+        }
+      }
+    ]
+  },
+  "skill:blocked_read": {
+    "requested": [
+      {
+        "scope": "skill:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "skill"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "skill:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "skill"
+        }
+      },
+      {
+        "scope": "skill:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "skill"
+        }
+      }
+    ]
+  },
+  "skill:blocked_write": {
+    "requested": [
+      {
+        "scope": "skill:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "skill"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "skill:blocked_write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "skill"
+        }
+      }
+    ]
+  },
+  "skill:read": {
+    "requested": [
+      {
+        "scope": "skill:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "skill"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "skill:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "skill"
+        }
+      }
+    ]
+  },
+  "skill:write": {
+    "requested": [
+      {
+        "scope": "skill:write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "skill"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "skill:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "skill"
+        }
+      },
+      {
+        "scope": "skill:write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "skill"
+        }
+      }
+    ]
+  }
+}
