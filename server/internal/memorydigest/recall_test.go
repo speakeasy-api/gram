@@ -50,6 +50,25 @@ func TestUncoveredShowsEachPeriodAtItsMostCompressedLevel(t *testing.T) {
 	require.Equal(t, "Queue X because of ordering.", entries[4].Text)
 }
 
+func TestUncoveredShowsASummaryRegeneratedAfterItsDigest(t *testing.T) {
+	t.Parallel()
+
+	chatID := uuid.New()
+	day := memorydigest.Digest{ID: uuid.New(), Level: memorydigest.LevelDay, PeriodStart: date(2026, 10, 27), Content: "old snapshot", ChatIDs: []uuid.UUID{chatID}}
+
+	entries := memorydigest.Uncovered(
+		[]memorydigest.Digest{day},
+		[]memorydigest.ChatNote{{ID: chatID, SummarizedAt: date(2026, 10, 29), Summary: "Regenerated summary."}},
+		nil,
+	)
+
+	var ids []uuid.UUID
+	for _, e := range entries {
+		ids = append(ids, e.ID)
+	}
+	require.Equal(t, []uuid.UUID{day.ID, chatID}, ids)
+}
+
 func TestBudgetDropsOldestFirst(t *testing.T) {
 	t.Parallel()
 
