@@ -1841,7 +1841,10 @@ JOIN grant_matches allowed
 WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.skill_id = cs.id
-    AND blocked.scope = 'skill:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (
+      blocked.scope = 'skill:blocked_read'
+      OR (blocked.scope = 'skill:blocked_write' AND allowed.scope = 'skill:write')
+    )
     AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY cs.display_name, cs.name
@@ -1867,6 +1870,16 @@ type ListAccessibleSkillsForUserRow struct {
 // distributed to a plugin the user holds is still unreachable if RBAC does not
 // allow it, so distribution is not consulted. Principal precedence also
 // matches: a direct grant naming the skill outranks an inherited block.
+//
+// Blocks pair with allows by scope: skill:blocked_read withdraws skill:read and
+// also skill:write, because a write check honours a read block (see
+// scopeExpansions in authz/scopes.go), and skill:blocked_write withdraws
+// skill:write. Callers read the result as "skills this user can reach", which
+// is the skill:read check, and the engine does not withdraw that on
+// skill:blocked_write. So a user whose only grant is skill:write, blocked by
+// skill:blocked_write, is left out here although the engine lets them read the
+// skill. That case is kept as it was until list and single-skill access are
+// reconciled.
 // SELECT DISTINCT only permits ORDER BY over selected columns, and
 // skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
 func (q *Queries) ListAccessibleSkillsForUser(ctx context.Context, arg ListAccessibleSkillsForUserParams) ([]ListAccessibleSkillsForUserRow, error) {

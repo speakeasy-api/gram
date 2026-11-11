@@ -305,3 +305,24 @@ it("counts distinct tools when multiple grants contribute to a summary", () => {
     }),
   ).toBe("unknown annotation tools and search");
 });
+
+describe("effectiveReach without an explicit connect rule", () => {
+  // mcp:read and mcp:write do not imply mcp:connect, so viewing or managing
+  // a server reaches none of its tools.
+  it("does not count view or manage as connect", () => {
+    const tools: ToolSelectionTool[] = [
+      { name: "search", annotations: [] },
+      { name: "deploy", annotations: [] },
+    ];
+    for (const level of ["view", "manage"] as const) {
+      const rules = [entry({ principalUrn: "role:organization:gtm", level })];
+      for (const catalog of [[], tools]) {
+        const reach = effectiveReach(rules, catalog);
+        expect(reach?.capabilities).not.toContain("use");
+        expect(reach?.capabilities).toContain("view");
+        expect(reach?.toolsLabel).toBe("None");
+        expect(reach?.reachableTools).toEqual([]);
+      }
+    }
+  });
+});

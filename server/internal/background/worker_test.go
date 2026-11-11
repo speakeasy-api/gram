@@ -119,6 +119,7 @@ func TestWorkers_RegisterSchedulesSkipsFleetWideOnPreviewQueue(t *testing.T) {
 		slackDirectorySweepScheduleID(env.Queue()),
 		oktaApplicationSyncCoordinatorScheduleID(queue),
 		fmt.Sprintf("v1:trusted-delegation-cleanup:%s", queue),
+		fmt.Sprintf("v1:channels-retention:%s", queue),
 		fmt.Sprintf("v1:tenant-dimensions-sync:%s", queue),
 		indexToolsetSweepScheduleID(queue),
 	}
@@ -140,11 +141,13 @@ func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
 		var err error
 		ids, err = scheduleIDs(ctx, env.Client())
 		assert.NoError(c, err)
-		assert.Len(c, ids, 34, "all unconditional schedules should be registered")
+		assert.Len(c, ids, 36, "all unconditional schedules should be registered")
 		assert.Contains(c, ids, organizationEncryptionSweepScheduleID(string(env.Queue())), "the organization encryption sweep is an unconditional schedule")
+		assert.Contains(c, ids, internalSessionIssuerKeySweepScheduleID(string(env.Queue())), "the internal issuer key sweep is an unconditional schedule")
 		assert.Contains(c, ids, fmt.Sprintf("v1:directory-review-emails:%s", env.Queue()), "directory review emails are an unconditional schedule")
 		assert.Contains(c, ids, fmt.Sprintf("v1:trusted-delegation-cleanup:%s", env.Queue()), "delegation cleanup is an unconditional schedule")
 		assert.Contains(c, ids, fmt.Sprintf("v1:mcp-finding-evidence-cleanup:%s", env.Queue()), "MCP finding evidence cleanup is an unconditional schedule")
+		assert.Contains(c, ids, fmt.Sprintf("v1:channels-retention:%s", env.Queue()), "Channels retention is an unconditional schedule")
 	}, 30*time.Second, 250*time.Millisecond)
 	sc := env.Client().ScheduleClient()
 	windows := make(map[string]time.Duration, len(ids))

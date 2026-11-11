@@ -262,6 +262,7 @@ func TestGrantExpressionEvaluate_mcpConnectBlocklistLeavesMCPWrite(t *testing.T)
 	const serverID = "server_123"
 	grants := []Grant{
 		NewGrant(ScopeMCPWrite, WildcardResource),
+		NewGrant(ScopeMCPConnect, WildcardResource),
 		NewGrant(ScopeMCPBlockedConnect, serverID),
 	}
 
@@ -278,7 +279,7 @@ func TestGrantExpressionEvaluate_mcpConnectBlocklistLeavesMCPWrite(t *testing.T)
 	require.True(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
 
-	// Connect, which mcp:write would otherwise satisfy, is the one it takes.
+	// Connect is the one it takes.
 	connect := write
 	connect.Scope = ScopeMCPConnect
 	result, err = expressionForCheck(connect).Evaluate(grants)

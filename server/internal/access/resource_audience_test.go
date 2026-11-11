@@ -1220,12 +1220,14 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 	})
 	require.NoError(t, err)
 	principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
-	selectors, err := authz.NewSelector(authz.ScopeMCPWrite, "*").MarshalJSON()
-	require.NoError(t, err)
-	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
-		OrganizationID: authCtx.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPWrite), Selectors: selectors,
-	})
-	require.NoError(t, err)
+	for _, scope := range []authz.Scope{authz.ScopeMCPWrite, authz.ScopeMCPConnect} {
+		selectors, err := authz.NewSelector(scope, "*").MarshalJSON()
+		require.NoError(t, err)
+		_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+			OrganizationID: authCtx.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(scope), Selectors: selectors,
+		})
+		require.NoError(t, err)
+	}
 	// The two servers share one upstream session. A policy-only removal must
 	// not invoke credential revocation or erase the other server's connection.
 	otherServerID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
