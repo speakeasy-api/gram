@@ -118427,14 +118427,20 @@ components:
                 next_cursor:
                     type: string
                     description: Cursor for next page
+                scoped:
+                    type: boolean
+                    description: True when sessions were withheld because the caller lacks chat:read on one or more projects. The totals still cover every matching session.
                 sessions:
                     type: array
                     items:
                         $ref: '#/components/schemas/SessionSummary'
-                    description: List of chat session summaries
+                    description: List of chat session summaries. Only sessions from projects the caller holds chat:read on are listed.
+                totals:
+                    $ref: '#/components/schemas/SessionTotals'
             description: Result of listing org-scoped chat sessions
             required:
                 - sessions
+                - scoped
         ListSetupTasksResult:
             type: object
             properties:
@@ -129963,6 +129969,46 @@ components:
                 - total_tokens
                 - total_cost
                 - status
+        SessionTotals:
+            type: object
+            properties:
+                message_count:
+                    type: integer
+                    description: Number of LLM completion messages across the sessions
+                    format: int64
+                session_count:
+                    type: integer
+                    description: Number of matching chat sessions
+                    format: int64
+                tool_call_count:
+                    type: integer
+                    description: Number of tool calls across the sessions
+                    format: int64
+                total_cost:
+                    type: number
+                    description: Total cost in USD
+                    format: double
+                total_input_tokens:
+                    type: integer
+                    description: Total input tokens used
+                    format: int64
+                total_output_tokens:
+                    type: integer
+                    description: Total output tokens used
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: Total tokens used
+                    format: int64
+            description: Aggregate usage over a set of chat sessions
+            required:
+                - session_count
+                - message_count
+                - tool_call_count
+                - total_input_tokens
+                - total_output_tokens
+                - total_tokens
+                - total_cost
         SetAIToolDecisionRequestBody:
             type: object
             properties:

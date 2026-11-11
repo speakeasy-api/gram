@@ -2,6 +2,8 @@ package telemetry_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -16,10 +18,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 // ownScopeFixture seeds one tool call per attribution shape plus one hook
-// trace per human, so each raw read can be checked against the own scope.
+// trace per human, so each raw read can be checked against the own scope, and
+// one chat session per attribution shape for the chat summary read.
 type ownScopeFixture struct {
 	ownTool          string
 	ownAgentTool     string
@@ -30,6 +34,11 @@ type ownScopeFixture struct {
 	ownAgentHook     string
 	foreignAgentHook string
 	ownEmailOnlyTool string
+	ownChat          string
+	ownAgentChat     string
+	otherChat        string
+	foreignAgentChat string
+	ownEmailOnlyChat string
 	ownAgentID       uuid.UUID
 	foreignAgentID   uuid.UUID
 	otherOwner       string
@@ -74,7 +83,90 @@ func seedOwnScopeFixture(t *testing.T, ctx context.Context, ti *testInstance, au
 	insertHookEvent(t, ctx, hookEventParams{projectID: ti.projectID, timestamp: now, traceID: uuid.NewString(), hookSource: "mcp", toolSource: "srv", toolName: f.foreignAgentHook, result: `"ok"`, customAttrs: agentActorAttrs(foreignAgentID)})
 	// A row attributed by email alone exercises the email leg on its own.
 	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{projectID: ti.projectID, timestamp: now, toolsetSlug: "ts", toolName: f.ownEmailOnlyTool, userEmail: email, statusCode: 200})
+
+	// Chat sessions carry identity on their completion rows (user.id and
+	// user.email) or, for agent-driven sessions, on their gateway tool-call
+	// rows as the agent actor. The agent chats also hold an unattributed
+	// completion row, so the summary must admit the whole chat, not just the
+	// attributed rows.
+	f.ownChat, f.ownAgentChat, f.otherChat, f.foreignAgentChat, f.ownEmailOnlyChat = uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	otherEmail := "other-" + suffix + "@example.com"
+	insertOwnScopeChatRow(t, ctx, ti, f.ownChat, now, chatCompletionURN, chatCompletionAttrs(map[string]any{"user.id": authCtx.UserID, "user.email": email}))
+	insertOwnScopeChatRow(t, ctx, ti, f.ownAgentChat, now, chatCompletionURN, chatCompletionAttrs(nil))
+	insertOwnScopeChatRow(t, ctx, ti, f.ownAgentChat, now.Add(time.Second), chatToolCallURN, chatToolCallAttrs(f.ownAgentID))
+	insertOwnScopeChatRow(t, ctx, ti, f.otherChat, now, chatCompletionURN, chatCompletionAttrs(map[string]any{"user.id": otherOwner, "user.email": otherEmail}))
+	insertOwnScopeChatRow(t, ctx, ti, f.foreignAgentChat, now, chatCompletionURN, chatCompletionAttrs(nil))
+	insertOwnScopeChatRow(t, ctx, ti, f.foreignAgentChat, now.Add(time.Second), chatToolCallURN, chatToolCallAttrs(foreignAgentID))
+	insertOwnScopeChatRow(t, ctx, ti, f.ownEmailOnlyChat, now, chatCompletionURN, chatCompletionAttrs(map[string]any{"user.email": email}))
 	return f
+}
+
+const (
+	chatCompletionURN = "chat:completion"
+	chatToolCallURN   = "tools:http:gram:agent_tool"
+)
+
+func chatCompletionAttrs(identity map[string]any) map[string]any {
+	attrs := map[string]any{
+		"gen_ai.response.id":    uuid.NewString(),
+		"gen_ai.response.model": "test-model",
+	}
+	for k, v := range identity {
+		attrs[k] = v
+	}
+	return attrs
+}
+
+func chatToolCallAttrs(agentID uuid.UUID) map[string]any {
+	attrs := map[string]any{
+		"gram.event.source":         "tool_call",
+		"gram.tool.name":            "agent_tool",
+		"http.response.status_code": 200,
+	}
+	for k, v := range agentActorAttrs(agentID) {
+		attrs[k] = v
+	}
+	return attrs
+}
+
+// insertOwnScopeChatRow writes one telemetry row of a chat session.
+func insertOwnScopeChatRow(t *testing.T, ctx context.Context, ti *testInstance, chatID string, timestamp time.Time, urn string, attrs map[string]any) {
+	t.Helper()
+	attrsJSON, err := json.Marshal(attrs)
+	require.NoError(t, err)
+	// Committed before returning so the read that follows sees the row.
+	err = ti.chClient.InsertTelemetryLogsSync(ctx, []telemetryRepo.InsertTelemetryLogParams{{
+		ID:                   uuid.NewString(),
+		TimeUnixNano:         timestamp.UnixNano(),
+		ObservedTimeUnixNano: timestamp.UnixNano(),
+		SeverityText:         nil,
+		Body:                 "chat row",
+		TraceID:              nil,
+		SpanID:               nil,
+		Attributes:           string(attrsJSON),
+		ResourceAttributes:   "{}",
+		GramProjectID:        ti.projectID,
+		GramDeploymentID:     nil,
+		GramFunctionID:       nil,
+		GramURN:              urn,
+		ServiceName:          "gram-server",
+		ServiceVersion:       nil,
+		GramChatID:           &chatID,
+	}})
+	require.NoError(t, err)
+}
+
+// chatsVisible runs the chat summary read and returns the chats it lists,
+// keyed by chat id.
+func chatsVisible(t *testing.T, ctx context.Context, ti *testInstance, f ownScopeFixture) map[string]*telem_gen.ChatSummary {
+	t.Helper()
+	res, err := ti.service.SearchChats(ctx, &telem_gen.SearchChatsPayload{Limit: 100, Sort: "desc", Filter: &telem_gen.SearchChatsFilter{From: &f.from, To: &f.to}})
+	require.NoError(t, err)
+	out := make(map[string]*telem_gen.ChatSummary, len(res.Chats))
+	for _, chat := range res.Chats {
+		out[chat.GramChatID] = chat
+	}
+	return out
 }
 
 func agentActorAttrs(agentID uuid.UUID) map[string]any {
@@ -200,6 +292,57 @@ func TestTelemetry_LogReads_LogReadGrantSeesEveryMember(t *testing.T) {
 	require.True(t, visible["ListHooksTraces"][f.otherHook])
 }
 
+// A member without chat:read lists their own chat sessions and those of agents
+// they own, with every row of each session counted, and nothing else.
+func TestTelemetry_SearchChats_MemberSeesOwnAndOwnedAgentChats(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	f := seedOwnScopeFixture(t, ctx, ti, authCtx)
+
+	visible := chatsVisible(t, authztest.WithExactGrants(t, ctx), ti, f)
+
+	require.NotNil(t, visible[f.ownChat], "own chat")
+	require.NotNil(t, visible[f.ownEmailOnlyChat], "chat attributed by email alone")
+	require.NotNil(t, visible[f.ownAgentChat], "owned agent's chat")
+	require.Nil(t, visible[f.otherChat], "another member's chat")
+	require.Nil(t, visible[f.foreignAgentChat], "another owner's agent's chat")
+	// The agent chat's unattributed completion row stays in its summary.
+	require.Equal(t, uint64(2), visible[f.ownAgentChat].LogCount)
+	require.Equal(t, uint64(1), visible[f.ownAgentChat].ToolCallCount)
+}
+
+// chat:read on the project lists every member's sessions.
+func TestTelemetry_SearchChats_ChatReadGrantSeesEveryMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	f := seedOwnScopeFixture(t, ctx, ti, authCtx)
+
+	readerCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeChatRead, authCtx.ProjectID.String()))
+	visible := chatsVisible(t, readerCtx, ti, f)
+
+	for _, chat := range []string{f.ownChat, f.ownAgentChat, f.otherChat, f.foreignAgentChat, f.ownEmailOnlyChat} {
+		require.NotNil(t, visible[chat], "chat %s", chat)
+	}
+}
+
+// Naming another member in the chat filter narrows the own scope to nothing
+// instead of widening it.
+func TestTelemetry_SearchChats_MemberFilterCannotWidenScope(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	f := seedOwnScopeFixture(t, ctx, ti, authCtx)
+
+	res, err := ti.service.SearchChats(authztest.WithExactGrants(t, ctx), &telem_gen.SearchChatsPayload{Limit: 100, Sort: "desc", Filter: &telem_gen.SearchChatsFilter{From: &f.from, To: &f.to, UserID: &f.otherOwner}})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Empty(t, res.Chats)
+}
+
 // Payload filters never widen the scope: asking for another member's user id
 // returns nothing rather than their rows.
 func TestTelemetry_LogReads_MemberFilterCannotWidenScope(t *testing.T) {
@@ -223,8 +366,8 @@ func TestTelemetry_LogReads_MemberFilterCannotWidenScope(t *testing.T) {
 
 // Assistant-runtime, embedded chat-session and API-key callers are not a member
 // reading their own activity; all keep the plain check and are refused without
-// log:read.
-func TestTelemetry_LogReads_NonMemberCallersKeepPlainCheck(t *testing.T) {
+// the read's wide scope.
+func TestTelemetry_OwnScopeReads_NonMemberCallersKeepPlainCheck(t *testing.T) {
 	t.Parallel()
 
 	type caller struct {
@@ -265,7 +408,7 @@ func TestTelemetry_LogReads_NonMemberCallersKeepPlainCheck(t *testing.T) {
 		},
 	}
 	for name, c := range callers {
-		for _, endpoint := range logReadEndpoints {
+		for _, endpoint := range ownScopeEndpoints {
 			t.Run(name+"/"+endpoint.name, func(t *testing.T) {
 				t.Parallel()
 				ctx, ti := newTestLogsService(t)
@@ -295,15 +438,20 @@ func TestTelemetry_LogReads_LatchedAgentLeavesOwnerScope(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	visible := toolNamesVisible(t, authztest.WithExactGrants(t, ctx), ti, f)
+	memberCtx := authztest.WithExactGrants(t, ctx)
+	visible := toolNamesVisible(t, memberCtx, ti, f)
 	for _, endpoint := range []string{"SearchLogs", "SearchToolCalls", "ListToolUsageTraces", "ListToolUsageTracesRaw"} {
 		require.True(t, visible[endpoint][f.ownTool], "%s: own calls stay visible", endpoint)
 		require.False(t, visible[endpoint][f.ownAgentTool], "%s: a latched agent's calls are no longer the owner's", endpoint)
 	}
+	chats := chatsVisible(t, memberCtx, ti, f)
+	require.NotNil(t, chats[f.ownChat], "own chats stay visible")
+	require.Nil(t, chats[f.ownAgentChat], "a latched agent's chats are no longer the owner's")
 }
 
-// requireOwnScopeOnly seeds one row for another member and checks that the
-// caller, who lacks project-wide log:read, does not see it through any raw read.
+// requireOwnScopeOnly seeds rows for another member and checks that the
+// caller, who lacks the project-wide scope, does not see them through any raw
+// read or the chat summary read.
 func requireOwnScopeOnly(t *testing.T, ctx context.Context, ti *testInstance) {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -315,6 +463,9 @@ func requireOwnScopeOnly(t *testing.T, ctx context.Context, ti *testInstance) {
 		require.False(t, visible[endpoint][f.foreignAgentTool], "%s: another owner's agent leaked", endpoint)
 	}
 	require.False(t, visible["ListHooksTraces"][f.otherHook])
+	chats := chatsVisible(t, ctx, ti, f)
+	require.Nil(t, chats[f.otherChat], "another member's chat leaked")
+	require.Nil(t, chats[f.foreignAgentChat], "another owner's agent's chat leaked")
 }
 
 func nestedString(value any, path ...string) string {

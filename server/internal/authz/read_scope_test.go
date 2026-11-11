@@ -118,3 +118,16 @@ func TestResolveReadScope_FillsEmailFromTheUserRow(t *testing.T) {
 	require.Equal(t, ReadScopeOwn, scope.Kind)
 	require.Equal(t, "row@example.com", scope.UserEmail, "an auth context without an email falls back to the user row")
 }
+
+func TestResolveReadScope_ChatReadFallsBackToOwnScope(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(readScopeMemberCtx(t, "org_chat_scope", nil), nil)
+
+	scope, err := engine.ResolveReadScope(ctx, ScopeChatRead, readScopeProject)
+	require.NoError(t, err)
+	require.Equal(t, ReadScopeOwn, scope.Kind)
+	require.Equal(t, "user_123", scope.UserID)
+	require.Empty(t, scope.AgentIDs)
+}
