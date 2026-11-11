@@ -3,6 +3,8 @@ package authz
 import (
 	"context"
 	"sync"
+
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 // DecisionMode says whether an authorization entry point evaluated grants for
@@ -49,7 +51,28 @@ type DecisionSummary struct {
 	// Operations counts decisions per entry point, enforced and skipped
 	// together.
 	Operations map[DecisionOperation]int
+	// Prepared is true once PrepareContext ran for the request, which every
+	// authenticated transport does before calling a handler. A prepared
+	// request that makes no decision reached a handler that never asked.
+	Prepared bool
+	// SkipReasons counts skipped decisions by why the request is not
+	// enforced. Phase 6 of the RBAC plan replaces each reason with an explicit
+	// policy, so this is the inventory it works from.
+	SkipReasons map[SkipReason]int
 }
+
+// SkipReason says why ShouldEnforce reported false for a request. It is a
+// bounded set.
+type SkipReason string
+
+const (
+	// SkipReasonLegacyAPIKey is a legacy API key, authorized by its own scopes
+	// outside RBAC.
+	SkipReasonLegacyAPIKey SkipReason = "legacy_api_key"
+	// SkipReasonNoSession is an authenticated caller with no session that is
+	// not one of the session-less surfaces RBAC enforces.
+	SkipReasonNoSession SkipReason = "no_session"
+)
 
 // Total is every decision the request made, enforced or skipped.
 func (s DecisionSummary) Total() int { return s.Enforced + s.Skipped }
@@ -68,7 +91,7 @@ type decisionRecorder struct {
 func WithDecisionRecorder(ctx context.Context) context.Context {
 	return context.WithValue(ctx, decisionRecorderKey{}, &decisionRecorder{
 		mu:      sync.Mutex{},
-		summary: DecisionSummary{Enforced: 0, Skipped: 0, Operations: nil},
+		summary: DecisionSummary{Enforced: 0, Skipped: 0, Operations: nil, Prepared: false, SkipReasons: nil},
 	})
 }
 
@@ -77,7 +100,7 @@ func WithDecisionRecorder(ctx context.Context) context.Context {
 func RecordedDecisions(ctx context.Context) (summary DecisionSummary, ok bool) {
 	recorder, ok := ctx.Value(decisionRecorderKey{}).(*decisionRecorder)
 	if !ok {
-		return DecisionSummary{Enforced: 0, Skipped: 0, Operations: nil}, false
+		return DecisionSummary{Enforced: 0, Skipped: 0, Operations: nil, Prepared: false, SkipReasons: nil}, false
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
@@ -85,10 +108,16 @@ func RecordedDecisions(ctx context.Context) (summary DecisionSummary, ok bool) {
 	for operation, count := range recorder.summary.Operations {
 		operations[operation] = count
 	}
+	reasons := make(map[SkipReason]int, len(recorder.summary.SkipReasons))
+	for reason, count := range recorder.summary.SkipReasons {
+		reasons[reason] = count
+	}
 	return DecisionSummary{
-		Enforced:   recorder.summary.Enforced,
-		Skipped:    recorder.summary.Skipped,
-		Operations: operations,
+		Enforced:    recorder.summary.Enforced,
+		Skipped:     recorder.summary.Skipped,
+		Operations:  operations,
+		Prepared:    recorder.summary.Prepared,
+		SkipReasons: reasons,
 	}, true
 }
 
@@ -107,6 +136,10 @@ func recordDecision(ctx context.Context, operation DecisionOperation, mode Decis
 		recorder.summary.Enforced++
 	case DecisionModeSkipped:
 		recorder.summary.Skipped++
+		if recorder.summary.SkipReasons == nil {
+			recorder.summary.SkipReasons = make(map[SkipReason]int)
+		}
+		recorder.summary.SkipReasons[skipReasonFor(ctx)]++
 	}
 	if recorder.summary.Operations == nil {
 		recorder.summary.Operations = make(map[DecisionOperation]int)
@@ -120,4 +153,24 @@ func decisionModeFor(enforce bool) DecisionMode {
 		return DecisionModeEnforced
 	}
 	return DecisionModeSkipped
+}
+
+// recordPrepared notes that the request's authorization context was prepared.
+func recordPrepared(ctx context.Context) {
+	recorder, ok := ctx.Value(decisionRecorderKey{}).(*decisionRecorder)
+	if !ok {
+		return
+	}
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	recorder.summary.Prepared = true
+}
+
+// skipReasonFor names why ShouldEnforce skipped ctx. It mirrors the order of
+// checks in shouldEnforce, which is the only place that decides.
+func skipReasonFor(ctx context.Context) SkipReason {
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModeLegacy {
+		return SkipReasonLegacyAPIKey
+	}
+	return SkipReasonNoSession
 }

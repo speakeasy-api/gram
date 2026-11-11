@@ -116,6 +116,13 @@ const (
 	// MandatoryAuthzReasonKey is why the mandatory check denied.
 	MandatoryAuthzReasonKey = attribute.Key("gram.authz.mandatory.reason")
 
+	// AuthzUndecidedKindKey is why a request was reported as undecided: no_decision or skipped_only.
+	AuthzUndecidedKindKey = attribute.Key("gram.authz.undecided.kind")
+	// AuthzSkipReasonKey is why RBAC evaluation was skipped for a request: legacy_api_key or no_session.
+	AuthzSkipReasonKey = attribute.Key("gram.authz.skip_reason")
+	// AuthzUndecidedCountKey is how many matching requests a rate-limited report covers.
+	AuthzUndecidedCountKey = attribute.Key("gram.authz.undecided.count")
+
 	// SigintRequestedWindowSizeKey records the configured message count including the target.
 	SigintRequestedWindowSizeKey = attribute.Key("gram.sigint.window.requested_size")
 
@@ -1439,6 +1446,21 @@ func SlogUpstreamIssuerAssociationProviders(v int64) slog.Attr {
 // SlogUpstreamIssuerConsenter identifies whose consent a re-consent forecast is about.
 func SlogUpstreamIssuerConsenter(v string) slog.Attr {
 	return slog.String(string(UpstreamIssuerConsenterKey), v)
+}
+
+func AuthzUndecidedKind(v string) attribute.KeyValue { return AuthzUndecidedKindKey.String(v) }
+func SlogAuthzUndecidedKind(v string) slog.Attr {
+	return slog.String(string(AuthzUndecidedKindKey), v)
+}
+
+func AuthzSkipReason(v string) attribute.KeyValue { return AuthzSkipReasonKey.String(v) }
+func SlogAuthzSkipReason(v string) slog.Attr {
+	return slog.String(string(AuthzSkipReasonKey), v)
+}
+
+func AuthzUndecidedCount(v int) attribute.KeyValue { return AuthzUndecidedCountKey.Int(v) }
+func SlogAuthzUndecidedCount(v int) slog.Attr {
+	return slog.Int(string(AuthzUndecidedCountKey), v)
 }
 
 func MandatoryAuthzSurface(v string) attribute.KeyValue { return MandatoryAuthzSurfaceKey.String(v) }

@@ -1517,6 +1517,9 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
 			mux.Use(middleware.DenialHeaders())
+			// Reports requests that reach a handler and make no authz decision, and
+			// requests RBAC skipped entirely. Detection only: responses are unchanged.
+			mux.Use(middleware.UndecidedRequests(logger))
 			// LiteLLM dispatch must run before canonical OTLP ingest because
 			// the metrics path is shared with harness telemetry.
 			mux.Use(litellm.OTLPMetricsDispatch(func() *litellm.Service { return litellmService }))

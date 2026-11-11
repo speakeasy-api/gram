@@ -115,6 +115,7 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	if !ok || authCtx == nil {
 		return ctx, nil
 	}
+	recordPrepared(ctx)
 
 	if mode, hasMode := contextvalues.APIKeyAuthorization(ctx); hasMode {
 		switch mode {
