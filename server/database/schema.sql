@@ -6450,7 +6450,7 @@ ON chats (id, project_id);
 -- chats have no redacted summary.
 CREATE INDEX IF NOT EXISTS chats_memory_summary_idx
 ON chats (project_id, summary_generated_at)
-WHERE summary_redacted IS TRUE AND memory_excluded_at IS NULL AND deleted IS FALSE;
+WHERE summary IS NOT NULL AND summary_redacted IS TRUE AND memory_excluded_at IS NULL AND deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS skill_distributions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
