@@ -610,7 +610,7 @@ open their effective assignments; the dropdown always offers compact member sear
       ready binding to its authorization server ("Enterprise Sign-In
       Authorization Server") and that server's one client. In the demo org
       the hosts are reserved placeholders, so a sign-in there fails by
-      design; locally the dev-idp plays Acme Identity (check 35).
+      design; locally the dev-idp plays Acme Identity (check 36).
     - `acme-workforce` trusts Acme Identity for inbound EMA (ID-JAGs) only.
       Its sign-in client is unset on purpose, so interactive sign-in through
       it (the organization gateway) stays on the
@@ -628,7 +628,7 @@ open their effective assignments; the dropdown always offers compact member sear
         step 31).
       - `directory.resolvable_directory_users` greater than zero and
         `directory.synced` true.
-    - Locally, after the check 35 sign-in, the server's binding reads as
+    - Locally, after the check 36 sign-in, the server's binding reads as
       accepted and `remote_session_ema_credentials` holds one row for the
       developer.
 
@@ -711,7 +711,7 @@ open their effective assignments; the dropdown always offers compact member sear
     - As the local admin (who holds both scopes) the same rows appear among
       everyone else's, and no other member's sessions appear as the persona.
 
-35. **Seeded MCP servers** (names in both orgs; live checks local only)
+36. **Seeded MCP servers** (names in both orgs; live checks local only)
     - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
       server appears once, named for what it tests: OpenAPI Server (API Key),
       Read-Only Tool Subset, Server-Specific Sign-In, External OAuth Server
