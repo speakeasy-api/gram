@@ -8,50 +8,158 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-func TestIsAgentBuiltinServer(t *testing.T) {
+func TestClassifyServer(t *testing.T) {
 	t.Parallel()
 
-	noTransport := shadowmcp.ServerProvenance{Known: true, URL: "", Command: ""}
-
+	const connector = "1c55c87d-ac7c-4dfc-95f1-69e84cb5f92c"
 	tests := []struct {
-		name       string
-		serverName string
-		provenance shadowmcp.ServerProvenance
-		want       bool
+		name  string
+		facts shadowmcp.ServerFacts
+		want  shadowmcp.Classification
 	}{
-		{name: "claude in chrome without transport", serverName: "claude-in-chrome", provenance: noTransport, want: true},
-		{name: "desktop app task tools", serverName: "ccd_turn", provenance: noTransport, want: true},
-		{name: "desktop app session tools", serverName: "ccd_session", provenance: noTransport, want: true},
-		{name: "desktop app session management", serverName: "ccd_session_mgmt", provenance: noTransport, want: true},
-		{name: "desktop app pull request tools", serverName: "ccd_pr", provenance: noTransport, want: true},
-		{name: "desktop app view tools", serverName: "ccd_view", provenance: noTransport, want: true},
-		{name: "desktop app window tools", serverName: "ccd_window", provenance: noTransport, want: true},
-		{name: "desktop app sidebar tools", serverName: "ccd_sidebar", provenance: noTransport, want: true},
-		{name: "desktop app settings tools", serverName: "ccd_settings", provenance: noTransport, want: true},
-		{name: "desktop app host tools", serverName: "ccd_host", provenance: noTransport, want: true},
-		{name: "desktop app directory tools", serverName: "ccd_directory", provenance: noTransport, want: true},
-		{name: "desktop app connector tools", serverName: "ccd_connectors", provenance: noTransport, want: true},
-		{name: "desktop app browser pane", serverName: "Claude_Browser", provenance: noTransport, want: true},
-		{name: "desktop app iOS simulator", serverName: "Claude_Code_iOS_Simulator", provenance: noTransport, want: true},
-		{name: "computer use", serverName: "computer-use", provenance: noTransport, want: true},
-		{name: "surrounding whitespace", serverName: " claude-in-chrome ", provenance: noTransport, want: true},
-		{name: "unknown provenance", serverName: "claude-in-chrome", provenance: shadowmcp.UnknownServerProvenance(), want: false},
-		{name: "unknown provenance for a desktop app tool", serverName: "ccd_turn", provenance: shadowmcp.UnknownServerProvenance(), want: false},
-		{name: "built-in name with stdio command", serverName: "claude-in-chrome", provenance: shadowmcp.ServerProvenance{Known: true, URL: "", Command: "npx some-mcp"}, want: false},
-		{name: "desktop app name with stdio command", serverName: "ccd_turn", provenance: shadowmcp.ServerProvenance{Known: true, URL: "", Command: "node server.js"}, want: false},
-		{name: "built-in name with remote URL", serverName: "Claude_Browser", provenance: shadowmcp.ServerProvenance{Known: true, URL: "https://mcp.example.test/mcp", Command: ""}, want: false},
-		{name: "built-in name with Speakeasy-hosted URL", serverName: "computer-use", provenance: shadowmcp.ServerProvenance{Known: true, URL: "https://app.getgram.ai/mcp/team", Command: ""}, want: false},
-		{name: "unlisted ccd name", serverName: "ccd_custom", provenance: noTransport, want: false},
-		{name: "bare ccd prefix", serverName: "ccd_", provenance: noTransport, want: false},
-		{name: "different case", serverName: "claude_browser", provenance: noTransport, want: false},
-		{name: "third-party server without transport", serverName: "linear", provenance: noTransport, want: false},
-		{name: "empty name", serverName: "", provenance: noTransport, want: false},
+		{
+			name:  "known URL is judged by the URL",
+			facts: shadowmcp.ServerFacts{Name: "claude-in-chrome", URL: "https://mcp.example.test/mcp"},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindURL},
+		},
+		{
+			name:  "connector UUID with a known URL is judged by the URL",
+			facts: shadowmcp.ServerFacts{Name: connector, URL: "https://mcp.example.test/mcp"},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindURL},
+		},
+		{
+			name:  "connector UUID without a URL",
+			facts: shadowmcp.ServerFacts{Name: connector, InventoryLoaded: true},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindConnector},
+		},
+		{
+			name:  "connector UUID without any inventory",
+			facts: shadowmcp.ServerFacts{Name: connector},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindConnector},
+		},
+		{
+			name:  "user launch command",
+			facts: shadowmcp.ServerFacts{Name: "claude-in-chrome", Command: "npx some-mcp"},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindCommand},
+		},
+		{
+			name:  "vendor bundle launch command",
+			facts: shadowmcp.ServerFacts{Name: "computer_use", Command: "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl"},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindBuiltin, Evidence: shadowmcp.BuiltinEvidenceVendorBundle},
+		},
+		{
+			name:  "listed in the inventory without transport",
+			facts: shadowmcp.ServerFacts{Name: "linear", Installed: true, InventoryLoaded: true},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindInstalled},
+		},
+		{
+			name:  "listed built-in name is still installed",
+			facts: shadowmcp.ServerFacts{Name: "claude-in-chrome", Installed: true, InventoryLoaded: true},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindInstalled},
+		},
+		{
+			name:  "cursor plugin identifier",
+			facts: shadowmcp.ServerFacts{Name: "Linear", CursorServerIdentifier: "plugin-acme-Linear"},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindInstalled},
+		},
+		{
+			name:  "cursor user identifier",
+			facts: shadowmcp.ServerFacts{Name: "extension-Tracker", CursorServerIdentifier: "user-vendor.ext-Tracker"},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindInstalled},
+		},
+		{
+			name:  "cursor built-in identifier",
+			facts: shadowmcp.ServerFacts{Name: "cursor-ide-browser", CursorServerIdentifier: "cursor-ide-browser"},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindBuiltin, Evidence: shadowmcp.BuiltinEvidenceCursorBuiltin},
+		},
+		{
+			name:  "known name not in the inventory",
+			facts: shadowmcp.ServerFacts{Name: "ccd_turn", InventoryLoaded: true},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindBuiltin, Evidence: shadowmcp.BuiltinEvidenceKnownName},
+		},
+		{
+			name:  "known name without any inventory",
+			facts: shadowmcp.ServerFacts{Name: "claude-in-chrome"},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindBuiltin, Evidence: shadowmcp.BuiltinEvidenceKnownName},
+		},
+		{
+			name:  "unlisted name not in the inventory",
+			facts: shadowmcp.ServerFacts{Name: "ccd_new_tool", InventoryLoaded: true},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindBuiltin, Evidence: shadowmcp.BuiltinEvidenceNotInInventory},
+		},
+		{
+			name:  "unlisted name without any inventory",
+			facts: shadowmcp.ServerFacts{Name: "ccd_new_tool"},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindBuiltin, Evidence: shadowmcp.BuiltinEvidenceUnverified},
+		},
+		{
+			name:  "no server name",
+			facts: shadowmcp.ServerFacts{Name: "  ", InventoryLoaded: true},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindUnidentified},
+		},
 	}
-
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, shadowmcp.IsAgentBuiltinServer(tc.serverName, tc.provenance))
+			got := shadowmcp.ClassifyServer(tc.facts)
+			require.Equal(t, tc.want, got)
+			require.Equal(t, tc.want.Kind == shadowmcp.ServerKindBuiltin, got.IsBuiltin())
 		})
 	}
+}
+
+func TestIsKnownAgentBuiltinServerName(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{
+		"claude-in-chrome", "Claude_Browser", "Claude_Code_iOS_Simulator", "computer-use",
+		"ccd_turn", "ccd_session", "ccd_session_mgmt", "ccd_pr", "ccd_view", "ccd_window",
+		"ccd_sidebar", "ccd_settings", "ccd_host", "ccd_directory", "ccd_connectors",
+	} {
+		require.True(t, shadowmcp.IsKnownAgentBuiltinServerName(name), name)
+	}
+	for _, name := range []string{"", "Claude-In-Chrome", "ccd_custom", "linear"} {
+		require.False(t, shadowmcp.IsKnownAgentBuiltinServerName(name), name)
+	}
+}
+
+func TestParseBuiltinEvidence(t *testing.T) {
+	t.Parallel()
+
+	for _, evidence := range []shadowmcp.BuiltinEvidence{
+		shadowmcp.BuiltinEvidenceVendorBundle,
+		shadowmcp.BuiltinEvidenceCursorBuiltin,
+		shadowmcp.BuiltinEvidenceKnownName,
+		shadowmcp.BuiltinEvidenceNotInInventory,
+		shadowmcp.BuiltinEvidenceUnverified,
+	} {
+		got, ok := shadowmcp.ParseBuiltinEvidence(string(evidence))
+		require.True(t, ok, evidence)
+		require.Equal(t, evidence, got)
+	}
+	for _, value := range []string{"", "claude-in-chrome", "builtin"} {
+		_, ok := shadowmcp.ParseBuiltinEvidence(value)
+		require.False(t, ok, value)
+	}
+}
+
+func TestIsConnectorUUID(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, shadowmcp.IsConnectorUUID("1c55c87d-ac7c-4dfc-95f1-69e84cb5f92c"))
+	require.True(t, shadowmcp.IsConnectorUUID("1C55C87D-AC7C-4DFC-95F1-69E84CB5F92C"))
+	require.False(t, shadowmcp.IsConnectorUUID("1c55c87dac7c4dfc95f169e84cb5f92c"))
+	require.False(t, shadowmcp.IsConnectorUUID("claude_ai_1c55c87d-ac7c-4dfc-95f1-69e84cb5f92c"))
+	require.False(t, shadowmcp.IsConnectorUUID("claude-in-chrome"))
+}
+
+func TestCursorServerIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, shadowmcp.IsCursorBuiltinIdentifier("cursor-ide-browser"))
+	require.False(t, shadowmcp.IsCursorBuiltinIdentifier("cursor-"))
+	require.True(t, shadowmcp.IsCursorUserInstalledIdentifier("plugin-acme-Linear"))
+	require.True(t, shadowmcp.IsCursorUserInstalledIdentifier("user-vendor.ext-Tracker"))
+	require.False(t, shadowmcp.IsCursorUserInstalledIdentifier("user-"))
+	require.False(t, shadowmcp.IsCursorServerIdentifier("Linear"))
 }

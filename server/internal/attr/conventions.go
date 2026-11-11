@@ -1074,13 +1074,12 @@ const (
 	// MCPServerURLKey is the MCP server URL resolved from the SessionStart
 	// inventory snapshot (HTTP/SSE servers only). Empty for stdio servers.
 	MCPServerURLKey = attribute.Key("gram.mcp.server_url")
-	// MCPAgentBuiltinIdentityKey carries the name-only server identity of a
-	// hook-time MCP tool call that ingest proved targets a coding agent
-	// built-in server: the payload states no URL or launch command and the
-	// session's loaded inventory configures none. The offline Shadow MCP
-	// scanner reads it as known no-transport provenance. Kept apart from
-	// MCPMatchKey so a sibling event's URL or command is never outranked by it.
-	MCPAgentBuiltinIdentityKey = attribute.Key("gram.mcp.agent_builtin_identity")
+	// MCPBuiltinEvidenceKey records why Shadow MCP classified a hook-time MCP
+	// tool call's server as a coding agent built-in: vendor_bundle,
+	// cursor_builtin, known_name, not_in_inventory, or unverified. Absent
+	// when the server is not a built-in. The offline Shadow MCP scanner reads
+	// it so a built-in call never becomes a finding.
+	MCPBuiltinEvidenceKey = attribute.Key("gram.mcp.builtin_evidence")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")

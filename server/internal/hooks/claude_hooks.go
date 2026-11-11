@@ -547,6 +547,22 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 		return
 	}
 	s.upsertShadowMCPInventoryURLs(ctx, authCtx.ActiveOrganizationID, projectID, *payload.SessionID, entries)
+	if metadata, err := s.resolveClaudeSessionMetadata(ctx, *payload.SessionID, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))); err == nil {
+		s.cacheDeviceMCPList(ctx, claudeDeviceMCPListScope(metadata, payload), entries)
+	}
+}
+
+// claudeDeviceMCPListScope is the device MCP inventory scope of a Claude hook
+// event delivered to the Claude endpoint.
+func claudeDeviceMCPListScope(metadata SessionMetadata, payload *gen.ClaudePayload) deviceMCPListScope {
+	return deviceMCPListScope{
+		ProjectID: metadata.ProjectID,
+		UserID:    metadata.UserID,
+		DeviceID:  metadata.DeviceID,
+		Hostname:  conv.Default(strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")), metadata.Hostname),
+		Adapter:   "claude",
+		Cwd:       conv.Default(strings.TrimSpace(conv.PtrValOr(payload.Cwd, "")), metadata.Cwd),
+	}
 }
 
 // parseMCPInventoryFromPayload extracts the MCP inventory carried in the hook
@@ -679,13 +695,16 @@ func payloadInventoryIsFresh(payload *gen.ClaudePayload) bool {
 //     events. A cache transport error is NOT a miss: it fails closed rather
 //     than enforcing against a possibly-stale replay.
 //
-// Callers treat a returned error as fail-closed.
-func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen.ClaudePayload, sessionID string) ([]MCPServerEntry, error) {
+// A payload inventory written back to the session cache also refreshes the
+// device copy for deviceScope. A returned error means no inventory was found.
+func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen.ClaudePayload, sessionID string, deviceScope deviceMCPListScope) ([]MCPServerEntry, error) {
 	entries, variant, ok := s.parseMCPInventoryFromPayload(ctx, payload)
 	projectID := s.mcpListProjectID(ctx, sessionID)
 
 	if ok && payloadInventoryIsFresh(payload) {
-		s.cacheMCPListSnapshot(ctx, projectID, sessionID, entries, variant)
+		if s.cacheMCPListSnapshot(ctx, projectID, sessionID, entries, variant) {
+			s.cacheDeviceMCPList(ctx, deviceScope, entries)
+		}
 		return entries, nil
 	}
 
@@ -701,7 +720,9 @@ func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen
 	// we fail closed exactly as the no-payload path does rather than enforce
 	// against a possibly-stale replay.
 	if ok && errors.Is(err, redisCache.ErrCacheMiss) {
-		s.cacheMCPListSnapshot(ctx, projectID, sessionID, entries, variant)
+		if s.cacheMCPListSnapshot(ctx, projectID, sessionID, entries, variant) {
+			s.cacheDeviceMCPList(ctx, deviceScope, entries)
+		}
 		return entries, nil
 	}
 
@@ -1269,11 +1290,36 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// script replays the SessionStart inventory file on every PreToolUse, so
 	// this normally comes straight from the request payload and is immune to
 	// the SessionStart-snapshot race (DNO-286); it falls back to the cached
-	// snapshot only when the payload carried none. If neither is available we
-	// can't enforce the policy — deny with a retry-or-restart message so the
-	// user knows the guard is fail-closed rather than silently allowing.
-	entries, cacheErr := s.resolveMCPListForEnforcement(ctx, payload, sessionID)
-	if cacheErr != nil {
+	// snapshot only when the payload carried none, and to the device's copy
+	// of its last complete inventory when the session has none yet.
+	deviceScope := claudeDeviceMCPListScope(metadata, payload)
+	inventory := shadowMCPInventory{entries: nil, loaded: false}
+	entries, inventoryErr := s.resolveMCPListForEnforcement(ctx, payload, sessionID, deviceScope)
+	if inventoryErr == nil {
+		inventory = shadowMCPInventory{entries: entries, loaded: true}
+	}
+	if !inventory.loaded {
+		if deviceEntries, ok := s.getDeviceMCPList(ctx, deviceScope); ok {
+			inventory = shadowMCPInventory{entries: deviceEntries, loaded: true}
+		}
+	}
+
+	// A coding agent's own built-in servers (Claude in Chrome, desktop app
+	// tools) never appear in `claude mcp list`. A server with no URL, no
+	// launch command and no inventory entry is one of them, listed or not, so
+	// it is allowed even when no inventory could be loaded.
+	if shadowmcp.ClassifyServer(inventoryShadowMCPFacts(serverPrefix, inventory)).IsBuiltin() {
+		if output != nil {
+			output.PermissionDecision = &allow
+		}
+		return result, nil
+	}
+
+	// Only a server that cannot be a built-in reaches here without an
+	// inventory: a connector named by its UUID. Its URL is unknown until the
+	// inventory loads and may be Speakeasy-hosted, so deny with a
+	// retry-or-restart message rather than calling it Shadow MCP outright.
+	if !inventory.loaded {
 		auditReason := "missing MCP list snapshot for session"
 		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."
 		s.logger.With(
@@ -1285,25 +1331,14 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			attr.SlogToolName(rawToolName),
 		).InfoContext(ctx, "denying claude tool call: no cached MCP list",
 			attr.SlogEvent("claude_hook_denied_no_mcp_list"),
-			attr.SlogError(cacheErr),
+			attr.SlogError(inventoryErr),
 			attr.SlogRiskPolicyID(policy.ID),
 			attr.SlogRiskPolicyName(policy.Name),
 		)
 		s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 		return constructBlockResponse(payload.HookEventName, userReason), nil
 	}
-
-	// The agent's own in-process servers (Claude in Chrome, desktop app tools)
-	// never appear in `claude mcp list`, so without this they would read as
-	// missing from the configuration and be denied under block_all. The
-	// inventory loaded above is what proves the server has no URL or command,
-	// which is why this runs only after the fail-closed missing-inventory deny.
-	if shadowmcp.IsAgentBuiltinServer(serverPrefix, inventoryServerProvenance(entries, serverPrefix)) {
-		if output != nil {
-			output.PermissionDecision = &allow
-		}
-		return result, nil
-	}
+	entries = inventory.entries
 
 	matched := matchCachedMCPEntry(entries, serverPrefix)
 	var detail string

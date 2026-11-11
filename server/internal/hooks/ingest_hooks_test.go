@@ -2419,8 +2419,9 @@ func TestCanonicalSessionMetadata_CodexReattributionDropsStaleCachedUserID(t *te
 // neither arm of the gate (resolved MCP data, MCP-shaped tool name) recognizes
 // them. Before DNO-767 they were classified as ordinary tool calls and a
 // block_all shadow-MCP policy never ran, letting a Codex session read any MCP
-// server's resources. A meta-tool whose server cannot be read must still deny —
-// an unproven target is not an absent one.
+// server's resources. A meta-tool whose server cannot be read must still deny,
+// since an unproven target is not an absent one, and one naming a server the
+// user installed is denied like any other call to it.
 func TestIngest_ShadowMCPGuardCoversCodexMetaTools(t *testing.T) {
 	t.Parallel()
 
@@ -2437,7 +2438,11 @@ func TestIngest_ShadowMCPGuardCoversCodexMetaTools(t *testing.T) {
 				ctx, ti := newTestHooksService(t)
 				ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
-				payload := canonicalIngestPayload("codex", "tool.requested", "codex-meta-"+toolName+"-"+name)
+				sessionID := "codex-meta-" + toolName + "-" + name
+				require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
+					[]MCPServerEntry{{Source: "codex", Name: "platform-logs", Command: "npx platform-logs-mcp", Status: "unknown"}}, sessionMCPListTTL))
+
+				payload := canonicalIngestPayload("codex", "tool.requested", sessionID)
 				callID := "call-1"
 				payload.Data = &gen.HookIngestData{
 					ToolCall: &gen.HookToolCallData{
@@ -2445,8 +2450,7 @@ func TestIngest_ShadowMCPGuardCoversCodexMetaTools(t *testing.T) {
 						Name:  &toolName,
 						Input: toolInput,
 					},
-					// The sender read the list and found no servers, so an
-					// empty inventory is proof of absence here.
+					// The sender read the list, so the inventory is complete.
 					McpInventoryCollected: new(true),
 				}
 
@@ -2492,6 +2496,7 @@ func TestIngest_ShadowMCPGuardIgnoresMetaToolNamesFromOtherAdapters(t *testing.T
 // reading resources from a Speakeasy-hosted server would be blocked — traffic the
 // legacy endpoint permits. Resolving the name against the session inventory is
 // what separates allowed from denied, and it must name the server when denying.
+// A target the inventory does not configure is a Codex built-in and allowed.
 func TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory(t *testing.T) {
 	t.Parallel()
 
@@ -2514,7 +2519,8 @@ func TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory(t *testing.T) {
 	}{
 		{"gram-hosted target is allowed", gramHosted, "speakeasy-team", false},
 		{"external target is denied", external, "someone-else", true},
-		{"target absent from inventory is denied", gramHosted, "unlisted", true},
+		{"target absent from inventory is allowed as a built-in", gramHosted, "unlisted", false},
+		{"target listed without transport is denied", MCPServerEntry{Source: "codex", Name: "unlisted", Status: "unknown"}, "unlisted", true},
 	}
 
 	for _, tc := range tests {
@@ -2779,11 +2785,13 @@ func TestIngest_ShadowMCPMetaToolGateReadsSessionState(t *testing.T) {
 
 	sessionID := "codex-session-state-gate"
 
-	// The ordered inventory event says the sender read the list and found no
-	// servers before the related tool request arrives.
+	// The ordered inventory event says the sender read the list, which
+	// configures an external server, before the related tool request arrives.
+	server := "platform-logs"
+	serverURL := "https://mcp.example.test/mcp"
 	inventory := canonicalIngestPayload("codex", "mcp.inventory", sessionID)
 	inventory.Data = &gen.HookIngestData{
-		McpInventory:          []*gen.HookMCPData{},
+		McpInventory:          []*gen.HookMCPData{{ServerName: &server, URL: &serverURL}},
 		McpInventoryCollected: new(true),
 	}
 	_, err := ti.service.Ingest(ctx, inventory)

@@ -646,7 +646,7 @@ func TestGetCachedMCPList_OwnerReadErrorFailsClosed(t *testing.T) {
 	require.Error(t, err)
 	require.NotErrorIs(t, err, redisCache.ErrCacheMiss, "an owner decode failure is not a miss")
 
-	_, err = ti.service.resolveMCPListForEnforcement(agentCtx, &gen.ClaudePayload{HookEventName: "PreToolUse", SessionID: &sessionID}, sessionID)
+	_, err = ti.service.resolveMCPListForEnforcement(agentCtx, &gen.ClaudePayload{HookEventName: "PreToolUse", SessionID: &sessionID}, sessionID, deviceMCPListScope{})
 	require.Error(t, err, "enforcement fails closed on an owner read failure")
 }
 

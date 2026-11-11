@@ -349,12 +349,13 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// idempotency key but failed its cache write with no inventory for its
 	// whole life — under block_all every later meta-tool call would then deny,
 	// including Speakeasy-hosted targets, with no path to recover.
-	s.cacheCanonicalMCPList(
-		context.WithoutCancel(ctx),
-		canonicalSessionID(payload),
-		mcpInventory,
-		canonicalMCPInventoryRead(payload),
-	)
+	cacheCtx := context.WithoutCancel(ctx)
+	if s.cacheCanonicalMCPList(cacheCtx, canonicalSessionID(payload), mcpInventory, canonicalMCPInventoryRead(payload)) {
+		// The device copy is what the Shadow MCP guard falls back to for the
+		// first seconds of this device's next session, before its own
+		// inventory arrives.
+		s.cacheDeviceMCPList(cacheCtx, s.canonicalDeviceMCPListScope(cacheCtx, authCtx, actor.UserID, payload), mcpInventory)
+	}
 	// Transcript-derived MCP attribution (Claude Stop/SubagentStop): stash
 	// tuples for the scheduled staged-telemetry sweep to join. Runs for
 	// duplicate deliveries too — the Redis Set is idempotent, and skipping
@@ -909,22 +910,17 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	}
 
 	toolName := toolref.MCPFunctionOf(rawToolName)
-	evidence := canonicalShadowMCPEvidence(payload, rawToolName)
-	// A Codex meta-tool names its target in tool_input.server, so nothing above
-	// can derive an identity from the tool name. Resolving that name against the
-	// session's inventory is what lets a Speakeasy-hosted target be allowed at all —
-	// without a URL the guard can only reach its generic "not Speakeasy-hosted" deny,
-	// which would block legitimate reads the legacy endpoint permits. A name we
-	// cannot resolve still denies: unproven is not absent.
-	if evidence.ServerIdentity == "" && evidence.FullURL == "" {
-		if server, isMetaTool := codexMetaToolServer(rawToolName, toolInput); isMetaTool {
-			evidence.ServerIdentity = server
-			s.resolveEvidenceFromSessionInventory(ctx, &evidence, canonicalSessionID(payload))
-		}
-	}
-	if s.isCanonicalAgentBuiltinMCPServer(ctx, payload, rawToolName, evidence) {
+	// When the payload states no URL or launch command (always so for a Codex
+	// meta-tool, which names its target in tool_input.server), the session or
+	// device inventory supplies it, which is what lets a Speakeasy-hosted target
+	// be allowed. A coding agent's own built-in server is never enforced on.
+	target := s.classifyCanonicalShadowMCP(ctx, payload, rawToolName, toolInput, func() deviceMCPListScope {
+		return s.canonicalDeviceMCPListScope(ctx, authCtx, actor.UserID, payload)
+	})
+	if target.classification.IsBuiltin() {
 		return "", ""
 	}
+	evidence := target.evidence
 	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy, toolName, evidence); denied {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
@@ -968,33 +964,18 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	return "", ""
 }
 
-// resolveEvidenceFromSessionInventory upgrades evidence carrying only a server
-// name to the target that name resolves to in the session's inventory: the URL
-// for HTTP servers, the launch command for stdio ones. Mirrors the legacy
-// codexShadowMCPEvidence resolution — stdio identity is pinned to the command
-// so a bypass grant cannot follow a renamed config alias.
-func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evidence *shadowmcp.AccessEvidence, sessionID string) {
-	if evidence.ServerIdentity == "" || sessionID == "" {
-		return
-	}
-	entries, err := s.getCachedMCPList(ctx, sessionID)
-	if err != nil {
-		return
-	}
-	applyMCPEntryToEvidence(evidence, matchCodexCachedMCPServerEntry(entries, evidence.ServerIdentity))
-}
-
 // cacheCanonicalMCPList stores a session's MCP inventory under the same key
 // and TTL the legacy per-provider endpoints use, so the shadow-MCP guard can
-// resolve a later tool call's target to a configured server. Best-effort: a
-// cache miss downgrades a deny's detail, it never changes the decision.
-func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) {
+// resolve a later tool call's target to a configured server, and reports
+// whether it stored a complete inventory. Best-effort: a cache miss only
+// leaves the guard without install evidence.
+func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) bool {
 	ctx, span := s.tracer.Start(ctx, "hooks.cacheCanonicalMCPList")
 	defer span.End()
 
 	projectID := s.mcpListProjectID(ctx, sessionID)
 	if sessionID == "" || projectID == "" {
-		return
+		return false
 	}
 
 	// Extend both keys on every event, as the legacy endpoints do for the
@@ -1017,7 +998,7 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 	// it cannot back up — and under block_all every later meta-tool call denies
 	// for the rest of the session.
 	if !inventoryRead || !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
-		return
+		return false
 	}
 	if err := s.cache.Set(ctx, sessionMCPListCacheKey(projectID, sessionID), entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
@@ -1025,7 +1006,7 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(sessionID),
 		)
-		return
+		return false
 	}
 
 	// Meta-tool calls arrive later carrying no inventory status, so the
@@ -1037,6 +1018,7 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 			attr.SlogGenAIConversationID(sessionID),
 		)
 	}
+	return true
 }
 
 // canonicalCodexMetaTool reports whether this event is one of Codex's built-in
@@ -1419,11 +1401,7 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 			attrs[attr.MCPMatchKey] = command
 		}
 	}
-	if _, matched := attrs[attr.MCPMatchKey]; !matched {
-		if identity := s.canonicalAgentBuiltinIdentity(ctx, payload); identity != "" {
-			attrs[attr.MCPAgentBuiltinIdentityKey] = identity
-		}
-	}
+	s.applyCanonicalShadowMCPAttrs(ctx, attrs, payload, authCtx, metadata.UserID)
 	skill := canonicalSkillName(payload)
 	if skill != "" && isExplicitSkillActivation(payload) {
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})

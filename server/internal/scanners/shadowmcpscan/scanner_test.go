@@ -842,14 +842,16 @@ func TestScanner_UntrimmedServerURLIsClean(t *testing.T) {
 	require.Empty(t, out[0])
 }
 
-// The agent's own in-process servers reach the scanner with no URL or launch
-// command, the same shape the signature fallback would otherwise flag. They
-// are not Shadow MCP and must produce no finding once a recorded row proves
-// they have no transport, while a stdio server that borrows a built-in name,
-// or a built-in name without recorded provenance, is still flagged.
+// A coding agent's own built-in servers reach the scanner with no URL or
+// launch command, the same shape the signature fallback would otherwise flag.
+// They produce no finding when ingest recorded built-in evidence, when their
+// name is on the known list, or when their launch command runs from a vendor
+// bundle. A recorded URL or user launch command, a connector UUID, or an
+// unlisted name without evidence is still judged as before.
 func TestScanner_AgentBuiltinServers(t *testing.T) {
 	t.Parallel()
 
+	const connectorTool = "mcp__1c55c87d-ac7c-4dfc-95f1-69e84cb5f92c__list_issues"
 	tests := []struct {
 		name        string
 		toolName    string
@@ -858,80 +860,79 @@ func TestScanner_AgentBuiltinServers(t *testing.T) {
 		wantFlagged bool
 	}{
 		{
-			name:        "claude in chrome with bare prefix provenance is clean",
+			name:        "known name with bare prefix provenance is clean",
 			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
 			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "claude-in-chrome", ServerURL: "", ServerIdentity: "claude-in-chrome", HookSource: "claude"}},
 			wantFlagged: false,
 		},
 		{
-			name:        "desktop app tool with bare prefix provenance is clean",
-			toolName:    "mcp__ccd_turn__wrap_up",
-			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "ccd_turn", ServerURL: "", ServerIdentity: "", HookSource: "claude"}},
-			wantFlagged: false,
-		},
-		{
-			name:        "canonical built-in identity without a match is clean",
-			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
-			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "", ServerIdentity: "claude-in-chrome", HookSource: "claude", AgentBuiltinIdentity: "claude-in-chrome"}},
-			wantFlagged: false,
-		},
-		{
-			name:        "canonical built-in identity under a payload server name variant is clean",
-			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
-			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "", ServerIdentity: "Claude in Chrome", HookSource: "claude", AgentBuiltinIdentity: "Claude in Chrome"}},
-			wantFlagged: false,
-		},
-		{
-			name:        "canonical built-in identity with a sibling command match is flagged",
-			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
-			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "/usr/bin/node server.js", ServerURL: "", ServerIdentity: "claude-in-chrome", HookSource: "claude", AgentBuiltinIdentity: "claude-in-chrome"}},
-			wantFlagged: true,
-		},
-		{
-			name:        "canonical built-in identity with a different recorded identity is flagged",
-			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
-			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "", ServerIdentity: "npx some-mcp", HookSource: "claude", AgentBuiltinIdentity: "claude-in-chrome"}},
-			wantFlagged: true,
-		},
-		{
-			name:        "canonical built-in identity on an unlisted name is flagged",
-			toolName:    "mcp__ccd_custom__run",
-			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "", ServerIdentity: "ccd_custom", HookSource: "claude", AgentBuiltinIdentity: "ccd_custom"}},
-			wantFlagged: true,
-		},
-		{
-			name:        "desktop app tool without provenance is flagged",
+			name:        "known name without provenance is clean",
 			toolName:    "mcp__ccd_turn__wrap_up",
 			provenance:  map[string]telemetryrepo.MCPProvenance{},
-			wantFlagged: true,
+			wantFlagged: false,
 		},
 		{
-			name:        "built-in name with a failed provenance lookup is flagged",
+			name:        "known name with a failed provenance lookup is clean",
 			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
 			provenance:  nil,
 			lookupErr:   errors.New("clickhouse unavailable"),
+			wantFlagged: false,
+		},
+		{
+			name:        "recorded built-in evidence on an unlisted name is clean",
+			toolName:    "mcp__ccd_new_tool__run",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "", ServerIdentity: "ccd_new_tool", HookSource: "claude", BuiltinEvidence: "unverified"}},
+			wantFlagged: false,
+		},
+		{
+			name:        "recorded not-in-inventory evidence with a bare prefix match is clean",
+			toolName:    "mcp__ccd_new_tool__run",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "ccd_new_tool", ServerURL: "", ServerIdentity: "ccd_new_tool", HookSource: "claude", BuiltinEvidence: "not_in_inventory"}},
+			wantFlagged: false,
+		},
+		{
+			name:     "vendor bundle launch command is clean",
+			toolName: "mcp__computer_use__click",
+			provenance: map[string]telemetryrepo.MCPProvenance{"call-1": {
+				Match:          "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+				ServerURL:      "",
+				ServerIdentity: "computer_use",
+				HookSource:     "codex",
+			}},
+			wantFlagged: false,
+		},
+		{
+			name:        "unrecognized evidence value on an unlisted name is flagged",
+			toolName:    "mcp__ccd_new_tool__run",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "", ServerIdentity: "ccd_new_tool", HookSource: "claude", BuiltinEvidence: "ccd_new_tool"}},
 			wantFlagged: true,
 		},
 		{
-			name:        "built-in name with a non-name recorded identity is flagged",
+			name:        "built-in evidence with a sibling command match is flagged",
 			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
-			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "claude-in-chrome", ServerURL: "", ServerIdentity: "npx some-mcp", HookSource: "claude"}},
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "/usr/bin/node server.js", ServerURL: "", ServerIdentity: "claude-in-chrome", HookSource: "claude", BuiltinEvidence: "known_name"}},
 			wantFlagged: true,
 		},
 		{
-			name:        "unlisted ccd name with bare prefix provenance is flagged",
+			name:        "built-in evidence on a connector UUID is flagged",
+			toolName:    connectorTool,
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "", ServerIdentity: "", HookSource: "claude", BuiltinEvidence: "unverified"}},
+			wantFlagged: true,
+		},
+		{
+			name:        "unlisted name with bare prefix provenance and no evidence is flagged",
 			toolName:    "mcp__ccd_custom__run",
 			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "ccd_custom", ServerURL: "", ServerIdentity: "ccd_custom", HookSource: "claude"}},
 			wantFlagged: true,
 		},
 		{
-			name:        "built-in name with stdio command provenance is flagged",
+			name:        "known name with stdio command provenance is flagged",
 			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
 			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "npx some-mcp", ServerURL: "", ServerIdentity: "", HookSource: "claude"}},
 			wantFlagged: true,
 		},
 		{
-			name:        "built-in name with external URL provenance is flagged",
+			name:        "known name with external URL provenance is flagged",
 			toolName:    "mcp__Claude_Browser__navigate",
 			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "Claude_Browser", ServerURL: "https://mcp.example.test/mcp", ServerIdentity: "", HookSource: "claude"}},
 			wantFlagged: true,
@@ -956,9 +957,11 @@ func TestScanner_AgentBuiltinServers(t *testing.T) {
 				"navigate":         true,
 				"list_issues":      true,
 				"run":              true,
+				"click":            true,
 			}, orgIDs: nil}
 			prov := &fakeProvenance{found: tc.provenance, err: tc.lookupErr, gotIDs: nil, gotSince: time.Time{}, callCount: 0}
-			s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
+			coverage := &fakeCoverage{}
+			s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage)
 
 			out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 				{ToolCalls: []ToolCall{{ID: "call-1", Name: tc.toolName, Arguments: `{}`, CreatedAt: time.Now(), Sender: "claude"}}},
@@ -969,6 +972,8 @@ func TestScanner_AgentBuiltinServers(t *testing.T) {
 				return
 			}
 			require.Empty(t, out[0])
+			require.Len(t, coverage.got, 1)
+			require.Equal(t, ResolutionBuiltin, coverage.got[0].resolution)
 		})
 	}
 }
