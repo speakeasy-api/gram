@@ -3722,7 +3722,7 @@ type MemoryEvalRun struct {
 	// @access: confidential
 	CostUsd pgtype.Numeric
 	// Email of the Speakeasy staff member who started the run.
-	// @access: confidential
+	// @access: confidential-pii
 	RequestedBy string
 	// @access: confidential
 	StartedAt pgtype.Timestamptz
