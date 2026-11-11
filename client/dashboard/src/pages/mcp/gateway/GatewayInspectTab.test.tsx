@@ -77,13 +77,21 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: "user-test" } }),
 }));
 vi.mock("@/hooks/useUserSessionToken", () => ({
-  useUserSessionToken: (input: { target: { discoveryMode?: string } }) => {
+  useUserSessionToken: (input: {
+    target: { discoveryMode?: string; connectionVersion?: string };
+    userSessionIssuerId?: string;
+  }) => {
     state.mint(input);
+    // Like the real hook, the catalog session only mints (and so can only
+    // fail) for an issuer-gated gateway.
+    const catalog = input.target.connectionVersion?.endsWith(":catalog");
+    const fails =
+      !!input.target.discoveryMode && (!catalog || !!input.userSessionIssuerId);
     return {
       accessToken: state.accessToken,
       isLoading: false,
-      isError: !!input.target.discoveryMode,
-      error: input.target.discoveryMode
+      isError: fails,
+      error: fails
         ? new Error("Gateway discovery settings are not available")
         : null,
       refetch: (
@@ -356,6 +364,7 @@ it("names a failed Code Mode catalog sign-in and retries the mint", () => {
           metaMcpServer={
             {
               id: "gateway-test",
+              userSessionIssuerId: "issuer-test",
               discoveryMode: "code_mode",
               codeModeEnabled: true,
             } as MetaMcpServer
