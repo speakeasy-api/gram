@@ -143,6 +143,26 @@ describe("ConfigureExportSheet level", () => {
     ).toBe("true");
   });
 
+  it("blocks saving a level this dashboard does not know", () => {
+    const onSave = vi.fn<(values: ConfigureExportValues) => Promise<void>>();
+    renderSheet(
+      route("mcp_connection_logs", "debug" as DataExportRoute["minSeverity"]),
+      onSave,
+    );
+
+    expect(
+      screen.getByText(/not supported by this version of Speakeasy/),
+    ).toBeTruthy();
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio.getAttribute("aria-checked")).toBe("false");
+      expect(radio.hasAttribute("disabled")).toBe(true);
+    }
+    const save = screen.getByRole("button", { name: "Save export" });
+    expect(save.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(save);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
   it("has no level for other data sources", () => {
     renderSheet(route("product_telemetry"), vi.fn());
 

@@ -26,7 +26,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { isValidDataExportEndpointURL } from "@/lib/data-export-validation";
-import { isKnownEnumValue } from "@/lib/enum";
+import { isKnownEnumValue, UNSUPPORTED_ENUM_VALUE_MESSAGE } from "@/lib/enum";
 import {
   blankWriteOnlyHeader,
   hasValidWriteOnlyHeaders,
@@ -99,6 +99,14 @@ function initialMinSeverity(route: DataExportRoute | undefined): MinSeverity {
     return route.minSeverity;
   }
   return MinSeverity.Error;
+}
+
+// A level this dashboard does not know must not be saved over with a default.
+function hasUnknownMinSeverity(route: DataExportRoute | undefined): boolean {
+  return (
+    route?.minSeverity !== undefined &&
+    !isKnownEnumValue(MinSeverity, route.minSeverity)
+  );
 }
 
 function initialDestinationID(
@@ -210,6 +218,7 @@ export function ConfigureExportSheet({
     [destinations],
   );
   const initialDestinationId = initialDestinationID(route, destinations);
+  const unknownMinSeverity = hasUnknownMinSeverity(route);
   const initialDataSource =
     route?.dataSource ?? dataSources[0]?.value ?? DataSource.ProductTelemetry;
   const form = useForm({
@@ -320,12 +329,18 @@ export function ConfigureExportSheet({
                   <form.Field name="minSeverity">
                     {(field) => (
                       <div className="space-y-3 border-t py-5">
+                        {unknownMinSeverity ? (
+                          <Alert variant="warning">
+                            {UNSUPPORTED_ENUM_VALUE_MESSAGE}
+                          </Alert>
+                        ) : null}
                         <Label id={minSeverityControlId}>
                           Connections to send
                         </Label>
                         <RadioGroup
                           aria-labelledby={minSeverityControlId}
-                          value={field.state.value}
+                          value={unknownMinSeverity ? "" : field.state.value}
+                          disabled={unknownMinSeverity}
                           onValueChange={(value) =>
                             field.handleChange(value as MinSeverity)
                           }
@@ -575,8 +590,15 @@ export function ConfigureExportSheet({
                 values,
                 destinations,
               );
+              const levelBlocked =
+                unknownMinSeverity &&
+                values.dataSource === DataSource.McpConnectionLogs;
               const disabled =
-                loading || saving || isSubmitting || !destinationValid;
+                loading ||
+                saving ||
+                isSubmitting ||
+                !destinationValid ||
+                levelBlocked;
               return (
                 <SheetFooter className="min-h-14 flex-row items-center justify-end gap-2 border-t bg-muted/30 px-6 py-3">
                   <Button
