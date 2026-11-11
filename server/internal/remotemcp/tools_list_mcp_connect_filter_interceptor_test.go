@@ -500,8 +500,9 @@ func TestToolsListReservedMetaInterceptor_LeavesOtherListingsUntouched(t *testin
 func TestToolsListMCPConnectFilterInterceptor_InspectionReasons(t *testing.T) {
 	t.Parallel()
 
-	// Each case gives the caller mcp:read on the server, narrowed where the
-	// unrestricted read grant would otherwise cover mcp:connect on every tool.
+	// Each case gives the caller mcp:read on the server, which inspection
+	// needs, plus an explicit mcp:connect narrowed to the case: read no
+	// longer implies connect.
 	tests := []struct {
 		name         string
 		grants       []authz.Grant
@@ -512,6 +513,7 @@ func TestToolsListMCPConnectFilterInterceptor_InspectionReasons(t *testing.T) {
 			name: "an explicit block rule reports blocked",
 			grants: []authz.Grant{
 				authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID}),
+				authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID}),
 				authz.NewGrantWithSelector(authz.ScopeMCPBlockedConnect, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID, "tool": "locked_tool"}),
 			},
 			dispositions: nil,
@@ -520,7 +522,8 @@ func TestToolsListMCPConnectFilterInterceptor_InspectionReasons(t *testing.T) {
 		{
 			name: "a disposition-scoped grant reports read_only",
 			grants: []authz.Grant{
-				authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID, "disposition": "read_only"}),
+				authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID}),
+				authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID, "disposition": "read_only"}),
 			},
 			dispositions: map[string]string{"open_tool": "read_only", "locked_tool": "destructive"},
 			wantReason:   remotemcp.ToolUnavailableReasonReadOnly,
@@ -528,7 +531,8 @@ func TestToolsListMCPConnectFilterInterceptor_InspectionReasons(t *testing.T) {
 		{
 			name: "no grant covering the tool reports not_granted",
 			grants: []authz.Grant{
-				authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID, "tool": "open_tool"}),
+				authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID}),
+				authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID, "tool": "open_tool"}),
 			},
 			dispositions: map[string]string{"open_tool": "read_only", "locked_tool": "destructive"},
 			wantReason:   remotemcp.ToolUnavailableReasonNotGranted,
