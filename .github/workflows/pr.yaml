@@ -1841,7 +1841,7 @@ jobs:
           GRAM_TESTENV_MAX_CONCURRENT_LAUNCHES: 4
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
-          RACE_FLAG: ${{ (github.event_name == 'merge_group' || github.ref == 'refs/heads/main') && '-race' || '' }}
+          RACE_FLAG: -race
           # Alongside junit-report.xml, gotestsum writes only the pass, skip,
           # and fail events of 'go test -json' (no output lines) to this file,
           # relative to server/. Each event carries its time and elapsed.
