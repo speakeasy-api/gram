@@ -783,30 +783,25 @@ describe("the access grid", () => {
     ).toBe("false");
   });
 
-  it("ticks Connect on a wide row without choosing its tools", () => {
+  it("ticks every server and tool under a project, and lets one server be left out", () => {
     show(role);
     const pressed = (name: string) =>
       screen.getByRole("button", { name }).getAttribute("aria-pressed");
     fireEvent.click(screen.getByRole("button", { name: "Connect Default" }));
+    // The project reaches every tool, and so does each server in it.
     expect(pressed("Connect Default")).toBe("true");
-    expect(pressed("All tools on Default")).toBe("false");
-    // Its servers follow the project, and have no tools yet either.
-    expect(pressed("All tools on GitHub")).toBe("false");
-    // Nothing is granted until tools are chosen.
-    expect(
-      screen
-        .getByRole("button", { name: "Save Changes" })
-        .hasAttribute("disabled"),
-    ).toBe(true);
-    fireEvent.click(
-      screen.getByRole("button", { name: "All tools on Default" }),
-    );
+    expect(pressed("All tools on Default")).toBe("true");
+    expect(pressed("Connect GitHub")).toBe("true");
+    expect(pressed("All tools on GitHub")).toBe("true");
+    // One server can be left out: the others keep Connect.
+    fireEvent.click(screen.getByRole("button", { name: "Connect GitHub" }));
+    expect(pressed("Connect GitHub")).toBe("false");
+    expect(pressed("Connect Linear")).toBe("true");
+    expect(pressed("All tools on Linear")).toBe("true");
     expect(savedForm("reviewed").addGrants).toEqual([
       {
         scope: "mcp:connect",
-        selectors: [
-          { resourceKind: "mcp", resourceId: "*", projectId: "project-a" },
-        ],
+        selectors: [{ resourceKind: "mcp", resourceId: "server-b" }],
       },
     ]);
   });
@@ -978,11 +973,11 @@ describe("the access grid", () => {
         },
       ],
     });
-    // View passes down to the project's servers; Connect is its own
-    // permission, so it stays untouched and open to grant.
+    // View passes down to the project's servers, where it can be unticked.
     const view = screen.getByRole("button", { name: "View GitHub" });
-    expect(view.getAttribute("aria-pressed")).toBe("false");
-    expect(view.getAttribute("aria-disabled")).toBe("true");
+    expect(view.getAttribute("aria-pressed")).toBe("true");
+    expect(view.getAttribute("aria-disabled")).toBe("false");
+    // View does not include Connect, so Connect stays off and can be granted.
     const use = screen.getByRole("button", { name: "Connect GitHub" });
     expect(use.getAttribute("aria-pressed")).toBe("false");
     expect(use.getAttribute("aria-disabled")).toBe("false");
@@ -991,6 +986,33 @@ describe("the access grid", () => {
         .getByRole("button", { name: "View Default" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
+  });
+
+  it("unticks a level one server gets from a wider grant by splitting it", () => {
+    show({
+      ...role,
+      grants: [{ scope: "mcp:connect" }],
+    });
+    // Connect on every server shows on each server, and can be unticked.
+    fireEvent.click(screen.getByRole("button", { name: "Connect GitHub" }));
+    expect(
+      screen
+        .getByRole("button", { name: "Connect GitHub" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(
+      screen
+        .getByRole("button", { name: "Connect Linear" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    const form = savedForm("reviewed");
+    expect(form.removeGrants).toEqual([{ scope: "mcp:connect" }]);
+    expect(form.addGrants).toEqual([
+      {
+        scope: "mcp:connect",
+        selectors: [{ resourceKind: "mcp", resourceId: "server-b" }],
+      },
+    ]);
   });
 });
 

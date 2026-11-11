@@ -30,6 +30,7 @@ import {
   setPlatformScopeBlocked,
   splitMcpToolLimit,
   clearMcp,
+  excludeMcpRow,
   clearPlatform,
   limitMcpUse,
   mcpBlockedTools,
@@ -273,6 +274,37 @@ describe("MCP cells", () => {
       mcp("gh", { tool: "x", disposition: "read_only" }),
     ]);
     expect(mcpAllows(after, github, "use")).toBe(true);
+  });
+
+  it("splits a wider grant to leave one row out", () => {
+    const other: McpRow = { kind: "project", projectId: "p2" };
+    const remote: McpRow = { kind: "server", serverId: "rem", projectId: "p2" };
+    const rows = [all, project, github, linear, other, remote];
+    const everywhere = load([{ scope: "mcp:read" }]);
+
+    // A project: every other project keeps the level.
+    const noProject = excludeMcpRow(everywhere, project, "view", rows);
+    expect(mcpAllows(noProject, all, "view")).toBe(false);
+    expect(mcpAllows(noProject, project, "view")).toBe(false);
+    expect(mcpAllows(noProject, other, "view")).toBe(true);
+    expect(mcpAllows(noProject, github, "view")).toBe(false);
+
+    // A server: other projects and its sibling servers keep the level.
+    const noServer = excludeMcpRow(everywhere, github, "view", rows);
+    expect(mcpAllows(noServer, all, "view")).toBe(false);
+    expect(mcpAllows(noServer, project, "view")).toBe(false);
+    expect(mcpAllows(noServer, github, "view")).toBe(false);
+    expect(mcpAllows(noServer, linear, "view")).toBe(true);
+    expect(mcpAllows(noServer, other, "view")).toBe(true);
+
+    // Connect on a project, taken off one of its servers.
+    const connect = load([
+      { scope: "mcp:connect", selectors: [mcp("*", { projectId: "p1" })] },
+    ]);
+    const noConnect = excludeMcpRow(connect, github, "use", rows);
+    expect(mcpAllows(noConnect, project, "use")).toBe(false);
+    expect(mcpAllows(noConnect, github, "use")).toBe(false);
+    expect(mcpAllows(noConnect, linear, "use")).toBe(true);
   });
 
   it("denies one tool of a server without touching its grants", () => {

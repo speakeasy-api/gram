@@ -1092,3 +1092,80 @@ export function roleDenies(
 export function denyCountLabel(count: number): string {
   return `${count} explicit ${count === 1 ? "deny" : "denies"}`;
 }
+
+/**
+ * Take one level away from a row that gets it from a wider row. Grants add
+ * up, so nothing stored on the row itself could take it away: the wider
+ * grant is split instead. A grant on every server becomes one on each other
+ * project, and a grant on a project becomes one on each of its other
+ * servers. Servers and projects added later are no longer covered by a
+ * grant that was split.
+ */
+export function excludeMcpRow(
+  grants: Record<string, RoleGrant>,
+  row: McpRow,
+  level: Level,
+  rows: McpRow[],
+): Record<string, RoleGrant> {
+  if (row.kind === "all") return setMcpAllow(grants, row, level, false);
+  const servers = rows.filter((r) => r.kind === "server");
+  // Connect can be limited to some tools, which the split has to carry.
+  if (level === "use" && row.kind === "server") {
+    return splitMcpToolLimit(
+      grants,
+      row,
+      { kind: "tools", tools: [] },
+      servers,
+    );
+  }
+  const all: McpRow = { kind: "all" };
+  const project: McpRow = { kind: "project", projectId: row.projectId };
+  const fromAll = mcpAllows(grants, all, level);
+  const fromProject = mcpAllows(grants, project, level);
+  const allLimit: ToolLimit = (level === "use"
+    ? mcpToolLimit(grants, all)
+    : null) ?? { kind: "all" };
+
+  let next = grants;
+  if (fromAll) {
+    next = setMcpAllow(next, all, level, false);
+    for (const other of rows) {
+      if (other.kind !== "project" || other.projectId === row.projectId) {
+        continue;
+      }
+      if (mcpAllows(next, other, level)) continue;
+      // A project row holds a level on every tool; a narrower Connect goes
+      // on each of its servers instead.
+      if (allLimit.kind === "all") {
+        next = setMcpAllow(next, other, level, true);
+        continue;
+      }
+      for (const server of servers) {
+        if (server.projectId !== other.projectId) continue;
+        if (!mcpAllows(next, server, "use")) {
+          next = setMcpToolLimit(next, server, allLimit);
+        }
+      }
+    }
+  }
+  if (row.kind === "project") {
+    return fromProject ? setMcpAllow(next, row, level, false) : next;
+  }
+  // A server: its project's grant, own or just handed down, moves to the
+  // project's other servers.
+  if (fromAll || fromProject) {
+    next = setMcpAllow(next, project, level, false);
+    for (const server of servers) {
+      if (
+        server.projectId !== row.projectId ||
+        server.serverId === row.serverId
+      ) {
+        continue;
+      }
+      if (!mcpAllows(next, server, level)) {
+        next = setMcpAllow(next, server, level, true);
+      }
+    }
+  }
+  return setMcpAllow(next, row, level, false);
+}

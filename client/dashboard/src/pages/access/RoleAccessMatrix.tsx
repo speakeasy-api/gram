@@ -23,6 +23,7 @@ import {
 } from "./mcpAccessModel";
 import { DenyDialog, ExplicitDenies } from "./RoleDenies";
 import {
+  excludeMcpRow,
   LEVEL_LABEL,
   LEVELS,
   type Level,
@@ -423,7 +424,13 @@ function McpMatrix({
   const cellState = (
     view: McpRowView,
     level: Level,
-  ): { state: CellState; reason?: string; locked?: boolean } => {
+  ): {
+    state: CellState;
+    reason?: string;
+    locked?: boolean;
+    /** Inherited at this same level from a wider row, so it can be split. */
+    handedDown?: boolean;
+  } => {
     const { row } = view;
     if (mcpBlocks(grants, row, level)) {
       // A denied row is taken back from its menu, not one level at a time.
@@ -483,9 +490,15 @@ function McpMatrix({
         (other) => includes(other) && mcpAllows(grants, up.row, other),
       );
       if (from) {
+        // The same level handed down from a wider row can be unticked here:
+        // the wider grant is split to leave this row out.
+        const handedDown = from === level;
         return {
           state: "inherited",
-          reason: `${LEVEL_LABEL[from]} on ${rowName(up)}`,
+          reason: handedDown
+            ? `${LEVEL_LABEL[from]} on ${rowName(up)}. Untick to leave ${rowName(view)} out.`
+            : `${LEVEL_LABEL[from]} on ${rowName(up)}`,
+          handedDown,
         };
       }
     }
@@ -504,12 +517,6 @@ function McpMatrix({
   const reaches = (state: CellState) => state === "on" || state === "inherited";
 
   const toggleCell = (view: McpRowView, level: Level, state: CellState) => {
-    // Connect on All servers or a project is ticked on its own: which tools
-    // it reaches is chosen beside it, or server by server under it.
-    if (level === "use" && view.row.kind !== "server" && state === "off") {
-      setNoTools(view.row, true);
-      return;
-    }
     if (level === "use") setNoTools(view.row, false);
     onChange((prev) =>
       state === "blocked"
@@ -599,9 +606,16 @@ function McpMatrix({
         <Cell
           state={state}
           reason={reason}
-          narrowable={row.kind === "server"}
+          narrowable
           label={`All tools on ${rowName(view)}`}
           onToggle={() => {
+            // A project that gets Connect from every server: split that
+            // grant to leave the project out, keeping its Connect ticked.
+            if (every && row.kind === "project" && access.connect !== "own") {
+              setNoTools(row, true);
+              onChange((prev) => excludeMcpRow(prev, row, "use", matrixRows));
+              return;
+            }
             // Connect stays ticked; the tools are then picked one by
             // one under the server.
             setNoTools(row, every);
@@ -662,6 +676,7 @@ function McpMatrix({
     return actions;
   };
 
+  const matrixRows = rowViews.map((view) => view.row);
   const serverRows = rowViews.flatMap((view) =>
     view.row.kind === "server" ? [view.row] : [],
   );
@@ -810,7 +825,7 @@ function McpMatrix({
                         )}
                       </th>
                       {LEVELS.map((level) => {
-                        const { state, reason, locked } = cellState(
+                        const { state, reason, locked, handedDown } = cellState(
                           view,
                           level,
                         );
@@ -820,10 +835,21 @@ function McpMatrix({
                               state={state}
                               reason={reason}
                               label={`${LEVEL_LABEL[level]} ${rowName(view)}`}
+                              narrowable={handedDown}
                               onToggle={
                                 locked
                                   ? undefined
-                                  : () => toggleCell(view, level, state)
+                                  : handedDown
+                                    ? () =>
+                                        onChange((prev) =>
+                                          excludeMcpRow(
+                                            prev,
+                                            row,
+                                            level,
+                                            matrixRows,
+                                          ),
+                                        )
+                                    : () => toggleCell(view, level, state)
                               }
                             />
                           </td>
