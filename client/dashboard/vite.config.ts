@@ -414,6 +414,7 @@ export default defineConfig(async (env) => {
             "/rpc": devProxyTarget,
             "/otel": devProxyTarget,
             "/chat": devProxyTarget,
+            "/channels": devProxyTarget,
             "/mcp": devProxyTarget,
             "/oauth": devProxyTarget,
             "/oauth-external": devProxyTarget,

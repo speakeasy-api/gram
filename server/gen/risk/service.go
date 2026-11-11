@@ -117,6 +117,9 @@ type Service interface {
 	// Create or refresh a risk policy bypass request from a signed request URL
 	// token.
 	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *PolicyBypassRedemption, err error)
+	// Fetch what a request access link asks for (the blocked server and tool)
+	// WITHOUT filing the request. Powers the request access page.
+	GetRiskPolicyBypassRequestTarget(context.Context, *GetRiskPolicyBypassRequestTargetPayload) (res *GetRiskPolicyBypassRequestTargetResult, err error)
 	// Acknowledge a risk policy warn/challenge from a warning-link token. Records
 	// the acknowledgement so the user's retried action proceeds; self-service (no
 	// admin approval).
@@ -234,7 +237,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [57]string{"createRiskPolicy", "listRiskPolicies", "listMCPPlatformToolsets", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "revealRiskResultPayload", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "listRiskPresets", "suggestRiskPolicy", "compileExpr", "getRiskUserBreakdown", "getRiskSignals", "getRiskMcpServerCounts", "getRiskAnalysisStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "listRiskPolicyApprovals", "getRiskPolicyApproval", "decideRiskPolicyApproval", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [58]string{"createRiskPolicy", "listRiskPolicies", "listMCPPlatformToolsets", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "revealRiskResultPayload", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "listRiskPresets", "suggestRiskPolicy", "compileExpr", "getRiskUserBreakdown", "getRiskSignals", "getRiskMcpServerCounts", "getRiskAnalysisStatus", "createRiskPolicyBypassRequest", "getRiskPolicyBypassRequestTarget", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "listRiskPolicyApprovals", "getRiskPolicyApproval", "decideRiskPolicyApproval", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -610,6 +613,31 @@ type GetRiskPolicyApprovalPayload struct {
 	ProjectSlugInput *string
 	// The approval request ID.
 	ID string
+}
+
+// GetRiskPolicyBypassRequestTargetPayload is the payload type of the risk
+// service getRiskPolicyBypassRequestTarget method.
+type GetRiskPolicyBypassRequestTargetPayload struct {
+	SessionToken *string
+	// Signed request token generated when a risk policy blocks an action.
+	RequestToken string
+}
+
+// GetRiskPolicyBypassRequestTargetResult is the result type of the risk
+// service getRiskPolicyBypassRequestTarget method.
+type GetRiskPolicyBypassRequestTargetResult struct {
+	// Display name of the blocked server, when known.
+	ServerName *string
+	// URL of the blocked server without credentials, query, or fragment, when it
+	// was reached over HTTP.
+	ServerURL *string
+	// How the agent identified the blocked server when it has no URL: its
+	// configured name for Claude Code and Codex, or its launch command for Cursor.
+	ServerIdentifier *string
+	// The tool the agent tried to call, when known.
+	ToolName *string
+	// When the request link expires.
+	ExpiresAt string
 }
 
 // GetRiskPolicyChallengePayload is the payload type of the risk service
