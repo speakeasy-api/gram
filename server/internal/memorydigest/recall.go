@@ -100,8 +100,10 @@ type Entry struct {
 
 // Uncovered picks the recall entries for a project: every month digest, then
 // the week digests no month digest folded, the day digests no week digest
-// folded, and the chats and memos no day digest folded. Older history
-// therefore shows at its most compressed level, and nothing appears twice.
+// folded, the memos no day digest folded, and the chats whose current
+// summary falls outside the period of every digest that folded them. Older
+// history therefore shows at its most compressed level. A summary regenerated
+// after its digest shows next to that digest's older snapshot of it.
 // Entries come back oldest first.
 func Uncovered(digests []Digest, chats []ChatNote, memos []MemoNote) []Entry {
 	covered := map[uuid.UUID]bool{}
