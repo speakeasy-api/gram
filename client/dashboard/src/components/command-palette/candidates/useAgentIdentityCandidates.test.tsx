@@ -112,6 +112,7 @@ describe("useAgentIdentityCandidates", () => {
         null,
       ],
       enabled: false,
+      staleTime: 30_000,
       retry: false,
       throwOnError: false,
     });

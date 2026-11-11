@@ -14,6 +14,8 @@ import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
 
+const AGENT_INVENTORY_STALE_TIME_MS = 30_000;
+
 /**
  * Registered agents, opening the same canonical identity pages as the identity
  * roster. Agent names are identities too, so these candidates remain fuzzy-only
@@ -73,6 +75,10 @@ export function useAgentIdentityCandidates({
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: queryEnabled,
+    // Reopening the palette used to mark every loaded cursor page stale and
+    // refetch the full inventory immediately. Keep a short freshness window so
+    // quick close/reopen cycles reuse the complete inventory already fetched.
+    staleTime: AGENT_INVENTORY_STALE_TIME_MS,
     throwOnError: false,
     retry: false,
   });
