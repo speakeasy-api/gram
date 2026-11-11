@@ -904,7 +904,8 @@ func (s Scope) SubScopes() []string {
 // ImpliedScopes returns every scope whose checks a grant of this scope can
 // satisfy, the scope itself included, following satisfiedBy transitively.
 func (s Scope) ImpliedScopes() []Scope {
-	seen := map[Scope]struct{}{s: {}}
+	seen := make(map[Scope]struct{})
+	seen[s] = struct{}{}
 	queue := []Scope{s}
 	for len(queue) > 0 {
 		granted := queue[0]
