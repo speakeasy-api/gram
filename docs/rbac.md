@@ -1289,10 +1289,10 @@ When adding a new scope:
 1. Confirm a customer needs to assign it independently.
 2. Add the scope constant in `authz/scopes.go`.
 3. Add one catalogue entry in `authz/catalog.go`: label, category, resource kind, description, sensitivity, visibility, grant surface, satisfying scopes, exception scope and built-in role defaults.
-5. Update the access API scope metadata and Goa enums.
-6. Regenerate server and SDK code.
-7. Update the dashboard scope type mirror.
-8. Update tests that assert the full scope list.
+4. Update the access API scope metadata and Goa enums.
+5. Regenerate server and SDK code.
+6. Update the dashboard scope type mirror.
+7. Update tests that assert the full scope list.
 
 When adding a new selector dimension:
 
