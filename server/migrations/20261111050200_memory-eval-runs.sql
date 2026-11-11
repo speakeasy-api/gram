@@ -15,7 +15,7 @@ CREATE TABLE "memory_eval_runs" (
   "deleted_at" timestamptz NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
-  CONSTRAINT "memory_eval_runs_cost_usd_check" CHECK ((cost_usd IS NULL) OR (cost_usd >= (0)::numeric))
+  CONSTRAINT "memory_eval_runs_cost_usd_check" CHECK ((cost_usd IS NULL) OR ((cost_usd >= (0)::numeric) AND (cost_usd <> 'NaN'::numeric)))
 );
 -- Create index "memory_eval_runs_created_at_idx" to table: "memory_eval_runs"
 CREATE INDEX "memory_eval_runs_created_at_idx" ON "memory_eval_runs" ("created_at" DESC, "id" DESC) WHERE (deleted IS FALSE);
