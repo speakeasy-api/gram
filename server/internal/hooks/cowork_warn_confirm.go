@@ -12,10 +12,12 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -76,8 +78,15 @@ func (s *Service) confirmWarnByResend(ctx context.Context, ev hookevents.Event, 
 		CallFingerprint: pgtype.Text{String: scanResult.CallFingerprint, Valid: true},
 		WindowSeconds:   coworkResendWindow.Seconds(),
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// No pending challenge: the common first-send case.
+		return false
+	}
 	if err != nil {
-		// No pending challenge (pgx.ErrNoRows) is the common first-send case.
+		s.logger.WarnContext(ctx, "confirm warn by resend failed; challenging again",
+			attr.SlogError(err),
+			attr.SlogRiskPolicyID(policyID.String()),
+		)
 		return false
 	}
 

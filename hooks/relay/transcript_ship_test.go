@@ -780,11 +780,11 @@ func TestCoworkUploadNamesTheClaudeAccount(t *testing.T) {
 func TestCoworkSurfacesServerWarnings(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
-	ts.setBody(func(n int) []byte {
-		if n > 1 {
-			return []byte(`{"stored":1}`)
-		}
-		return []byte(`{"stored":2,"warnings":[{"policy_id":"p-1","policy_name":"PII policy","message":"EXAMPLE-MATCH looks like sensitive information."}]}`)
+	// The server warns on every upload, and twice for one policy, to show the
+	// relay dedupes and never continues a continuation.
+	ts.setBody(func(int) []byte {
+		w := `{"policy_id":"p-1","policy_name":"PII policy","message":"EXAMPLE-MATCH looks like sensitive information."}`
+		return []byte(`{"stored":2,"warnings":[` + w + `,` + w + `]}`)
 	})
 	cfg := coworkConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
@@ -802,9 +802,14 @@ func TestCoworkSurfacesServerWarnings(t *testing.T) {
 	require.Contains(t, out.Reason, `Speakeasy policy "PII policy": EXAMPLE-MATCH looks like sensitive information.`)
 	require.Equal(t, `Speakeasy policy "PII policy": EXAMPLE-MATCH looks like sensitive information.`, out.SystemMessage)
 
-	// Claude's reply lands; the next Stop ships it and, with no warning, finishes.
-	appendTranscript(t, transcript, transcriptLater)
-	res = invokeClaude(t, cfg, claudeStop(transcript))
+	require.Contains(t, out.Reason, "<speakeasy-warning>", "the quoted warning is fenced as data")
+
+	// Claude's reply lands; the continuation Stop ships it and finishes even
+	// though the server still answers with a warning.
+	appendTranscript(t, transcript, `{"type":"assistant","uuid":"a-2","message":{"id":"msg_2","role":"assistant","content":[{"type":"text","text":"Your message matched the policy."}]}}`+"\n")
+	continued := claudeStop(transcript)
+	continued["stop_hook_active"] = true
+	res = invokeClaude(t, cfg, continued)
 	require.Equal(t, 0, res.ExitCode, res.Stderr)
 	require.NotContains(t, string(res.Stdout), `"decision":"block"`)
 	require.Equal(t, int32(2), ts.requests.Load())

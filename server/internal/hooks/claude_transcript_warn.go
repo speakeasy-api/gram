@@ -70,7 +70,9 @@ func (s *Service) claudeTranscriptWarnings(ctx context.Context, authCtx *context
 
 	ctx, span := s.tracer.Start(ctx, "hooks.claudeTranscriptWarnings")
 	defer span.End()
-	ctx, cancel := context.WithTimeout(ctx, claudeTranscriptWarnTimeout)
+	// The rows are already stored, so a retry of this upload stores nothing
+	// and would never warn. Finish the scan even if the binary hangs up.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), claudeTranscriptWarnTimeout)
 	defer cancel()
 
 	var warnings []claudeTranscriptWarning

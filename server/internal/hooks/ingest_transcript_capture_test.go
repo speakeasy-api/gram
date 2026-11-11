@@ -146,3 +146,30 @@ func TestIngest_EventWithoutTranscriptCaptureStoresRow(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
 }
+
+// A Cowork hook event stores no row when the org has session capture off,
+// the same as the transcript and the plain per-event paths.
+func TestIngest_CoworkEventRowRespectsSessionCapture(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ti.service.productFeatures = staticFeatures{failOpen: false}
+
+	sessionID := uuid.NewString()
+	captured := true
+	promptID := "prompt-1"
+	prompt := "list the files"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Session.TranscriptCapture = &captured
+	payload.Session.TurnID = &promptID
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	_, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
+	require.NoError(t, err)
+
+	messages, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Empty(t, messages)
+}

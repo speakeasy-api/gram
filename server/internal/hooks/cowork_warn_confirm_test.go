@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // dbChallengeScanner warns on every prompt and keeps challenges and
@@ -97,9 +99,10 @@ func TestIngest_CoworkPromptWarnConfirmedByResend(t *testing.T) {
 
 	sessionID := uuid.NewString()
 	captured := true
-	send := func(text string) *gen.IngestHookResult {
+	sendKeyed := func(text, idempotencyKey string) *gen.IngestHookResult {
 		t.Helper()
 		payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+		payload.IdempotencyKey = &idempotencyKey
 		payload.Session.TranscriptCapture = &captured
 		promptID := uuid.NewString()
 		payload.Session.TurnID = &promptID
@@ -108,6 +111,17 @@ func TestIngest_CoworkPromptWarnConfirmedByResend(t *testing.T) {
 		require.NoError(t, err)
 		return res
 	}
+	send := func(text string) *gen.IngestHookResult {
+		t.Helper()
+		return sendKeyed(text, uuid.NewString())
+	}
+
+	// A transport retry reuses the challenged send's idempotency key. It gets
+	// the same challenge and does not count as the person sending again.
+	retried := "Payroll check: Mira Okonkwo 305-64-7182"
+	key := uuid.NewString()
+	require.Equal(t, "deny", sendKeyed(retried, key).Decision)
+	require.Equal(t, "deny", sendKeyed(retried, key).Decision, "a retried delivery does not confirm")
 
 	prompt := "Sort these employees: Avery Lindqvist 618-27-4093"
 	first := send(prompt)
@@ -122,7 +136,17 @@ func TestIngest_CoworkPromptWarnConfirmedByResend(t *testing.T) {
 	require.Equal(t, "allow", send(prompt).Decision, "the confirmation holds for an immediate retry")
 	require.Equal(t, "deny", send(prompt+" and 472-81-3365").Decision, "a different prompt is challenged on its own")
 
+	// A resend after the window is a fresh first send, so it is challenged.
+	late := "Sort these too: Noah Castellanos 472-81-3365"
+	require.Equal(t, "deny", send(late).Decision)
+	require.NoError(t, testrepo.New(ti.conn).BackdateRiskPolicyChallenges(ctx, testrepo.BackdateRiskPolicyChallengesParams{
+		Seconds:   (coworkResendWindow + time.Minute).Seconds(),
+		ProjectID: *authCtx.ProjectID,
+	}))
+	require.Equal(t, "deny", send(late).Decision, "a resend after the window does not confirm")
+	require.Equal(t, "allow", send(late).Decision, "the challenge it raised confirms the next resend")
+
 	audited, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyChallengeAcknowledge)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, audited, "the confirmation is audited once")
+	require.EqualValues(t, 2, audited, "each confirmation is audited once")
 }

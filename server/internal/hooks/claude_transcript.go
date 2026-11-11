@@ -280,9 +280,15 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 
 	hookSource := conv.Default(s.claudeSessionSurface(ctx, &metadata), agentVariantCowork)
 	chatID := sessionIDToUUID(upload.SessionID)
+	// The lookup only decides which prompts to warn about, so a failure
+	// warns about every prompt in the upload rather than losing the upload.
 	held, err := s.heldClaudePromptKeys(ctx, chatID, projectID, rows)
 	if err != nil {
-		return none, err
+		s.logger.WarnContext(ctx, "could not list stored claude prompt keys; scanning every uploaded prompt",
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(upload.SessionID),
+		)
+		held = map[string]bool{}
 	}
 	stored, err := s.writeClaudeRows(ctx, authCtx, &metadata, chatID, rows, hookSource, claudeTranscriptOrigin, claudeTranscriptTitle(rows, hookSource))
 	if err != nil {

@@ -718,7 +718,10 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 					return "", ""
 				}
 				if coworkResendConfirms(payload) {
-					if s.confirmWarnByResend(ctx, ev.Event, scanResult) {
+					// A transport retry of the challenged send reuses its
+					// idempotency key. It must get the same challenge, never
+					// count as the person sending the prompt again.
+					if !s.isHookDuplicate(ctx) && s.confirmWarnByResend(ctx, ev.Event, scanResult) {
 						return "", ""
 					}
 					s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, "", scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
@@ -1186,6 +1189,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// prompt and tool call once. See claude_cowork_rows.go.
 	if transcriptCaptured(payload) {
 		s.persistCoworkEventRow(ctx, payload, authCtx, &metadata, hookSource, timestamp)
+		s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, timestamp)
 		return
 	}
 	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
@@ -1207,7 +1211,13 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	} else if promptCaptured && usesNativeTranscriptFallback(payload.Source.Adapter) {
 		s.markNativePromptSession(ctx, authCtx.ProjectID.String(), canonicalSessionID(payload), payload.Source.Adapter)
 	}
-	if err := s.persistPromptAttachments(ctx, payload, authCtx, &metadata, timestamp); err != nil {
+	s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, timestamp)
+}
+
+// persistPromptAttachmentsLogged stores the event's prompt attachments and
+// logs, rather than returns, a failure: attachment capture is best effort.
+func (s *Service) persistPromptAttachmentsLogged(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time) {
+	if err := s.persistPromptAttachments(ctx, payload, authCtx, metadata, timestamp); err != nil {
 		event := "hooks_ingest_prompt_attachment_persist_failed"
 		msg := "failed to persist prompt attachments"
 		if errors.Is(err, errChatProjectMismatch) {
@@ -2648,6 +2658,17 @@ func (s *Service) persistCoworkEventRow(ctx context.Context, payload *gen.Ingest
 	}
 	row, ok := coworkEventRow(payload, occurredAt)
 	if !ok {
+		return
+	}
+	enabled, err := s.sessionCaptureEnabled(ctx, metadata, *authCtx.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not resolve session capture for a cowork hook event, skipping its row",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+		)
+		return
+	}
+	if !enabled {
 		return
 	}
 	title := canonicalPlaceholderTitle(hookSource)

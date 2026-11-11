@@ -516,10 +516,13 @@ func cursorMCPEcho(base *agenthooks.Event, toolName string) bool {
 
 func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks.StopDecision, error) {
 	if coworkTranscriptMode(&e.Event) {
-		if warnings := r.shipTranscript(ctx, e); len(warnings) > 0 {
-			return coworkWarnDecision(warnings), nil
+		warnings := r.shipTranscript(ctx, e)
+		// A Stop that follows a warning continuation ships the reply but never
+		// continues again, so a replayed upload cannot loop Claude.
+		if len(warnings) == 0 || e.PreviouslyContinued {
+			return agenthooks.Finish(), nil
 		}
-		return agenthooks.Finish(), nil
+		return coworkWarnDecision(warnings), nil
 	}
 	r.deliver(ctx, e)
 	return agenthooks.Finish(), nil
