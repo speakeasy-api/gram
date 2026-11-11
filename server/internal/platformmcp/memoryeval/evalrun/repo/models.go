@@ -30,8 +30,8 @@ type MemoryEvalRun struct {
 	// Model spend the run reported across preparation, answers and grading.
 	// @access: confidential
 	CostUsd pgtype.Numeric
-	// User ID of the Speakeasy staff member who started the run.
-	// @access: confidential
+	// Email of the Speakeasy staff member who started the run.
+	// @access: confidential-pii
 	RequestedBy string
 	// @access: confidential
 	StartedAt pgtype.Timestamptz
