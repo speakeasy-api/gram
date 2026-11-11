@@ -10,9 +10,11 @@ import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { fetchRegisteredAgents } from "@/pages/identities/identityRoster";
 import { useRoutes } from "@/routes";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
+
+const AGENT_INVENTORY_STALE_TIME_MS = 30_000;
 
 /**
  * Registered agents, opening the same canonical identity pages as the identity
@@ -73,20 +75,26 @@ export function useAgentIdentityCandidates({
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: queryEnabled,
+    // Reopening the palette used to mark every loaded cursor page stale and
+    // refetch the full inventory immediately. Keep a short freshness window so
+    // quick close/reopen cycles reuse the complete inventory already fetched.
+    staleTime: AGENT_INVENTORY_STALE_TIME_MS,
     throwOnError: false,
     retry: false,
   });
 
   // The inventory is cursor-paginated; loading just its first page would make
-  // older or later-named agents disappear from global name search.
+  // older or later-named agents disappear from global name search. A failed
+  // page gets one retry on the next palette open without looping while open.
+  const opens = useRef(0);
+  const lastFetchOpen = useRef(0);
   useEffect(() => {
-    if (
-      !queryEnabled ||
-      !hasNextPage ||
-      isFetchingNextPage ||
-      isFetchNextPageError
-    )
-      return;
+    if (queryEnabled) opens.current += 1;
+  }, [queryEnabled]);
+  useEffect(() => {
+    if (!queryEnabled || !hasNextPage || isFetchingNextPage) return;
+    if (isFetchNextPageError && lastFetchOpen.current === opens.current) return;
+    lastFetchOpen.current = opens.current;
     void fetchNextPage().catch(() => undefined);
   }, [
     queryEnabled,
