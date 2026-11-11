@@ -7,32 +7,37 @@
 SELECT DISTINCT ON (COALESCE(s.credential_id, s.id))
        COALESCE(s.credential_id, s.id)::uuid AS credential_id,
        s.user_session_issuer_id,
-       COALESCE(usi.organization_id, p.organization_id, '')::text AS organization_id
+       COALESCE(CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END, '')::text AS organization_id
 FROM user_sessions AS s
 JOIN user_session_issuers AS usi
   ON usi.id = s.user_session_issuer_id
 LEFT JOIN projects AS p
   ON p.id = usi.project_id
-WHERE s.deleted IS FALSE
+WHERE usi.deleted IS FALSE
+  AND (usi.project_id IS NULL OR p.deleted IS FALSE)
+  AND (s.organization_id IS NULL OR s.organization_id = CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END)
+  AND s.deleted IS FALSE
   AND s.refresh_expires_at > clock_timestamp()
+  AND (sqlc.narg('issuer_id')::uuid IS NULL OR s.user_session_issuer_id = sqlc.narg('issuer_id')::uuid)
   AND COALESCE(s.credential_id, s.id) > @cursor::uuid
-  AND (@organization_id::text = '' OR COALESCE(usi.organization_id, p.organization_id) = @organization_id::text)
+  AND (@organization_id::text = '' OR CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END = @organization_id::text)
 ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
 LIMIT @page_size::int;
 
 -- name: ListUpstreamClientSelectionCoverage :many
 -- Every server one credential can reach, with its recorded choice and the
--- evidence RecordUpstreamClientSelections decides from. The reach and the
+-- evidence RecordUpstreamClientSelectionsForCredentials decides from. The reach and the
 -- evidence must stay identical to that statement's, so a prediction made here
 -- is what the write records.
 WITH session_issuer AS (
     SELECT usi.id,
            usi.project_id,
-           COALESCE(usi.organization_id, p.organization_id) AS organization_id
+           CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END AS organization_id
     FROM user_session_issuers AS usi
     LEFT JOIN projects AS p ON p.id = usi.project_id
     WHERE usi.id = @user_session_issuer_id
       AND usi.deleted IS FALSE
+      AND (usi.project_id IS NULL OR p.deleted IS FALSE)
 ),
 reachable AS (
     SELECT s.id, s.project_id
@@ -271,3 +276,6 @@ JOIN remote_mcp_server_headers AS h
   ON h.remote_mcp_server_id = s.remote_mcp_server_id
  AND h.deleted IS FALSE
 WHERE s.id = @mcp_server_id;
+
+-- name: SoftDeleteUserSessionIssuerFixture :exec
+UPDATE user_session_issuers SET deleted_at = clock_timestamp() WHERE id = @id;

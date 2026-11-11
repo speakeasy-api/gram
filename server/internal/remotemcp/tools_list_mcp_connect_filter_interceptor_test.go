@@ -385,6 +385,9 @@ func TestToolsListMCPConnectFilterInterceptor_Inspection(t *testing.T) {
 		"resource_id":   testServerID,
 		"tool":          "search_tickets",
 	})
+	// mcp:read does not imply mcp:connect, so read holders that list tools
+	// also hold the matching connect grant the explicit-connect backfill adds.
+	connectOnServer := authz.NewGrantWithSelector(authz.ScopeMCPConnect, onServer)
 	blockDelete := authz.NewGrantWithSelector(authz.ScopeMCPBlockedConnect, authz.Selector{
 		"resource_kind": "mcp",
 		"resource_id":   testServerID,
@@ -399,7 +402,7 @@ func TestToolsListMCPConnectFilterInterceptor_Inspection(t *testing.T) {
 	}{
 		{
 			name:       "mcp:read keeps and marks the tools it would drop",
-			grants:     []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPRead, onServer), blockDelete},
+			grants:     []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPRead, onServer), connectOnServer, blockDelete},
 			inspect:    true,
 			wantMarked: true,
 		},
@@ -422,7 +425,7 @@ func TestToolsListMCPConnectFilterInterceptor_Inspection(t *testing.T) {
 		},
 		{
 			name:       "an ordinary client with mcp:read still gets the filtered list",
-			grants:     []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPRead, onServer), blockDelete},
+			grants:     []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPRead, onServer), connectOnServer, blockDelete},
 			inspect:    false,
 			wantMarked: false,
 		},
