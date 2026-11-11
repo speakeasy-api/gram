@@ -143,7 +143,6 @@ export function useGatewayConnectionCandidates({
           detail: `Registration · ${gateway.name}`,
           keywords: ["client", "registration", client.id, client.clientId],
           // A client-supplied display name may contain a person's identity.
-          fuzzyOnly: true,
           verbs: ["open"],
           icon: "key",
           group: "Client Registrations",

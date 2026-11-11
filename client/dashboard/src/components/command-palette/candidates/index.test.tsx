@@ -313,7 +313,6 @@ vi.mock("./useManagedDeviceCandidates", () => ({
             detail: "Device",
             keywords: [],
             verbs: ["open"],
-            fuzzyOnly: true,
             group: "Devices",
             run: () => {},
           },
@@ -336,7 +335,7 @@ import { useSkillCandidates } from "./useSkillCandidates";
 import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import { useManagedDeviceCandidates } from "./useManagedDeviceCandidates";
 import { usePlatformSetupCandidates } from "./usePlatformSetupCandidates";
-import { isSendable, type LauncherCandidate } from "./types";
+import type { LauncherCandidate } from "./types";
 
 const REMOTE = { remoteMcpServerId: "remote-1" };
 
@@ -1386,7 +1385,7 @@ describe("useActionCandidates", () => {
 });
 
 describe("useRecentCandidates", () => {
-  it("never sends persisted Channels conversation labels to the intent service", () => {
+  it("keeps persisted Channels conversations as local search candidates", () => {
     mocks.recents = [
       {
         label: "Private agent session",
@@ -1396,8 +1395,7 @@ describe("useRecentCandidates", () => {
     ];
     const { result } = renderCandidates();
     const recent = byKind(result.current, "recent")[0];
-    expect(recent?.fuzzyOnly).toBe(true);
-    expect(isSendable(recent!)).toBe(false);
+    expect(recent?.title).toBe("Private agent session");
     expect(recent?.verbs).toEqual(["open"]);
   });
 
@@ -1449,13 +1447,9 @@ describe("useRecentCandidates", () => {
     expect(mocks.navigate).toHaveBeenCalledWith(
       "/acme/projects/default/mcp/slack",
     );
-    expect(recent?.fuzzyOnly).toBeUndefined();
   });
 
-  // Identity pages register the person's display name (or their email) as the
-  // recent's label. That label must rank by fuzzy alone, like People, so it
-  // never reaches the intent service.
-  it("marks identity-page recents fuzzy-only so names never leave the tenant", () => {
+  it("uses the person's display name for an identity-page recent", () => {
     mocks.recents = [
       {
         label: "ada@example.test",
@@ -1471,11 +1465,9 @@ describe("useRecentCandidates", () => {
       },
     ];
     const { result } = renderCandidates();
-    const [person, index] = byKind(result.current, "recent");
+    const [person] = byKind(result.current, "recent");
 
     expect(person?.title).toBe("ada@example.test");
-    expect(person?.fuzzyOnly).toBe(true);
-    expect(index?.fuzzyOnly).toBeUndefined();
   });
 });
 
