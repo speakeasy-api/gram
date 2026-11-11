@@ -1,3 +1,4 @@
+// TEMP: cache-busting comment for CI timing comparison.
 package testenv
 
 import (
