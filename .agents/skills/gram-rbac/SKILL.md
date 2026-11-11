@@ -102,7 +102,7 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 | `server/internal/authz/provisioner.go` | New-organization provisioning for built-in role grants and the initial Admin assignment.                                                                  |
 | `server/internal/authz/scopes.go`      | Scope type, constants and `Parts`.                                                                                                                        |
 | `server/internal/authz/catalog.go`     | Scope catalogue: one entry per grantable scope (rules, role defaults) and the `Scope` methods that read it.                                               |
-| `server/internal/authz/selector.go`    | `Selector` type, matching rules, `NewSelector`/`NewGrant` helpers, `ValidateSelector`, the prefix fallback behind `Scope.ResourceKind`, disposition vocabulary, `SelectorFromRow`. |
+| `server/internal/authz/selector.go`    | `Selector` type, matching rules, `NewSelector`/`NewGrant`, `ValidateSelector`, resource-kind prefix fallback, dispositions, `SelectorFromRow`.            |
 | `server/internal/authztest/helpers.go` | Test helpers other packages reuse for RBAC setup, including `WithExactGrants`.                                                                            |
 | `server/internal/access/impl.go`       | Implementation of the `/rpc/access.*` Goa service.                                                                                                        |
 | `server/internal/access/queries.sql`   | SQLc queries for principals, grants, roles, and members. Regenerates `server/internal/access/repo/` via `mise run gen:sqlc-server`.                       |
