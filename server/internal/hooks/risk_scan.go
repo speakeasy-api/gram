@@ -196,7 +196,10 @@ func renderUserBlockReason(scanResult *risk.ScanResult, auditReason string) stri
 	if scanResult.AnalysisUnavailable() {
 		return analysisUnavailableReason(scanResult)
 	}
-	return renderPolicyUserMessage(scanResult.UserMessage, auditReason)
+	if scanResult.UserMessage != nil && strings.TrimSpace(*scanResult.UserMessage) != "" {
+		return renderPolicyPlaceholders(*scanResult.UserMessage, scanResult)
+	}
+	return auditReason
 }
 
 // renderPolicyUserMessage applies a policy's user_message override to a deny
@@ -306,13 +309,7 @@ func renderWarnBody(scanResult *risk.ScanResult) string {
 	}
 
 	if scanResult.UserMessage != nil && strings.TrimSpace(*scanResult.UserMessage) != "" {
-		r := strings.NewReplacer(
-			"%{match}", match,
-			"%{entity}", entity,
-			"%{policy}", scanResult.PolicyName,
-			"%{rule}", scanResult.RuleID,
-		)
-		return r.Replace(*scanResult.UserMessage)
+		return renderPolicyPlaceholders(*scanResult.UserMessage, scanResult)
 	}
 	if match != "" {
 		return fmt.Sprintf("Your request matched policy %q: potentially harmful or sensitive content %q identified as %s. Do you wish to continue?",
@@ -320,6 +317,22 @@ func renderWarnBody(scanResult *risk.ScanResult) string {
 	}
 	return fmt.Sprintf("Your request matched policy %q: potentially harmful or sensitive content identified as %s. Do you wish to continue?",
 		scanResult.PolicyName, entity)
+}
+
+// renderPolicyPlaceholders fills a policy's custom message template:
+// %{match} (the matched value, truncated), %{entity}, %{policy} and %{rule}.
+// Warn, block and quarantine messages all accept the same placeholders.
+func renderPolicyPlaceholders(message string, scanResult *risk.ScanResult) string {
+	entity := scanResult.Entity
+	if entity == "" {
+		entity = scanResult.RuleID
+	}
+	return strings.NewReplacer(
+		"%{match}", truncateForWarn(scanResult.MatchedValue),
+		"%{entity}", entity,
+		"%{policy}", scanResult.PolicyName,
+		"%{rule}", scanResult.RuleID,
+	).Replace(message)
 }
 
 // renderWarnAgentReason is the model-facing framing of a warn challenge. It
