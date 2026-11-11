@@ -19,7 +19,9 @@ func (s *Service) SetExternalCredentialService(service *externalcredentials.Serv
 
 // requirePlatformCredentials rejects requests that reach a platform credential
 // handler without the verified staff identity the admin transport installs, or
-// on a server with no external credential service configured.
+// on a server with no external credential service configured. The handlers
+// behind it additionally require the staff email to belong to a live platform
+// administrator (users.admin); admin app access alone is not enough.
 func (s *Service) requirePlatformCredentials(ctx context.Context) error {
 	a, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {

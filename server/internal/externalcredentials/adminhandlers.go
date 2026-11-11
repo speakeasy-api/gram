@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // The adminExternalCredentials handlers curate platform external_credentials
@@ -52,23 +53,38 @@ func logPlatformExemptionGranted(ctx context.Context, logger *slog.Logger, actor
 	)
 }
 
-// authorizePlatformRead admits a staff identity verified by the standalone
-// admin transport, or a dashboard session carrying the platform-admin flag.
-// It returns the actor's email for audit lines.
+// authorizePlatformRead admits a platform administrator (users.admin) through
+// either transport: a staff identity verified by the standalone admin
+// transport whose email belongs to a live platform administrator, or a
+// dashboard session carrying the platform-admin flag. Staff access to the
+// admin app alone is not enough, since these credentials are the identity
+// Speakeasy signs and encrypts with for every organization. It returns the
+// actor's email for audit lines.
 func (s *Service) authorizePlatformRead(ctx context.Context) (string, *slog.Logger, error) {
 	email, logger, err := auth.RequireGlobalAdmin(ctx, s.logger)
 	if err != nil {
 		return "", logger, fmt.Errorf("authorize platform credential request: %w", err)
+	}
+	if _, ok := contextvalues.GetAdminAuthContext(ctx); !ok {
+		return email, logger, nil
+	}
+
+	isAdmin, err := usersrepo.New(s.db).IsPlatformAdminEmail(ctx, email)
+	if err != nil {
+		return "", logger, oops.E(oops.CodeUnavailable, err, "service is temporarily unavailable").LogError(ctx, logger)
+	}
+	if !isAdmin {
+		return "", logger, oops.E(oops.CodeForbidden, nil, "platform admin required").LogWarn(ctx, logger)
 	}
 	return email, logger, nil
 }
 
 // authorizePlatformWrite gates mutations of the platform credentials Speakeasy
 // signs with. The standalone admin transport verifies its staff identity
-// against the identity provider on every request, so it is accepted as is. A
-// dashboard caller needs a fresh platform-admin session: the users.admin flag
-// alone can ride along on support sessions, legacy impersonation and stale
-// session state.
+// against the identity provider on every request, and authorizePlatformRead
+// re-reads users.admin for it, so that is enough. A dashboard caller needs a
+// fresh platform-admin session: the users.admin flag alone can ride along on
+// support sessions, legacy impersonation and stale session state.
 func (s *Service) authorizePlatformWrite(ctx context.Context) (string, *slog.Logger, error) {
 	if _, ok := contextvalues.GetAdminAuthContext(ctx); ok {
 		return s.authorizePlatformRead(ctx)

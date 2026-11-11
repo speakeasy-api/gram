@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
@@ -12,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 )
 
@@ -33,6 +35,11 @@ func TestPlatformCredentials_RoundTripThroughAdminHandlers(t *testing.T) {
 	_, svc, db := newTestAdminService(t)
 	svc.SetExternalCredentialService(externalcredentials.NewPlatformService(testenv.NewLogger(t), testenv.NewTracerProvider(t), db, gcpauth.NewIdentity(gcpauth.NewStubResolver())))
 	ctx := withPlatformCredentialStaff(t.Context())
+
+	staffID := "user_" + uuid.NewString()
+	fixtures := testrepo.New(db)
+	require.NoError(t, fixtures.InsertUserFixture(t.Context(), testrepo.InsertUserFixtureParams{ID: staffID, Email: "operator@example.com", DisplayName: "Test Operator"}))
+	require.NoError(t, fixtures.SetUserPlatformAdminFixture(t.Context(), testrepo.SetUserPlatformAdminFixtureParams{Admin: true, ID: staffID}))
 
 	// The stub resolver's own project, where platform credentials are expected.
 	_, domain, _ := strings.Cut(gcpauth.StubResolverPrincipal, "@")
