@@ -11,7 +11,9 @@ import (
 	"net/url"
 	"os/exec"
 	"strings"
+	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -69,6 +71,11 @@ type LocalFixturesOptions struct {
 	ObservedEnv map[string]string
 	// Slack connects the org to the developer's Slack test app, when set.
 	Slack LocalSlackOptions
+	// ClickHouse receives the local-only servers' telemetry; nil skips it.
+	ClickHouse driver.Conn
+	// MockMCPURL is the local mock MCP server (server/cmd/mock-mcp) to
+	// register as a working remote MCP server; empty leaves it out.
+	MockMCPURL string
 }
 
 // RunLocalFixtures adds everything the local development organization needs on
@@ -85,7 +92,8 @@ type LocalFixturesOptions struct {
 //     hardcode them;
 //   - the global MCP registry row, which is not tenant-scoped and so cannot
 //     live in the seed proper;
-//   - a global catalog logo entry and public platform asset when SiteURL is set.
+//   - a global catalog logo entry and public platform asset when SiteURL is set;
+//   - the Inspect tab's local-only remote servers (runLocalInspectFixtures).
 //
 // Writes are idempotent. Tenant writes are scoped to LocalSpec's org; the
 // registry entries, platform assets, and system roles are global.
@@ -235,8 +243,19 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		}
 	}
 
+	inspect, err := runLocalInspectFixtures(ctx, logger, q, time.Now(), opts.MockMCPURL)
+	if err != nil {
+		return fmt.Errorf("local fixture %q: %w", "inspect tab servers", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit local fixtures: %w", err)
+	}
+
+	if opts.ClickHouse != nil && opts.MockMCPURL != "" {
+		if err := insertLocalInspectTelemetry(ctx, inspect, opts.ClickHouse); err != nil {
+			return fmt.Errorf("local fixture %q: %w", "inspect tab telemetry", err)
+		}
 	}
 
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)

@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { useState } from "react";
 import type { GatewayInspection } from "./useGatewayInspection";
 import { afterEach, expect, it, vi } from "vitest";
@@ -7,6 +13,18 @@ import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { GatewayInspectTab } from "./GatewayInspectTab";
+
+type MintInput = {
+  target: { discoveryMode?: string; connectionVersion?: string };
+};
+
+/** The main session's latest mint, skipping the Code Mode catalog session. */
+function lastMainMint(): MintInput | undefined {
+  return (state.mint.mock.calls as [MintInput][])
+    .map(([input]) => input)
+    .filter((input) => !input.target.connectionVersion?.endsWith(":catalog"))
+    .at(-1);
+}
 
 vi.mock("@/lib/utils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/utils")>()),
@@ -42,6 +60,16 @@ vi.mock("./GatewayCodeExecution", () => ({
       />
     );
   },
+}));
+vi.mock("../inspect/useToolHealth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../inspect/useToolHealth")>()),
+  useToolHealth: () => ({ healthFor: () => undefined, isLoading: false }),
+}));
+vi.mock("./useGatewayMemberTools", () => ({
+  useGatewayMemberTools: () => [],
+}));
+vi.mock("@/pages/playground/PlaygroundChat", () => ({
+  PlaygroundChat: () => <div data-testid="playground-chat" />,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-test" }),
@@ -107,7 +135,7 @@ vi.mock("@/components/page-layout", () => {
   };
 });
 function Location() {
-  return <output aria-label="location">{useLocation().search}</output>;
+  return <span aria-label="location">{useLocation().search}</span>;
 }
 afterEach(() => {
   cleanup();
@@ -135,39 +163,42 @@ it("applies discovery choices to the URL and the minted connection", async () =>
     </TooltipProvider>,
   );
   fireEvent.click(
-    screen.getByRole("combobox", { name: "Inspect discovery mode" }),
+    screen.getByRole("button", { name: "Preview a mode: Progressive" }),
   );
-  fireEvent.click(await screen.findByRole("option", { name: "Direct" }));
-  fireEvent.click(screen.getByRole("button", { name: "Apply and reconnect" }));
-  expect(state.mint).toHaveBeenLastCalledWith(
+  fireEvent.click(await screen.findByRole("button", { name: /^Direct/ }));
+  expect(lastMainMint()).toEqual(
     expect.objectContaining({
       target: expect.objectContaining({ discoveryMode: "direct" }),
     }),
   );
-  expect(screen.getByLabelText("location").textContent).toBe(
-    "?keep=value&discovery_mode=direct",
+  await waitFor(() =>
+    expect(screen.getByLabelText("location").textContent).toBe(
+      "?keep=value&discovery_mode=direct",
+    ),
   );
   fireEvent.click(
-    screen.getByRole("combobox", { name: "Inspect discovery mode" }),
+    screen.getByRole("button", { name: "Preview a mode: Direct" }),
   );
   fireEvent.click(
-    await screen.findByRole("option", { name: /^Use gateway default/ }),
+    await screen.findByRole("button", { name: /gateway default/ }),
   );
-  fireEvent.click(screen.getByRole("button", { name: "Apply and reconnect" }));
-  expect(state.mint).toHaveBeenLastCalledWith(
+  expect(lastMainMint()).toEqual(
     expect.objectContaining({
       target: expect.objectContaining({ discoveryMode: undefined }),
     }),
   );
-  expect(screen.getByLabelText("location").textContent).toBe("?keep=value");
+  await waitFor(() =>
+    expect(screen.getByLabelText("location").textContent).toBe("?keep=value"),
+  );
 });
 
 it.each([
   ["direct", "Direct"],
   ["progressive", "Progressive"],
-  ["future_mode", "Unknown"],
-  ["constructor", "Unknown"],
-  ["__proto__", "Unknown"],
+  ["code_mode", "Code Mode"],
+  ["future_mode", "Progressive"],
+  ["constructor", "Progressive"],
+  ["__proto__", "Progressive"],
 ])(
   "labels gateway default %s as %s without choosing an override",
   (mode, label) => {
@@ -190,10 +221,10 @@ it.each([
       </TooltipProvider>,
     );
     expect(
-      screen.getByRole("combobox", { name: "Inspect discovery mode" })
+      screen.getByRole("button", { name: `Preview a mode: ${label}` })
         .textContent,
-    ).toBe(`Use gateway default (${label})`);
-    expect(state.mint).toHaveBeenLastCalledWith(
+    ).toBe(label);
+    expect(lastMainMint()).toEqual(
       expect.objectContaining({
         target: expect.objectContaining({ discoveryMode: undefined }),
       }),
@@ -266,6 +297,8 @@ it("explains Progressive fallback when the saved Code runtime is unavailable", (
     </TooltipProvider>,
   );
   expect(
-    screen.getByText(/this connection uses Progressive discovery/i),
+    screen.getByText(
+      /Code Mode isn't available for this gateway, so this connection uses Progressive/i,
+    ),
   ).toBeTruthy();
 });

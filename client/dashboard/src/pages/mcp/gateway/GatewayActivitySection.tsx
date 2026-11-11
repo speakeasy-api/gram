@@ -1,6 +1,9 @@
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  ObservabilityDisabledState,
+  ObservabilitySummaryTiles,
+} from "@/components/observe/ObservabilitySummaryTiles";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
@@ -8,7 +11,7 @@ import { encodeGatewayServerFilter } from "@/components/observe/observeTargetFil
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { useRoutes } from "@/routes";
-import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import type { Column } from "@/components/ui/Table";
 import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
@@ -19,7 +22,6 @@ import { telemetryGetOrganizationGatewayOverview } from "@gram/client/funcs/tele
 import { telemetryGetOrganizationGatewayUsage } from "@gram/client/funcs/telemetryGetOrganizationGatewayUsage";
 import type { GetMetaMcpServerUsageResult } from "@gram/client/models/components/getmetamcpserverusageresult.js";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
-import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -35,12 +37,6 @@ import type { MemberRow } from "./memberRows";
 import { MetaToolUsageChart } from "./MetaToolUsageChart";
 
 const noMembers: MemberRow[] = [];
-
-function errorRate(summary: ObservabilitySummary): number {
-  return summary.totalToolCalls > 0
-    ? (summary.failedToolCalls / summary.totalToolCalls) * 100
-    : 0;
-}
 
 const memberColumns = (header: string): Column<MemberUsageRow>[] => [
   {
@@ -286,71 +282,19 @@ export function GatewayActivitySection({
       </Page.Section.CTA>
       <Page.Section.Body>
         {isLogsDisabled ? (
-          <div className="flex flex-col items-center justify-center border p-12 text-center">
-            <Text muted className="mb-1 block">
-              Observability is not enabled
-            </Text>
-            <Text muted small>
-              Enable logs for this organization to see usage for this gateway.
-            </Text>
-          </div>
+          <ObservabilityDisabledState subject="this gateway" />
         ) : (
           <div className="@container flex flex-col gap-6">
             {overviewFailed ? (
               <LoadError what="usage metrics" />
             ) : (
               <>
-                <StatTileGroup>
-                  {overview.isLoading && !summary ? (
-                    Array.from({ length: 4 }).map((_, i) => (
-                      <Skeleton key={i} className="h-[116px] flex-1" />
-                    ))
-                  ) : (
-                    <>
-                      <StatTile
-                        title="Dispatched calls"
-                        value={summary?.totalToolCalls ?? 0}
-                        tone="information"
-                        previousValue={comparison?.totalToolCalls}
-                        format="compact"
-                        comparisonLabel="vs previous period"
-                      />
-                      <StatTile
-                        title="Failed calls"
-                        value={summary?.failedToolCalls ?? 0}
-                        tone={
-                          (summary?.failedToolCalls ?? 0) > 0
-                            ? "destructive"
-                            : "neutral"
-                        }
-                        previousValue={comparison?.failedToolCalls}
-                        format="compact"
-                        invertDelta
-                        comparisonLabel="vs previous period"
-                      />
-                      <StatTile
-                        title="Error rate"
-                        value={summary ? errorRate(summary) : 0}
-                        previousValue={
-                          comparison ? errorRate(comparison) : undefined
-                        }
-                        format="percent"
-                        invertDelta
-                        thresholds={{ red: 10, amber: 5, inverted: true }}
-                        comparisonLabel="vs previous period"
-                      />
-                      <StatTile
-                        title="Avg latency"
-                        value={summary?.avgLatencyMs ?? 0}
-                        tone="information"
-                        previousValue={comparison?.avgLatencyMs}
-                        format="ms"
-                        invertDelta
-                        comparisonLabel="vs previous period"
-                      />
-                    </>
-                  )}
-                </StatTileGroup>
+                <ObservabilitySummaryTiles
+                  summary={summary}
+                  comparison={comparison}
+                  isLoading={overview.isLoading}
+                  callsTitle="Dispatched calls"
+                />
 
                 <ToolCallsTimeSeriesChart
                   title="Dispatched calls over time"

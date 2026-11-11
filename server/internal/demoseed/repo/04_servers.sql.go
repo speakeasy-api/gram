@@ -383,6 +383,52 @@ func (q *Queries) ServersInsertCodeGatewayMembers(ctx context.Context, arg Serve
 	return err
 }
 
+const serversInsertDirectGateway = `-- name: ServersInsertDirectGateway :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                              user_session_issuer_id, discovery_mode) VALUES
+  ($1::uuid, $2::text, $3::uuid, 'Engineering Direct Gateway',
+   $4::uuid, 'direct')
+`
+
+type ServersInsertDirectGatewayParams struct {
+	ID                  uuid.UUID
+	OrgID               string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) ServersInsertDirectGateway(ctx context.Context, arg ServersInsertDirectGatewayParams) error {
+	_, err := q.db.Exec(ctx, serversInsertDirectGateway,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+	)
+	return err
+}
+
+const serversInsertDirectGatewayIssuer = `-- name: ServersInsertDirectGatewayIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode) VALUES
+  ($1::uuid, $2::uuid, $3::text, 'engineering-direct-gateway',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
+`
+
+type ServersInsertDirectGatewayIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+// A third gateway, stored in Direct mode, so the gateway pages show all
+// three discovery modes (Acme Agent Gateway is Progressive, Python Code
+// Gateway Code Mode locally). Its own issuer, like every gateway.
+func (q *Queries) ServersInsertDirectGatewayIssuer(ctx context.Context, arg ServersInsertDirectGatewayIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertDirectGatewayIssuer, arg.ID, arg.ProjectID, arg.OrgID)
+	return err
+}
+
 const serversInsertEMABindings = `-- name: ServersInsertEMABindings :exec
 INSERT INTO remote_session_ema_bindings
   (id, project_id, organization_id, user_session_issuer_id,
@@ -852,6 +898,32 @@ func (q *Queries) ServersInsertGatewayEndpoints(ctx context.Context, arg Servers
 		arg.SlackEndpointID,
 		arg.SlackServerID,
 		arg.SlackSlug,
+	)
+	return err
+}
+
+const serversInsertGatewayMember = `-- name: ServersInsertGatewayMember :exec
+INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                     mcp_server_id, sort_order) VALUES
+  ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::integer)
+ON CONFLICT DO NOTHING
+`
+
+type ServersInsertGatewayMemberParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	MetaID      uuid.UUID
+	McpServerID uuid.UUID
+	SortOrder   int32
+}
+
+func (q *Queries) ServersInsertGatewayMember(ctx context.Context, arg ServersInsertGatewayMemberParams) error {
+	_, err := q.db.Exec(ctx, serversInsertGatewayMember,
+		arg.ID,
+		arg.ProjectID,
+		arg.MetaID,
+		arg.McpServerID,
+		arg.SortOrder,
 	)
 	return err
 }
@@ -2008,6 +2080,50 @@ func (q *Queries) ServersInsertSupportDeskGrants(ctx context.Context, arg Server
 	return err
 }
 
+const serversInsertToolBlock = `-- name: ServersInsertToolBlock :execrows
+INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+SELECT $1::uuid, $2::text, r.principal_urn, 'mcp:blocked_connect',
+       jsonb_build_object('resource_kind', 'mcp',
+         'resource_id', ($3::uuid)::text, 'tool', $4::text)
+FROM (
+  SELECT COALESCE(
+    (SELECT 'role:organization:' || o.id FROM organization_roles o
+     WHERE o.organization_id = $2::text AND o.workos_slug = $5::text),
+    (SELECT 'role:global:' || g.id FROM global_roles g
+     WHERE g.workos_slug = $5::text AND g.deleted_at IS NULL LIMIT 1)) AS principal_urn
+) r
+WHERE r.principal_urn IS NOT NULL
+ON CONFLICT DO NOTHING
+`
+
+type ServersInsertToolBlockParams struct {
+	ID          uuid.UUID
+	OrgID       string
+	McpServerID uuid.UUID
+	Tool        string
+	RoleSlug    string
+}
+
+// A block on one tool of one server for a role: an organization role by
+// slug, or else the global role of that slug (Admin). Tool-scoped exclusions
+// match strictly, so the role still connects to the server and its other
+// tools. Custom role grants are cleared with the roles on every reseed; a
+// global role's block is cleared by id in the org phase. Inserts nothing when
+// no role of that slug exists (global roles may be absent on a fresh stack).
+func (q *Queries) ServersInsertToolBlock(ctx context.Context, arg ServersInsertToolBlockParams) (int64, error) {
+	result, err := q.db.Exec(ctx, serversInsertToolBlock,
+		arg.ID,
+		arg.OrgID,
+		arg.McpServerID,
+		arg.Tool,
+		arg.RoleSlug,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const serversInsertUpstreamClientChoice = `-- name: ServersInsertUpstreamClientChoice :exec
 INSERT INTO upstream_client_selections
   (id, project_id, organization_id, credential_kind, credential_id,
@@ -2368,4 +2484,50 @@ type ServersUpsertLinearProtectedResourceParams struct {
 func (q *Queries) ServersUpsertLinearProtectedResource(ctx context.Context, arg ServersUpsertLinearProtectedResourceParams) error {
 	_, err := q.db.Exec(ctx, serversUpsertLinearProtectedResource, arg.ID, arg.ProjectID, arg.OrgID)
 	return err
+}
+
+const serversUpsertToolMetadata = `-- name: ServersUpsertToolMetadata :execrows
+INSERT INTO mcp_server_tool_metadata
+  (project_id, mcp_server_id, tool_name, title, read_only_hint,
+   destructive_hint, idempotent_hint, open_world_hint)
+SELECT $1::uuid, $2::uuid, unnest($3::text[]),
+       unnest($4::text[]), unnest($5::boolean[]),
+       unnest($6::boolean[]), unnest($7::boolean[]),
+       unnest($8::boolean[])
+ON CONFLICT (mcp_server_id, tool_name) WHERE deleted IS FALSE
+DO UPDATE SET title = EXCLUDED.title, read_only_hint = EXCLUDED.read_only_hint,
+  destructive_hint = EXCLUDED.destructive_hint, idempotent_hint = EXCLUDED.idempotent_hint,
+  open_world_hint = EXCLUDED.open_world_hint, updated_at = clock_timestamp()
+`
+
+type ServersUpsertToolMetadataParams struct {
+	ProjectID        uuid.UUID
+	McpServerID      uuid.UUID
+	ToolNames        []string
+	Titles           []string
+	ReadOnlyHints    []bool
+	DestructiveHints []bool
+	IdempotentHints  []bool
+	OpenWorldHints   []bool
+}
+
+// Inspect tab: the annotations an admin keeps for a remote server's tools.
+// One call per server; the arrays are aligned by position. The upsert keeps
+// a rerun of the local fixtures idempotent; the projects cascade clears the
+// rows on every reseed.
+func (q *Queries) ServersUpsertToolMetadata(ctx context.Context, arg ServersUpsertToolMetadataParams) (int64, error) {
+	result, err := q.db.Exec(ctx, serversUpsertToolMetadata,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.ToolNames,
+		arg.Titles,
+		arg.ReadOnlyHints,
+		arg.DestructiveHints,
+		arg.IdempotentHints,
+		arg.OpenWorldHints,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

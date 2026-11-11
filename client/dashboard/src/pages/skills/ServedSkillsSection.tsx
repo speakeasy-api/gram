@@ -242,7 +242,6 @@ export function ServedSkillsSection({
 
   return (
     <Page.Section>
-      <Page.Section.Title>Skills</Page.Section.Title>
       <Page.Section.Description>
         Skills agents load over MCP when they connect to {surfaceName}.
       </Page.Section.Description>

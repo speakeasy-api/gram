@@ -306,6 +306,8 @@ const CardEntity: FC<CardEntityProps> = ({
 CardEntity.displayName = "CardEntity";
 
 type CardDashboardProps = {
+  /** One line under the title, saying what the panel is for. */
+  description?: React.ReactNode;
   title: string;
   action?: ReactNode;
   children: ReactNode;
@@ -325,6 +327,7 @@ type CardDashboardProps = {
  */
 function CardDashboard({
   title,
+  description,
   action,
   children,
   tooltip,
@@ -345,19 +348,24 @@ function CardDashboard({
           headerClassName,
         )}
       >
-        <div className="flex items-center gap-1.5">
-          <h3 className="text-eyebrow">{title}</h3>
-          {tooltip && (
-            <SimpleTooltip tooltip={tooltip}>
-              <button
-                type="button"
-                aria-label={`About ${title}`}
-                className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
-              >
-                <Icon name="info" className="size-3.5" />
-              </button>
-            </SimpleTooltip>
-          )}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-eyebrow">{title}</h3>
+            {tooltip && (
+              <SimpleTooltip tooltip={tooltip}>
+                <button
+                  type="button"
+                  aria-label={`About ${title}`}
+                  className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
+                >
+                  <Icon name="info" className="size-3.5" />
+                </button>
+              </SimpleTooltip>
+            )}
+          </div>
+          {description ? (
+            <p className="text-muted-foreground text-sm">{description}</p>
+          ) : null}
         </div>
         {action}
       </div>

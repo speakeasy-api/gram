@@ -6,6 +6,7 @@ import {
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { mcpServerTabHref } from "../MCPServerDetailsRouting";
 import { RemoteMcpToolsSection } from "./RemoteMcpToolsSection";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./settings/sections/authentication/AuthenticationSection";
 
@@ -15,9 +16,10 @@ type InspectTabProps = {
   isLoadingEndpoints: boolean;
 };
 
-// Unproxied servers never reach this tab: MCPServerDetails redirects their
-// /inspect route back to /overview before this component renders, since
-// there's no reliable way to discover a vendor's tools without live auth.
+// Every server that serves MCP through Speakeasy has this tab: remote, tunneled
+// and hosted alike. Unproxied servers never reach it: MCPServerDetails
+// redirects their /inspect route back to /overview, since there's no reliable
+// way to discover a vendor's tools without live auth.
 export function InspectTab({
   mcpServer,
   endpoints,
@@ -28,15 +30,16 @@ export function InspectTab({
     endpoints,
     isLoadingEndpoints,
   );
+  const param = mcpServerRouteParam(mcpServer);
 
   // Deep-link to the Authentication section under Settings so the tools view
   // can point users at auth setup when a server has none configured yet.
   const authSettingsHref = `${routes.mcp.details.settings.href(
-    mcpServerRouteParam(mcpServer),
+    param,
   )}#${MCP_AUTHENTICATION_SECTION_ID}`;
 
   return (
-    <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+    <div className="flex min-h-0 w-full flex-1 flex-col">
       <RemoteMcpToolsSection
         mcpUrl={mcpUrl}
         isResolvingUrl={loading}
@@ -45,6 +48,7 @@ export function InspectTab({
         remoteMcpServerId={mcpServer.remoteMcpServerId ?? undefined}
         isDisabled={mcpServer.visibility === "disabled"}
         authSettingsHref={authSettingsHref}
+        accessHref={mcpServerTabHref(routes, param, "team-access")}
         platformSlug={platformEndpointSlug(endpoints)}
         tunneledMcpServerId={mcpServer.tunneledMcpServerId}
         visibility={mcpServer.visibility}

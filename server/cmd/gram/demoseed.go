@@ -64,6 +64,11 @@ func newDemoSeedCommand() *cli.Command {
 				EnvVars: []string{"GRAM_ENCRYPTION_KEY"},
 			},
 			&cli.StringFlag{
+				Name:    "local-mock-mcp-url",
+				Usage:   "With --local, the URL of the local mock MCP server (server/cmd/mock-mcp) to register as a working remote MCP server; empty leaves it out",
+				EnvVars: []string{"GRAM_MOCK_MCP_URL"},
+			},
+			&cli.StringFlag{
 				Name:    "local-slack-bot-token",
 				Usage:   "Bot token of your Slack test app; with --local, connects the local org to its workspace (see mise run zero:slack)",
 				EnvVars: []string{"GRAM_DEV_SLACK_BOT_TOKEN"},
@@ -177,6 +182,8 @@ func newDemoSeedCommand() *cli.Command {
 				Environment:    c.String("environment"),
 				ObservedEnv:    observed,
 				Slack:          slack,
+				ClickHouse:     ch,
+				MockMCPURL:     c.String("local-mock-mcp-url"),
 			}); err != nil {
 				return fmt.Errorf("apply local fixtures: %w", err)
 			}

@@ -578,3 +578,8 @@ WHERE organization_id = @org_id::text AND deleted IS FALSE;
 -- name: PostflightCountSecurityAuditLogs :one
 SELECT count(*) FROM security_audit_logs
 WHERE organization_id = @org_id::text;
+
+-- name: PostflightCountToolMetadata :one
+-- The Inspect tab's stored annotations for Linear, Slack and GitHub.
+SELECT count(*) FROM mcp_server_tool_metadata
+WHERE project_id = @project_id::uuid AND deleted IS FALSE;

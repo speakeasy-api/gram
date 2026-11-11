@@ -1,13 +1,13 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  ObservabilityDisabledState,
+  ObservabilitySummaryTiles,
+} from "@/components/observe/ObservabilitySummaryTiles";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
 import { MemberWorkflowCTA } from "@/components/platform-mcp/member-workflow-cta";
-import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
-import { PluginStatusBanner } from "./PluginStatusBanner";
 import { RankedBarList } from "@/components/chart/RankedBarList";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
@@ -35,24 +35,12 @@ function toolLabelFromUrn(urn: string): string {
   return parts[parts.length - 1] || urn;
 }
 
-function errorRate(summary: ObservabilitySummary): number {
-  return summary.totalToolCalls > 0
-    ? (summary.failedToolCalls / summary.totalToolCalls) * 100
-    : 0;
-}
-
 export function MCPOverviewTab({
   server,
   logsTarget,
-  showPluginBanner = true,
-  pluginServer = server,
 }: {
   server: HostedServerRef;
-  /** The identity plugin membership is keyed by, when it differs from `server`. */
-  pluginServer?: HostedServerRef;
   logsTarget?: ParsedTargetFilter | null;
-  /** Set false when the page already shows the marketplace banner above this. */
-  showPluginBanner?: boolean;
 }): React.JSX.Element {
   const client = useGramContext();
   const project = useProject();
@@ -140,7 +128,6 @@ export function MCPOverviewTab({
     // Container queries, not viewport ones: the side panel narrows this column
     // without narrowing the window, and `lg:`/`xl:` would not notice.
     <Stack gap={6} className="@container mb-4">
-      {showPluginBanner && <PluginStatusBanner server={pluginServer} />}
       {!isLoading && !isLogsDisabled && (
         <MemberWorkflowCTA
           workflow="mcp_diagnostics"
@@ -165,14 +152,7 @@ export function MCPOverviewTab({
       </div>
 
       {isLogsDisabled && (
-        <div className="flex flex-col items-center justify-center border p-12 text-center">
-          <Text muted className="mb-1 block">
-            Observability is not enabled
-          </Text>
-          <Text muted small>
-            Enable logs for this organization to see usage for this MCP server.
-          </Text>
-        </div>
+        <ObservabilityDisabledState subject="this MCP server" />
       )}
       {!isLogsDisabled && showQueryError && (
         <div className="flex flex-col items-center justify-center border p-12 text-center">
@@ -187,55 +167,12 @@ export function MCPOverviewTab({
       )}
       {!isLogsDisabled && !showQueryError && (
         <>
-          <StatTileGroup>
-            {isLoading && !summary ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-[116px] flex-1" />
-              ))
-            ) : (
-              <>
-                <StatTile
-                  title="Tool calls"
-                  value={summary?.totalToolCalls ?? 0}
-                  tone="information"
-                  previousValue={comparison?.totalToolCalls}
-                  format="compact"
-                  comparisonLabel="vs previous period"
-                />
-                <StatTile
-                  title="Failed calls"
-                  value={summary?.failedToolCalls ?? 0}
-                  tone={
-                    (summary?.failedToolCalls ?? 0) > 0
-                      ? "destructive"
-                      : "neutral"
-                  }
-                  previousValue={comparison?.failedToolCalls}
-                  format="compact"
-                  invertDelta
-                  comparisonLabel="vs previous period"
-                />
-                <StatTile
-                  title="Error rate"
-                  value={summary ? errorRate(summary) : 0}
-                  previousValue={comparison ? errorRate(comparison) : undefined}
-                  format="percent"
-                  invertDelta
-                  thresholds={{ red: 10, amber: 5, inverted: true }}
-                  comparisonLabel="vs previous period"
-                />
-                <StatTile
-                  title="Avg latency"
-                  value={summary?.avgLatencyMs ?? 0}
-                  tone="information"
-                  previousValue={comparison?.avgLatencyMs}
-                  format="ms"
-                  invertDelta
-                  comparisonLabel="vs previous period"
-                />
-              </>
-            )}
-          </StatTileGroup>
+          <ObservabilitySummaryTiles
+            summary={summary}
+            comparison={comparison}
+            isLoading={isLoading}
+            callsTitle="Tool calls"
+          />
 
           <ToolCallsTimeSeriesChart
             title="Tool calls over time"

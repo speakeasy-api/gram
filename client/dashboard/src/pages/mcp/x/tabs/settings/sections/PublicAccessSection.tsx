@@ -99,7 +99,7 @@ export function PublicAccessSection({
     <SettingsSection id={MCP_PUBLIC_ACCESS_SECTION_ID}>
       <SettingsSection.Header>
         <div className="flex items-center gap-2">
-          <SettingsSection.Title>Public Access</SettingsSection.Title>
+          <SettingsSection.Title>Public access</SettingsSection.Title>
           <ReleaseStageBadge stage="preview" />
         </div>
         <SettingsSection.Description>

@@ -1,3 +1,4 @@
+import { StatusDot } from "@/components/ui/StatusDot";
 import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
@@ -104,19 +105,24 @@ function describeSaveResult(addedCount: number, removedCount: number): string {
 
 export function PluginStatusBanner({
   server,
+  variant = "banner",
 }: {
   server: HostedServerRef;
+  /** "header" is the compact card in the MCP detail page header. */
+  variant?: "banner" | "header";
 }): React.JSX.Element | null {
   const canWritePlugins = usePluginWriteAccess();
   return canWritePlugins ? (
-    <WritablePluginStatusBanner server={server} />
+    <WritablePluginStatusBanner server={server} variant={variant} />
   ) : null;
 }
 
 function WritablePluginStatusBanner({
   server,
+  variant,
 }: {
   server: HostedServerRef;
+  variant: "banner" | "header";
 }): React.JSX.Element | null {
   const scope = usePluginQueryScope();
   const organization = useOrganization();
@@ -294,10 +300,100 @@ function WritablePluginStatusBanner({
   if (isPublished) saveButtonText = "Update";
   if (isSaving) saveButtonText = "Publishing";
 
+  const pickerControls =
+    plugins.length > 0 ? (
+      <div className="flex items-center gap-2">
+        <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="border-input bg-background hover:bg-muted flex h-8 w-56 items-center justify-between gap-2 border px-3 text-sm shadow-xs outline-none"
+            >
+              <span
+                className={cn(
+                  "truncate",
+                  selectedPluginIds.length === 0 && "text-muted-foreground",
+                )}
+              >
+                {summarizePluginSelection(selectedPluginIds, plugins)}
+              </span>
+              <ChevronDown className="text-muted-foreground size-4 shrink-0" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-80 p-1">
+            <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
+              {plugins.map((plugin) => (
+                <label
+                  key={plugin.id}
+                  className="hover:bg-accent flex cursor-pointer items-start gap-2 px-2 py-1.5 text-sm"
+                >
+                  <Checkbox
+                    checked={selectedPluginIds.includes(plugin.id)}
+                    onCheckedChange={() => togglePlugin(plugin.id)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex flex-col">
+                    <span>{plugin.name}</span>
+                    {plugin.description && (
+                      <span className="text-muted-foreground text-xs">
+                        {plugin.description}
+                      </span>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+        <Button
+          size="sm"
+          disabled={!hasChanges || isSaving}
+          onClick={() => void handleSave()}
+        >
+          {isSaving && (
+            <Button.LeftIcon>
+              <Spinner />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>{saveButtonText}</Button.Text>
+        </Button>
+      </div>
+    ) : null;
+
+  const statusLabel = isTrulyPublished
+    ? `In ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}`
+    : isPublished
+      ? "Marketplace needs setup"
+      : "Not in a plugin";
+
+  if (variant === "header") {
+    // The page header's compact version: one row, what it's in and the picker.
+    return (
+      <div className="border-border bg-card flex items-center gap-3 border py-1.5 pr-1.5 pl-3">
+        <span
+          className="flex shrink-0 items-center gap-2 text-sm whitespace-nowrap"
+          title={
+            isTrulyPublished
+              ? memberPlugins.map((plugin) => plugin.name).join(", ")
+              : isPublished && !marketplaceReady
+                ? "Set up the marketplace on the Plugins page to make it installable."
+                : "Add it to a plugin so your team can install it."
+          }
+        >
+          <StatusDot tone={isTrulyPublished ? "success" : "warning"} />
+          {statusLabel}
+          {isRefetching && <Spinner className="text-muted-foreground size-3" />}
+        </span>
+        {pickerControls}
+      </div>
+    );
+  }
+
   return (
     <StatusBanner tone={isTrulyPublished ? "success" : "warning"}>
-      <div className="flex items-center justify-between gap-8 p-6">
-        <div className="flex max-w-md flex-col gap-3">
+      {/* One row: state on the left, the plugin picker on the right. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-3.5">
+        <div className="flex min-w-0 flex-col gap-0.5">
           <div className="flex items-center gap-2">
             {isTrulyPublished ? (
               <CircleCheck className="text-emerald-500 h-4 w-4 shrink-0" />
@@ -306,7 +402,7 @@ function WritablePluginStatusBanner({
             )}
             <Text
               className={cn(
-                "text-warning-foreground text-base font-semibold",
+                "text-warning-foreground text-sm font-medium",
                 isTrulyPublished && "text-emerald-500",
               )}
             >
@@ -322,95 +418,21 @@ function WritablePluginStatusBanner({
               <Spinner className="text-muted-foreground ml-1 h-3.5 w-3.5" />
             )}
           </div>
-          {isTrulyPublished && (
-            <ul className="flex flex-col gap-1">
-              {memberPlugins.map((plugin) => {
-                const reason = describeMembership(
-                  plugin,
-                  rolesByPlugin.get(plugin.id) ?? [],
-                );
-                return (
-                  <li key={plugin.id}>
-                    <Text variant="small">
-                      <span className="font-medium">{plugin.name}</span>
-                      {reason && (
-                        <span className="text-muted-foreground">
-                          {" "}
-                          · {reason}
-                        </span>
-                      )}
-                    </Text>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          <Text variant="small" className="text-muted-foreground/90">
-            Plugins are the preferred way to distribute MCP servers to your
-            organization's users. Plugins are installed via marketplaces which
-            are GitHub repositories that Speakeasy hosts on your behalf.
+          <Text variant="small" className="text-muted-foreground pl-6">
+            {isTrulyPublished
+              ? memberPlugins
+                  .map((plugin) => {
+                    const reason = describeMembership(
+                      plugin,
+                      rolesByPlugin.get(plugin.id) ?? [],
+                    );
+                    return reason ? `${plugin.name} · ${reason}` : plugin.name;
+                  })
+                  .join(", ")
+              : "Add it to a plugin so your team can install it from your marketplace."}
           </Text>
-          {plugins.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="border-input bg-background hover:bg-muted flex h-8 w-56 items-center justify-between gap-2 border px-3 text-sm shadow-xs outline-none"
-                  >
-                    <span
-                      className={cn(
-                        "truncate",
-                        selectedPluginIds.length === 0 &&
-                          "text-muted-foreground",
-                      )}
-                    >
-                      {summarizePluginSelection(selectedPluginIds, plugins)}
-                    </span>
-                    <ChevronDown className="text-muted-foreground size-4 shrink-0" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-80 p-1">
-                  <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
-                    {plugins.map((plugin) => (
-                      <label
-                        key={plugin.id}
-                        className="hover:bg-accent flex cursor-pointer items-start gap-2 px-2 py-1.5 text-sm"
-                      >
-                        <Checkbox
-                          checked={selectedPluginIds.includes(plugin.id)}
-                          onCheckedChange={() => togglePlugin(plugin.id)}
-                          className="mt-0.5"
-                        />
-                        <div className="flex flex-col">
-                          <span>{plugin.name}</span>
-                          {plugin.description && (
-                            <span className="text-muted-foreground text-xs">
-                              {plugin.description}
-                            </span>
-                          )}
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <Button
-                size="sm"
-                disabled={!hasChanges || isSaving}
-                onClick={() => void handleSave()}
-              >
-                {isSaving && (
-                  <Button.LeftIcon>
-                    <Spinner />
-                  </Button.LeftIcon>
-                )}
-                <Button.Text>{saveButtonText}</Button.Text>
-              </Button>
-            </div>
-          )}
         </div>
-        <ClientIconFan />
+        {pickerControls}
       </div>
 
       {isPublished && (

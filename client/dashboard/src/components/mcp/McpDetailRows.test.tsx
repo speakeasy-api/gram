@@ -9,7 +9,7 @@ import {
   RemoteIdentitySummary,
   SidebarUrlRow,
   UpstreamCredentialsIdentitySummary,
-} from "./mcp-server-x-sidebar-nav";
+} from "./McpDetailRows";
 
 vi.mock("@/pages/mcp/x/MCPServerDetails", () => ({
   default: () => null,

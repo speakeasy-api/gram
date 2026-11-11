@@ -1,3 +1,4 @@
+import { McpServerReadinessBar } from "./mcp-server-readiness-bar";
 import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import {
@@ -235,27 +236,31 @@ vi.mock("@/components/mcp-server-readiness-bar", () => ({
 }));
 vi.mock("@/components/detail/detail-sidebar-nav", () => ({
   DetailSidebarInfoLabel: () => null,
-  DetailSidebarNav: ({
-    items,
-    topContent,
-    cardContent,
-  }: {
-    items: { title: string }[];
-    topContent: ReactNode;
-    cardContent: ReactNode;
-  }) => (
-    <>
-      {items.map((item) => (
-        <span key={item.title}>{item.title}</span>
-      ))}
-      {topContent}
-      {cardContent}
-    </>
-  ),
 }));
 
-import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
+import { useMcpServerDetailChrome } from "./mcp/useMcpServerDetailChrome";
 import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
+
+// What the detail frame renders from the chrome: tab titles, the readiness
+// card, and the details popover.
+function DetailChrome() {
+  const chrome = useMcpServerDetailChrome();
+  if (!chrome) return null;
+  return (
+    <>
+      {chrome.items.map((item) => (
+        <span key={item.title}>{item.title}</span>
+      ))}
+      <McpServerReadinessBar checks={chrome.readinessChecks} />
+      {chrome.identity}
+      {chrome.installLinks.map((link) => (
+        <a key={link.url} href={link.url}>
+          {link.label}
+        </a>
+      ))}
+    </>
+  );
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -327,10 +332,10 @@ describe("MCP plugin permission boundaries", () => {
     expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
   });
   it.each(["org:read", "plugin:write", "org:admin"])(
-    "scopes sidebar queries for %s",
+    "scopes detail chrome queries for %s",
     (grant) => {
       state.grants = [{ scope: grant }];
-      render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+      render(<DetailChrome />, { wrapper: MemoryRouter });
       expect(screen.getByText("Included in Plugin")).toBeTruthy();
       expect(state.plugins).toHaveBeenCalledWith(
         scope,
@@ -345,7 +350,7 @@ describe("MCP plugin permission boundaries", () => {
     },
   );
   it.each([false, true])(
-    "disables sidebar reads and cached plugin content (org block: %s)",
+    "disables detail chrome reads and cached plugin content (org block: %s)",
     (blocked) => {
       state.grants = blocked
         ? [
@@ -353,7 +358,7 @@ describe("MCP plugin permission boundaries", () => {
             { scope: "org:blocked_read", selectors: [{ resourceId: "org-a" }] },
           ]
         : [];
-      render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+      render(<DetailChrome />, { wrapper: MemoryRouter });
       expect(state.plugins).toHaveBeenCalledWith(
         scope,
         undefined,
@@ -373,7 +378,7 @@ describe("MCP plugin permission boundaries", () => {
       { scope: "mcp:read" },
       { scope: "org:blocked_read", selectors: [{ resourceId: "org-a" }] },
     ];
-    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    render(<DetailChrome />, { wrapper: MemoryRouter });
     expect(screen.queryByText("Team Access")).toBeNull();
   });
   it.each([
@@ -441,7 +446,7 @@ describe("remote MCP server Skills tab", () => {
     state.skillsOverMcp = true;
     state.mcpServer = remote;
     state.grants = [{ scope: "skill:read" }];
-    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    render(<DetailChrome />, { wrapper: MemoryRouter });
     expect(screen.getByText("Skills")).toBeTruthy();
   });
 
@@ -471,7 +476,7 @@ describe("remote MCP server Skills tab", () => {
     state.skillsOverMcp = flag;
     state.mcpServer = server;
     state.grants = grants;
-    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    render(<DetailChrome />, { wrapper: MemoryRouter });
     expect(screen.queryByText("Skills")).toBeNull();
   });
 });
@@ -479,7 +484,7 @@ describe("remote MCP server Skills tab", () => {
 describe("MCP server readiness", () => {
   it("leaves servers without a tunnel unchanged", () => {
     state.grants = [{ scope: "org:read" }];
-    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    render(<DetailChrome />, { wrapper: MemoryRouter });
     for (const label of [
       "Server URL",
       "Authentication",
@@ -504,7 +509,7 @@ describe("MCP server readiness", () => {
       isLoading: false,
       isError: false,
     });
-    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    render(<DetailChrome />, { wrapper: MemoryRouter });
     expect(screen.getByText("Tunnel agent")).toBeTruthy();
     // The Overview polls; the sidebar reads the same cached snapshot.
     expect(state.tunnelConnections).toHaveBeenCalledWith("tunnel-a");
@@ -535,7 +540,7 @@ describe("remote MCP server Identity summary", () => {
       isError: false,
       data: { upstreamAuthEnforced: true },
     });
-    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    render(<DetailChrome />, { wrapper: MemoryRouter });
     expect(
       screen.getByRole("link", { name: /Identity: Credentials set up/ }),
     ).toBeTruthy();
@@ -544,7 +549,7 @@ describe("remote MCP server Identity summary", () => {
 
   it("keeps the legacy identity mode when enforcement is off", () => {
     state.mcpServer = remote;
-    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    render(<DetailChrome />, { wrapper: MemoryRouter });
     expect(screen.getByRole("link", { name: /Identity: Manual/ })).toBeTruthy();
     expect(
       screen.queryByRole("link", { name: /Credentials set up/ }),
@@ -572,7 +577,7 @@ describe("remote MCP server Identity summary", () => {
     (_state, features, text) => {
       state.mcpServer = remote;
       setFeatures(features);
-      render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+      render(<DetailChrome />, { wrapper: MemoryRouter });
       expect(screen.getByText(text)).toBeTruthy();
       expect(screen.queryByRole("link", { name: /^Identity:/ })).toBeNull();
     },
@@ -621,7 +626,7 @@ describe("remote MCP server readiness under enforcement", () => {
       isError: false,
       data: { status },
     };
-    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    render(<DetailChrome />, { wrapper: MemoryRouter });
     expect(authenticationCheck().getAttribute("data-ready")).toBe(ready);
     expect(authenticationCheck().getAttribute("title")).toBe(description);
   });
@@ -633,7 +638,7 @@ describe("remote MCP server readiness under enforcement", () => {
       isError: false,
       data: undefined,
     };
-    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    render(<DetailChrome />, { wrapper: MemoryRouter });
     expect(authenticationCheck().getAttribute("data-ready")).toBe("false");
     expect(authenticationCheck().getAttribute("title")).toBe(
       "The identity status is not available yet.",

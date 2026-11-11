@@ -8,7 +8,9 @@ import { RemoteMcpToolsSection } from "./RemoteMcpToolsSection";
 const mocks = vi.hoisted(() => ({
   needsAuth: true,
   open: vi.fn(),
-  tools: undefined as undefined | Record<string, { unavailable: boolean }>,
+  tools: undefined as
+    | undefined
+    | Record<string, { unavailable: boolean; unavailableReason?: string }>,
   stored: {} as Record<string, { toolName: string }>,
   canWrite: true,
 }));
@@ -22,6 +24,28 @@ vi.mock("@/hooks/useProxiedMcpTools", () => ({
     refetch: vi.fn(),
     error: null,
   }),
+}));
+
+vi.mock("../../inspect/useToolHealth", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../inspect/useToolHealth")
+  >("../../inspect/useToolHealth");
+  return {
+    ...actual,
+    useToolHealth: () => ({ healthFor: () => undefined, isLoading: false }),
+  };
+});
+
+vi.mock("../../inspect/useChatSessionHeaders", () => ({
+  useChatSessionHeaders: () => ({
+    headers: undefined,
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@/pages/playground/PlaygroundProxiedChat", () => ({
+  PlaygroundProxiedChat: () => <div data-testid="proxied-chat" />,
 }));
 
 vi.mock("@/hooks/useUserSessionToken", () => ({
@@ -96,13 +120,14 @@ describe("RemoteMcpToolsSection tool list", () => {
     mocks.needsAuth = false;
     mocks.tools = {
       search: { unavailable: false },
-      delete_all: { unavailable: true },
+      delete_all: { unavailable: true, unavailableReason: "blocked" },
     };
     renderSection(remote);
 
-    expect(screen.getByText("Available (1)")).toBeTruthy();
-    expect(screen.getByText("Not available (1)")).toBeTruthy();
+    expect(screen.getByText("Not available to you · 1")).toBeTruthy();
     expect(screen.getByText("delete_all")).toBeTruthy();
+    expect(screen.getByText("Blocked by a role rule")).toBeTruthy();
+    expect(screen.getByText(/1 of 2 tools/)).toBeTruthy();
   });
 
   it("does not separate the list when every tool is available", () => {
@@ -111,8 +136,7 @@ describe("RemoteMcpToolsSection tool list", () => {
     renderSection(remote);
 
     expect(screen.getByText("search")).toBeTruthy();
-    expect(screen.queryByText(/^Available/)).toBeNull();
-    expect(screen.queryByText(/^Not available/)).toBeNull();
+    expect(screen.queryByText(/^Not available to you/)).toBeNull();
   });
 
   it("offers sync to someone who can write once tools are stored", () => {
@@ -121,6 +145,8 @@ describe("RemoteMcpToolsSection tool list", () => {
     mocks.stored = { old_tool: { toolName: "old_tool" } };
     renderSection(remote);
 
+    // The notice is one line; the diff and Sync open from Review.
+    fireEvent.click(screen.getByRole("button", { name: /review/i }));
     expect(screen.getByRole("button", { name: /sync/i })).toBeTruthy();
   });
 

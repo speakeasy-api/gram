@@ -1,56 +1,48 @@
-import { enumPresentation } from "@/lib/enum";
-import { GatewayCodeExecution } from "./GatewayCodeExecution";
-import { useSession } from "@/contexts/Auth";
-import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { Page } from "@/components/page-layout";
-import { Badge } from "@/components/ui/Badge";
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
-import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
-import { Skeleton } from "@/components/ui/Skeleton";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/Sheet";
+import { StatusDot } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
+import { useSession } from "@/contexts/Auth";
 import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import { enumPresentation } from "@/lib/enum";
+import { DEFAULT_MODEL } from "@/lib/models";
 import { mcpConnectionUrl } from "@/lib/utils";
+import { PlaygroundChat } from "@/pages/playground/PlaygroundChat";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
-import { useEffect, useMemo, useState } from "react";
-import { Pencil } from "lucide-react";
-import { Link, useNavigate, useSearchParams } from "react-router";
-import { toast } from "sonner";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, useSearchParams } from "react-router";
+import { InspectWorkbench, LensChoice } from "../inspect/InspectWorkbench";
+import { runMcpTool } from "../inspect/runMcpTool";
+import type { InspectTool } from "../inspect/types";
+import { useToolHealth } from "../inspect/useToolHealth";
+import { GatewayCodeExecution } from "./GatewayCodeExecution";
 import { gatewayTabHref } from "./GatewayDetailsRouting";
 import { GATEWAY_INSTRUCTIONS_SECTION_ID } from "./GatewaySettingsTab";
+import { useGatewayInspection } from "./useGatewayInspection";
 import { useGatewayMemberRows } from "./useGatewayMemberRows";
-import {
-  useGatewayDescribeServer,
-  useGatewayInspection,
-  type GatewayInspection,
-} from "./useGatewayInspection";
+import { useGatewayMemberTools } from "./useGatewayMemberTools";
 
-/** Renders a tool's argument names, which is what the mock's tool list shows. */
-function argumentNames(inputSchema: unknown): string {
-  const properties =
-    typeof inputSchema === "object" &&
-    inputSchema !== null &&
-    "properties" in inputSchema
-      ? (inputSchema as { properties?: Record<string, unknown> }).properties
-      : undefined;
-  const names = Object.keys(properties ?? {});
-  return names.length > 0 ? names.join(", ") : "(no arguments)";
-}
+type Mode = "direct" | "progressive" | "code_mode";
+type ModeChoice = "default" | Mode;
 
-const discoveryModeLabels: Record<string, string> = {
+const modeLabels: Record<Mode, string> = {
   progressive: "Progressive",
   direct: "Direct",
   code_mode: "Code Mode",
 };
+
+/** The tool that runs a member's tool behind a Progressive gateway. */
+const EXECUTE_TOOL = "execute_tool";
 
 export function GatewayInspectTab(
   props: Parameters<typeof GatewayInspectConnection>[0],
@@ -74,505 +66,415 @@ function GatewayInspectConnection({
   isLoadingEndpoints: boolean;
 }): JSX.Element {
   const routes = useRoutes();
+  const settingsHref = gatewayTabHref(routes, metaMcpServer.id, "settings");
 
+  // The previewed mode lives in the URL so a link reproduces the view. It
+  // travels in the minted session token, so changing it reconnects.
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedMode = searchParams.get("discovery_mode");
-  const urlMode =
-    requestedMode === "direct" ||
-    requestedMode === "progressive" ||
-    requestedMode === "code_mode"
-      ? requestedMode
+  const requested = searchParams.get("discovery_mode");
+  const choice: ModeChoice =
+    requested === "direct" ||
+    requested === "progressive" ||
+    requested === "code_mode"
+      ? requested
       : "default";
-  const [modeDraft, setModeDraft] = useState<
-    "default" | "direct" | "progressive" | "code_mode"
-  >(urlMode);
-  // A stable initial version lets the token and inspection caches hit across
-  // visits; only an explicit reconnect mints a fresh one.
-  const [connection, setConnection] = useState<{
-    mode: "default" | "direct" | "progressive" | "code_mode";
-    version: string;
-  }>({ mode: urlMode, version: urlMode });
-  const syncKey = `${metaMcpServer.id}:${urlMode}`;
-  const [syncedKey, setSyncedKey] = useState(syncKey);
-  if (syncedKey !== syncKey) {
-    setSyncedKey(syncKey);
-    setModeDraft(urlMode);
-    if (connection.mode !== urlMode) {
-      setConnection({ mode: urlMode, version: urlMode });
-    }
-  }
-  function applyMode(mode: "default" | "direct" | "progressive" | "code_mode") {
+  const [version, setVersion] = useState<string>(choice);
+  const chooseMode = (next: ModeChoice) => {
     setSearchParams(
       (current) => {
-        const next = new URLSearchParams(current);
-        if (mode === "default") next.delete("discovery_mode");
-        else next.set("discovery_mode", mode);
-        return next;
+        const params = new URLSearchParams(current);
+        if (next === "default") params.delete("discovery_mode");
+        else params.set("discovery_mode", next);
+        return params;
       },
       { replace: true },
     );
-    setModeDraft(mode);
-    setConnection({ mode, version: crypto.randomUUID() });
-  }
-  const discoveryMode =
-    connection.mode === "default" ? undefined : connection.mode;
-  const configurationKey = `${connection.mode}:${connection.version}:${metaMcpServer.discoveryMode}`;
-  const { mcpUrl, loading } = useResolvedMcpServerUrl(
+    setVersion(crypto.randomUUID());
+  };
+  const discoveryMode = choice === "default" ? undefined : choice;
+  const configurationKey = `${choice}:${version}:${metaMcpServer.discoveryMode}`;
+
+  const { mcpUrl, loading: resolvingUrl } = useResolvedMcpServerUrl(
     endpoints,
     isLoadingEndpoints,
   );
   const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
+  const hasIssuer = !!metaMcpServer.userSessionIssuerId;
 
-  // Connect as the signed-in user rather than anonymously, so the tab shows
-  // the members this operator can actually reach. The mint RPC requires the
-  // same mcp:connect the runtime enforces, so this grants nothing extra.
-  const {
-    accessToken,
-    isLoading: isMintingToken,
-    error: mintError,
-    refetch: retryMint,
-  } = useUserSessionToken({
+  // Connect as the signed-in user so the tab shows what this person's agents
+  // get. Minting requires the same mcp:connect the runtime enforces.
+  const token = useUserSessionToken({
     target: {
       kind: "metaMcpServer",
       id: metaMcpServer.id,
       discoveryMode,
-      connectionVersion: connection.version,
+      connectionVersion: version,
     },
     userSessionIssuerId: metaMcpServer.userSessionIssuerId,
     throwOnError: false,
   });
-  const headers = accessToken
-    ? { Authorization: `Bearer ${accessToken}` }
-    : undefined;
-
-  const { data, isLoading, isError, needsAuth, error, refetch } =
-    useGatewayInspection(connectUrl, {
-      headers,
-      enabled:
-        !loading &&
-        !!connectUrl &&
-        !isMintingToken &&
-        !mintError &&
-        (!metaMcpServer.userSessionIssuerId || !!accessToken),
-      configurationKey,
-    });
-  // Preserve source and execution across token refresh or failed inspection reads.
-  // Explicit reconnects reset the editor.
-  const [codeConnection, setCodeConnection] = useState<string>();
-  useEffect(() => {
-    if (data?.discoveryMode === "code_mode" && !isError && !mintError) {
-      setCodeConnection(configurationKey);
-    }
-  }, [data, isError, mintError, configurationKey]);
-  // Configured membership, to explain a shortfall against what the endpoint
-  // actually serves this connection.
-  const { rows } = useGatewayMemberRows(metaMcpServer.id);
-
-  return (
-    <Page.Section>
-      <Page.Section.Title>Inspect</Page.Section.Title>
-      <Page.Section.Description>
-        Exactly what a client receives from this endpoint, read live over MCP.
-      </Page.Section.Description>
-      <Page.Section.CTA>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={!data}
-          onClick={() => {
-            if (!data) return;
-            void navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-            toast.success("Copied as JSON");
-          }}
-        >
-          <Button.Text>Copy as JSON</Button.Text>
-        </Button>
-      </Page.Section.CTA>
-      <Page.Section.Body>
-        {metaMcpServer.userSessionIssuerId && (
-          <Page.Toolbar>
-            <Page.Toolbar.Leading>
-              <Select
-                value={modeDraft}
-                onValueChange={(value) => {
-                  if (
-                    value === "default" ||
-                    value === "direct" ||
-                    value === "progressive" ||
-                    value === "code_mode"
-                  )
-                    setModeDraft(value);
-                }}
-              >
-                <SelectTrigger aria-label="Inspect discovery mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default">
-                    Use gateway default (
-                    {enumPresentation(
-                      discoveryModeLabels,
-                      metaMcpServer.discoveryMode,
-                      "Unknown",
-                    )}
-                    )
-                  </SelectItem>
-                  <SelectItem value="progressive">Progressive</SelectItem>
-                  <SelectItem value="direct">Direct</SelectItem>
-                  {(metaMcpServer.codeModeEnabled ||
-                    modeDraft === "code_mode") && (
-                    <SelectItem
-                      value="code_mode"
-                      disabled={!metaMcpServer.codeModeEnabled}
-                    >
-                      Code Mode
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              <ReleaseStageBadge stage="preview" />
-            </Page.Toolbar.Leading>
-            <Page.Toolbar.Actions>
-              <Button
-                variant="secondary"
-                disabled={
-                  isMintingToken ||
-                  (modeDraft === "code_mode" && !metaMcpServer.codeModeEnabled)
-                }
-                onClick={() => {
-                  applyMode(modeDraft);
-                }}
-              >
-                <Button.Text>Apply and reconnect</Button.Text>
-              </Button>
-            </Page.Toolbar.Actions>
-          </Page.Toolbar>
-        )}
-        {(connection.mode === "code_mode" ||
-          (connection.mode === "default" &&
-            metaMcpServer.discoveryMode === "code_mode")) &&
-          !metaMcpServer.codeModeEnabled && (
-            <Text muted small>
-              Code Mode is not available for this gateway. This connection uses
-              Progressive discovery.
-            </Text>
-          )}
-        {connection.mode === "code_mode" && !metaMcpServer.codeModeEnabled && (
-          <Button
-            variant="secondary"
-            disabled={isMintingToken}
-            onClick={() => applyMode("default")}
-          >
-            <Button.Text>Use gateway default and reconnect</Button.Text>
-          </Button>
-        )}
-        {codeConnection === configurationKey && connectUrl && (
-          <GatewayCodeExecution
-            key={`${configurationKey}:${connectUrl}`}
-            connectUrl={connectUrl}
-            headers={headers}
-            disabled={
-              isLoading ||
-              loading ||
-              isMintingToken ||
-              isError ||
-              !!mintError ||
-              needsAuth ||
-              data?.discoveryMode !== "code_mode"
-            }
-          />
-        )}
-        <InspectBody
-          key={configurationKey}
-          data={data}
-          isLoading={isLoading || loading || isMintingToken}
-          isError={isError || !!mintError}
-          needsAuth={needsAuth}
-          error={mintError ?? error}
-          hasUrl={!!connectUrl}
-          configuredMembers={rows.length}
-          hasIssuer={!!metaMcpServer.userSessionIssuerId}
-          connectUrl={connectUrl}
-          headers={headers}
-          onRetry={mintError ? retryMint : refetch}
-          settingsHref={gatewayTabHref(routes, metaMcpServer.id, "settings")}
-        />
-      </Page.Section.Body>
-    </Page.Section>
+  const headers = useMemo(
+    () =>
+      token.accessToken
+        ? { Authorization: `Bearer ${token.accessToken}` }
+        : undefined,
+    [token.accessToken],
   );
-}
+  const ready =
+    !resolvingUrl &&
+    !!connectUrl &&
+    !token.isLoading &&
+    !token.error &&
+    (!hasIssuer || !!token.accessToken);
 
-function InspectBody({
-  data,
-  isLoading,
-  isError,
-  needsAuth,
-  error,
-  hasUrl,
-  configuredMembers,
-  hasIssuer,
-  connectUrl,
-  headers,
-  onRetry,
-  settingsHref,
-}: {
-  data: GatewayInspection | undefined;
-  isLoading: boolean;
-  isError: boolean;
-  needsAuth: boolean;
-  error: Error | null;
-  hasUrl: boolean;
-  configuredMembers: number;
-  hasIssuer: boolean;
-  connectUrl: string | undefined;
-  headers: Record<string, string> | undefined;
-  onRetry: () => void;
-  settingsHref: string;
-}): JSX.Element {
-  const navigate = useNavigate();
-
-  if (!hasUrl && !isLoading) {
-    return (
-      <Text muted small>
-        This gateway has no address yet. Add one in{" "}
-        <Link to={settingsHref}>Settings</Link> so clients — and this tab — can
-        connect.
-      </Text>
-    );
-  }
-
-  if (isLoading) {
-    return <Skeleton className="h-64 w-full" />;
-  }
-
-  if (needsAuth) {
-    // Unconnected providers no longer reject a session (members degrade
-    // member-scoped instead). A 401 here means either the session token was
-    // refused or minting failed and the anonymous probe was denied, so the
-    // copy asserts neither.
-    return (
-      <Text muted small>
-        This gateway could not authenticate the dashboard&apos;s connection.
-        Reload to try again, or review the gateway&apos;s authentication in{" "}
-        <Link to={settingsHref}>Settings</Link>.
-      </Text>
-    );
-  }
-
-  if (isError || !data) {
-    return (
-      <div className="flex flex-col items-start gap-2">
-        <Text muted small>
-          {error?.message ?? "Couldn't read this gateway's MCP surface."}
-        </Text>
-        <Button variant="secondary" size="sm" onClick={onRetry}>
-          <Button.Text>Try again</Button.Text>
-        </Button>
-      </div>
-    );
-  }
-
-  // The tool surface reads as a signature list: one line per tool with its
-  // argument names, the way the wire contract is easiest to scan.
-  const nameWidth =
-    Math.max(...data.tools.map((tool) => tool.name.length), 0) + 2;
-  const toolCount = `${data.tools.length} ${data.tools.length === 1 ? "tool" : "tools"}`;
-  const toolSignatures = [
-    `// ${toolCount} (${data.discoveryMode})`,
-    ...data.tools.map(
-      (tool) =>
-        `${tool.name.padEnd(nameWidth)}${argumentNames(tool.inputSchema)}`,
-    ),
-  ].join("\n");
-
-  return (
-    <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
-      {/* Left column: the tool surface, then one level down into a member. */}
-      <div className="flex flex-col gap-6">
-        <InspectCard title="tools/list" meta={toolCount}>
-          <CodeSnippet
-            language="js"
-            code={toolSignatures}
-            fontSize="small"
-            className="min-h-full"
-            snippetClassName="self-start"
-          />
-        </InspectCard>
-
-        {(data.servers?.length ?? 0) > 0 && (
-          <DescribeServerCard
-            servers={data.servers ?? []}
-            connectUrl={connectUrl}
-            headers={headers}
-          />
-        )}
-      </div>
-
-      {/* Right column: what the agent is told, and the state it can see. */}
-      <div className="flex flex-col gap-6">
-        {data.discoveryMode === "code_mode" && (
-          <InspectCard title="execute description">
-            <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
-              {data.tools[0]?.description}
-            </pre>
-          </InspectCard>
-        )}
-        <InspectCard
-          title="server instructions"
-          action={
-            <Button
-              variant="secondary"
-              size="xs"
-              onClick={() => {
-                void navigate(
-                  `${settingsHref}#${GATEWAY_INSTRUCTIONS_SECTION_ID}`,
-                );
-              }}
-            >
-              <Button.LeftIcon>
-                <Pencil />
-              </Button.LeftIcon>
-              <Button.Text>Edit</Button.Text>
-            </Button>
-          }
-        >
-          {/* Prose, not code: a plain pre keeps the paragraph breaks that a
-              syntax highlighter collapses. */}
-          <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
-            {data.instructions}
-          </pre>
-        </InspectCard>
-
-        {data.discoveryMode === "progressive" && (
-          <InspectCard title="list_servers" meta="bundle state">
-            {data.servers === undefined ? (
-              <Text muted small>
-                The gateway couldn&apos;t report its member state.
-              </Text>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <CodeSnippet
-                  language="json"
-                  code={JSON.stringify({ servers: data.servers }, null, 2)}
-                  fontSize="small"
-                />
-                {data.servers.length < configuredMembers && (
-                  <Text muted className="text-xs">
-                    {hasIssuer
-                      ? `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served to you. Private members need mcp:connect on their backing resource (the member server for proxied members, the backing toolset for hosted members), and disabled, unproxied, or slugless members are never served.`
-                      : `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served. This gateway has no sign-in attached, so every caller — including this tab — is anonymous and private members are hidden. Attach an issuer under Settings → Authentication.`}
-                  </Text>
-                )}
-              </div>
-            )}
-          </InspectCard>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// One member's catalog, with a picker so every member is reachable rather
-// than only the first. Proxied members answer with the runtime's own "not yet
-// available" error, which is what a client sees too.
-function DescribeServerCard({
-  servers,
-  connectUrl,
-  headers,
-}: {
-  servers: { slug: string; name?: string }[];
-  connectUrl: string | undefined;
-  headers: Record<string, string> | undefined;
-}): JSX.Element {
-  const [selected, setSelected] = useState<string | undefined>();
-  const serverSlug =
-    selected && servers.some((server) => server.slug === selected)
-      ? selected
-      : servers[0]?.slug;
-  const { data, isLoading } = useGatewayDescribeServer(connectUrl, serverSlug, {
+  const inspection = useGatewayInspection(connectUrl, {
     headers,
+    enabled: ready,
+    configurationKey,
+  });
+  const data = inspection.data;
+  const mode = data?.discoveryMode;
+
+  // Code Mode serves one tool, so the member catalog comes from a second,
+  // Progressive session — the same members the program can reach.
+  const catalogToken = useUserSessionToken({
+    target: {
+      kind: "metaMcpServer",
+      // No id, no mint: the catalog session exists only in Code Mode.
+      id: mode === "code_mode" ? metaMcpServer.id : undefined,
+      discoveryMode: "progressive",
+      connectionVersion: `${version}:catalog`,
+    },
+    userSessionIssuerId: metaMcpServer.userSessionIssuerId,
+    throwOnError: false,
+  });
+  const catalogHeaders = useMemo(
+    () =>
+      catalogToken.accessToken
+        ? { Authorization: `Bearer ${catalogToken.accessToken}` }
+        : undefined,
+    [catalogToken.accessToken],
+  );
+  const catalog = useGatewayInspection(connectUrl, {
+    headers: catalogHeaders,
+    enabled: mode === "code_mode" && !!catalogHeaders,
+    configurationKey: `${configurationKey}:catalog`,
   });
 
-  return (
-    <InspectCard
-      title="describe_server"
-      action={
-        servers.length > 1 ? (
-          <Select value={serverSlug} onValueChange={setSelected}>
-            <SelectTrigger className="h-7 w-[190px] font-mono text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {servers.map((server) => (
-                <SelectItem
-                  key={server.slug}
-                  value={server.slug}
-                  className="font-mono text-xs"
-                >
-                  {server.slug}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+  const memberSource =
+    mode === "progressive"
+      ? { servers: data?.servers, headers }
+      : mode === "code_mode"
+        ? { servers: catalog.data?.servers, headers: catalogHeaders }
+        : { servers: undefined, headers: undefined };
+  const members = useGatewayMemberTools(
+    connectUrl,
+    memberSource.headers,
+    memberSource.servers,
+    {
+      enabled: mode === "progressive" || mode === "code_mode",
+      cacheKey: configurationKey,
+    },
+  );
+
+  const { rows } = useGatewayMemberRows(metaMcpServer.id);
+  const { healthFor } = useToolHealth({ metaMcpServerId: metaMcpServer.id });
+
+  // Keep the Code Mode editor across token refreshes; reconnects reset it.
+  const [codeConnection, setCodeConnection] = useState<string>();
+  useEffect(() => {
+    if (mode === "code_mode" && !inspection.isError) {
+      setCodeConnection(configurationKey);
+    }
+  }, [mode, inspection.isError, configurationKey]);
+
+  const memberToolNames = useMemo(
+    () => new Set(members.flatMap((m) => m.tools.map((t) => t.name))),
+    [members],
+  );
+  const tools = useMemo<InspectTool[]>(() => {
+    if (!data) return [];
+    const surface: InspectTool[] = data.tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+      group: mode === "direct" ? undefined : "Gateway tools",
+    }));
+    if (mode === "direct") return surface;
+    const via =
+      mode === "code_mode" ? "reachable from code" : "behind execute_tool";
+    const memberTools = members.flatMap((m) =>
+      m.tools.map((tool) => ({ ...tool, group: `${m.name} · ${via}` })),
+    );
+    return [...surface, ...memberTools];
+  }, [data, members, mode]);
+
+  const tokens = data
+    ? Math.round(JSON.stringify(data.tools).length / 4)
+    : undefined;
+  const servedMembers =
+    mode === "code_mode" ? catalog.data?.servers : data?.servers;
+  const unserved =
+    servedMembers !== undefined ? rows.length - servedMembers.length : 0;
+  const failedMembers = members.filter((m) => m.error);
+
+  const defaultLabel = enumPresentation(
+    modeLabels,
+    metaMcpServer.discoveryMode,
+    "Progressive",
+  );
+  const modeOptions: {
+    value: ModeChoice;
+    label: string;
+    hint?: string;
+    disabled?: boolean;
+  }[] = [
+    { value: "default", label: defaultLabel, hint: "gateway default" },
+    { value: "direct", label: "Direct", hint: "every tool, flat" },
+    { value: "progressive", label: "Progressive", hint: "five fixed tools" },
+    ...(metaMcpServer.codeModeEnabled || choice === "code_mode"
+      ? [
+          {
+            value: "code_mode" as const,
+            label: "Code Mode",
+            hint: "one Python tool",
+            disabled: !metaMcpServer.codeModeEnabled,
+          },
+        ]
+      : []),
+  ];
+
+  const lens = (
+    <div className="flex flex-wrap items-baseline justify-between gap-3">
+      <Text className="text-base">
+        What <span className="font-medium">you</span> get in{" "}
+        {hasIssuer ? (
+          <LensChoice
+            label="Preview a mode"
+            value={choice}
+            options={modeOptions}
+            onChange={chooseMode}
+            footnote={
+              <>
+                Previewing doesn&apos;t change the gateway. Change the default
+                in <Link to={settingsHref}>Settings</Link>.
+              </>
+            }
+          />
         ) : (
-          <Badge variant="neutral">
-            <Badge.Text>{`server: "${serverSlug ?? ""}"`}</Badge.Text>
-          </Badge>
-        )
-      }
-    >
-      {isLoading || !data ? (
-        <Skeleton className="h-40 w-full" />
-      ) : data.error ? (
-        // An error is prose, not JSON: wrap it rather than letting a code
-        // block clip it.
-        <Text
-          muted
-          className="font-mono text-xs break-words whitespace-pre-wrap"
-        >
-          {data.error}
-        </Text>
-      ) : (
-        <CodeSnippet
-          language="json"
-          code={JSON.stringify(data.result ?? null, null, 2)}
-          fontSize="small"
+          <span className="font-medium">{defaultLabel}</span>
+        )}
+        {/* "Code Mode" already ends in the word. */}
+        {(choice === "default" ? metaMcpServer.discoveryMode : choice) ===
+        "code_mode"
+          ? null
+          : " mode"}
+        {data ? (
+          <span className="text-muted-foreground">
+            {" "}
+            · {data.tools.length} {data.tools.length === 1 ? "tool" : "tools"}
+            {tokens !== undefined ? ` · ~${formatTokens(tokens)} tokens` : ""}
+          </span>
+        ) : null}
+      </Text>
+      {data?.instructions ? (
+        <InstructionsLink
+          instructions={data.instructions}
+          editHref={`${settingsHref}#${GATEWAY_INSTRUCTIONS_SECTION_ID}`}
         />
-      )}
-    </InspectCard>
+      ) : null}
+    </div>
+  );
+
+  const fallbackNote =
+    (choice === "code_mode" ||
+      (choice === "default" && metaMcpServer.discoveryMode === "code_mode")) &&
+    !metaMcpServer.codeModeEnabled ? (
+      <Text muted small>
+        Code Mode isn&apos;t available for this gateway, so this connection uses
+        Progressive.
+      </Text>
+    ) : null;
+  const shortfall =
+    unserved > 0 ? (
+      <Text muted small>
+        {hasIssuer
+          ? `${unserved} of ${rows.length} servers on this gateway aren't served to you. Private servers need your access, and disabled servers are never served.`
+          : `${unserved} of ${rows.length} servers aren't served. This gateway has no sign-in, so every caller is anonymous and private servers are hidden.`}
+      </Text>
+    ) : null;
+  const memberFailures =
+    failedMembers.length > 0 ? (
+      <p className="text-muted-foreground flex items-center gap-2 text-sm">
+        <StatusDot tone="destructive" />
+        Couldn&apos;t read tools from{" "}
+        {failedMembers.map((m) => m.name).join(", ")}. Agents see the same
+        error.
+      </p>
+    ) : null;
+  const notice =
+    fallbackNote || shortfall || memberFailures ? (
+      <div className="flex flex-col gap-1">
+        {fallbackNote}
+        {shortfall}
+        {memberFailures}
+      </div>
+    ) : undefined;
+
+  let state: ReactNode;
+  if (!connectUrl && !resolvingUrl) {
+    state = (
+      <InlineEmptyState
+        icon="link"
+        heading="This gateway has no address yet"
+        description="Add one so clients, and this tab, can connect."
+        action={
+          <Button variant="secondary" asChild>
+            <Link to={settingsHref}>
+              <Button.Text>Open settings</Button.Text>
+            </Link>
+          </Button>
+        }
+      />
+    );
+  } else if (inspection.needsAuth) {
+    state = (
+      <InlineEmptyState
+        icon="lock"
+        heading="This gateway didn't accept the dashboard's connection"
+        description="Reload to try again, or review the gateway's authentication."
+        action={
+          <Button variant="secondary" asChild>
+            <Link to={settingsHref}>
+              <Button.Text>Review authentication</Button.Text>
+            </Link>
+          </Button>
+        }
+      />
+    );
+  } else if (inspection.isError || token.error) {
+    state = (
+      <InlineEmptyState
+        icon="triangle-alert"
+        heading="Couldn't read this gateway"
+        description={
+          (token.error ?? inspection.error)?.message ??
+          "The gateway didn't answer."
+        }
+        action={
+          <Button
+            variant="secondary"
+            onClick={token.error ? token.refetch : inspection.refetch}
+          >
+            <Button.Text>Try again</Button.Text>
+          </Button>
+        }
+      />
+    );
+  }
+
+  const isLoading = resolvingUrl || token.isLoading || inspection.isLoading;
+
+  return (
+    <div className="flex min-h-0 w-full flex-1 flex-col">
+      <InspectWorkbench
+        lens={lens}
+        tools={tools}
+        isLoading={isLoading}
+        state={state}
+        notice={notice}
+        healthFor={healthFor}
+        accessHref={gatewayTabHref(routes, metaMcpServer.id, "team-access")}
+        runTool={
+          connectUrl && mode !== "code_mode"
+            ? (tool, args) =>
+                memberToolNames.has(tool.name)
+                  ? runMcpTool({
+                      url: connectUrl,
+                      headers,
+                      name: EXECUTE_TOOL,
+                      args: { name: tool.name, arguments: args },
+                    })
+                  : runMcpTool({
+                      url: connectUrl,
+                      headers,
+                      name: tool.name,
+                      args,
+                    })
+            : undefined
+        }
+        runner={
+          // Keyed on the connection, not the live mode, so a token refresh
+          // that briefly clears the inspection keeps the program.
+          connectUrl && codeConnection === configurationKey ? (
+            <GatewayCodeExecution
+              key={`${configurationKey}:${connectUrl}`}
+              connectUrl={connectUrl}
+              headers={headers}
+              disabled={isLoading || inspection.isError}
+            />
+          ) : undefined
+        }
+        chat={
+          mcpUrl && data && !inspection.isError ? (
+            <PlaygroundChat
+              mcpUrl={mcpUrl}
+              gatewayToken={token.accessToken}
+              model={DEFAULT_MODEL}
+              compact
+              environmentSlug={null}
+            />
+          ) : undefined
+        }
+      />
+    </div>
   );
 }
 
-function InspectCard({
-  title,
-  meta,
-  action,
-  children,
+function formatTokens(tokens: number): string {
+  return tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
+}
+
+/** The instructions every client receives on connect, one click away. */
+function InstructionsLink({
+  instructions,
+  editHref,
 }: {
-  title: string;
-  meta?: string;
-  /** Replaces the meta badge, e.g. with a picker. */
-  action?: React.ReactNode;
-  children: React.ReactNode;
+  instructions: string;
+  editHref: string;
 }): JSX.Element {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="border-border flex flex-col border">
-      <div className="border-border flex min-h-[42px] items-center justify-between gap-2 border-b px-4 py-2">
-        <Text className="font-mono text-xs tracking-wide uppercase">
-          {title}
-        </Text>
-        {action ?? (
-          <Badge variant="neutral">
-            <Badge.Text>{meta}</Badge.Text>
-          </Badge>
-        )}
-      </div>
-      {/* Every card body is the same fixed height: long content (a member's
-          full catalog) scrolls inside it, short content sits in calm space,
-          and the four cards read as one aligned grid. */}
-      <div className="border-primary/60 bg-muted/20 h-[28rem] overflow-auto border-l-2 px-4 py-3">
-        {children}
-      </div>
-    </div>
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-muted-foreground hover:text-foreground text-sm underline-offset-2 hover:underline"
+      >
+        Server instructions
+      </button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent className="w-full gap-0 sm:max-w-lg">
+          <SheetHeader className="border-b">
+            <SheetTitle>Server instructions</SheetTitle>
+            <SheetDescription>
+              Every client receives this text when it connects.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
+            <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
+              {instructions}
+            </pre>
+            <div>
+              <Button variant="secondary" size="sm" asChild>
+                <Link to={editHref}>
+                  <Button.Text>Edit instructions</Button.Text>
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

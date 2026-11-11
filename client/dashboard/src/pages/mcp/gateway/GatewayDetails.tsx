@@ -1,4 +1,5 @@
-import { Page } from "@/components/page-layout";
+import { useGatewayDetailChrome } from "@/components/mcp/useGatewayDetailChrome";
+import { McpDetailFrame } from "@/components/mcp/McpDetailFrame";
 import { RequireScope } from "@/components/require-scope";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
@@ -25,6 +26,7 @@ export default function GatewayDetails(): JSX.Element {
   const id = gatewayId ?? "";
   const activeTab = activeTabFromPath(location.pathname, id);
   const tabContentRef = useTabScrollReset(activeTab);
+  const chrome = useGatewayDetailChrome();
 
   const {
     data: metaMcpServer,
@@ -115,22 +117,15 @@ export default function GatewayDetails(): JSX.Element {
   };
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs
-          substitutions={{ [id]: metaMcpServer?.name || "Gateway" }}
-          skipSegments={["gateway", ...GATEWAY_TAB_URLS]}
-        />
-      </Page.Header>
-
-      <Page.Body fullWidth className="gap-0">
-        <div
-          ref={tabContentRef}
-          className="mx-auto w-full max-w-[1270px] flex-1"
-        >
-          {renderTabContent()}
-        </div>
-      </Page.Body>
-    </Page>
+    <McpDetailFrame
+      chrome={chrome}
+      breadcrumbs={{
+        substitutions: { [id]: metaMcpServer?.name || "Gateway" },
+        skipSegments: ["gateway", ...GATEWAY_TAB_URLS],
+      }}
+      contentRef={tabContentRef}
+    >
+      {renderTabContent()}
+    </McpDetailFrame>
   );
 }

@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
+import { useMcpServerDetailChrome } from "./useMcpServerDetailChrome";
 
 const state = vi.hoisted(() => ({
   rollout: "enabled" as "enabled" | "disabled" | "loading",
@@ -101,20 +101,20 @@ vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
 }));
 vi.mock("@/components/detail/detail-sidebar-nav", () => ({
   DetailSidebarInfoLabel: () => null,
-  DetailSidebarNav: ({
-    items,
-  }: {
-    items: { key: string; title: string; href: string }[];
-  }) => (
+}));
+// The page tabs the detail frame renders from the chrome's items.
+function Tabs() {
+  const chrome = useMcpServerDetailChrome();
+  return (
     <nav>
-      {items.map((item) => (
+      {chrome?.items.map((item) => (
         <a key={item.key} href={item.href}>
           {item.title}
         </a>
       ))}
     </nav>
-  ),
-}));
+  );
+}
 function Sidebar() {
   return (
     <MemoryRouter
@@ -123,7 +123,7 @@ function Sidebar() {
       <Routes>
         <Route
           path="/example/projects/default/mcp/:mcpServerSlug/:tab"
-          element={<McpServerXSidebarNav />}
+          element={<Tabs />}
         />
       </Routes>
     </MemoryRouter>

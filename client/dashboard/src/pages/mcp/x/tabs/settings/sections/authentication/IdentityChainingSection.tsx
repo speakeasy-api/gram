@@ -1,3 +1,4 @@
+import { scrollWithinPage } from "@/lib/scroll-within-page";
 import { useEffect, useRef, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 
@@ -45,9 +46,8 @@ function useScrollWhenReady(ready: boolean) {
     if (location.hash !== `#${IDENTITY_CHAINING_SECTION_ID}`) return;
     done.current = true;
     const frame = window.requestAnimationFrame(() => {
-      document
-        .getElementById(IDENTITY_CHAINING_SECTION_ID)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const target = document.getElementById(IDENTITY_CHAINING_SECTION_ID);
+      if (target) scrollWithinPage(target);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [ready, location.hash]);

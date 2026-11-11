@@ -3,8 +3,6 @@ import {
   StatTileGroup,
   StatTileSkeleton,
 } from "@/components/chart/stat-tile";
-import { Page } from "@/components/page-layout";
-import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
@@ -34,79 +32,57 @@ export function GatewayOverviewTab({
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>{metaMcpServer.name}</Page.Section.Title>
-        <Page.Section.Description>
-          Connect an AI client to one URL for tools from its permitted members.
-          Connections can list tools directly or discover them progressively.
-          Organizations with Code Mode enabled can also discover and call them
-          in Python.
-        </Page.Section.Description>
-        <Page.Section.Body>
-          <div className="flex flex-col gap-6">
-            {mcpUrl ? (
-              <div className="border-border bg-muted/30 flex items-center gap-3 border px-4 py-3">
-                <span className="border-border bg-background text-muted-foreground shrink-0 border px-1.5 py-0.5 font-mono text-[10px] tracking-widest uppercase">
-                  mcp
-                </span>
-                <Text className="min-w-0 flex-1 truncate font-mono text-sm">
-                  {mcpUrl}
-                </Text>
-                <CopyButton text={mcpUrl} size="xs" tooltip="Copy URL" />
-              </div>
-            ) : (
-              <Text muted small>
-                {isLoadingEndpoints
-                  ? "Loading…"
-                  : "No address yet. Add one in Settings so clients can connect."}
-              </Text>
-            )}
+      <section>
+        <div className="flex flex-col gap-6">
+          {/* The header shows the URL; only its absence needs saying here. */}
+          {!mcpUrl && !isLoadingEndpoints ? (
+            <Text muted small>
+              No address yet. Add one in Settings so clients can connect.
+            </Text>
+          ) : null}
 
-            <StatTileGroup>
-              {isLoading ? (
-                <StatTileSkeleton />
-              ) : (
-                <StatTile
-                  title="Members"
-                  value={rows.length}
-                  format="number"
-                  icon="network"
-                  subtext={
-                    servable === rows.length
-                      ? undefined
-                      : `${servable} servable`
-                  }
-                  tooltip="MCP servers this gateway fronts."
-                />
-              )}
-              {isLoadingEndpoints ? (
-                <StatTileSkeleton />
-              ) : (
-                <StatTile
-                  title="Addresses"
-                  value={endpoints.length}
-                  format="number"
-                  icon="link"
-                  tooltip="URLs clients can connect to, including custom domains."
-                />
-              )}
+          <StatTileGroup>
+            {isLoading ? (
+              <StatTileSkeleton />
+            ) : (
               <StatTile
-                title="Authentication"
-                value={0}
-                displayValue={
-                  metaMcpServer.userSessionIssuerId ? "Required" : "Anonymous"
+                title="Members"
+                value={rows.length}
+                format="number"
+                icon="network"
+                subtext={
+                  servable === rows.length ? undefined : `${servable} servable`
                 }
-                icon="shield"
-                tooltip={
-                  metaMcpServer.userSessionIssuerId
-                    ? "Clients authenticate with Speakeasy before connecting."
-                    : "Anyone who knows the URL can connect."
-                }
+                tooltip="MCP servers this gateway fronts."
               />
-            </StatTileGroup>
-          </div>
-        </Page.Section.Body>
-      </Page.Section>
+            )}
+            {isLoadingEndpoints ? (
+              <StatTileSkeleton />
+            ) : (
+              <StatTile
+                title="Addresses"
+                value={endpoints.length}
+                format="number"
+                icon="link"
+                tooltip="URLs clients can connect to, including custom domains."
+              />
+            )}
+            <StatTile
+              title="Authentication"
+              value={0}
+              displayValue={
+                metaMcpServer.userSessionIssuerId ? "Required" : "Anonymous"
+              }
+              icon="shield"
+              tooltip={
+                metaMcpServer.userSessionIssuerId
+                  ? "Clients authenticate with Speakeasy before connecting."
+                  : "Anyone who knows the URL can connect."
+              }
+            />
+          </StatTileGroup>
+        </div>
+      </section>
 
       <GatewayMembersSection metaMcpServer={metaMcpServer} />
 

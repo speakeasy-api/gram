@@ -12,12 +12,18 @@ import {
   ServerUrlSection,
 } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
+import { SettingsLayout } from "@/components/detail/settings-layout";
+import {
+  SETTINGS_GROUP_IDS,
+  SETTINGS_GROUPS,
+} from "@/components/detail/settings-groups";
+import { useScrollToSettingsHash } from "@/hooks/useScrollToSettingsHash";
+import { DisplayNameField } from "@/pages/mcp/x/tabs/settings/sections/DisplayNameField";
 
 import { AuthenticationSectionBody } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { Input } from "@/components/ui/Input";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/NetworkAccessSection";
@@ -49,28 +55,12 @@ const INSTRUCTIONS_MAX_LENGTH = 10000;
 export const GATEWAY_AUTHENTICATION_SECTION_ID = "authentication";
 export const GATEWAY_INSTRUCTIONS_SECTION_ID = "instructions";
 
-function useScrollToSettingsHash() {
-  const location = useLocation();
-
-  useEffect(() => {
-    const targetId = location.hash.replace("#", "");
-    if (
-      targetId !== MCP_SERVER_URL_SECTION_ID &&
-      targetId !== GATEWAY_AUTHENTICATION_SECTION_ID &&
-      targetId !== GATEWAY_INSTRUCTIONS_SECTION_ID
-    ) {
-      return;
-    }
-
-    const animationFrame = window.requestAnimationFrame(() => {
-      document
-        .getElementById(targetId)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [location.hash]);
-}
+const SCROLLABLE_SECTION_IDS: readonly string[] = [
+  MCP_SERVER_URL_SECTION_ID,
+  GATEWAY_AUTHENTICATION_SECTION_ID,
+  GATEWAY_INSTRUCTIONS_SECTION_ID,
+  ...SETTINGS_GROUP_IDS,
+];
 
 export function GatewaySettingsTab({
   metaMcpServer,
@@ -81,38 +71,69 @@ export function GatewaySettingsTab({
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
 }): JSX.Element {
-  useScrollToSettingsHash();
+  useScrollToSettingsHash(SCROLLABLE_SECTION_IDS);
+  const G = SETTINGS_GROUPS;
 
   return (
-    <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
-      <GatewayNameSection metaMcpServer={metaMcpServer} />
-      <GatewayDiscoverySection
-        key={`${metaMcpServer.id}:${metaMcpServer.discoveryMode}`}
-        metaMcpServer={metaMcpServer}
-      />
-      <GatewayInstructionsSection metaMcpServer={metaMcpServer} />
-      <ServerUrlSection
-        backend={{ metaMcpServerId: metaMcpServer.id }}
-        endpoints={endpoints}
-        isLoadingEndpoints={isLoadingEndpoints}
-        subject="gateway"
-        mcpServer={metaMcpServer}
-      />
-      {!isLoadingEndpoints && (
-        <NetworkAccessSection
-          metaMcpServer={metaMcpServer}
-          endpoints={endpoints}
-        />
-      )}
-      <GatewayAuthenticationSection
-        metaMcpServer={metaMcpServer}
-        endpoints={endpoints}
-      />
-      <GatewayDangerZoneSection
-        metaMcpServer={metaMcpServer}
-        endpoints={endpoints}
-      />
-    </div>
+    <SettingsLayout
+      groups={[
+        {
+          ...G.general,
+          content: <GatewayNameSection metaMcpServer={metaMcpServer} />,
+        },
+        {
+          ...G.identity,
+          content: (
+            <GatewayAuthenticationSection
+              metaMcpServer={metaMcpServer}
+              endpoints={endpoints}
+            />
+          ),
+        },
+        {
+          ...G.connection,
+          content: (
+            <>
+              <ServerUrlSection
+                backend={{ metaMcpServerId: metaMcpServer.id }}
+                endpoints={endpoints}
+                isLoadingEndpoints={isLoadingEndpoints}
+                subject="gateway"
+                mcpServer={metaMcpServer}
+              />
+              {!isLoadingEndpoints && (
+                <NetworkAccessSection
+                  metaMcpServer={metaMcpServer}
+                  endpoints={endpoints}
+                />
+              )}
+            </>
+          ),
+        },
+        {
+          ...G.tools,
+          content: (
+            <GatewayDiscoverySection
+              key={`${metaMcpServer.id}:${metaMcpServer.discoveryMode}`}
+              metaMcpServer={metaMcpServer}
+            />
+          ),
+        },
+        {
+          ...G.instructions,
+          content: <GatewayInstructionsSection metaMcpServer={metaMcpServer} />,
+        },
+        {
+          ...G.danger,
+          content: (
+            <GatewayDangerZoneSection
+              metaMcpServer={metaMcpServer}
+              endpoints={endpoints}
+            />
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -156,21 +177,14 @@ function GatewayNameSection({
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
-          <Field
-            data-invalid={update.isError ? true : undefined}
-            className="max-w-md"
-          >
-            <FieldLabel htmlFor="gateway-name">Display Name</FieldLabel>
-            <Input
-              id="gateway-name"
-              value={nameDraft}
-              onChange={(value) => setNameDraft(value)}
-              placeholder="My Gateway"
-              maxLength={NAME_MAX_LENGTH}
-              aria-invalid={update.isError}
-            />
-            {update.isError && <FieldError>{update.error.message}</FieldError>}
-          </Field>
+          <DisplayNameField
+            id="gateway-name"
+            value={nameDraft}
+            onChange={setNameDraft}
+            placeholder="My Gateway"
+            maxLength={NAME_MAX_LENGTH}
+            error={update.isError ? update.error.message : undefined}
+          />
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
@@ -452,23 +466,23 @@ function GatewayDangerZoneSection({
 
   return (
     <DangerSettingsSection>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Danger Zone</SettingsSection.Title>
-        <SettingsSection.Description>
-          Deleting a gateway removes its endpoints and memberships. Member MCP
-          servers are untouched.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
-          <div className="flex items-center justify-between gap-4">
-            <Text muted small>
-              {endpoints.length > 0
-                ? `Removes ${endpoints.length} ${endpoints.length === 1 ? "address" : "addresses"}: ${endpoints
-                    .map((e) => e.slug)
-                    .join(", ")}`
-                : "This gateway has no addresses."}
-            </Text>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 space-y-1">
+              <Text small className="font-medium">
+                Delete gateway
+              </Text>
+              <Text muted small className="max-w-2xl">
+                {`Removes ${
+                  endpoints.length > 0
+                    ? `its ${endpoints.length === 1 ? "address" : "addresses"} (${endpoints
+                        .map((e) => e.slug)
+                        .join(", ")})`
+                    : "the gateway"
+                } and its member list. Member MCP servers are untouched.`}
+              </Text>
+            </div>
             <RequireScope scope="mcp:write" level="component">
               <Button
                 variant="destructive-primary"

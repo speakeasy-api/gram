@@ -61,12 +61,9 @@ export function GuardrailsTab({
       <RequireScope scope="mcp:read" resourceId={mcpServer.id} level="page">
         <Stack gap={6} className="py-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="font-display text-3xl font-thin">Guardrails</h2>
-              <Text small muted>
-                Risk policies that inspect traffic through this server.
-              </Text>
-            </div>
+            <Text small muted>
+              Risk policies that inspect traffic through this server.
+            </Text>
             <SegmentedControl<GuardrailsView>
               value={view}
               onChange={setView}

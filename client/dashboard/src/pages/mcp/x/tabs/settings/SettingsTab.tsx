@@ -1,3 +1,10 @@
+import { useScrollToSettingsHash } from "@/hooks/useScrollToSettingsHash";
+import { SettingsLayout } from "@/components/detail/settings-layout";
+import {
+  SETTINGS_GROUP_IDS,
+  SETTINGS_GROUPS,
+} from "@/components/detail/settings-groups";
+import { useRBAC } from "@/hooks/useRBAC";
 import {
   AuthenticationSection,
   MCP_AUTHENTICATION_SECTION_ID,
@@ -9,7 +16,6 @@ import {
 } from "./sections/ServerUrlSection";
 
 import { SettingsSection } from "@/components/detail/settings-section";
-import { RequireScope } from "@/components/require-scope";
 import { FieldError } from "@/components/ui/Field";
 import { Text } from "@/components/ui/Text";
 import {
@@ -23,7 +29,6 @@ import {
   ToolsetOAuthSection,
 } from "@/pages/mcp/MCPEnvironmentSettings";
 import { MCPPerformanceTab } from "@/pages/mcp/MCPPerformanceTab";
-import { PageSection } from "@/pages/mcp/PageSection";
 import { ExportJsonSection } from "@/pages/mcp/x/hosted/ExportJsonSection";
 import { ServerInstructionsSection } from "@/pages/mcp/x/hosted/ServerInstructionsSection";
 import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
@@ -33,8 +38,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
-import { Fragment, useEffect } from "react";
-import { useLocation } from "react-router";
+import { Fragment } from "react";
 import {
   AgentSetupSection,
   MCP_AGENT_SETUP_SECTION_ID,
@@ -67,6 +71,10 @@ import {
 } from "./sections/RemoteMcpSessionsSection";
 import { ToolFilteringSection } from "./sections/ToolFilteringSection";
 import {
+  MCP_VISIBILITY_SECTION_ID,
+  VisibilitySection,
+} from "./sections/VisibilitySection";
+import {
   MCP_TUNNEL_KEY_SECTION_ID,
   TunnelKeySection,
 } from "./sections/TunnelKeySection";
@@ -88,29 +96,9 @@ const SCROLLABLE_SECTION_IDS: readonly string[] = [
   IDENTITY_CHAINING_SECTION_ID,
   MCP_SESSIONS_SECTION_ID,
   UPSTREAM_CREDENTIALS_SECTION_ID,
+  MCP_VISIBILITY_SECTION_ID,
+  ...SETTINGS_GROUP_IDS,
 ];
-
-// `ready` flips once the source-backed sections can be on the page: they
-// mount after the source row loads, so a cold-load deep link would otherwise
-// look for an element that isn't there yet.
-function useScrollToSettingsHash(ready: boolean) {
-  const location = useLocation();
-
-  useEffect(() => {
-    const targetId = location.hash.replace("#", "");
-    if (!ready || !SCROLLABLE_SECTION_IDS.includes(targetId)) {
-      return;
-    }
-
-    const animationFrame = window.requestAnimationFrame(() => {
-      document
-        .getElementById(targetId)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [location.hash, ready]);
-}
 
 export function SettingsTab({
   mcpServer,
@@ -134,6 +122,9 @@ export function SettingsTab({
   // Enforcing organizations configure upstream identity through credentials;
   // the others keep the legacy Identity panel. Only one renders.
   const upstreamAuth = useUpstreamAuthEnforcement();
+  const { hasScope } = useRBAC();
+  const canWriteToolset =
+    !!hostedToolset && hasScope("mcp:write", hostedToolset.id);
 
   // The source rows behind this server. Each section edits the source
   // directly, so they are fetched once here rather than per section.
@@ -164,7 +155,13 @@ export function SettingsTab({
     !!remoteMcpServer ||
     !!tunneledMcpServer;
 
-  useScrollToSettingsHash(sourceSettled && upstreamAuth !== "loading");
+  // `ready` flips once the source-backed sections can be on the page: they
+  // mount after the source row loads, so a cold-load deep link would otherwise
+  // look for an element that isn't there yet.
+  useScrollToSettingsHash(
+    SCROLLABLE_SECTION_IDS,
+    sourceSettled && upstreamAuth !== "loading",
+  );
 
   let deleteTarget: SourceBackedDeleteTarget | undefined;
   if (remoteMcpServer) {
@@ -175,126 +172,206 @@ export function SettingsTab({
     deleteTarget = { kind: "unproxied", source: unproxiedMcpServer };
   }
 
+  const G = SETTINGS_GROUPS;
+  const danger = (
+    <DangerZoneSection
+      mcpServer={mcpServer}
+      endpoints={endpoints}
+      deleteTarget={deleteTarget}
+      sourceUnavailable={sourceUnavailable}
+      hostedToolset={
+        hostedToolset && isCanonicalHostedWrapper(mcpServer)
+          ? hostedToolset
+          : undefined
+      }
+    />
+  );
+
   if (hostedToolset) {
-    // Toolset columns sync onto the canonical server only.
+    // Toolset columns sync onto the canonical server only, and only people
+    // who can edit the toolset see them.
     const canonical = isCanonicalHostedWrapper(mcpServer);
+    const toolsetSections = canonical && canWriteToolset;
     return (
-      <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
-        <GeneralSection mcpServer={mcpServer} />
-        {canonical ? (
-          <RequireScope
-            scope="mcp:write"
-            resourceId={hostedToolset.id}
-            level="section"
-          >
-            <ServerUrlSection
-              backend={{ mcpServerId: mcpServer.id }}
-              endpoints={endpoints}
-              isLoadingEndpoints={isLoadingEndpoints}
-              mcpServer={mcpServer}
-            />
-            <NetworkAccessSection
-              mcpServer={mcpServer}
-              endpoints={endpoints}
-              toolset={hostedToolset}
-            />
-            <div id={MCP_AUTHENTICATION_SECTION_ID}>
-              <ToolsetOAuthSection toolset={hostedToolset} />
-            </div>
-            <div id={MCP_ENVIRONMENT_SECTION_ID}>
-              <MCPAuthenticationTab toolset={hostedToolset} showOAuth={false} />
-            </div>
-          </RequireScope>
-        ) : (
-          <>
-            <ServerUrlSection
-              backend={{ mcpServerId: mcpServer.id }}
-              endpoints={endpoints}
-              isLoadingEndpoints={isLoadingEndpoints}
-              mcpServer={mcpServer}
-            />
-            <NetworkAccessSection mcpServer={mcpServer} endpoints={endpoints} />
-            <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
-          </>
-        )}
-        <RequireScope
-          scope="mcp:write"
-          resourceId={hostedToolset.id}
-          level="section"
-        >
-          <div id={MCP_PERFORMANCE_SECTION_ID}>
-            <MCPPerformanceTab toolset={hostedToolset} />
-          </div>
-        </RequireScope>
-        <PageSection
-          heading="Server Instructions"
-          description="Instructions returned to LLMs when they connect to your MCP server. Describe how your tools work together, required workflows, and any constraints."
-        >
-          <ServerInstructionsSection
-            mcpServerId={mcpServer.id}
-            writeResourceId={hostedToolset.id}
-            name={mcpServer.name || hostedToolset.name}
-            tools={hostedToolset.tools}
-          />
-        </PageSection>
-        <ToolFilteringSection mcpServer={mcpServer} />
-        {/* Export reads the toolset's canonical server only. */}
-        {canonical && <ExportJsonSection mcpServer={mcpServer} />}
-        <DangerZoneSection
-          mcpServer={mcpServer}
-          endpoints={endpoints}
-          hostedToolset={canonical ? hostedToolset : undefined}
-        />
-      </div>
+      <SettingsLayout
+        groups={[
+          {
+            ...G.general,
+            content: <GeneralSection mcpServer={mcpServer} />,
+          },
+          {
+            ...G.access,
+            content: <VisibilitySection mcpServer={mcpServer} />,
+          },
+          canonical
+            ? toolsetSections && {
+                ...G.identity,
+                content: (
+                  <>
+                    <div id={MCP_AUTHENTICATION_SECTION_ID}>
+                      <ToolsetOAuthSection toolset={hostedToolset} />
+                    </div>
+                    <div id={MCP_ENVIRONMENT_SECTION_ID}>
+                      <MCPAuthenticationTab
+                        toolset={hostedToolset}
+                        showOAuth={false}
+                      />
+                    </div>
+                  </>
+                ),
+              }
+            : {
+                ...G.identity,
+                content: (
+                  <AuthenticationSection
+                    mcpServer={mcpServer}
+                    mcpUrl={mcpUrl}
+                  />
+                ),
+              },
+          (!canonical || toolsetSections) && {
+            ...G.connection,
+            content: (
+              <>
+                <ServerUrlSection
+                  backend={{ mcpServerId: mcpServer.id }}
+                  endpoints={endpoints}
+                  isLoadingEndpoints={isLoadingEndpoints}
+                  mcpServer={mcpServer}
+                />
+                {canonical ? (
+                  <NetworkAccessSection
+                    mcpServer={mcpServer}
+                    endpoints={endpoints}
+                    toolset={hostedToolset}
+                  />
+                ) : (
+                  <NetworkAccessSection
+                    mcpServer={mcpServer}
+                    endpoints={endpoints}
+                  />
+                )}
+              </>
+            ),
+          },
+          {
+            ...G.tools,
+            content: (
+              <>
+                {canWriteToolset ? (
+                  <div id={MCP_PERFORMANCE_SECTION_ID}>
+                    <MCPPerformanceTab toolset={hostedToolset} />
+                  </div>
+                ) : null}
+                <ToolFilteringSection mcpServer={mcpServer} />
+                {/* Export reads the toolset's canonical server only. */}
+                {canonical && <ExportJsonSection mcpServer={mcpServer} />}
+              </>
+            ),
+          },
+          {
+            ...G.instructions,
+            content: (
+              <SettingsSection>
+                <SettingsSection.Header>
+                  <SettingsSection.Title>
+                    Server instructions
+                  </SettingsSection.Title>
+                  <SettingsSection.Description>
+                    Returned to agents when they connect. Describe how your
+                    tools work together, required workflows, and any
+                    constraints.
+                  </SettingsSection.Description>
+                </SettingsSection.Header>
+                <ServerInstructionsSection
+                  mcpServerId={mcpServer.id}
+                  writeResourceId={hostedToolset.id}
+                  name={mcpServer.name || hostedToolset.name}
+                  tools={hostedToolset.tools}
+                />
+              </SettingsSection>
+            ),
+          },
+          { ...G.danger, content: danger },
+        ]}
+      />
     );
   }
 
   if (remoteMcpServerId) {
     return (
-      <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
-        {/* Held until the source settles: arriving later would remount the
-            form around its Remote URL and drop anything already typed. */}
-        {remoteMcpServer || remoteQuery.isError ? (
-          <GeneralSection
-            mcpServer={mcpServer}
-            remoteMcpServer={remoteMcpServer}
-          />
-        ) : null}
-        {/* Identity sits directly under General: it is the first decision a
-            remote server needs. Upstream headers live inside its Custom
-            Headers disclosure; they are governed by the identity choice, not
-            a peer of it. */}
-        {upstreamAuth === "legacy" ? (
-          <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
-        ) : upstreamAuth === "enforced" ? (
-          // Links to the legacy Identity anchor land on its replacement.
-          <div id={MCP_AUTHENTICATION_SECTION_ID} className="space-y-4">
-            <SetupStepBanner mcpServer={mcpServer} />
-            <UpstreamCredentialsSection mcpServer={mcpServer} />
-          </div>
-        ) : (
-          <UpstreamIdentityPendingSection
-            id={MCP_AUTHENTICATION_SECTION_ID}
-            status={upstreamAuth}
-          />
-        )}
-        <IdentityChainingSection mcpServer={mcpServer} />
-        <ServerUrlSection
-          backend={{ mcpServerId: mcpServer.id }}
-          endpoints={endpoints}
-          isLoadingEndpoints={isLoadingEndpoints}
-          mcpServer={mcpServer}
-        />
-        <NetworkAccessSection mcpServer={mcpServer} endpoints={endpoints} />
-        <RemoteMcpSessionsSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
-        <ToolFilteringSection mcpServer={mcpServer} />
-        <DangerZoneSection
-          mcpServer={mcpServer}
-          endpoints={endpoints}
-          deleteTarget={deleteTarget}
-          sourceUnavailable={sourceUnavailable}
-        />
-      </div>
+      <SettingsLayout
+        groups={[
+          // Held until the source settles: arriving later would remount the
+          // form around its Remote URL and drop anything already typed.
+          (remoteMcpServer || remoteQuery.isError) && {
+            ...G.general,
+            content: (
+              <GeneralSection
+                mcpServer={mcpServer}
+                remoteMcpServer={remoteMcpServer}
+              />
+            ),
+          },
+          {
+            ...G.access,
+            content: <VisibilitySection mcpServer={mcpServer} />,
+          },
+          {
+            ...G.identity,
+            // Upstream headers live inside the Identity panel's Custom
+            // Headers disclosure; the identity choice governs them.
+            content: (
+              <>
+                {upstreamAuth === "legacy" ? (
+                  <AuthenticationSection
+                    mcpServer={mcpServer}
+                    mcpUrl={mcpUrl}
+                  />
+                ) : upstreamAuth === "enforced" ? (
+                  // Links to the legacy Identity anchor land on its replacement.
+                  <div id={MCP_AUTHENTICATION_SECTION_ID} className="space-y-4">
+                    <SetupStepBanner mcpServer={mcpServer} />
+                    <UpstreamCredentialsSection mcpServer={mcpServer} />
+                  </div>
+                ) : (
+                  <UpstreamIdentityPendingSection
+                    id={MCP_AUTHENTICATION_SECTION_ID}
+                    status={upstreamAuth}
+                  />
+                )}
+                <IdentityChainingSection mcpServer={mcpServer} />
+              </>
+            ),
+          },
+          {
+            ...G.connection,
+            content: (
+              <>
+                <ServerUrlSection
+                  backend={{ mcpServerId: mcpServer.id }}
+                  endpoints={endpoints}
+                  isLoadingEndpoints={isLoadingEndpoints}
+                  mcpServer={mcpServer}
+                />
+                <NetworkAccessSection
+                  mcpServer={mcpServer}
+                  endpoints={endpoints}
+                />
+                <RemoteMcpSessionsSection
+                  mcpServer={mcpServer}
+                  mcpUrl={mcpUrl}
+                />
+              </>
+            ),
+          },
+          {
+            ...G.tools,
+            content: <ToolFilteringSection mcpServer={mcpServer} />,
+          },
+          { ...G.danger, content: danger },
+        ]}
+      />
     );
   }
 
@@ -303,53 +380,84 @@ export function SettingsTab({
   // this tree stays mounted across that navigation, and a draft or late save
   // result from the previous source must not land on the next one.
   return (
-    <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
-      <GeneralSection mcpServer={mcpServer} />
-      {isUnproxied ? null : (
-        <>
-          <ServerUrlSection
-            backend={{ mcpServerId: mcpServer.id }}
-            endpoints={endpoints}
-            isLoadingEndpoints={isLoadingEndpoints}
-            mcpServer={mcpServer}
-          />
-          <NetworkAccessSection mcpServer={mcpServer} endpoints={endpoints} />
-        </>
-      )}
-      <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
-      {/* Hosted toolsets keep their own authentication, and unproxied
-          servers reach the upstream without Speakeasy in between. */}
-      {isUnproxied ||
-      mcpServer.toolsetId ||
-      upstreamAuth === "legacy" ? null : upstreamAuth === "enforced" ? (
-        <UpstreamCredentialsSection mcpServer={mcpServer} />
-      ) : (
-        <UpstreamIdentityPendingSection
-          id={UPSTREAM_CREDENTIALS_SECTION_ID}
-          status={upstreamAuth}
-        />
-      )}
-      {tunneledMcpServer ? (
-        <Fragment key={tunneledMcpServer.id}>
-          <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />
-          <CallerIdentitySection />
-          <PublicAccessSection tunneledMcpServer={tunneledMcpServer} />
-          <PublicRateLimitsSection
-            tunneledMcpServerId={tunneledMcpServer.id}
-            projectId={mcpServer.projectId}
-          />
-          <TunnelKeySection tunneledMcpServer={tunneledMcpServer} />
-          <AgentSetupSection tunneledMcpServer={tunneledMcpServer} />
-        </Fragment>
-      ) : null}
-      {isUnproxied ? null : <ToolFilteringSection mcpServer={mcpServer} />}
-      <DangerZoneSection
-        mcpServer={mcpServer}
-        endpoints={endpoints}
-        deleteTarget={deleteTarget}
-        sourceUnavailable={sourceUnavailable}
-      />
-    </div>
+    <SettingsLayout
+      groups={[
+        { ...G.general, content: <GeneralSection mcpServer={mcpServer} /> },
+        {
+          ...G.access,
+          content: (
+            <>
+              <VisibilitySection mcpServer={mcpServer} />
+              {tunneledMcpServer ? (
+                <Fragment key={tunneledMcpServer.id}>
+                  <PublicAccessSection tunneledMcpServer={tunneledMcpServer} />
+                  <PublicRateLimitsSection
+                    tunneledMcpServerId={tunneledMcpServer.id}
+                    projectId={mcpServer.projectId}
+                  />
+                </Fragment>
+              ) : null}
+            </>
+          ),
+        },
+        {
+          ...G.identity,
+          content: (
+            <>
+              <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+              {/* Hosted toolsets keep their own authentication, and unproxied
+                  servers reach the upstream without Speakeasy in between. */}
+              {isUnproxied ||
+              mcpServer.toolsetId ||
+              upstreamAuth === "legacy" ? null : upstreamAuth === "enforced" ? (
+                <UpstreamCredentialsSection mcpServer={mcpServer} />
+              ) : (
+                <UpstreamIdentityPendingSection
+                  id={UPSTREAM_CREDENTIALS_SECTION_ID}
+                  status={upstreamAuth}
+                />
+              )}
+              {tunneledMcpServer ? (
+                <Fragment key={tunneledMcpServer.id}>
+                  <ResourceIdentifierSection
+                    tunneledMcpServer={tunneledMcpServer}
+                  />
+                  <CallerIdentitySection />
+                </Fragment>
+              ) : null}
+            </>
+          ),
+        },
+        !isUnproxied && {
+          ...G.connection,
+          content: (
+            <>
+              <ServerUrlSection
+                backend={{ mcpServerId: mcpServer.id }}
+                endpoints={endpoints}
+                isLoadingEndpoints={isLoadingEndpoints}
+                mcpServer={mcpServer}
+              />
+              <NetworkAccessSection
+                mcpServer={mcpServer}
+                endpoints={endpoints}
+              />
+              {tunneledMcpServer ? (
+                <Fragment key={tunneledMcpServer.id}>
+                  <TunnelKeySection tunneledMcpServer={tunneledMcpServer} />
+                  <AgentSetupSection tunneledMcpServer={tunneledMcpServer} />
+                </Fragment>
+              ) : null}
+            </>
+          ),
+        },
+        !isUnproxied && {
+          ...G.tools,
+          content: <ToolFilteringSection mcpServer={mcpServer} />,
+        },
+        { ...G.danger, content: danger },
+      ]}
+    />
   );
 }
 

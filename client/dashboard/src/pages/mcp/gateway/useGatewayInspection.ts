@@ -78,6 +78,15 @@ const rpcErrorSchema = z.object({
   message: z.string(),
 });
 
+/** What the HTTP exchange behind one JSON-RPC call looked like. */
+export interface GatewayRPCExchange {
+  request: unknown;
+  status: number;
+  headers: Headers;
+  /** The decoded JSON-RPC envelope, when the body was readable. */
+  response: unknown;
+}
+
 // The endpoint speaks streamable HTTP and answers stateless requests, so one
 // fetch per JSON-RPC call is enough — no session to establish or carry.
 export async function gatewayRPC(
@@ -87,7 +96,10 @@ export async function gatewayRPC(
   params: unknown,
   signal?: AbortSignal,
   requestId: string = crypto.randomUUID(),
+  /** Sees the raw exchange, for callers that show the wire to the user. */
+  observe?: (exchange: GatewayRPCExchange) => void,
 ): Promise<unknown> {
+  const requestBody = { jsonrpc: "2.0", id: requestId, method, params };
   const response = await fetch(url, {
     method: "POST",
     signal,
@@ -96,19 +108,23 @@ export async function gatewayRPC(
       Accept: "application/json, text/event-stream",
       ...headers,
     },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: requestId,
-      method,
-      params,
-    }),
+    body: JSON.stringify(requestBody),
   });
+  const report = (decoded: unknown) =>
+    observe?.({
+      request: requestBody,
+      status: response.status,
+      headers: response.headers,
+      response: decoded,
+    });
 
   if (response.status === 401 || response.status === 403) {
+    report(undefined);
     throw new UnauthorizedError("unauthorized", response.status);
   }
   if (!response.ok) {
     const failure: unknown = await response.json().catch(() => undefined);
+    report(failure);
     const message = z.object({ error: rpcErrorSchema }).safeParse(failure);
     if (message.success)
       throw new GatewayRPCError(
@@ -136,6 +152,7 @@ export async function gatewayRPC(
     : body;
 
   const parsed: unknown = JSON.parse(payload ?? "{}");
+  report(parsed);
   const envelope = z
     .object({
       result: z.unknown().optional(),

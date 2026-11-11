@@ -1,3 +1,4 @@
+import { DetailBody } from "@/components/detail-body";
 import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
@@ -7,7 +8,6 @@ import { buildGetUnproxiedMcpServerUsageQuery } from "@gram/client/react-query/g
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
 import { UnproxiedMcpUsageBreakdown } from "./UnproxiedMcpUsageBreakdown";
 
 const USAGE_WINDOW_DAYS = 30;
@@ -15,9 +15,6 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 type UnproxiedMcpOverviewTabProps = {
   unproxiedMcpServerId: string;
-  mcpServerId: string;
-  mcpServerSlug: string;
-  mcpServerName: string;
 };
 
 /**
@@ -25,14 +22,10 @@ type UnproxiedMcpOverviewTabProps = {
  * Speakeasy-proxied traffic, so the summary cards, top-tools breakdowns, and
  * comparison stats that tab shows (all sourced from Speakeasy's own proxy
  * telemetry) don't apply. This shows only a daily call-count chart, sourced
- * from Shadow MCP's hook-reported traces matched by URL. Plugin/publish
- * status is backend-agnostic, so it's shown the same as every other server.
+ * from Shadow MCP's hook-reported traces matched by URL.
  */
 export function UnproxiedMcpOverviewTab({
   unproxiedMcpServerId,
-  mcpServerId,
-  mcpServerSlug,
-  mcpServerName,
 }: UnproxiedMcpOverviewTabProps): JSX.Element {
   const { from, to } = useMemo(() => {
     const to = new Date();
@@ -103,17 +96,8 @@ export function UnproxiedMcpOverviewTab({
   const isLoadingUsage = !isUsageUnavailable && (isLoading || isLoadingServer);
 
   return (
-    <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+    <DetailBody spacing="none" className="px-0 pt-0">
       <Stack gap={6}>
-        <PluginStatusBanner
-          server={{
-            kind: "mcp-server",
-            id: mcpServerId,
-            slug: mcpServerSlug,
-            name: mcpServerName,
-          }}
-        />
-
         <div className="border-neutral-softest border p-6">
           <Heading variant="h4">Tool calls over time</Heading>
           <Text small muted className="mt-1">
@@ -184,6 +168,6 @@ export function UnproxiedMcpOverviewTab({
           </div>
         )}
       </Stack>
-    </div>
+    </DetailBody>
   );
 }

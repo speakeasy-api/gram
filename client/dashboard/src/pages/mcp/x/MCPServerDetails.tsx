@@ -1,20 +1,13 @@
+import { DetailBody } from "@/components/detail-body";
+import { useMcpServerDetailChrome } from "@/components/mcp/useMcpServerDetailChrome";
+import { McpDetailFrame } from "@/components/mcp/McpDetailFrame";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { ProviderSetupPage } from "./setup/ProviderSetupPage";
 import { isKnownEnumValue } from "@/lib/enum";
-import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
-import {
-  invalidateMcpServerQueries,
-  mcpServerVisibilityToast,
-  mcpServerVisibilityUpdateForm,
-} from "@/lib/mcp-server-visibility";
-import { handleError } from "@/lib/errors";
-import { Page } from "@/components/page-layout";
 import { SplashScreen } from "@/components/ui/LogoLoader";
 import { RequireScope } from "@/components/require-scope";
 import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
-import { useRBAC } from "@/hooks/useRBAC";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { platformEndpointSlug } from "@/hooks/useToolsetUrl";
 import {
@@ -25,16 +18,12 @@ import {
 } from "@/lib/utils";
 import { getMcpServerArgs, mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import type {
-  McpServer,
-  McpServerVisibility,
-} from "@gram/client/models/components/mcpserver.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { isNotNotFound } from "@/lib/query-errors";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
-import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,10 +35,8 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check, ChevronDown } from "lucide-react";
 import { Link, Navigate, useLocation, useParams } from "react-router";
-import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import { RemoteTeamAccessTab } from "./tabs/RemoteTeamAccessTab";
 import {
@@ -63,10 +50,7 @@ import {
 import { ToolsetRedirectPage } from "../ToolsetRedirect";
 import { serverTabForToolsetTab } from "../toolsetRedirectRouting";
 import { isNotFoundError } from "@/lib/route-errors";
-import {
-  HostedPromptsTab,
-  HostedResourcesTab,
-} from "./hosted/HostedContentTabs";
+import { HostedContentTab } from "./hosted/HostedContentTabs";
 import { HostedToolsTab } from "./hosted/HostedToolsTab";
 import { useHostedToolset } from "./hosted/useHostedToolset";
 import { useHostedVisibilityGuard } from "./hosted/useHostedVisibilityGuard";
@@ -81,6 +65,13 @@ import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { GuardrailsTab } from "./tabs/guardrails/GuardrailsTab";
 import { RemoteSkillsTabRoute } from "./tabs/skills/RemoteSkillsTab";
 import { MCPSkillsTabRoute } from "../MCPSkillsTab";
+import {
+  ALL_VISIBILITY_OPTIONS,
+  HOSTED_PUBLIC_DESCRIPTION,
+  useMcpServerVisibilityUpdate,
+  visibilityLabel,
+  VISIBILITY_OPTIONS,
+} from "./mcpServerVisibility";
 
 export default function MCPServerDetails(): JSX.Element | null {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -92,6 +83,7 @@ export default function MCPServerDetails(): JSX.Element | null {
   const idOrSlug = mcpServerSlug ?? "";
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
   const tabContentRef = useTabScrollReset(activeTab);
+  const chrome = useMcpServerDetailChrome();
   const tabSegment = tabSegmentFromPath(location.pathname, idOrSlug);
 
   const {
@@ -215,7 +207,7 @@ export default function MCPServerDetails(): JSX.Element | null {
     if (hosted && needsToolset && !hostedToolset) {
       if (isLoadingToolset) return <SplashScreen />;
       return (
-        <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+        <DetailBody spacing="none" className="px-0 pt-0">
           <Alert variant="error" dismissible={false}>
             <Stack gap={2}>
               <Text small>
@@ -230,32 +222,32 @@ export default function MCPServerDetails(): JSX.Element | null {
               </div>
             </Stack>
           </Alert>
-        </div>
+        </DetailBody>
       );
     }
     switch (activeTab) {
       case "tools":
         return (
           hostedToolset && (
-            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+            <DetailBody spacing="none" className="px-0 pt-0">
               <HostedToolsTab toolset={hostedToolset} />
-            </div>
+            </DetailBody>
           )
         );
       case "resources":
         return (
           hostedToolset && (
-            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-              <HostedResourcesTab toolset={hostedToolset} />
-            </div>
+            <DetailBody spacing="none" className="px-0 pt-0">
+              <HostedContentTab toolset={hostedToolset} kind="resources" />
+            </DetailBody>
           )
         );
       case "prompts":
         return (
           hostedToolset && (
-            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-              <HostedPromptsTab toolset={hostedToolset} />
-            </div>
+            <DetailBody spacing="none" className="px-0 pt-0">
+              <HostedContentTab toolset={hostedToolset} kind="prompts" />
+            </DetailBody>
           )
         );
       case "overview":
@@ -363,75 +355,22 @@ export default function MCPServerDetails(): JSX.Element | null {
   };
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs
-          substitutions={{
-            [idOrSlug]: mcpServer?.name || "MCP Server",
-          }}
-          // skipSegments matches by literal value, not position — if the
-          // server's own slug happens to collide with a tab name (e.g. a
-          // server slugged "settings"), guard against also skipping the
-          // server's own breadcrumb crumb.
-          skipSegments={MCP_SERVER_TAB_URLS.filter((tab) => tab !== idOrSlug)}
-        />
-      </Page.Header>
-
-      <Page.Body fullWidth className="gap-0">
-        <div
-          ref={tabContentRef}
-          className="mx-auto w-full max-w-[1270px] flex-1"
-        >
-          {renderTabContent()}
-        </div>
-      </Page.Body>
-    </Page>
+    <McpDetailFrame
+      chrome={chrome}
+      breadcrumbs={{
+        substitutions: { [idOrSlug]: mcpServer?.name || "MCP Server" },
+        // skipSegments matches by literal value, not position — if the
+        // server's own slug happens to collide with a tab name (e.g. a
+        // server slugged "settings"), guard against also skipping the
+        // server's own breadcrumb crumb.
+        skipSegments: MCP_SERVER_TAB_URLS.filter((tab) => tab !== idOrSlug),
+      }}
+      contentRef={tabContentRef}
+    >
+      {renderTabContent()}
+    </McpDetailFrame>
   );
 }
-
-type VisibilityOption = {
-  value: McpServerVisibility;
-  label: string;
-  description: string;
-  dotClass: string;
-  hoverDotClass: string;
-};
-
-const VISIBILITY_OPTIONS: VisibilityOption[] = [
-  {
-    value: "disabled",
-    label: "Disabled",
-    description: "This server is offline. No users can connect to it",
-    dotClass: "bg-amber-400",
-    hoverDotClass: "group-hover:bg-amber-400",
-  },
-  {
-    value: "private",
-    label: "Private",
-    description: "The server serves traffic.",
-    dotClass: "bg-blue-400",
-    hoverDotClass: "group-hover:bg-blue-400",
-  },
-];
-
-// Public visibility is offered for hosted servers, and for tunneled-backed
-// servers once the tunnel source owner has consented (double opt-in).
-const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
-  value: "public",
-  label: "Public",
-  description:
-    "Anyone can connect anonymously — no login. Every tool is exposed to the public internet.",
-  dotClass: "bg-green-400",
-  hoverDotClass: "group-hover:bg-green-400",
-};
-
-const HOSTED_PUBLIC_DESCRIPTION =
-  "Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools.";
-
-const ALL_VISIBILITY_OPTIONS = [
-  ...VISIBILITY_OPTIONS,
-  PUBLIC_VISIBILITY_OPTION,
-];
 
 export function MCPServerStatusDropdown({
   server,
@@ -613,72 +552,4 @@ export function MCPServerAvailabilityToggle({
       />
     </span>
   );
-}
-
-function visibilityLabel(visibility: McpServerVisibility): string {
-  switch (visibility) {
-    case "disabled":
-      return "Disabled";
-    case "public":
-      return "Public";
-    case "private":
-      return "Private";
-  }
-  return "Unknown";
-}
-
-function useMcpServerVisibilityUpdate(server: McpServer): {
-  canWrite: boolean;
-  updateVisibility: (visibility: McpServerVisibility) => void;
-  updating: boolean;
-} {
-  const { hasScope } = useRBAC();
-  const canWrite =
-    hasScope("mcp:write") &&
-    isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);
-  const queryClient = useQueryClient();
-  const telemetry = useTelemetry();
-  const followRenamedServer = useFollowRenamedServer();
-  const update = useUpdateMcpServerMutation({
-    onSuccess: async (updated, variables) => {
-      followRenamedServer(updated);
-      await invalidateMcpServerQueries(queryClient);
-      const next = variables.request.updateMcpServerForm.visibility;
-      toast.success(mcpServerVisibilityToast(next));
-      // Keeps the toolset page's visibility events for hosted servers.
-      if (standsInForToolset(server)) {
-        telemetry.capture("mcp_event", {
-          action:
-            next === "disabled"
-              ? "mcp_disabled"
-              : next === "public"
-                ? "mcp_made_public"
-                : "mcp_made_private",
-          slug: server.toolset?.slug,
-        });
-      }
-    },
-    onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update server visibility",
-      );
-    },
-  });
-
-  const updateVisibility = (next: McpServerVisibility) => {
-    if (!canWrite || next === server.visibility) return;
-    try {
-      update.mutate({
-        request: {
-          updateMcpServerForm: mcpServerVisibilityUpdateForm(server, next),
-        },
-      });
-    } catch (error) {
-      handleError(error, { title: "Couldn't update server availability" });
-    }
-  };
-
-  return { canWrite, updateVisibility, updating: update.isPending };
 }

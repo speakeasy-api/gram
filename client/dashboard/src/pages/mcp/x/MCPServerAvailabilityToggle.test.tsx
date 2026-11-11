@@ -1,7 +1,13 @@
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -57,6 +63,21 @@ vi.mock("@gram/client/react-query/updateMcpServer.js", () => ({
     return { isPending: false, mutate: mocks.mutate };
   },
 }));
+// The update reads the latest record first; it is the one rendered.
+const latest = vi.hoisted(() => ({ server: undefined as unknown }));
+vi.mock("@/contexts/Sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/contexts/Sdk")>()),
+  useSdkClient: () => ({}),
+}));
+vi.mock("@gram/client/react-query/getMcpServer.js", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@gram/client/react-query/getMcpServer.js")
+  >()),
+  buildGetMcpServerQuery: (_client: unknown, request: { id: string }) => ({
+    queryKey: ["test-get-mcp-server", request.id],
+    queryFn: async () => latest.server,
+  }),
+}));
 vi.mock("@gram/client/react-query/getTunneledMcpServer.js", () => ({
   useGetTunneledMcpServer: () => mocks.tunneledSource(),
 }));
@@ -101,7 +122,8 @@ const server = {
 
 // The status dropdown links to the source's public-access section, so these
 // renders need a router as well as the query client.
-function renderInApp(ui: ReactNode): void {
+function renderInApp(ui: ReactNode, rendered?: McpServer): void {
+  latest.server = rendered;
   render(
     <MemoryRouter>
       <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>
@@ -110,7 +132,7 @@ function renderInApp(ui: ReactNode): void {
 }
 
 function renderToggle(mcpServer: McpServer = server): void {
-  renderInApp(<MCPServerAvailabilityToggle server={mcpServer} />);
+  renderInApp(<MCPServerAvailabilityToggle server={mcpServer} />, mcpServer);
 }
 
 beforeEach(() => {
@@ -151,41 +173,45 @@ describe("MCPServerAvailabilityToggle", () => {
     expect(mocks.mutate).not.toHaveBeenCalled();
   });
 
-  it("disables a Remote MCP server while preserving its backend fields", () => {
+  it("disables a Remote MCP server while preserving its backend fields", async () => {
     renderToggle();
 
     fireEvent.click(screen.getByRole("switch", { name: "Disable MCP server" }));
 
-    expect(mocks.mutate).toHaveBeenCalledWith({
-      request: {
-        updateMcpServerForm: {
-          id: "mcp-server-1",
-          name: "Example server",
-          remoteMcpServerId: "remote-source-1",
-          tunneledMcpServerId: undefined,
-          toolsetId: undefined,
-          unproxiedMcpServerId: undefined,
-          environmentId: undefined,
-          toolVariationsGroupId: "tool-filter-1",
-          visibility: "disabled",
+    await waitFor(() =>
+      expect(mocks.mutate).toHaveBeenCalledWith({
+        request: {
+          updateMcpServerForm: {
+            id: "mcp-server-1",
+            name: "Example server",
+            remoteMcpServerId: "remote-source-1",
+            tunneledMcpServerId: undefined,
+            toolsetId: undefined,
+            unproxiedMcpServerId: undefined,
+            environmentId: undefined,
+            toolVariationsGroupId: "tool-filter-1",
+            visibility: "disabled",
+          },
         },
-      },
-    });
+      }),
+    );
   });
 
-  it("enables a disabled server as private", () => {
+  it("enables a disabled server as private", async () => {
     renderToggle({ ...server, visibility: "disabled" });
 
     fireEvent.click(screen.getByRole("switch", { name: "Enable MCP server" }));
 
-    expect(mocks.mutate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: expect.objectContaining({
-          updateMcpServerForm: expect.objectContaining({
-            visibility: "private",
+    await waitFor(() =>
+      expect(mocks.mutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: expect.objectContaining({
+            updateMcpServerForm: expect.objectContaining({
+              visibility: "private",
+            }),
           }),
         }),
-      }),
+      ),
     );
   });
 
@@ -196,6 +222,7 @@ describe("MCPServerAvailabilityToggle", () => {
       fireEvent.click(screen.getByRole("switch"));
       expect(mocks.invalidateAudience).not.toHaveBeenCalled();
 
+      await waitFor(() => expect(mocks.mutate).toHaveBeenCalled());
       const [variables] = mocks.mutate.mock.calls.at(-1)!;
       const [options] = mocks.mutationOptions.mock.calls.at(-1)!;
       await options.onSuccess(undefined, variables);
@@ -243,28 +270,27 @@ describe("MCPServerAvailabilityToggle", () => {
     ).not.toBeNull();
   });
 
-  it("keeps the tunneled Public option after the source opts in", () => {
+  it("keeps the tunneled Public option after the source opts in", async () => {
     mocks.tunneledSource.mockReturnValue({ data: { allowPublic: true } });
-    renderInApp(
-      <MCPServerStatusDropdown
-        server={{
-          ...server,
-          remoteMcpServerId: undefined,
-          tunneledMcpServerId: "tunneled-source-1",
-        }}
-      />,
-    );
+    const tunneled = {
+      ...server,
+      remoteMcpServerId: undefined,
+      tunneledMcpServerId: "tunneled-source-1",
+    };
+    renderInApp(<MCPServerStatusDropdown server={tunneled} />, tunneled);
 
     fireEvent.click(screen.getByRole("menuitem", { name: /^Public/ }));
 
-    expect(mocks.mutate).toHaveBeenCalledWith({
-      request: {
-        updateMcpServerForm: expect.objectContaining({
-          tunneledMcpServerId: "tunneled-source-1",
-          visibility: "public",
-        }),
-      },
-    });
+    await waitFor(() =>
+      expect(mocks.mutate).toHaveBeenCalledWith({
+        request: {
+          updateMcpServerForm: expect.objectContaining({
+            tunneledMcpServerId: "tunneled-source-1",
+            visibility: "public",
+          }),
+        },
+      }),
+    );
   });
 });
 
@@ -294,20 +320,22 @@ describe("hosted MCP server visibility", () => {
     ).toHaveProperty("disabled", true);
   });
 
-  it("offers Public through the hosted confirmations", () => {
-    renderInApp(<MCPServerStatusDropdown server={hosted} />);
+  it("offers Public through the hosted confirmations", async () => {
+    renderInApp(<MCPServerStatusDropdown server={hosted} />, hosted);
 
     fireEvent.click(screen.getByRole("menuitem", { name: /^Public/ }));
 
     expect(mocks.guardRequest).toHaveBeenCalledWith("hosted-tools", "public");
-    expect(mocks.mutate).toHaveBeenCalledWith({
-      request: {
-        updateMcpServerForm: expect.objectContaining({
-          id: "hosted-1",
-          visibility: "public",
-        }),
-      },
-    });
+    await waitFor(() =>
+      expect(mocks.mutate).toHaveBeenCalledWith({
+        request: {
+          updateMcpServerForm: expect.objectContaining({
+            id: "hosted-1",
+            visibility: "public",
+          }),
+        },
+      }),
+    );
   });
 });
 
