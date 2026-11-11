@@ -120,10 +120,10 @@ var adminScopes = []Scope{
 	// Organizational Memory is an org-level capability that admins turn on and
 	// curate, so org:admin gets memory:read and memory:write by default.
 	// Members still need an explicit grant because team memory summarizes
-	// every member's sessions in a project. It exposes only masked summaries,
-	// never raw transcripts, so the scope catalog does not mark it sensitive
-	// the way it marks chat:read. memory:write satisfies memory:read via
-	// scopeExpansions.
+	// every member's sessions in a project. It exposes masked session
+	// summaries, memos and digests, never raw transcripts, so the scope
+	// catalog does not mark it sensitive the way it marks chat:read.
+	// memory:write satisfies memory:read via scopeExpansions.
 	ScopeMemoryRead,
 	ScopeMemoryWrite,
 	// chat:read and chat:write are intentionally NOT defaults for any system
