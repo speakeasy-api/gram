@@ -214,6 +214,7 @@ var textOnlyTools = map[string]string{
 	"list_gateway_sessions":                textOnlyLog,
 	"search_chats":                         textOnlyLog,
 	"read_chat":                            textOnlyLog,
+	"search_team_memory":                   textOnlyLog,
 	"find_signal_sessions":                 textOnlyLog,
 	"list_skill_feedback":                  textOnlyLog,
 	"list_skill_suggestion_feedback":       textOnlyLog,
@@ -257,6 +258,7 @@ var textOnlyTools = map[string]string{
 	"list_my_mcp_access":                   textOnlyMember,
 	"send_platform_mcp_feedback":           textOnlyNothing,
 	"record_workflow_run":                  textOnlyNothing,
+	"remember":                             textOnlyNothing,
 }
 
 // cardRouteParam fills one {name} route segment. Exact keys are read from
