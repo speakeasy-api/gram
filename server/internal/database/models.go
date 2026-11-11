@@ -1863,9 +1863,15 @@ type CustomDomain struct {
 	// Advisory DNS configuration observation, independent of ownership and infrastructure health.
 	// @access: confidential
 	DnsConfigurationStatus pgtype.Text
-	// Time of the DNS observation; matches health_checked_at only when both observations came from the same check.
+	// Time of the routing DNS observation; matches health_checked_at only when both observations came from the same check.
 	// @access: confidential
 	DnsCheckedAt pgtype.Timestamptz
+	// Start of the current run of successful checks of the domain's Certificate Manager DNS authorization record. NULL until a check succeeds; a failed check clears it. Reflects our own DNS lookup, not certificate issuance.
+	// @access: confidential
+	DnsAuthorizationVerifiedAt pgtype.Timestamptz
+	// Time of the last check of the domain's Certificate Manager DNS authorization record, whatever its result. NULL when it has never been checked.
+	// @access: confidential
+	DnsAuthorizationCheckedAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
