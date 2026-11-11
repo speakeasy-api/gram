@@ -240,6 +240,8 @@ ORDER BY d.period_start, d.level;
 -- yet, newest first so @row_limit keeps the most recent. A stale day digest
 -- (one that folded a source no longer eligible) is hidden from recall, so its
 -- still-eligible sources come back here until the next run rebuilds the day.
+-- A day digest covers a chat only for the day of its current summary, so a
+-- summary regenerated on a later day comes back until that day is digested.
 SELECT c.id, c.summary::text AS summary, c.summary_generated_at::timestamptz AS summary_generated_at
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
@@ -256,6 +258,7 @@ WHERE c.project_id = @project_id
     WHERE d.project_id = c.project_id
       AND d.level = 'day'
       AND d.chat_ids @> ARRAY[c.id]
+      AND d.period_start = (c.summary_generated_at AT TIME ZONE 'UTC')::date
       AND cardinality(d.chat_ids) = (
         SELECT count(*)
         FROM chats dc
