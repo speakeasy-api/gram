@@ -40,9 +40,9 @@ func TestScopeCatalog_EntriesAreComplete(t *testing.T) {
 		require.Contains(t, ScopeCategories, entry.Category, "%s: category", entry.Scope)
 		require.NotEmpty(t, entry.ResourceType, "%s: resource type", entry.Scope)
 
-		surface, ok := GrantSurfaceForScope(entry.Scope)
-		require.True(t, ok, "%s: grant surface", entry.Scope)
-		require.NotEmpty(t, surface)
+		owner, ok := ScopeGrantSource(entry.Scope)
+		require.True(t, ok, "%s: grant source", entry.Scope)
+		require.NotEmpty(t, owner)
 
 		visibility, ok := ScopeVisibilityFor(entry.Scope)
 		require.True(t, ok)

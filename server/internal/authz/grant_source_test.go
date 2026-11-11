@@ -6,16 +6,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateGrantSurface(t *testing.T) {
+func TestValidateGrantSource(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, ValidateGrantSurface(GrantSurfaceAccess, []*RoleGrant{
+	require.NoError(t, ValidateGrantSource(GrantSourceRoles, []*RoleGrant{
 		{Scope: string(ScopeOrgAdmin)},
 		{Scope: string(ScopeProjectRead)},
 		{Scope: string(ScopeSkillWrite)},
 		{Scope: string(ScopeSkillBlockedRead)},
-		// Chat scopes are assignable only through custom roles, so the access
-		// surface has to own them or non-owner session access could never be
+		// Chat scopes are assignable only through custom roles, so roles have
+		// to be their source or non-owner session access could never be
 		// granted at all.
 		{Scope: string(ScopeChatRead)},
 		{Scope: string(ScopeChatWrite)},
@@ -29,22 +29,22 @@ func TestValidateGrantSurface(t *testing.T) {
 		{Scope: string(ScopeAssistantWrite)},
 		{Scope: string(ScopeAssistantBlockedWrite)},
 	}))
-	require.NoError(t, ValidateGrantSurface(GrantSurfaceRiskPolicy, []*RoleGrant{
+	require.NoError(t, ValidateGrantSource(GrantSourceRiskPolicy, []*RoleGrant{
 		{Scope: string(ScopeRiskPolicyEvaluate)},
 		{Scope: string(ScopeRiskPolicyBypass)},
 	}))
 
-	require.ErrorContains(t, ValidateGrantSurface(GrantSurfaceAccess, []*RoleGrant{
+	require.ErrorContains(t, ValidateGrantSource(GrantSourceRoles, []*RoleGrant{
 		{Scope: string(ScopeRiskPolicyEvaluate)},
 	}), `managed by "risk_policy" grants`)
-	require.ErrorContains(t, ValidateGrantSurface(GrantSurfaceRiskPolicy, []*RoleGrant{
+	require.ErrorContains(t, ValidateGrantSource(GrantSourceRiskPolicy, []*RoleGrant{
 		{Scope: string(ScopeProjectRead)},
 	}), `managed by "access" grants`)
 }
 
-func TestValidateGrantSurfaceRejectsUnknownScope(t *testing.T) {
+func TestValidateGrantSourceRejectsUnknownScope(t *testing.T) {
 	t.Parallel()
 
-	err := ValidateGrantSurface(GrantSurfaceAccess, []*RoleGrant{{Scope: "unknown:scope"}})
+	err := ValidateGrantSource(GrantSourceRoles, []*RoleGrant{{Scope: "unknown:scope"}})
 	require.ErrorContains(t, err, `scope "unknown:scope" is not managed by a grant surface`)
 }
