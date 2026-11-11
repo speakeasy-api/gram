@@ -105,12 +105,15 @@ type Entry struct {
 // Entries come back oldest first.
 func Uncovered(digests []Digest, chats []ChatNote, memos []MemoNote) []Entry {
 	covered := map[uuid.UUID]bool{}
+	// A digest covers a chat only for the period it folded: a summary
+	// regenerated after that period is newer than the digest's snapshot.
+	chatPeriods := map[uuid.UUID][]Digest{}
 	for _, d := range digests {
 		for _, id := range d.ChildDigestIDs {
 			covered[id] = true
 		}
 		for _, id := range d.ChatIDs {
-			covered[id] = true
+			chatPeriods[id] = append(chatPeriods[id], d)
 		}
 		for _, id := range d.MemoIDs {
 			covered[id] = true
@@ -145,7 +148,7 @@ func Uncovered(digests []Digest, chats []ChatNote, memos []MemoNote) []Entry {
 		}
 	}
 	for _, c := range chats {
-		if covered[c.ID] {
+		if chatCovered(c, chatPeriods[c.ID]) {
 			continue
 		}
 		// Chat titles are generated from the raw transcript and are not
@@ -270,4 +273,17 @@ func renderEntry(e Entry) string {
 
 func omittedNotice(dropped int) string {
 	return fmt.Sprintf("(%d older entries omitted to fit the budget; use search_team_memory for older history.)\n\n", dropped)
+}
+
+// chatCovered reports whether one of the digests that cite the chat covers
+// the period its current summary was written in.
+func chatCovered(c ChatNote, digests []Digest) bool {
+	at := c.SummarizedAt.UTC()
+	for _, d := range digests {
+		start := d.PeriodStart.UTC()
+		if !at.Before(start) && at.Before(d.Level.PeriodEnd(start)) {
+			return true
+		}
+	}
+	return false
 }
