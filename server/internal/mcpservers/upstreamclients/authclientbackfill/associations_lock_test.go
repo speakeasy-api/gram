@@ -158,3 +158,10 @@ func TestPreflightServerAssociationsWithRegistrationsMergesOneOrderedGateSet(t *
 		})
 	}
 }
+
+func TestPreflightServerAssociationsEmptyScopeSkipsDatabase(t *testing.T) {
+	t.Parallel()
+	// A nil transaction proves no statement runs for an empty normalized scope.
+	require.NoError(t, PreflightServerAssociations(t.Context(), nil, "org_empty", uuid.Nil))
+	require.NoError(t, PreflightServerAssociationsWithRegistrations(t.Context(), nil, "org_empty", nil, []uuid.UUID{uuid.Nil}))
+}

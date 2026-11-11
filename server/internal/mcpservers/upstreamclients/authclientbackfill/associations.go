@@ -39,7 +39,11 @@ func PreflightServerAssociationsWithRegistrations(ctx context.Context, tx pgx.Tx
 	if organizationID == "" {
 		return errors.New("preflight server associations: no tenant scope")
 	}
-	_, err := gateOAuthRegistrations(ctx, New(tx), organizationID, dedupeServers(serverIDs), extraRegistrationIDs...)
+	servers, registrations := dedupeServers(serverIDs), dedupeServers(extraRegistrationIDs)
+	if len(servers) == 0 && len(registrations) == 0 {
+		return nil
+	}
+	_, err := gateOAuthRegistrations(ctx, New(tx), organizationID, servers, registrations...)
 	return err
 }
 
