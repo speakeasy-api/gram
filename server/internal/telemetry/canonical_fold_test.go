@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -38,10 +37,7 @@ func foldTestContext(t *testing.T) (context.Context, *testInstance, string) {
 
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 	return ctx, ti, authCtx.ActiveOrganizationID
 }
 

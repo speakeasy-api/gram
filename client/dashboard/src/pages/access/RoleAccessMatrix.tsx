@@ -39,7 +39,6 @@ import {
   LEVEL_LABEL,
   LEVELS,
   type Level,
-  levelRank,
   type McpRow,
   mcpAllows,
   mcpBlocks,
@@ -576,6 +575,12 @@ function McpMatrix({
     return result;
   };
 
+  // Whether a grant of `other` satisfies `level`. The server says what each
+  // permission includes (sub_scopes): Manage includes View, and neither
+  // includes Connect.
+  const satisfies = (other: Level, level: Level) =>
+    other === level || mcpLevelIncludes(scopes, other).includes(level);
+
   const cellState = (
     view: McpRowView,
     level: Level,
@@ -602,7 +607,9 @@ function McpMatrix({
     }
     const higher = LEVELS.find(
       (other) =>
-        levelRank(other) > levelRank(level) && mcpAllows(grants, row, other),
+        other !== level &&
+        satisfies(other, level) &&
+        mcpAllows(grants, row, other),
     );
     if (higher) {
       return {
@@ -612,9 +619,7 @@ function McpMatrix({
     }
     for (const up of ancestors(row)) {
       const from = LEVELS.find(
-        (other) =>
-          levelRank(other) >= levelRank(level) &&
-          mcpAllows(grants, up.row, other),
+        (other) => satisfies(other, level) && mcpAllows(grants, up.row, other),
       );
       if (from) {
         return {
@@ -668,11 +673,11 @@ function McpMatrix({
         </SimpleTooltip>
       );
     }
-    const states = LEVELS.map((level) => cellState(view, level).state);
-    const reaches = states.some(
-      (state) => state === "on" || state === "inherited",
-    );
-    if (!reaches) return <span className="text-muted-foreground">—</span>;
+    // Only Connect calls tools; View and Manage reach none of them.
+    const connectState = cellState(view, "use").state;
+    if (connectState !== "on" && connectState !== "inherited") {
+      return <span className="text-muted-foreground">—</span>;
+    }
     const limit = mcpToolLimit(grants, row);
     const target: ToolAccessTarget | null =
       row.kind === "all"
@@ -680,17 +685,9 @@ function McpMatrix({
         : view.entry
           ? { kind: "server", entry: view.entry }
           : null;
-    // A limit narrows this row's own Use. View and Manage reach every tool,
-    // and a tick from a broader row reaches them whatever this row says.
-    // View and Manage reach every tool. Use from a broader row can still be
+    // A limit narrows this row's own Use. Use from a broader row can still be
     // narrowed on a server: the broader row is split (splitMcpToolLimit).
-    const disabledReason = states
-      .slice(1)
-      .some((state) => state === "on" || state === "inherited")
-      ? "View and Manage reach every tool"
-      : !target
-        ? "Choose tools on each server"
-        : undefined;
+    const disabledReason = !target ? "Choose tools on each server" : undefined;
     return (
       <DropdownChip
         label={`Choose tools for ${rowName(view)}`}
@@ -705,7 +702,7 @@ function McpMatrix({
           }
         }}
       >
-        {disabledReason || states[0] !== "on"
+        {disabledReason || connectState !== "on"
           ? inheritedTools(view)
           : toolLimitText(limit ?? { kind: "all" })}
       </DropdownChip>
@@ -713,18 +710,13 @@ function McpMatrix({
   };
 
   /**
-   * The tools a row reaches without its own Use limit: every tool through
-   * View or Manage, or whatever the nearest broader row's Use allows.
+   * The tools a row reaches without its own Use limit:
+   * whatever the nearest broader row's Use allows. View and Manage call no
+   * tools, so they never widen it.
    */
   const inheritedLimit = (view: McpRowView): ToolLimit => {
-    for (const up of [view, ...ancestors(view.row)]) {
-      if (
-        mcpAllows(grants, up.row, "view") ||
-        mcpAllows(grants, up.row, "manage")
-      ) {
-        return { kind: "all" };
-      }
-      if (up !== view && mcpAllows(grants, up.row, "use")) {
+    for (const up of ancestors(view.row)) {
+      if (mcpAllows(grants, up.row, "use")) {
         return mcpToolLimit(grants, up.row) ?? { kind: "all" };
       }
     }
