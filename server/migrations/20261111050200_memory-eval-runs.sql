@@ -14,7 +14,8 @@ CREATE TABLE "memory_eval_runs" (
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "deleted_at" timestamptz NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
-  PRIMARY KEY ("id")
+  PRIMARY KEY ("id"),
+  CONSTRAINT "memory_eval_runs_cost_usd_check" CHECK ((cost_usd IS NULL) OR (cost_usd >= (0)::numeric))
 );
 -- Create index "memory_eval_runs_created_at_idx" to table: "memory_eval_runs"
 CREATE INDEX "memory_eval_runs_created_at_idx" ON "memory_eval_runs" ("created_at" DESC, "id" DESC) WHERE (deleted IS FALSE);
@@ -39,8 +40,8 @@ COMMENT ON COLUMN "memory_eval_runs"."error" IS 'Why a failed run stopped; may q
 COMMENT ON COLUMN "memory_eval_runs"."cost_usd" IS 'Model spend the run reported across preparation, answers and grading.
 @access: confidential';
 -- Set comment to column: "requested_by" on table: "memory_eval_runs"
-COMMENT ON COLUMN "memory_eval_runs"."requested_by" IS 'User ID of the Speakeasy staff member who started the run.
-@access: confidential';
+COMMENT ON COLUMN "memory_eval_runs"."requested_by" IS 'Email of the Speakeasy staff member who started the run.
+@access: confidential-pii';
 -- Set comment to column: "started_at" on table: "memory_eval_runs"
 COMMENT ON COLUMN "memory_eval_runs"."started_at" IS '@access: confidential';
 -- Set comment to column: "finished_at" on table: "memory_eval_runs"
