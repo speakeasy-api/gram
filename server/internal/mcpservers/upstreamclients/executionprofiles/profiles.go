@@ -28,9 +28,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 )
 
 // Context is whether a turn runs for a user it identified.
@@ -108,7 +111,11 @@ type decision struct {
 // remote_session, EMA or service_account auth client serves the choice. A server
 // with no associated upstream OAuth client is served by its headers, as a
 // static_credential or pass_through auth client, or by nothing.
-func decide(row ListProfileServersRow, execCtx Context) (decision, *Gap) {
+//
+// For an organization enforcing upstream auth (typedOnly), associations decide
+// nothing: a server's upstream OAuth clients are the ones its enabled auth
+// clients carry.
+func decide(row ListProfileServersRow, execCtx Context, typedOnly bool) (decision, *Gap) {
 	gap := func(reason GapReason) (decision, *Gap) {
 		return decision{serverID: uuid.Nil, authClientID: uuid.Nil}, &Gap{MCPServerID: row.McpServerID, Reason: reason}
 	}
@@ -124,7 +131,16 @@ func decide(row ListProfileServersRow, execCtx Context) (decision, *Gap) {
 		}
 		return choose(uuid.Nil)
 	}
-	switch len(row.RegistrationIds) {
+	registrations := row.RegistrationIds
+	if typedOnly {
+		registrations = []uuid.UUID{}
+		for _, id := range row.AuthClientRegistrationIds {
+			if id != uuid.Nil && !slices.Contains(registrations, id) {
+				registrations = append(registrations, id)
+			}
+		}
+	}
+	switch len(registrations) {
 	case 0:
 		headers, oauth := []uuid.UUID{}, false
 		for i, id := range row.AuthClientIds {
@@ -140,7 +156,7 @@ func decide(row ListProfileServersRow, execCtx Context) (decision, *Gap) {
 		}
 		return choose(headers[0])
 	case 1:
-		registration := row.RegistrationIds[0]
+		registration := registrations[0]
 		candidates, personal := []uuid.UUID{}, false
 		for i, id := range row.AuthClientIds {
 			if row.AuthClientRegistrationIds[i] != registration {
@@ -244,6 +260,12 @@ func (p plan) writes() bool {
 }
 
 func planTx(ctx context.Context, q *Queries, target Target, profileID, versionID uuid.UUID, version int64) (plan, error) {
+	// Read on the bind's transaction, so the choices it records follow the
+	// enforcement state they commit beside.
+	typedOnly, err := authenforcement.ReadEnforced(ctx, q.db, target.OrganizationID)
+	if err != nil {
+		return plan{}, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
 	servers, err := q.ListProfileServers(ctx, ListProfileServersParams{
 		VersionID:      uuid.NullUUID{UUID: versionID, Valid: version > 0},
 		OrganizationID: target.OrganizationID,
@@ -258,7 +280,7 @@ func planTx(ctx context.Context, q *Queries, target Target, profileID, versionID
 		if row.HasChoice {
 			continue
 		}
-		d, gap := decide(row, target.Context)
+		d, gap := decide(row, target.Context, typedOnly)
 		if gap != nil {
 			p.gaps = append(p.gaps, *gap)
 			continue
