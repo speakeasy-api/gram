@@ -26,20 +26,12 @@ export interface LauncherCandidate {
   /** Stable across renders: "page:/settings", "mcp:<id>", "marketplace". */
   id: string;
   kind: CandidateKind;
-  /** What Jev sees. */
   title: string;
-  /** State Jev can read: "MCP server · disabled · 12 tools". */
   detail: string;
-  /** Slug, id, aliases — fuzzy only, never sent to Jev. */
+  /** Slug, id, and aliases used for fuzzy matching. */
   keywords: string[];
   /** "open" always first; others attached by state + RBAC. */
   verbs: Verb[];
-  /**
-   * Never sent to the intent service; ranks by fuzzy alone. Set on candidates
-   * whose title names a person (an identity page in Recents). `person`
-   * candidates are excluded by kind regardless.
-   */
-  fuzzyOnly?: boolean;
   icon?: IconName;
   /** Release stage of a page candidate (pre-GA pages render a badge). */
   stage?: ReleaseStage;
@@ -50,25 +42,6 @@ export interface LauncherCandidate {
    * failure so the palette can return to the list instead of closing.
    */
   run: (verb: Verb) => void | Promise<void>;
-}
-
-/** Probability distributions returned by `launcher.judge`. */
-export interface Judgment {
-  /** Candidate id → probability it is the intended target. */
-  target: Record<string, number>;
-  /** Verb (or "unclear") → probability it is the intended action. */
-  action: Record<string, number>;
-  /** Probability the intent is settled enough to run on Enter. */
-  ready: number;
-}
-
-/**
- * Whether a candidate may be sent to the intent service. People are never
- * sent, by kind or by the `fuzzyOnly` mark; the prefilter and the judge
- * client both apply this so neither can drift from the other.
- */
-export function isSendable(c: LauncherCandidate): boolean {
-  return c.kind !== "person" && !c.fuzzyOnly;
 }
 
 /**

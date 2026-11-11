@@ -22,7 +22,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useLocation } from "react-router";
 import { requestAskAi } from "./askAiBridge";
 import { useLauncherCandidates } from "./candidates";
 import {
@@ -30,9 +29,8 @@ import {
   type LauncherCandidate,
   type Verb,
 } from "./candidates/types";
-import { isReady, prefilter, rank, type RankedRow } from "./ranker";
+import { prefilter, rank, type RankedRow } from "./ranker";
 import { useRecentsUserId } from "./recentlyVisited";
-import { useLauncherJudge } from "./useLauncherJudge";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
 // Assistant uses. Rendered as a thin hairline at the top of the palette so the
@@ -55,7 +53,7 @@ const VERB_LABEL: Record<Verb, string> = {
   publish: "Publish",
 };
 
-/** A candidate plus the verb Jev (or the fuzzy fallback) resolved for it. */
+/** A candidate plus the verb the palette will run for it. */
 interface DisplayRow {
   candidate: LauncherCandidate;
   verb: Verb;
@@ -100,8 +98,8 @@ function openRow(candidate: LauncherCandidate): DisplayRow {
 
 /**
  * The zero-state list: recents first, then the organization's projects, then
- * registered page actions by group. No prefilter and no Jev call while the
- * query is empty. Projects are listed only at the org level (see
+ * registered page actions by group. Search ranking only runs while the query
+ * is non-empty. Projects are listed only at the org level (see
  * `CommandPalette`); the hook keeps them in their source order (by slug).
  */
 function idleRows(candidates: LauncherCandidate[]): {
@@ -360,7 +358,6 @@ function ConfirmBar({
 export function CommandPalette(): JSX.Element {
   const { isOpen, close, contextBadge } = useCommandPalette();
   const { orgSlug, projectSlug } = useSlugs();
-  const { pathname } = useLocation();
   const project = useProject();
   const { hasScope } = useRBAC();
   const [query, setQuery] = useState("");
@@ -385,12 +382,6 @@ export function CommandPalette(): JSX.Element {
     orgSlug,
     projectSlug,
   });
-  // The intent service is keyed per organization and project, so the "no
-  // service" latch is too: moving to a tenant that has one asks again.
-  const { state, judge, reset } = useLauncherJudge(
-    `${orgSlug ?? ""}/${projectSlug ?? ""}`,
-  );
-
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
 
@@ -398,38 +389,11 @@ export function CommandPalette(): JSX.Element {
     () => prefilter(trimmedQuery, candidates),
     [trimmedQuery, candidates],
   );
-  const rows = useMemo(() => rank(pre, state.judgment), [pre, state.judgment]);
+  const rows = useMemo(() => rank(pre), [pre]);
   const idle = useMemo(() => idleRows(candidates), [candidates]);
 
-  // Ask Jev on every keystroke while open. The hook aborts the previous
-  // request itself; an empty query clears the judgment without a call.
-  //
-  // Keyed on what would be sent rather than on the array's identity: a
-  // background refetch of any candidate query rebuilds the array with the
-  // same content, and re-asking then would abort a good request in flight.
-  const sendableKey = useMemo(
-    () =>
-      pre.sendable
-        .map((c) => [c.id, c.title, c.detail, c.verbs.join(",")].join("\u0001"))
-        .join("\n"),
-    [pre.sendable],
-  );
-  const sendableRef = useRef(pre.sendable);
-  useEffect(() => {
-    sendableRef.current = pre.sendable;
-  }, [pre.sendable]);
-  useEffect(() => {
-    if (!isOpen || state.disabled) return;
-    judge(trimmedQuery, sendableRef.current, pathname);
-  }, [isOpen, state.disabled, trimmedQuery, sendableKey, pathname, judge]);
-
-  useEffect(() => {
-    if (!isOpen) reset();
-  }, [isOpen, reset]);
-
-  // cmdk only reselects the first item when its search changes, so when a
-  // judgment reorders the rows the highlight would stay on a now-demoted row.
-  // Controlling the value pins it to the top row whenever the DOM order
+  // cmdk only reselects the first item when its search changes. Controlling
+  // the value pins it to the top row whenever the DOM order
   // changes — unless the user had moved off the top, in which case their row
   // keeps the highlight (see `resolveSelection`).
   const [selectedFor, setSelectedFor] = useState<Selection | null>(null);
@@ -445,15 +409,10 @@ export function CommandPalette(): JSX.Element {
     () => (inProject ? [] : idle.projects),
     [inProject, idle.projects],
   );
-  // Jev's verbs are the answer to a question the user asked in words, so they
-  // are set apart under their own heading rather than mixed into the matches.
-  // The DOM order still drives ↑/↓, so `domOrder` follows this partition.
-  const ranked = useMemo(() => {
-    const actions: RankedRow[] = [];
-    const results: RankedRow[] = [];
-    for (const row of rows) (row.verb === "open" ? results : actions).push(row);
-    return { actions, results, ordered: [...actions, ...results] };
-  }, [rows]);
+  const ranked = useMemo(
+    () => ({ actions: [] as RankedRow[], results: rows, ordered: rows }),
+    [rows],
+  );
   const domOrder = useMemo((): string[] => {
     if (mode.mode !== "list") return [mode.row.candidate.id];
     const ask = canAskAssistant ? [ASK_AI_VALUE] : [];
@@ -475,19 +434,7 @@ export function CommandPalette(): JSX.Element {
     domOrder,
   );
 
-  // The green ↵ is purely visual: Enter always runs the highlighted row.
-  const topRow = ranked.ordered[0];
-  const readyValue =
-    mode.mode === "list" &&
-    hasQuery &&
-    topRow &&
-    selectedValue === topRow.candidate.id &&
-    // Only a fresh judgment may light the ↵: a dimmed one belongs to the
-    // previous keystroke and says nothing about the current query.
-    state.fresh &&
-    isReady(ranked.ordered, state.judgment)
-      ? topRow.candidate.id
-      : null;
+  const readyValue = null;
 
   // Focus follows the mode: the confirm bar focuses itself on mount, and the
   // input takes focus back when the bar goes away.
@@ -650,11 +597,7 @@ export function CommandPalette(): JSX.Element {
         />
       )}
       <CommandList
-        className={cn(
-          "transition-opacity",
-          // A newer request is in flight: keep the last order, but dimmed.
-          state.judgment && !state.fresh && "opacity-60",
-        )}
+        className="transition-opacity"
         // Capture phase: cmdk selects the row under the pointer from the
         // row's own handler, so the flag must be set before it fires.
         onPointerMoveCapture={(e: ReactPointerEvent<HTMLDivElement>) => {
@@ -712,9 +655,6 @@ export function CommandPalette(): JSX.Element {
           <kbd className={KBD_CLASS}>esc</kbd>
           to close
         </span>
-        {state.fresh && state.latencyMs != null && (
-          <span className="ml-auto tabular-nums">{state.latencyMs} ms</span>
-        )}
       </div>
     </CommandDialog>
   );

@@ -16,8 +16,7 @@ import type { LauncherCandidate } from "./types";
 
 /**
  * Registered agents, opening the same canonical identity pages as the identity
- * roster. Agent names are identities too, so these candidates remain fuzzy-only
- * and are never sent to the intent service.
+ * roster. Candidates are matched locally by name and aliases.
  */
 export function useAgentIdentityCandidates({
   enabled,
@@ -110,7 +109,6 @@ export function useAgentIdentityCandidates({
           detail: "Agent identity",
           keywords: ["agent", agent.id, urn],
           verbs: ["open"],
-          fuzzyOnly: true,
           icon: "bot",
           group: "Identities",
           run: () => {
