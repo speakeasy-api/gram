@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/channels/authn/repo"
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
 
@@ -59,7 +60,7 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r = r.WithContext(WithTarget(r.Context(), target))
-	_, identity, err := s.browser(r)
+	ctx, identity, err := s.browser(r)
 	if err != nil {
 		if !identity.Principal.IsZero() {
 			oauthError(w, http.StatusForbidden, "access_denied")
@@ -69,6 +70,10 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request) {
 		target := "/channels/oauth/authorize?" + q.Encode()
 		http.Redirect(w, r, "/rpc/auth.login?redirect="+url.QueryEscape(target), http.StatusSeeOther)
 		return
+	}
+	userEmail := ""
+	if auth, ok := contextvalues.GetAuthContext(ctx); ok && auth.Email != nil {
+		userEmail = *auth.Email
 	}
 	proof := randomToken()
 	csrf := randomToken()
@@ -84,9 +89,9 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
 	_ = consentTemplate.Execute(w, struct {
-		Styles                                                                 template.CSS
-		Name, ClientID, Organization, Project, Resource, User, Challenge, CSRF string
-	}{consentpage.Styles, client.ClientName, client.ClientID, target.OrganizationSlug, target.ProjectSlug, target.Resource, identity.Principal.ID, challenge, csrf})
+		Styles                                                                         template.CSS
+		Name, RedirectURI, Organization, Project, Resource, UserEmail, Challenge, CSRF string
+	}{consentpage.Styles, client.ClientName, redirect, target.OrganizationSlug, target.ProjectSlug, target.Resource, userEmail, challenge, csrf})
 }
 func (s *Service) consent(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")

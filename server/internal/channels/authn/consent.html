@@ -12,18 +12,18 @@
       <div class="text-foreground">{{template "speakeasyWordmark"}}</div>
       <section class="bg-card border" aria-labelledby="page-title">
         <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
-          <p class="text-eyebrow">Authorize connection</p>
-          <h1 id="page-title" class="text-display-xs">Connect to Speakeasy Channels</h1>
+          <p class="text-eyebrow">Authorize</p>
+          <h1 id="page-title" class="text-display-xs flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span class="break-all">{{.Name}}</span>
+            <span class="text-muted-foreground" aria-hidden="true">&rsaquo;</span>
+            <span>Speakeasy Channels</span>
+          </h1>
           <p class="text-sm text-muted-foreground">
             Allow <span class="text-foreground font-medium break-all">{{.Name}}</span>
             to connect to Channels on your behalf?
           </p>
         </header>
         <dl class="m-0 flex flex-col gap-4 border-b px-6 py-6 sm:px-8">
-          <div>
-            <dt class="text-eyebrow">Client ID</dt>
-            <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.ClientID}}</dd>
-          </div>
           <div>
             <dt class="text-eyebrow">Organization</dt>
             <dd class="mt-1 ml-0 text-sm break-all">{{.Organization}}</dd>
@@ -32,9 +32,15 @@
             <dt class="text-eyebrow">Project</dt>
             <dd class="mt-1 ml-0 text-sm break-all">{{.Project}}</dd>
           </div>
+          {{if .UserEmail}}
           <div>
             <dt class="text-eyebrow">Signed in as</dt>
-            <dd class="mt-1 ml-0 text-sm break-all">{{.User}}</dd>
+            <dd class="mt-1 ml-0 text-sm break-all">{{.UserEmail}}</dd>
+          </div>
+          {{end}}
+          <div>
+            <dt class="text-eyebrow">Will redirect to</dt>
+            <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.RedirectURI}}</dd>
           </div>
         </dl>
         <form method="post" action="/channels/oauth/authorize" class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:px-8">

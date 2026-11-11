@@ -16,7 +16,7 @@ func TestConsentTemplateRendering(t *testing.T) {
 	// Exercise both text and attribute contexts with untrusted client and identity data.
 	untrusted := `<script>alert("consent")</script>&'`
 	data := map[string]any{"Styles": consentpage.Styles}
-	for _, field := range []string{"Name", "ClientID", "Organization", "Project", "User", "Resource", "Challenge", "CSRF"} {
+	for _, field := range []string{"Name", "RedirectURI", "Organization", "Project", "UserEmail", "Resource", "Challenge", "CSRF"} {
 		data[field] = field + untrusted
 	}
 	var out bytes.Buffer
@@ -27,7 +27,7 @@ func TestConsentTemplateRendering(t *testing.T) {
 	if strings.Contains(page, "<script>") || strings.Contains(page, "ZgotmplZ") {
 		t.Fatal("untrusted data was not safely rendered")
 	}
-	for _, field := range []string{"Name", "ClientID", "Organization", "Project", "User"} {
+	for _, field := range []string{"Name", "RedirectURI", "Organization", "Project", "UserEmail"} {
 		if !strings.Contains(page, html.EscapeString(field+untrusted)) {
 			t.Errorf("missing escaped %s", field)
 		}

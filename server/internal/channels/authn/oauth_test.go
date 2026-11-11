@@ -211,6 +211,32 @@ func TestOAuthSecurity(t *testing.T) {
 		return newOAuthFixture(t, db, configure...)
 	}
 
+	t.Run("consent identifies the signed-in account without exposing its principal ID", func(t *testing.T) {
+		f := fixture(t)
+		client := f.register(t)
+		email := "member@example.test"
+		f.browser = func() context.Context {
+			return contextvalues.WithValidatedGramSession(t.Context(), &contextvalues.AuthContext{
+				UserID: "user_test", ActiveOrganizationID: "org_test", Email: &email,
+			}, false)
+		}
+		response := f.request(http.MethodGet, "/channels/oauth/authorize?"+authorizationQuery(client).Encode(), "", "")
+		require.Equal(t, http.StatusOK, response.Code)
+		require.Contains(t, response.Body.String(), email)
+		require.NotContains(t, response.Body.String(), "user_test")
+		require.Contains(t, response.Body.String(), testRedirect)
+
+		f.browser = func() context.Context {
+			return contextvalues.WithValidatedGramSession(t.Context(), &contextvalues.AuthContext{
+				UserID: "user_test", ActiveOrganizationID: "org_test",
+			}, false)
+		}
+		response = f.request(http.MethodGet, "/channels/oauth/authorize?"+authorizationQuery(client).Encode(), "", "")
+		require.Equal(t, http.StatusOK, response.Code)
+		require.NotContains(t, response.Body.String(), "Signed in as")
+		require.NotContains(t, response.Body.String(), "user_test")
+	})
+
 	t.Run("same user client grants remain independent across projects", func(t *testing.T) {
 		t.Parallel()
 		f := fixture(t)
