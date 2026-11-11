@@ -347,7 +347,9 @@ it.each(["app", "install"])(
     await user.click(
       screen.getByRole("button", { name: "Review Salesforce domain" }),
     );
-    expect(screen.getByLabelText("Salesforce Domain (optional)")).toBeDefined();
+    expect(
+      screen.getByLabelText("Salesforce Domain (optional)"),
+    ).toHaveProperty("value", "example--uat.sandbox.my.salesforce.com");
   },
 );
 it("uses the real Salesforce callback and native scopes", () => {
