@@ -2387,7 +2387,7 @@ func (s *Service) issueSession(
 	}
 	// A rotated session keeps the choices its credential already has.
 	if !issuance.CredentialID.Valid {
-		picks := usersessions_repo.RecordUpstreamClientSelectionsParams{CredentialIds: nil,
+		picks := usersessions_repo.RecordUpstreamClientSelectionsParams{
 			UserSessionIssuerID: issuance.UserSessionIssuerID,
 			CredentialKind:      upstreamclients.CredentialKindUserSession,
 			CredentialID:        session.ID,

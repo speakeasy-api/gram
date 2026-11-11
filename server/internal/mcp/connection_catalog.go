@@ -218,7 +218,7 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, catalog *connect
 // upstreamChoices records only reviewed members, even when their issuer also
 // serves other gateways. An empty scope must stay non-nil: nil means issuer-wide.
 func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID) usersessionsrepo.RecordUpstreamClientSelectionsParams {
-	picks := usersessionsrepo.RecordUpstreamClientSelectionsParams{CredentialIds: nil,
+	picks := usersessionsrepo.RecordUpstreamClientSelectionsParams{
 		UserSessionIssuerID: c.IssuerID,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credentialID,

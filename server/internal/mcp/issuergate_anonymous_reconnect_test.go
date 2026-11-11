@@ -243,7 +243,7 @@ func TestHandleToken_AnonymousRefreshJudgesTheChosenClientOnAProxiedServer(t *te
 			require.NoError(t, err)
 
 			subject, session, client, refreshToken := seedAnonymousRefresh(t, ctx, ti, issuer.ID)
-			_, err = usersessions_repo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{CredentialIds: nil,
+			_, err = usersessions_repo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
 				UserSessionIssuerID: issuer.ID,
 				CredentialKind:      upstreamclients.CredentialKindUserSession,
 				CredentialID:        session.ID,

@@ -553,6 +553,22 @@ func reconcileIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organization
 	return skipped, nil
 }
 
+// recordIssuerMigrationChoices records what each live credential uses today,
+// before the source's bindings join the target's. A server both issuers bound a
+// registration for has one eligible client per credential until then and two
+// afterwards, which would leave every credential without a choice to reconnect.
+// Source lineages record their whole reach: they move, and what they reach on
+// the target is decided after the move.
+func recordIssuerMigrationChoices(ctx context.Context, dbtx pgx.Tx, organizationID string, sourceID, targetID uuid.UUID, serverIDs []uuid.UUID) error {
+	if err := selectionbackfill.RecordIssuerScopeInLockedTransaction(ctx, dbtx, organizationID, sourceID, nil, nil); err != nil {
+		return fmt.Errorf("record source credential choices: %w", err)
+	}
+	if err := selectionbackfill.RecordIssuerScopeInLockedTransaction(ctx, dbtx, organizationID, targetID, serverIDs, nil); err != nil {
+		return fmt.Errorf("record target credential choices: %w", err)
+	}
+	return nil
+}
+
 func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssuerPayload) (*orggen.MigrateOrganizationUserSessionIssuerResult, error) {
 	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
@@ -633,6 +649,10 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		return nil, oops.E(oops.CodeConflict, nil, "user session issuer migration warnings have not been confirmed or changed; refresh the preflight and confirm its exact warnings fingerprint").LogError(ctx, logger)
 	}
 
+	if err := recordIssuerMigrationChoices(ctx, dbtx, authCtx.ActiveOrganizationID, source.ID, target.ID, serverIDs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "record issuer migration credential choices").LogError(ctx, logger)
+	}
+
 	merged, err := mergeDuplicateCimdClients(ctx, q, authCtx.ActiveOrganizationID, source.ID, target.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "merge duplicate CIMD user session clients").LogError(ctx, logger)
@@ -663,6 +683,14 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate CIMD clients").LogError(ctx, logger)
 	}
+	// Read before the source's bindings join the target's: only these were
+	// configured for sign-in through the target.
+	targetRegistrations, err := q.ListBoundOAuthRegistrationsForUserSessionIssuerMigration(ctx, repo.ListBoundOAuthRegistrationsForUserSessionIssuerMigrationParams{
+		IssuerIds: []uuid.UUID{target.ID}, OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list target remote-session client links").LogError(ctx, logger)
+	}
 	if _, err := q.InsertTargetRemoteSessionClientIssuerLinks(ctx, repo.InsertTargetRemoteSessionClientIssuerLinksParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create target remote-session client links").LogError(ctx, logger)
 	}
@@ -684,6 +712,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list MCP server projects for issuer migration").LogError(ctx, logger)
 	}
+	movedServers := 0
 	ownerUpdates := []struct {
 		name string
 		fn   func() (int64, error)
@@ -696,6 +725,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 			if err := auditHostedIssuerMoves(ctx, dbtx, s.audit, authCtx, moved, source.ID); err != nil {
 				return 0, err
 			}
+			movedServers = len(moved)
 			return int64(len(moved)), nil
 		}},
 		{name: "meta MCP servers", fn: func() (int64, error) {
@@ -712,10 +742,14 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	}
 	for _, projectID := range mcpServerProjectIDs {
 		// The migration moves the servers onto the target, which configures
-		// their sign-in there, so a server that is the target's only consumer
-		// offers the clients bound to it.
-		if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{target.ID}, nil); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "capture MCP server upstream clients").LogError(ctx, logger)
+		// their sign-in there, so a moved server that is the target's only
+		// consumer offers the clients the target bound. A server already on
+		// the target was not configured by this move, and a binding that only
+		// the source held was configured for neither.
+		if movedServers > 0 {
+			if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{target.ID}, slices.Concat([]uuid.UUID{}, targetRegistrations)); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "capture MCP server upstream clients").LogError(ctx, logger)
+			}
 		}
 		if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{source.ID, target.ID}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resync MCP server remote session issuers").LogError(ctx, logger)

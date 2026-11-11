@@ -239,11 +239,30 @@ func ReconcileIssuerInLockedTransaction(ctx context.Context, tx pgx.Tx, organiza
 // for existing credentials. The returned count reports guarded bulk rows whose
 // legacy evidence changed before their mapping write.
 func ReconcileIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, fullReachCredentialIDs []uuid.UUID) (int64, error) {
-	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
-		return 0, errors.New("reconcile issuer credentials: no transaction or tenant scope")
+	if err := RecordIssuerScopeInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs, fullReachCredentialIDs); err != nil {
+		return 0, err
 	}
 	if serverIDs != nil && len(serverIDs) == 0 && len(fullReachCredentialIDs) == 0 {
 		return 0, nil
+	}
+	skipped, err := authclientbackfill.ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs)
+	if err != nil {
+		return skipped, fmt.Errorf("map issuer credential choices: %w", err)
+	}
+	return skipped, nil
+}
+
+// RecordIssuerScopeInLockedTransaction records the missing choices of one
+// issuer's live credential lineages and maps nothing, with the scoping
+// ReconcileIssuerScopeInLockedTransaction describes. A caller about to change
+// what the issuer binds records first: each credential is then decided by the
+// bindings it was served through, and a recorded choice is never replaced.
+func RecordIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, fullReachCredentialIDs []uuid.UUID) error {
+	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
+		return errors.New("reconcile issuer credentials: no transaction or tenant scope")
+	}
+	if serverIDs != nil && len(serverIDs) == 0 && len(fullReachCredentialIDs) == 0 {
+		return nil
 	}
 	fullReach := make(map[uuid.UUID]bool, len(fullReachCredentialIDs))
 	for _, id := range fullReachCredentialIDs {
@@ -256,7 +275,7 @@ func ReconcileIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, org
 			Cursor: cursor, OrganizationID: organizationID, PageSize: defaultPageSize, IssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		})
 		if err != nil {
-			return 0, fmt.Errorf("list issuer credentials: %w", err)
+			return fmt.Errorf("list issuer credentials: %w", err)
 		}
 		var existingIDs, movedIDs []uuid.UUID
 		for _, credential := range credentials {
@@ -268,30 +287,25 @@ func ReconcileIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, org
 			cursor = credential.CredentialID
 		}
 		if _, err := recordCredentialSelections(ctx, sessions, issuerID, existingIDs, serverIDs); err != nil {
-			return 0, fmt.Errorf("record existing issuer credential choices: %w", err)
+			return fmt.Errorf("record existing issuer credential choices: %w", err)
 		}
 		if _, err := recordCredentialSelections(ctx, sessions, issuerID, movedIDs, nil); err != nil {
-			return 0, fmt.Errorf("record moved issuer credential choices: %w", err)
+			return fmt.Errorf("record moved issuer credential choices: %w", err)
 		}
 		if len(credentials) < defaultPageSize {
-			break
+			return nil
 		}
 	}
-	skipped, err := authclientbackfill.ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs)
-	if err != nil {
-		return skipped, fmt.Errorf("map issuer credential choices: %w", err)
-	}
-	return skipped, nil
 }
 
 func recordCredentialSelections(ctx context.Context, q *usersessionsrepo.Queries, issuerID uuid.UUID, credentialIDs, serverIDs []uuid.UUID) (int64, error) {
 	if len(credentialIDs) == 0 || (serverIDs != nil && len(serverIDs) == 0) {
 		return 0, nil
 	}
-	written, err := q.RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{CredentialIds: credentialIDs,
+	written, err := q.RecordUpstreamClientSelectionsForCredentials(ctx, usersessionsrepo.RecordUpstreamClientSelectionsForCredentialsParams{
+		CredentialIds:       credentialIDs,
 		UserSessionIssuerID: issuerID,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
-		CredentialID:        uuid.Nil,
 		// These choices are inferred for existing credentials, not explicit
 		// administrator choices; consolidation uses the same backfill source.
 		Source:             upstreamclients.SelectionSourceBackfill,

@@ -80,7 +80,7 @@ func (f selectionFixture) issuePicked(t *testing.T, ctx context.Context, slug st
 		servers = append(servers, serverID)
 		clients = append(clients, clientID)
 	}
-	_, err = usersessions_repo.New(f.ti.conn).RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{CredentialIds: nil,
+	_, err = usersessions_repo.New(f.ti.conn).RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
 		UserSessionIssuerID: issuerID,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        policy.CredentialID,
@@ -400,7 +400,7 @@ func TestUpstreamClientSelection_RecordsTypedConsentPicks(t *testing.T) {
 	policy, err := usersessions_repo.New(f.ti.conn).GetUserSessionPolicyByJTI(ctx, usersessions_repo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuerID, Jti: jti})
 	require.NoError(t, err)
 
-	_, err = usersessions_repo.New(f.ti.conn).RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{CredentialIds: nil,
+	_, err = usersessions_repo.New(f.ti.conn).RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
 		UserSessionIssuerID: issuerID,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        policy.CredentialID,
@@ -439,7 +439,7 @@ func TestUpstreamClientSelection_EmptyScopeRecordsNothing(t *testing.T) {
 	q := usersessions_repo.New(f.ti.conn)
 	session, err := q.GetUserSessionPolicyByJTI(ctx, usersessions_repo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuerID, Jti: jti})
 	require.NoError(t, err)
-	params := usersessions_repo.RecordUpstreamClientSelectionsParams{CredentialIds: nil,
+	params := usersessions_repo.RecordUpstreamClientSelectionsParams{
 		UserSessionIssuerID: issuerID, CredentialKind: upstreamclients.CredentialKindUserSession,
 		CredentialID: session.CredentialID, Source: upstreamclients.SelectionSourceIssuance,
 		ScopeMcpServerIds: []uuid.UUID{},

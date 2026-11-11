@@ -26,7 +26,7 @@ LIMIT @page_size::int;
 
 -- name: ListUpstreamClientSelectionCoverage :many
 -- Every server one credential can reach, with its recorded choice and the
--- evidence RecordUpstreamClientSelections decides from. The reach and the
+-- evidence RecordUpstreamClientSelectionsForCredentials decides from. The reach and the
 -- evidence must stay identical to that statement's, so a prediction made here
 -- is what the write records.
 WITH session_issuer AS (

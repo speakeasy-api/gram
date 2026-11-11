@@ -70,7 +70,7 @@ func requireReady(t *testing.T, ctx context.Context, ti *testInstance) {
 func recordSelectionFixture(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID, serverID uuid.UUID) uuid.NullUUID {
 	t.Helper()
 	credentialID := uuid.New()
-	_, err := usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{CredentialIds: nil,
+	_, err := usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{
 		UserSessionIssuerID: userIssuerID,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credentialID,

@@ -19,49 +19,54 @@ import (
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-func batchSelectionParams(issuerID uuid.UUID, ids []uuid.UUID) usersessionsrepo.RecordUpstreamClientSelectionsParams {
-	return usersessionsrepo.RecordUpstreamClientSelectionsParams{
+func batchSelectionParams(issuerID uuid.UUID, ids []uuid.UUID) usersessionsrepo.RecordUpstreamClientSelectionsForCredentialsParams {
+	return usersessionsrepo.RecordUpstreamClientSelectionsForCredentialsParams{
 		UserSessionIssuerID: issuerID, CredentialKind: upstreamclients.CredentialKindUserSession,
-		CredentialID: uuid.Nil, CredentialIds: ids, Source: upstreamclients.SelectionSourceBackfill,
+		CredentialIds: ids, Source: upstreamclients.SelectionSourceBackfill,
 		ScopeMcpServerIds: nil, PickedMcpServerIds: []uuid.UUID{}, PickedClientIds: []uuid.UUID{}, PickedAuthClientIds: nil,
 	}
 }
 
-func TestRecordUpstreamClientSelectionsBatchNilEmptyAndDuplicateIDs(t *testing.T) {
+// The batch statement must decide what issuance decides for one credential:
+// the two statements are separate so sign-in stays untouched by bulk work.
+func TestRecordUpstreamClientSelectionsForCredentialsMatchesIssuance(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	issuer := f.projectIssuer()
 	registration := f.client(issuer)
 	server := f.server(issuer, registration)
+	unassociated := f.server(issuer)
+	ambiguous := f.server(issuer, registration, f.client(issuer))
 	typed := f.authClient(authclientbackfill.TypeRemoteSession, registration, server)
 	q := usersessionsrepo.New(f.pool)
-	scalar := f.session(issuer)
+	issued := f.session(issuer)
 	empty := f.session(issuer)
 	first, second := f.session(issuer), f.session(issuer)
-	params := batchSelectionParams(issuer, nil)
-	params.CredentialID = scalar
-	n, err := q.RecordUpstreamClientSelections(t.Context(), params)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), n, "nil batch IDs preserve scalar issuance")
-	params.CredentialID, params.CredentialIds = empty, []uuid.UUID{}
-	n, err = q.RecordUpstreamClientSelections(t.Context(), params)
+	require.Equal(t, int64(2), f.record(issuer, issued))
+	n, err := q.RecordUpstreamClientSelectionsForCredentials(t.Context(), batchSelectionParams(issuer, []uuid.UUID{}))
 	require.NoError(t, err)
 	require.Zero(t, n)
-	require.Empty(t, f.selections(empty), "an empty batch must not fall back to the scalar ID")
-	params.CredentialIds = []uuid.UUID{first, second, first}
+	require.Empty(t, f.selections(empty), "an empty batch records nothing")
+	params := batchSelectionParams(issuer, []uuid.UUID{first, second, first})
 	params.ScopeMcpServerIds = []uuid.UUID{}
-	n, err = q.RecordUpstreamClientSelections(t.Context(), params)
+	n, err = q.RecordUpstreamClientSelectionsForCredentials(t.Context(), params)
 	require.NoError(t, err)
 	require.Zero(t, n, "an empty server scope is independently a no-op")
 	params.ScopeMcpServerIds = nil
-	n, err = q.RecordUpstreamClientSelections(t.Context(), params)
+	n, err = q.RecordUpstreamClientSelectionsForCredentials(t.Context(), params)
 	require.NoError(t, err)
-	require.Equal(t, int64(2), n, "duplicate IDs must not conflict twice in one statement")
-	require.Empty(t, f.selections(empty), "a supplied batch ignores the fallback scalar")
-	for _, credential := range []uuid.UUID{scalar, first, second} {
-		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
+	require.Equal(t, int64(4), n, "duplicate IDs must not conflict twice in one statement")
+	want := f.selections(issued)
+	require.Len(t, want, 2)
+	require.Equal(t, registration, want[server])
+	require.Contains(t, want, unassociated, "a server with no client records no-auth")
+	require.NotContains(t, want, ambiguous, "two eligible clients record nothing")
+	for _, credential := range []uuid.UUID{first, second} {
+		require.Equal(t, want, f.selections(credential))
+		require.Equal(t, f.selection(issuer, issued, unassociated).NoAuth, f.selection(issuer, credential, unassociated).NoAuth)
 		require.Equal(t, uuid.NullUUID{UUID: typed, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
 	}
+	require.Equal(t, uuid.NullUUID{UUID: typed, Valid: true}, f.namedAuthClient(issued, server).AuthClientID)
 }
 
 func TestRecordUpstreamClientSelectionsBatchPreservesImmutableChoices(t *testing.T) {
@@ -81,7 +86,7 @@ func TestRecordUpstreamClientSelectionsBatchPreservesImmutableChoices(t *testing
 	require.Equal(t, upstreamclients.SelectionSourceIssuance, before.Source)
 	q := usersessionsrepo.New(f.pool)
 	params := batchSelectionParams(issuer, []uuid.UUID{immutable, replaceable, missing})
-	n, err := q.RecordUpstreamClientSelections(t.Context(), params)
+	n, err := q.RecordUpstreamClientSelectionsForCredentials(t.Context(), params)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), n, "a server is not excluded just because one lineage has an immutable choice")
 	require.Equal(t, before, f.selection(issuer, immutable, server))
@@ -92,7 +97,7 @@ func TestRecordUpstreamClientSelectionsBatchPreservesImmutableChoices(t *testing
 		require.Equal(t, upstreamclients.SelectionSourceBackfill, choice.Source)
 		require.Equal(t, uuid.NullUUID{UUID: typed, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
 	}
-	n, err = q.RecordUpstreamClientSelections(t.Context(), params)
+	n, err = q.RecordUpstreamClientSelectionsForCredentials(t.Context(), params)
 	require.NoError(t, err)
 	require.Zero(t, n, "all immutable choices make the batch idempotent")
 }
@@ -105,7 +110,7 @@ type observeCredentialBatchWrites struct {
 }
 
 func (tx observeCredentialBatchWrites) Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error) {
-	if strings.HasPrefix(query, "-- name: RecordUpstreamClientSelections ") {
+	if strings.HasPrefix(query, "-- name: RecordUpstreamClientSelectionsForCredentials ") {
 		*tx.writes++
 	}
 	tag, err := tx.Tx.Exec(ctx, query, args...) //nolint:glint // notestingrawsql: batch instrumentation delegates dynamically intercepted SQLc statements.
