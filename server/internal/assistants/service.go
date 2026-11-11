@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -454,6 +455,8 @@ type DashboardIngestor interface {
 }
 
 type ServiceCore struct {
+	mcpAuthSessionSigner     *sessiontokens.Signer
+	mcpAuthSessionRevocation sessiontokens.RevocationChecker
 	// Set only by production Kit composition; existing assistants are untouched.
 	newAssistantRuntimeVersion  int16
 	newAssistantRuntimeEligible func(context.Context, pgx.Tx, assistantRecord) (bool, error)
@@ -545,6 +548,8 @@ func NewServiceCore(
 		featureFlags:                nil,
 		turnClassified:              turnClassified,
 		outboundOrigin:              nil,
+		mcpAuthSessionSigner:        nil,
+		mcpAuthSessionRevocation:    nil,
 	}
 }
 

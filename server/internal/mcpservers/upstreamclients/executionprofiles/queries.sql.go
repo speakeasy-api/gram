@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const copyProfileVersionChoices = `-- name: CopyProfileVersionChoices :exec
@@ -170,6 +171,149 @@ func (q *Queries) EnsureProfile(ctx context.Context, arg EnsureProfileParams) er
 		arg.ExecutionContext,
 	)
 	return err
+}
+
+const getOAuthIssuerBindingFixture = `-- name: GetOAuthIssuerBindingFixture :one
+SELECT binding.remote_session_client_id, binding.user_session_issuer_id
+FROM remote_session_client_user_session_issuers binding
+JOIN mcp_auth_clients ac ON ac.remote_session_client_id = binding.remote_session_client_id
+WHERE ac.id = $1 AND ac.project_id = $2
+  AND binding.user_session_issuer_id = $3
+`
+
+type GetOAuthIssuerBindingFixtureParams struct {
+	AuthClientID uuid.UUID
+	ProjectID    uuid.NullUUID
+	IssuerID     uuid.UUID
+}
+
+type GetOAuthIssuerBindingFixtureRow struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) GetOAuthIssuerBindingFixture(ctx context.Context, arg GetOAuthIssuerBindingFixtureParams) (GetOAuthIssuerBindingFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getOAuthIssuerBindingFixture, arg.AuthClientID, arg.ProjectID, arg.IssuerID)
+	var i GetOAuthIssuerBindingFixtureRow
+	err := row.Scan(&i.RemoteSessionClientID, &i.UserSessionIssuerID)
+	return i, err
+}
+
+const getOAuthResumeOrigin = `-- name: GetOAuthResumeOrigin :one
+SELECT p.trigger_instance_id, v.version
+FROM execution_selection_profile_versions v
+JOIN execution_selection_profiles p ON p.id = v.profile_id
+JOIN assistants a ON a.id = p.assistant_id AND a.project_id = p.project_id
+JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = p.project_id
+WHERE v.id = $1
+  AND p.organization_id = $2
+  AND p.project_id = $3
+  AND p.assistant_id = $4
+  AND t.id = $5
+  AND p.execution_context = 'user_backed'
+  AND p.deleted IS FALSE AND a.deleted IS FALSE AND t.deleted IS FALSE
+  AND a.status = 'active'
+FOR SHARE OF p, a, t
+`
+
+type GetOAuthResumeOriginParams struct {
+	VersionID      uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	AssistantID    uuid.UUID
+	ThreadID       uuid.UUID
+}
+
+type GetOAuthResumeOriginRow struct {
+	TriggerInstanceID uuid.UUID
+	Version           int64
+}
+
+// Only a live user-backed origin may accept a browser's authenticated choice.
+func (q *Queries) GetOAuthResumeOrigin(ctx context.Context, arg GetOAuthResumeOriginParams) (GetOAuthResumeOriginRow, error) {
+	row := q.db.QueryRow(ctx, getOAuthResumeOrigin,
+		arg.VersionID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+	)
+	var i GetOAuthResumeOriginRow
+	err := row.Scan(&i.TriggerInstanceID, &i.Version)
+	return i, err
+}
+
+const getOAuthResumeSelection = `-- name: GetOAuthResumeSelection :one
+SELECT sel.auth_client_id, sel.no_auth
+FROM user_sessions s
+JOIN user_session_issuers i ON i.id = s.user_session_issuer_id AND i.deleted IS FALSE
+JOIN user_session_clients c ON c.id = s.user_session_client_id AND c.deleted IS FALSE
+JOIN upstream_client_selections sel ON sel.credential_id = COALESCE(s.credential_id, s.id)
+  AND sel.credential_kind = 'user_session' AND sel.deleted IS FALSE
+JOIN mcp_servers m ON m.id = sel.mcp_server_id AND m.deleted IS FALSE
+JOIN projects p ON p.id = m.project_id AND p.deleted IS FALSE
+WHERE s.jti = $1 AND s.deleted IS FALSE AND s.expires_at > now()
+  AND s.subject_urn = $2
+  AND c.client_id = $3 AND c.user_session_issuer_id = i.id
+  AND i.id = $4 AND m.user_session_issuer_id = i.id
+  AND (i.project_id = p.id
+       OR (i.project_id IS NULL AND i.organization_id = p.organization_id)
+       OR (i.project_id IS NULL AND i.organization_id IS NULL))
+  AND m.id = $5 AND m.project_id = $6
+  AND p.organization_id = $7
+  AND s.organization_id = p.organization_id
+  AND sel.organization_id = p.organization_id AND sel.project_id = p.id
+  -- Lock the live credential and its associations through version publication.
+  AND (sel.no_auth OR EXISTS (
+    SELECT 1
+    FROM mcp_auth_clients ac
+    JOIN mcp_server_auth_clients link ON link.auth_client_id = ac.id
+      AND link.mcp_server_id = m.id AND link.deleted IS FALSE
+    WHERE ac.id = sel.auth_client_id AND ac.organization_id = p.organization_id
+      AND ac.deleted IS FALSE AND ac.enabled
+      AND (ac.remote_session_client_id IS NULL OR EXISTS (
+        SELECT 1
+        FROM remote_session_clients reg
+        JOIN remote_session_client_user_session_issuers binding
+          ON binding.remote_session_client_id = reg.id AND binding.user_session_issuer_id = i.id
+        WHERE reg.id = ac.remote_session_client_id AND reg.deleted IS FALSE
+        FOR SHARE OF reg, binding
+      ))
+    FOR SHARE OF ac, link
+  ))
+FOR SHARE OF s, i, c, sel, m, p
+`
+
+type GetOAuthResumeSelectionParams struct {
+	Jti            string
+	SubjectUrn     urn.SessionSubject
+	ClientID       string
+	IssuerID       uuid.UUID
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type GetOAuthResumeSelectionRow struct {
+	AuthClientID uuid.NullUUID
+	NoAuth       bool
+}
+
+// The verified bearer must identify this exact live user session and OAuth
+// client, and the selected upstream must belong to the originating project.
+func (q *Queries) GetOAuthResumeSelection(ctx context.Context, arg GetOAuthResumeSelectionParams) (GetOAuthResumeSelectionRow, error) {
+	row := q.db.QueryRow(ctx, getOAuthResumeSelection,
+		arg.Jti,
+		arg.SubjectUrn,
+		arg.ClientID,
+		arg.IssuerID,
+		arg.McpServerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	var i GetOAuthResumeSelectionRow
+	err := row.Scan(&i.AuthClientID, &i.NoAuth)
+	return i, err
 }
 
 const getProfile = `-- name: GetProfile :one
@@ -739,6 +883,52 @@ func (q *Queries) RecordProfileChoice(ctx context.Context, arg RecordProfileChoi
 	return result.RowsAffected(), nil
 }
 
+const refreshOAuthSessionFixture = `-- name: RefreshOAuthSessionFixture :one
+WITH retired AS (
+  UPDATE user_sessions SET deleted_at = clock_timestamp()
+  WHERE user_sessions.jti = $1 AND user_sessions.project_id = $2 AND user_sessions.deleted IS FALSE
+  RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, credential_id, created_at, updated_at, deleted_at, deleted
+), replacement AS (
+  INSERT INTO user_sessions (project_id, organization_id, user_session_issuer_id,
+    user_session_client_id, subject_urn, jti, refresh_expires_at, expires_at, credential_id)
+  SELECT project_id, organization_id, user_session_issuer_id, user_session_client_id,
+    subject_urn, $3, refresh_expires_at, expires_at, COALESCE(credential_id, id)
+  FROM retired RETURNING id, credential_id, jti
+)
+SELECT retired.id AS old_id, retired.jti AS old_jti, retired.deleted AS old_deleted,
+  replacement.id AS new_id, replacement.jti AS new_jti, replacement.credential_id
+FROM retired, replacement
+`
+
+type RefreshOAuthSessionFixtureParams struct {
+	OldJti    string
+	ProjectID uuid.NullUUID
+	NewJti    string
+}
+
+type RefreshOAuthSessionFixtureRow struct {
+	OldID        uuid.UUID
+	OldJti       string
+	OldDeleted   bool
+	NewID        uuid.UUID
+	NewJti       string
+	CredentialID uuid.NullUUID
+}
+
+func (q *Queries) RefreshOAuthSessionFixture(ctx context.Context, arg RefreshOAuthSessionFixtureParams) (RefreshOAuthSessionFixtureRow, error) {
+	row := q.db.QueryRow(ctx, refreshOAuthSessionFixture, arg.OldJti, arg.ProjectID, arg.NewJti)
+	var i RefreshOAuthSessionFixtureRow
+	err := row.Scan(
+		&i.OldID,
+		&i.OldJti,
+		&i.OldDeleted,
+		&i.NewID,
+		&i.NewJti,
+		&i.CredentialID,
+	)
+	return i, err
+}
+
 const seedAssistantFixture = `-- name: SeedAssistantFixture :one
 INSERT INTO assistants (organization_id, project_id, name, model, instructions)
 VALUES ($1, $2, $3, 'fixture-model', 'fixture')
@@ -849,6 +1039,65 @@ func (q *Queries) SeedMCPServerFixture(ctx context.Context, arg SeedMCPServerFix
 		arg.RequiresUpstreamAuth,
 	)
 	return err
+}
+
+const seedOAuthResumeFixture = `-- name: SeedOAuthResumeFixture :one
+WITH chat AS (
+  INSERT INTO chats (project_id, organization_id) VALUES ($1, $2) RETURNING id
+), thread AS (
+  INSERT INTO assistant_threads (project_id, assistant_id, chat_id, correlation_id, source_kind)
+  SELECT $1, $3, chat.id, 'oauth-fixture', 'dashboard' FROM chat RETURNING id
+), issuer AS (
+  INSERT INTO user_session_issuers (project_id, organization_id, slug, authn_challenge_mode, session_duration)
+  VALUES ($1, $2, 'oauth-fixture', 'interactive', '1 hour') RETURNING id
+), client AS (
+  INSERT INTO user_session_clients (project_id, organization_id, user_session_issuer_id, client_id, client_name)
+  SELECT $1, $2, issuer.id, 'oauth-fixture', 'OAuth fixture' FROM issuer RETURNING id, user_session_issuer_id
+), session AS (
+  INSERT INTO user_sessions (project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_expires_at, expires_at)
+  SELECT $1, $2, client.user_session_issuer_id, client.id, 'user:oauth-user', $4, now() + interval '1 hour', now() + interval '1 hour' FROM client RETURNING id
+), endpoint AS (
+  UPDATE mcp_servers SET user_session_issuer_id = (SELECT id FROM issuer)
+  WHERE mcp_servers.id = $5 AND mcp_servers.project_id = $1 RETURNING mcp_servers.id
+), issuer_binding AS (
+  INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+  SELECT ac.remote_session_client_id, issuer.id
+  FROM mcp_auth_clients ac, issuer
+  WHERE ac.id = $6 AND ac.project_id = $1 AND ac.organization_id = $2
+), selection AS (
+  INSERT INTO upstream_client_selections (project_id, organization_id, credential_kind, credential_id, mcp_server_id, auth_client_id, auth_client_attachment_scope, no_auth, source)
+  SELECT $1, $2, 'user_session', session.id, $5, ac.id, ac.attachment_scope, false, 'issuance'
+  FROM session, mcp_auth_clients ac WHERE ac.id = $6 AND ac.organization_id = $2
+)
+SELECT thread.id AS thread_id, issuer.id AS issuer_id FROM thread, issuer
+`
+
+type SeedOAuthResumeFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	AssistantID    uuid.UUID
+	Jti            string
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+}
+
+type SeedOAuthResumeFixtureRow struct {
+	ThreadID uuid.UUID
+	IssuerID uuid.UUID
+}
+
+func (q *Queries) SeedOAuthResumeFixture(ctx context.Context, arg SeedOAuthResumeFixtureParams) (SeedOAuthResumeFixtureRow, error) {
+	row := q.db.QueryRow(ctx, seedOAuthResumeFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.AssistantID,
+		arg.Jti,
+		arg.McpServerID,
+		arg.AuthClientID,
+	)
+	var i SeedOAuthResumeFixtureRow
+	err := row.Scan(&i.ThreadID, &i.IssuerID)
+	return i, err
 }
 
 const seedOrganizationFixture = `-- name: SeedOrganizationFixture :exec
@@ -1029,6 +1278,23 @@ func (q *Queries) SeedWorkloadBindingFixture(ctx context.Context, arg SeedWorklo
 	return err
 }
 
+const setOAuthIssuerScopeFixture = `-- name: SetOAuthIssuerScopeFixture :exec
+UPDATE user_session_issuers SET project_id = NULL,
+  organization_id = CASE WHEN $1::boolean THEN NULL ELSE organization_id END
+WHERE id = $2 AND project_id = $3
+`
+
+type SetOAuthIssuerScopeFixtureParams struct {
+	GlobalScope bool
+	IssuerID    uuid.UUID
+	ProjectID   uuid.NullUUID
+}
+
+func (q *Queries) SetOAuthIssuerScopeFixture(ctx context.Context, arg SetOAuthIssuerScopeFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOAuthIssuerScopeFixture, arg.GlobalScope, arg.IssuerID, arg.ProjectID)
+	return err
+}
+
 const setRequiresUpstreamAuthFixture = `-- name: SetRequiresUpstreamAuthFixture :exec
 UPDATE mcp_servers SET requires_upstream_auth = $1
 WHERE id = $2 AND project_id = $3
@@ -1042,5 +1308,42 @@ type SetRequiresUpstreamAuthFixtureParams struct {
 
 func (q *Queries) SetRequiresUpstreamAuthFixture(ctx context.Context, arg SetRequiresUpstreamAuthFixtureParams) error {
 	_, err := q.db.Exec(ctx, setRequiresUpstreamAuthFixture, arg.RequiresUpstreamAuth, arg.ID, arg.ProjectID)
+	return err
+}
+
+const withdrawOAuthChoiceFixture = `-- name: WithdrawOAuthChoiceFixture :exec
+WITH disabled AS (
+  UPDATE mcp_auth_clients SET enabled = FALSE
+  WHERE id = $1 AND project_id = $2 AND $3::text = 'disabled'
+), detached AS (
+  UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp()
+  WHERE auth_client_id = $1 AND project_id = $2
+    AND mcp_server_id = $4 AND $3::text = 'detached'
+), unbound AS (
+  DELETE FROM remote_session_client_user_session_issuers
+  WHERE remote_session_client_id = (SELECT ac.remote_session_client_id FROM mcp_auth_clients ac WHERE ac.id = $1 AND ac.project_id = $2)
+    AND user_session_issuer_id = $5 AND $3::text = 'unbound issuer'
+)
+UPDATE remote_session_clients SET deleted_at = clock_timestamp()
+WHERE id = (SELECT ac.remote_session_client_id FROM mcp_auth_clients ac WHERE ac.id = $1 AND ac.project_id = $2)
+  AND $3::text = 'deleted registration'
+`
+
+type WithdrawOAuthChoiceFixtureParams struct {
+	AuthClientID uuid.UUID
+	ProjectID    uuid.NullUUID
+	Change       string
+	McpServerID  uuid.UUID
+	IssuerID     uuid.UUID
+}
+
+func (q *Queries) WithdrawOAuthChoiceFixture(ctx context.Context, arg WithdrawOAuthChoiceFixtureParams) error {
+	_, err := q.db.Exec(ctx, withdrawOAuthChoiceFixture,
+		arg.AuthClientID,
+		arg.ProjectID,
+		arg.Change,
+		arg.McpServerID,
+		arg.IssuerID,
+	)
 	return err
 }

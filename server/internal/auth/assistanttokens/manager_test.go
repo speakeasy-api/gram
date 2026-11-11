@@ -185,7 +185,10 @@ func TestMCPAuthFlowSeparatesStableCallbackFromAttempt(t *testing.T) {
 	manager := New("test-secret", nil, nil, nil, nil)
 	assistantID := uuid.New()
 	attemptID := uuid.NewString()
+	profileVersion := uuid.NewString()
 	token, err := manager.GenerateMCPAuthFlow(MCPAuthFlowInput{
+		SelectionProfileVersionID: profileVersion,
+
 		OrgID:             "org-test",
 		ProjectID:         uuid.New(),
 		UserID:            "user-test",
@@ -209,6 +212,7 @@ func TestMCPAuthFlowSeparatesStableCallbackFromAttempt(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, assistantID.String(), claims.FlowID)
 	require.Equal(t, attemptID, claims.ID)
+	require.Equal(t, profileVersion, claims.SelectionProfileVersionID)
 	require.Equal(t, "https://auth.example.com", claims.OAuthServerIssuer)
 }
 

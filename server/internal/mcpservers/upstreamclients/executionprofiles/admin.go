@@ -182,6 +182,10 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 // turn may use it. A userless profile represents nobody, so it chooses shared
 // credentials only.
 func SetChoice(ctx context.Context, db TxStarter, target Target, serverID uuid.UUID, input ChoiceInput, beforeCommit func(ctx context.Context, tx pgx.Tx, previous *Choice) error) error {
+	return setChoice(ctx, db, target, serverID, input, SourceAdmin, beforeCommit)
+}
+
+func setChoice(ctx context.Context, db TxStarter, target Target, serverID uuid.UUID, input ChoiceInput, source string, beforeCommit func(context.Context, pgx.Tx, *Choice) error) error {
 	if target.OrganizationID == "" || target.ProjectID == uuid.Nil || target.AssistantID == uuid.Nil || target.TriggerID == uuid.Nil {
 		return errors.New("execution profile target is incomplete")
 	}
@@ -270,7 +274,7 @@ func SetChoice(ctx context.Context, db TxStarter, target Target, serverID uuid.U
 		OrganizationID: target.OrganizationID,
 		ProjectID:      target.ProjectID,
 		Version:        profile.Version + 1,
-		Source:         SourceAdmin,
+		Source:         source,
 	})
 	if err != nil {
 		return fmt.Errorf("create execution profile version: %w", err)
@@ -289,7 +293,7 @@ func SetChoice(ctx context.Context, db TxStarter, target Target, serverID uuid.U
 	if !input.Clear {
 		n, err := q.RecordProfileChoice(ctx, RecordProfileChoiceParams{
 			VersionID:      versionID,
-			Source:         upstreamclients.SelectionSourceAdmin,
+			Source:         source,
 			OrganizationID: target.OrganizationID,
 			AuthClientID:   clientID,
 			McpServerID:    serverID,

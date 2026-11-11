@@ -1348,6 +1348,31 @@ func (q *Queries) GetAssistantIgnoringDeleted(ctx context.Context, arg GetAssist
 	return i, err
 }
 
+const getAssistantMCPAuthAttempt = `-- name: GetAssistantMCPAuthAttempt :one
+SELECT assistant_id, normalized_payload_json
+FROM assistant_thread_events
+WHERE project_id = $1 AND assistant_thread_id = $2
+  AND event_id = $3
+`
+
+type GetAssistantMCPAuthAttemptParams struct {
+	ProjectID uuid.UUID
+	ThreadID  uuid.UUID
+	EventID   string
+}
+
+type GetAssistantMCPAuthAttemptRow struct {
+	AssistantID           uuid.UUID
+	NormalizedPayloadJson []byte
+}
+
+func (q *Queries) GetAssistantMCPAuthAttempt(ctx context.Context, arg GetAssistantMCPAuthAttemptParams) (GetAssistantMCPAuthAttemptRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantMCPAuthAttempt, arg.ProjectID, arg.ThreadID, arg.EventID)
+	var i GetAssistantMCPAuthAttemptRow
+	err := row.Scan(&i.AssistantID, &i.NormalizedPayloadJson)
+	return i, err
+}
+
 const getAssistantMCPOAuthClient = `-- name: GetAssistantMCPOAuthClient :one
 SELECT
   client_id,
@@ -3792,6 +3817,21 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 		&i.WarmUntil,
 	)
 	return i, err
+}
+
+const lockAssistantMCPAuthAttempt = `-- name: LockAssistantMCPAuthAttempt :exec
+SELECT pg_advisory_xact_lock(hashtextextended('assistant-mcp-auth:' || CAST($1::uuid AS text) || ':' || $2::text, 0))
+`
+
+type LockAssistantMCPAuthAttemptParams struct {
+	ProjectID uuid.UUID
+	AttemptID string
+}
+
+// Serialize consumption and event insertion for the same signed OAuth state.
+func (q *Queries) LockAssistantMCPAuthAttempt(ctx context.Context, arg LockAssistantMCPAuthAttemptParams) error {
+	_, err := q.db.Exec(ctx, lockAssistantMCPAuthAttempt, arg.ProjectID, arg.AttemptID)
+	return err
 }
 
 const lockKitLocalWorkloadSubject = `-- name: LockKitLocalWorkloadSubject :exec
