@@ -77,20 +77,19 @@ const MIN_SEVERITY_OPTIONS: Array<{
 }> = [
   {
     value: MinSeverity.Error,
-    label: "Failed connections (recommended)",
-    description:
-      "Connections that failed, such as a server that did not respond.",
+    label: "Errors only (recommended)",
+    description: "Failed connections, such as a server that did not respond.",
   },
   {
     value: MinSeverity.Warn,
-    label: "Failed and blocked connections",
+    label: "Warnings and errors",
     description:
-      "Also sends blocked connections, such as someone without access to a server.",
+      "Also blocked connections, such as someone without access to a server.",
   },
   {
     value: MinSeverity.Info,
-    label: "Failed, blocked and declined connections",
-    description: "Also sends declined connections, such as a canceled sign-in.",
+    label: "Info, warnings and errors",
+    description: "Also declined connections, such as a canceled sign-in.",
   },
 ];
 
@@ -335,7 +334,7 @@ export function ConfigureExportSheet({
                           </Alert>
                         ) : null}
                         <Label id={minSeverityControlId}>
-                          Connections to send
+                          Lowest level to send
                         </Label>
                         <RadioGroup
                           aria-labelledby={minSeverityControlId}

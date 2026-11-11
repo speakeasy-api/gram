@@ -141,7 +141,7 @@ function renderDataSourceDescription(
   }
 
   if (dataSource === DataSource.McpConnectionLogs) {
-    return "OTLP logs for failed MCP connections, including server problems an admin or service provider needs to fix. You can also choose to send blocked or declined connections. Connections through organization gateways are not included.";
+    return "OTLP logs for failed MCP connections, including server problems an admin or service provider needs to fix. You can choose to also send warnings (blocked connections) or info (declined connections). Connections through organization gateways are not included.";
   }
 
   return "OTLP data";

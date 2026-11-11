@@ -118,13 +118,13 @@ describe("ConfigureExportSheet level", () => {
 
     expect(
       screen
-        .getByRole("radio", { name: /^Failed and blocked connections/ })
+        .getByRole("radio", { name: /^Warnings and errors/ })
         .getAttribute("aria-checked"),
     ).toBe("true");
 
     fireEvent.click(
       screen.getByRole("radio", {
-        name: /^Failed, blocked and declined connections/,
+        name: /^Info, warnings and errors/,
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Save export" }));
@@ -133,12 +133,12 @@ describe("ConfigureExportSheet level", () => {
     expect(onSave.mock.calls[0]?.[0].minSeverity).toBe("info");
   });
 
-  it("defaults to failed connections when the route has no level", () => {
+  it("defaults to errors only when the route has no level", () => {
     renderSheet(route("mcp_connection_logs"), vi.fn());
 
     expect(
       screen
-        .getByRole("radio", { name: /Failed connections \(recommended\)/ })
+        .getByRole("radio", { name: /Errors only \(recommended\)/ })
         .getAttribute("aria-checked"),
     ).toBe("true");
   });
