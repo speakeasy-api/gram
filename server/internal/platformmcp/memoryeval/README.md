@@ -54,7 +54,8 @@ customers (the staff admin Business Memory Extraction toggle) only when arm D me
 gate. Nothing in this package evaluates the gates yet; read them off the report.
 
 - **Complete run**: no errored answers in either arm, since errors drop out
-  of every rate below.
+  of the graded rates below (accuracy, citations, negatives) while still
+  adding to tool tokens per question.
 - **Hard-set lift**: at least 15 points above arm B on the hard set.
 - **Overall accuracy**: at least 80%, and no lower than arm B.
 - **Privacy**: no leaked secret, and nothing from another project or a
