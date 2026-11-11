@@ -12,17 +12,17 @@ package plugins
 
 // hooksBinaryVersion is the release every newly rendered bootstrap script
 // installs.
-const hooksBinaryVersion = "0.3.46"
+const hooksBinaryVersion = "0.3.49"
 
 // hooksBinarySHA256s pins the archive digests for hooksBinaryVersion. Bootstrap
 // scripts verify the same digests client-side after downloading.
 var hooksBinarySHA256s = map[string]string{
-	"darwin-amd64":  "f2d598edd70b92ea188474c7a713ce6ac17e1a2fcea173c8f75efa35caec228a",
-	"darwin-arm64":  "b847b40fde831230e60ee9e82049c5838321df923010c976977a2fc7522d7bbc",
-	"linux-amd64":   "5d44e92dfa4adcb4d0091419d1b633ecfcb6fefb5d0cf4073c81bfe33c9e5d2d",
-	"linux-arm64":   "99e4412aea1e6f05501f26d2db94b28388a7c7a53addacd4c5abbdb833f2a126",
-	"windows-amd64": "d6ff52e034c64c7987d448e7b750beb82b615be36c5fc56950f858b9f772678d",
-	"windows-arm64": "d12ca548afd81207780f603ebf03dd7e872cc26e8c37f85120485663fcdefb27",
+	"darwin-amd64":  "db7509b5c1a887174a5f4957b286c6820cfd231e9b870327789aa6153485f70b",
+	"darwin-arm64":  "d3b6a6309bd8456c3118c2756b823446b465594f94071d1edb0688122f7f089d",
+	"linux-amd64":   "e6a57879181246eadab4b5ceb8bf4e8d9baf53aa6b8d4ce4a38a72a727b740da",
+	"linux-arm64":   "b8a64e8957ab1bdc13e33053b02636b84929b775b5b60e6f957d0e3cb0ae8513",
+	"windows-amd64": "7e519ee10ee373c0fc7873aa0026ecc27e3c9636c618845bdede41a0ef88a520",
+	"windows-arm64": "cc24e8796acae2970b9d2cd55506b3b856f6a73815918d5fd51b2547d0c64dec",
 }
 
 // hooksRetiredSHA256s keeps previously pinned releases fetchable. Bootstrap
@@ -245,5 +245,13 @@ var hooksRetiredSHA256s = map[string]map[string]string{
 		"linux-arm64":   "2b4c6cd0b769c50ca79fce03feb45bcf5110e1a0ae6a797a444596fdcadb7886",
 		"windows-amd64": "474ab098353a7581e13d8bd3f9071c8a0be9a5606dc109a8fb784f3fe715b34e",
 		"windows-arm64": "c1a434d3ede99cc99bbdc8a450284ab48e618852c7a95b5da057c11c64e78bbd",
+	},
+	"0.3.46": {
+		"darwin-amd64":  "f2d598edd70b92ea188474c7a713ce6ac17e1a2fcea173c8f75efa35caec228a",
+		"darwin-arm64":  "b847b40fde831230e60ee9e82049c5838321df923010c976977a2fc7522d7bbc",
+		"linux-amd64":   "5d44e92dfa4adcb4d0091419d1b633ecfcb6fefb5d0cf4073c81bfe33c9e5d2d",
+		"linux-arm64":   "99e4412aea1e6f05501f26d2db94b28388a7c7a53addacd4c5abbdb833f2a126",
+		"windows-amd64": "d6ff52e034c64c7987d448e7b750beb82b615be36c5fc56950f858b9f772678d",
+		"windows-arm64": "d12ca548afd81207780f603ebf03dd7e872cc26e8c37f85120485663fcdefb27",
 	},
 }
