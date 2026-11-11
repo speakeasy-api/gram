@@ -8,11 +8,18 @@
 # The server is linted with a golangci-lint binary that has the glint plugin
 # compiled in (see .custom-gcl.yml). Everything else is stock golangci-lint:
 # its cache is shared across worktrees because golangci-lint 2.13.2 and later
-# key entries on module-relative paths, and Go's GOMEMLIMIT/GOGC are honored
-# from the environment for anyone who needs to bound a cold run on a small
-# machine (mise.local.toml is the place to set them).
+# key entries on module-relative paths.
 
 set -eo pipefail
+
+# A cold-cache run keeps every dependency's analysis facts in memory at once
+# (about 10 GiB live heap for the server), and with Go's default GOGC the heap
+# grows to more than twice that before the collector runs, which pushes even a
+# 36 GB laptop into memory compression. A soft limit makes the collector run
+# before the heap doubles: it cut a cold run's peak footprint from 27 GiB to
+# 11 GiB and made the run faster. Warm runs never get near it. Set GOMEMLIMIT
+# in mise.local.toml to override it.
+export GOMEMLIMIT="${GOMEMLIMIT:-4GiB}"
 
 args=(--show-stats=false --output.text.print-issued-lines=false)
 if [ "${usage_long:-false}" = "true" ]; then
@@ -28,11 +35,6 @@ if [ "$expected_version" != "$installed_version" ]; then
     echo "golangci-lint $installed_version is installed but .custom-gcl.yml builds v$expected_version; keep them in sync" >&2
     exit 1
 fi
-
-# gcl gets its own cache directory so that clearing it after a rebuild (below)
-# does not discard the stock binary's entries for the other Go modules. The
-# cache is still shared by every worktree.
-export GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}}/gcl"
 
 # Rebuild gcl only when its inputs change: the Go toolchain it embeds (a
 # binary built with an older go/types cannot check packages that require a
@@ -60,6 +62,18 @@ gcl_inputs=$(
             done
     } | git hash-object --stdin
 )
+
+# golangci-lint keys its cache on a hash of the plugin directory, but that
+# hash does not descend into subdirectories, so analyzer changes under
+# glint/imports would otherwise be served stale results. Each gcl build
+# therefore gets its own cache directory, named after its inputs. Worktrees
+# with the same glint share one warm cache, and a worktree that builds a
+# different glint does not wipe the cache the others use. A new worktree used
+# to clear the shared cache on its first build, and the next run anywhere then
+# rebuilt every dependency's facts from source (7 minutes, 27 GiB footprint,
+# against 9 seconds warm).
+export GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/gcl}/glint-${gcl_inputs:0:12}"
+
 gcl_stamp=
 if [ -r "$gcl_fingerprint_file" ]; then
     IFS= read -r gcl_stamp < "$gcl_fingerprint_file"
@@ -74,12 +88,6 @@ if [ ! -x ./bin/gcl ] || [ "$gcl_stamp" != "$gcl_inputs" ]; then
     GOTOOLCHAIN=local golangci-lint custom --destination ./bin --name gcl
     printf '%s\n' "$gcl_inputs" > "$gcl_fingerprint_file"
     echo "Built gcl in $((SECONDS - build_started))s"
-    # golangci-lint keys its cache on a hash of the plugin directory, but that
-    # hash does not descend into subdirectories, so analyzer changes under
-    # glint/imports would otherwise be served stale results from the cache.
-    # Only gcl's own cache directory is affected (see GOLANGCI_LINT_CACHE
-    # above).
-    ./bin/gcl cache clean
 fi
 
 # Generated packages produce no diagnostics after golangci-lint's generated
