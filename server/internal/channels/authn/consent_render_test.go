@@ -11,6 +11,8 @@ import (
 )
 
 func TestConsentTemplateRendering(t *testing.T) {
+	t.Parallel()
+
 	// Exercise both text and attribute contexts with untrusted client and identity data.
 	untrusted := `<script>alert("consent")</script>&'`
 	data := map[string]any{"Styles": consentpage.Styles}
@@ -26,12 +28,12 @@ func TestConsentTemplateRendering(t *testing.T) {
 		t.Fatal("untrusted data was not safely rendered")
 	}
 	for _, field := range []string{"Name", "ClientID", "Organization", "Project", "User"} {
-		if !strings.Contains(page, html.EscapeString(data[field].(string))) {
+		if !strings.Contains(page, html.EscapeString(field+untrusted)) {
 			t.Errorf("missing escaped %s", field)
 		}
 	}
 	for _, field := range []string{"Resource", "Challenge", "CSRF"} {
-		want := `type="hidden" name="` + strings.ToLower(field) + `" value="` + html.EscapeString(data[field].(string)) + `"`
+		want := `type="hidden" name="` + strings.ToLower(field) + `" value="` + html.EscapeString(field+untrusted) + `"`
 		if !strings.Contains(page, want) {
 			t.Errorf("missing escaped hidden field %s", field)
 		}
@@ -63,6 +65,8 @@ func TestConsentTemplateRendering(t *testing.T) {
 }
 
 func TestConsentTemplateUtilitiesCompiled(t *testing.T) {
+	t.Parallel()
+
 	// This page reuses existing utilities, so no generated stylesheet change is needed.
 	escape := strings.NewReplacer(":", `\:`, "[", `\[`, "]", `\]`)
 	for _, match := range regexp.MustCompile(`class="([^"]+)"`).FindAllStringSubmatch(consentHTML, -1) {

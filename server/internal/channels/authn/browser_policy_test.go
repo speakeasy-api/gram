@@ -15,6 +15,8 @@ func TestBrowserPolicyPreservesConsentOrigin(t *testing.T) {
 	service := &Service{}
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
 		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+
 			response := httptest.NewRecorder()
 			service.wrap(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusNoContent)
@@ -37,6 +39,8 @@ func TestConsentRejectsOpaqueAndUntrustedOrigins(t *testing.T) {
 	service := &Service{origin: "https://channels.example.com", dashboardOrigin: "https://dashboard.example.com"}
 	for _, origin := range []string{"", "null", "https://attacker.example.com"} {
 		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+
 			request := httptest.NewRequest(http.MethodPost, service.origin+"/channels/oauth/authorize", strings.NewReader("decision=allow"))
 			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			request.Header.Set("Origin", origin)
