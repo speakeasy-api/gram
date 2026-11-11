@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { ListScopesResult$inboundSchema } from "@gram/client/models/components/listscopesresult.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import { listUserGrantsResultFromJSON } from "@gram/client/models/components/listusergrantsresult.js";
 import { queryKeyGrants } from "@gram/client/react-query/grants.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -12,6 +13,40 @@ import {
   selectorMatchesStrict,
 } from "./useRBAC";
 import servedCatalogue from "../pages/access/listScopes.fixture.json";
+
+describe("Channels effective-grants contract", () => {
+  const scopes = ["channels:connect", "channels:admin", "channels:read_all"];
+
+  it("decodes successful grant responses containing Channels scopes", () => {
+    // These are real scope slugs, not unknown values to discard: rejecting a
+    // 200 response makes MembershipSyncGuard unmount the entire route outlet.
+    const result = listUserGrantsResultFromJSON(
+      JSON.stringify({
+        grants: scopes.map((scope) => ({ scope, sub_scopes: [scope] })),
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value?.grants.map((grant) => grant.scope)).toEqual(scopes);
+    expect(result.value?.grants.map((grant) => grant.subScopes)).toEqual(
+      scopes.map((scope) => [scope]),
+    );
+  });
+
+  it("preserves forward-compatible scopes without authorizing known permissions", () => {
+    const result = listUserGrantsResultFromJSON(
+      JSON.stringify({
+        grants: [{ scope: "unknown:permission" }],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(
+      hasScopeInGrants(result.value!.grants, "channels:connect", "*"),
+    ).toBe(false);
+    expect(hasScopeInGrants(result.value!.grants, "project:write", "*")).toBe(
+      false,
+    );
+  });
+});
 
 describe("grants query key", () => {
   it("isolates effective grants by session", () => {
