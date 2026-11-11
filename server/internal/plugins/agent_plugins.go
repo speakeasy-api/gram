@@ -194,6 +194,17 @@ func validateAgentPluginRemoteURL(raw string) error {
 	return nil
 }
 
+// validateAgentPluginName checks just a manifest name against the vendored
+// schema's name rules (maxLength 64, the name pattern, no "--"/".."). It runs
+// the same schema document validation generation uses, so the standalone
+// check and the full-document check cannot drift apart.
+func validateAgentPluginName(name string) error {
+	return validateAgentPluginDocument(agentPluginSchemaID, map[string]any{
+		"$schema": agentPluginSchemaID,
+		"name":    name,
+	})
+}
+
 func validateAgentPluginDocument(schemaID string, document any) error {
 	schemas, err := loadAgentPluginSchemas()
 	if err != nil {

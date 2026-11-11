@@ -182,6 +182,7 @@ describe("installation instructions", () => {
     // Manual install from the marketplace repository's <slug>-vibe/ directory:
     // clone into a fresh temp dir chained with &&, clear the destination, copy.
     expect(text).toContain("tmp=$(mktemp -d)");
+    expect(text).toContain(`trap 'rm -rf "$tmp"' EXIT`);
     expect(text).toContain(
       'git clone https://github.com/example-owner/example-org-plugins "$tmp/marketplace"',
     );

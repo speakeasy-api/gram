@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -390,4 +392,68 @@ func TestVibeHooksTomlRendered(t *testing.T) {
 
 	// The deployment identity file is written beside it, like every provider.
 	require.FileExists(t, filepath.Join(dir, configFileName))
+}
+
+// TestLoadVibeMCPServers covers config discovery: [[mcp_servers]] from the
+// Vibe home's config.toml ($VIBE_HOME honoured), plugin mcp.json under the
+// home's plugins/ and the cwd's trusted .vibe/plugins/, stdio args joined
+// onto the command, and Vibe's name normalisation matching in resolveVibeMCP.
+func TestLoadVibeMCPServers(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("VIBE_HOME", home)
+	cwd := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(home, "config.toml"), []byte(`
+[[mcp_servers]]
+name = "speakeasy-linear"
+url = "https://app.getgram.ai/mcp/linear"
+
+[[mcp_servers]]
+name = "local-stdio"
+command = "npx"
+args = ["-y", "@example/mcp"]
+`), 0o600))
+	pluginDir := filepath.Join(home, "plugins", "my-plugin")
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "mcp.json"), []byte(`{"mcpServers":{"docs":{"command":"uvx","args":["docs-mcp"]}}}`), 0o600))
+	projDir := filepath.Join(cwd, ".vibe", "plugins", "proj-plugin")
+	require.NoError(t, os.MkdirAll(projDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projDir, "mcp.json"), []byte(`{"mcpServers":{"proj":{"url":"https://proj.example.test/mcp"}}}`), 0o600))
+
+	servers := loadVibeMCPServers(cwd)
+	byName := map[string]agenthooks.MCPServer{}
+	for _, s := range servers {
+		byName[s.Name] = s
+	}
+	require.Equal(t, "https://app.getgram.ai/mcp/linear", byName["speakeasy-linear"].URL)
+	require.Equal(t, "npx -y @example/mcp", byName["local-stdio"].Command, "stdio args must join onto the command")
+	require.Equal(t, "uvx docs-mcp", byName["docs"].Command)
+	require.Equal(t, "https://proj.example.test/mcp", byName["proj"].URL)
+
+	// Vibe normalises server names in tool calls: "-" becomes "_".
+	var tc agenthooks.ToolCall
+	tc.MCP = &agenthooks.MCPCall{Server: "speakeasy_linear"}
+	resolveVibeMCP(&tc, servers)
+	require.Equal(t, "https://app.getgram.ai/mcp/linear", tc.MCP.URL)
+	require.True(t, tc.MCP.FromConfig)
+	require.Equal(t, agenthooks.ToolMCP, tc.Canonical)
+}
+
+// TestLoadVibeMCPServersSkipsUnsafeFiles: a FIFO or an oversized mcp.json in
+// the project scope must be skipped, not stall or balloon the gating read.
+func TestLoadVibeMCPServersSkipsUnsafeFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("FIFO test is unix-only")
+	}
+	home := t.TempDir()
+	t.Setenv("VIBE_HOME", home)
+	cwd := t.TempDir()
+	projDir := filepath.Join(cwd, ".vibe", "plugins", "evil")
+	require.NoError(t, os.MkdirAll(projDir, 0o755))
+	require.NoError(t, syscall.Mkfifo(filepath.Join(projDir, "mcp.json"), 0o600))
+	bigDir := filepath.Join(cwd, ".vibe", "plugins", "big")
+	require.NoError(t, os.MkdirAll(bigDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bigDir, "mcp.json"), make([]byte, maxVibeConfigBytes+1), 0o600))
+
+	require.Empty(t, loadVibeMCPServers(cwd))
 }

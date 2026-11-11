@@ -525,18 +525,60 @@ func vibeDurationMS(ms *float64) *float64 {
 // vibeMCPConfig is the shape of ~/.vibe/config.toml's [[mcp_servers]] entries.
 type vibeMCPConfig struct {
 	MCPServers []struct {
-		Name    string `toml:"name"`
-		URL     string `toml:"url"`
-		Command string `toml:"command"`
+		Name    string   `toml:"name"`
+		URL     string   `toml:"url"`
+		Command string   `toml:"command"`
+		Args    []string `toml:"args"`
 	} `toml:"mcp_servers"`
 }
 
 // vibePluginMCPConfig is the shape of a plugin package's mcp.json.
 type vibePluginMCPConfig struct {
 	MCPServers map[string]struct {
-		URL     string `json:"url"`
-		Command string `json:"command"`
+		URL     string   `json:"url"`
+		Command string   `json:"command"`
+		Args    []string `json:"args"`
 	} `json:"mcpServers"`
+}
+
+// maxVibeConfigBytes bounds one Vibe config read. Both config paths are read
+// on the tool-call gating path, so a read must never stall or balloon the
+// relay (mirrors maxPiMCPConfigBytes in pi.go).
+const maxVibeConfigBytes = 1 << 20
+
+// readVibeConfigFile reads one Vibe config file bounded and non-blocking, the
+// way pi.go reads Pi's mcp.json: the plugin mcp.json under the session cwd is
+// project-controlled, so a FIFO or a symlink to a device must not block the
+// read past the hook's deadline (turning the verdict into an allow), and an
+// oversized file must not exhaust memory. The open cannot block and the
+// descriptor itself is checked, so a path swapped after an earlier stat cannot
+// smuggle one in.
+func readVibeConfigFile(path string) []byte {
+	f, err := os.OpenFile(path, os.O_RDONLY|piNonBlockingOpenFlag, 0)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxVibeConfigBytes {
+		return nil
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxVibeConfigBytes+1))
+	if err != nil || len(data) > maxVibeConfigBytes {
+		return nil
+	}
+	return data
+}
+
+// vibeServerCommand joins a stdio server's command and args the way pi.go
+// does, so servers launched by the same executable keep their distinguishing
+// provenance.
+func vibeServerCommand(command string, args []string) string {
+	command = strings.TrimSpace(command)
+	if command != "" && len(args) > 0 {
+		return strings.Join(append([]string{command}, args...), " ")
+	}
+	return command
 }
 
 // vibeHomeDir resolves Vibe's home: $VIBE_HOME when set, else ~/.vibe.
@@ -568,17 +610,17 @@ func loadVibeMCPServers(cwd string) []agenthooks.MCPServer {
 	}
 
 	if home := vibeHomeDir(); home != "" {
-		if b, err := os.ReadFile(filepath.Join(home, "config.toml")); err == nil {
+		if b := readVibeConfigFile(filepath.Join(home, "config.toml")); b != nil {
 			var cfg vibeMCPConfig
 			if err := toml.Unmarshal(b, &cfg); err == nil {
 				for _, s := range cfg.MCPServers {
-					add(s.Name, s.URL, s.Command)
+					add(s.Name, s.URL, vibeServerCommand(s.Command, s.Args))
 				}
 			}
 		}
 		for _, pluginDir := range vibePluginDirs(home, cwd) {
-			b, err := os.ReadFile(filepath.Join(pluginDir, "mcp.json"))
-			if err != nil {
+			b := readVibeConfigFile(filepath.Join(pluginDir, "mcp.json"))
+			if b == nil {
 				continue
 			}
 			var doc vibePluginMCPConfig
@@ -592,7 +634,7 @@ func loadVibeMCPServers(cwd string) []agenthooks.MCPServer {
 			sort.Strings(names)
 			for _, name := range names {
 				s := doc.MCPServers[name]
-				add(name, s.URL, s.Command)
+				add(name, s.URL, vibeServerCommand(s.Command, s.Args))
 			}
 		}
 	}

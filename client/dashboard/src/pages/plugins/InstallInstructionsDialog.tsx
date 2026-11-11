@@ -1028,12 +1028,14 @@ function VibeInstallContent({
   const portable = agentPluginsV1Compatible !== false;
 
   const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
-  // Clone into a fresh temp directory and chain with &&: a second paste of the
-  // clone alone fails, and without the chaining the copy below would still
-  // replace the install from the stale checkout. Clear the destination first:
-  // cp -R into an existing directory nests the new files one level deeper and
-  // Vibe keeps loading the old plugin.
+  // Clone into a fresh temp directory, chain with &&, and trap EXIT so the
+  // clone is cleaned up on success and failure: a second paste of the clone
+  // alone fails, and without the chaining the copy below would still replace
+  // the install from the stale checkout. Clear the destination first: cp -R
+  // into an existing directory nests the new files one level deeper and Vibe
+  // keeps loading the old plugin.
   const manualCopy = `tmp=$(mktemp -d) && \
+trap 'rm -rf "$tmp"' EXIT && \
 git clone ${repoUrl} "$tmp/marketplace" && \
 mkdir -p ~/.vibe/plugins && \
 rm -rf ~/.vibe/plugins/${installSlug} && \

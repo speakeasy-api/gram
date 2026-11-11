@@ -11,7 +11,6 @@ import (
 	"maps"
 	"net/url"
 	"path"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -1080,7 +1079,7 @@ func generateReadme(plugins []sharedPluginEntry, cfg GenerateConfig) []byte {
 	b.WriteString("or a repository's `.vibe/plugins/<slug>/` (that project only, once the folder is trusted). ")
 	b.WriteString("Vibe discovers the plugin on next start or `/reload-plugins`; remove the copied directory to uninstall.\n")
 	b.WriteString("The package's `mcp.json` carries the plugin's public MCP servers; Speakeasy-hosted servers assigned to the device reach Vibe through `[[mcp_servers]]` entries the Speakeasy device agent writes into `~/.vibe/config.toml`.\n")
-	if cfg.HooksAPIKey != "" && vibeHooksSupported() {
+	if cfg.HooksAPIKey != "" && VibeObservabilityPluginAvailable(cfg) {
 		fmt.Fprintf(&b, "For observability, also copy `%s/` into `~/.vibe/plugins/%s/`: the package's `ai.mistral.vibe/hooks.toml` registers the Speakeasy hooks, which Vibe runs on next start or `/reload-plugins` (coverage today is tool calls and turn end; prompt and session lifecycle hooks are a planned follow-up). Remove the copied directory to uninstall.\n", VibeObservabilitySlug(cfg), naming.ObservabilitySlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)))
 	}
 
@@ -2687,27 +2686,19 @@ func vibeHooksSupported() bool {
 	return semver.Compare("v"+pinnedHooksBinaryVersion, "v"+vibeProviderMinHooksBinaryVersion) >= 0
 }
 
-// agentPluginNameRe mirrors the name branch of agentPluginNamePattern in
-// agent_plugins.go (Go's regexp engine has no lookahead, so the "--"/".."
-// exclusion is checked separately, exactly like agentSchemaRegexp).
-var agentPluginNameRe = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$`)
-
 // VibeObservabilityPluginAvailable reports whether the per-org Vibe
 // observability package would generate cleanly for cfg: the pinned hooks
 // binary carries the vibe provider, and the manifest name (the org's
-// observability slug, at most 64 characters starting with a letter or digit
-// and free of "--"/"..") satisfies the Agent Plugins 1.0 name schema.
-// Publish status uses it so install UIs only offer the package when it is
-// actually published.
+// observability slug) satisfies the Agent Plugins 1.0 name schema — checked
+// through the same vendored-schema validation generation runs, so the two
+// cannot drift. Publish status uses it so install UIs only offer the package
+// when it is actually published.
 func VibeObservabilityPluginAvailable(cfg GenerateConfig) bool {
 	if !vibeHooksSupported() {
 		return false
 	}
 	name := naming.ObservabilitySlug(conv.Default(cfg.HooksOrgName, cfg.OrgName))
-	if len(name) > 64 || strings.Contains(name, "--") || strings.Contains(name, "..") {
-		return false
-	}
-	return agentPluginNameRe.MatchString(name)
+	return validateAgentPluginName(name) == nil
 }
 
 func generateVibeObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
@@ -2737,14 +2728,19 @@ func generateVibeObservabilityPluginInDir(files map[string][]byte, subdir string
 			},
 		},
 	}
+	// An org slug that breaks the name schema must not fail the whole
+	// publish — only the Vibe package is skipped. The name is checked on its
+	// own first so a schema-loader or future manifest error is not
+	// misreported as a name failure.
+	if err := validateAgentPluginName(manifestName); err != nil {
+		return fmt.Errorf("%w: %v", errVibeManifestName, err)
+	}
 	manifestJSON, err := marshalJSON(manifest)
 	if err != nil {
 		return fmt.Errorf("marshal vibe plugin.json: %w", err)
 	}
 	if err := validateAgentPluginDocument(agentPluginSchemaID, manifest); err != nil {
-		// An org slug that breaks the name schema must not fail the whole
-		// publish — only the Vibe package is skipped.
-		return fmt.Errorf("%w: %v", errVibeManifestName, err)
+		return fmt.Errorf("validate vibe plugin.json: %w", err)
 	}
 	files[path.Join(subdir, "plugin.json")] = manifestJSON
 	files[path.Join(subdir, "ai.mistral.vibe/hooks.toml")] = renderVibeHooksTOML()
