@@ -122,9 +122,6 @@ type IdentityResolver interface {
 }
 
 type Service struct {
-	// builtinBackends serve mcp_servers rows whose builtin_backend names
-	// them, such as the approvals server.
-	builtinBackends         map[string]BuiltinBackend
 	assistantWorkloadTokens AssistantWorkloadTokenIssuer
 	codeExecutor            codemode.Executor
 	federatedLoginConsumer  FederatedLoginConsumer
@@ -195,6 +192,9 @@ type Service struct {
 	features feature.Provider
 	// mandatoryShadowLog dedupes mandatory authz shadow disagreement logs.
 	mandatoryShadowLog *onceLog
+	// upstreamIssuerParityLog dedupes upstream issuer disagreement and
+	// re-consent forecast logs.
+	upstreamIssuerParityLog *onceLog
 	// prepareMandatory replaces authz PrepareMandatory for the shadow when
 	// set; tests use it to observe admissions.
 	prepareMandatory func(context.Context) (authz.MandatoryAuthorization, error)
@@ -298,6 +298,9 @@ type Service struct {
 	// attemptEndings claims once-only endings off the request path.
 	attemptEndings *attemptEndings
 	bindingRefresh *remotesessions.BindingRefreshAttempts
+	// pendingSignIn connects a Platform MCP server's sign-in provider before
+	// its consent page lists sign-in options; nil leaves the page as it is.
+	pendingSignIn PendingSignInConnector
 	// validationMetrics counts the consent page's live validation probes.
 	validationMetrics *remotesessionmetrics.Validation
 	// validationLimiter paces verifies per consent challenge; nil without Redis.
@@ -313,9 +316,9 @@ type Service struct {
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
 	// shutdownDrain interrupts tools/call and resources/read work the gateway
-	// runs itself (functions, HTTP tools, external MCP tools) when the server
-	// shuts down. It is the remote proxy manager's drain when there is one,
-	// so one StartDrain reaches relayed and executed requests alike.
+	// runs itself (functions and HTTP tools) when the server shuts down. It is
+	// the remote proxy manager's drain when there is one, so one StartDrain
+	// reaches relayed and executed requests alike.
 	shutdownDrain *shutdowndrain.Drain
 	tunnelManager *tunnelManager
 	// Nil when no Redis was wired; every public tunneled request then fails closed.
@@ -356,6 +359,9 @@ type oauthTokenInputs struct {
 	// the matching tool's *_ACCESS_TOKEN env var, which the gateway forwards
 	// as the Authorization header on the outgoing upstream request.
 	Token string
+
+	// shared marks a credential the server holds for the organization, not the caller.
+	shared bool
 }
 
 // appendRemoteSessionTokenInputs converts a remote_session_issuer_id -> token
@@ -388,6 +394,7 @@ func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID
 			securityKeys:          nil,
 			remoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 			Token:                 entry.Token,
+			shared:                entry.CredentialOwner == remotesessions.CredentialOwnerSelf,
 		})
 	}
 	return dst, nil
@@ -432,10 +439,6 @@ type mcpInputs struct {
 	// toolVariationsGroupID is the effective variation group resolved per
 	// request (mcp_servers, then toolsets, then nil for the project default).
 	toolVariationsGroupID *uuid.UUID
-	// skipProxyTools drops external-MCP passthrough tools from dispatch.
-	// The meta surface sets it: those tools are hidden from its describe
-	// catalog, so execute must not reach them through the hosted path either.
-	skipProxyTools bool
 	// mcpServerID is the fronting mcp_servers row id: the mcp_endpoint's
 	// server, or on the legacy toolset-by-slug path the canonical wrapper when
 	// one exists. Nil otherwise and for internal (agent-workflow) callers.
@@ -492,6 +495,9 @@ type mcpInputs struct {
 	// a method has needed it. Nil until then; the flag is never evaluated
 	// more than once per request.
 	skillsOverMCP *bool
+
+	// upstreamRejection is set by tools/call when an HTTP tool's provider refused the credential sent.
+	upstreamRejection mcpconnectionattempts.Code
 }
 
 // recordServingAnalytics adds the known serving ids to product event properties.
@@ -610,7 +616,6 @@ func NewService(
 	}
 	service := &Service{
 		assistantWorkloadTokens:   nil,
-		builtinBackends:           map[string]BuiltinBackend{},
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
@@ -620,6 +625,7 @@ func NewService(
 		authEnforcement:           authenforcement.NewGate(db),
 		consentBindings:           nil,
 		bindingRefresh:            nil,
+		pendingSignIn:             nil,
 		logger:                    logger,
 		tracer:                    tracer,
 		metrics:                   metrics,
@@ -648,6 +654,7 @@ func NewService(
 		posthog:                   posthog,
 		features:                  features,
 		mandatoryShadowLog:        newOnceLog(),
+		upstreamIssuerParityLog:   newOnceLog(),
 		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
@@ -1535,6 +1542,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 					securityKeys:          []string{},
 					remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 					Token:                 authToken,
+					shared:                false,
 				})
 			}
 		case !cfg.isPublic:
@@ -1651,7 +1659,6 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		wrapperIsPublic:          wrapperIsPublic,
 		metaMcpServerID:          "",
 		clientInfoScope:          "",
-		skipProxyTools:           false,
 		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		toolsetIsPublic:          new(cfg.isPublic),
 		tags:                     tags,
@@ -1659,6 +1666,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		identityCoverageRecorded: hostedCoverageRecorded,
 		toolSelection:            callerToolSelection,
 		skillsOverMCP:            nil,
+		upstreamRejection:        mcpconnectionattempts.Code{},
 	}
 
 	// Call handlers resolve attribution after loading their toolset. Other
@@ -2209,11 +2217,11 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
 	case mcpversions.MethodToolsList:
-		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
+		return handleToolsList(ctx, s.logger, s.authz, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
-		s.recordHostedToolsCallRefusal(ctx, payload, err)
+		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		s.recordHostedToolsCallOutcome(ctx, payload, err)
 		return body, err
 	case mcpversions.MethodPromptsList:
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
@@ -2436,9 +2444,7 @@ func (s *Service) HandleToolsList(
 		ctx,
 		s.logger,
 		s.authz,
-		s.guardianPolicy,
 		s.db,
-		s.env,
 		payload,
 		req,
 		s.posthog,
@@ -2509,7 +2515,6 @@ func (s *Service) HandleToolsCall(
 		s.metrics,
 		s.identityCoverage,
 		s.authz,
-		s.guardianPolicy,
 		s.db,
 		s.env,
 		payload,

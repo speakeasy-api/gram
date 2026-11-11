@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CustomDomainsRouteImport } from './routes/custom-domains'
 import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
 import { Route as FleetHealthRouteImport } from './routes/fleet-health'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
@@ -17,6 +18,7 @@ import { Route as McpSetupRouteImport } from './routes/mcp-setup'
 import { Route as OnboardingPlaybooksRouteImport } from './routes/onboarding-playbooks'
 import { Route as OnboardingStepsRouteImport } from './routes/onboarding-steps'
 import { Route as OrganizationsRouteImport } from './routes/organizations'
+import { Route as PlatformMcpFeedbackRouteImport } from './routes/platform-mcp-feedback'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
@@ -38,7 +40,9 @@ import { Route as OrganizationsIdOrSlugIndexRouteImport } from './routes/organiz
 import { Route as OrganizationsIdOrSlugActivityRouteImport } from './routes/organizations.$idOrSlug.activity'
 import { Route as OrganizationsIdOrSlugBillingRouteImport } from './routes/organizations.$idOrSlug.billing'
 import { Route as OrganizationsIdOrSlugCoverageRouteImport } from './routes/organizations.$idOrSlug.coverage'
+import { Route as OrganizationsIdOrSlugCustomDomainRouteImport } from './routes/organizations.$idOrSlug.custom-domain'
 import { Route as OrganizationsIdOrSlugFeaturesRouteImport } from './routes/organizations.$idOrSlug.features'
+import { Route as OrganizationsIdOrSlugHooksRouteImport } from './routes/organizations.$idOrSlug.hooks'
 import { Route as OrganizationsIdOrSlugMcpServersRouteImport } from './routes/organizations.$idOrSlug.mcp-servers'
 import { Route as OrganizationsIdOrSlugMembersRouteImport } from './routes/organizations.$idOrSlug.members'
 import { Route as OrganizationsIdOrSlugOnboardingRouteImport } from './routes/organizations.$idOrSlug.onboarding'
@@ -53,6 +57,11 @@ import { Route as OrganizationsIdOrSlugProjectsProjectIdOrSlugRouteImport } from
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomDomainsRoute = CustomDomainsRouteImport.update({
+  id: '/custom-domains',
+  path: '/custom-domains',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CustomerUsageRoute = CustomerUsageRouteImport.update({
@@ -88,6 +97,11 @@ const OnboardingStepsRoute = OnboardingStepsRouteImport.update({
 const OrganizationsRoute = OrganizationsRouteImport.update({
   id: '/organizations',
   path: '/organizations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlatformMcpFeedbackRoute = PlatformMcpFeedbackRouteImport.update({
+  id: '/platform-mcp-feedback',
+  path: '/platform-mcp-feedback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsRoute = ProjectsRouteImport.update({
@@ -201,10 +215,22 @@ const OrganizationsIdOrSlugCoverageRoute =
     path: '/coverage',
     getParentRoute: () => OrganizationsIdOrSlugRoute,
   } as any)
+const OrganizationsIdOrSlugCustomDomainRoute =
+  OrganizationsIdOrSlugCustomDomainRouteImport.update({
+    id: '/custom-domain',
+    path: '/custom-domain',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
 const OrganizationsIdOrSlugFeaturesRoute =
   OrganizationsIdOrSlugFeaturesRouteImport.update({
     id: '/features',
     path: '/features',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
+const OrganizationsIdOrSlugHooksRoute =
+  OrganizationsIdOrSlugHooksRouteImport.update({
+    id: '/hooks',
+    path: '/hooks',
     getParentRoute: () => OrganizationsIdOrSlugRoute,
   } as any)
 const OrganizationsIdOrSlugMcpServersRoute =
@@ -270,6 +296,7 @@ const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
@@ -277,6 +304,7 @@ export interface FileRoutesByFullPath {
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/organizations': typeof OrganizationsRouteWithChildren
+  '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
   '/projects': typeof ProjectsRouteWithChildren
   '/registry': typeof RegistryRouteWithChildren
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
@@ -297,7 +325,9 @@ export interface FileRoutesByFullPath {
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
+  '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
+  '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
   '/organizations/$idOrSlug/onboarding': typeof OrganizationsIdOrSlugOnboardingRoute
@@ -312,12 +342,14 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
+  '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
@@ -332,7 +364,9 @@ export interface FileRoutesByTo {
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
+  '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
+  '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
   '/organizations/$idOrSlug/onboarding': typeof OrganizationsIdOrSlugOnboardingRoute
   '/remote-session-issuers/$issuerId/convergence': typeof RemoteSessionIssuersIssuerIdConvergenceRoute
@@ -347,6 +381,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
@@ -354,6 +389,7 @@ export interface FileRoutesById {
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/organizations': typeof OrganizationsRouteWithChildren
+  '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
   '/projects': typeof ProjectsRouteWithChildren
   '/registry': typeof RegistryRouteWithChildren
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
@@ -374,7 +410,9 @@ export interface FileRoutesById {
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
+  '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
+  '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
   '/organizations/$idOrSlug/onboarding': typeof OrganizationsIdOrSlugOnboardingRoute
@@ -391,6 +429,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/custom-domains'
     | '/customer-usage'
     | '/fleet-health'
     | '/integration-coverage'
@@ -398,6 +437,7 @@ export interface FileRouteTypes {
     | '/onboarding-playbooks'
     | '/onboarding-steps'
     | '/organizations'
+    | '/platform-mcp-feedback'
     | '/projects'
     | '/registry'
     | '/remote-session-issuers'
@@ -418,7 +458,9 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
+    | '/organizations/$idOrSlug/custom-domain'
     | '/organizations/$idOrSlug/features'
+    | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/mcp-servers'
     | '/organizations/$idOrSlug/members'
     | '/organizations/$idOrSlug/onboarding'
@@ -433,12 +475,14 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/custom-domains'
     | '/customer-usage'
     | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
     | '/onboarding-steps'
+    | '/platform-mcp-feedback'
     | '/signup-offers'
     | '/stoken-calculator'
     | '/upstream-oauth-migration'
@@ -453,7 +497,9 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
+    | '/organizations/$idOrSlug/custom-domain'
     | '/organizations/$idOrSlug/features'
+    | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/members'
     | '/organizations/$idOrSlug/onboarding'
     | '/remote-session-issuers/$issuerId/convergence'
@@ -467,6 +513,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/custom-domains'
     | '/customer-usage'
     | '/fleet-health'
     | '/integration-coverage'
@@ -474,6 +521,7 @@ export interface FileRouteTypes {
     | '/onboarding-playbooks'
     | '/onboarding-steps'
     | '/organizations'
+    | '/platform-mcp-feedback'
     | '/projects'
     | '/registry'
     | '/remote-session-issuers'
@@ -494,7 +542,9 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
+    | '/organizations/$idOrSlug/custom-domain'
     | '/organizations/$idOrSlug/features'
+    | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/mcp-servers'
     | '/organizations/$idOrSlug/members'
     | '/organizations/$idOrSlug/onboarding'
@@ -510,6 +560,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CustomDomainsRoute: typeof CustomDomainsRoute
   CustomerUsageRoute: typeof CustomerUsageRoute
   FleetHealthRoute: typeof FleetHealthRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
@@ -517,6 +568,7 @@ export interface RootRouteChildren {
   OnboardingPlaybooksRoute: typeof OnboardingPlaybooksRoute
   OnboardingStepsRoute: typeof OnboardingStepsRoute
   OrganizationsRoute: typeof OrganizationsRouteWithChildren
+  PlatformMcpFeedbackRoute: typeof PlatformMcpFeedbackRoute
   ProjectsRoute: typeof ProjectsRouteWithChildren
   RegistryRoute: typeof RegistryRouteWithChildren
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
@@ -533,6 +585,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/custom-domains': {
+      id: '/custom-domains'
+      path: '/custom-domains'
+      fullPath: '/custom-domains'
+      preLoaderRoute: typeof CustomDomainsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/customer-usage': {
@@ -582,6 +641,13 @@ declare module '@tanstack/react-router' {
       path: '/organizations'
       fullPath: '/organizations'
       preLoaderRoute: typeof OrganizationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/platform-mcp-feedback': {
+      id: '/platform-mcp-feedback'
+      path: '/platform-mcp-feedback'
+      fullPath: '/platform-mcp-feedback'
+      preLoaderRoute: typeof PlatformMcpFeedbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects': {
@@ -731,11 +797,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizationsIdOrSlugCoverageRouteImport
       parentRoute: typeof OrganizationsIdOrSlugRoute
     }
+    '/organizations/$idOrSlug/custom-domain': {
+      id: '/organizations/$idOrSlug/custom-domain'
+      path: '/custom-domain'
+      fullPath: '/organizations/$idOrSlug/custom-domain'
+      preLoaderRoute: typeof OrganizationsIdOrSlugCustomDomainRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
     '/organizations/$idOrSlug/features': {
       id: '/organizations/$idOrSlug/features'
       path: '/features'
       fullPath: '/organizations/$idOrSlug/features'
       preLoaderRoute: typeof OrganizationsIdOrSlugFeaturesRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
+    '/organizations/$idOrSlug/hooks': {
+      id: '/organizations/$idOrSlug/hooks'
+      path: '/hooks'
+      fullPath: '/organizations/$idOrSlug/hooks'
+      preLoaderRoute: typeof OrganizationsIdOrSlugHooksRouteImport
       parentRoute: typeof OrganizationsIdOrSlugRoute
     }
     '/organizations/$idOrSlug/mcp-servers': {
@@ -833,7 +913,9 @@ interface OrganizationsIdOrSlugRouteChildren {
   OrganizationsIdOrSlugActivityRoute: typeof OrganizationsIdOrSlugActivityRoute
   OrganizationsIdOrSlugBillingRoute: typeof OrganizationsIdOrSlugBillingRoute
   OrganizationsIdOrSlugCoverageRoute: typeof OrganizationsIdOrSlugCoverageRoute
+  OrganizationsIdOrSlugCustomDomainRoute: typeof OrganizationsIdOrSlugCustomDomainRoute
   OrganizationsIdOrSlugFeaturesRoute: typeof OrganizationsIdOrSlugFeaturesRoute
+  OrganizationsIdOrSlugHooksRoute: typeof OrganizationsIdOrSlugHooksRoute
   OrganizationsIdOrSlugMcpServersRoute: typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
   OrganizationsIdOrSlugMembersRoute: typeof OrganizationsIdOrSlugMembersRoute
   OrganizationsIdOrSlugOnboardingRoute: typeof OrganizationsIdOrSlugOnboardingRoute
@@ -846,7 +928,10 @@ const OrganizationsIdOrSlugRouteChildren: OrganizationsIdOrSlugRouteChildren = {
   OrganizationsIdOrSlugActivityRoute: OrganizationsIdOrSlugActivityRoute,
   OrganizationsIdOrSlugBillingRoute: OrganizationsIdOrSlugBillingRoute,
   OrganizationsIdOrSlugCoverageRoute: OrganizationsIdOrSlugCoverageRoute,
+  OrganizationsIdOrSlugCustomDomainRoute:
+    OrganizationsIdOrSlugCustomDomainRoute,
   OrganizationsIdOrSlugFeaturesRoute: OrganizationsIdOrSlugFeaturesRoute,
+  OrganizationsIdOrSlugHooksRoute: OrganizationsIdOrSlugHooksRoute,
   OrganizationsIdOrSlugMcpServersRoute:
     OrganizationsIdOrSlugMcpServersRouteWithChildren,
   OrganizationsIdOrSlugMembersRoute: OrganizationsIdOrSlugMembersRoute,
@@ -954,6 +1039,7 @@ const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CustomDomainsRoute: CustomDomainsRoute,
   CustomerUsageRoute: CustomerUsageRoute,
   FleetHealthRoute: FleetHealthRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
@@ -961,6 +1047,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingPlaybooksRoute: OnboardingPlaybooksRoute,
   OnboardingStepsRoute: OnboardingStepsRoute,
   OrganizationsRoute: OrganizationsRouteWithChildren,
+  PlatformMcpFeedbackRoute: PlatformMcpFeedbackRoute,
   ProjectsRoute: ProjectsRouteWithChildren,
   RegistryRoute: RegistryRouteWithChildren,
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,

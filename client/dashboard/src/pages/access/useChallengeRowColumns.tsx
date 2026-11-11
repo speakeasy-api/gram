@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { useSlugs } from "@/contexts/Sdk";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { useMembers } from "@gram/client/react-query/members.js";
-import { Column } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
 import { Bot, KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { OutcomeBadge } from "./ChallengesTab";

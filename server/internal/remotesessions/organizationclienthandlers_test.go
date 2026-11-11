@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -153,6 +154,33 @@ func TestDeleteClient(t *testing.T) {
 		ApikeyToken:  nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+
+	bindings, err := testrepo.New(ti.conn).CountRemoteSessionClientBindingsFixture(ctx, uuid.MustParse(clientID))
+	require.NoError(t, err)
+	require.Zero(t, bindings, "a deleted client keeps no user session issuer binding")
+}
+
+// A server that took its upstream issuer from the deleted client no longer
+// names it once the delete commits.
+func TestDeleteClient_RederivesServersOnItsIssuers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-derive-issuer", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-derive-usi")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "admin-derive-server")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-derive-client")
+	stampIssuer(t, ctx, ti.conn, projectID, serverID, uuid.MustParse(issuerID))
+
+	require.NoError(t, ti.service.DeleteClient(ctx, &orgclientsgen.DeleteClientPayload{
+		ID:           clientID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	}))
+
+	require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 }
 
 // TestDeleteClient_RBACForbidden proves a write requires org:admin; org:read
@@ -474,6 +502,30 @@ func TestRemoveClientFromMcpServer_NotAttached(t *testing.T) {
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// A server that took its upstream issuer from the removed binding no longer
+// names it once the removal commits.
+func TestRemoveClientFromMcpServer_RederivesServersOnTheIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-detach-derive-issuer", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-detach-derive-usi")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "admin-detach-derive-server")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-detach-derive-client")
+	stampIssuer(t, ctx, ti.conn, projectID, serverID, uuid.MustParse(issuerID))
+
+	require.NoError(t, ti.service.RemoveClientFromMcpServer(ctx, &orgclientsgen.RemoveClientFromMcpServerPayload{
+		ClientID:     clientID,
+		McpServerID:  serverID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	}))
+
+	require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 }
 
 // TestRemoveClientFromMcpServer_CrossOrgNotFound proves an MCP server owned by

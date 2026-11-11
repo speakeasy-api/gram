@@ -131,7 +131,9 @@ WHERE meta_mcp_servers.id = meta_mcp_server_members.meta_mcp_server_id
   AND meta_mcp_server_members.mcp_server_id = @mcp_server_id
   AND meta_mcp_server_members.project_id = @project_id
   AND meta_mcp_server_members.deleted IS FALSE
-RETURNING meta_mcp_server_members.*, meta_mcp_servers.name AS meta_mcp_server_name;
+RETURNING meta_mcp_server_members.*,
+          meta_mcp_servers.name AS meta_mcp_server_name,
+          meta_mcp_servers.user_session_issuer_id AS meta_mcp_server_user_session_issuer_id;
 
 -- name: CreateMetaMCPMember :one
 INSERT INTO meta_mcp_server_members (
@@ -246,6 +248,8 @@ ORDER BY m.sort_order, m.created_at, m.id;
 -- identifier so credential routing needs no second read per dial. A member
 -- whose tunneled source is soft-deleted reads as no identifier and routes
 -- anonymously; the dial then fails member-scoped on the missing tunnel.
+-- association_provider_ids are the distinct live providers of the member's
+-- live client associations.
 SELECT
     m.id,
     m.mcp_server_id,
@@ -260,6 +264,22 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    ARRAY(
+        SELECT DISTINCT c.remote_session_issuer_id
+        FROM mcp_server_remote_session_clients AS a
+        JOIN remote_session_clients AS c
+          ON c.id = a.remote_session_client_id
+         AND c.deleted IS FALSE
+         AND (c.project_id = a.project_id
+              OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+        JOIN remote_session_issuers AS provider
+          ON provider.id = c.remote_session_issuer_id
+         AND provider.deleted IS FALSE
+         AND (provider.project_id = a.project_id
+              OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+        WHERE a.mcp_server_id = s.id
+          AND a.deleted IS FALSE
+    )::uuid[] AS mcp_server_association_provider_ids,
     COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
@@ -641,31 +661,40 @@ WHERE l.remote_session_client_id = c.id
 -- comes from the member's live client associations; a member with none or
 -- several is left out. Ordered so callers take the per-remote-issuer binding
 -- locks deterministically.
-SELECT i.id AS remote_session_issuer_id, s.id AS mcp_server_id
-FROM meta_mcp_server_members m
-JOIN mcp_servers s
-  ON s.id = m.mcp_server_id
- AND s.project_id = m.project_id
- AND s.deleted IS FALSE
+WITH members AS (
+    SELECT s.id AS mcp_server_id,
+           ARRAY(
+               SELECT DISTINCT c.remote_session_issuer_id
+               FROM mcp_server_remote_session_clients AS a
+               JOIN remote_session_clients AS c
+                 ON c.id = a.remote_session_client_id
+                AND c.deleted IS FALSE
+                AND (c.project_id = a.project_id
+                     OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+               JOIN remote_session_issuers AS provider
+                 ON provider.id = c.remote_session_issuer_id
+                AND provider.deleted IS FALSE
+                AND (provider.project_id = a.project_id
+                     OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+               WHERE a.mcp_server_id = s.id
+                 AND a.deleted IS FALSE
+           )::uuid[] AS association_provider_ids
+    FROM meta_mcp_server_members m
+    JOIN mcp_servers s
+      ON s.id = m.mcp_server_id
+     AND s.project_id = m.project_id
+     AND s.deleted IS FALSE
+    WHERE m.meta_mcp_server_id = @meta_mcp_server_id
+      AND m.project_id = @project_id
+      AND m.deleted IS FALSE
+      AND s.user_session_issuer_id IS NOT NULL
+)
+SELECT i.id AS remote_session_issuer_id, members.mcp_server_id
+FROM members
 JOIN remote_session_issuers AS i
-  ON i.id = (
-    SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
-                THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
-    FROM mcp_server_remote_session_clients AS a
-    JOIN remote_session_clients AS c
-      ON c.id = a.remote_session_client_id
-     AND c.deleted IS FALSE
-    JOIN remote_session_issuers AS provider
-      ON provider.id = c.remote_session_issuer_id
-     AND provider.deleted IS FALSE
-    WHERE a.mcp_server_id = s.id
-      AND a.deleted IS FALSE
-  )
-WHERE m.meta_mcp_server_id = @meta_mcp_server_id
-  AND m.project_id = @project_id
-  AND m.deleted IS FALSE
-  AND s.user_session_issuer_id IS NOT NULL
-ORDER BY i.id, s.id;
+  ON cardinality(members.association_provider_ids) = 1
+ AND i.id = members.association_provider_ids[1]
+ORDER BY i.id, members.mcp_server_id;
 
 -- name: ListMetaMCPEndpointsForTelemetryByProjectID :many
 -- Gateway endpoints for classifying hook-observed calls by URL. Deleted rows keep

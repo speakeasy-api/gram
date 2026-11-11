@@ -934,6 +934,39 @@ func (q *Queries) AdminInsertAuthPermissionProvisionFixture(ctx context.Context,
 	return err
 }
 
+const adminInsertPlatformMCPFeedbackFixture = `-- name: AdminInsertPlatformMCPFeedbackFixture :exec
+INSERT INTO platform_mcp_feedback (organization_id, subject_urn, category, rating, tool_name, note, idempotency_key, input_hash, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'fixture', $8, $9)
+`
+
+type AdminInsertPlatformMCPFeedbackFixtureParams struct {
+	OrganizationID string
+	SubjectUrn     string
+	Category       string
+	Rating         pgtype.Int4
+	ToolName       pgtype.Text
+	Note           pgtype.Text
+	IdempotencyKey string
+	CreatedAt      pgtype.Timestamptz
+	ExpiresAt      pgtype.Timestamptz
+}
+
+// Test fixture: the Platform MCP writer sets its own timestamps and rate limits.
+func (q *Queries) AdminInsertPlatformMCPFeedbackFixture(ctx context.Context, arg AdminInsertPlatformMCPFeedbackFixtureParams) error {
+	_, err := q.db.Exec(ctx, adminInsertPlatformMCPFeedbackFixture,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.Category,
+		arg.Rating,
+		arg.ToolName,
+		arg.Note,
+		arg.IdempotencyKey,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
 const adminInsertPrincipalGrantFixture = `-- name: AdminInsertPrincipalGrantFixture :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors, expires_at, created_at)
 VALUES (
@@ -970,6 +1003,95 @@ func (q *Queries) AdminInsertPrincipalGrantFixture(ctx context.Context, arg Admi
 		arg.CreatedAt,
 	)
 	return err
+}
+
+const adminListCustomDomains = `-- name: AdminListCustomDomains :many
+SELECT
+    d.id,
+    d.organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    d.domain,
+    d.verified,
+    d.activated,
+    d.dns_target_token,
+    d.dns_routing_method,
+    d.dns_configuration_status,
+    d.dns_checked_at,
+    d.health_status,
+    d.health_issue,
+    d.health_checked_at,
+    d.created_at
+FROM custom_domains d
+JOIN organization_metadata om ON om.id = d.organization_id
+WHERE d.deleted IS FALSE
+  AND ($1::text IS NULL OR d.organization_id = $1::text)
+  AND (
+    $2::text IS NULL
+    OR COALESCE(d.dns_routing_method, 'unknown') = $2::text
+  )
+ORDER BY d.domain, d.id
+`
+
+type AdminListCustomDomainsParams struct {
+	OrganizationID   pgtype.Text
+	DnsRoutingMethod pgtype.Text
+}
+
+type AdminListCustomDomainsRow struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	OrganizationName       string
+	OrganizationSlug       string
+	Domain                 string
+	Verified               bool
+	Activated              bool
+	DnsTargetToken         pgtype.Text
+	DnsRoutingMethod       pgtype.Text
+	DnsConfigurationStatus pgtype.Text
+	DnsCheckedAt           pgtype.Timestamptz
+	HealthStatus           pgtype.Text
+	HealthIssue            pgtype.Text
+	HealthCheckedAt        pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+}
+
+// Staff-wide read across organizations. A domain with no observed routing
+// method matches the unknown filter, since no supported method was observed.
+func (q *Queries) AdminListCustomDomains(ctx context.Context, arg AdminListCustomDomainsParams) ([]AdminListCustomDomainsRow, error) {
+	rows, err := q.db.Query(ctx, adminListCustomDomains, arg.OrganizationID, arg.DnsRoutingMethod)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListCustomDomainsRow
+	for rows.Next() {
+		var i AdminListCustomDomainsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationSlug,
+			&i.Domain,
+			&i.Verified,
+			&i.Activated,
+			&i.DnsTargetToken,
+			&i.DnsRoutingMethod,
+			&i.DnsConfigurationStatus,
+			&i.DnsCheckedAt,
+			&i.HealthStatus,
+			&i.HealthIssue,
+			&i.HealthCheckedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const adminListCustomerUsageOrganizations = `-- name: AdminListCustomerUsageOrganizations :many
@@ -1645,6 +1767,89 @@ func (q *Queries) AdminListOtherServersUsingIssuer(ctx context.Context, arg Admi
 	for rows.Next() {
 		var i AdminListOtherServersUsingIssuerRow
 		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListPlatformMCPFeedback = `-- name: AdminListPlatformMCPFeedback :many
+SELECT
+    f.id,
+    f.organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    f.subject_urn,
+    u.email AS user_email,
+    f.category,
+    f.rating,
+    f.success,
+    f.tool_name,
+    f.failure_category,
+    f.note,
+    f.delivery_state,
+    f.created_at,
+    f.expires_at
+FROM platform_mcp_feedback AS f
+LEFT JOIN organization_metadata AS om ON om.id = f.organization_id
+LEFT JOIN users AS u ON 'user:' || u.id = f.subject_urn
+    AND u.deleted_at IS NULL
+    AND u.workos_deleted_at IS NULL
+WHERE f.expires_at > clock_timestamp()
+ORDER BY f.created_at DESC, f.id DESC
+LIMIT $1
+`
+
+type AdminListPlatformMCPFeedbackRow struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	OrganizationName pgtype.Text
+	OrganizationSlug pgtype.Text
+	SubjectUrn       string
+	UserEmail        pgtype.Text
+	Category         string
+	Rating           pgtype.Int4
+	Success          pgtype.Bool
+	ToolName         pgtype.Text
+	FailureCategory  pgtype.Text
+	Note             pgtype.Text
+	DeliveryState    string
+	CreatedAt        pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+}
+
+// Expired rows wait for the next submission in their organization to delete
+// them, so this read hides them itself.
+func (q *Queries) AdminListPlatformMCPFeedback(ctx context.Context, rowLimit int32) ([]AdminListPlatformMCPFeedbackRow, error) {
+	rows, err := q.db.Query(ctx, adminListPlatformMCPFeedback, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListPlatformMCPFeedbackRow
+	for rows.Next() {
+		var i AdminListPlatformMCPFeedbackRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationSlug,
+			&i.SubjectUrn,
+			&i.UserEmail,
+			&i.Category,
+			&i.Rating,
+			&i.Success,
+			&i.ToolName,
+			&i.FailureCategory,
+			&i.Note,
+			&i.DeliveryState,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

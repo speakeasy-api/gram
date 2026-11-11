@@ -1,17 +1,15 @@
 import { useLatestDeployment } from "@/hooks/toolTypes";
-import { ExternalMCPToolDefinition } from "@gram/client/models/components/externalmcptooldefinition.js";
-import { FunctionResourceDefinition } from "@gram/client/models/components/functionresourcedefinition.js";
-import { FunctionToolDefinition } from "@gram/client/models/components/functiontooldefinition.js";
-import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition.js";
-import { PlatformToolDefinition } from "@gram/client/models/components/platformtooldefinition.js";
-import {
-  PromptTemplate,
-  PromptTemplateKind,
-} from "@gram/client/models/components/prompttemplate.js";
-import { PromptTemplateEntry } from "@gram/client/models/components/prompttemplateentry.js";
-import { Resource as GeneratedResource } from "@gram/client/models/components/resource.js";
-import { Tool as GeneratedTool } from "@gram/client/models/components/tool.js";
-import { Toolset as GeneratedToolset } from "@gram/client/models/components/toolset.js";
+import type { ExternalMCPToolDefinition } from "@gram/client/models/components/externalmcptooldefinition.js";
+import type { FunctionResourceDefinition } from "@gram/client/models/components/functionresourcedefinition.js";
+import type { FunctionToolDefinition } from "@gram/client/models/components/functiontooldefinition.js";
+import type { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition.js";
+import type { PlatformToolDefinition } from "@gram/client/models/components/platformtooldefinition.js";
+import type { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
+import { PromptTemplateKind } from "@gram/client/models/components/prompttemplate.js";
+import type { PromptTemplateEntry } from "@gram/client/models/components/prompttemplateentry.js";
+import type { Resource as GeneratedResource } from "@gram/client/models/components/resource.js";
+import type { Tool as GeneratedTool } from "@gram/client/models/components/tool.js";
+import type { Toolset as GeneratedToolset } from "@gram/client/models/components/toolset.js";
 import { useMemo } from "react";
 
 type ToolWithDisplayName = Tool & { displayName: string };

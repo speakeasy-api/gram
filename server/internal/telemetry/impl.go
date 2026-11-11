@@ -27,6 +27,7 @@ import (
 	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/agentgateway"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -3380,9 +3381,13 @@ func (s *Service) resolveToolUsageParamsWithOwners(ctx context.Context, f toolUs
 	}
 
 	userFilters := make([]repo.ToolUsageUserFilter, 0, len(f.UserFilters))
+	hasEmailFilter := false
 	for _, filter := range f.UserFilters {
 		if filter == nil {
 			continue
+		}
+		if string(filter.Kind) == "email" {
+			hasEmailFilter = true
 		}
 		userFilters = append(userFilters, repo.ToolUsageUserFilter{
 			Kind: string(filter.Kind),
@@ -3391,6 +3396,14 @@ func (s *Service) resolveToolUsageParamsWithOwners(ctx context.Context, f toolUs
 	}
 
 	authorizerUserIDs := s.authorizerUserIDsForUserFilters(ctx, authCtx.ActiveOrganizationID, userFilters)
+
+	// The canonical org is only needed to fold email user filters in the
+	// scan pushdown, so it is resolved only when one is present — agent-only
+	// requests skip the lookup entirely.
+	canonicalOrg := ""
+	if hasEmailFilter {
+		canonicalOrg = s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
+	}
 
 	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
@@ -3405,27 +3418,28 @@ func (s *Service) resolveToolUsageParamsWithOwners(ctx context.Context, f toolUs
 	}
 
 	return repo.GetToolUsageSummaryParams{
-		GramProjectID:      authCtx.ProjectID.String(),
-		TimeStart:          timeStart,
-		TimeEnd:            timeEnd,
-		BucketSizeNs:       bucketSizeNs,
-		HostedMCPMatchers:  hostedMCPMatchers,
-		MCPServerMatchers:  mcpServerMatchers,
-		MetaMCPMatchers:    metaMCPMatchers,
-		TargetTypes:        targetTypes,
-		HostedToolsetSlugs: f.HostedToolsetSlugs,
-		MCPServerIDs:       lowerAll(f.MCPServerIDs),
-		ShadowServerNames:  f.ShadowServerNames,
-		MetaMCPServerIDs:   f.MetaMcpServerIDs,
-		UserFilters:        userFilters,
-		AuthorizerUserIDs:  authorizerUserIDs,
-		AgentIDs:           f.AgentIDs,
-		HookSources:        f.HookSources,
-		ClientKeys:         f.ClientKeys,
-		AccountType:        conv.PtrValOr(f.AccountType, ""),
-		Statuses:           f.Statuses,
-		Query:              conv.PtrValOr(f.Query, ""),
-		Filters:            toRepoAttributeFilters(f.Filters),
+		GramProjectID:        authCtx.ProjectID.String(),
+		TimeStart:            timeStart,
+		TimeEnd:              timeEnd,
+		BucketSizeNs:         bucketSizeNs,
+		HostedMCPMatchers:    hostedMCPMatchers,
+		MCPServerMatchers:    mcpServerMatchers,
+		MetaMCPMatchers:      metaMCPMatchers,
+		TargetTypes:          targetTypes,
+		HostedToolsetSlugs:   f.HostedToolsetSlugs,
+		MCPServerIDs:         lowerAll(f.MCPServerIDs),
+		ShadowServerNames:    f.ShadowServerNames,
+		MetaMCPServerIDs:     f.MetaMcpServerIDs,
+		UserFilters:          userFilters,
+		CanonicalIdentityOrg: canonicalOrg,
+		AuthorizerUserIDs:    authorizerUserIDs,
+		AgentIDs:             f.AgentIDs,
+		HookSources:          f.HookSources,
+		ClientKeys:           f.ClientKeys,
+		AccountType:          conv.PtrValOr(f.AccountType, ""),
+		Statuses:             f.Statuses,
+		Query:                conv.PtrValOr(f.Query, ""),
+		Filters:              toRepoAttributeFilters(f.Filters),
 		// The insights board splits one ranking into several cards — servers,
 		// skills, most errors — and ranks tools across every target, so a
 		// limit sized for a single top-N list truncates before the split and
@@ -4641,7 +4655,7 @@ func agentGatewayCandidate(authCtx *contextvalues.AuthContext, agent agentsRepo.
 	}
 	// The agent visibility rule: an owner who is not awaiting reassignment
 	// sees their own agent whatever their grants.
-	owned := authCtx != nil && agent.OwnerUserID == authCtx.UserID && !agent.OwnerReassignmentRequiredAt.Valid
+	owned := authCtx != nil && agents.OwnsUnblocked(authCtx.UserID, agent.OwnerUserID, agent.OwnerReassignmentRequiredAt)
 	return gatewayCandidate{id: agentgateway.GatewayID(agent.ID), label: label, projectID: uuid.Nil, agentID: agent.ID, ownedAgent: owned}
 }
 

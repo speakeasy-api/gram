@@ -208,6 +208,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	}
 	base := agenthooks.EventOf(typed)
 	ctx = withHarnessInfo(ctx, base, r.cfg.InstallRoute)
+	ctx = withDailySnapshot(ctx, r.cfg)
 	promptAttachmentAdvance := promptAttachmentHighWaterAdvance{}
 	if entries, advance, err := collectClaudePromptAttachments(base); err == nil {
 		attachPromptAttachments(&payload, entries)
@@ -443,7 +444,7 @@ func (r *Relay) onToolPre(ctx context.Context, e *agenthooks.ToolPreEvent) (agen
 	// instead, without reporting the tool call the agent never got to make.
 	if msg := r.backfillDeny; msg != "" {
 		r.backfillDeny = ""
-		return agenthooks.Deny(msg).WithSystemMessage(msg), nil
+		return denyTool(&e.Event, msg), nil
 	}
 	if cursorMCPEcho(&e.Event, e.Tool.Name) {
 		return agenthooks.NoDecision(), nil
@@ -451,10 +452,7 @@ func (r *Relay) onToolPre(ctx context.Context, e *agenthooks.ToolPreEvent) (agen
 	v := r.evaluate(ctx, e)
 	if v.block {
 		r.notifyAgentBlock(ctx, v.blockEffect, e)
-		// The system message mirrors the deny reason so the block text (and
-		// any access-request URL in it) reaches the user verbatim, not only
-		// the model.
-		return agenthooks.Deny(v.message).WithSystemMessage(v.message), nil
+		return denyTool(&e.Event, v.message), nil
 	}
 	r.queueCodexToolID(e)
 	return agenthooks.NoDecision(), nil
@@ -463,14 +461,28 @@ func (r *Relay) onToolPre(ctx context.Context, e *agenthooks.ToolPreEvent) (agen
 func (r *Relay) onPermission(ctx context.Context, e *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
 	if msg := r.backfillDeny; msg != "" {
 		r.backfillDeny = ""
-		return agenthooks.Deny(msg).WithSystemMessage(msg), nil
+		return denyTool(&e.Event, msg), nil
 	}
 	v := r.evaluate(ctx, e)
 	if v.block {
 		r.notifyAgentBlock(ctx, v.blockEffect, e)
-		return agenthooks.Deny(v.message).WithSystemMessage(v.message), nil
+		return denyTool(&e.Event, v.message), nil
 	}
 	return agenthooks.NoDecision(), nil
+}
+
+// denyTool denies a gated tool or permission event. The system message
+// mirrors the deny reason so the block text (and any access-request URL in
+// it) reaches the user verbatim, not only the model. Codex is the exception:
+// its TUI already shows the deny reason under "Blocked by hook" and renders
+// systemMessage as a second line beneath it, so the mirror would print the
+// same block text twice.
+func denyTool(base *agenthooks.Event, msg string) agenthooks.ToolPreDecision {
+	deny := agenthooks.Deny(msg)
+	if base.Provider == agenthooks.ProviderCodex {
+		return deny
+	}
+	return deny.WithSystemMessage(msg)
 }
 
 func (r *Relay) onToolPost(ctx context.Context, e *agenthooks.ToolPostEvent) (agenthooks.ToolPostDecision, error) {

@@ -115,11 +115,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	// 404 matches how the island's absence hides the surface entirely.
-	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
-	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
-	}
-	if !eligible {
+	if !consentToolPickerEligible(endpoint) {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
 	// Mixed credentials are a confusion smell: the consent transport never
@@ -180,6 +176,11 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		if rerr != nil {
 			return oops.E(oops.CodeUnexpected, rerr, "load mcp server for consent transport").LogError(ctx, logger)
 		}
+		// The approvals server, the only server with a first-party backend, is
+		// no longer served; see serveResolvedMCPEndpoint.
+		if row.BuiltinBackend.Valid {
+			return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+		}
 		serverRow = &row
 	}
 
@@ -187,7 +188,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeBadRequest, nil, "gateway tools are captured when the consent page loads").LogWarn(ctx, logger)
 	}
 
-	draft, err := s.loadConsentInventoryDraft(ctx, endpoint, stateID, attempt)
+	draft, err := s.loadConsentInventoryDraft(ctx, endpoint, stateID, attempt, reconsentConsenter(challengeState))
 	if err != nil {
 		if errors.Is(err, errConsentConfigurationChanged) {
 			return oops.E(oops.CodeFailedPrecondition, err, "server configuration changed; reload this page to review access").LogWarn(ctx, logger)
@@ -207,9 +208,6 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	if endpoint.ToolsetID.Valid {
 		return s.serveConsentToolsetMCP(w, r, endpoint, challengeState, draft)
 	}
-	if serverRow != nil && serverRow.BuiltinBackend.Valid {
-		return s.serveConsentBuiltinMCP(w, r, endpoint, challengeState, draft, serverRow)
-	}
 	if serverRow != nil {
 		return s.serveConsentProxiedMCP(w, r, endpoint, challengeState, draft, serverRow, postedAuthClient)
 	}
@@ -223,33 +221,6 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, draft consentToolInventory) error {
 	return s.serveConsentLocalMCP(w, r, endpoint, draft, func(ctx context.Context) ([]consentInventoryTool, []string, error) {
 		return s.authorizedToolsetConsentInventory(ctx, endpoint, challengeState)
-	})
-}
-
-// serveConsentBuiltinMCP answers the consent method surface locally for a
-// first-party backend. Its tools are the same for every caller, and the
-// backend authorizes each call itself, so the inventory needs only a signed-in
-// subject.
-func (s *Service) serveConsentBuiltinMCP(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, draft consentToolInventory, serverRow *mcpservers_repo.McpServer) error {
-	backend, ok := s.builtinBackends[serverRow.BuiltinBackend.String]
-	if !ok {
-		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
-	}
-	return s.serveConsentLocalMCP(w, r, endpoint, draft, func(ctx context.Context) ([]consentInventoryTool, []string, error) {
-		if challengeState.Subject.Kind == urn.SessionSubjectKindAnonymous {
-			return nil, nil, oops.E(oops.CodeBadRequest, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, endpoint.LogWith(s.logger))
-		}
-		tools := make([]consentInventoryTool, 0, len(backend.Tools))
-		for _, tool := range backend.Tools {
-			tools = append(tools, consentInventoryTool{
-				Name:           tool.Name,
-				Definition:     nil,
-				DefinitionHash: consentEvidenceHash(tool),
-				Annotations:    consentAnnotationsFromSDK(tool.Annotations),
-				Source:         "",
-			})
-		}
-		return tools, nil, nil
 	})
 }
 
@@ -422,9 +393,13 @@ func (s *Service) serveConsentProxiedMCP(
 	var tokens map[uuid.UUID]remotesessions.UpstreamToken
 	backendIssuerID := serverRow.RemoteSessionIssuerID
 	var chosenClient uuid.UUID
+	var association *remotesessions.ServerAssociationIssuer
 	switch {
 	case auth == nil:
-		tokens, err = s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, serverRow.ID, false)
+		var resolved remotesessions.ServerAccessTokens
+		resolved, err = s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, serverRow.ID, false)
+		tokens = resolved.Tokens
+		association = &resolved.Association
 	case auth.outcome == authClientNoAuth || auth.headersOnly() || (auth.outcome == authClientLegacy && auth.choice.noAuth()):
 		// No issuer-derived bearer is needed for this credential.
 	case auth.choice.clientID.Valid:
@@ -468,6 +443,17 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	var upstreamToken remotesessions.UpstreamToken
 	if !chain {
+		backendIssuerID = s.directUpstreamIssuer(ctx, logger, directUpstreamIssuerInput{
+			organizationID:   endpoint.OrganizationID,
+			serverID:         serverRow.ID,
+			site:             upstreamIssuerSiteConsentPreview,
+			tokens:           tokens,
+			upstreamResource: endpoint.UpstreamResource,
+			tunneled:         serverRow.TunneledMcpServerID.Valid,
+			backendIssuerID:  backendIssuerID,
+			choiceGoverns:    chosenClient != uuid.Nil,
+			association:      association,
+		})
 		upstreamToken, err = routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, backendIssuerID)
 		var routeErr *upstreamRoutingError
 		switch {
@@ -579,7 +565,7 @@ func (s *Service) serveConsentProxiedMCP(
 		// returns, allowing its next tools/list request to capture a page in
 		// parallel. Re-read before storing the session id so a stale initialize
 		// draft cannot overwrite that newer capture.
-		freshDraft, ferr := s.loadConsentInventoryDraft(ctx, endpoint, challengeState.ID, draft.Attempt)
+		freshDraft, ferr := s.loadConsentInventoryDraft(ctx, endpoint, challengeState.ID, draft.Attempt, reconsentConsenter(challengeState))
 		if ferr != nil {
 			s.logger.WarnContext(ctx, "reload consent inventory before recording session id", attr.SlogError(ferr))
 		} else if freshDraft.McpSessionID == "" {

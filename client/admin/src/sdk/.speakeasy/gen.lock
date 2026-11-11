@@ -68,6 +68,7 @@ trackedFiles:
   src/funcs/adminGetOrganization.ts: {}
   src/funcs/adminGetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminGetOrganizationFeatures.ts: {}
+  src/funcs/adminGetOrganizationHookFleet.ts: {}
   src/funcs/adminGetOrganizationOnboardingPlaybook.ts: {}
   src/funcs/adminGetOrganizationOnboardingStack.ts: {}
   src/funcs/adminGetOrganizationStats.ts: {}
@@ -85,6 +86,7 @@ trackedFiles:
   src/funcs/adminGetSupportCoverage.ts: {}
   src/funcs/adminGetSupportMatrix.ts: {}
   src/funcs/adminGetUpstreamOAuthMigrationStatus.ts: {}
+  src/funcs/adminListCustomDomains.ts: {}
   src/funcs/adminListCustomerUsage.ts: {}
   src/funcs/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/funcs/adminListGlobalIssuers.ts: {}
@@ -95,6 +97,7 @@ trackedFiles:
   src/funcs/adminListOrganizationMembers.ts: {}
   src/funcs/adminListOrganizationProjects.ts: {}
   src/funcs/adminListOrganizations.ts: {}
+  src/funcs/adminListPlatformMcpFeedback.ts: {}
   src/funcs/adminListProjectMcpServers.ts: {}
   src/funcs/adminListRegistryEntries.ts: {}
   src/funcs/adminListRegistryOktaUnmapped.ts: {}
@@ -158,6 +161,7 @@ trackedFiles:
   src/models/components/adminbulkupdateaccounttyperesult.ts: {}
   src/models/components/adminchatanalysissettings.ts: {}
   src/models/components/adminchatanalysistriggerresult.ts: {}
+  src/models/components/admincustomdomain.ts: {}
   src/models/components/admincustomerusage.ts: {}
   src/models/components/admincustomerusageproductcost.ts: {}
   src/models/components/admincustomerusageresponse.ts: {}
@@ -165,6 +169,10 @@ trackedFiles:
   src/models/components/adminhookclientorganization.ts: {}
   src/models/components/adminhookclientsessioncell.ts: {}
   src/models/components/adminhookclientsresult.ts: {}
+  src/models/components/adminhookfleetbucket.ts: {}
+  src/models/components/adminhookfleetinstall.ts: {}
+  src/models/components/adminhookfleetresult.ts: {}
+  src/models/components/adminhookfleetversion.ts: {}
   src/models/components/admininferencehookcell.ts: {}
   src/models/components/admininferencekey.ts: {}
   src/models/components/admininferencekeycause.ts: {}
@@ -172,6 +180,7 @@ trackedFiles:
   src/models/components/admininferencekeyrepairresult.ts: {}
   src/models/components/admininferencekeyrepairstate.ts: {}
   src/models/components/admininferencespendmonth.ts: {}
+  src/models/components/adminlistcustomdomainsresult.ts: {}
   src/models/components/adminlistorganizationactivityresult.ts: {}
   src/models/components/adminlistorganizationmembersresult.ts: {}
   src/models/components/adminlistorganizationprojectsresult.ts: {}
@@ -219,6 +228,7 @@ trackedFiles:
   src/models/components/adminorganizationonboardingplaybook.ts: {}
   src/models/components/adminorganizationstats.ts: {}
   src/models/components/adminpaygbillingsummary.ts: {}
+  src/models/components/adminplatformmcpfeedback.ts: {}
   src/models/components/adminproject.ts: {}
   src/models/components/adminprojectdetail.ts: {}
   src/models/components/adminprojectredeploypreview.ts: {}
@@ -289,6 +299,7 @@ trackedFiles:
   src/models/components/issuermigratepreflight.ts: {}
   src/models/components/listglobalremotesessionissuersresult.ts: {}
   src/models/components/listissuerconvergencecandidatesresult.ts: {}
+  src/models/components/listplatformmcpfeedbackresponsebody.ts: {}
   src/models/components/listsignupoffersresponsebody.ts: {}
   src/models/components/markenterprisetrialconvertedrequestbody.ts: {}
   src/models/components/markenterprisetrialconvertedresult.ts: {}
@@ -359,6 +370,7 @@ trackedFiles:
   src/models/operations/admingetorganization.ts: {}
   src/models/operations/admingetorganizationchatanalysissettings.ts: {}
   src/models/operations/admingetorganizationfeatures.ts: {}
+  src/models/operations/admingetorganizationhookfleet.ts: {}
   src/models/operations/admingetorganizationonboardingplaybook.ts: {}
   src/models/operations/admingetorganizationonboardingstack.ts: {}
   src/models/operations/admingetpaygbillingsummary.ts: {}
@@ -372,6 +384,7 @@ trackedFiles:
   src/models/operations/admingetstripesubscriptioncandidate.ts: {}
   src/models/operations/admingetsupportcoverage.ts: {}
   src/models/operations/admingetupstreamoauthmigrationstatus.ts: {}
+  src/models/operations/adminlistcustomdomains.ts: {}
   src/models/operations/adminlistcustomerusage.ts: {}
   src/models/operations/adminlistglobalissuerconvergencecandidates.ts: {}
   src/models/operations/adminlistglobalissuers.ts: {}
@@ -380,6 +393,7 @@ trackedFiles:
   src/models/operations/adminlistorganizationmembers.ts: {}
   src/models/operations/adminlistorganizationprojects.ts: {}
   src/models/operations/adminlistorganizations.ts: {}
+  src/models/operations/adminlistplatformmcpfeedback.ts: {}
   src/models/operations/adminlistprojectmcpservers.ts: {}
   src/models/operations/adminlistregistryentries.ts: {}
   src/models/operations/adminlistregistrypromotioncandidates.ts: {}
@@ -427,6 +441,8 @@ trackedFiles:
   src/react-query/adminGetOrganization.ts: {}
   src/react-query/adminGetOrganizationChatAnalysisSettings.core.ts: {}
   src/react-query/adminGetOrganizationChatAnalysisSettings.ts: {}
+  src/react-query/adminGetOrganizationHookFleet.core.ts: {}
+  src/react-query/adminGetOrganizationHookFleet.ts: {}
   src/react-query/adminGetOrganizationStats.core.ts: {}
   src/react-query/adminGetOrganizationStats.ts: {}
   src/react-query/adminGetPaygBillingSummary.core.ts: {}
@@ -456,6 +472,8 @@ trackedFiles:
   src/react-query/adminGetSupportMatrix.ts: {}
   src/react-query/adminGetUpstreamOAuthMigrationStatus.core.ts: {}
   src/react-query/adminGetUpstreamOAuthMigrationStatus.ts: {}
+  src/react-query/adminListCustomDomains.core.ts: {}
+  src/react-query/adminListCustomDomains.ts: {}
   src/react-query/adminListCustomerUsage.core.ts: {}
   src/react-query/adminListCustomerUsage.ts: {}
   src/react-query/adminListGlobalIssuerConvergenceCandidates.core.ts: {}
@@ -470,6 +488,8 @@ trackedFiles:
   src/react-query/adminListOrganizationProjects.ts: {}
   src/react-query/adminListOrganizations.core.ts: {}
   src/react-query/adminListOrganizations.ts: {}
+  src/react-query/adminListPlatformMcpFeedback.core.ts: {}
+  src/react-query/adminListPlatformMcpFeedback.ts: {}
   src/react-query/adminListProjectMcpServers.core.ts: {}
   src/react-query/adminListProjectMcpServers.ts: {}
   src/react-query/adminListRegistryEntries.core.ts: {}
@@ -1047,6 +1067,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetOrganizationHookFleet:
+    speakeasy-default-admin-get-organization-hook-fleet:
+      parameters:
+        query:
+          organization_id: "<id>"
+          window_days: 30
+      responses:
+        "200":
+          application/json: {"generations": [], "installs": [], "latest_version": "<value>", "legacy_events": 959358, "organization_id": "<id>", "quiet_after_days": 589245, "quiet_installs": 215014, "routes": [], "since": "2025-07-28T06:59:30.196Z", "total_installs": 961682, "truncated": false, "versions": [], "window_days": 865157}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminGetOrganizationOnboarding:
     speakeasy-default-admin-get-organization-onboarding:
       parameters:
@@ -1262,6 +1295,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminListCustomDomains:
+    speakeasy-default-admin-list-custom-domains:
+      responses:
+        "200":
+          application/json: {"custom_domains": [{"activated": true, "created_at": "2025-05-04T02:08:12.050Z", "domain": "precious-obesity.name", "id": "3693e93a-8ede-4aed-a934-2f0a97ee985d", "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "verified": true}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminListCustomerUsage:
     speakeasy-default-admin-list-customer-usage:
       parameters:
@@ -1397,6 +1439,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminListPlatformMcpFeedback:
+    speakeasy-default-admin-list-platform-mcp-feedback:
+      parameters:
+        query:
+          limit: 200
+      responses:
+        "200":
+          application/json: {"feedback": [{"category": "<value>", "created_at": "2025-11-16T19:16:15.623Z", "delivery_state": "<value>", "expires_at": "2025-03-25T18:21:47.946Z", "id": "27f012a4-a624-4da5-a5fe-79bbc52909ff", "organization_id": "<id>", "subject_urn": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminListProjectMcpServers:
     speakeasy-default-admin-list-project-mcp-servers:
       parameters:

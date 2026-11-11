@@ -1987,7 +1987,7 @@ func (p *Provisioner) openKMSClient(ctx context.Context) (gcpkms.ProvisioningCli
 // createSigningKey creates one KMS key, grants the signer on it alone, and
 // mints the JWK to publish. A key left unusable by a later step is disabled.
 func (p *Provisioner) createSigningKey(ctx context.Context, logger *slog.Logger, client gcpkms.ProvisioningClient, provider string, connectionID uuid.UUID, signer *signingCredential) (*createdKey, error) {
-	keyID, err := gcpkms.NewSigningKeyID(provider)
+	keyID, err := gcpkms.NewKeyID(provider)
 	if err != nil {
 		return nil, fmt.Errorf("name managed signing key: %w", err)
 	}

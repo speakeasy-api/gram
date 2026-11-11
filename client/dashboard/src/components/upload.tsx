@@ -1,7 +1,7 @@
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils";
 import { useAssetImageUploadHandler } from "@/components/useAssetImageUploadHandler";
-import { Asset } from "@gram/client/models/components/asset.js";
+import type { Asset } from "@gram/client/models/components/asset.js";
 import { Stack } from "@/components/ui/Stack";
 import { UploadIcon } from "lucide-react";
 import { useState } from "react";

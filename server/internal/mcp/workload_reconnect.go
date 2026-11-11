@@ -139,6 +139,7 @@ func (s *Service) serveWorkloadReconnect(w http.ResponseWriter, r *http.Request,
 	}
 	now := time.Now()
 	ticket := AuthnChallengeState{
+		ConnectPendingSignIn:     false,
 		ConsentBrowserHash:       "",
 		FederatedBinding:         nil,
 		DelegationRetryUsed:      false,

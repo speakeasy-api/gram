@@ -491,6 +491,44 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatSources", "type": "query"}`)
 	})
 
+	Method("countByUser", func() {
+		Description("Count agent sessions per user for a time range. Uses the same population and visibility scoping as listChats, so each user's count matches listChats filtered to that user and the total matches the unfiltered listChats total.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+			Attribute("from", String, "Count chats last active after this timestamp (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Count chats created before this timestamp (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("limit", Int, "Maximum number of users to return", func() {
+				Default(10)
+				Minimum(1)
+				Maximum(100)
+			})
+		})
+
+		Result(CountChatsByUserResult)
+
+		HTTP(func() {
+			GET("/rpc/chat.countByUser")
+			Param("from")
+			Param("to")
+			Param("limit")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "countChatsByUser")
+		Meta("openapi:extension:x-speakeasy-name-override", "countByUser")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CountChatsByUser", "type": "query"}`)
+	})
+
 	Method("listSessionLinks", func() {
 		Description("List session-lineage links touching the given chats (session portability). A link records that a session was moved to another harness; the child side is present when the continuation's session id was known at move time. Returns every link where a requested chat is either the parent or the child, honoring the same visibility scoping as listChats.")
 
@@ -577,6 +615,20 @@ var ListSessionLinksResult = Type("ListSessionLinksResult", func() {
 var ListSourcesResult = Type("ListSourcesResult", func() {
 	Attribute("sources", ArrayOf(String), "The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').")
 	Required("sources")
+})
+
+var ChatUserSessionCount = Type("ChatUserSessionCount", func() {
+	Attribute("user_id", String, "Speakeasy user ID. Empty for sessions with no Speakeasy user (external users, agent actors).")
+	Attribute("email", String, "The user's email, empty when unknown")
+	Attribute("display_name", String, "The user's display name, empty when unknown")
+	Attribute("count", Int, "Number of sessions; equals the chat.list total when filtered to this user")
+	Required("user_id", "email", "display_name", "count")
+})
+
+var CountChatsByUserResult = Type("CountChatsByUserResult", func() {
+	Attribute("users", ArrayOf(ChatUserSessionCount), "Users ranked by session count, highest first, truncated to the requested limit")
+	Attribute("total", Int, "Total sessions across all users; equals the unfiltered chat.list total for the same range")
+	Required("users", "total")
 })
 
 var ListChatsResult = Type("ListChatsResult", func() {

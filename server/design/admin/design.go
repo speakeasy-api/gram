@@ -1421,10 +1421,12 @@ var _ = Service("admin", func() {
 	supportCoverageMethods()
 	mcpServerHealthMethods()
 	hookClientsMethods()
+	hookFleetMethods()
 	registryDesign()
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
 	signupOfferMethods()
+	platformMCPFeedbackMethods()
 
 	Method("getStripeSubscriptionCandidate", func() {
 		Description("Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.")
@@ -1497,4 +1499,5 @@ var _ = Service("admin", func() {
 	mcpAuthBackfillMethods()
 	mcpConnectBackfillMethods()
 	projectRedeployMethods()
+	customDomainMethods()
 })

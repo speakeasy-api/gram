@@ -2091,33 +2091,13 @@ WHERE candidates.indexed IS NULL
             AND definitions.deployment_id = candidates.deployment_id
             AND definitions.deleted IS FALSE
       )
-      OR EXISTS (
-          SELECT 1
-          FROM external_mcp_tool_definitions definitions
-          JOIN external_mcp_attachments attachments
-            ON attachments.id = definitions.external_mcp_attachment_id
-           AND attachments.deployment_id = candidates.deployment_id
-           AND attachments.deleted IS FALSE
-          WHERE definitions.tool_urn = ANY(candidates.tool_urns)
-            AND definitions.type <> 'proxy'
-            AND definitions.deleted IS FALSE
-      )
   )
+  -- An external MCP URN resolves to no tool definition, so a version that still
+  -- selects one has tools the index could never cover.
   AND NOT EXISTS (
       SELECT 1
       FROM unnest(candidates.tool_urns) selected(tool_urn)
       WHERE selected.tool_urn LIKE 'tools:externalmcp:%'
-        AND NOT EXISTS (
-            SELECT 1
-            FROM external_mcp_tool_definitions definitions
-            JOIN external_mcp_attachments attachments
-              ON attachments.id = definitions.external_mcp_attachment_id
-             AND attachments.deployment_id = candidates.deployment_id
-             AND attachments.deleted IS FALSE
-            WHERE definitions.tool_urn = selected.tool_urn
-              AND definitions.type <> 'proxy'
-              AND definitions.deleted IS FALSE
-        )
   )
 ORDER BY hashtextextended(candidates.id::text, $1), candidates.id
 LIMIT $2

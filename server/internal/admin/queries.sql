@@ -1324,3 +1324,65 @@ WHERE organization_id = @organization_id
 -- name: AdminBackdateUserSessionFixture :exec
 -- Test fixture: no writer backdates a session.
 UPDATE user_sessions SET created_at = @created_at WHERE id = @id;
+
+-- name: AdminListPlatformMCPFeedback :many
+-- Expired rows wait for the next submission in their organization to delete
+-- them, so this read hides them itself.
+SELECT
+    f.id,
+    f.organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    f.subject_urn,
+    u.email AS user_email,
+    f.category,
+    f.rating,
+    f.success,
+    f.tool_name,
+    f.failure_category,
+    f.note,
+    f.delivery_state,
+    f.created_at,
+    f.expires_at
+FROM platform_mcp_feedback AS f
+LEFT JOIN organization_metadata AS om ON om.id = f.organization_id
+LEFT JOIN users AS u ON 'user:' || u.id = f.subject_urn
+    AND u.deleted_at IS NULL
+    AND u.workos_deleted_at IS NULL
+WHERE f.expires_at > clock_timestamp()
+ORDER BY f.created_at DESC, f.id DESC
+LIMIT @row_limit;
+
+-- name: AdminInsertPlatformMCPFeedbackFixture :exec
+-- Test fixture: the Platform MCP writer sets its own timestamps and rate limits.
+INSERT INTO platform_mcp_feedback (organization_id, subject_urn, category, rating, tool_name, note, idempotency_key, input_hash, created_at, expires_at)
+VALUES (@organization_id, @subject_urn, @category, @rating, @tool_name, @note, @idempotency_key, 'fixture', @created_at, @expires_at);
+
+-- name: AdminListCustomDomains :many
+-- Staff-wide read across organizations. A domain with no observed routing
+-- method matches the unknown filter, since no supported method was observed.
+SELECT
+    d.id,
+    d.organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    d.domain,
+    d.verified,
+    d.activated,
+    d.dns_target_token,
+    d.dns_routing_method,
+    d.dns_configuration_status,
+    d.dns_checked_at,
+    d.health_status,
+    d.health_issue,
+    d.health_checked_at,
+    d.created_at
+FROM custom_domains d
+JOIN organization_metadata om ON om.id = d.organization_id
+WHERE d.deleted IS FALSE
+  AND (sqlc.narg(organization_id)::text IS NULL OR d.organization_id = sqlc.narg(organization_id)::text)
+  AND (
+    sqlc.narg(dns_routing_method)::text IS NULL
+    OR COALESCE(d.dns_routing_method, 'unknown') = sqlc.narg(dns_routing_method)::text
+  )
+ORDER BY d.domain, d.id;

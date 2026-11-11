@@ -11,10 +11,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Eye, EyeOff, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
-import {
-  environmentHasValue,
+import type {
   EnvironmentVariable,
   EnvVarState,
+} from "./environmentVariableUtils";
+import {
+  environmentHasValue,
   getHeaderDisplayName,
   getValueForEnvironment,
   hasEntryInEnvironment,

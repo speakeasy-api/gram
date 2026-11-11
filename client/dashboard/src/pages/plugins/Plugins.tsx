@@ -14,7 +14,7 @@ import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
-import { Plugin } from "@gram/client/models/components/plugin.js";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { useCreatePluginMutation } from "@gram/client/react-query/createPlugin";
 import {
   invalidateAllPlugins,

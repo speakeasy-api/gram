@@ -626,7 +626,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	defer t.Finish(ctx)
 
@@ -679,6 +679,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
 
+	if err := s.connectPendingSignIn(ctx, logger, endpoint, challengeState); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return err
+	}
+
 	autoRefreshPolicy := s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID)
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, autoRefreshPolicy)
 	if err != nil {
@@ -707,6 +712,13 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		for i := range cards {
 			if cards[i].ClientID == outage {
 				cards[i].ValidationNotice = refreshUnavailableNotice
+			}
+		}
+	}
+	if reconnect := r.URL.Query().Get("refresh_reconnect"); reconnect != "" {
+		for i := range cards {
+			if cards[i].ClientID == reconnect {
+				cards[i].ValidationNotice = refreshReconnectNotice(cards[i].Connected)
 			}
 		}
 	}
@@ -821,12 +833,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if r.URL.Query().Get("consent") != "required" && len(agentOptions) == 0 &&
 		consentReuseEligible(endpoint, challengeState) && consentBrowserMatches(r, challengeState, time.Now()) &&
 		consentRemoteFingerprint(endpoint, cards) != "" {
-		eligible, eligibilityErr := s.consentToolPickerEligible(ctx, endpoint)
 		lockedDown, lockdownErr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
-		if eligibilityErr != nil {
-			logger.WarnContext(ctx, "saved consent eligibility unavailable", attr.SlogError(eligibilityErr))
-		}
-		if eligible && eligibilityErr == nil && lockdownErr == nil && !lockedDown {
+		if consentToolPickerEligible(endpoint) && lockdownErr == nil && !lockedDown {
 			if _, lookupErr := usersessions_repo.New(s.db).GetUserSessionConsentResource(ctx, consentResourceParams(endpoint, challengeState, clientRowID)); lookupErr == nil {
 				t.Continue()
 				return renderConsentReuse(w, endpoint, challengeState)
@@ -913,11 +921,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// require a complete capture before approving any discovery mode.
 	showToolsIsland := false
 	if (!challengeState.FirstParty || catalogReview) && focusServer == "" {
-		var eligibilityErr error
-		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
-		if eligibilityErr != nil {
-			logger.WarnContext(ctx, "consent tool picker eligibility unavailable", attr.SlogError(eligibilityErr))
-		}
+		showToolsIsland = consentToolPickerEligible(endpoint)
 	}
 	var gatewayInventory string
 	var approvalError *consentApprovalError
@@ -1206,7 +1210,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 
 	// Until the state is consumed the page stays usable, so a refusal does not end the attempt.
 	attempt := challengeState.connectionAttempt(endpoint)
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
 	t.Attach(attempt)
 	defer t.Finish(ctx)
 
@@ -1394,12 +1398,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 	}
 	if selectedAgentID == "" && !reuse && (r.PostForm.Get("tool_filtering") == "on" || materializeGateway) {
-		eligible, eerr := s.consentToolPickerEligible(ctx, endpoint)
-		if eerr != nil {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-			return oops.E(oops.CodeUnavailable, eerr, "service temporarily unavailable").LogError(ctx, logger)
-		}
-		if !eligible {
+		if !consentToolPickerEligible(endpoint) {
 			t.Continue()
 			return oops.E(oops.CodeConflict, nil, "tool filtering is not available for this endpoint").LogWarn(ctx, logger)
 		}
@@ -1535,7 +1534,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnavailable, err, "build remote session cards").LogError(ctx, logger)
 	}
-	upstreamPicks, err := s.consentUpstreamClientPicks(ctx, endpoint, pickState, cards)
+	upstreamPicks, err := s.consentUpstreamClientPicks(ctx, endpoint, pickState, cards, inventoryUpstreamPicks(boundInventory))
 	if err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnavailable, err, "read upstream client picks").LogError(ctx, logger)
@@ -2286,7 +2285,12 @@ func (s *Service) buildRemoteSessionCards(
 		}
 		tokenActive, tokenExpiresAt, tokenExpiresIn := tokenLine(renderedAt, state.Token, state.AccessExpiresAt)
 		resourceScopes := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discoverScopes}
-		if resourceApplies[c.ID] {
+		// A direct server's validated typed offer owns its resource scopes,
+		// even without legacy issuer attachments or with alternative providers.
+		_, typedOffer := typed[c.ID]
+		typedTarget := typedOffer && endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid &&
+			!endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway()
+		if hasServerResource && (typedTarget || resourceApplies[c.ID]) {
 			resourceScopes = serverResource
 		}
 		if member, ok := memberResources[c.ID]; ok {

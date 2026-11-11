@@ -170,13 +170,29 @@ func createMCPServerInLockedTransaction(ctx context.Context, tx pgx.Tx, auditLog
 	// Capture configured OAuth associations and typed state before commit, not
 	// in a best-effort post-commit resync.
 	if issuerID.Valid {
-		if _, err := repo.New(tx).ResyncMCPServerRemoteSessionIssuers(ctx, repo.ResyncMCPServerRemoteSessionIssuersParams{
+		derive := repo.ResyncMCPServerRemoteSessionIssuersParams{
 			UserSessionIssuerIds: []uuid.UUID{issuerID.UUID}, OrganizationID: input.OrganizationID, ProjectID: input.ProjectID,
-		}); err != nil {
+		}
+		// Gateway capture reads the column, so derive it before reconcile, and
+		// again after, because reconcile changes the associations it derives from.
+		if _, err := repo.New(tx).ResyncMCPServerRemoteSessionIssuers(ctx, derive); err != nil {
 			return repo.McpServer{}, fmt.Errorf("derive server upstream issuer: %w", err)
 		}
 		if err := upstreamclients.ReconcileInLockedTransaction(ctx, tx, input.OrganizationID, input.ProjectID, []uuid.UUID{issuerID.UUID}); err != nil {
 			return repo.McpServer{}, fmt.Errorf("capture server upstream clients: %w", err)
+		}
+		// Choosing the issuer configures the server's sign-in, so a server that
+		// is the issuer's only consumer offers the clients bound there.
+		if err := upstreamclients.CaptureSoleConsumers(ctx, tx, input.OrganizationID, input.ProjectID, []uuid.UUID{issuerID.UUID}, nil); err != nil {
+			return repo.McpServer{}, fmt.Errorf("capture server upstream clients: %w", err)
+		}
+		// Choosing the issuer configures the server's sign-in, so a server that
+		// is the issuer's only consumer offers the clients bound there.
+		if err := upstreamclients.CaptureSoleConsumers(ctx, tx, input.OrganizationID, input.ProjectID, []uuid.UUID{issuerID.UUID}, nil); err != nil {
+			return repo.McpServer{}, fmt.Errorf("capture server upstream clients: %w", err)
+		}
+		if _, err := repo.New(tx).ResyncMCPServerRemoteSessionIssuers(ctx, derive); err != nil {
+			return repo.McpServer{}, fmt.Errorf("derive server upstream issuer: %w", err)
 		}
 		server, err = repo.New(tx).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{ID: server.ID, ProjectID: input.ProjectID})
 		if err != nil {

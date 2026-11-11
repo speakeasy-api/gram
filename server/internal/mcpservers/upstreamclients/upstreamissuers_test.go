@@ -113,7 +113,7 @@ var upstreamIssuerReaders = map[string]func(t *testing.T, ctx context.Context, f
 	},
 	"ListEligibleServers": func(t *testing.T, ctx context.Context, f issuerFixture) uuid.NullUUID {
 		t.Helper()
-		rows, err := oktarepo.New(f.conn).ListEligibleServers(ctx, f.organizationID)
+		rows, err := oktarepo.New(f.conn).ListEligibleServers(ctx, oktarepo.ListEligibleServersParams{TypedAuthEnforced: false, OrganizationID: f.organizationID})
 		require.NoError(t, err)
 		for _, row := range rows {
 			if row.ID == f.serverID {

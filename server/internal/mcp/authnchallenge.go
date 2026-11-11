@@ -221,6 +221,11 @@ type AuthnChallengeState struct {
 	// for, so the consent page lands on that server's connect page. Empty
 	// lands on the gateway's own page.
 	FocusServer string `json:"focus_server,omitempty"`
+	// ConnectPendingSignIn marks a first-party connect opened from a Platform
+	// MCP server card (`setup=sign-in`): the consent page first connects the
+	// server's sign-in provider when an organization admin opens it and the
+	// server has none yet, so the page can offer that provider's sign-in.
+	ConnectPendingSignIn bool `json:"connect_pending_sign_in,omitempty"`
 }
 
 var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
@@ -1104,6 +1109,11 @@ type issuerGateAuthentication struct {
 	// typed resolver checked against the endpoint's server for a client it
 	// does not serve itself, which authorizes it without a sign-in link.
 	checkedRegistration bool
+
+	// serverAssociation is the upstream issuer the proxied server's client
+	// associations give, read when its own clients' tokens were resolved.
+	// Nil when this request resolved tokens another way.
+	serverAssociation *remotesessions.ServerAssociationIssuer
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1261,6 +1271,7 @@ func (s *Service) authenticateIssuerGate(
 		request:                r,
 		agentKeyClients:        nil,
 		checkedRegistration:    false,
+		serverAssociation:      nil,
 	}, toolSelection, nil
 }
 
@@ -1340,7 +1351,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication, err); ok {
 			return recoveryErr
 		}
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession, mcpconnectionattempts.CodeInvalidRemoteSession, err)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession, resolveFailureHappened(err), err)
 		if authentication.directWorkloadHandoff && authentication.subject.Kind == urn.SessionSubjectKindWorkload {
 			return errWorkloadReconnectRequired
 		}
@@ -1408,12 +1419,18 @@ func (s *Service) remoteSessionResolveFailed(ctx context.Context, logger *slog.L
 func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication *issuerGateAuthentication, reason string, code mcpconnectionattempts.Code, causes ...error) {
 	// Only a fresh, admitted standalone refresh row replaces this gate row.
 	if remotesessions.RefreshFailureRecorded(errors.Join(causes...)) {
+		contextvalues.ClaimRefreshConnectionReference(ctx)
 		return
 	}
 	endpoint := authentication.endpoint
-	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request,
+	opts := []mcpconnectionattempts.Option{
 		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject),
-		s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
+		s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope),
+	}
+	if id, ok := remotesessions.UnreadableRemoteSessionID(errors.Join(causes...)); ok {
+		opts = append(opts, mcpconnectionattempts.RemoteSession(id))
+	}
+	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request, opts...)
 }
 
 // writeRemoteSessionReconnectChallenge answers a request whose required
@@ -1612,7 +1629,7 @@ func (a AuthnChallengeState) connectionAttempt(endpoint *ResolvedMcpEndpoint) mc
 	if err != nil || a.CreatedAt.IsZero() {
 		return mcpconnectionattempts.NoAttempt
 	}
-	app := mcpconnectionattempts.AppOf(a.ClientID)
+	app := mcpconnectionattempts.AppOf(a.ClientID, mcpconnectionattempts.ClientIDAdmitted)
 	switch {
 	case a.WorkloadReconnect != nil:
 		app = mcpconnectionattempts.AppWorkload

@@ -17,6 +17,8 @@ import (
 // share one field would collide on a unique index, or worse, silently share
 // rows. Validate enforces that they are at least pairwise distinct.
 type Spec struct {
+	// CustomDomain is an inert, tenant-specific hostname used to demonstrate domain diagnostics.
+	CustomDomain string
 	// OrgID is the WorkOS-style organization id — the primary isolation
 	// boundary for every Postgres write and most ClickHouse ones.
 	OrgID string
@@ -57,16 +59,17 @@ type Spec struct {
 // TestSpecMatchesConstants).
 func DefaultSpec() Spec {
 	return Spec{
-		OrgID:       "org_gram_demo_workspace",
-		OrgSlug:     "acme-demo",
-		OrgName:     "Acme Demo Org",
-		UUIDPrefix:  "dec0de00",
-		UserPrefix:  "user_demo_",
-		EmailDomain: "@demo.getgram.ai",
-		NameSeed:    "gram-demo-",
-		GroupPrefix: "demo_grp_",
-		WorkOSOrgID: "workos_gram_demo_unlinked",
-		Marker:      "demo-seed",
+		CustomDomain: "mcp.demo.example.com",
+		OrgID:        "org_gram_demo_workspace",
+		OrgSlug:      "acme-demo",
+		OrgName:      "Acme Demo Org",
+		UUIDPrefix:   "dec0de00",
+		UserPrefix:   "user_demo_",
+		EmailDomain:  "@demo.getgram.ai",
+		NameSeed:     "gram-demo-",
+		GroupPrefix:  "demo_grp_",
+		WorkOSOrgID:  "workos_gram_demo_unlinked",
+		Marker:       "demo-seed",
 	}
 }
 
@@ -87,16 +90,17 @@ func DefaultSpec() Spec {
 // authz.Engine keys off it.
 func LocalSpec() Spec {
 	return Spec{
-		OrgID:       orgid.FromWorkOSID(devidentity.DefaultOrgWorkosID),
-		WorkOSOrgID: devidentity.DefaultOrgWorkosID,
-		OrgSlug:     devidentity.DefaultOrgSlug,
-		OrgName:     devidentity.DefaultOrgName,
-		UUIDPrefix:  "10ca1000",
-		UserPrefix:  "user_locl_",
-		EmailDomain: "@local.getgram.ai",
-		NameSeed:    "gram-locl-",
-		GroupPrefix: "locl_grp_",
-		Marker:      "local-seed",
+		CustomDomain: "mcp.local.example.com",
+		OrgID:        orgid.FromWorkOSID(devidentity.DefaultOrgWorkosID),
+		WorkOSOrgID:  devidentity.DefaultOrgWorkosID,
+		OrgSlug:      devidentity.DefaultOrgSlug,
+		OrgName:      devidentity.DefaultOrgName,
+		UUIDPrefix:   "10ca1000",
+		UserPrefix:   "user_locl_",
+		EmailDomain:  "@local.getgram.ai",
+		NameSeed:     "gram-locl-",
+		GroupPrefix:  "locl_grp_",
+		Marker:       "local-seed",
 	}
 }
 
@@ -118,6 +122,7 @@ func (s Spec) FixedUUID(rest string) string {
 
 func (s Spec) fields() []string {
 	return []string{
+		s.CustomDomain,
 		s.UserPrefix,
 		s.OrgID,
 		s.UUIDPrefix,

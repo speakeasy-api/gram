@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OnboardingHeader } from "./onboarding-header";
 import { StepContainer, StepSupportProvider } from "./step-container";
@@ -7,11 +8,27 @@ afterEach(cleanup);
 
 describe("setup interaction fixes", () => {
   it("exposes the compact dashboard action by name", () => {
-    render(<OnboardingHeader onLeave={() => {}} />);
+    render(
+      <MemoryRouter>
+        <OnboardingHeader homeHref="/org" onLeave={() => {}} />
+      </MemoryRouter>,
+    );
 
     expect(
       screen.getByRole("button", { name: "Go to dashboard" }),
     ).toBeTruthy();
+  });
+
+  it("links the logo to the organization home", () => {
+    render(
+      <MemoryRouter>
+        <OnboardingHeader homeHref="/org" />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Speakeasy home" }).getAttribute("href"),
+    ).toBe("/org");
   });
 
   it("places the shared support action directly before the primary action", () => {

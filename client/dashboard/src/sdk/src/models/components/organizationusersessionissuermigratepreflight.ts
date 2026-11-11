@@ -29,7 +29,7 @@ export type OrganizationUserSessionIssuerMigratePreflight = {
    */
   clientCount: number;
   /**
-   * Active OAuth client ids already present on both issuers. Non-empty blocks migration.
+   * Active OAuth client ids present on both issuers that cannot be merged. Non-empty blocks migration. A client resolved from the same Client ID Metadata Document on both issuers is not listed: it merges onto the target's client, keeping its sessions and consents, unless an issuance selection profile pins the source client to the source issuer.
    */
   conflictingClientIds: Array<string>;
   /**

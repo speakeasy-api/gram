@@ -32,7 +32,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -229,8 +228,6 @@ func (tp *ToolProxy) Do(
 		return tp.doPrompt(ctx, logger.With(attr.SlogComponent("gateway-prompt-caller")), w, requestBody, env, plan.Descriptor, plan.Prompt)
 	case ToolKindPlatform:
 		return tp.doPlatform(ctx, logger.With(attr.SlogComponent("gateway-platform-caller")), w, requestBody, env, plan, attrs)
-	case ToolKindExternalMCP:
-		return tp.doExternalMCP(ctx, logger.With(attr.SlogComponent("gateway-externalmcp-caller")), w, requestBody, env, plan.Descriptor, plan.ExternalMCP)
 	default:
 		return fmt.Errorf("tool type not supported: %s", plan.Kind)
 	}
@@ -705,6 +702,9 @@ func (tp *ToolProxy) doHTTP(
 	if toolCallBody.EnvironmentVariables != nil {
 		for k, v := range toolCallBody.EnvironmentVariables {
 			env.UserConfig.Set(k, v)
+			if env.Credentials != nil {
+				env.Credentials.CallerVariables = append(env.Credentials.CallerVariables, k)
+			}
 		}
 	}
 
@@ -884,17 +884,24 @@ func (tp *ToolProxy) doHTTP(
 		Policy:                    tp.policy,
 		ResponseStatusCodeCapture: &responseStatusCode,
 		Attributes:                attrRecorder,
-		VerifyResponse:            func(resp *http.Response) error { return nil },
-		RetryConfig:               httpToolRetryConfig(),
-		Timeout:                   httpToolCallTimeout,
-		ID:                        descriptor.ID,
-		Name:                      descriptor.Name,
-		DeploymentID:              descriptor.DeploymentID,
-		ProjectID:                 descriptor.ProjectID,
-		ProjectSlug:               descriptor.ProjectSlug,
-		OrganizationID:            descriptor.OrganizationID,
-		OrganizationSlug:          descriptor.OrganizationSlug,
-		DisableKeepAlives:         false,
+		VerifyResponse: func(resp *http.Response) error {
+			// The challenge is kept for classification only; it is not forwarded.
+			if env.Credentials != nil {
+				env.Credentials.Challenges = resp.Header.Values("WWW-Authenticate")
+				env.Credentials.KeepCarried(resp.Request)
+			}
+			return nil
+		},
+		RetryConfig:       httpToolRetryConfig(),
+		Timeout:           httpToolCallTimeout,
+		ID:                descriptor.ID,
+		Name:              descriptor.Name,
+		DeploymentID:      descriptor.DeploymentID,
+		ProjectID:         descriptor.ProjectID,
+		ProjectSlug:       descriptor.ProjectSlug,
+		OrganizationID:    descriptor.OrganizationID,
+		OrganizationSlug:  descriptor.OrganizationSlug,
+		DisableKeepAlives: false,
 	})
 }
 
@@ -937,206 +944,6 @@ func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.R
 		return oops.E(oops.CodeUnexpected, err, "failed to write prompt data").LogError(ctx, logger)
 	}
 
-	return nil
-}
-
-// externalMCPErrorSummaryLimit bounds how much of an errored tool result is
-// recorded. Provider error codes lead the payload, so the head is the part
-// worth keeping; the tail can be an arbitrarily large upstream response.
-const externalMCPErrorSummaryLimit = 512
-
-// externalMCPErrorSummary renders the content of an errored tool result for
-// logging. The content is upstream-controlled, so each part is written only up
-// to the remaining budget — the limit bounds what is built, not just what is
-// returned, so one multi-megabyte part cannot be copied whole on its way to a
-// 512-byte log field. Slicing to a byte offset can split a multi-byte rune, so
-// invalid UTF-8 is stripped before the summary reaches the log.
-func externalMCPErrorSummary(content []json.RawMessage) string {
-	if len(content) == 0 {
-		return "external MCP server reported an error with no content"
-	}
-
-	var summary strings.Builder
-	truncated := false
-	for _, part := range content {
-		remaining := externalMCPErrorSummaryLimit - summary.Len()
-		if remaining <= 0 {
-			// Budget spent with parts still to go: the tail is being dropped.
-			truncated = true
-			break
-		}
-		if len(part) > remaining {
-			summary.Write(part[:remaining])
-			truncated = true
-			break
-		}
-		summary.Write(part)
-	}
-
-	rendered := strings.ToValidUTF8(summary.String(), "")
-	if truncated {
-		return rendered + "…(truncated)"
-	}
-
-	return rendered
-}
-
-func (tp *ToolProxy) doExternalMCP(
-	ctx context.Context,
-	logger *slog.Logger,
-	w http.ResponseWriter,
-	requestBody io.Reader,
-	env toolconfig.ToolCallEnv,
-	descriptor *ToolDescriptor,
-	plan *ExternalMCPToolCallPlan,
-) error {
-	span := trace.SpanFromContext(ctx)
-
-	// Use the tool name from the plan (resolved by the proxy tool executor for
-	// proxy tools, or set directly for materialized tools)
-	toolName := plan.ToolName
-
-	// A proxy tool's name is whatever the caller sent after the server slug:
-	// nothing validates it against the upstream's tool list. Only a name the
-	// upstream answered successfully reaches the metric dimension, so a bogus
-	// name cannot mint a timeseries per call, including against an upstream
-	// that rejects an unknown tool in-band as an errored result rather than as
-	// a protocol error. Every other call is attributed to the URN name.
-	recordedToolName := descriptor.URN.Name
-
-	var responseStatusCode int
-	// An in-band failure is still answered with a 200, so the status code alone
-	// would record the call as a success.
-	var upstreamReportedError bool
-	defer func() {
-		outcome := toolCallOutcomeForStatus(responseStatusCode)
-		if upstreamReportedError {
-			outcome = toolCallOutcomeToolError
-		}
-
-		tp.metrics.RecordToolCall(ctx, toolCallRecord{
-			OrganizationID: descriptor.OrganizationID,
-			URN:            descriptor.URN,
-			ToolName:       recordedToolName,
-			StatusCode:     responseStatusCode,
-			Outcome:        outcome,
-		})
-
-		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
-	}()
-
-	arguments, err := io.ReadAll(requestBody)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read tool arguments").LogError(ctx, logger)
-	}
-
-	// Only pass OAuth token if this plan requires it
-	var oauthToken string
-	if plan.RequiresOAuth {
-		oauthToken = env.OAuthToken
-	}
-
-	// Build headers from environment variables
-	headers := externalmcp.BuildHeaders(env.SystemEnv, env.UserConfig, plan.HeaderDefinitions, oauthToken)
-	opts := &externalmcp.ClientOptions{
-		Metrics:          nil,
-		Authorization:    "",
-		Headers:          headers,
-		DisableRetries:   false,
-		MaxResponseBytes: 0,
-		MaxMessageBytes:  0,
-	}
-
-	// Connect to the external MCP server
-	client, err := externalmcp.NewClient(ctx, logger, tp.policy, plan.RemoteURL, plan.TransportType, opts)
-	if err != nil {
-		if authErr, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
-			upstreamReportedError = true
-			responseStatusCode = http.StatusOK
-			logger.WarnContext(ctx, "external MCP authentication rejected", attr.SlogHTTPResponseStatusCode(authErr.StatusCode))
-			return writeExternalMCPAuthRejection(w, plan.RequiresOAuth)
-		}
-		if shutdowndrain.Interrupted(ctx) {
-			responseStatusCode = http.StatusServiceUnavailable
-			return shutdownInterrupt("connect to external MCP server", err)
-		}
-		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").LogError(ctx, logger)
-	}
-	defer o11y.LogDefer(ctx, logger, "failed to close external mcp client", client.Close)
-
-	// Call the tool on the external MCP server
-	callResult, err := client.CallTool(ctx, toolName, arguments, plan.InputSchema)
-	if err != nil {
-		if authErr, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
-			upstreamReportedError = true
-			responseStatusCode = http.StatusOK
-			logger.WarnContext(ctx, "external MCP authentication rejected", attr.SlogHTTPResponseStatusCode(authErr.StatusCode))
-			return writeExternalMCPAuthRejection(w, plan.RequiresOAuth)
-		}
-		if shutdowndrain.Interrupted(ctx) {
-			responseStatusCode = http.StatusServiceUnavailable
-			return shutdownInterrupt("call external MCP tool", err)
-		}
-		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").LogError(ctx, logger)
-	}
-
-	// An upstream that reports failure in-band — a result carrying isError
-	// rather than a transport or protocol error — reaches none of the error
-	// paths above, and the result is forwarded to the caller as a successful
-	// response, so this is the only place the failure can be detected.
-	// Providers that surface a rejected or expired bearer as a tool result
-	// rather than a 401 are the motivating case, since the failure is
-	// otherwise visible to the end user and to no one operating the service.
-	if callResult.IsError {
-		upstreamReportedError = true
-		logger.ErrorContext(ctx, "external MCP tool returned an error result",
-			attr.SlogToolName(toolName),
-			attr.SlogURL(plan.RemoteURL),
-			attr.SlogErrorMessage(externalMCPErrorSummary(callResult.Content)),
-		)
-	} else {
-		recordedToolName = toolName
-	}
-
-	responseStatusCode = http.StatusOK
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(responseStatusCode)
-
-	response := struct {
-		Content []json.RawMessage `json:"content"`
-		IsError bool              `json:"isError,omitzero"`
-	}{
-		Content: callResult.Content,
-		IsError: callResult.IsError,
-	}
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write external MCP tool result").LogError(ctx, logger)
-	}
-
-	return nil
-}
-
-// An upstream rejection is a tool error, not a rejection of the caller's Speakeasy
-// bearer. Never relay its WWW-Authenticate challenge: it names a different
-// audience and may contain sensitive, upstream-controlled values.
-func writeExternalMCPAuthRejection(w http.ResponseWriter, requiresOAuth bool) error {
-	message := "The upstream MCP server rejected authentication. Ask the MCP server administrator to check its configured credentials and permissions."
-	if requiresOAuth {
-		message = "The upstream MCP server rejected authentication. Reauthorize this MCP server to reconnect your upstream account. If the problem persists, check that your account has the required permissions."
-	}
-	response := struct {
-		Content []map[string]string `json:"content"`
-		IsError bool                `json:"isError"`
-	}{
-		Content: []map[string]string{{"type": "text", "text": message}},
-		IsError: true,
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write external MCP tool result")
-	}
 	return nil
 }
 
@@ -1413,6 +1220,9 @@ func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTo
 
 		envVar := env.UserConfig.Get(tool.ServerEnvVar)
 		if envVar != "" {
+			if env.Credentials != nil {
+				env.Credentials.ServerVariable = tool.ServerEnvVar
+			}
 			return envVar
 		} else {
 			logger.WarnContext(ctx, "provided variables for server not found", attr.SlogEnvVarName(tool.ServerEnvVar))

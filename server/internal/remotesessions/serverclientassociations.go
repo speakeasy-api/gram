@@ -12,6 +12,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -72,7 +75,7 @@ func (s *Service) ListServerClientAssociations(ctx context.Context, payload *gen
 		for _, client := range bound {
 			ids = append(ids, client.ClientID)
 		}
-		required, err := requiredServerClients(ctx, q, authCtx.ActiveOrganizationID, server.UserSessionIssuerID.UUID, serverID, ids)
+		required, _, err := requiredServerClients(ctx, q, authCtx.ActiveOrganizationID, server.UserSessionIssuerID.UUID, serverID, ids)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "decide required MCP server clients").LogError(ctx, logger)
 		}
@@ -209,8 +212,19 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "check MCP server client binding").LogError(ctx, logger)
 	}
+	// The sign-in's binding implies a sole consumer's association, so the
+	// association cannot be removed on its own. Where typed auth clients
+	// choose upstream authentication the server offers the client through its
+	// link, which can: the detach then retires the link and leaves the
+	// association for the upstream client choice to read again.
 	if soleConsumer {
-		return oops.E(oops.CodeConflict, nil, "this client is the server's own sign-in; turn off User Identity on the server to remove it").LogWarn(ctx, logger)
+		enforced, err := authenforcement.ReadEnforced(ctx, dbtx, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
+		}
+		if !enforced {
+			return oops.E(oops.CodeConflict, nil, "this client is the server's own sign-in; turn off User Identity on the server to remove it").LogWarn(ctx, logger)
+		}
 	}
 
 	rows, err := q.ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{
@@ -228,47 +242,96 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 			break
 		}
 	}
-	if found {
-		if _, err := q.DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
-			McpServerID:           serverID,
-			RemoteSessionClientID: clientID,
-			ProjectID:             *authCtx.ProjectID,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "detach MCP server client association").LogError(ctx, logger)
+	if soleConsumer && !found {
+		return oops.E(oops.CodeNotFound, nil, "MCP server is not associated with this client").LogWarn(ctx, logger)
+	}
+
+	if soleConsumer {
+		// The link is retired as an administrator's detach, which the
+		// synchronization never undoes while the association it was derived
+		// from stays. Administrator-owned links, including ones to backfilled
+		// clients, are not this association's and stay offered.
+		offered, err := authclientsrepo.New(dbtx).ListServerBackfillAuthClients(ctx, authclientsrepo.ListServerBackfillAuthClientsParams{
+			McpServerID:    serverID,
+			ProjectID:      *authCtx.ProjectID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "list MCP server auth clients").LogError(ctx, logger)
+		}
+		retired := false
+		for _, client := range offered {
+			if client.RemoteSessionClientID.UUID != clientID {
+				continue
+			}
+			err := authclients.DetachMcpServer(ctx, dbtx, s.auditLogger, authCtx, client, serverID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				// A concurrent detach already retired this link.
+				continue
+			}
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "detach MCP server auth client").LogError(ctx, logger)
+			}
+			retired = true
+		}
+		if !retired {
+			return oops.E(oops.CodeNotFound, nil, "MCP server has no auth client from this association left to detach").LogWarn(ctx, logger)
 		}
 	} else {
-		externalClientID, err = recordUnclaimedClientDetach(ctx, dbtx, authCtx.ActiveOrganizationID, server, clientID)
-		switch {
-		case errors.Is(err, errClientNotDetachable):
-			return oops.E(oops.CodeNotFound, err, "MCP server is not associated with this client").LogWarn(ctx, logger)
-		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "record MCP server client detach").LogError(ctx, logger)
+		if found {
+			if _, err := q.DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
+				McpServerID:           serverID,
+				RemoteSessionClientID: clientID,
+				ProjectID:             *authCtx.ProjectID,
+			}); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "detach MCP server client association").LogError(ctx, logger)
+			}
+		} else {
+			externalClientID, err = recordUnclaimedClientDetach(ctx, dbtx, authCtx.ActiveOrganizationID, server, clientID)
+			switch {
+			case errors.Is(err, errClientNotDetachable):
+				return oops.E(oops.CodeNotFound, err, "MCP server is not associated with this client").LogWarn(ctx, logger)
+			case err != nil:
+				return oops.E(oops.CodeUnexpected, err, "record MCP server client detach").LogError(ctx, logger)
+			}
 		}
-	}
 
-	// The association is what the server's link to its typed auth client was
-	// derived from, so deciding again here keeps the two models in step: the
-	// link goes with the association, and the credential headers the client
-	// copied from the source this server sat on are no longer its to send.
-	// The client row itself is left alone — only the offline backfill retires
-	// one no server reaches. Deciding from the same evidence is how a repeated
-	// detach stays a no-op.
-	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, serverID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "sync mcp server auth clients").LogError(ctx, logger)
-	}
+		// The association is what the server's link to its typed auth client was
+		// derived from, so deciding again here keeps the two models in step: the
+		// link goes with the association, and the credential headers the client
+		// copied from the source this server sat on are no longer its to send.
+		// The client row itself is left alone — only the offline backfill retires
+		// one no server reaches. Deciding from the same evidence is how a repeated
+		// detach stays a no-op.
+		if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, serverID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "sync mcp server auth clients").LogError(ctx, logger)
+		}
 
-	if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:       authCtx.Email,
-		ActorSlug:              nil,
-		RemoteSessionClientURN: urn.NewRemoteSessionClient(clientID),
-		ClientID:               externalClientID,
-		McpServerURN:           urn.NewMcpServer(server.ID),
-		McpServerName:          conv.FromPGTextOrEmpty[string](server.Name),
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log MCP server client detach").LogError(ctx, logger)
+		// The server's upstream issuer is derived from its associations, and the
+		// writer scope taken above covers this update.
+		if server.UserSessionIssuerID.Valid {
+			if _, err := mcpserversrepo.New(dbtx).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{
+				UserSessionIssuerIds: []uuid.UUID{server.UserSessionIssuerID.UUID},
+				OrganizationID:       authCtx.ActiveOrganizationID,
+				ProjectID:            *authCtx.ProjectID,
+			}); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "resync mcp server upstream issuer").LogError(ctx, logger)
+			}
+		}
+
+		if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:       authCtx.Email,
+			ActorSlug:              nil,
+			RemoteSessionClientURN: urn.NewRemoteSessionClient(clientID),
+			ClientID:               externalClientID,
+			McpServerURN:           urn.NewMcpServer(server.ID),
+			McpServerName:          conv.FromPGTextOrEmpty[string](server.Name),
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log MCP server client detach").LogError(ctx, logger)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

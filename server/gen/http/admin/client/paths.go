@@ -327,6 +327,11 @@ func GetHookClientsAdminPath() string {
 	return "/admin/hookClients.get"
 }
 
+// GetOrganizationHookFleetAdminPath returns the URL path to the admin service getOrganizationHookFleet HTTP endpoint.
+func GetOrganizationHookFleetAdminPath() string {
+	return "/admin/organizationHookFleet.get"
+}
+
 // ListRegistryPromotionCandidatesAdminPath returns the URL path to the admin service listRegistryPromotionCandidates HTTP endpoint.
 func ListRegistryPromotionCandidatesAdminPath() string {
 	return "/admin/registry.promotionCandidates"
@@ -477,6 +482,11 @@ func UpdateSignupOfferAdminPath() string {
 	return "/admin/signupOffers.update"
 }
 
+// ListPlatformMcpFeedbackAdminPath returns the URL path to the admin service listPlatformMcpFeedback HTTP endpoint.
+func ListPlatformMcpFeedbackAdminPath() string {
+	return "/admin/platformMcpFeedback.list"
+}
+
 // GetStripeSubscriptionCandidateAdminPath returns the URL path to the admin service getStripeSubscriptionCandidate HTTP endpoint.
 func GetStripeSubscriptionCandidateAdminPath() string {
 	return "/admin/organization.stripeSubscriptionCandidate"
@@ -535,4 +545,9 @@ func GetProjectRedeployPreviewAdminPath() string {
 // RedeployProjectAdminPath returns the URL path to the admin service redeployProject HTTP endpoint.
 func RedeployProjectAdminPath() string {
 	return "/admin/project.redeploy"
+}
+
+// ListCustomDomainsAdminPath returns the URL path to the admin service listCustomDomains HTTP endpoint.
+func ListCustomDomainsAdminPath() string {
+	return "/admin/customDomains.list"
 }

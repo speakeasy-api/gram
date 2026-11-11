@@ -3,11 +3,13 @@ import { cn } from "@/lib/utils.ts";
 import { useRoutes } from "@/routes.tsx";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
-import React, { ReactElement } from "react";
+import type { ReactElement } from "react";
+import React from "react";
 import { Link } from "react-router";
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
-import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
+import type { ReleaseStage } from "./release-stage-badge.tsx";
+import { ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "@/components/ui/Heading";
 import { MoreActions } from "@/components/ui/MoreActions";
 import { Toolbar } from "@/components/ui/Toolbar";
@@ -15,6 +17,13 @@ import { Text } from "@/components/ui/Text";
 import { XYFade } from "@/components/ui/XyFade";
 import { SplashScreen } from "@/components/ui/LogoLoader";
 import { PageEyebrow } from "./page-eyebrow";
+
+const PageFrameContext = React.createContext(false);
+
+/** Whether the caller renders inside a `Page`, and so under its header. */
+export function useInPageFrame(): boolean {
+  return React.useContext(PageFrameContext);
+}
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -24,7 +33,9 @@ function PageLayout({ children }: { children: React.ReactNode }) {
     // for the SidebarInset visual gutter (m-2 top+bottom = 1rem) and the
     // impersonation banner via --banner-offset.
     <div className="flex min-h-[calc(100vh-1rem-var(--banner-offset,0px))] flex-col has-[[data-page-bound]]:h-[calc(100vh-1rem-var(--banner-offset,0px))] has-[[data-page-bound]]:overflow-hidden">
-      <ContentErrorBoundary>{children}</ContentErrorBoundary>
+      <PageFrameContext.Provider value={true}>
+        <ContentErrorBoundary>{children}</ContentErrorBoundary>
+      </PageFrameContext.Provider>
     </div>
   );
 }

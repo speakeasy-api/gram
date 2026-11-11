@@ -1,5 +1,5 @@
 import { useRegisterChatTelemetry, useTelemetry } from "@/contexts/Telemetry";
-import { UIMessage } from "ai";
+import type { UIMessage } from "ai";
 import { useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { v7 as uuidv7 } from "uuid";
