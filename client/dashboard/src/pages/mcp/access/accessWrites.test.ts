@@ -143,17 +143,17 @@ describe("revokeScopeWrite", () => {
   });
 
   it("blocks a scope a stronger grant on the same row satisfies", () => {
-    // Manage satisfies a connect check, so dropping the connect rule is not
-    // enough — the block is what actually closes the line.
+    // Manage satisfies a view check, so dropping the view rule is not enough
+    // — the block is what actually closes the line.
     const { direct, rows } = state([
       entry({ principalUrn: "user:1", level: "manage" }),
     ]);
 
-    expect(revokeScopeWrite(direct, rows[0]!, "use").entries).toEqual([
+    expect(revokeScopeWrite(direct, rows[0]!, "view").entries).toEqual([
       { principalUrn: "user:1", level: "manage" },
       {
         principalUrn: "user:1",
-        level: "blocked",
+        level: "blocked_view",
         tools: [],
         dispositions: [],
       },

@@ -125,6 +125,7 @@ import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.j
 import type { CatalogServer } from "@/pages/catalog/hooks";
 import {
   ISSUER_LOOKUP_FAILED_MESSAGE,
+  headerValueKey,
   useRemoteMcpInstallWorkflow,
 } from "./useRemoteMcpInstallWorkflow";
 
@@ -399,6 +400,146 @@ describe("useRemoteMcpInstallWorkflow", () => {
     );
     expect(result.current.phase).toBe("selectRemotes");
   });
+
+  it("honors the caller's User Identity default for a single manual-auth source", () => {
+    const servers = [
+      makeServer({
+        supportsDcr: false,
+        remotes: [
+          remote(
+            "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+          ),
+        ],
+      }),
+    ];
+    const initialConfiguration = { identityMode: "user" as const };
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers, initialConfiguration }),
+    );
+    expect(result.current.phase).toBe("configure");
+    if (result.current.phase !== "configure")
+      throw new Error("unexpected phase");
+    expect(result.current.serverConfigs[0]!.identityMode).toBe("user");
+    expect(result.current.serverConfigs[0]!.remotes).toHaveLength(1);
+  });
+
+  it.each(["none", "agent"] as const)(
+    "preserves %s and the name through the original endpoint selection",
+    (identityMode) => {
+      const servers = [
+        makeServer({
+          supportsDcr: false,
+          remotes: [
+            remote("https://a.example/mcp"),
+            remote("https://b.example/mcp"),
+          ],
+        }),
+      ];
+      const initialConfiguration = { identityMode, name: "Chosen name" };
+      const { result } = renderHook(() =>
+        useRemoteMcpInstallWorkflow({ servers, initialConfiguration }),
+      );
+      act(() => {
+        if (result.current.phase !== "selectRemotes")
+          throw new Error("unexpected phase");
+        result.current.updateCurrentConfig({
+          selectedRemoteUrls: new Set([servers[0]!.remotes![1]!.url]),
+        });
+      });
+      act(() => {
+        if (result.current.phase !== "selectRemotes")
+          throw new Error("unexpected phase");
+        result.current.nextServer();
+      });
+      if (result.current.phase !== "configure")
+        throw new Error("unexpected phase");
+      expect(result.current.serverConfigs[0]).toMatchObject({
+        identityMode,
+        name: "Chosen name",
+        remotes: [servers[0]!.remotes![1]],
+      });
+    },
+  );
+
+  it.each(["native", "hosted"] as const)(
+    "keeps %s endpoint choices and header input when Manual and Shared credential switch",
+    (integration) => {
+      const remotes =
+        integration === "native"
+          ? [
+              remote(
+                "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+              ),
+              remote(
+                "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all",
+              ),
+              remote(
+                "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-all",
+              ),
+            ]
+          : [
+              remote("https://app.getgram.ai/mcp/speakeasy-team-salesforce", [
+                "MCP-Instance-URL",
+              ]),
+            ];
+      const servers = [makeServer({ remotes })];
+      const initialConfiguration = { identityMode: "none" as const };
+      const { result } = renderHook(() =>
+        useRemoteMcpInstallWorkflow({ servers, initialConfiguration }),
+      );
+      const selected = integration === "native" ? remotes.slice(0, 2) : remotes;
+      if (integration === "native") {
+        act(() => {
+          if (result.current.phase !== "selectRemotes")
+            throw new Error("unexpected phase");
+          result.current.updateCurrentConfig({
+            selectedRemoteUrls: new Set(selected.map((item) => item.url)),
+          });
+        });
+        act(() => {
+          if (result.current.phase !== "selectRemotes")
+            throw new Error("unexpected phase");
+          result.current.nextServer();
+        });
+      }
+      act(() => {
+        if (result.current.phase !== "configure")
+          throw new Error("unexpected phase");
+        result.current.updateServerConfig(0, {
+          name: "Chosen Salesforce name",
+        });
+        if (integration === "hosted")
+          result.current.setHeaderValue(
+            0,
+            remotes[0]!.url,
+            "MCP-Instance-URL",
+            "https://example.my.salesforce.com",
+          );
+      });
+      for (const identityMode of ["agent", "none"] as const) {
+        act(() => {
+          if (result.current.phase !== "configure")
+            throw new Error("unexpected phase");
+          result.current.updateServerConfig(0, { identityMode });
+        });
+        expect(result.current.phase).toBe("configure");
+        if (result.current.phase !== "configure")
+          throw new Error("unexpected phase");
+        expect(result.current.serverConfigs[0]).toMatchObject({
+          identityMode,
+          name: "Chosen Salesforce name",
+          remotes: selected,
+          headerValues:
+            integration === "hosted"
+              ? {
+                  [headerValueKey(remotes[0]!.url, "MCP-Instance-URL")]:
+                    "https://example.my.salesforce.com",
+                }
+              : {},
+        });
+      }
+    },
+  );
 
   it("skips selectRemotes and installs every endpoint with autoSelectRemotes", () => {
     const servers = [

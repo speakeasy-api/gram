@@ -48,11 +48,11 @@ export function lineLabels(lines: ScopeKey[]): string {
 
 /**
  * The scopes whose grant satisfies a check for this one, itself included.
- * Mirrors scopeExpansions in authz/scopes.go: read and write both satisfy
- * connect, and write satisfies read.
+ * Mirrors scopeExpansions in authz/scopes.go: write satisfies read, and only
+ * connect satisfies connect.
  */
 const SATISFIED_BY: Record<ScopeKey, ScopeKey[]> = {
-  use: ["use", "view", "manage"],
+  use: ["use"],
   view: ["view", "manage"],
   manage: ["manage"],
 };
