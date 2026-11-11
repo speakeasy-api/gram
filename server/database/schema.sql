@@ -16935,7 +16935,7 @@ CREATE TABLE IF NOT EXISTS memory_eval_runs (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
   CONSTRAINT memory_eval_runs_pkey PRIMARY KEY (id),
-  CONSTRAINT memory_eval_runs_cost_usd_check CHECK (cost_usd IS NULL OR cost_usd >= 0)
+  CONSTRAINT memory_eval_runs_cost_usd_check CHECK (cost_usd IS NULL OR (cost_usd >= 0 AND cost_usd <> 'NaN'))
 );
 
 COMMENT ON COLUMN memory_eval_runs.id IS '@access: confidential';
