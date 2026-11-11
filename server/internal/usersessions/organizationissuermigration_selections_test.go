@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -172,4 +173,89 @@ func seedIssuerMigrationOAuthServer(t *testing.T, ctx context.Context, ti *testI
 	require.NoError(t, fixtures.SeedMCPServerFixture(ctx, selectionbackfill.SeedMCPServerFixtureParams{ID: serverID, ProjectID: projectID, Slug: conv.ToPGText("server-" + serverID.String()), RemoteMcpServerID: conv.ToNullUUID(backendID), UserSessionIssuerID: conv.ToNullUUID(issuerID)}))
 	require.NoError(t, fixtures.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{ProjectID: projectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, RemoteSessionClientID: clientID}))
 	return serverID, clientID
+}
+
+func TestOrganizationUserSessionIssuerMigrateScopesExistingTargetButNotMovedCredentials(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	target, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "bounded-target", AuthnChallengeMode: "chain", SessionDurationHours: 24})
+	require.NoError(t, err)
+	targetID := uuid.MustParse(target.ID)
+	first, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, targetID)
+	second, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, targetID)
+	syncIssuerMigrationTestServers(t, ctx, ti, first, second)
+	sourceID := seedIssuer(t, ctx, ti, "bounded-source")
+	impact, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, sourceID)
+	existing, err := seedUserSession(t, ctx, ti.conn, targetID, urn.NewUserSubject("bounded-existing"))
+	require.NoError(t, err)
+	moved, err := seedUserSession(t, ctx, ti.conn, sourceID, urn.NewUserSubject("bounded-moved"))
+	require.NoError(t, err)
+	result, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.SessionsMigrated)
+	fixtures := selectionbackfill.New(ti.conn)
+	existingChoices, err := fixtures.ListSelectionsFixture(ctx, selectionbackfill.ListSelectionsFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: migrationCredentialID(existing)})
+	require.NoError(t, err)
+	require.Len(t, existingChoices, 1, "unaffected pre-existing gaps are not an organization-wide backfill")
+	require.Equal(t, impact, existingChoices[0].McpServerID)
+	movedChoices, err := fixtures.ListSelectionsFixture(ctx, selectionbackfill.ListSelectionsFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: migrationCredentialID(moved)})
+	require.NoError(t, err)
+	require.Len(t, movedChoices, 3, "moved source lineages need all target reach, not only typed maintenance")
+	for _, choice := range movedChoices {
+		typed, err := fixtures.GetSelectionAuthClientFixture(ctx, selectionbackfill.GetSelectionAuthClientFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: migrationCredentialID(moved), McpServerID: choice.McpServerID})
+		require.NoError(t, err)
+		require.True(t, typed.AuthClientID.Valid)
+		require.Equal(t, upstreamclients.SelectionSourceBackfill, choice.Source)
+	}
+}
+
+func TestOrganizationUserSessionIssuerMigrateMaintainsMovedGatewayMembers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	targetID := seedIssuer(t, ctx, ti, "gateway-maintenance-target")
+	sourceID := seedIssuer(t, ctx, ti, "gateway-maintenance-source")
+	otherID := seedIssuer(t, ctx, ti, "gateway-maintenance-other")
+	direct, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, targetID)
+	member, registration := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, otherID)
+	fixtures := selectionbackfill.New(ti.conn)
+	require.NoError(t, fixtures.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: registration, UserSessionIssuerID: targetID}))
+	syncIssuerMigrationTestServers(t, ctx, ti, direct, member)
+	gatewayID := uuid.New()
+	require.NoError(t, fixtures.SeedMetaMCPServerFixture(ctx, selectionbackfill.SeedMetaMCPServerFixtureParams{ID: gatewayID, OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, Name: "Moved gateway", UserSessionIssuerID: conv.ToNullUUID(sourceID)}))
+	require.NoError(t, fixtures.SeedMetaMCPServerMemberFixture(ctx, selectionbackfill.SeedMetaMCPServerMemberFixtureParams{ProjectID: *auth.ProjectID, MetaMcpServerID: gatewayID, McpServerID: member}))
+	existing, err := seedUserSession(t, ctx, ti.conn, targetID, urn.NewUserSubject("gateway-existing"))
+	require.NoError(t, err)
+	moved, err := seedUserSession(t, ctx, ti.conn, sourceID, urn.NewUserSubject("gateway-moved"))
+	require.NoError(t, err)
+	rows, err := usersessionsrepo.New(ti.conn).ListMCPServersForUserSessionIssuerMigration(ctx, usersessionsrepo.ListMCPServersForUserSessionIssuerMigrationParams{OrganizationID: auth.ActiveOrganizationID, IssuerIds: []uuid.UUID{sourceID, targetID}, SourceIssuerID: sourceID})
+	require.NoError(t, err)
+	for _, row := range rows {
+		if row.ID == member {
+			require.True(t, row.NeedsSync, "a gateway move creates reach even without transferring its registration")
+		}
+	}
+	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	require.NoError(t, err)
+	existingChoices, err := fixtures.ListSelectionsFixture(ctx, selectionbackfill.ListSelectionsFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: migrationCredentialID(existing)})
+	require.NoError(t, err)
+	require.Len(t, existingChoices, 1)
+	require.Equal(t, member, existingChoices[0].McpServerID)
+	movedChoices, err := fixtures.ListSelectionsFixture(ctx, selectionbackfill.ListSelectionsFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: migrationCredentialID(moved)})
+	require.NoError(t, err)
+	require.Len(t, movedChoices, 2)
+}
+
+func syncIssuerMigrationTestServers(t *testing.T, ctx context.Context, ti *testInstance, servers ...uuid.UUID) {
+	t.Helper()
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, authclientbackfill.LockEMAWriterScope(ctx, tx, auth.ActiveOrganizationID, []uuid.UUID{*auth.ProjectID}))
+	require.NoError(t, authclientbackfill.PreflightServerAssociations(ctx, tx, auth.ActiveOrganizationID, servers...))
+	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, auth.ActiveOrganizationID, servers...))
+	require.NoError(t, tx.Commit(ctx))
 }

@@ -2951,8 +2951,8 @@ WITH scoped_live_credentials AS MATERIALIZED (
     FROM user_sessions AS session
     JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
     LEFT JOIN projects AS project ON project.id = issuer.project_id
-    WHERE $3::uuid IS NOT NULL
-      AND issuer.id = $3::uuid
+    WHERE $4::uuid IS NOT NULL
+      AND issuer.id = $4::uuid
       AND issuer.deleted IS FALSE
       AND (
         (issuer.project_id IS NULL AND issuer.organization_id = $1::text)
@@ -3227,8 +3227,10 @@ FROM upstream_client_selections AS sel
 WHERE sel.organization_id = $1::text
   AND sel.credential_kind = 'user_session'
   AND sel.deleted IS FALSE
-  AND (NOT $2::boolean OR sel.auth_client_id IS NULL)
-  AND ($3::uuid IS NULL
+  AND ($2::uuid[] IS NULL
+       OR sel.mcp_server_id = ANY($2::uuid[]))
+  AND (NOT $3::boolean OR sel.auth_client_id IS NULL)
+  AND ($4::uuid IS NULL
        OR sel.credential_id IN (SELECT credential_id FROM scoped_live_credentials))
   -- A choice for a deleted server is kept as history but is never served
   -- again, so it is not live coverage.
@@ -3238,14 +3240,15 @@ WHERE sel.organization_id = $1::text
     WHERE live_server.id = sel.mcp_server_id
       AND live_server.deleted IS FALSE
   )
-  AND sel.id > $4::uuid
-  AND ($5::uuid IS NULL OR sel.id = $5::uuid)
+  AND sel.id > $5::uuid
+  AND ($6::uuid IS NULL OR sel.id = $6::uuid)
 ORDER BY sel.id
-LIMIT $6::int
+LIMIT $7::int
 `
 
 type ListSelectionMappingsParams struct {
 	OrganizationID           string
+	ScopeMcpServerIds        []uuid.UUID
 	OnlyUnmapped             bool
 	ScopeUserSessionIssuerID uuid.NullUUID
 	Cursor                   uuid.UUID
@@ -3300,6 +3303,7 @@ type ListSelectionMappingsRow struct {
 func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMappingsParams) ([]ListSelectionMappingsRow, error) {
 	rows, err := q.db.Query(ctx, listSelectionMappings,
 		arg.OrganizationID,
+		arg.ScopeMcpServerIds,
 		arg.OnlyUnmapped,
 		arg.ScopeUserSessionIssuerID,
 		arg.Cursor,

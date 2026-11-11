@@ -216,7 +216,7 @@ func runSelections(ctx context.Context, q *Queries, opts Options, size int32, wr
 		return err
 	}
 	return visitSelectionMappings(ctx, q, ListSelectionMappingsParams{
-		OrganizationID: opts.OrganizationID, PageSize: size, OnlyUnmapped: false,
+		OrganizationID: opts.OrganizationID, PageSize: size, OnlyUnmapped: false, ScopeMcpServerIds: nil,
 		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}, func(rows []ListSelectionMappingsRow) error {
 		for _, row := range rows {
@@ -310,7 +310,7 @@ func mapSelection(ctx context.Context, q *Queries, organizationID string, issuer
 			return false, "", fmt.Errorf("lock issuer binding of selection %s: %w", row.ID, err)
 		}
 	}
-	fresh, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: organizationID, Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: row.ID, Valid: true}, PageSize: 1, OnlyUnmapped: false, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+	fresh, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: organizationID, Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: row.ID, Valid: true}, PageSize: 1, OnlyUnmapped: false, ScopeMcpServerIds: nil, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	if err != nil {
 		return false, "", fmt.Errorf("reread selection %s: %w", row.ID, err)
 	}
@@ -348,13 +348,22 @@ func mapSelection(ctx context.Context, q *Queries, organizationID string, issuer
 // before its first mutation. Newly missing choices are recorded separately by
 // the shared issuance writer.
 func ReconcileUserSessionSelectionsInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID) error {
+	_, err := ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, nil)
+	return err
+}
+
+// ReconcileUserSessionSelectionsForServersInLockedTransaction independently
+// scopes mapping to servers: nil keeps full reach, while an empty array maps
+// nothing. It reports guarded bulk rows skipped because their evidence changed.
+func ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs []uuid.UUID) (int64, error) {
 	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
-		return errors.New("reconcile user session selections: no transaction or tenant scope")
+		return 0, errors.New("reconcile user session selections: no transaction or tenant scope")
 	}
 	q := New(tx)
 	confirmed := make(map[selectionMappingGroup]bool)
-	return visitSelectionMappings(ctx, q, ListSelectionMappingsParams{
-		OrganizationID: organizationID, PageSize: defaultPageSize, OnlyUnmapped: true,
+	var skipped int64
+	err := visitSelectionMappings(ctx, q, ListSelectionMappingsParams{
+		OrganizationID: organizationID, PageSize: defaultPageSize, OnlyUnmapped: true, ScopeMcpServerIds: serverIDs,
 		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 	}, func(rows []ListSelectionMappingsRow) error {
 		groups := make(map[selectionMappingGroup][]ListSelectionMappingsRow)
@@ -396,15 +405,18 @@ func ReconcileUserSessionSelectionsInLockedTransaction(ctx context.Context, tx p
 			for _, row := range group {
 				ids = append(ids, row.ID)
 			}
-			if _, err := q.MapSelectionGroupToAuthClient(ctx, MapSelectionGroupToAuthClientParams{
+			n, err := q.MapSelectionGroupToAuthClient(ctx, MapSelectionGroupToAuthClientParams{
 				OrganizationID: organizationID, Ids: ids, McpServerID: key.serverID,
 				NoAuth: key.noAuth, RemoteSessionClientID: key.registration, AuthClientID: key.clientID,
-			}); err != nil {
+			})
+			if err != nil {
 				return fmt.Errorf("map selection group for server %s: %w", key.serverID, err)
 			}
+			skipped += int64(len(ids)) - n
 		}
 		return nil
 	})
+	return skipped, err
 }
 
 // For one issuer, the mapping policy for unmapped choices depends only on the

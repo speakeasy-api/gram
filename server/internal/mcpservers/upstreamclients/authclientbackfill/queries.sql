@@ -2062,6 +2062,8 @@ FROM upstream_client_selections AS sel
 WHERE sel.organization_id = @organization_id::text
   AND sel.credential_kind = 'user_session'
   AND sel.deleted IS FALSE
+  AND (sqlc.narg('scope_mcp_server_ids')::uuid[] IS NULL
+       OR sel.mcp_server_id = ANY(sqlc.narg('scope_mcp_server_ids')::uuid[]))
   AND (NOT @only_unmapped::boolean OR sel.auth_client_id IS NULL)
   AND (sqlc.narg('scope_user_session_issuer_id')::uuid IS NULL
        OR sel.credential_id IN (SELECT credential_id FROM scoped_live_credentials))

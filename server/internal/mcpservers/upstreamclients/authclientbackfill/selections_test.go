@@ -615,9 +615,9 @@ type selectionMappingCounts struct {
 
 func (tx observeSelectionMapping) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
 	if strings.HasPrefix(query, "-- name: ListSelectionMappings ") {
-		onlyID, ok := args[4].(uuid.NullUUID)
+		onlyID, ok := args[5].(uuid.NullUUID)
 		if !ok {
-			return nil, fmt.Errorf("selection query only ID has unexpected type %T", args[4])
+			return nil, fmt.Errorf("selection query only ID has unexpected type %T", args[5])
 		}
 		if onlyID.Valid {
 			tx.counts.rereads++
@@ -799,4 +799,59 @@ func TestReconcileUserSessionSelectionsDoesNotInferEMA(t *testing.T) {
 	require.NoError(t, ReconcileUserSessionSelectionsInLockedTransaction(ctx, tx, f.orgID, f.sessionIssuer()))
 	require.NoError(t, tx.Commit(ctx))
 	require.False(t, f.selection(credential, server).AuthClientID.Valid, "an EMA-only offer requires explicit selection")
+}
+
+// A row can acquire an explicit choice after a page read but before its bulk
+// write. The batch must preserve it and report the guarded skip to its caller.
+type skipBulkSelectionMapping struct {
+	observeSelectionMapping
+	injected *bool
+}
+
+func (tx skipBulkSelectionMapping) Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error) {
+	if strings.HasPrefix(query, "-- name: MapSelectionGroupToAuthClient ") && !*tx.injected {
+		ids, ok := args[0].([]uuid.UUID)
+		if !ok || len(ids) == 0 {
+			return pgconn.CommandTag{}, fmt.Errorf("bulk selection IDs have unexpected value %T", args[0])
+		}
+		*tx.injected = true
+		_, err := New(tx.Tx).MapSelectionToAuthClient(ctx, MapSelectionToAuthClientParams{
+			ID: ids[0], OrganizationID: tx.organizationID, NoAuth: false,
+			RemoteSessionClientID: uuid.NullUUID{UUID: tx.registrationID, Valid: true}, AuthClientID: tx.clientID,
+		})
+		if err != nil {
+			return pgconn.CommandTag{}, fmt.Errorf("simulate bulk row choice: %w", err)
+		}
+	}
+	return tx.observeSelectionMapping.Exec(ctx, query, args...)
+}
+
+func TestReconcileUserSessionSelectionsReportsGuardedBulkSkips(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	server, registration := f.server(), f.client("subject")
+	f.associate(server, registration)
+	f.run(true)
+	typed := OAuthClientID(f.orgID, registration, TypeRemoteSession)
+	credentials := []uuid.UUID{f.interactiveCredential(), f.interactiveCredential(), f.interactiveCredential()}
+	for _, credential := range credentials {
+		f.oauthSelection(credential, server, registration)
+	}
+	tx := testenv.BeginTx(t, t.Context(), f.pool)
+	require.NoError(t, LockEMAWriterScope(t.Context(), tx, f.orgID, []uuid.UUID{f.projectID}))
+	require.NoError(t, PreflightServerAssociations(t.Context(), tx, f.orgID, server))
+	counts := selectionMappingCounts{rereads: 0, serverLocks: 0, singleUpdates: 0, groupUpdates: 0, injected: false}
+	injected := false
+	skipped, err := ReconcileUserSessionSelectionsForServersInLockedTransaction(t.Context(), skipBulkSelectionMapping{
+		observeSelectionMapping: observeSelectionMapping{Tx: tx, counts: &counts, organizationID: f.orgID, registrationID: registration, clientID: typed, raceFirst: false}, injected: &injected,
+	}, f.orgID, f.sessionIssuer(), []uuid.UUID{server})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), skipped)
+	require.True(t, injected)
+	require.NoError(t, tx.Commit(t.Context()))
+	for _, credential := range credentials {
+		choice := f.selection(credential, server)
+		require.Equal(t, uuid.NullUUID{UUID: typed, Valid: true}, choice.AuthClientID)
+		require.Equal(t, "issuance", choice.Source)
+	}
 }

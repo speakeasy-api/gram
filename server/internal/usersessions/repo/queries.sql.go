@@ -2703,6 +2703,7 @@ FROM remote_session_client_user_session_issuers AS link
 JOIN user_session_issuers AS issuer ON issuer.id = link.user_session_issuer_id
 LEFT JOIN projects AS project ON project.id = issuer.project_id
 WHERE issuer.id = ANY($1::uuid[])
+  AND issuer.deleted IS FALSE
   AND COALESCE(issuer.organization_id, project.organization_id) = $2::text
 ORDER BY link.remote_session_client_id
 `
@@ -3248,6 +3249,16 @@ WITH transferred_registrations AS MATERIALIZED (
 )
 SELECT server.id, server.project_id,
        (server.user_session_issuer_id IS NOT DISTINCT FROM $1::uuid
+        OR EXISTS (
+          SELECT 1
+          FROM meta_mcp_server_members AS member
+          JOIN meta_mcp_servers AS gateway ON gateway.id = member.meta_mcp_server_id
+          WHERE member.mcp_server_id = server.id
+            AND member.deleted IS FALSE
+            AND gateway.deleted IS FALSE
+            AND gateway.organization_id = $2::text
+            AND gateway.user_session_issuer_id = $1::uuid
+        )
         OR server.id IN (SELECT mcp_server_id FROM impacted_servers)
         OR server.id IN (SELECT mcp_server_id FROM unmapped_servers)
         OR server.id IN (SELECT mcp_server_id FROM untyped_missing_choice_servers))::boolean AS needs_sync
@@ -7430,7 +7441,7 @@ func (q *Queries) UpdateUserSessionIssuerCimdClientsToIssuer(ctx context.Context
 	return result.RowsAffected(), nil
 }
 
-const updateUserSessionsToIssuer = `-- name: UpdateUserSessionsToIssuer :execrows
+const updateUserSessionsToIssuer = `-- name: UpdateUserSessionsToIssuer :many
 UPDATE user_sessions AS session
 SET user_session_issuer_id = $1,
     project_id = $2::uuid,
@@ -7449,6 +7460,7 @@ WHERE session.user_session_issuer_id = $4
         OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
       )
   )
+RETURNING COALESCE(session.credential_id, session.id)::uuid AS credential_id
 `
 
 type UpdateUserSessionsToIssuerParams struct {
@@ -7458,17 +7470,29 @@ type UpdateUserSessionsToIssuerParams struct {
 	SourceIssuerID  uuid.UUID
 }
 
-func (q *Queries) UpdateUserSessionsToIssuer(ctx context.Context, arg UpdateUserSessionsToIssuerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateUserSessionsToIssuer,
+func (q *Queries) UpdateUserSessionsToIssuer(ctx context.Context, arg UpdateUserSessionsToIssuerParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, updateUserSessionsToIssuer,
 		arg.TargetIssuerID,
 		arg.TargetProjectID,
 		arg.OrganizationID,
 		arg.SourceIssuerID,
 	)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var credential_id uuid.UUID
+		if err := rows.Scan(&credential_id); err != nil {
+			return nil, err
+		}
+		items = append(items, credential_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertUserSessionClientFromCIMD = `-- name: UpsertUserSessionClientFromCIMD :one

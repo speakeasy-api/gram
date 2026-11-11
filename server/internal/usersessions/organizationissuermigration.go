@@ -509,7 +509,8 @@ func lockIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID st
 	if err != nil {
 		return nil, fmt.Errorf("discover issuer migration writer scope: %w", err)
 	}
-	var lockProjects, serverIDs, syncServers []uuid.UUID
+	var lockProjects, serverIDs []uuid.UUID
+	syncServers := make([]uuid.UUID, 0)
 	for _, server := range servers {
 		lockProjects = append(lockProjects, server.ProjectID)
 		serverIDs = append(serverIDs, server.ID)
@@ -539,14 +540,15 @@ func lockIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID st
 
 // reconcileIssuerMigrationAuth preserves typed state and credential choices in
 // the consolidation transaction, independent of the enforcement feature flag.
-func reconcileIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs []uuid.UUID) error {
+func reconcileIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, movedCredentialIDs []uuid.UUID) (int64, error) {
 	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, organizationID, serverIDs...); err != nil {
-		return fmt.Errorf("sync issuer auth clients: %w", err)
+		return 0, fmt.Errorf("sync issuer auth clients: %w", err)
 	}
-	if err := selectionbackfill.ReconcileIssuerInLockedTransaction(ctx, dbtx, organizationID, issuerID); err != nil {
-		return fmt.Errorf("reconcile issuer credential choices: %w", err)
+	skipped, err := selectionbackfill.ReconcileIssuerScopeInLockedTransaction(ctx, dbtx, organizationID, issuerID, serverIDs, movedCredentialIDs)
+	if err != nil {
+		return 0, fmt.Errorf("reconcile issuer credential choices: %w", err)
 	}
-	return nil
+	return skipped, nil
 }
 
 func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssuerPayload) (*orggen.MigrateOrganizationUserSessionIssuerResult, error) {
@@ -643,10 +645,11 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate user session clients").LogError(ctx, logger)
 	}
-	sessionsMigrated, err := q.UpdateUserSessionsToIssuer(ctx, repo.UpdateUserSessionsToIssuerParams{TargetIssuerID: target.ID, TargetProjectID: targetProjectID, OrganizationID: authCtx.ActiveOrganizationID, SourceIssuerID: source.ID})
+	movedCredentialIDs, err := q.UpdateUserSessionsToIssuer(ctx, repo.UpdateUserSessionsToIssuerParams{TargetIssuerID: target.ID, TargetProjectID: targetProjectID, OrganizationID: authCtx.ActiveOrganizationID, SourceIssuerID: source.ID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate user sessions").LogError(ctx, logger)
 	}
+	sessionsMigrated := int64(len(movedCredentialIDs))
 	// Merged clients and their consents now live on the target's rows, so they
 	// count as migrated alongside the rows that moved as they were.
 	clientsMigrated += merged.clients
@@ -716,7 +719,8 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 			return nil, oops.E(oops.CodeUnexpected, err, "resync MCP server remote session issuers").LogError(ctx, logger)
 		}
 	}
-	if err := reconcileIssuerMigrationAuth(ctx, dbtx, authCtx.ActiveOrganizationID, target.ID, serverIDs); err != nil {
+	skippedMappings, err := reconcileIssuerMigrationAuth(ctx, dbtx, authCtx.ActiveOrganizationID, target.ID, serverIDs, movedCredentialIDs)
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "reconcile issuer migration auth").LogError(ctx, logger)
 	}
 	deleted, err := q.SoftDeleteMigratedUserSessionIssuer(ctx, repo.SoftDeleteMigratedUserSessionIssuerParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: authCtx.ActiveOrganizationID})
@@ -740,6 +744,10 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+	if skippedMappings > 0 {
+		logger.DebugContext(ctx, "issuer consolidation skipped changed credential choices",
+			attr.SlogUserSessionIssuerID(target.ID.String()), attr.SlogAuthClientBackfillSkipped(skippedMappings))
 	}
 	return &orggen.MigrateOrganizationUserSessionIssuerResult{
 		Issuer: s.organizationIssuerView(ctx, surviving.UserSessionIssuer, surviving.ProjectName), ClientsMigrated: int(clientsMigrated), SessionsMigrated: int(sessionsMigrated), ConsentsMigrated: int(consentsMigrated), CimdClientsMigrated: int(cimdClientsMigrated), RemoteSessionsMigrated: int(remoteSessionsMigrated), SourceDeleted: true,

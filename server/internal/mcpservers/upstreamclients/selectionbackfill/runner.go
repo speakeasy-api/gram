@@ -190,7 +190,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 				}
 			}
 			if opts.Apply {
-				written, err := recordCredentialSelections(ctx, sessions, credential)
+				written, err := recordCredentialSelections(ctx, sessions, credential, nil)
 				if err != nil {
 					return report, fmt.Errorf("record selections for credential %s: %w", credential.CredentialID, err)
 				}
@@ -226,22 +226,43 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 // caller holds the complete server/source writer scope and registration gates.
 // It uses migration selection policy without granting permissions.
 func ReconcileIssuerInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID) error {
+	_, err := ReconcileIssuerScopeInLockedTransaction(ctx, tx, organizationID, issuerID, nil, nil)
+	return err
+}
+
+// ReconcileIssuerScopeInLockedTransaction limits existing credentials to the
+// maintenance servers. Moved lineages instead record full target reach: moving
+// their issuer changes their audience even on servers needing no typed sync.
+// A nil server scope retains full reach; an empty scope records/maps nothing
+// for existing credentials. The returned count reports guarded bulk rows whose
+// legacy evidence changed before their mapping write.
+func ReconcileIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, fullReachCredentialIDs []uuid.UUID) (int64, error) {
 	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
-		return errors.New("reconcile issuer credentials: no transaction or tenant scope")
+		return 0, errors.New("reconcile issuer credentials: no transaction or tenant scope")
+	}
+	if serverIDs != nil && len(serverIDs) == 0 && len(fullReachCredentialIDs) == 0 {
+		return 0, nil
+	}
+	fullReach := make(map[uuid.UUID]bool, len(fullReachCredentialIDs))
+	for _, id := range fullReachCredentialIDs {
+		fullReach[id] = true
 	}
 	q, sessions := New(tx), usersessionsrepo.New(tx)
 	cursor := uuid.Nil
 	for {
 		credentials, err := q.ListLiveUserSessionCredentials(ctx, ListLiveUserSessionCredentialsParams{
-			Cursor: cursor, OrganizationID: organizationID, PageSize: defaultPageSize,
-			IssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+			Cursor: cursor, OrganizationID: organizationID, PageSize: defaultPageSize, IssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		})
 		if err != nil {
-			return fmt.Errorf("list issuer credentials: %w", err)
+			return 0, fmt.Errorf("list issuer credentials: %w", err)
 		}
 		for _, credential := range credentials {
-			if _, err := recordCredentialSelections(ctx, sessions, credential); err != nil {
-				return fmt.Errorf("record issuer credential choices: %w", err)
+			scope := serverIDs
+			if fullReach[credential.CredentialID] {
+				scope = nil
+			}
+			if _, err := recordCredentialSelections(ctx, sessions, credential, scope); err != nil {
+				return 0, fmt.Errorf("record issuer credential choices: %w", err)
 			}
 			cursor = credential.CredentialID
 		}
@@ -249,20 +270,26 @@ func ReconcileIssuerInLockedTransaction(ctx context.Context, tx pgx.Tx, organiza
 			break
 		}
 	}
-	if err := authclientbackfill.ReconcileUserSessionSelectionsInLockedTransaction(ctx, tx, organizationID, issuerID); err != nil {
-		return fmt.Errorf("map issuer credential choices: %w", err)
+	skipped, err := authclientbackfill.ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs)
+	if err != nil {
+		return skipped, fmt.Errorf("map issuer credential choices: %w", err)
 	}
-	return nil
+	return skipped, nil
 }
 
-func recordCredentialSelections(ctx context.Context, q *usersessionsrepo.Queries, credential ListLiveUserSessionCredentialsRow) (int64, error) {
+func recordCredentialSelections(ctx context.Context, q *usersessionsrepo.Queries, credential ListLiveUserSessionCredentialsRow, serverIDs []uuid.UUID) (int64, error) {
+	if serverIDs != nil && len(serverIDs) == 0 {
+		return 0, nil
+	}
 	written, err := q.RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{
 		UserSessionIssuerID: credential.UserSessionIssuerID,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credential.CredentialID,
-		Source:              upstreamclients.SelectionSourceBackfill,
-		PickedMcpServerIds:  []uuid.UUID{}, PickedClientIds: []uuid.UUID{},
-		PickedAuthClientIds: nil, ScopeMcpServerIds: nil,
+		// These choices are inferred for existing credentials, not explicit
+		// administrator choices; consolidation uses the same backfill source.
+		Source:             upstreamclients.SelectionSourceBackfill,
+		PickedMcpServerIds: []uuid.UUID{}, PickedClientIds: []uuid.UUID{},
+		PickedAuthClientIds: nil, ScopeMcpServerIds: serverIDs,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("record credential selections: %w", err)

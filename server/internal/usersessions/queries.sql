@@ -925,7 +925,7 @@ WHERE client.user_session_issuer_id = @source_issuer_id
       )
   );
 
--- name: UpdateUserSessionsToIssuer :execrows
+-- name: UpdateUserSessionsToIssuer :many
 UPDATE user_sessions AS session
 SET user_session_issuer_id = @target_issuer_id,
     project_id = sqlc.narg('target_project_id')::uuid,
@@ -943,7 +943,8 @@ WHERE session.user_session_issuer_id = @source_issuer_id
         (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
         OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
       )
-  );
+  )
+RETURNING COALESCE(session.credential_id, session.id)::uuid AS credential_id;
 
 -- name: UpdateUserSessionConsentsToIssuerScope :execrows
 UPDATE user_session_consents AS consent
@@ -1185,6 +1186,16 @@ WITH transferred_registrations AS MATERIALIZED (
 )
 SELECT server.id, server.project_id,
        (server.user_session_issuer_id IS NOT DISTINCT FROM @source_issuer_id::uuid
+        OR EXISTS (
+          SELECT 1
+          FROM meta_mcp_server_members AS member
+          JOIN meta_mcp_servers AS gateway ON gateway.id = member.meta_mcp_server_id
+          WHERE member.mcp_server_id = server.id
+            AND member.deleted IS FALSE
+            AND gateway.deleted IS FALSE
+            AND gateway.organization_id = @organization_id::text
+            AND gateway.user_session_issuer_id = @source_issuer_id::uuid
+        )
         OR server.id IN (SELECT mcp_server_id FROM impacted_servers)
         OR server.id IN (SELECT mcp_server_id FROM unmapped_servers)
         OR server.id IN (SELECT mcp_server_id FROM untyped_missing_choice_servers))::boolean AS needs_sync
@@ -1223,6 +1234,7 @@ FROM remote_session_client_user_session_issuers AS link
 JOIN user_session_issuers AS issuer ON issuer.id = link.user_session_issuer_id
 LEFT JOIN projects AS project ON project.id = issuer.project_id
 WHERE issuer.id = ANY(@issuer_ids::uuid[])
+  AND issuer.deleted IS FALSE
   AND COALESCE(issuer.organization_id, project.organization_id) = @organization_id::text
 ORDER BY link.remote_session_client_id;
 
