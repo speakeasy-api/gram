@@ -10,7 +10,7 @@ import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { fetchRegisteredAgents } from "@/pages/identities/identityRoster";
 import { useRoutes } from "@/routes";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
 
@@ -84,15 +84,17 @@ export function useAgentIdentityCandidates({
   });
 
   // The inventory is cursor-paginated; loading just its first page would make
-  // older or later-named agents disappear from global name search.
+  // older or later-named agents disappear from global name search. A failed
+  // page gets one retry on the next palette open without looping while open.
+  const opens = useRef(0);
+  const lastFetchOpen = useRef(0);
   useEffect(() => {
-    if (
-      !queryEnabled ||
-      !hasNextPage ||
-      isFetchingNextPage ||
-      isFetchNextPageError
-    )
-      return;
+    if (queryEnabled) opens.current += 1;
+  }, [queryEnabled]);
+  useEffect(() => {
+    if (!queryEnabled || !hasNextPage || isFetchingNextPage) return;
+    if (isFetchNextPageError && lastFetchOpen.current === opens.current) return;
+    lastFetchOpen.current = opens.current;
     void fetchNextPage().catch(() => undefined);
   }, [
     queryEnabled,
