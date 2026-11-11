@@ -1888,7 +1888,9 @@ jobs:
 
   # Every management API endpoint must be seen making an authz decision in
   # some test, or be allowlisted with the reason it makes none. See
-  # ci/cmd/authzcoverage.
+  # ci/cmd/authzcoverage. Report-only until the allowlist is seeded from a
+  # full CI run: it is not yet a CI Gate dependency. The candidate allowlist
+  # this run would write is uploaded for seeding.
   authz-coverage:
     name: authz-coverage
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1918,6 +1920,21 @@ jobs:
 
       - name: Check endpoint coverage
         run: mise run test:authz-coverage --records authz-coverage
+
+      - name: Write candidate allowlist
+        if: always()
+        run: |
+          cp server/internal/authz/testdata/endpoint_coverage_allowlist.txt "$RUNNER_TEMP/allowlist.txt" 2>/dev/null || true
+          go run ./ci/cmd/authzcoverage -records authz-coverage -allowlist "$RUNNER_TEMP/allowlist.txt" -write
+
+      - name: Upload candidate allowlist
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: authz-coverage-candidate-allowlist
+          path: ${{ runner.temp }}/allowlist.txt
+          if-no-files-found: ignore
+          retention-days: 14
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
@@ -2928,7 +2945,6 @@ jobs:
       - server-build
       - server-checks
       - server-test
-      - authz-coverage
       - demo-seed-safety
       - docker-build-server
       - docker-build-client

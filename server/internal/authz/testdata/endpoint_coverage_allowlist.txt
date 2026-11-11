@@ -1,0 +1,10 @@
+# Management API endpoints no test has seen making an authz decision.
+# Format: <service>.<Method> <reason>. Checked by ci/cmd/authzcoverage.
+#
+# Remove an entry by adding a test that reaches the endpoint's authz check.
+# Keep one only with the reason the endpoint makes no decision, for
+# example "public: serves the login page".
+#
+# Not seeded yet: the first full CI run of the authz-coverage job uploads a
+# candidate allowlist (artifact authz-coverage-candidate-allowlist). Until it
+# is reviewed and committed here, the job is report-only.
