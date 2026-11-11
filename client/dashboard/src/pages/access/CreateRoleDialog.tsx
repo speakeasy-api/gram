@@ -2,6 +2,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { isKnownResourceType } from "./types";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { AnyField } from "@/components/moon/any-field";
+import { Input } from "@/components/moon/input";
 import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 
@@ -51,7 +52,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Bot, Check, ChevronRight } from "lucide-react";
+import { ArrowLeft, Ban, Bot, Check, ChevronRight } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import {
   getSelectableMembers,
@@ -60,6 +61,14 @@ import {
 } from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import { RoleAccessMatrix } from "./RoleAccessMatrix";
+import {
+  denyCountLabel,
+  mcpRowViews,
+  platformAreas,
+  roleDenies,
+} from "./roleMatrixModel";
+import { RoleTemplatePicker } from "./RoleTemplatePicker";
+import { roleTemplates, type RoleTemplate } from "./roleTemplates";
 import { useOrgMcpServers } from "./useOrgMcpServers";
 import { RoleDirectorySources } from "./RoleDirectorySources";
 import type {
@@ -179,6 +188,11 @@ interface CreateRoleDialogProps {
    * limited to it, so the new role grants no more than the request.
    */
   defaultResource?: { resourceId?: string; projectId?: string };
+  /**
+   * The organization's roles, so a new role can start as a copy of a built-in
+   * one. Without them only the dashboard's own starting points are offered.
+   */
+  templateRoles?: Role[];
 }
 
 /**
@@ -244,6 +258,7 @@ export function CreateRoleDialog({
   defaultName = "",
   defaultScopes,
   defaultResource,
+  templateRoles,
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
@@ -271,6 +286,11 @@ export function CreateRoleDialog({
   );
   const [savedClientTypeRules, setSavedClientTypeRules] =
     useState<ClientTypeRules>(() => clientTypeRulesFromRole(undefined));
+  // The starting point the form still matches. A role pre-filled from an
+  // access request starts as its own.
+  const [template, setTemplate] = useState<string | null>(
+    defaultScopes && defaultScopes.length > 0 ? null : "blank",
+  );
   const [showMembers, setShowMembers] = useState(false);
   const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -540,7 +560,62 @@ export function CreateRoleDialog({
     update: (previous: Record<string, RoleGrant>) => Record<string, RoleGrant>,
   ) => {
     setAssignmentConfirmed(false);
+    setTemplate(null);
     setGrants(update);
+  };
+
+  const templates = useMemo(
+    () => roleTemplates(userVisibleScopeDefinitions, templateRoles ?? []),
+    [userVisibleScopeDefinitions, templateRoles],
+  );
+
+  const applyTemplate = (next: RoleTemplate) => {
+    const previous = templates.find((t) => t.key === template);
+    setAssignmentConfirmed(false);
+    setGrants(next.grants());
+    setTemplate(next.key);
+    // A name the person typed stays; one a template put there follows it.
+    if (name.trim() === "" || name === previous?.name) setName(next.name);
+  };
+
+  // Every deny the role stores, counted for the footer: a deny set far up
+  // the page is still in view where the role is saved.
+  const denyCount = useMemo(
+    () =>
+      roleDenies(
+        grants,
+        mcpInventory.settled
+          ? mcpRowViews(mcpInventory.groups, projectList).map((v) => v.row)
+          : null,
+        platformAreas(userVisibleScopeDefinitions),
+      ).length,
+    [grants, mcpInventory, projectList, userVisibleScopeDefinitions],
+  );
+
+  const clientTypesChanged =
+    clientTypeRulesKey(clientTypeRules) !==
+    clientTypeRulesKey(savedClientTypeRules);
+  const sameSet = (a: Set<string>, b: Set<string>) =>
+    a.size === b.size && [...a].every((id) => b.has(id));
+  // Whether an existing role differs from what is stored, so it can be put
+  // back in one step.
+  const canReset =
+    isEditing &&
+    initialized &&
+    (name !== initialName ||
+      description !== initialDescription ||
+      grantKeysStringFn(grants) !== grantKeysStringFn(initialGrants) ||
+      clientTypesChanged ||
+      !sameSet(selectedMembers, initialMembers) ||
+      !sameSet(selectedAgents, initialAgents));
+  const resetToSaved = () => {
+    setName(initialName);
+    setDescription(initialDescription);
+    setGrants(initialGrants);
+    setClientTypeRules(savedClientTypeRules);
+    setSelectedMembers(new Set(initialMembers));
+    setSelectedAgents(new Set(initialAgents));
+    setAssignmentConfirmed(false);
   };
 
   const openRuleEditor = (scopeSlug: Scope, ruleIndex: number) => {
@@ -855,6 +930,7 @@ export function CreateRoleDialog({
     setInitialDescription("");
     setInitialGrants({});
     setShowMembers(false);
+    setTemplate("blank");
     setAssignmentConfirmed(false);
     setInitialized(false);
     setDialogStep("form");
@@ -949,30 +1025,47 @@ export function CreateRoleDialog({
               isPage ? "pt-2" : "px-4 pt-3",
             )}
           >
-            <InputField
-              label="Name"
-              placeholder="e.g., Project Manager"
-              required
-              autoFocus
-              disabled={editingRole?.isSystem}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+            <div
+              className={cn("grid gap-4", isPage && "md:grid-cols-[2fr_3fr]")}
+            >
+              <InputField
+                label="Name"
+                placeholder="e.g., Project Manager"
+                required
+                autoFocus
+                disabled={editingRole?.isSystem}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
 
-            <AnyField
-              label="Description"
-              render={(props) => (
-                <textarea
-                  {...props}
-                  rows={2}
-                  disabled={editingRole?.isSystem}
-                  placeholder="Describe what this role can do..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none border bg-transparent px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              )}
-            />
+              <AnyField
+                label="Description"
+                // Beside the name on a page, the field matches it: one line,
+                // and no "optional" tag to push its label off the name's.
+                optionality={isPage ? "hidden" : "visible"}
+                render={(props) =>
+                  isPage ? (
+                    <Input
+                      {...props}
+                      disabled={editingRole?.isSystem}
+                      placeholder="Describe what this role can do..."
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                    />
+                  ) : (
+                    <textarea
+                      {...props}
+                      rows={2}
+                      disabled={editingRole?.isSystem}
+                      placeholder="Describe what this role can do..."
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none border bg-transparent px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  )
+                }
+              />
+            </div>
 
             {isSystemRole && (
               // Quieter than a banner: the fields it describes are right
@@ -983,12 +1076,15 @@ export function CreateRoleDialog({
               </Text>
             )}
 
+            {!isEditing && (
+              <RoleTemplatePicker
+                templates={templates}
+                selected={template}
+                onPick={applyTemplate}
+              />
+            )}
+
             {/* ─── Permissions ─── */}
-            <div className="border-border border-t pt-4">
-              <Text variant="body" className="mb-3 font-medium">
-                Permissions
-              </Text>
-            </div>
             <RoleAccessMatrix
               grants={grants}
               onChange={updateGrants}
@@ -1000,6 +1096,7 @@ export function CreateRoleDialog({
               // overwritten.
               loading={isEditing && !initialized}
               markAgentIneligible={selectedAgents.size > 0}
+              memberCount={selectedMembers.size}
               onEditRule={openRuleEditor}
               onRemoveRule={removeRule}
             />
@@ -1344,9 +1441,12 @@ export function CreateRoleDialog({
 
       {(dialogStep !== "rule-editor" || isPage) && (
         <Footer
-          // On a page the permissions table right above already draws a
-          // border; a second one would read as a double line.
-          className={cn("border-border flex-col", !isPage && "border-t")}
+          // On a page the bar stays in view while the role scrolls under
+          // it, so the denies it counts and Save are always at hand.
+          className={cn(
+            "border-border flex-col border-t",
+            isPage && "bg-card sticky bottom-0 z-10 mt-6 py-3",
+          )}
         >
           {confirmAssignmentFor && !isEditing && (
             <label className="flex cursor-pointer items-start gap-3 self-stretch text-left">
@@ -1378,7 +1478,18 @@ export function CreateRoleDialog({
               </Button>
             </div>
           )}
-          <div className="flex justify-end gap-2 self-stretch">
+          <div className="flex flex-wrap items-center justify-end gap-2 self-stretch">
+            {denyCount > 0 && (
+              <span className="text-destructive mr-auto flex items-center gap-2 text-sm">
+                <Ban aria-hidden="true" className="size-4" />
+                {denyCountLabel(denyCount)} · overrides every other grant
+              </span>
+            )}
+            {canReset && (
+              <Button variant="tertiary" onClick={resetToSaved}>
+                Reset
+              </Button>
+            )}
             <Button variant="secondary" onClick={handleClose}>
               Cancel
             </Button>
@@ -1527,7 +1638,7 @@ function PageFooterSlot({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <div className={cn("flex flex-row justify-end gap-2 pt-6", className)}>
+    <div className={cn("flex flex-row justify-end gap-2", className)}>
       {children}
     </div>
   );

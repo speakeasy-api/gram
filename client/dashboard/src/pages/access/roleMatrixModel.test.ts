@@ -32,6 +32,15 @@ import {
   clearMcp,
   clearPlatform,
   limitMcpUse,
+  mcpBlockedTools,
+  mcpRowDenied,
+  platformAreaBlockable,
+  platformAreaDenied,
+  platformLevel,
+  roleDenies,
+  setMcpToolBlocked,
+  setPlatformAreaDenied,
+  setPlatformLevel,
   unblockPlatformScope,
 } from "./roleMatrixModel";
 import type { RoleGrant } from "./types";
@@ -254,13 +263,64 @@ describe("MCP cells", () => {
       ["use", false, mcp("gone")],
       ["use", false, mcp("*", { tool: "search" })],
       ["use", false, mcp("gh", { tool: "x", disposition: "read_only" })],
-      ["use", true, mcp("gh", { tool: "rm" })],
     ]);
-    const after = removeOtherMcpRule(grants, other[3]!);
+    const after = removeOtherMcpRule(grants, other[0]!);
     expect(
-      otherMcpRules(after, [all, project, github]).map((r) => r.blocked),
-    ).toEqual([false, false, false]);
+      otherMcpRules(after, [all, project, github]).map((r) => r.selector),
+    ).toEqual([
+      mcp("*", { tool: "search" }),
+      mcp("gh", { tool: "x", disposition: "read_only" }),
+    ]);
     expect(mcpAllows(after, github, "use")).toBe(true);
+  });
+
+  it("denies one tool of a server without touching its grants", () => {
+    const grants = load([{ scope: "mcp:connect", selectors: [mcp("gh")] }]);
+    const denied = setMcpToolBlocked(
+      grants,
+      github as McpRow & { kind: "server" },
+      "rm",
+      true,
+    );
+    expect(mcpBlockedTools(denied, github)).toEqual(["rm"]);
+    expect(mcpAllows(denied, github, "use")).toBe(true);
+    expect(mcpRowDenied(denied, github)).toBe(false);
+    // The tool has its own row, so it is not an "other rule".
+    expect(otherMcpRules(denied, [all, project, github])).toEqual([]);
+    expect(
+      sdkGrantsFromForm(denied, scopes).find(
+        (g) => g.scope === "mcp:blocked_connect",
+      )?.selectors,
+    ).toEqual([mcp("gh", { tool: "rm" })]);
+    const back = setMcpToolBlocked(
+      denied,
+      github as McpRow & { kind: "server" },
+      "rm",
+      false,
+    );
+    expect(mcpBlockedTools(back, github)).toEqual([]);
+  });
+
+  it("lists a denied row, a denied tool and a block it has no row for", () => {
+    let grants = load([
+      { scope: "mcp:blocked_connect", selectors: [mcp("gone")] },
+    ]);
+    grants = setMcpRowBlocked(grants, linear, true);
+    grants = setMcpToolBlocked(
+      grants,
+      github as McpRow & { kind: "server" },
+      "rm",
+      true,
+    );
+    expect(mcpRowDenied(grants, linear)).toBe(true);
+    const rows = [all, project, github, linear];
+    expect(roleDenies(grants, rows, []).map((d) => d.kind)).toEqual([
+      "mcp-tool",
+      "mcp-row",
+      "mcp-other",
+    ]);
+    // Until the servers are known nothing can be called missing.
+    expect(roleDenies(grants, null, [])).toEqual([]);
   });
 });
 
@@ -474,6 +534,56 @@ describe("editing without losing rules", () => {
     expect(platformBlock(blocked, "project:read")).toBe("all");
     const unblocked = setPlatformBlocked(blocked, projects, false);
     expect(platformBlock(unblocked, "project:read")).toBe("some");
+  });
+
+  it("moves an area between levels, keeping where it applies", () => {
+    const projects = platformAreas(scopes).find(
+      (a) => a.resourceType === "project",
+    )!;
+    const grants = load([{ scope: "project:read", selectors: [scoped] }]);
+    expect(platformLevel(grants, projects)).toBe("view");
+    const managed = setPlatformLevel(grants, projects, "manage");
+    expect(platformLevel(managed, projects)).toBe("manage");
+    expect(managed["project:read"]).toBeUndefined();
+    expect(managed["project:write"]?.rules.map((r) => r.selectors)).toEqual([
+      [scoped],
+    ]);
+    const none = setPlatformLevel(managed, projects, "none");
+    expect(platformLevel(none, projects)).toBe("none");
+    expect(none["project:write"]).toBeUndefined();
+    expect(
+      setPlatformLevel(none, projects, "view")["project:read"]?.rules.map(
+        (r) => r.selectors,
+      ),
+    ).toEqual([null]);
+  });
+
+  it("denies an area as a whole and lists it once", () => {
+    const areas = platformAreas(scopes);
+    const projects = areas.find((a) => a.resourceType === "project")!;
+    const plugins = areas.find((a) => a.category === "plugin")!;
+    let grants = load([{ scope: "project:write" }, { scope: "plugin:write" }]);
+    expect(platformAreaBlockable(projects)).toBe(true);
+    grants = setPlatformAreaDenied(grants, projects, true);
+    grants = setPlatformAreaDenied(grants, plugins, true);
+    expect(platformAreaDenied(grants, projects)).toBe(true);
+    expect(platformAreaDenied(grants, plugins)).toBe(true);
+    expect(platformLevel(grants, projects)).toBe("none");
+    expect(roleDenies(grants, [], areas).map((d) => [d.kind, d.key])).toEqual([
+      ["area", "area:project"],
+      ["area", "area:plugin"],
+    ]);
+    grants = setPlatformAreaDenied(grants, projects, false);
+    expect(platformAreaDenied(grants, projects)).toBe(false);
+  });
+
+  it("lists a block on some projects as its own deny", () => {
+    const areas = platformAreas(scopes);
+    const grants = load([
+      { scope: "project:read" },
+      { scope: "project:blocked_read", selectors: [scoped] },
+    ]);
+    expect(roleDenies(grants, [], areas).map((d) => d.kind)).toEqual(["rule"]);
   });
 
   it("unblocks one level without touching the other", () => {

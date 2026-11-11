@@ -141,6 +141,15 @@ vi.mock("./useOrgMcpServers", () => ({
     refetch: vi.fn(),
   }),
 }));
+vi.mock("./useServerTools", () => ({
+  useServerTools: () => ({
+    status: "ready",
+    tools: [
+      { id: "tool-a", name: "list_issues", type: "http" },
+      { id: "tool-b", name: "delete_branch", type: "http" },
+    ],
+  }),
+}));
 vi.mock("./GrantRuleDrawerContent", () => ({
   GrantRuleDrawerContent: ({
     onChangeSelectors,
@@ -205,9 +214,17 @@ function renderEditor(
     reread: (next: Role) => result.rerender(tree(next)),
   };
 }
-// Radix tabs switch on mouse down, not click.
-function openPlatformTab() {
-  fireEvent.mouseDown(screen.getByRole("tab", { name: "Platform access" }));
+// Radix menus open on pointer down, not click.
+function openMenu(name: string) {
+  fireEvent.pointerDown(screen.getByRole("button", { name }), {
+    button: 0,
+    ctrlKey: false,
+  });
+}
+/** Pick a platform area's level from its card. */
+function setLevel(area: string, level: "No access" | "View" | "Manage") {
+  openMenu(`${area} access level`);
+  fireEvent.click(screen.getByRole("menuitemradio", { name: level }));
 }
 type SubmitLabel = "Save Changes" | "Create Role";
 function reviewButtonName(label: SubmitLabel) {
@@ -239,9 +256,54 @@ beforeEach(() => {
   mocks.list.mockResolvedValue([{ result: { items: [] } }]);
   mocks.mappings = { groups: [], attributes: [], mappings: [] };
 });
-it("labels the permissions section as a section rather than an action", () => {
+it("splits permissions into MCP access and platform access on one page", () => {
   renderEditor();
-  expect(screen.getByText("Permissions", { exact: true })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "MCP access" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Platform access" })).toBeTruthy();
+  expect(screen.queryByRole("tab")).toBeNull();
+});
+
+describe("starting a new role from a template", () => {
+  it("fills the editor from the chosen starting point", () => {
+    renderEditor();
+    fireEvent.click(screen.getByRole("button", { name: /^Team reviewer/ }));
+    expect(
+      screen.getByRole("button", { name: "Tool logs access level" })
+        .textContent,
+    ).toContain("View");
+    fireEvent.click(screen.getByRole("button", { name: "Create Role" }));
+    // Tool logs are sensitive, so the review asks for a confirmation.
+    const review = within(
+      screen.getByRole("dialog", {
+        name: "Review changes to “Team reviewer”",
+      }),
+    );
+    fireEvent.click(review.getByRole("checkbox"));
+    fireEvent.click(review.getByRole("button", { name: "Create role" }));
+    expect(mocks.create.mock.calls[0]![0].request.createRoleForm).toMatchObject(
+      {
+        name: "Team reviewer",
+        grants: expect.arrayContaining([
+          { scope: "org:read" },
+          { scope: "project:read" },
+          { scope: "log:read" },
+        ]),
+      },
+    );
+  });
+
+  it("stops matching the template once a permission changes", () => {
+    renderEditor();
+    const blank = screen.getByRole("button", { name: /^Blank/ });
+    expect(blank.getAttribute("aria-pressed")).toBe("true");
+    setLevel("Organization", "View");
+    expect(blank.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("offers no starting points for a role that already exists", () => {
+    renderEditor(role);
+    expect(screen.queryByText("Create from")).toBeNull();
+  });
 });
 
 describe("role assignment confirmation", () => {
@@ -259,11 +321,10 @@ describe("role assignment confirmation", () => {
     fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
       target: { value: "Reader" },
     });
-    openPlatformTab();
-    fireEvent.click(screen.getByRole("button", { name: "View organization" }));
+    setLevel("Organization", "View");
 
     const confirmation = confirmAssignment();
-    fireEvent.click(screen.getByRole("button", { name: "View organization" }));
+    setLevel("Organization", "No access");
 
     expect(confirmation.getAttribute("data-state")).toBe("unchecked");
   });
@@ -273,8 +334,7 @@ describe("role assignment confirmation", () => {
     fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
       target: { value: "Reader" },
     });
-    openPlatformTab();
-    fireEvent.click(screen.getByRole("button", { name: "View projects" }));
+    setLevel("Projects", "View");
 
     const confirmation = confirmAssignment();
     fireEvent.click(
@@ -343,8 +403,7 @@ describe("agent assignment", () => {
     fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
       target: { value: "Test role" },
     });
-    openPlatformTab();
-    fireEvent.click(screen.getByRole("button", { name: "View organization" }));
+    setLevel("Organization", "View");
     submitReviewed("Create Role");
     expect(mocks.create).toHaveBeenCalledOnce();
     expect(
@@ -483,8 +542,7 @@ describe("who holds the role under directory sync", () => {
 describe("the review step", () => {
   it("lists what a save adds and requires confirmation for sensitive access", () => {
     renderEditor(role);
-    openPlatformTab();
-    fireEvent.click(screen.getByRole("button", { name: "View tool logs" }));
+    setLevel("Tool logs", "View");
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     expect(mocks.update).not.toHaveBeenCalled();
 
@@ -514,8 +572,7 @@ describe("the review step", () => {
 
   it("needs no confirmation when nothing added is sensitive", () => {
     renderEditor(role);
-    openPlatformTab();
-    fireEvent.click(screen.getByRole("button", { name: "View organization" }));
+    setLevel("Organization", "View");
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     const review = within(
       screen.getByRole("dialog", { name: "Review changes to “Test role”" }),
@@ -529,8 +586,7 @@ describe("the review step", () => {
 
   it("goes back to the form without saving", () => {
     renderEditor(role);
-    openPlatformTab();
-    fireEvent.click(screen.getByRole("button", { name: "View organization" }));
+    setLevel("Organization", "View");
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.queryByRole("button", { name: "Save role" })).toBeNull();
@@ -601,8 +657,7 @@ describe("the review step", () => {
     // it closes rather than commit grants nobody reviewed; the next save is
     // reviewed afresh and keeps the grant the role gained.
     const { reread } = renderEditor(role);
-    openPlatformTab();
-    fireEvent.click(screen.getByRole("button", { name: "View tool logs" }));
+    setLevel("Tool logs", "View");
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     expect(screen.getByRole("button", { name: "Save role" })).toBeTruthy();
 
@@ -672,6 +727,69 @@ describe("the access grid", () => {
     ]);
   });
 
+  it("keeps Connect ticked when All tools is unticked", () => {
+    show({
+      ...role,
+      grants: [
+        {
+          scope: "mcp:connect",
+          selectors: [{ resourceKind: "mcp", resourceId: "server-a" }],
+        },
+      ],
+    });
+    const allTools = () =>
+      screen.getByRole("button", { name: "All tools on GitHub" });
+    expect(allTools().getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(allTools());
+    expect(allTools().getAttribute("aria-pressed")).toBe("false");
+    expect(
+      screen
+        .getByRole("button", { name: "Connect GitHub" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.getByText("No tools")).toBeTruthy();
+    // The server's tools unfold, ready to be picked one by one.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect list_issues on GitHub" }),
+    );
+    expect(screen.getByText("1 tool")).toBeTruthy();
+    // Unticking Connect itself still takes it away.
+    fireEvent.click(screen.getByRole("button", { name: "Connect GitHub" }));
+    expect(
+      screen
+        .getByRole("button", { name: "Connect GitHub" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("ticks Connect on a wide row without choosing its tools", () => {
+    show(role);
+    const pressed = (name: string) =>
+      screen.getByRole("button", { name }).getAttribute("aria-pressed");
+    fireEvent.click(screen.getByRole("button", { name: "Connect Default" }));
+    expect(pressed("Connect Default")).toBe("true");
+    expect(pressed("All tools on Default")).toBe("false");
+    // Its servers follow the project, and have no tools yet either.
+    expect(pressed("All tools on GitHub")).toBe("false");
+    // Nothing is granted until tools are chosen.
+    expect(
+      screen
+        .getByRole("button", { name: "Save Changes" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.click(
+      screen.getByRole("button", { name: "All tools on Default" }),
+    );
+    expect(savedForm("reviewed").addGrants).toEqual([
+      {
+        scope: "mcp:connect",
+        selectors: [
+          { resourceKind: "mcp", resourceId: "*", projectId: "project-a" },
+        ],
+      },
+    ]);
+  });
+
   it("shows a block the role stores without a grant beside it", () => {
     show({
       ...role,
@@ -692,7 +810,7 @@ describe("the access grid", () => {
     ).toBe("false");
   });
 
-  it("blocks every level on a server from the Blocked column", () => {
+  it("denies a server from its row menu, once acknowledged", () => {
     show({
       ...role,
       grants: [
@@ -705,7 +823,23 @@ describe("the access grid", () => {
         },
       ],
     });
-    fireEvent.click(screen.getByRole("button", { name: "Block Linear" }));
+    openMenu("More for Linear");
+    fireEvent.click(screen.getByRole("menuitem", { name: /Deny explicitly/ }));
+    const dialog = within(
+      screen.getByRole("dialog", { name: "Deny MCP access for this role" }),
+    );
+    const add = dialog.getByRole("button", { name: "Add deny" });
+    expect(add.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(dialog.getByRole("checkbox"));
+    fireEvent.click(add);
+    expect(
+      within(screen.getByRole("region", { name: "Explicit denies" })).getByText(
+        "MCP access",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("1 explicit deny · overrides every other grant"),
+    ).toBeTruthy();
     const form = savedForm("direct");
     const linear = [{ resourceKind: "mcp", resourceId: "server-b" }];
     expect(form.addGrants).toEqual(
@@ -796,9 +930,14 @@ describe("the access grid", () => {
         },
       ],
     });
+    // View passes down to the project's servers; Connect is its own
+    // permission, so it stays untouched and open to grant.
+    const view = screen.getByRole("button", { name: "View GitHub" });
+    expect(view.getAttribute("aria-pressed")).toBe("false");
+    expect(view.getAttribute("aria-disabled")).toBe("true");
     const use = screen.getByRole("button", { name: "Connect GitHub" });
     expect(use.getAttribute("aria-pressed")).toBe("false");
-    expect(use.getAttribute("aria-disabled")).toBe("true");
+    expect(use.getAttribute("aria-disabled")).toBe("false");
     expect(
       screen
         .getByRole("button", { name: "View Default" })
@@ -809,8 +948,7 @@ describe("the access grid", () => {
 
 it("names the inference project selector for its permission, not View", () => {
   renderEditor();
-  openPlatformTab();
-  fireEvent.click(screen.getByRole("button", { name: "Run inference" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Run inference" }));
   expect(
     screen.queryByRole("button", { name: "Change where View applies" }),
   ).toBeNull();
