@@ -1824,9 +1824,11 @@ jobs:
         # Each package can launch Postgres, Redis, and ClickHouse concurrently.
         # GRAM_TESTENV_MAX_CONCURRENT_LAUNCHES bounds how many containers start
         # at once across all test binaries, so their startup does not compete
-        # for this runner's eight CPUs. Package concurrency (-p) is left at its
-        # default: it also bounds compile and link jobs, and lowering it made
-        # cold-cache -race builds take minutes. Keep within-package
+        # for this runner's eight CPUs. -p also bounds compile and link jobs:
+        # -p=2 made cold-cache -race builds take minutes, while the default
+        # (8) ran so many test binaries at once that each package ran about 3x
+        # slower and timing-sensitive tests failed. -p=4 builds at half width
+        # and keeps test runtimes close to uncontended. Keep within-package
         # parallelism; do not retry failures.
         # Race detection runs only in the merge queue and on main: it slows
         # every package down, and PR runs get faster feedback without it.
@@ -1841,7 +1843,7 @@ jobs:
           GRAM_TESTENV_MAX_CONCURRENT_LAUNCHES: 4
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
-          RACE_FLAG: -race
+          RACE_FLAG: ${{ (github.event_name == 'merge_group' || github.ref == 'refs/heads/main') && '-race' || '' }}
           # Alongside junit-report.xml, gotestsum writes only the pass, skip,
           # and fail events of 'go test -json' (no output lines) to this file,
           # relative to server/. Each event carries its time and elapsed.

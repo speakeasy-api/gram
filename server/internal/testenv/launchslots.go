@@ -1,5 +1,3 @@
-// TEMP: second cache-busting line (run 4).
-// TEMP: cache-busting comment for CI timing comparison (run 3).
 package testenv
 
 import (
