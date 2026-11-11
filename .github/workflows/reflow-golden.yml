@@ -1,0 +1,173 @@
+name: Reflow golden flows
+
+# Runs the Reflow collection's golden flows against a freshly booted local
+# stack. Pushes to main record the baseline that pull requests compare with.
+# Pilot: pull requests run only when they carry the `reflow` label.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Exact Reflow CLI release; bump deliberately.
+  REFLOW_VERSION: 0.1.0-35fc546d2bb1205f808a
+  REFLOW_API: https://app.reflow.io
+
+jobs:
+  golden:
+    name: golden
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'reflow'))
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      pull-requests: write # sticky report comment
+    env:
+      GOMAXPROCS: 8
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
+      REFLOW_COLLECTION: ${{ vars.REFLOW_COLLECTION_ID }}
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+        with:
+          fetch-depth: 0 # ci run diffs against the pull request base
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      - name: Answer zero's questions before it asks them
+        run: |
+          cat > mise.local.toml <<'TOML'
+          [env]
+          CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"
+          TOML
+
+      - name: Give the seed someone to be
+        run: |
+          git config user.email "reflow-golden@example.com"
+          git config user.name "Reflow Golden"
+
+      - name: Boot the stack
+        run: ./zero --agent
+
+      - name: Install Reflow
+        env:
+          REFLOW_INSTALLER_SHA256: ${{ vars.REFLOW_INSTALLER_SHA256 }}
+        run: |
+          installer="$RUNNER_TEMP/reflow-install.sh"
+          curl -fsSL -o "$installer" https://reflow.io/install.sh
+          echo "${REFLOW_INSTALLER_SHA256}  ${installer}" | sha256sum -c -
+          sh "$installer" --no-agent-setup --version "$REFLOW_VERSION"
+          echo "$HOME/.local/share/reflow-sidecar/bin" >> "$GITHUB_PATH"
+
+      - name: Connect Reflow
+        env:
+          REFLOW_TOKEN: ${{ secrets.REFLOW_TOKEN }}
+        run: |
+          printf '%s' "$REFLOW_TOKEN" | reflow-connection configure --api-url "$REFLOW_API" --app-url "$REFLOW_API"
+          reflow connection
+
+      - name: Bind the checkout to the collection
+        env:
+          REFLOW_TEAM: ${{ vars.REFLOW_TEAM_ID }}
+        run: |
+          mkdir -p .reflow
+          printf 'team: %s\ncollection: %s\nrepository: %s\n' "$REFLOW_TEAM" "$REFLOW_COLLECTION" "$GITHUB_REPOSITORY" > .reflow/app.yml
+          reflow init --collection "$REFLOW_COLLECTION"
+
+      - name: Target the stack
+        run: mise run reflow:target --group "ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --dir "$RUNNER_TEMP/reflow-target"
+
+      - name: Describe this CI run
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg branch "$HEAD_REF" \
+            --arg pr "$PR_NUMBER" \
+            --arg base "$BASE_SHA" \
+            --arg url "$RUN_URL" \
+            '{provider: "github-actions", repository: $repo, branch: $branch, run_url: $url}
+             + (if $pr == "" then {} else {pr_number: ($pr | tonumber), base_sha: $base} end)' \
+            > "$RUNNER_TEMP/reflow-ci.json"
+
+      - name: Run golden flows
+        id: golden
+        env:
+          BASE_BRANCH: ${{ github.event_name == 'pull_request' && github.base_ref || '' }}
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          args=(--ci-context "$RUNNER_TEMP/reflow-ci.json" --branch "$HEAD_REF" --out-dir "$RUNNER_TEMP/reflow-ci" --publish)
+          if [ -n "$BASE_BRANCH" ]; then
+            args+=(--base-branch "$BASE_BRANCH")
+          fi
+          mise run reflow:golden "${args[@]}"
+
+      - name: Job summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/reflow-ci/report.md" ]; then
+            cat "$RUNNER_TEMP/reflow-ci/report.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Pull request comment
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          OUTCOME: ${{ steps.golden.outcome }}
+        run: |
+          report="$RUNNER_TEMP/reflow-ci/report.md"
+          [ -f "$report" ] || exit 0
+          marker='<!-- reflow-golden -->'
+          body="$RUNNER_TEMP/reflow-comment.md"
+          {
+            echo "$marker"
+            echo "## Reflow golden flows: ${OUTCOME}"
+            echo
+            cat "$report"
+          } > "$body"
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$body" > /dev/null
+          else
+            gh pr comment "$PR_NUMBER" --body-file "$body"
+          fi
+
+      - name: Upload stack logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reflow-golden-stack-logs
+          path: |
+            .git/gram-stack-*.log
+          retention-days: 7
+          if-no-files-found: ignore
