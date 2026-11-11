@@ -71157,6 +71157,95 @@ paths:
                 - risk
             x-speakeasy-group: risk.policies
             x-speakeasy-name-override: get
+    /rpc/risk.getPolicyBypassRequestTarget:
+        post:
+            description: Fetch what a request access link asks for (the blocked server and tool) WITHOUT filing the request. Powers the request access page.
+            operationId: getRiskPolicyBypassRequestTarget
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetRiskPolicyBypassRequestTargetRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetRiskPolicyBypassRequestTargetResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getRiskPolicyBypassRequestTarget risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.policyBypassRequests
+            x-speakeasy-name-override: getTarget
+            x-speakeasy-react-hook:
+                name: RiskGetPolicyBypassRequestTarget
+                type: mutation
     /rpc/risk.getPolicyChallenge:
         post:
             description: Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
@@ -112902,6 +112991,35 @@ components:
                 - organization_id
                 - project_id
                 - mcp_server_id
+        GetRiskPolicyBypassRequestTargetRequestBody:
+            type: object
+            properties:
+                request_token:
+                    type: string
+                    description: Signed request token generated when a risk policy blocks an action.
+            required:
+                - request_token
+        GetRiskPolicyBypassRequestTargetResponseBody:
+            type: object
+            properties:
+                expires_at:
+                    type: string
+                    description: When the request link expires.
+                    format: date-time
+                server_identifier:
+                    type: string
+                    description: 'How the agent identified the blocked server when it has no URL: its configured name for Claude Code and Codex, or its launch command for Cursor.'
+                server_name:
+                    type: string
+                    description: Display name of the blocked server, when known.
+                server_url:
+                    type: string
+                    description: URL of the blocked server without credentials, query, or fragment, when it was reached over HTTP.
+                tool_name:
+                    type: string
+                    description: The tool the agent tried to call, when known.
+            required:
+                - expires_at
         GetRiskPolicyChallengeResponseBody:
             type: object
             properties:
