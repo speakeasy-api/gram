@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/Masterminds/squirrel"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 // OwnScope limits a raw log or trace read to the caller's own sessions and
@@ -90,4 +92,23 @@ func failClosed(preds squirrel.Or) squirrel.Sqlizer {
 		return squirrel.Expr("0")
 	}
 	return preds
+}
+
+// OwnScopeFrom turns the authorization engine's answer into the predicate
+// this repository applies. nil means the caller reads the whole project.
+// identityOrg is the canonical organization the hook rows are keyed under.
+func OwnScopeFrom(scope authz.ReadScope, identityOrg string) *OwnScope {
+	if scope.Unrestricted() {
+		return nil
+	}
+	agentIDs := make([]string, 0, len(scope.AgentIDs))
+	for _, id := range scope.AgentIDs {
+		agentIDs = append(agentIDs, id.String())
+	}
+	return &OwnScope{
+		UserID:      scope.UserID,
+		UserEmail:   scope.UserEmail,
+		AgentIDs:    agentIDs,
+		IdentityOrg: identityOrg,
+	}
 }

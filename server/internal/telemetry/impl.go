@@ -1912,7 +1912,7 @@ func (s *Service) resolveSearchScope(ctx context.Context, authCtx *contextvalues
 	if err != nil {
 		return nil, err //nolint:wrapcheck // authz errors carry the oops code the caller must see
 	}
-	return OwnScopeFor(scope, s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)), nil
+	return repo.OwnScopeFrom(scope, s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)), nil
 }
 
 // parseTimeRange extracts and parses the time range from a telemetry filter.

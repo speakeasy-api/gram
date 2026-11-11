@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // ReadScopeKind says how much of a project's rows a caller may read.
@@ -80,10 +81,20 @@ func (e *Engine) ResolveReadScope(ctx context.Context, scope Scope, projectID st
 	if err != nil {
 		return ReadScope{}, oops.E(oops.CodeUnexpected, err, "resolve owned agents").LogError(ctx, e.logger)
 	}
+	// Hook rows are keyed by email. Some surfaces (the Platform MCP) carry none
+	// in their auth context, so the member's address is read from the user row.
+	email := conv.PtrValOr(authCtx.Email, "")
+	if email == "" {
+		user, err := usersrepo.New(e.db).GetUser(ctx, authCtx.UserID)
+		if err != nil {
+			return ReadScope{}, oops.E(oops.CodeUnexpected, err, "resolve member email").LogError(ctx, e.logger)
+		}
+		email = user.Email
+	}
 	return ReadScope{
 		Kind:      ReadScopeOwn,
 		UserID:    authCtx.UserID,
-		UserEmail: conv.PtrValOr(authCtx.Email, ""),
+		UserEmail: email,
 		AgentIDs:  agentIDs,
 	}, nil
 }

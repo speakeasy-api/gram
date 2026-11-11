@@ -102,3 +102,19 @@ func TestResolveReadScope_EmbeddedCallerIsDenied(t *testing.T) {
 	_, err := engine.ResolveReadScope(ctx, ScopeLogRead, readScopeProject)
 	requireForbidden(t, err)
 }
+
+func TestResolveReadScope_FillsEmailFromTheUserRow(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(readScopeMemberCtx(t, "org_email_scope", func(a *contextvalues.AuthContext) { a.Email = nil }), nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
+	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "row@example.com", "Member", "workos_row", "membership_row")
+
+	scope, err := engine.ResolveReadScope(ctx, ScopeLogRead, readScopeProject)
+	require.NoError(t, err)
+	require.Equal(t, ReadScopeOwn, scope.Kind)
+	require.Equal(t, "row@example.com", scope.UserEmail, "an auth context without an email falls back to the user row")
+}
