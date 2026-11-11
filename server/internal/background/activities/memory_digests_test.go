@@ -335,6 +335,7 @@ func TestMemoryDigests_RegeneratedSummaryReturnsToRecall(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Contains(t, recallChatIDs(), chatID)
+	require.Contains(t, enabled.digestSources(t, conn, "day", day).ChatIds, chatID, "the old day digest keeps its snapshot")
 }
 
 func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
