@@ -30,9 +30,9 @@ import (
 
 // The access levels this surface exposes, and the scope each one is stored
 // as. The "blocked_" levels are not levels but their absence: each writes the
-// exclusion scope for exactly one grant. Per authz/scopes.go the mcp:blocked_*
-// scopes are independent of one another, so "cannot connect" leaves view and
-// manage alone — connecting to a server and administering it are different
+// exclusion scope for exactly one grant. Per the scope catalogue in
+// authz/catalog.go, the mcp:blocked_* scopes are independent of one another,
+// so "cannot connect" leaves view and manage alone — connecting to a server and administering it are different
 // jobs. Taking a principal off a server entirely writes all three.
 //
 // This is how a rule covering every server is narrowed to one: the grant stays

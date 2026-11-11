@@ -10,7 +10,7 @@ import (
 // The mcp:blocked_* scopes are independent of one another: each removes the
 // grant it names and nothing else. Connecting to a server and administering
 // it are different jobs, so blocking one must leave the other standing (see
-// scopeExpansions in authz/scopes.go).
+// the scope catalogue in authz/catalog.go).
 func TestConsentPolicyExclusionHierarchy(t *testing.T) {
 	t.Parallel()
 	for _, blocked := range []authz.Scope{authz.ScopeMCPBlockedConnect, authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite} {

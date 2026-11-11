@@ -97,7 +97,7 @@ Think of a scope as:
 
 The domain is the kind of thing being protected. The action is what the caller can do to it. For example, `project:read` means the caller can view a project, while `project:write` means the caller can mutate a project or project-owned resource. `mcp:connect` is intentionally separate from `mcp:read` and `mcp:write` because runtime use of an MCP server is a different customer-facing capability from managing or inspecting the server.
 
-Scopes are code, not database rows. The current vocabulary lives in `server/internal/authz/scopes.go`:
+Scopes are code, not database rows. The `Scope*` constants live in `server/internal/authz/scopes.go`, and every scope is defined once, with its label and its evaluation rules, in the catalogue in `server/internal/authz/catalog.go` (see [Scope catalogue](#scope-catalogue)):
 
 ```go
 const (
@@ -147,45 +147,38 @@ That is deliberate. Adding a scope changes the product contract: it affects role
 
 For example, prefer `mcp:connect` plus a `tool` selector dimension over a scope like `mcp:call-search-docs`. Prefer `project:write` for project-owned mutations unless customers genuinely need to delegate that mutation separately. In practice, a new scope should exist only when admins need to assign it independently.
 
-Some scopes imply lower-privilege scopes. The expansion rules also live in `server/internal/authz/scopes.go`:
+Some scopes imply lower-privilege scopes. Each catalogue entry lists the scopes that also satisfy it in its `satisfiedBy` field, next to the exception scope that withdraws it (`blockedBy`):
 
 ```go
-var scopeExpansions = map[Scope][]Scope{
-	ScopeRoot:               nil,
-	ScopeOrgRead:            {ScopeOrgAdmin},
-	ScopeOrgAdmin:           nil,
-	ScopeProjectRead:        {ScopeProjectWrite},
-	ScopeProjectWrite:       nil,
-	ScopeAssistantRead:      {ScopeAssistantWrite},
-	ScopeAssistantWrite:     nil,
-	ScopeMCPRead:            {ScopeMCPWrite},
-	ScopeMCPWrite:           nil,
-	ScopeMCPConnect:         {ScopeMCPRead, ScopeMCPWrite},
-	ScopeEnvironmentRead:    {ScopeEnvironmentWrite},
-	ScopeEnvironmentWrite:   nil,
-	ScopeSkillRead:          {ScopeSkillWrite},
-	ScopeSkillWrite:         nil,
-	ScopeRiskPolicyEvaluate: nil,
-	ScopeRiskPolicyBypass:   nil,
-	ScopeChatRead:           {ScopeChatWrite},
-	ScopeChatWrite:          nil,
-	ScopeLogRead:            nil,
-}
+{
+	Scope:        ScopeMCPConnect,
+	Label:        "Connect to MCP servers",
+	Category:     ScopeCategoryMCP,
+	ResourceType: ResourceKindMCP,
+	Description:  "Connect to MCP servers and call their tools.",
+	Sensitivity:  SensitivityNone,
+	visibility:   scopeVisibilityUserVisible,
+	surface:      GrantSurfaceAccess,
+	satisfiedBy:  []Scope{ScopeMCPRead, ScopeMCPWrite},
+	blockedBy:    ScopeMCPBlockedConnect,
+},
 ```
 
-Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `assistant:write` grant satisfies `assistant:read`. An `mcp:write` grant satisfies `mcp:read`, and both `mcp:read` and `mcp:write` satisfy `mcp:connect`. `environment:write` satisfies `environment:read`, `skill:write` satisfies `skill:read`, and `chat:write` satisfies `chat:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
+The engine reads these through lookup tables derived from the catalogue (`scopeExpansions`, `scopeExclusions` and the visibility, surface and resource-kind indexes), so there is no second table to keep in step.
+
+Read `satisfiedBy` as "if a handler requires this scope, any scope in the list also satisfies the check." Expansion is one step and not transitive, so every satisfying scope is listed directly. A `project:write` grant satisfies a `project:read` check. An `assistant:write` grant satisfies `assistant:read`. An `mcp:write` grant satisfies `mcp:read`, and both `mcp:read` and `mcp:write` satisfy `mcp:connect`. `environment:write` satisfies `environment:read`, `skill:write` satisfies `skill:read`, and `chat:write` satisfies `chat:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
 
 Expansion happens when the engine evaluates a check. If code asks for `project:read`, the engine checks for `root`, `project:read`, and `project:write` against the same resource selector. The API also exposes the inverse relationship as `sub_scopes` so role UIs can show what a broader grant implies; those sub-scopes are derived from code and are not additional database rows.
 
 #### Scope catalogue
 
-What a person reads about a scope lives in one place, `server/internal/authz/catalog.go`, beside the tables that define its semantics. `access.listScopes` projects the catalogue, so every entry carries:
+What a person reads about a scope lives in one place, `server/internal/authz/catalog.go`, in the same entry that defines how the engine evaluates it. `access.listScopes` projects the catalogue, so every entry carries:
 
 - `label`: the short name shown instead of the slug (`log:read` is "View tool logs").
 - `description`: what a holder can do and, where it matters, what the scope does not include.
 - `category`: how the dashboard groups the scope. It differs from `resource_type` where one resource kind carries several permission families: `plugin:write` and `log:read` are checked against a project, but a role editor lists them under plugins and tool logs, not under projects.
 - `sensitive` and `sensitivity`: whether granting the scope deserves a warning, and why. The set is a product decision: `chat:read` and `chat:write` (`conversations`, other members' transcripts), `log:read` (`tool_logs`, every member's tool arguments, results and prompt text), and `org:admin` (`destructive_admin`, removes members and rewrites every role). Secrets and credentials are deliberately not in it. A scope that includes a sensitive scope is itself sensitive, so a broader grant never loses the warning.
-- `sub_scopes`: the scopes a grant of this one also satisfies, from `scopeExpansions`.
+- `sub_scopes`: the scopes a grant of this one also satisfies, the inverse of the catalogue's `satisfiedBy`.
 
 `TestScopeCatalog_CoversEveryRegisteredScope` fails when a scope is added without an entry, and `TestService_ListScopes_CategoriesAndSensitivitiesAreInTheDesignEnum` fails when the catalogue emits a category or reason the Goa design does not declare; generated clients would otherwise reject the whole `listScopes` response. Dashboard copy for a permission comes from these fields; the client keeps no list of its own. Platform MCP serves the same catalogue through `describe_access_permissions`, so an agent explains a permission in the same words. `access.listAgentPolicyScopes` serves the agent-eligible, user-visible subset to any session without an organization grant, because an owner configuring their own agent holds none; the agent permission editor reads it instead of keeping a copy of the runtime-safe set. It leaves out the `mcp_auth_client` category (`mcp:auth`), which the auth client editor provisions rather than a permission an owner picks.
 
@@ -1294,7 +1287,7 @@ When adding a new scope:
 
 1. Confirm a customer needs to assign it independently.
 2. Add the scope constant in `authz/scopes.go`.
-3. Add scope expansion rules.
+3. Add one catalogue entry in `authz/catalog.go`: label, category, resource kind, description, sensitivity, visibility, grant surface, satisfying scopes and exception scope.
 4. Update system role defaults if appropriate.
 5. Update the access API scope metadata and Goa enums.
 6. Regenerate server and SDK code.

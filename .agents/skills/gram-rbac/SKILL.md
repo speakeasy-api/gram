@@ -19,7 +19,7 @@ Speakeasy's RBAC is a scope-and-selector model. The server ships with a fixed se
 
 **Resource type.** The kind of resource a scope protects — for example `org`, `project`, `assistant`, or `mcp`. Every scope has exactly one resource type.
 
-**Scope expansion.** Higher-privilege scopes satisfy lower-privilege ones. In the read/write/connect family the privilege order is `write > read > connect`: `mcp:write` satisfies a `mcp:read` check, and either `mcp:read` or `mcp:write` satisfies a `mcp:connect` check (`connect` is the broadest, easiest-to-satisfy gate). The mapping lives in `scopeExpansions` in `authz/scopes.go` — key = required scope, value = higher-privilege scopes that also satisfy it.
+**Scope expansion.** Higher-privilege scopes satisfy lower-privilege ones. In the read/write/connect family the privilege order is `write > read > connect`: `mcp:write` satisfies a `mcp:read` check, and either `mcp:read` or `mcp:write` satisfies a `mcp:connect` check (`connect` is the broadest, easiest-to-satisfy gate). Each scope's catalogue entry in `authz/catalog.go` lists the higher-privilege scopes that also satisfy it in `satisfiedBy`; the engine reads them through the derived `scopeExpansions` index.
 
 **Selector.** A `map[string]string` of constraints attached to a grant or check. Always carries `resource_kind` and `resource_id` (both required); MCP scopes additionally allow `tool` and `disposition`. Wildcards are explicit values — `{"resource_kind":"*","resource_id":"*"}`, never empty `{}`. Defined in [server/internal/authz/selector.go](server/internal/authz/selector.go).
 
@@ -49,7 +49,7 @@ RBAC is split across two Go packages: `server/internal/authz/` holds the enforce
 
 Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s imports are deliberately minimal (DB, logger, cache, WorkOS, urn) so any package that gates on RBAC can depend on it without import cycles — never add an import to `authz` from a package that transitively depends on `authz`, since the split exists specifically to prevent the cycles that motivated it.
 
-**Scope declarations.** `Scope` type and every `Scope*` constant live in `server/internal/authz/scopes.go`. Constants follow the `Scope<Name>` pattern; string values follow `<resource>:<verb>` (e.g. `mcp:read`, `org:admin`). `ScopeRoot` is reserved for service-internal superadmin overrides. The file also holds the `scopeExpansions` map and computes the inverse `scopeSubScopes` in `init()`. `CalculateSubScopes(scope)` exposes the inverse to callers.
+**Scope declarations.** `Scope` type and every `Scope*` constant live in `server/internal/authz/scopes.go`. Constants follow the `Scope<Name>` pattern; string values follow `<resource>:<verb>` (e.g. `mcp:read`, `org:admin`). `ScopeRoot` is reserved for service-internal superadmin overrides. The file computes the inverse `scopeSubScopes` in `init()` from the catalogue's expansions. `CalculateSubScopes(scope)` exposes the inverse to callers.
 
 **System role grants.** `SystemRoleGrants` in `server/internal/authz/grants.go` — admin and member defaults. Adding a scope usually means adding it to admin, and optionally to member if end users should get it by default. `SeedSystemRoleGrants` upserts the full set; `SyncGrants` upserts grants for a single role slug.
 
@@ -100,7 +100,8 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 | `server/internal/authz/override.go`    | Scope override plumbing (header parsing, override-to-grants conversion).                                                                                  |
 | `server/internal/authz/precedence.go`  | Principal precedence: direct concrete grants outrank blocklist exclusions inherited from roles or `user:all`.                                             |
 | `server/internal/authz/provisioner.go` | New-organization provisioning for built-in role grants and the initial Admin assignment.                                                                  |
-| `server/internal/authz/scopes.go`      | Scope type, constants, and expansion rules.                                                                                                               |
+| `server/internal/authz/scopes.go`      | Scope type, constants, role defaults, and the sub-scope and closure helpers.                                                                              |
+| `server/internal/authz/catalog.go`     | The scope catalogue: one entry per scope with its label, resource kind, expansions, exception scope, visibility and grant surface.                        |
 | `server/internal/authz/selector.go`    | `Selector` type, matching rules, `NewSelector`/`NewGrant` helpers, `ValidateSelector`, `ResourceKindForScope`, disposition vocabulary, `SelectorFromRow`. |
 | `server/internal/authztest/helpers.go` | Test helpers other packages reuse for RBAC setup, including `WithExactGrants`.                                                                            |
 | `server/internal/access/impl.go`       | Implementation of the `/rpc/access.*` Goa service.                                                                                                        |
@@ -175,7 +176,7 @@ The dashboard pages under `client/dashboard/src/pages/access/` render membership
 Use this when the resource type is already represented (e.g. adding a new verb on `mcp`).
 
 1. Add the `Scope<Name>` constant in `server/internal/authz/scopes.go`.
-2. Add the new scope to `scopeExpansions` in the same file. Usually: the new scope is the upper or lower end of an existing read/write/connect triple.
+2. Add one entry for the new scope to `scopeCatalog` in `server/internal/authz/catalog.go`, with its `satisfiedBy` and `blockedBy`. Usually: the new scope is the upper or lower end of an existing read/write/connect triple.
 3. Extend `SystemRoleGrants` in `server/internal/authz/grants.go`: admin always receives the new scope. Member receives it if and only if end users should have it by default (read and connect, yes; write, no).
 4. Add the scope metadata to `ListScopes` in `server/internal/access/impl.go`, with the correct resource type and visibility. The override toolbar discovers user-visible scopes from this backend catalog; do not add scopes or groups manually to the toolbar.
 5. Extend the hard-coded full-access scope list in `ListGrants` (same `impl.go`) so callers without grants loaded still see the complete catalogue.
@@ -264,7 +265,7 @@ Dashboard code should never hand-roll scope checks — use the shared primitives
 
 ## Role hierarchy at a glance
 
-- `admin` — every scope. Write implies read via `scopeExpansions`, so admins can exercise every read operation transitively.
+- `admin` — every scope. Write implies read via the catalogue's `satisfiedBy`, so admins can exercise every read operation transitively.
 - `member` — the read-and-connect subset.
 - Resource scoping — a grant's selector either names a specific resource (`{"resource_kind":"project","resource_id":"proj_123"}`) or wildcards it (`{"resource_kind":"*","resource_id":"*"}` via `authz.WildcardResource`). A grant value of `*` matches anything for that selector key.
 - `root` (`authz.ScopeRoot`) — held only by service-internal overrides; satisfies every check.

@@ -171,3 +171,66 @@ func TestScopeCategories_AreDistinct(t *testing.T) {
 	slices.Sort(sorted)
 	require.Len(t, slices.Compact(sorted), len(ScopeCategories))
 }
+
+// Every exception scope must withdraw something: be the blockedBy of an allow
+// scope, or satisfy a narrower exception scope that is. An exception scope
+// nobody reaches would store grants the engine never reads.
+func TestScopeCatalog_ExceptionScopesAreReachable(t *testing.T) {
+	t.Parallel()
+
+	reached := make(map[Scope]bool)
+	for _, entry := range scopeDefinitions {
+		if entry.blockedBy != "" {
+			reached[entry.blockedBy] = true
+		}
+	}
+	for _, entry := range scopeDefinitions {
+		if reached[entry.Scope] {
+			for _, broader := range entry.satisfiedBy {
+				reached[broader] = true
+			}
+		}
+	}
+
+	for _, entry := range scopeCatalog {
+		if entry.visibility == scopeVisibilityInternal {
+			require.True(t, reached[entry.Scope], "%s: exception scope withdraws nothing", entry.Scope)
+		}
+		if entry.blockedBy != "" {
+			_, ok := ScopeEntryFor(entry.blockedBy)
+			require.True(t, ok, "%s: blockedBy %s is not catalogued", entry.Scope, entry.blockedBy)
+		}
+		for _, satisfying := range entry.satisfiedBy {
+			_, ok := ScopeEntryFor(satisfying)
+			require.True(t, ok, "%s: satisfiedBy %s is not catalogued", entry.Scope, satisfying)
+		}
+	}
+}
+
+// Resource kinds are data on each entry. Today they agree with the scope's
+// prefix everywhere except the auth-client scopes, which are checked against
+// the client rather than a server. A new disagreement must be deliberate.
+func TestScopeCatalog_ResourceTypeFollowsPrefixExceptAuthClients(t *testing.T) {
+	t.Parallel()
+
+	for _, entry := range scopeDefinitions {
+		if entry.Scope == ScopeMCPAuth || entry.Scope == ScopeMCPBlockedAuth {
+			require.Equal(t, ResourceKindMCPAuthClient, entry.ResourceType, entry.Scope)
+			continue
+		}
+		require.Equal(t, resourceKindForUnregisteredScope(entry.Scope), entry.ResourceType, entry.Scope)
+	}
+}
+
+// Root is registered so stored root grants evaluate, but it is never listed.
+func TestScopeCatalog_RootIsRegisteredButNotCatalogued(t *testing.T) {
+	t.Parallel()
+
+	require.Contains(t, RegisteredScopes(), ScopeRoot)
+	_, ok := ScopeEntryFor(ScopeRoot)
+	require.False(t, ok)
+	visibility, ok := ScopeVisibilityFor(ScopeRoot)
+	require.True(t, ok)
+	require.Equal(t, ScopeVisibilityInternal, visibility)
+	require.Equal(t, ResourceKindWildcard, ResourceKindForScope(ScopeRoot))
+}

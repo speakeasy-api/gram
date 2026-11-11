@@ -33,7 +33,7 @@ export const LEVEL_LABEL: Record<Level, string> = {
   manage: "Manage",
 };
 
-/** The MCP scope each level stores as (scopeExpansions in authz/scopes.go). */
+/** The MCP scope each level stores as (the scope catalogue in authz/catalog.go). */
 const MCP_LEVEL_SCOPE: Record<Level, Scope> = {
   use: "mcp:connect" as Scope,
   view: "mcp:read" as Scope,

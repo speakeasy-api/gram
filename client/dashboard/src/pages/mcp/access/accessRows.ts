@@ -48,7 +48,7 @@ export function lineLabels(lines: ScopeKey[]): string {
 
 /**
  * The scopes whose grant satisfies a check for this one, itself included.
- * Mirrors scopeExpansions in authz/scopes.go: read and write both satisfy
+ * Mirrors the scope catalogue in authz/catalog.go: read and write both satisfy
  * connect, and write satisfies read.
  */
 const SATISFIED_BY: Record<ScopeKey, ScopeKey[]> = {
@@ -59,7 +59,7 @@ const SATISFIED_BY: Record<ScopeKey, ScopeKey[]> = {
 
 /**
  * The level that takes one scope away. Each block stands on its own — see
- * scopeExpansions in authz/scopes.go, where the mcp:blocked_* scopes do not
+ * the scope catalogue in authz/catalog.go, where the mcp:blocked_* scopes do not
  * satisfy one another — so closing connect leaves view and manage as they
  * were, and taking a principal off the server writes all three.
  */
