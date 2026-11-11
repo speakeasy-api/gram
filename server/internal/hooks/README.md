@@ -119,19 +119,27 @@ Each entry's uuid keys its rows (`external_message_id` prefixed
 
 ### Warn policies in Cowork
 
-Claude Code can only confirm a warn at PreToolUse, so a warn match on a typed
-prompt is let through at prompt submission and never reaches the user unless a
-tool call carries it. In Cowork the Stop that ships the prompt closes that gap.
-When an upload stores new rows, the server
-checks the upload's user prompts from the last 15 minutes (at most five)
-against the project's enforcing policies and returns the warn matches as
-`warnings` beside `stored`. The binary then answers that Stop with
-`decision: block` and a reason, so Claude continues once and tells the user,
-plus a `systemMessage` carrying the same warning. The next Stop ships no new
-prompt and finishes. The prompt has already reached the model, so the warning
-is a notice: there is no acknowledgement link. Block and quarantine matches
-are enforced by the per-event hooks, not here. A full re-send stores nothing new and
-warns nobody twice.
+A warn on a typed prompt challenges it: the prompt is blocked, and in Claude
+Code the block text carries an acknowledgement link the person opens before
+retrying. Cowork shows a hook's block text cut off after two lines with no way
+to expand it, so that link never shows. For transcript-capture (Cowork)
+sessions the challenge instead tells the person to send the same message
+again, and an identical resend within 10 minutes is the confirmation: the
+pending challenge for that prompt's call fingerprint becomes a two-minute
+acknowledgement, recorded in the audit log. Only a person submits prompts, so
+the agent cannot confirm on their behalf.
+
+The first message is typed in chat before the session moves to Cowork, so no
+prompt hook sees it. The Stop that ships it closes that gap. When an upload
+stores new rows, the server checks the upload's user prompts from the last 15
+minutes (at most five) against the project's enforcing policies and returns the
+warn matches as `warnings` beside `stored`. The binary then answers that Stop
+with `decision: block` and a reason, so Claude continues once and tells the
+user, plus a `systemMessage` carrying the same warning. The next Stop ships no
+new prompt and finishes. The prompt has already reached the model, so this
+warning is a notice. Block and quarantine matches are enforced by the
+per-event hooks, not here. A full re-send stores nothing new and warns nobody
+twice.
 
 The binary advances its read offset past a batch only once the batch is
 settled, and resends anything unsettled on the next Stop:

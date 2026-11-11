@@ -558,6 +558,26 @@ SET status = 'declined'
   , updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: ConfirmRiskPolicyChallengeByResend :one
+-- Claude Cowork resend-to-confirm: a person who sends the exact prompt a warn
+-- just challenged has seen the warning and chosen to go ahead, so the pending
+-- challenge becomes a short-lived acknowledgement for that same prompt. Only a
+-- recent, still-pending challenge for the identical call qualifies.
+UPDATE risk_policy_challenges
+SET status = 'acknowledged'
+  , acknowledged_at = clock_timestamp()
+  , expires_at = clock_timestamp() + make_interval(secs => @grace_seconds::float8)
+  , updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND user_id = @user_id
+  AND risk_policy_id = @risk_policy_id
+  AND tool_name IS NOT DISTINCT FROM sqlc.narg(tool_name)::text
+  AND call_fingerprint IS NOT DISTINCT FROM sqlc.narg(call_fingerprint)::text
+  AND status = 'challenged'
+  AND challenged_at > clock_timestamp() - make_interval(secs => @window_seconds::float8)
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: GetActiveRiskPolicyAck :one
 -- Hook-time gate: is there a live acknowledgement for this concrete call
 -- (user, policy, tool, call_fingerprint)? The agent retries with NO token, so

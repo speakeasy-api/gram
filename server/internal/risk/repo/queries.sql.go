@@ -353,6 +353,71 @@ func (q *Queries) CleanupExpiredMCPFindingEvidenceBatch(ctx context.Context, bat
 	return result.RowsAffected(), nil
 }
 
+const confirmRiskPolicyChallengeByResend = `-- name: ConfirmRiskPolicyChallengeByResend :one
+UPDATE risk_policy_challenges
+SET status = 'acknowledged'
+  , acknowledged_at = clock_timestamp()
+  , expires_at = clock_timestamp() + make_interval(secs => $1::float8)
+  , updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND user_id = $3
+  AND risk_policy_id = $4
+  AND tool_name IS NOT DISTINCT FROM $5::text
+  AND call_fingerprint IS NOT DISTINCT FROM $6::text
+  AND status = 'challenged'
+  AND challenged_at > clock_timestamp() - make_interval(secs => $7::float8)
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type ConfirmRiskPolicyChallengeByResendParams struct {
+	GraceSeconds    float64
+	ProjectID       uuid.UUID
+	UserID          string
+	RiskPolicyID    uuid.UUID
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+	WindowSeconds   float64
+}
+
+// Claude Cowork resend-to-confirm: a person who sends the exact prompt a warn
+// just challenged has seen the warning and chosen to go ahead, so the pending
+// challenge becomes a short-lived acknowledgement for that same prompt. Only a
+// recent, still-pending challenge for the identical call qualifies.
+func (q *Queries) ConfirmRiskPolicyChallengeByResend(ctx context.Context, arg ConfirmRiskPolicyChallengeByResendParams) (RiskPolicyChallenge, error) {
+	row := q.db.QueryRow(ctx, confirmRiskPolicyChallengeByResend,
+		arg.GraceSeconds,
+		arg.ProjectID,
+		arg.UserID,
+		arg.RiskPolicyID,
+		arg.ToolName,
+		arg.CallFingerprint,
+		arg.WindowSeconds,
+	)
+	var i RiskPolicyChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.UserID,
+		&i.ToolName,
+		&i.Status,
+		&i.PolicyName,
+		&i.Entity,
+		&i.RuleID,
+		&i.CallFingerprint,
+		&i.ChallengedAt,
+		&i.AcknowledgedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const countEnabledRegexExclusionsInScope = `-- name: CountEnabledRegexExclusionsInScope :one
 SELECT COUNT(*)::BIGINT
 FROM risk_exclusions

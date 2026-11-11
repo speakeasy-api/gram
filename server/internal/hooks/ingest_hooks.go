@@ -717,6 +717,14 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
 				}
+				if coworkResendConfirms(payload) {
+					if s.confirmWarnByResend(ctx, ev.Event, scanResult) {
+						return "", ""
+					}
+					s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, "", scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
+					auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+					return auditReason, coworkWarnUserReason(scanResult)
+				}
 				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
 					auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 					return auditReason, userReason
