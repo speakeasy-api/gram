@@ -19,6 +19,12 @@ func NewTestRedis(ctx context.Context) (*tcr.RedisContainer, RedisClientFunc, er
 		return nil, nil, fmt.Errorf("wait for docker: %w", err)
 	}
 
+	releaseLaunchSlot, err := acquireLaunchSlot(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer releaseLaunchSlot()
+
 	container, err := tcr.Run(
 		ctx, "redis:6.2-alpine",
 		testcontainers.WithLogger(NewTestcontainersLogger()),

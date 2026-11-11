@@ -33,6 +33,12 @@ func NewTestPostgres(ctx context.Context) (_ *postgres.PostgresContainer, _ Post
 		return nil, nil, fmt.Errorf("wait for docker: %w", err)
 	}
 
+	releaseLaunchSlot, err := acquireLaunchSlot(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer releaseLaunchSlot()
+
 	// The maintenance pool is shared by every clone and drop for this
 	// container. It is closed before the container stops.
 	var maintenance *pgxpool.Pool

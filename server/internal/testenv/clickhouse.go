@@ -30,6 +30,12 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 		return nil, nil, fmt.Errorf("wait for docker: %w", err)
 	}
 
+	releaseLaunchSlot, err := acquireLaunchSlot(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer releaseLaunchSlot()
+
 	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:26.6.8.7-distroless@sha256:31f67400c46f94f7d9236728f369faa125067f13f98fa2ad620ee190fe70eed5",
 		clickhousecontainer.WithUsername("gram"),
 		clickhousecontainer.WithPassword("gram"),
