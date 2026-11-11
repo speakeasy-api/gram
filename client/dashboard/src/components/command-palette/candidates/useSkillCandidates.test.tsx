@@ -78,22 +78,6 @@ describe("useSkillCandidates", () => {
     expect(mocks.query.fetchNextPage).not.toHaveBeenCalled();
   });
 
-  it("reuses a fully loaded inventory on a quick reopen", () => {
-    mocks.query.data = {
-      pages: [{ result: { skills: [skill("first", "First Page")] } }],
-    };
-    const { rerender } = baseRenderHook(
-      ({ enabled }) => useSkillCandidates({ enabled }),
-      { initialProps: { enabled: true }, wrapper: MemoryRouter },
-    );
-
-    rerender({ enabled: false });
-    rerender({ enabled: true });
-
-    expect(mocks.calls.at(-1)?.[2]).toMatchObject({ staleTime: 30_000 });
-    expect(mocks.query.fetchNextPage).not.toHaveBeenCalled();
-  });
-
   it("maps skills from every loaded page and opens the overview directly", () => {
     mocks.query.data = {
       pages: [

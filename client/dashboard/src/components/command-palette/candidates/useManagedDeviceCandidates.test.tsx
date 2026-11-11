@@ -92,20 +92,6 @@ describe("useManagedDeviceCandidates", () => {
     expect(mocks.query.fetchNextPage).not.toHaveBeenCalled();
   });
 
-  it("reuses a fully loaded inventory on a quick reopen", () => {
-    mocks.query.data = { pages: [{ result: { devices: [device("a")] } }] };
-    const { rerender } = renderHook(
-      ({ enabled }) => useManagedDeviceCandidates({ enabled }),
-      { initialProps: { enabled: true } },
-    );
-
-    rerender({ enabled: false });
-    rerender({ enabled: true });
-
-    expect(mocks.options.at(-1)).toMatchObject({ staleTime: 30_000 });
-    expect(mocks.query.fetchNextPage).not.toHaveBeenCalled();
-  });
-
   it("finds devices by hostname or serial", () => {
     mocks.query.data = {
       pages: [

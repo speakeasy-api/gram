@@ -172,11 +172,10 @@ it("keys both inventories by organization and project and offers org navigation 
       useGatewayConnectionCandidates({ enabled: true, inProject }),
     { initialProps: { inProject: true } },
   );
-  expect(state.queryCalls.at(-1)?.queryKey).toEqual([
-    "gateways",
-    { gramProject: "project-one" },
-    "org-one",
-  ]);
+  expect(state.queryCalls.at(-1)).toMatchObject({
+    queryKey: ["gateways", { gramProject: "project-one" }, "org-one"],
+    staleTime: 30_000,
+  });
   expect(state.infiniteCalls.at(-1)).toMatchObject({
     queryKey: [
       "clients",

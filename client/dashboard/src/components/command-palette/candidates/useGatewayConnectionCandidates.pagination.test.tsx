@@ -9,6 +9,7 @@ import { useGatewayConnectionCandidates } from "./useGatewayConnectionCandidates
 const state = vi.hoisted(() => ({
   sdk: undefined as unknown,
   navigate: vi.fn(),
+  gatewayRequests: 0,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-one" }),
@@ -30,21 +31,25 @@ vi.mock("react-router", async (importOriginal) => ({
 vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
   buildMetaMcpServersQuery: () => ({
     queryKey: ["gateways"],
-    queryFn: async () => ({
-      metaMcpServers: [
-        {
-          id: "gateway-one",
-          name: "Example gateway",
-          userSessionIssuerId: "issuer-one",
-        },
-      ],
-    }),
+    queryFn: async () => {
+      state.gatewayRequests += 1;
+      return {
+        metaMcpServers: [
+          {
+            id: "gateway-one",
+            name: "Example gateway",
+            userSessionIssuerId: "issuer-one",
+          },
+        ],
+      };
+    },
   }),
 }));
 afterEach(cleanup);
 
 it("requests the SDK next cursor before exposing a later-page registration", async () => {
   const requests: URL[] = [];
+  state.gatewayRequests = 0;
   const release = Promise.withResolvers<void>();
   state.sdk = new GramCore({
     serverURL: "https://api.example.test",
@@ -127,6 +132,7 @@ it("requests the SDK next cursor before exposing a later-page registration", asy
     rerender({ enabled: true });
     await act(async () => Promise.resolve());
     expect(requests).toHaveLength(2);
+    expect(state.gatewayRequests).toBe(1);
   } finally {
     release.resolve();
     unmount();

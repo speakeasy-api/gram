@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
 
-const GATEWAY_CLIENT_INVENTORY_STALE_TIME_MS = 30_000;
+const GATEWAY_INVENTORY_STALE_TIME_MS = 30_000;
 
 /** Named gateways and registrations, never a crawl of session history. */
 export function useGatewayConnectionCandidates({
@@ -37,6 +37,7 @@ export function useGatewayConnectionCandidates({
     ...gatewaysQuery,
     queryKey: [...gatewaysQuery.queryKey, organization.id],
     enabled: enabled && canReadGateways,
+    staleTime: GATEWAY_INVENTORY_STALE_TIME_MS,
     retry: false,
     throwOnError: false,
   });
@@ -56,7 +57,7 @@ export function useGatewayConnectionCandidates({
     initialPageParam: undefined as UserSessionClientsPageParams,
     getNextPageParam: (page) => page["~next"],
     enabled: clientsEnabled,
-    staleTime: GATEWAY_CLIENT_INVENTORY_STALE_TIME_MS,
+    staleTime: GATEWAY_INVENTORY_STALE_TIME_MS,
     retry: false,
     throwOnError: false,
   });
