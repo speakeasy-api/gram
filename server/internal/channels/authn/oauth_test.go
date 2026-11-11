@@ -211,6 +211,33 @@ func TestOAuthSecurity(t *testing.T) {
 		return newOAuthFixture(t, db, configure...)
 	}
 
+	t.Run("consent identifies the signed-in account without exposing its principal ID", func(t *testing.T) {
+		t.Parallel()
+		f := fixture(t)
+		client := f.register(t)
+		email := "member@example.test"
+		f.browser = func() context.Context {
+			return contextvalues.WithValidatedGramSession(t.Context(), &contextvalues.AuthContext{
+				UserID: "user_test", ActiveOrganizationID: "org_test", Email: &email,
+			}, false)
+		}
+		response := f.request(http.MethodGet, "/channels/oauth/authorize?"+authorizationQuery(client).Encode(), "", "")
+		require.Equal(t, http.StatusOK, response.Code)
+		require.Contains(t, response.Body.String(), email)
+		require.NotContains(t, response.Body.String(), "user_test")
+		require.Contains(t, response.Body.String(), testRedirect)
+
+		f.browser = func() context.Context {
+			return contextvalues.WithValidatedGramSession(t.Context(), &contextvalues.AuthContext{
+				UserID: "user_test", ActiveOrganizationID: "org_test",
+			}, false)
+		}
+		response = f.request(http.MethodGet, "/channels/oauth/authorize?"+authorizationQuery(client).Encode(), "", "")
+		require.Equal(t, http.StatusOK, response.Code)
+		require.NotContains(t, response.Body.String(), "Signed in as")
+		require.NotContains(t, response.Body.String(), "user_test")
+	})
+
 	t.Run("same user client grants remain independent across projects", func(t *testing.T) {
 		t.Parallel()
 		f := fixture(t)
@@ -321,7 +348,8 @@ func TestOAuthSecurity(t *testing.T) {
 		query.Set("resource", resource)
 		response := f.request(http.MethodGet, "/channels/oauth/authorize?"+query.Encode(), "", "")
 		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-		require.Contains(t, response.Body.String(), "organization other-org, project default")
+		require.Regexp(t, `<dt[^>]*>Organization</dt>\s*<dd[^>]*>other-org</dd>`, response.Body.String())
+		require.Regexp(t, `<dt[^>]*>Project</dt>\s*<dd[^>]*>default</dd>`, response.Body.String())
 		require.Equal(t, "org_other", admitted.OrganizationID)
 		form := consentFields(t, response.Body.String())
 		form.Set("decision", "allow")
