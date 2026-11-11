@@ -445,38 +445,6 @@ WHERE mcp_server_id = @mcp_server_id::uuid
   AND project_id = @project_id::uuid
   AND deleted IS FALSE;
 
--- name: RecordMCPServerRemoteSessionClientDetach :one
--- Records an explicit detach for a client bound to the server's user session
--- issuer that the server has no association with, so a server that signs in
--- through a binding alone can give it up. The row is written soft-deleted, the
--- same record DetachMCPServerRemoteSessionClient leaves. Returns the client's
--- external id, and no row when the server or client does not qualify. Both ids
--- are re-checked against the caller's tenant.
-INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope, deleted_at)
-SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope, clock_timestamp()
-FROM mcp_servers AS s
-JOIN projects AS p
-  ON p.id = s.project_id
- AND p.organization_id = @organization_id::text
- AND p.deleted IS FALSE
-JOIN remote_session_client_user_session_issuers AS link
-  ON link.user_session_issuer_id = s.user_session_issuer_id
-JOIN remote_session_clients AS c
-  ON c.id = link.remote_session_client_id
- AND c.deleted IS FALSE
- AND (c.project_id = p.id
-      OR (c.project_id IS NULL AND c.organization_id = p.organization_id)
-      OR (c.project_id IS NULL AND c.organization_id IS NULL))
-WHERE s.id = @mcp_server_id::uuid
-  AND s.project_id = @project_id::uuid
-  AND s.deleted IS FALSE
-  AND c.id = @remote_session_client_id::uuid
-RETURNING (
-  SELECT recorded.client_id
-  FROM remote_session_clients AS recorded
-  WHERE recorded.id = remote_session_client_id
-)::text AS external_client_id;
-
 -- name: IsSoleConsumerBinding :one
 -- Whether the client is bound to the server's user session issuer and the
 -- server is that issuer's only consumer in its organization, in which case an

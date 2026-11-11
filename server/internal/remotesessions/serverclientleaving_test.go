@@ -87,38 +87,34 @@ func TestLeavingStopsRequiringAClientAGatewayKeepsBound(t *testing.T) {
 	requireClientBound(t, ctx, ti, client, issuer, true)
 }
 
-// Servers sharing a client nobody has an association with each fall back to it,
-// so one leaving keeps the client bound and only stops requiring it itself.
-func TestLeavingAnUnclaimedClientOnlyAffectsThisServer(t *testing.T) {
+// A bound client no server is associated with is required by none of them, so
+// a server leaving neither releases it nor unbinds it.
+func TestLeavingLeavesAClientNoServerIsAssociatedWith(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	manager := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
-	issuer := createUserSessionIssuer(t, ctx, ti.conn, "leaving-unclaimed-issuer")
-	client, _ := seedActiveClient(t, ctx, ti.conn, *auth.ProjectID, issuer, auth.ActiveOrganizationID, "leaving-unclaimed")
-	first := createServerIdentityTargetOnIssuer(t, ctx, ti, "leaving-unclaimed-first", issuer)
-	second := createServerIdentityTargetOnIssuer(t, ctx, ti, "leaving-unclaimed-second", issuer)
-	requireServerRequires(t, ctx, ti, manager, first, issuer, client)
-	requireServerRequires(t, ctx, ti, manager, second, issuer, client)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, "leaving-unassociated-issuer")
+	client, _ := seedActiveClient(t, ctx, ti.conn, *auth.ProjectID, issuer, auth.ActiveOrganizationID, "leaving-unassociated")
+	first := createServerIdentityTargetOnIssuer(t, ctx, ti, "leaving-unassociated-first", issuer)
+	second := createServerIdentityTargetOnIssuer(t, ctx, ti, "leaving-unassociated-second", issuer)
+	requireServerRequires(t, ctx, ti, manager, first, issuer)
+	requireServerRequires(t, ctx, ti, manager, second, issuer)
 
 	preview, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(issuer, &first, "detach", nil, nil))
 	require.NoError(t, err)
 	require.Empty(t, preview.DetachClientIds)
-	require.Equal(t, []string{client.String()}, preview.ReleaseClientIds)
+	require.Empty(t, preview.ReleaseClientIds)
 	require.Empty(t, preview.Servers, "the other server keeps its sign-in")
-	require.NoError(t, detachServerClient(ctx, ti, first, client))
-
-	requireServerRequires(t, ctx, ti, manager, first, issuer)
-	requireServerRequires(t, ctx, ti, manager, second, issuer, client)
-	requireClientBound(t, ctx, ti, client, issuer, true)
 
 	requireOopsCode(t, detachServerClient(ctx, ti, first, client), oops.CodeNotFound)
+	requireClientBound(t, ctx, ti, client, issuer, true)
 }
 
-// Dropping a server's own client must not hand it the unclaimed one beside it.
-func TestLeavingGivesUpUnclaimedClientsBesideTheServersOwn(t *testing.T) {
+// Dropping a server's own client must not hand it another client bound beside it.
+func TestDetachingTheServersOwnClientRequiresNoOtherBoundClient(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -127,7 +123,7 @@ func TestLeavingGivesUpUnclaimedClientsBesideTheServersOwn(t *testing.T) {
 	manager := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, "leaving-beside-issuer")
 	own, _ := seedActiveClient(t, ctx, ti.conn, *auth.ProjectID, issuer, auth.ActiveOrganizationID, "leaving-beside-own")
-	unclaimed, _ := seedActiveClient(t, ctx, ti.conn, *auth.ProjectID, issuer, auth.ActiveOrganizationID, "leaving-beside-unclaimed")
+	beside, _ := seedActiveClient(t, ctx, ti.conn, *auth.ProjectID, issuer, auth.ActiveOrganizationID, "leaving-beside-unassociated")
 	target := createServerIdentityTargetOnIssuer(t, ctx, ti, "leaving-beside-target", issuer)
 	createServerIdentityTargetOnIssuer(t, ctx, ti, "leaving-beside-sibling", issuer)
 	associateServerClient(t, ctx, ti, target, own)
@@ -136,13 +132,11 @@ func TestLeavingGivesUpUnclaimedClientsBesideTheServersOwn(t *testing.T) {
 	preview, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(issuer, &target, "detach", nil, nil))
 	require.NoError(t, err)
 	require.Equal(t, []string{own.String()}, preview.DetachClientIds)
-	require.Equal(t, []string{unclaimed.String()}, preview.ReleaseClientIds)
+	require.Empty(t, preview.ReleaseClientIds)
 
 	require.NoError(t, detachServerClient(ctx, ti, target, own))
-	requireServerRequires(t, ctx, ti, manager, target, issuer, unclaimed)
-
-	require.NoError(t, detachServerClient(ctx, ti, target, unclaimed))
 	requireServerRequires(t, ctx, ti, manager, target, issuer)
+	requireOopsCode(t, detachServerClient(ctx, ti, target, beside), oops.CodeNotFound)
 }
 
 // An explicit detach is a record of the past, not a refusal of the future.
@@ -157,6 +151,7 @@ func TestAssociatingAfterLeavingRequiresTheClientAgain(t *testing.T) {
 	client, _ := seedActiveClient(t, ctx, ti.conn, *auth.ProjectID, issuer, auth.ActiveOrganizationID, "leaving-return")
 	target := createServerIdentityTargetOnIssuer(t, ctx, ti, "leaving-return-target", issuer)
 	createServerIdentityTargetOnIssuer(t, ctx, ti, "leaving-return-sibling", issuer)
+	associateServerClient(t, ctx, ti, target, client)
 
 	require.NoError(t, detachServerClient(ctx, ti, target, client))
 	requireServerRequires(t, ctx, ti, manager, target, issuer)
@@ -165,9 +160,9 @@ func TestAssociatingAfterLeavingRequiresTheClientAgain(t *testing.T) {
 	requireServerRequires(t, ctx, ti, manager, target, issuer, client)
 }
 
-// A server with no association can only give up a client it would fall back to
-// needing, so a detach says nothing about any other client.
-func TestDetachRefusesAClientTheServerDoesNotFallBackTo(t *testing.T) {
+// Detach removes an association, so a client the server is not associated with
+// has nothing to detach, whether another server claims it or it is bound elsewhere.
+func TestDetachRefusesAClientTheServerIsNotAssociatedWith(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)

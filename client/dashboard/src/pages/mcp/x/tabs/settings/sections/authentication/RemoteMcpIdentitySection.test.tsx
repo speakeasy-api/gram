@@ -2411,60 +2411,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.detach).not.toHaveBeenCalled();
   });
 
-  it("shows and removes a client the server needs without an association", async () => {
-    mocks.clients.mockReturnValue({
-      items: [
-        {
-          id: "unclaimed-client",
-          clientId: "unclaimed",
-          scope: [],
-          userSessionIssuerIds: ["user-session-issuer-1"],
-          remoteSessionIssuerId: "provider-1",
-          projectId: "project-1",
-        },
-      ],
-      isLoading: false,
-      isError: false,
-      error: null,
-    });
-    mocks.associations.mockReturnValue({
-      data: { associations: [], requiredClientIds: ["unclaimed-client"] },
-    });
-    mocks.impact.mockReturnValue({
-      data: {
-        servers: [],
-        hiddenServerCount: 0,
-        releaseClientIds: ["unclaimed-client"],
-      },
-      isFetching: false,
-      isError: false,
-      error: null,
-    });
-
-    renderIdentity();
-    const manual = screen.getByRole("radio", {
-      name: "Manual",
-      description: /static headers/,
-    });
-    expect(manual.getAttribute("aria-checked")).toBe("false");
-
-    fireEvent.click(manual);
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-
-    await waitFor(() =>
-      expect(mocks.detachAssociation).toHaveBeenCalledWith({
-        request: {
-          detachServerClientAssociationRequestBody: {
-            mcpServerId: "mcp-server-1",
-            remoteSessionClientId: "unclaimed-client",
-          },
-        },
-      }),
-    );
-    expect(mocks.detach).not.toHaveBeenCalled();
-  });
-
   it("does not report success when turning off User Identity would remove nothing", async () => {
     mocks.clients.mockReturnValue({
       items: [

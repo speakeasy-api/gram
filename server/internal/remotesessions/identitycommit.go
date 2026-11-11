@@ -1203,9 +1203,8 @@ type boundClientsRequest struct {
 	ReplaceClient bool
 
 	// Leaving reports that the server is giving up User Identity altogether, so
-	// no client of its own stands in for the others, no choice between providers
-	// is ambiguous, and an unclaimed client it would otherwise fall back to
-	// requiring has to go too.
+	// no client of its own stands in for the others and no choice between
+	// providers is ambiguous.
 	Leaving bool
 }
 
@@ -1300,7 +1299,7 @@ func decideBoundClients(ctx context.Context, q *repo.Queries, req boundClientsRe
 	// The issuer's only consumer owns its bindings whether or not an association
 	// records it.
 	ownClient := func(id uuid.UUID) bool {
-		return use[id].AssociatedWithMcpServer || consumers.SoleConsumer || (req.Leaving && clientUnclaimed(use[id]))
+		return use[id].AssociatedWithMcpServer || consumers.SoleConsumer
 	}
 	sharedClient := func(id uuid.UUID) bool {
 		return len(use[id].OtherMcpServerIds) > 0 || consumers.ReadsBindings || (!use[id].AssociatedWithMcpServer && !consumers.SoleConsumer)

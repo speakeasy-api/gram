@@ -589,11 +589,12 @@ func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, attribution Re
 // the management API reports it, so settings cannot disagree with what callers
 // are asked for.
 //
-// A server with no associated client bound to the issuer needs the clients no
-// other server claims, so a client nothing explains stays fail-closed. When every
-// client belongs to another server, or the server explicitly detached the rest,
-// it has no upstream credential to require, which is what a session records as a
-// no-auth choice for it.
+// A server needs exactly the bound clients it is associated with. A bound client
+// with no association to the server is never its credential, whatever other
+// servers do with it: nothing records that it was meant for this server, so
+// sending it would guess the server's upstream. A server with no associated
+// client has no upstream credential to require, which is what a session records
+// as a no-auth choice for it.
 func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, organizationID string, userSessionIssuerID, mcpServerID uuid.UUID, clientIDs []uuid.UUID) ([]uuid.UUID, ServerAssociationIssuer, error) {
 	var association ServerAssociationIssuer
 	if len(clientIDs) == 0 {
@@ -608,27 +609,14 @@ func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, 
 	if err != nil {
 		return nil, association, fmt.Errorf("describe bound client use: %w", err)
 	}
-	var own, unclaimed []uuid.UUID
+	var own []uuid.UUID
 	for _, use := range uses {
 		association = AssociationIssuerFromProviders(use.AssociationProviderIds)
-		switch {
-		case use.AssociatedWithMcpServer:
+		if use.AssociatedWithMcpServer {
 			own = append(own, use.RemoteSessionClientID)
-		case clientUnclaimed(use):
-			unclaimed = append(unclaimed, use.RemoteSessionClientID)
 		}
 	}
-	if len(own) == 0 {
-		return unclaimed, association, nil
-	}
 	return own, association, nil
-}
-
-// clientUnclaimed reports that nothing says whether a bound client is the
-// configured server's: it has no association, no other server has one, and the
-// server has not explicitly detached it.
-func clientUnclaimed(use remotesessions_repo.DescribeBoundClientUseRow) bool {
-	return !use.AssociatedWithMcpServer && len(use.OtherMcpServerIds) == 0 && !use.DetachedFromMcpServer
 }
 
 // ServerAssociationIssuer is the upstream issuer an MCP server's live client

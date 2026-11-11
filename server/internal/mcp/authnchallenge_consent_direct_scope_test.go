@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -192,6 +193,14 @@ func TestConsentDirectScope_OffAndShadowKeepLegacyPreview(t *testing.T) {
 			issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, legacy)
 			err := authclientfixtures.New(fx.ti.conn).SetServerRemoteSessionIssuerFixture(ctx, authclientfixtures.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: conv.ToNullUUID(issuer), ID: fx.endpoint.McpServerID.UUID})
 			require.NoError(t, err)
+			associated, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+				OrganizationID:        fx.orgID,
+				RemoteSessionClientID: legacy,
+				McpServerID:           fx.endpoint.McpServerID.UUID,
+				ProjectID:             fx.projectID,
+			})
+			require.NoError(t, err)
+			require.Equal(t, int64(1), associated)
 			insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, legacy, fx.subject, "legacy-token", fx.endpoint.UpstreamResource)
 			typed, _ := addDirectScopePersonal(t, ctx, fx, "typed-token", fx.shared)
 			previewDirectScope(t, ctx, fx, typed)

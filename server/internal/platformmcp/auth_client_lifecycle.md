@@ -23,9 +23,9 @@ merely because it can use a credential.
   backfill-owned links derived from that registration, preserves the underlying
   association and sign-in binding, and returns 404 when nothing remains to retire.
   Administrator-owned links, including links to backfilled credentials, survive.
-- For a non-sole consumer, the same endpoint removes an association or records an
-  unclaimed-client exclusion and synchronizes its derived links. It therefore
-  cannot promise the same typed-link-only mutation for every target.
+- For a non-sole consumer, the same endpoint removes an association and
+  synchronizes its derived links. It therefore cannot promise the same
+  typed-link-only mutation for every target.
 - `get_mcp_connection_settings` returns typed credential IDs, types, enabled state,
   personal/shared status and sharing counts. `MCPUpstreamAuthClient` does not expose
   the legacy registration mapping, per-link provenance, or a link version. Its

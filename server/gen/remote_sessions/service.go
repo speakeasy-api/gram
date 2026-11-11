@@ -92,9 +92,9 @@ type Service interface {
 	// server instead; with enforcement on, detach retires only the
 	// backfill-derived typed auth-client link and keeps the association. In this
 	// sole-consumer case, repeating detach returns not found (404). For other
-	// servers, detach removes the association (or records an exclusion for an
-	// unclaimed client bound to the server's issuer) and synchronizes the
-	// backfill-derived typed links. Administrator-owned typed links are untouched.
+	// servers, detach removes the association and synchronizes the
+	// backfill-derived typed links; a client the server is not associated with
+	// returns not found (404). Administrator-owned typed links are untouched.
 	// Requires mcp:write on the server.
 	DetachServerClientAssociation(context.Context, *DetachServerClientAssociationPayload) (err error)
 	// List remote_sessions in the caller's project. Supplying both principal_id
@@ -480,10 +480,8 @@ type ListServerClientAssociationsResult struct {
 	// The server's associated upstream OAuth clients, oldest first.
 	Associations []*ServerClientAssociation
 	// The remote_session_client_id of each client bound to the server's user
-	// session issuer that its callers need to sign in through. These are its
-	// associated clients, or when it has none, the bound clients no other server
-	// claims and it has not explicitly detached. Empty when the server requires no
-	// upstream sign-in.
+	// session issuer that its callers need to sign in through. These are exactly
+	// its associated clients. Empty when the server requires no upstream sign-in.
 	RequiredClientIds []string
 }
 
