@@ -238,6 +238,58 @@ func TestOAuthSecurity(t *testing.T) {
 		require.NotContains(t, response.Body.String(), "user_test")
 	})
 
+	t.Run("consent policy permits registered OAuth callback redirects", func(t *testing.T) {
+		t.Parallel()
+		for _, callback := range []string{"https://client.example.com/callback", "http://127.0.0.1:43210/callback", "com.example.client:/oauth/callback"} {
+			t.Run(callback, func(t *testing.T) {
+				t.Parallel()
+				f := fixture(t)
+				body, err := json.Marshal(map[string]any{"client_name": "Test client", "redirect_uris": []string{callback}, "token_endpoint_auth_method": "none"})
+				require.NoError(t, err)
+				registered := f.request(http.MethodPost, "/channels/oauth/register", string(body), "")
+				require.Equal(t, http.StatusCreated, registered.Code)
+				var client struct {
+					ID string `json:"client_id"`
+				}
+				require.NoError(t, json.Unmarshal(registered.Body.Bytes(), &client))
+				query := authorizationQuery(client.ID)
+				query.Set("redirect_uri", callback)
+				for _, decision := range []string{"allow", "deny"} {
+					page := f.request(http.MethodGet, "/channels/oauth/authorize?"+query.Encode(), "", "")
+					require.Equal(t, http.StatusOK, page.Code)
+					policy := page.Header().Get("Content-Security-Policy")
+					callbackURL, err := url.Parse(callback)
+					require.NoError(t, err)
+					allowedCallback := callbackURL.Scheme + ":"
+					if callbackURL.Host != "" {
+						allowedCallback += "//" + callbackURL.Host
+					}
+					require.Contains(t, policy, "form-action 'self' "+allowedCallback+";")
+					require.NotContains(t, policy, "/callback")
+					require.Contains(t, policy, "frame-ancestors 'none'")
+					require.Contains(t, policy, "default-src 'none'")
+					require.Equal(t, "same-origin", page.Header().Get("Referrer-Policy"))
+					form := consentFields(t, page.Body.String())
+					form.Set("decision", decision)
+					response := f.request(http.MethodPost, "/channels/oauth/authorize", form.Encode(), testOrigin, page.Result().Cookies()...)
+					require.Equal(t, http.StatusSeeOther, response.Code)
+					redirect, err := url.Parse(response.Header().Get("Location"))
+					require.NoError(t, err)
+					require.Equal(t, query.Get("state"), redirect.Query().Get("state"))
+					if decision == "allow" {
+						require.NotEmpty(t, redirect.Query().Get("code"))
+						require.Empty(t, redirect.Query().Get("error"))
+					} else {
+						require.Empty(t, redirect.Query().Get("code"))
+						require.Equal(t, "access_denied", redirect.Query().Get("error"))
+					}
+					redirect.RawQuery = ""
+					require.Equal(t, callback, redirect.String())
+				}
+			})
+		}
+	})
+
 	t.Run("same user client grants remain independent across projects", func(t *testing.T) {
 		t.Parallel()
 		f := fixture(t)
