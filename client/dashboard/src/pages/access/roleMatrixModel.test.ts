@@ -58,7 +58,7 @@ const def = (
 
 const scopes: ScopeDefinition[] = [
   def("mcp:connect", "mcp", "mcp:blocked_connect"),
-  def("mcp:read", "mcp", "mcp:blocked_read", { subScopes: ["mcp:connect"] }),
+  def("mcp:read", "mcp", "mcp:blocked_read"),
   def("mcp:write", "mcp", "mcp:blocked_write", { subScopes: ["mcp:read"] }),
   def("org:read", "org", "org:blocked_read"),
   def("org:admin", "org", "org:blocked_admin", { subScopes: ["org:read"] }),
@@ -292,8 +292,9 @@ describe("platform areas", () => {
   });
 
   it("reads which levels the MCP permissions include from the catalogue", () => {
-    expect(mcpLevelIncludes(scopes, "manage")).toEqual(["use", "view"]);
-    expect(mcpLevelIncludes(scopes, "view")).toEqual(["use"]);
+    // Manage includes View; neither includes Connect.
+    expect(mcpLevelIncludes(scopes, "manage")).toEqual(["view"]);
+    expect(mcpLevelIncludes(scopes, "view")).toEqual([]);
     expect(mcpLevelIncludes(scopes, "use")).toEqual([]);
   });
 

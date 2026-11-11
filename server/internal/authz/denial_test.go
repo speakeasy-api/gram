@@ -118,8 +118,8 @@ func TestEngineRequireAny_RecordsTheLeastPrivilegedAlternative(t *testing.T) {
 		{
 			name:   "the scope the other alternative implies",
 			grants: nil,
-			checks: []Check{{Scope: ScopeMCPRead, ResourceKind: "", ResourceID: "mcp_1", Dimensions: nil}, {Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "mcp_1", Dimensions: nil}},
-			want:   Denial{Scope: ScopeMCPConnect, ResourceKind: "mcp"},
+			checks: []Check{{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "mcp_1", Dimensions: nil}, {Scope: ScopeMCPRead, ResourceKind: "", ResourceID: "mcp_1", Dimensions: nil}},
+			want:   Denial{Scope: ScopeMCPRead, ResourceKind: "mcp"},
 			none:   false,
 		},
 		{

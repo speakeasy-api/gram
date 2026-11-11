@@ -1,3 +1,9 @@
+import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders";
+import {
+  salesforceSelectionForUrl,
+  salesforceInstanceConfiguration,
+} from "@/pages/catalog/provider-setup/salesforce";
+import type { State } from "@/pages/catalog/provider-setup/state";
 import { useEffect, useReducer, useRef, type ReactNode } from "react";
 import { useProviderConnection } from "./useProviderConnection";
 import { Link, Navigate, useNavigate } from "react-router";
@@ -36,6 +42,7 @@ import {
   setupProviderForUrl,
   loadProviderProgress,
   saveProviderProgress,
+  salesforceSourceFingerprint,
 } from "./provider-setup";
 
 export function ProviderSetupPage({
@@ -78,6 +85,14 @@ export function ProviderSetupPage({
     );
   const provider = setupProviderForUrl(remote.data?.url);
   if (!provider) return <Navigate to={overview} replace />;
+  if (provider === "salesforce")
+    return (
+      <SalesforceSetupEntry
+        serverUrl={remote.data?.url ?? ""}
+        mcpServer={mcpServer}
+        overviewHref={overview}
+      />
+    );
   return (
     <ProviderSetupFlow
       provider={provider}
@@ -87,12 +102,93 @@ export function ProviderSetupPage({
     />
   );
 }
+function SalesforceSetupEntry({
+  serverUrl,
+  mcpServer,
+  overviewHref,
+}: {
+  serverUrl: string;
+  mcpServer: McpServer;
+  overviewHref: string;
+}): JSX.Element {
+  const routes = useRoutes();
+  const headers = useRemoteMcpServerHeaders(
+    { remoteMcpServerId: mcpServer.remoteMcpServerId! },
+    undefined,
+    { throwOnError: false },
+  );
+  if (headers.isPending)
+    return (
+      <Page>
+        <Page.Header>{null}</Page.Header>
+        <Page.Body>
+          <Skeleton className="h-64 w-full" />
+        </Page.Body>
+      </Page>
+    );
+  if (headers.isError)
+    return (
+      <Page>
+        <Page.Header>{null}</Page.Header>
+        <Page.Body>
+          <Alert variant="error">
+            Couldn’t load Salesforce connection configuration.{" "}
+            <Button variant="secondary" onClick={() => void headers.refetch()}>
+              <Button.Text>Retry</Button.Text>
+            </Button>
+          </Alert>
+        </Page.Body>
+      </Page>
+    );
+  let instanceUrl;
+  try {
+    instanceUrl = salesforceInstanceConfiguration(
+      headers.data.headers,
+    ).instanceUrl;
+  } catch (error) {
+    return (
+      <Page>
+        <Page.Header>{null}</Page.Header>
+        <Page.Body>
+          <Alert variant="error">
+            {error instanceof Error
+              ? error.message
+              : "Review the MCP-Instance-URL header in identity settings."}{" "}
+            <Link
+              to={
+                routes.mcp.details.settings.href(
+                  mcpServerRouteParam(mcpServer),
+                ) + "#authentication"
+              }
+            >
+              Open identity settings
+            </Link>
+          </Alert>
+        </Page.Body>
+      </Page>
+    );
+  }
+  return (
+    <ProviderSetupFlow
+      provider="salesforce"
+      serverUrl={serverUrl}
+      mcpServer={mcpServer}
+      overviewHref={overviewHref}
+      initialValues={{ ...salesforceSelectionForUrl(serverUrl), instanceUrl }}
+      sourceInstance={instanceUrl}
+    />
+  );
+}
 function ProviderSetupFlow({
   provider,
   serverUrl,
   mcpServer,
   overviewHref,
+  initialValues,
+  sourceInstance,
 }: {
+  initialValues?: Partial<State["values"]>;
+  sourceInstance?: string;
   provider: SetupProvider;
   serverUrl: string;
   mcpServer: McpServer;
@@ -114,6 +210,8 @@ function ProviderSetupFlow({
       serverUrl={serverUrl}
       serverName={mcpServer.name ?? mcpServer.slug ?? names[provider]}
       key={storageKey}
+      initialValues={initialValues}
+      sourceInstance={sourceInstance}
       storageKey={storageKey}
       overviewHref={overviewHref}
       mcpServer={mcpServer}
@@ -127,7 +225,11 @@ function RetainedProviderSetup({
   storageKey,
   overviewHref,
   mcpServer,
+  initialValues,
+  sourceInstance,
 }: {
+  initialValues?: Partial<State["values"]>;
+  sourceInstance?: string;
   mcpServer: McpServer;
   provider: SetupProvider;
   serverUrl: string;
@@ -137,7 +239,17 @@ function RetainedProviderSetup({
 }): JSX.Element {
   const navigate = useNavigate();
   const [s, dispatch] = useReducer(reduce, storageKey, (key) => {
-    return loadProviderProgress(provider, key);
+    return loadProviderProgress(
+      provider,
+      key,
+      initialValues,
+      provider === "salesforce"
+        ? salesforceSourceFingerprint(mcpServer.remoteMcpServerId, {
+            url: serverUrl,
+            instanceUrl: sourceInstance,
+          })
+        : undefined,
+    );
   });
   useEffect(() => {
     saveProviderProgress(storageKey, s);
@@ -153,24 +265,30 @@ function RetainedProviderSetup({
       dispatch={dispatch}
       mcpServer={mcpServer}
       serverUrl={serverUrl}
+      sourceInstance={sourceInstance}
       serverName={serverName}
     />
   );
 }
 function LiveSetupConnection({
+  sourceInstance,
   s,
   dispatch,
   mcpServer,
   serverUrl,
   serverName,
 }: {
+  sourceInstance?: string;
   s: Parameters<typeof useProviderConnection>[0];
   dispatch: Parameters<typeof useProviderConnection>[1];
   mcpServer: McpServer;
   serverUrl: string;
   serverName: string;
 }): JSX.Element {
-  const live = useProviderConnection(s, dispatch, mcpServer);
+  const live = useProviderConnection(s, dispatch, mcpServer, {
+    url: serverUrl,
+    instanceUrl: sourceInstance,
+  });
   const routes = useRoutes();
   const settingsHref =
     routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer)) +
@@ -191,30 +309,35 @@ function StepRail(): JSX.Element {
       className="row-start-1 min-w-0 lg:sticky lg:top-[calc(var(--page-sticky-top,0px)+24px)] lg:col-start-2 lg:row-start-1"
     >
       <ol className="flex flex-wrap gap-x-[18px] gap-y-3 lg:block">
-        {steps(s).map((step, index) => (
-          <li
-            key={step.id}
-            className="relative text-xs lg:pb-3 lg:after:absolute lg:after:top-6 lg:after:bottom-0.5 lg:after:left-[11px] lg:after:w-px lg:after:bg-border lg:last:pb-0 lg:last:after:hidden"
-          >
-            <button
-              type="button"
-              className="flex items-center gap-3 text-left"
-              aria-current={s.step === step.id ? "step" : undefined}
-              onClick={() => dispatch({ type: "goto", step: step.id })}
+        {steps(s).map((step, index) => {
+          let completed = s.done.includes(step.id);
+          if (step.id === "credentials") completed = s.saved;
+          if (step.id === "test") completed = s.tested;
+          return (
+            <li
+              key={step.id}
+              className="relative text-xs lg:pb-3 lg:after:absolute lg:after:top-6 lg:after:bottom-0.5 lg:after:left-[11px] lg:after:w-px lg:after:bg-border lg:last:pb-0 lg:last:after:hidden"
             >
-              <span
-                className={`relative z-1 grid size-6 shrink-0 place-items-center border font-mono text-[11px] ${s.step === step.id ? "border-foreground bg-foreground text-background" : "bg-card text-muted-foreground"}`}
+              <button
+                type="button"
+                className="flex items-center gap-3 text-left"
+                aria-current={s.step === step.id ? "step" : undefined}
+                onClick={() => dispatch({ type: "goto", step: step.id })}
               >
-                {s.done.includes(step.id) ? (
-                  <Check className="size-3" aria-hidden />
-                ) : (
-                  index + 1
-                )}
-              </span>
-              <span className="text-sm">{step.title}</span>
-            </button>
-          </li>
-        ))}
+                <span
+                  className={`relative z-1 grid size-6 shrink-0 place-items-center border font-mono text-[11px] ${s.step === step.id ? "border-foreground bg-foreground text-background" : "bg-card text-muted-foreground"}`}
+                >
+                  {completed ? (
+                    <Check className="size-3" aria-hidden />
+                  ) : (
+                    index + 1
+                  )}
+                </span>
+                <span className="text-sm">{step.title}</span>
+              </button>
+            </li>
+          );
+        })}
       </ol>
     </nav>
   );
@@ -365,7 +488,13 @@ function SetupBody({
                   ) : (
                     <Button
                       variant="primary"
-                      disabled={!!live.pending || live.loading}
+                      disabled={
+                        !!live.pending ||
+                        live.loading ||
+                        (s.provider === "salesforce" &&
+                          s.values.path === "support" &&
+                          s.step === "support")
+                      }
                       onClick={live.next}
                     >
                       <Button.Text>

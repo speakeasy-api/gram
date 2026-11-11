@@ -1,4 +1,4 @@
-h1:HbJzezSjilONAUHiyKxUeTwuhfkidtqlPE8QCtAp3Yw=
+h1:/acwFa72PtXtSxXKuceCWfySR8ZL+Frl5SaEnOSJXOk=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -527,5 +527,6 @@ h1:HbJzezSjilONAUHiyKxUeTwuhfkidtqlPE8QCtAp3Yw=
 20261110125515_organization-encryption-keys.sql h1:kFzOfYp7Cdxq/mrbrtoFO1Bf/w53Llk0Yz6IhhHssho=
 20261110204522_drop-oauth-proxy-tables.sql h1:JXpO11K7jYMzLUWuP6HoUyjzNiblPICHk26gkbQeNtk=
 20261111050000_team-memory.sql h1:XivftjD8wCMKZvq1n7llHGfDPJ+e8MHP2SdAH1GK+S0=
-20261111050100_chats-memory-summary-idx.sql h1:IFirOpTnywwihWfosDFzNMUsrANjW4TPgUylP1PXD0Y=
-20261111050200_memory-eval-runs.sql h1:h0sq9ptN+Q6/GjjQjhCHR+QFtU2nSvBHxoPT/Xf+S8g=
+20261111163822_channels.sql h1:wcE7855x/oWGWbBjUqSr9xpHpUstjI95P4DwN5hSd6o=
+20261111200000_chats-memory-summary-idx.sql h1:PDzAGbhT7USA73XZGIuhmrhkjFB2yZVMftCkay4whnM=
+20261111200100_memory-eval-runs.sql h1:MtWGo9mP9qNVicb3vRiMI8+rhTxnyXzLvoPaZJmPZkI=
