@@ -41,6 +41,7 @@ import type { OtelDestination } from "@gram/client/models/components/oteldestina
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 import { Plus } from "lucide-react";
 import { type ReactNode, useId, useMemo } from "react";
+import { SendTestEventSection } from "./SendTestEventSection";
 
 const NEW_DESTINATION = "__new_destination__";
 
@@ -311,6 +312,24 @@ export function ConfigureExportSheet({
                 );
               }}
             </form.Field>
+
+            {route?.dataSource === DataSource.McpConnectionLogs &&
+            route.otelDestinationId ? (
+              <form.Subscribe
+                selector={(state) =>
+                  state.values.dataSource !== route.dataSource ||
+                  state.values.destinationId !== route.otelDestinationId
+                }
+              >
+                {(unsavedChanges) => (
+                  <SendTestEventSection
+                    projectSlug={project.slug}
+                    routeId={route.id}
+                    unsavedChanges={unsavedChanges}
+                  />
+                )}
+              </form.Subscribe>
+            ) : null}
 
             <form.Subscribe
               selector={(state) =>

@@ -9,6 +9,7 @@ import { dataExportsDeleteRoute } from "../funcs/dataExportsDeleteRoute.js";
 import { dataExportsListDestinations } from "../funcs/dataExportsListDestinations.js";
 import { dataExportsListForOrg } from "../funcs/dataExportsListForOrg.js";
 import { dataExportsListRoutes } from "../funcs/dataExportsListRoutes.js";
+import { dataExportsTestRoute } from "../funcs/dataExportsTestRoute.js";
 import { dataExportsUpdateDestination } from "../funcs/dataExportsUpdateDestination.js";
 import { dataExportsUpdateRoute } from "../funcs/dataExportsUpdateRoute.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -17,6 +18,7 @@ import { Destination } from "../models/components/destination.js";
 import { ListDataExportRoutesResult } from "../models/components/listdataexportroutesresult.js";
 import { ListDataExportsForOrgResult } from "../models/components/listdataexportsfororgresult.js";
 import { ListDestinationsResult } from "../models/components/listdestinationsresult.js";
+import { TestDataExportRouteResult } from "../models/components/testdataexportrouteresult.js";
 import {
   CreateDataExportDestinationRequest,
   CreateDataExportDestinationSecurity,
@@ -45,6 +47,10 @@ import {
   ListDataExportsForOrgRequest,
   ListDataExportsForOrgSecurity,
 } from "../models/operations/listdataexportsfororg.js";
+import {
+  TestDataExportRouteRequest,
+  TestDataExportRouteSecurity,
+} from "../models/operations/testdataexportroute.js";
 import {
   UpdateDataExportDestinationRequest,
   UpdateDataExportDestinationSecurity,
@@ -182,6 +188,25 @@ export class DataExports extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListDataExportRoutesResult> {
     return unwrapAsync(dataExportsListRoutes(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * testRoute dataExports
+   *
+   * @remarks
+   * Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today.
+   */
+  async testRoute(
+    request: TestDataExportRouteRequest,
+    security?: TestDataExportRouteSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<TestDataExportRouteResult> {
+    return unwrapAsync(dataExportsTestRoute(
       this,
       request,
       security,
