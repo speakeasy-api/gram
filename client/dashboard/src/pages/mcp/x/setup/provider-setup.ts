@@ -1,4 +1,8 @@
 import {
+  salesforceSelectionForUrl,
+  salesforceConnection,
+} from "@/pages/catalog/provider-setup/salesforce";
+import {
   initialState,
   steps,
   type State,
@@ -29,6 +33,7 @@ export function setupProviderForUrl(
       return "slack";
     if (url.origin === "https://api.githubcopilot.com" && path === "/mcp")
       return "github";
+    if (salesforceSelectionForUrl(value)) return "salesforce";
     return null;
   } catch {
     return null;
@@ -68,14 +73,27 @@ export function saveProviderProgress(key: string, state: State): void {
     sessionStorage.setItem(
       key,
       JSON.stringify({
-        revision: 2,
+        revision: state.provider === "salesforce" ? 4 : 2,
         step: state.step,
         done: state.done.filter(
           (step) => !["credentials", "test"].includes(step),
         ),
         values: {
           ...(state.provider === "github" ? { org: state.values.org } : {}),
-          appChoice: state.values.appChoice,
+          ...(state.provider === "salesforce"
+            ? {
+                environment: state.values.environment,
+                salesforceServer: state.values.salesforceServer,
+                salesforceDomain: state.values.salesforceDomain,
+                path: state.values.path,
+                appChoice: state.values.appChoice,
+                configurationPending: state.configChanged,
+                sourceFingerprint: state.sourceFingerprint,
+              }
+            : {}),
+          ...(state.provider !== "salesforce"
+            ? { appChoice: state.values.appChoice }
+            : {}),
           ...(state.accessChosen ? { access: state.values.access } : {}),
         },
       }),
@@ -87,15 +105,29 @@ export function saveProviderProgress(key: string, state: State): void {
 export function loadProviderProgress(
   provider: SetupProvider,
   key: string,
+  defaults?: Partial<State["values"]>,
+  sourceFingerprint?: string,
 ): State {
   const initial = initialState(provider);
+  Object.assign(initial.values, defaults);
+  if (provider === "salesforce") {
+    initial.sourceFingerprint = sourceFingerprint;
+    Object.assign(initial.values, {
+      integration: "native",
+      path: "own",
+      instanceUrl: "",
+      appChoice: "new",
+    });
+  }
   try {
     const value: unknown = JSON.parse(sessionStorage.getItem(key) ?? "null");
     if (
       !value ||
       typeof value !== "object" ||
       !("revision" in value) ||
-      (value.revision !== 1 && value.revision !== 2)
+      (provider === "salesforce"
+        ? value.revision !== 4
+        : value.revision !== 1 && value.revision !== 2)
     )
       return initial;
     if (
@@ -105,6 +137,12 @@ export function loadProviderProgress(
     )
       return initial;
     const { values } = value;
+    const changedSource =
+      provider === "salesforce" &&
+      !!defaults &&
+      !!sourceFingerprint &&
+      (!("sourceFingerprint" in values) ||
+        values.sourceFingerprint !== sourceFingerprint);
     if (
       provider === "github" &&
       "org" in values &&
@@ -113,6 +151,7 @@ export function loadProviderProgress(
     )
       initial.values.org = values.org;
     if (
+      provider !== "salesforce" &&
       "appChoice" in values &&
       (values.appChoice === "new" || values.appChoice === "existing")
     )
@@ -126,15 +165,54 @@ export function loadProviderProgress(
       initial.values.access = values.access;
       initial.accessChosen = true;
     }
+    if (provider === "salesforce") {
+      initial.configChanged =
+        "configurationPending" in values &&
+        values.configurationPending === true;
+      for (const field of [
+        "environment",
+        "salesforceServer",
+        "salesforceDomain",
+      ] as const) {
+        const candidate = (values as Record<string, unknown>)[field];
+        if (
+          (!defaults ||
+            !sourceFingerprint ||
+            (initial.configChanged && !changedSource)) &&
+          typeof candidate === "string" &&
+          candidate.length <= 2048
+        )
+          initial.values[field] = candidate;
+      }
+      if (
+        "path" in values &&
+        (values.path === "own" || values.path === "support")
+      )
+        initial.values.path = values.path;
+      if (
+        "appChoice" in values &&
+        (values.appChoice === "new" || values.appChoice === "existing")
+      )
+        initial.values.appChoice = values.appChoice;
+      if (!salesforceConnection({ ...initial.values, salesforceDomain: "" })) {
+        initial.values.environment = defaults?.environment ?? "production";
+        initial.values.salesforceServer =
+          defaults?.salesforceServer ?? "sobject-reads";
+      }
+      if (!salesforceConnection(initial.values))
+        initial.values.salesforceDomain = "";
+    }
     // Resolve branch-specific steps after restoring choices.
     const validSteps = steps(initial).map((step) => step.id);
     if (
+      !changedSource &&
       "step" in value &&
       typeof value.step === "string" &&
       validSteps.includes(value.step)
     )
       initial.step = value.step;
-    if ("done" in value && Array.isArray(value.done))
+    if (changedSource) initial.step = "choices";
+    if (!changedSource && "done" in value && Array.isArray(value.done))
       initial.done = value.done.filter(
         (id: unknown): id is string =>
           typeof id === "string" &&
@@ -145,4 +223,15 @@ export function loadProviderProgress(
   } catch {
     return initial;
   }
+}
+
+export function salesforceSourceFingerprint(
+  remoteMcpServerId: string | undefined,
+  source: { url: string; instanceUrl?: string },
+): string {
+  return JSON.stringify([
+    remoteMcpServerId,
+    source.url,
+    source.instanceUrl ?? "",
+  ]);
 }

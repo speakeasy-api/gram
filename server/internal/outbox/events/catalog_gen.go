@@ -28,6 +28,7 @@ var All = []outbox.EventRegistration{
 	AwsKmsKeyV1,
 	BillingMetadataV1,
 	CatalogPromotionV1,
+	ChannelsV1,
 	ChatAnalysisSettingsV1,
 	ChatSessionV1,
 	CustomDomainV1,

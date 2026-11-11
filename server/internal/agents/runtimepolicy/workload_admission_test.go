@@ -214,6 +214,8 @@ func TestWorkloadOwnerEffectiveExclusionsAndDirectPrecedence(t *testing.T) {
 	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String())
 	seedGrant(t, t.Context(), f.db, f.organizationID, agent, authz.ScopeMCPWrite, "*")
 	seedGrant(t, t.Context(), f.db, f.organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, urn.AllUsersPrincipalID), authz.ScopeMCPWrite, "*")
+	seedGrant(t, t.Context(), f.db, f.organizationID, agent, authz.ScopeMCPConnect, "*")
+	seedGrant(t, t.Context(), f.db, f.organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, urn.AllUsersPrincipalID), authz.ScopeMCPConnect, "*")
 	seedGrant(t, t.Context(), f.db, f.organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, urn.AllUsersPrincipalID), authz.ScopeMCPBlockedConnect, "selected-server")
 	policy, err := NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, "*")})
 	require.NoError(t, err)

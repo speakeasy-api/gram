@@ -683,6 +683,7 @@ trackedFiles:
   src/funcs/riskPolicyBypassRequestsApprove.ts: {}
   src/funcs/riskPolicyBypassRequestsCreate.ts: {}
   src/funcs/riskPolicyBypassRequestsDeny.ts: {}
+  src/funcs/riskPolicyBypassRequestsGetTarget.ts: {}
   src/funcs/riskPolicyBypassRequestsList.ts: {}
   src/funcs/riskPolicyBypassRequestsRevoke.ts: {}
   src/funcs/riskPolicyChallengesAcknowledge.ts: {}
@@ -1349,6 +1350,8 @@ trackedFiles:
   src/models/components/getprojectoverviewresult.ts: {}
   src/models/components/getprojectresult.ts: {}
   src/models/components/getprompttemplateresult.ts: {}
+  src/models/components/getriskpolicybypassrequesttargetrequestbody.ts: {}
+  src/models/components/getriskpolicybypassrequesttargetresponsebody.ts: {}
   src/models/components/getriskpolicychallengeresponsebody.ts: {}
   src/models/components/getsessionmetaresult.ts: {}
   src/models/components/getsetupdocsresponsebody.ts: {}
@@ -1957,6 +1960,7 @@ trackedFiles:
   src/models/components/sessionquarantine.ts: {}
   src/models/components/sessionquarantinereleaserequestbody.ts: {}
   src/models/components/sessionsummary.ts: {}
+  src/models/components/sessiontotals.ts: {}
   src/models/components/setaitooldecisionrequestbody.ts: {}
   src/models/components/setaitooldecisionresult.ts: {}
   src/models/components/setauthclientaudiencerequestbody.ts: {}
@@ -2640,6 +2644,7 @@ trackedFiles:
   src/models/operations/getriskoverview.ts: {}
   src/models/operations/getriskpolicy.ts: {}
   src/models/operations/getriskpolicyapproval.ts: {}
+  src/models/operations/getriskpolicybypassrequesttarget.ts: {}
   src/models/operations/getriskpolicychallenge.ts: {}
   src/models/operations/getrisksignals.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
@@ -4074,6 +4079,7 @@ trackedFiles:
   src/react-query/riskGetBlock.ts: {}
   src/react-query/riskGetCustomDetectionRule.core.ts: {}
   src/react-query/riskGetCustomDetectionRule.ts: {}
+  src/react-query/riskGetPolicyBypassRequestTarget.ts: {}
   src/react-query/riskGetPolicyChallenge.ts: {}
   src/react-query/riskListApprovals.core.ts: {}
   src/react-query/riskListApprovals.ts: {}
@@ -8660,6 +8666,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getRiskPolicyBypassRequestTarget:
+    speakeasy-default-get-risk-policy-bypass-request-target:
+      requestBody:
+        application/json: {"request_token": "<value>"}
+      responses:
+        "200":
+          application/json: {"expires_at": "2026-11-21T19:04:39.559Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getRiskPolicyChallenge:
     speakeasy-default-get-risk-policy-challenge:
       requestBody:
@@ -11093,7 +11110,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "limit": 50, "sort_by": "total_cost", "to": "2025-12-26T10:00:00Z"}
       responses:
         "200":
-          application/json: {"sessions": []}
+          application/json: {"scoped": true, "sessions": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

@@ -189,6 +189,7 @@ const (
 
 // textOnlyTools keep their plain result, each with the reason.
 var textOnlyTools = map[string]string{
+	"get_my_channels_access":               "Channels connection admission and endpoint instructions have no standalone dashboard resource.",
 	"run_analytics_query":                  textOnlyAnalytics,
 	"query_mcp_events":                     textOnlyAnalytics,
 	"query_mcp_metrics":                    textOnlyAnalytics,
