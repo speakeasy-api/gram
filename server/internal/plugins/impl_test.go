@@ -1098,7 +1098,7 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 }
 
 func TestPluginsService_DownloadObservabilityPluginVibe(t *testing.T) {
-	t.Parallel()
+	plugins.SetPinnedHooksBinaryVersionForTest(t, plugins.VibeProviderMinHooksBinaryVersionForTest)
 
 	ctx, ti := newTestPluginsService(t)
 
@@ -1111,7 +1111,7 @@ func TestPluginsService_DownloadObservabilityPluginVibe(t *testing.T) {
 	hooksTOML, ok := files["ai.mistral.vibe/hooks.toml"]
 	require.True(t, ok, "vibe download must ship ai.mistral.vibe/hooks.toml at the ZIP root")
 	require.Contains(t, string(hooksTOML), "--provider=vibe")
-	for _, name := range []string{"plugin.json", "speakeasy.json", "hooks/bootstrap.sh", "hooks/bootstrap.ps1"} {
+	for _, name := range []string{"plugin.json", "speakeasy.json", "hooks/bootstrap.sh"} {
 		require.Contains(t, files, name, "vibe download must ship %s", name)
 	}
 }

@@ -86,6 +86,7 @@ var bySource = map[string]Surface{
 	"bedrock":        SurfaceOther,
 	"aws-bedrock":    SurfaceOther,
 	"pi":             SurfaceOther,
+	"vibe":           SurfaceOther,
 }
 
 // compact indexes the same surfaces separator-free, so "claudecode" resolves

@@ -2140,8 +2140,18 @@ func TestGeneratePiObservabilityPluginPackage(t *testing.T) {
 // ai.mistral.vibe/hooks.toml registers the relay on all three Vibe hook
 // events. Pin the whole shape — flat ZIP layout, TOML wiring, schema
 // validation, and which credentials ride in which file.
+// allowVibeHooks pins the hooks binary version to one that carries the vibe
+// provider for the duration of the test. The release pin moves in a separate
+// PR, so the checked-in hooksBinaryVersion may predate
+// vibeProviderMinHooksBinaryVersion; tests that call this must not be
+// parallel (the pin is a package var).
+func allowVibeHooks(t *testing.T) {
+	t.Helper()
+	SetPinnedHooksBinaryVersionForTest(t, vibeProviderMinHooksBinaryVersion)
+}
+
 func TestGenerateVibeObservabilityPluginPackage(t *testing.T) {
-	t.Parallel()
+	allowVibeHooks(t)
 	cfg := GenerateConfig{
 		OrgName:     "Acme",
 		ServerURL:   "https://app.getgram.ai",
@@ -2157,11 +2167,13 @@ func TestGenerateVibeObservabilityPluginPackage(t *testing.T) {
 		"ai.mistral.vibe/hooks.toml",
 		"speakeasy.json",
 		"hooks/bootstrap.sh",
-		"hooks/bootstrap.ps1",
 	} {
 		require.Contains(t, files, name, "vibe package must ship %s", name)
 	}
-	require.Len(t, files, 5, "vibe package is exactly manifest + hooks.toml + runtime files")
+	// No bootstrap.ps1: the single hooks.toml command is POSIX/bash and Git
+	// Bash is a stated requirement, so the PowerShell bootstrapper is not shipped.
+	require.NotContains(t, files, "hooks/bootstrap.ps1")
+	require.Len(t, files, 4, "vibe package is exactly manifest + hooks.toml + runtime files")
 
 	// hooks.toml wires the relay on all three Vibe events with --provider=vibe.
 	hooksTOML := string(files["ai.mistral.vibe/hooks.toml"])
@@ -2188,7 +2200,9 @@ func TestGenerateVibeObservabilityPluginPackage(t *testing.T) {
 		wantCommand := `bash "$PLUGIN_ROOT/hooks/bootstrap.sh" --config="$PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=vibe --timeout=60s`
 		// Tool hooks are strict (relay failure denies/clears instead of
 		// failing open); post_agent has no strict mode in Vibe.
-		wantStrict := hook.Type != "post_agent"
+		// Only pre_tool is strict: the server can only block prompt/pre-tool
+		// events, and strict post_tool would just clear a result that already ran.
+		wantStrict := hook.Type == "pre_tool"
 		if wantStrict {
 			wantCommand += " --strict"
 		}
@@ -2219,7 +2233,7 @@ func TestGenerateVibeObservabilityPluginPackage(t *testing.T) {
 // The published marketplace repo carries the Vibe observability package at
 // <org>-observability-vibe/ next to the other platforms' subtrees.
 func TestGenerateHooksFilesIncludesVibeSubtree(t *testing.T) {
-	t.Parallel()
+	allowVibeHooks(t)
 	cfg := GenerateConfig{
 		OrgName:     "Acme",
 		ServerURL:   "https://app.getgram.ai",
@@ -2236,7 +2250,7 @@ func TestGenerateHooksFilesIncludesVibeSubtree(t *testing.T) {
 	require.Contains(t, files, slug+"/plugin.json")
 	require.Contains(t, files, slug+"/speakeasy.json")
 	require.Contains(t, files, slug+"/hooks/bootstrap.sh")
-	require.Contains(t, files, slug+"/hooks/bootstrap.ps1")
+	require.NotContains(t, files, slug+"/hooks/bootstrap.ps1", "no PowerShell bootstrapper: Git Bash is a stated requirement")
 
 	// The repo README tells Vibe users where to install the observability package.
 	readme := string(generateReadme(nil, cfg))
@@ -2262,7 +2276,7 @@ func TestDogfoodPluginFilesIncludesPi(t *testing.T) {
 // rollout carries it forward by prefix, so a platform missing from either the
 // generator or the prefix lists silently stops publishing.
 func TestGenerateHooksFilesCoversEveryPlatformSubtree(t *testing.T) {
-	t.Parallel()
+	allowVibeHooks(t)
 	cfg := GenerateConfig{
 		OrgName:     "Acme",
 		ServerURL:   "https://app.getgram.ai",
@@ -2453,8 +2467,53 @@ func TestHooksConfigHashIgnoresPublishedMarketplaceName(t *testing.T) {
 
 // Substring assertions cannot catch shell quoting regressions — run bash -n
 // over every generated shell script.
+// While the pinned hooks binary predates the vibe provider, the Vibe
+// observability package is skipped without failing the whole publish, and
+// platform=vibe returns the sentinel error. Not parallel: writes the pin var.
+func TestGenerateHooksFilesSkipsVibeWhenPinLacksProvider(t *testing.T) {
+	prev := pinnedHooksBinaryVersion
+	pinnedHooksBinaryVersion = "0.3.46" // below vibeProviderMinHooksBinaryVersion
+	t.Cleanup(func() { pinnedHooksBinaryVersion = prev })
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := generateHooksFiles(cfg)
+	require.NoError(t, err)
+	for name := range files {
+		require.NotContains(t, name, "observability-vibe", "vibe package must be skipped while the pin lacks the provider, got %s", name)
+	}
+	_, err = GenerateObservabilityPluginPackage(cfg, "vibe")
+	require.ErrorIs(t, err, errVibeHooksUnsupported)
+	require.False(t, VibeObservabilityPluginAvailable(cfg))
+}
+
+// An org whose slug makes the manifest name exceed the AP1.0 schema's 64
+// characters skips only the Vibe package; the publish succeeds and
+// platform=vibe returns the sentinel. Not parallel: writes the pin var.
+func TestGenerateVibeManifestNameTooLongSkipsOnlyVibe(t *testing.T) {
+	allowVibeHooks(t)
+	cfg := GenerateConfig{
+		OrgName:     strings.Repeat("a", 60), // slug 60 chars, name would be 75 > 64
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := generateHooksFiles(cfg)
+	require.NoError(t, err)
+	for name := range files {
+		require.NotContains(t, name, "observability-vibe", "vibe package must be skipped on a name-schema failure, got %s", name)
+	}
+	// The other platforms' packages still generate.
+	require.Contains(t, files, PiObservabilitySlug(cfg)+"/"+relay.PiExtensionFile)
+	_, err = GenerateObservabilityPluginPackage(cfg, "vibe")
+	require.ErrorIs(t, err, errVibeManifestName)
+	require.False(t, VibeObservabilityPluginAvailable(cfg))
+}
+
 func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
-	t.Parallel()
+	allowVibeHooks(t)
 	bashPath, err := exec.LookPath("bash")
 	require.NoError(t, err, "bash is required to syntax-check generated hook scripts")
 

@@ -123855,6 +123855,9 @@ components:
                 up_to_date:
                     type: boolean
                     description: Whether the project's current plugin state matches what was last published to GitHub, including changes of plugins whose auto sync is off that wait for a manual sync. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
+                vibe_observability_plugin:
+                    type: string
+                    description: Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present when connected and the pinned hooks binary supports the vibe provider. The marketplace repo directory is `<slug>-vibe`.
             required:
                 - configured
                 - connected

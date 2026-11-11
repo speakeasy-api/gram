@@ -40,11 +40,6 @@ const PLATFORM_MCP_INSTALL_CLIENTS: PlatformMCPInstallClient[] = [
     description: "Copy the OpenCode package out of the marketplace repository",
   },
   {
-    id: "vibe",
-    label: "Mistral Vibe",
-    description: "Copy the Vibe plugin package into ~/.vibe/plugins/",
-  },
-  {
     id: "other",
     label: "Other agent",
     description: "Point any MCP-capable agent at the remote endpoint",
@@ -83,9 +78,6 @@ type PlatformMCPInstallWalkthroughProps = {
 function manualConfig(client: ClientFamily, mcpUrl: string): string {
   if (client === "codex") {
     return `[mcp_servers.${PLATFORM_MCP_SERVER_NAME}]\nurl = "${mcpUrl}"`;
-  }
-  if (client === "vibe") {
-    return `[[mcp_servers]]\nname = "${PLATFORM_MCP_SERVER_NAME}"\ntransport = "streamable-http"\nurl = "${mcpUrl}"`;
   }
   if (client === "opencode") {
     return JSON.stringify(
@@ -209,18 +201,21 @@ function manualSteps(client: ClientFamily, mcpUrl: string): InstallStep[] {
         },
       ];
     case "vibe":
+      // `vibe mcp add` writes the [[mcp_servers]] entry together with its
+      // [mcp_servers.auth] oauth table; a hand-written block has no auth table,
+      // so Vibe treats the server as static and sign-in never starts.
       return [
         {
-          title: "Add Platform MCP to your Vibe config",
+          title: "Add Platform MCP with the Vibe CLI",
           description:
-            "Add this [[mcp_servers]] block to ~/.vibe/config.toml for your account (or .vibe/config.toml in a trusted repository). This does not install the reviewed plugin.",
-          code: manualConfig(client, mcpUrl),
-          language: "toml",
+            "Run this in a terminal. It registers the server with OAuth auth in ~/.vibe/config.toml. This does not install the reviewed plugin.",
+          code: `vibe mcp add ${PLATFORM_MCP_SERVER_NAME} --url ${mcpUrl}`,
+          language: "bash",
         },
         {
-          title: "Restart Vibe or reload, then complete sign-in",
+          title: "Sign in from Vibe, then connect",
           description:
-            "Start a Vibe session (or run /reload), ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted.",
+            "Run /mcp login platform inside a Vibe session to open the AI Control Plane browser authorization, then ask Vibe to list your Speakeasy projects.",
         },
       ];
   }
@@ -324,30 +319,6 @@ function marketplaceSteps(
         title: "Open OpenCode and complete sign-in",
         description:
           "Start an OpenCode session, ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted. Restart OpenCode first if it does not see Platform MCP.",
-      },
-    ];
-  }
-
-  if (client === "vibe") {
-    return [
-      {
-        title: "Clone the Speakeasy marketplace repository",
-        description:
-          "Mistral Vibe has no marketplace importer, so copy the package out of the repository instead. Re-running replaces the checkout first so it never reinstalls stale files.",
-        code: `rm -rf marketplace\ngit clone ${marketplaceURL} marketplace`,
-        language: "bash",
-      },
-      {
-        title: "Copy the Vibe package into your plugins directory",
-        description:
-          "Copy the <slug>-vibe package into ~/.vibe/plugins/<slug> for your account (or .vibe/plugins/<slug> in a trusted repository). Clear the destination first on reinstall so the new package replaces the old one.",
-        code: `mkdir -p ~/.vibe/plugins\nrm -rf ~/.vibe/plugins/${PLATFORM_MCP_PLUGIN_NAME}\ncp -R marketplace/${PLATFORM_MCP_PLUGIN_NAME}-vibe ~/.vibe/plugins/${PLATFORM_MCP_PLUGIN_NAME}`,
-        language: "bash",
-      },
-      {
-        title: "Restart Vibe or reload plugins, then complete sign-in",
-        description:
-          "Start a Vibe session or run /reload-plugins, ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted.",
       },
     ];
   }

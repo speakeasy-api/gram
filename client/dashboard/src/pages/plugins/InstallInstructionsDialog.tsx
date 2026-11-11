@@ -21,6 +21,8 @@ import { cn } from "@/lib/utils";
 import { useObservabilityPluginDownload } from "./useObservabilityPluginDownload";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePlugins } from "@gram/client/react-query/plugins";
+import { usePublishStatus } from "@gram/client/react-query/publishStatus";
+import { usePluginQueryScope } from "./usePluginQueryScope";
 import { Button as MoonshineButton } from "@/components/ui/Button";
 import {
   ArrowLeft,
@@ -55,7 +57,12 @@ type ContentProps = {
   /** URL-safe slug for the specific plugin — required for the `<plugin>@<marketplace>` addressing Claude Code and Codex use. */
   pluginSlug?: string;
   /** Restricts the plugin-picker step to these plugins (e.g. the ones a given MCP server is actually installed to) instead of every plugin in the org. */
-  candidatePlugins?: { name: string; slug: string; description?: string }[];
+  candidatePlugins?: {
+    name: string;
+    slug: string;
+    description?: string;
+    agentPluginsV1Compatible?: boolean;
+  }[];
 };
 
 /**
@@ -994,36 +1001,48 @@ function VibeInstallContent({
   repoOwner,
   repoName,
   pluginSlug,
-}: Pick<ContentProps, "repoOwner" | "repoName" | "pluginSlug">): JSX.Element {
+  agentPluginsV1Compatible,
+  observabilityPluginSlug,
+}: Pick<ContentProps, "repoOwner" | "repoName" | "pluginSlug"> & {
+  /** Whether the selected feature plugin is published as a portable Agent Plugins 1.0 package (a `<slug>-vibe/` directory exists for it). */
+  agentPluginsV1Compatible?: boolean;
+  /** Real install name of the org's observability plugin from the publish status, when published. */
+  observabilityPluginSlug?: string;
+}): JSX.Element {
   const { isDownloading, download: handleDownloadPlugin } =
     useObservabilityPluginDownload("vibe", "observability-vibe.zip");
 
   // The dialog installs either the org's observability plugin (no specific
-  // plugin selected, or the <org>-observability slug) or one feature plugin.
-  // Feature plugins publish as <slug>-vibe/ in the marketplace repo and
-  // install under their bare slug; only the observability package has the
-  // server-generated ZIP.
-  const isObservability = !pluginSlug || pluginSlug.endsWith("-observability");
-  const installSlug = pluginSlug ?? "<org>-observability";
+  // plugin selected) or one feature plugin. The Quick install (server-generated
+  // ZIP) exists only for the observability package, and renders whenever that
+  // package is published — the publish status carries its real install name,
+  // so the copy never shows a placeholder. Feature plugins publish as
+  // <slug>-vibe/ in the marketplace repo, but only when they are portable
+  // Agent Plugins 1.0 packages.
+  const observabilityPublished = Boolean(observabilityPluginSlug);
+  const isObservability = !pluginSlug || pluginSlug === observabilityPluginSlug;
+  const installSlug = isObservability
+    ? (observabilityPluginSlug ?? "<org>-observability")
+    : pluginSlug;
   const packageDir = `${installSlug}-vibe`;
+  const portable = agentPluginsV1Compatible !== false;
 
   const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
-  // Clear the destination first: cp -R into an existing directory nests the
-  // new files one level deeper and Vibe keeps loading the old plugin.
-  const manualCopy = `git clone ${repoUrl} marketplace
-mkdir -p ~/.vibe/plugins
-rm -rf ~/.vibe/plugins/${installSlug}
-cp -R marketplace/${packageDir} ~/.vibe/plugins/${installSlug}`;
-
-  const mcpConfig = `[[mcp_servers]]
-name = "<server-name>"
-transport = "streamable-http"
-url = "<mcp-server-url>"`;
+  // Clone into a fresh temp directory and chain with &&: a second paste of the
+  // clone alone fails, and without the chaining the copy below would still
+  // replace the install from the stale checkout. Clear the destination first:
+  // cp -R into an existing directory nests the new files one level deeper and
+  // Vibe keeps loading the old plugin.
+  const manualCopy = `tmp=$(mktemp -d) && \
+git clone ${repoUrl} "$tmp/marketplace" && \
+mkdir -p ~/.vibe/plugins && \
+rm -rf ~/.vibe/plugins/${installSlug} && \
+cp -R "$tmp/marketplace/${packageDir}" ~/.vibe/plugins/${installSlug}`;
 
   return (
     <div className="min-w-0 space-y-6">
       {/* ── Quick install ─────────────────────────────────────────────────── */}
-      {isObservability && (
+      {observabilityPublished && (
         <>
           <div>
             <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
@@ -1032,7 +1051,7 @@ url = "<mcp-server-url>"`;
               Agent Plugins 1.0 package with a hooks-scoped API key already
               embedded (no CLI, no key to export). Extract it into{" "}
               <code className="bg-muted px-1 py-0.5 text-xs">
-                ~/.vibe/plugins/&lt;org&gt;-observability
+                ~/.vibe/plugins/{observabilityPluginSlug}
               </code>{" "}
               and Vibe loads it on next start.
             </p>
@@ -1049,17 +1068,13 @@ url = "<mcp-server-url>"`;
             <p className="text-muted-foreground mt-2 text-xs">
               Then extract:{" "}
               <code className="bg-muted px-1 py-0.5">
-                mkdir -p ~/.vibe/plugins/&lt;org&gt;-observability &amp;&amp;
-                unzip observability-vibe.zip -d
-                ~/.vibe/plugins/&lt;org&gt;-observability
+                mkdir -p ~/.vibe/plugins/{observabilityPluginSlug} &amp;&amp;
+                unzip observability-vibe.zip -d ~/.vibe/plugins/
+                {observabilityPluginSlug}
               </code>
             </p>
             <p className="text-muted-foreground mt-2 text-xs">
-              &lt;org&gt; is your organization&apos;s slug — the prefix of the{" "}
-              <code className="bg-muted px-1 py-0.5 text-xs">
-                &lt;org&gt;-observability
-              </code>{" "}
-              plugin name. Restart Vibe or run{" "}
+              Restart Vibe or run{" "}
               <code className="bg-muted px-1 py-0.5 text-xs">
                 /reload-plugins
               </code>{" "}
@@ -1067,7 +1082,9 @@ url = "<mcp-server-url>"`;
               <code className="bg-muted px-1 py-0.5 text-xs">
                 ai.mistral.vibe/hooks.toml
               </code>{" "}
-              runs automatically.
+              runs automatically. Coverage today is tool calls and turn end
+              (post_agent); prompt and session lifecycle hooks are a planned
+              follow-up.
             </p>
           </div>
 
@@ -1080,55 +1097,84 @@ url = "<mcp-server-url>"`;
         <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
           Manual setup
         </p>
-        <p className="text-muted-foreground text-sm">
-          Prefer installing from the marketplace repository? Vibe has no
-          marketplace of its own, so copy the plugin&apos;s{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">{packageDir}/</code>{" "}
-          directory into{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">
-            ~/.vibe/plugins/{installSlug}
-          </code>
-          :
-        </p>
-        <CodeBlock language="bash" className="bg-background">
-          {manualCopy}
-        </CodeBlock>
-        <p className="text-muted-foreground text-sm">
-          Then restart Vibe or run{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">/reload-plugins</code>.
-          User-scope plugins need no trust prompt. To uninstall, remove the
-          directory:{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">
-            rm -rf ~/.vibe/plugins/{installSlug}
-          </code>
-          {isObservability && (
-            <>
-              . The plugin&apos;s{" "}
+        {portable ? (
+          <>
+            <p className="text-muted-foreground text-sm">
+              Prefer installing from the marketplace repository? Vibe has no
+              marketplace of its own, so copy the plugin&apos;s{" "}
               <code className="bg-muted px-1 py-0.5 text-xs">
-                ai.mistral.vibe/hooks.toml
+                {packageDir}/
               </code>{" "}
-              ships with the package and runs automatically.
-            </>
-          )}
-        </p>
+              directory into{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                ~/.vibe/plugins/{installSlug}
+              </code>
+              :
+            </p>
+            <CodeBlock language="bash" className="bg-background">
+              {manualCopy}
+            </CodeBlock>
+            <p className="text-muted-foreground text-sm">
+              Then restart Vibe or run{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                /reload-plugins
+              </code>
+              . User-scope plugins need no trust prompt. To uninstall, remove
+              the directory:{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                rm -rf ~/.vibe/plugins/{installSlug}
+              </code>
+              {isObservability && (
+                <>
+                  . The plugin&apos;s{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    ai.mistral.vibe/hooks.toml
+                  </code>{" "}
+                  ships with the package and runs automatically.
+                </>
+              )}
+            </p>
+          </>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            This plugin is not published as a portable Agent Plugins 1.0
+            package, so the marketplace repository has no{" "}
+            <code className="bg-muted px-1 py-0.5 text-xs">{packageDir}/</code>{" "}
+            directory to copy. Install it through the Speakeasy device agent
+            instead — assigned plugins are delivered to{" "}
+            <code className="bg-muted px-1 py-0.5 text-xs">
+              ~/.vibe/plugins/
+            </code>{" "}
+            automatically.
+          </p>
+        )}
       </div>
 
       {/* ── Connect an MCP server ─────────────────────────────────────────── */}
       <div>
         <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          To reach a Speakeasy-hosted server by hand, add a{" "}
+          To reach a Speakeasy-hosted server by hand, add it with the Vibe CLI —
+          it writes the{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">[[mcp_servers]]</code>{" "}
-          entry to{" "}
+          entry in{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">
             ~/.vibe/config.toml
-          </code>
-          , replacing the placeholders with the name and URL from that
-          server&apos;s own install page:
+          </code>{" "}
+          together with its OAuth auth table (a hand-written block has none, so
+          Vibe treats the server as static and sign-in never starts). Replace
+          the placeholders with the name and URL from that server&apos;s own
+          install page:
         </p>
-        <CodeBlock language="toml" className="bg-background">
-          {mcpConfig}
+        <CodeBlock language="bash" className="bg-background">
+          {`vibe mcp add <server-name> --url <mcp-server-url>`}
         </CodeBlock>
+        <p className="text-muted-foreground mt-2 text-sm">
+          Then sign in from inside Vibe:{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">
+            /mcp login &lt;server-name&gt;
+          </code>
+        </p>
       </div>
 
       <RelatedLinks
@@ -1163,6 +1209,8 @@ export function InstallInstructionsDialog({
   const [pluginConfirmed, setPluginConfirmed] = useState(false);
   const { data: marketplaceSettings } = useMarketplaceSettings();
   const { data: pluginsData } = usePlugins();
+  const scope = usePluginQueryScope();
+  const { data: publishStatus } = usePublishStatus(scope);
   const marketplaceName = marketplaceSettings?.effectiveName;
 
   // Restrict to the plugins this context actually cares about (e.g. the ones
@@ -1175,6 +1223,7 @@ export function InstallInstructionsDialog({
       name: p.name,
       slug: p.slug,
       description: p.description,
+      agentPluginsV1Compatible: p.agentPluginsV1Compatible,
     }));
   const needsPluginPicker = candidatePlugins.length > 1;
   const singleCandidate =
@@ -1183,12 +1232,14 @@ export function InstallInstructionsDialog({
   const matchedPlugin = candidatePlugins.find(
     (p) => p.slug === selectedPluginSlug,
   );
-  const effectivePluginName = needsPluginPicker
-    ? (matchedPlugin?.name ?? content.pluginName)
-    : (singleCandidate?.name ?? content.pluginName);
-  const effectivePluginSlug = needsPluginPicker
-    ? (matchedPlugin?.slug ?? selectedPluginSlug ?? undefined)
-    : (singleCandidate?.slug ?? content.pluginSlug);
+  const effectiveCandidate = needsPluginPicker
+    ? (matchedPlugin ?? singleCandidate)
+    : singleCandidate;
+  const effectivePluginName = effectiveCandidate?.name ?? content.pluginName;
+  const effectivePluginSlug =
+    effectiveCandidate?.slug ?? selectedPluginSlug ?? content.pluginSlug;
+  const effectiveAgentPluginsV1Compatible =
+    effectiveCandidate?.agentPluginsV1Compatible;
 
   const totalSteps = needsPluginPicker ? 3 : 2;
   const stepIndex = needsPluginPicker
@@ -1416,6 +1467,10 @@ export function InstallInstructionsDialog({
                   repoOwner={content.repoOwner}
                   repoName={content.repoName}
                   pluginSlug={effectivePluginSlug}
+                  agentPluginsV1Compatible={effectiveAgentPluginsV1Compatible}
+                  observabilityPluginSlug={
+                    publishStatus?.vibeObservabilityPlugin
+                  }
                 />
               )}
             </div>

@@ -244,7 +244,10 @@ func TestVibePostAgentSubagentMarksAgent(t *testing.T) {
 
 func TestVibeUnknownHookPassesThrough(t *testing.T) {
 	fs := newFakeServer(t, nil)
-	payload := []byte(`{"hook_event_name":"session_start","session_id":"s","cwd":"/tmp"}`)
+	// Vibe fires more hook types than the relay classifies (e.g. session_start
+	// in 3.1.x); a type it cannot classify must pass through, so use one that
+	// is not a real Vibe hook at all.
+	payload := []byte(`{"hook_event_name":"not_a_real_hook","session_id":"s","cwd":"/tmp"}`)
 	res := vibeInvoke(t, authedConfig(t, fs.URL), payload)
 
 	require.Equal(t, 0, res.ExitCode)
@@ -363,8 +366,10 @@ func TestVibeArgParsing(t *testing.T) {
 }
 
 // TestVibeHooksTomlRendered pins the generated hooks.toml the install
-// subcommand writes for --provider=vibe: one hook per event type, tool hooks
-// strict, commands pointing at the binary with the plugin config.
+// subcommand writes for --provider=vibe: one hook per event type, only
+// pre_tool strict (a strict post_tool failure would clear the result of a
+// tool that already ran), commands pointing at the binary with the plugin
+// config.
 func TestVibeHooksTomlRendered(t *testing.T) {
 	dir := t.TempDir()
 	cfg := PluginConfig{ServerURL: "https://app.getgram.ai", ProjectSlug: "default", BinaryPath: "/bin/speakeasy-hooks"}
@@ -378,8 +383,10 @@ func TestVibeHooksTomlRendered(t *testing.T) {
 	require.Contains(t, doc, `type = "post_agent"`)
 	require.Contains(t, doc, "agenthooks run --provider=vibe --strict")
 	require.Contains(t, doc, filepath.Join(dir, configFileName))
-	// Two strict tool hooks, and post_agent without strict (forbidden there).
-	require.Equal(t, 2, strings.Count(doc, "strict = true"))
+	// Only pre_tool is strict; post_agent forbids strict in Vibe's schema.
+	require.Equal(t, 1, strings.Count(doc, "strict = true"))
+	// The strict flag rides only on the pre_tool command.
+	require.Equal(t, 1, strings.Count(doc, "--strict"))
 
 	// The deployment identity file is written beside it, like every provider.
 	require.FileExists(t, filepath.Join(dir, configFileName))

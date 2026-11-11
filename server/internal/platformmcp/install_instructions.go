@@ -238,8 +238,13 @@ func (s *PluginsService) standaloneMCPInstallInstructions(ctx context.Context, o
 	switch client {
 	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientOpencode, OnboardingClientVibe, OnboardingClientOther:
 		output.Supported = true
-		output.Instructions = append(clientInstallSteps(client, slug, endpoint),
-			InstallInstruction{Title: "Complete sign-in", Description: "Finish the browser authorization flow, then return to the client and retry the connection.", URL: "", Snippet: ""})
+		signIn := InstallInstruction{Title: "Complete sign-in", Description: "Finish the browser authorization flow, then return to the client and retry the connection.", URL: "", Snippet: ""}
+		if client == OnboardingClientVibe {
+			// Vibe starts the browser OAuth flow from inside the client, not
+			// from a terminal command.
+			signIn = InstallInstruction{Title: "Sign in from Vibe", Description: "Run this inside Vibe to open the browser sign-in flow, then retry the connection.", URL: "", Snippet: "/mcp login " + slug}
+		}
+		output.Instructions = append(clientInstallSteps(client, slug, endpoint), signIn)
 	default:
 		output.Fallback = "This client does not have reviewed installation guidance. Add the server as a remote Streamable HTTP MCP only if the client supports browser OAuth."
 	}
@@ -276,8 +281,14 @@ func clientInstallSteps(client OnboardingClientFamily, key, endpoint string) []I
 			{Title: "Add it to opencode.json", Description: "Merge this into the mcp object of your OpenCode config.", URL: endpoint, Snippet: string(mustJSONIndent(map[string]any{"mcp": map[string]any{key: map[string]any{"type": "remote", "url": endpoint, "enabled": true}}}))},
 		}
 	case OnboardingClientVibe:
+		// `vibe mcp add` writes the [[mcp_servers]] entry together with its
+		// [mcp_servers.auth] table (type = "oauth", scopes = []). A hand-written
+		// config block has no auth table, so Vibe treats the server as static
+		// and a Speakeasy-hosted server fails with "authentication was rejected"
+		// instead of starting the browser sign-in flow. Sign-in then runs as
+		// the /mcp login slash command (see the appended step).
 		return []InstallInstruction{
-			{Title: "Add it to ~/.vibe/config.toml", Description: "Add this [[mcp_servers]] block, then restart Vibe or run /reload to connect.", URL: endpoint, Snippet: fmt.Sprintf("[[mcp_servers]]\nname = %q\ntransport = \"streamable-http\"\nurl = %q", key, endpoint)},
+			{Title: "Add it with the Vibe CLI", Description: "Run this in a terminal. It registers the server with OAuth auth in ~/.vibe/config.toml.", URL: endpoint, Snippet: fmt.Sprintf("vibe mcp add %s --url %s", key, endpoint)},
 		}
 	case OnboardingClientOther:
 		addEndpoint.Snippet = string(mustJSONIndent(map[string]any{"mcpServers": map[string]any{key: map[string]string{"url": endpoint}}}))
