@@ -2,6 +2,7 @@ package authn
 
 import (
 	"crypto/subtle"
+	_ "embed"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -19,7 +20,11 @@ import (
 
 var pkceChallenge = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 var pkceVerifier = regexp.MustCompile(`^[A-Za-z0-9._~-]{43,128}$`)
-var consentTemplate = template.Must(template.New("consent").Parse(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connect to Speakeasy Channels</title><style>{{.Styles}}</style></head><body><main><h1>Connect to Speakeasy Channels</h1><p>Allow {{.Name}} ({{.ClientID}}) to connect to Channels in organization {{.Organization}}, project {{.Project}} as {{.User}}?</p><form method="post" action="/channels/oauth/authorize"><input type="hidden" name="resource" value="{{.Resource}}"><input type="hidden" name="challenge" value="{{.Challenge}}"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" name="decision" value="allow">Allow</button><button type="submit" name="decision" value="deny">Deny</button></form></main></body></html>`))
+
+//go:embed consent.html
+var consentHTML string
+
+var consentTemplate = template.Must(template.Must(template.New("consent").Parse(consentHTML)).Parse(consentpage.LogoTemplate))
 
 func (s *Service) authorize(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -77,7 +82,7 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request) {
 	//nolint:exhaustruct // Optional cookie fields must remain unset for this host-only browser proof.
 	http.SetCookie(w, &http.Cookie{Name: proofCookie, Value: proof, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 600})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
 	_ = consentTemplate.Execute(w, struct {
 		Styles                                                                 template.CSS
 		Name, ClientID, Organization, Project, Resource, User, Challenge, CSRF string
