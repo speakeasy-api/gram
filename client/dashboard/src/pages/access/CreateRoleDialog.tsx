@@ -48,6 +48,7 @@ import {
   rebaseClientTypeRules,
   type ClientTypeRules,
 } from "./roleAuthClientTypes";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -569,11 +570,28 @@ export function CreateRoleDialog({
     [userVisibleScopeDefinitions, templateRoles],
   );
 
+  // Bumped whenever the form's grants are replaced wholesale, so the grid
+  // drops choices it holds on its own, such as Connect with no tools yet.
+  const [matrixEpoch, setMatrixEpoch] = useState(0);
+  // A template picked over permissions the person set by hand waits here
+  // until they confirm replacing them.
+  const [pendingTemplate, setPendingTemplate] = useState<RoleTemplate | null>(
+    null,
+  );
+  const pickTemplate = (next: RoleTemplate) => {
+    if (template === null && Object.keys(grants).length > 0) {
+      setPendingTemplate(next);
+      return;
+    }
+    applyTemplate(next);
+  };
+
   const applyTemplate = (next: RoleTemplate) => {
     const previous = templates.find((t) => t.key === template);
     setAssignmentConfirmed(false);
     setGrants(next.grants());
     setTemplate(next.key);
+    setMatrixEpoch((epoch) => epoch + 1);
     // A name the person typed stays; one a template put there follows it.
     if (name.trim() === "" || name === previous?.name) setName(next.name);
   };
@@ -591,6 +609,12 @@ export function CreateRoleDialog({
       ).length,
     [grants, mcpInventory, projectList, userVisibleScopeDefinitions],
   );
+
+  const mcpDenyUncounted =
+    !mcpInventory.settled &&
+    ["mcp:connect", "mcp:read", "mcp:write"].some((scope) =>
+      (grants[scope]?.rules ?? []).some((rule) => rule.effect === "deny"),
+    );
 
   const clientTypesChanged =
     clientTypeRulesKey(clientTypeRules) !==
@@ -616,6 +640,7 @@ export function CreateRoleDialog({
     setSelectedMembers(new Set(initialMembers));
     setSelectedAgents(new Set(initialAgents));
     setAssignmentConfirmed(false);
+    setMatrixEpoch((epoch) => epoch + 1);
   };
 
   const openRuleEditor = (scopeSlug: Scope, ruleIndex: number) => {
@@ -1041,10 +1066,12 @@ export function CreateRoleDialog({
               <AnyField
                 label="Description"
                 // Beside the name on a page, the field matches it: one line,
-                // and no "optional" tag to push its label off the name's.
+                // and no "optional" tag to push its label off the name's. A
+                // description that already has line breaks keeps the
+                // textarea, since a one-line input would strip them.
                 optionality={isPage ? "hidden" : "visible"}
                 render={(props) =>
-                  isPage ? (
+                  isPage && !description.includes("\n") ? (
                     <Input
                       {...props}
                       disabled={editingRole?.isSystem}
@@ -1080,12 +1107,27 @@ export function CreateRoleDialog({
               <RoleTemplatePicker
                 templates={templates}
                 selected={template}
-                onPick={applyTemplate}
+                onPick={pickTemplate}
               />
             )}
+            <ConfirmDialog
+              open={!!pendingTemplate}
+              onOpenChange={(open) => {
+                if (!open) setPendingTemplate(null);
+              }}
+              title="Replace this role's permissions?"
+              description={`Starting from ${pendingTemplate?.label ?? "a template"} replaces the permissions you have set so far. Name, members and agents stay.`}
+              confirmLabel="Replace permissions"
+              confirmVariant="primary"
+              onConfirm={() => {
+                if (pendingTemplate) applyTemplate(pendingTemplate);
+                setPendingTemplate(null);
+              }}
+            />
 
             {/* ─── Permissions ─── */}
             <RoleAccessMatrix
+              key={matrixEpoch}
               grants={grants}
               onChange={updateGrants}
               scopes={userVisibleScopeDefinitions}
@@ -1479,10 +1521,15 @@ export function CreateRoleDialog({
             </div>
           )}
           <div className="flex flex-wrap items-center justify-end gap-2 self-stretch">
-            {denyCount > 0 && (
+            {(denyCount > 0 || mcpDenyUncounted) && (
               <span className="text-destructive mr-auto flex items-center gap-2 text-sm">
                 <Ban aria-hidden="true" className="size-4" />
-                {denyCountLabel(denyCount)} · overrides every other grant
+                {/* Until the servers are listed the MCP denies cannot be
+                    told apart, so no number is better than a low one. */}
+                {mcpDenyUncounted
+                  ? "Explicit denies"
+                  : denyCountLabel(denyCount)}{" "}
+                · overrides every other grant
               </span>
             )}
             {canReset && (

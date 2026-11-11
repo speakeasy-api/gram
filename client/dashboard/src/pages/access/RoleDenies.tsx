@@ -94,6 +94,7 @@ export function DenyDialog({
 function describeDeny(
   deny: RoleDeny,
   rowName: (deny: RoleDeny & { kind: "mcp-row" | "mcp-tool" }) => string,
+  serverName: (serverId: string) => string | undefined,
   projects: ProjectRef[],
 ): { what: string; where: string } {
   switch (deny.kind) {
@@ -118,7 +119,7 @@ function describeDeny(
           ? project
             ? `every server in ${project}`
             : "every server"
-          : "a removed server",
+          : (serverName(s.resourceId) ?? "a removed server"),
       ];
       if (s.tool) parts.push(`the ${s.tool} tool`);
       if (s.disposition) {
@@ -184,6 +185,8 @@ export function ExplicitDenies({
       ? `every server in ${view.name}`
       : view.name;
   };
+  const serverName = (serverId: string) =>
+    views.get(mcpRowKey({ kind: "server", serverId, projectId: "" }))?.name;
   const remove = (deny: RoleDeny) => {
     switch (deny.kind) {
       case "mcp-row":
@@ -228,7 +231,12 @@ export function ExplicitDenies({
       </div>
       <ul className="divide-border divide-y">
         {denies.map((deny) => {
-          const { what, where } = describeDeny(deny, rowName, projects);
+          const { what, where } = describeDeny(
+            deny,
+            rowName,
+            serverName,
+            projects,
+          );
           return (
             <li
               key={deny.key}

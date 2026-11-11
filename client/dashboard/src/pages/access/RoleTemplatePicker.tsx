@@ -60,8 +60,8 @@ export function RoleTemplatePicker({
       </div>
       <Text muted small>
         {current
-          ? `Matches ${current.label}. Any change below makes it custom.`
-          : "Custom. Not matching a starting point."}
+          ? `Permissions match ${current.label}. Changing any permission makes them custom.`
+          : "Custom permissions. Not matching a starting point."}
       </Text>
     </div>
   );

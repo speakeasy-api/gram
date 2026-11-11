@@ -66,8 +66,8 @@ export function RoleEditorPage(): JSX.Element {
             </Page.Section.Title>
             <Page.Section.Description>
               Roles carry permissions, enabling access to different features in
-              the product. MCP access is set per server, and platform access per
-              area. Some of it can be narrowed to certain projects.
+              the product. MCP access is set per project or server, and platform
+              access per area. Some of it can be narrowed to certain projects.
             </Page.Section.Description>
             <Page.Section.Body>
               {isLoading && roleId ? (

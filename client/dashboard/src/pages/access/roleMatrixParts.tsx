@@ -107,7 +107,12 @@ export function Cell({
           ? `${label}, blocked`
           : label
       }
-      aria-pressed={state === "on" || state === "blocked"}
+      aria-pressed={
+        state === "on" ||
+        state === "blocked" ||
+        // A dashed tick that can be unticked here is as pressed as it looks.
+        (state === "inherited" && narrowable)
+      }
       aria-disabled={!interactive}
       onClick={interactive ? onToggle : undefined}
       className={cn(

@@ -967,16 +967,18 @@ export function platformAreaDenied(
 
 /**
  * Deny an area as a whole, or take that deny back. An area with levels stores
- * it on View, which also blocks Manage; an area of single permissions stores
- * it on each one that can be blocked.
+ * it on View, which also blocks Manage; its single permissions that can be
+ * blocked are blocked with it. Ones that cannot be blocked stay as they are.
  */
 export function setPlatformAreaDenied(
   grants: Record<string, RoleGrant>,
   area: PlatformArea,
   on: boolean,
 ): Record<string, RoleGrant> {
-  if (area.view || area.manage) return setPlatformBlocked(grants, area, on);
-  let next = grants;
+  // The area's single permissions go with it: a card that says Denied must
+  // not leave one of them granted underneath.
+  let next =
+    area.view || area.manage ? setPlatformBlocked(grants, area, on) : grants;
   for (const scope of blockableExtras(area)) {
     next = setPlatformScopeBlocked(next, scope.slug as Scope, on);
   }
@@ -1058,9 +1060,9 @@ export function roleDenies(
     const whole = new Set<ScopeDefinition>(
       !denied
         ? []
-        : area.view || area.manage
-          ? [(area.view ?? area.manage)!]
-          : blockableExtras(area),
+        : [area.view ?? area.manage, ...blockableExtras(area)].filter(
+            (scope) => scope !== undefined,
+          ),
     );
     for (const scope of [area.view, area.manage, ...area.extras]) {
       if (!scope) continue;

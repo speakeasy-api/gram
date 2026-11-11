@@ -251,15 +251,14 @@ function AreaCard({
                 key={scope.slug}
                 className={cn(
                   "flex items-center gap-2 text-sm",
-                  denied || blocked
-                    ? "cursor-default opacity-60"
-                    : "cursor-pointer",
+                  blocked ? "cursor-default opacity-60" : "cursor-pointer",
                 )}
               >
                 <Checkbox
                   aria-label={scope.label}
                   checked={checked}
-                  disabled={denied || blocked}
+                  // One the deny cannot cover stays editable under it.
+                  disabled={blocked}
                   onCheckedChange={(next) =>
                     onChange((prev) =>
                       setPlatformAllow(

@@ -300,6 +300,24 @@ describe("starting a new role from a template", () => {
     expect(blank.getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("asks before a template replaces permissions set by hand", () => {
+    renderEditor();
+    setLevel("Organization", "View");
+    fireEvent.click(screen.getByRole("button", { name: /^Team reviewer/ }));
+    // Nothing is replaced until the person confirms.
+    fireEvent.click(
+      within(
+        screen.getByRole("dialog", {
+          name: "Replace this role's permissions?",
+        }),
+      ).getByRole("button", { name: "Replace permissions" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Tool logs access level" })
+        .textContent,
+    ).toContain("View");
+  });
+
   it("offers no starting points for a role that already exists", () => {
     renderEditor(role);
     expect(screen.queryByText("Create from")).toBeNull();

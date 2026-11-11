@@ -34,6 +34,7 @@ import {
   limitMcpUse,
   mcpBlockedTools,
   mcpRowDenied,
+  platformAllows,
   platformAreaBlockable,
   platformAreaDenied,
   platformLevel,
@@ -575,6 +576,30 @@ describe("editing without losing rules", () => {
     ]);
     grants = setPlatformAreaDenied(grants, projects, false);
     expect(platformAreaDenied(grants, projects)).toBe(false);
+  });
+
+  it("denies an area's single permissions along with its levels", () => {
+    const [area] = platformAreas([
+      def("skill:read", "skill", "skill:blocked_read"),
+      def("skill:run", "skill", "skill:blocked_run"),
+      def("skill:share", "skill"),
+    ]);
+    let grants: Record<string, RoleGrant> = {};
+    for (const scope of ["skill:read", "skill:run", "skill:share"]) {
+      grants = setPlatformAllow(grants, scope as Scope, true);
+    }
+    const denied = setPlatformAreaDenied(grants, area!, true);
+    expect(platformAreaDenied(denied, area!)).toBe(true);
+    // What can be blocked is blocked and no longer granted.
+    expect(platformBlock(denied, "skill:run")).toBe("all");
+    expect(platformAllows(denied, "skill:run")).toBe(false);
+    // What cannot be blocked is left as it was.
+    expect(platformAllows(denied, "skill:share")).toBe(true);
+    expect(roleDenies(denied, [], [area!]).map((d) => d.kind)).toEqual([
+      "area",
+    ]);
+    const back = setPlatformAreaDenied(denied, area!, false);
+    expect(platformBlock(back, "skill:run")).toBeNull();
   });
 
   it("lists a block on some projects as its own deny", () => {

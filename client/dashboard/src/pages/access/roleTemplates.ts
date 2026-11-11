@@ -16,7 +16,10 @@ export interface RoleTemplate {
   hint: string;
   /** Copied from one of the organization's built-in roles. */
   system: boolean;
-  /** The name a new role starts with; empty leaves the name alone. */
+  /**
+   * The name a new role starts with. It replaces an empty name or one an
+   * earlier template put there, never one the person typed.
+   */
   name: string;
   /** Builds the grants afresh, so two uses never share rule ids. */
   grants: () => Record<string, RoleGrant>;
@@ -108,7 +111,9 @@ export function roleTemplates(
       grants: () => ({}),
     },
   ];
-  for (const { slug, hint } of SYSTEM_TEMPLATES) {
+  // Without the catalogue a role's blocks cannot be told from its grants, so
+  // a copy would turn them into grants: offer the copies only once it loads.
+  for (const { slug, hint } of scopes.length > 0 ? SYSTEM_TEMPLATES : []) {
     const role = roles.find(
       (candidate) => candidate.isSystem && candidate.slug === slug,
     );
