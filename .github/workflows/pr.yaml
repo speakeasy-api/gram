@@ -1819,15 +1819,6 @@ jobs:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
 
-      - name: Build test binaries
-        # Compiles and links every test binary of the shard without running
-        # it, at full -p, so the Test step below only reruns links.
-        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} ${RACE_FLAG:+"$RACE_FLAG"} -tags=inv.debug -exec=/bin/true ./...
-        env:
-          STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
-          MATRIX_SHARD: ${{ matrix.shard }}
-          RACE_FLAG: -race
-
       - name: Test
         id: test
         # Each package can launch Postgres, Redis, and ClickHouse concurrently.
@@ -1845,8 +1836,9 @@ jobs:
         # other branches) a failure fails the job as before: those runs mix
         # flakes with the branch's own breakage.
         continue-on-error: ${{ github.event_name == 'merge_group' || github.ref == 'refs/heads/main' }}
-        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} -p=2 ${RACE_FLAG:+"$RACE_FLAG"} -tags=inv.debug ./...
+        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} -p=4 ${RACE_FLAG:+"$RACE_FLAG"} -tags=inv.debug ./...
         env:
+          GRAM_TESTENV_MAX_CONCURRENT_LAUNCHES: 4
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
           RACE_FLAG: -race
