@@ -24,10 +24,8 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
-	telemetrysvc "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // JWTAuthenticator validates Platform MCP access tokens. A token is accepted
@@ -1091,20 +1089,10 @@ func (r *PostgresReader) ResolveProjectLogScope(ctx context.Context, principal P
 		}
 		return ResolvedProject{}, nil, fmt.Errorf("resolve tool log scope: %w", err)
 	}
-	var scope *telemetryrepo.OwnScope
-	if !readScope.Unrestricted() {
-		scope = telemetrysvc.OwnScopeFor(readScope, r.canonicalIdentityOrg(ctx, principal.OrganizationID))
+	if readScope.Unrestricted() {
+		return project, nil, nil
 	}
-	if scope != nil && scope.UserEmail == "" {
-		// The Platform MCP auth context carries no email, and hook rows are
-		// keyed by it, so the member's own hook sessions need it looked up.
-		user, err := usersrepo.New(r.db).GetUser(ctx, principal.UserID)
-		if err != nil {
-			return ResolvedProject{}, nil, fmt.Errorf("resolve tool log scope member: %w", err)
-		}
-		scope.UserEmail = user.Email
-	}
-	return project, scope, nil
+	return project, telemetryrepo.OwnScopeFrom(readScope, r.canonicalIdentityOrg(ctx, principal.OrganizationID)), nil
 }
 
 func (r *PostgresReader) canonicalIdentityOrg(ctx context.Context, organizationID string) string {
