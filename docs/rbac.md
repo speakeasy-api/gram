@@ -165,7 +165,7 @@ Some scopes imply lower-privilege scopes. Each catalogue entry lists the scopes 
 },
 ```
 
-The same entry carries the scope's visibility, grant surface and built-in role defaults (`defaultRoles`). There is no second table to keep in step: the engine and callers read a scope's rules through methods on `Scope` (`BlockedBy`, `Visibility`, `GrantSurface`, `ResourceKind`, `SubScopes`, `ImpliedScopes`), and `SystemRoleGrants` is built from `defaultRoles`.
+The same entry carries the scope's visibility, grant surface and built-in role defaults (`defaultRoles`). For engine evaluation and built-in role defaults there is no second table to keep in step: callers read a scope's rules through methods on `Scope` (`BlockedBy`, `Visibility`, `GrantSurface`, `ResourceKind`, `SubScopes`, `ImpliedScopes`), and `SystemRoleGrants` is built from `defaultRoles`. Two lists still sit outside the catalogue: agent runtime eligibility (`runtimeScopeDefinitions` in `agents/runtimepolicy/scopes.go`) and the access service's `userVisibleScopeGrants`. Check both when adding a scope.
 
 Read `satisfiedBy` as "if a handler requires this scope, any scope in the list also satisfies the check." Expansion is one step and not transitive, so every satisfying scope is listed directly. A `project:write` grant satisfies a `project:read` check. An `assistant:write` grant satisfies `assistant:read`. An `mcp:write` grant satisfies `mcp:read`, and both `mcp:read` and `mcp:write` satisfy `mcp:connect`. `environment:write` satisfies `environment:read`, `skill:write` satisfies `skill:read`, and `chat:write` satisfies `chat:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check except the auth-client checks (`mcp:auth` and `mcp:blocked_auth`).
 
