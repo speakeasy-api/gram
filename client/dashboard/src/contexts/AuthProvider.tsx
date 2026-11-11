@@ -45,6 +45,7 @@ import {
   useSessionData,
   useUser,
   usePylonInAppChat,
+  useLetterproveIdentify,
   useFermatPixel,
 } from "./Auth";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
@@ -166,6 +167,11 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // organization-targeted feature flags resolve on the lockout pages too.
   useRegisterOrganizationForTelemetry(session?.organization?.slug ?? "");
   usePylonInAppChat(session?.user);
+  useLetterproveIdentify(
+    session?.user.email,
+    Boolean(session?.impersonatorEmail) ||
+      Boolean(session?.organizationOverride),
+  );
   useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
 
   // Sync isAdmin into the SDK fetcher so it can attach X-Gram-Scope-Override in production.

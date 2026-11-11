@@ -231,6 +231,34 @@ export function usePylonInAppChat(user: User | undefined): void {
   }, [user]);
 }
 
+declare global {
+  interface Window {
+    Letterprove?: { identify: (email: string) => void };
+  }
+}
+
+/**
+ * Report the signed-in user's email to Letterprove, which publishes counts of
+ * companies by email domain. The email comes from the server session, so it
+ * is the verified account address. Skipped while impersonating or using
+ * support access so staff activity is not attributed to the customer.
+ */
+export function useLetterproveIdentify(
+  email: string | undefined,
+  impersonating: boolean,
+): void {
+  useEffect(() => {
+    if (!email || impersonating) return;
+    if (typeof window !== "undefined" && window.Letterprove) {
+      try {
+        window.Letterprove.identify(email);
+      } catch {
+        // never let the attestation script break the page
+      }
+    }
+  }, [email, impersonating]);
+}
+
 /**
  * Boot the Claire de Fermat pixel and emit a `page_view` on each route
  * change. The pixel is gated to production builds so we don't pollute
