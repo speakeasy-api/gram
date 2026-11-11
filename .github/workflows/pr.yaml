@@ -41,6 +41,7 @@ jobs:
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
       glint: ${{ steps.gates.outputs.glint }}
+      agent-checks: ${{ steps.gates.outputs.agent-checks }}
       infra: ${{ steps.gates.outputs.infra }}
       pystreams: ${{ steps.gates.outputs.pystreams }}
       sdk: ${{ steps.gates.outputs.sdk }}
@@ -103,6 +104,7 @@ jobs:
           STEPS_FILTER_OUTPUTS_MIGRATIONS: ${{ steps.filter.outputs.migrations }}
           STEPS_FILTER_OUTPUTS_PLOG: ${{ steps.filter.outputs.plog }}
           STEPS_FILTER_OUTPUTS_GLINT: ${{ steps.filter.outputs.glint }}
+          STEPS_FILTER_OUTPUTS_AGENT_CHECKS: ${{ steps.filter.outputs.agent-checks }}
           STEPS_FILTER_OUTPUTS_INFRA: ${{ steps.filter.outputs.infra }}
           STEPS_FILTER_OUTPUTS_PYSTREAMS: ${{ steps.filter.outputs.pystreams }}
           STEPS_FILTER_OUTPUTS_SDK: ${{ steps.filter.outputs.sdk }}
@@ -172,6 +174,13 @@ jobs:
             echo "glint jobs will run."
           else
             echo "glint jobs will be skipped."
+          fi
+
+          if [[ "${STEPS_FILTER_OUTPUTS_AGENT_CHECKS}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "agent-checks=true" >> $GITHUB_OUTPUT
+            echo "Agent check tests will run."
+          else
+            echo "Agent check tests will be skipped."
           fi
 
           if [[ "${STEPS_FILTER_OUTPUTS_INFRA}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
@@ -1725,6 +1734,27 @@ jobs:
       - name: Check for dirty files
         run: mise run git:porcelain
 
+  agent-checks-test:
+    name: agent-checks-test
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.agent-checks == 'true'
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Test
+        run: mise run test:agent-checks
+
   plog-build-lint:
     name: plog-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -2893,6 +2923,7 @@ jobs:
       - hooks-build-test
       - plog-build-lint
       - glint-test
+      - agent-checks-test
       - infra-build-lint
       - pystreams-build-lint
       - functions-build-host

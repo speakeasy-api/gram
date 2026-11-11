@@ -26,7 +26,8 @@
     "/server/**/*.golden.yaml",
     "/server/gen/**",
     "/server/**/*_gen.yaml",
-    "/docs/pubsub-topology.md"
+    "/docs/pubsub-topology.md",
+    "/.github/workflows/*.lock.yml"
   ],
   "overrides": [
     {
