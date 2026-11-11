@@ -54,7 +54,11 @@ func TestEvaluateGrantCheck_rootGrantNotSelfExcluded(t *testing.T) {
 		t.Run(string(tc.scope), func(t *testing.T) {
 			t.Parallel()
 
-			eval, err := evaluateGrantCheck(grants, Check{Scope: tc.scope, ResourceKind: "", ResourceID: tc.resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""})
+			var dimensions map[string]string
+			if ResourceKindForScope(tc.scope) == ResourceKindMCP {
+				dimensions = map[string]string{SelectorKeyProjectID: testProjectID}
+			}
+			eval, err := evaluateGrantCheck(grants, Check{Scope: tc.scope, ResourceKind: "", ResourceID: tc.resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: ""})
 			require.NoError(t, err)
 			require.False(t, eval.Denied)
 			require.NotNil(t, eval.Grant)
@@ -212,7 +216,9 @@ func TestGrantExpressionEvaluate_mcpWriteBlocklistSubtractsProductionSelector(t 
 	require.True(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
 
-	result, err = expressionForCheck(Check{
+	// A check that omits the project cannot step around the block: it is
+	// invalid rather than matched.
+	_, err = expressionForCheck(Check{
 		Scope:           ScopeMCPWrite,
 		ResourceKind:    "",
 		ResourceID:      "dimensionless_probe",
@@ -220,9 +226,7 @@ func TestGrantExpressionEvaluate_mcpWriteBlocklistSubtractsProductionSelector(t 
 		selectorMatch:   selectorMatchNormal,
 		representedUser: "",
 	}).Evaluate(grants)
-	require.NoError(t, err)
-	require.True(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 }
 
 func TestGrantExpressionEvaluate_mcpReadBlocklistLeavesMCPWrite(t *testing.T) {
@@ -266,14 +270,7 @@ func TestGrantExpressionEvaluate_mcpConnectBlocklistLeavesMCPWrite(t *testing.T)
 		NewGrant(ScopeMCPBlockedConnect, serverID),
 	}
 
-	write := Check{
-		Scope:           ScopeMCPWrite,
-		ResourceKind:    "",
-		ResourceID:      serverID,
-		Dimensions:      nil,
-		selectorMatch:   selectorMatchNormal,
-		representedUser: "",
-	}
+	write := MCPCheck(ScopeMCPWrite, serverID, testProjectID)
 	result, err := expressionForCheck(write).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)

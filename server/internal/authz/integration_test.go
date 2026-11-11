@@ -32,11 +32,11 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 
 	err = engine.Require(ctx,
 		Check{Scope: ScopeProjectRead, ResourceID: "proj:123"},
-		Check{Scope: ScopeMCPConnect, ResourceID: "toolA"},
+		MCPCheck(ScopeMCPConnect, "toolA", testProjectID),
 	)
 	require.NoError(t, err)
 
-	err = engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolB"})
+	err = engine.Require(ctx, MCPCheck(ScopeMCPConnect, "toolB", testProjectID))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -70,9 +70,9 @@ func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 	require.Equal(t, []string{"proj:123"}, projectIDs)
 
 	toolIDs, err := engine.Filter(ctx, []Check{
-		{Scope: ScopeMCPConnect, ResourceID: "toolA"},
-		{Scope: ScopeMCPConnect, ResourceID: "toolB"},
-		{Scope: ScopeMCPConnect, ResourceID: "toolC"},
+		MCPCheck(ScopeMCPConnect, "toolA", testProjectID),
+		MCPCheck(ScopeMCPConnect, "toolB", testProjectID),
+		MCPCheck(ScopeMCPConnect, "toolC", testProjectID),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"toolA", "toolB"}, toolIDs)
@@ -100,8 +100,8 @@ func TestFilter_withDimensions(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	results, err := engine.Filter(ctx, []Check{
-		MCPToolCallCheck("toolsetX", MCPToolCallDimensions{Tool: "allowed_tool", Disposition: ""}),
-		MCPToolCallCheck("toolsetX", MCPToolCallDimensions{Tool: "denied_tool", Disposition: ""}),
+		MCPToolCallCheck("toolsetX", MCPToolCallDimensions{Tool: "allowed_tool", Disposition: "", ProjectID: testProjectID}),
+		MCPToolCallCheck("toolsetX", MCPToolCallDimensions{Tool: "denied_tool", Disposition: "", ProjectID: testProjectID}),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"toolsetX"}, results)

@@ -249,7 +249,7 @@ func (s *Service) requireEndpointCreateWrite(ctx context.Context, logger *slog.L
 			return false, oops.E(oops.CodeUnexpected, err, "get endpoint backing server").LogError(ctx, logger)
 		}
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return false, err
 	}
 	return false, nil

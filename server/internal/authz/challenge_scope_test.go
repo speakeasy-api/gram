@@ -59,13 +59,13 @@ func TestWithOneChallengePerResource_recordsEachResourceOnce(t *testing.T) {
 
 	// The server, then a tool on it: the second allow on the same server is
 	// not recorded again.
-	require.NoError(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, granted, "")))
-	require.NoError(t, engine.Require(ctx, MCPToolCallCheck(granted, MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""})))
+	require.NoError(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, granted, testProjectID)))
+	require.NoError(t, engine.Require(ctx, MCPToolCallCheck(granted, MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: testProjectID})))
 	// A denial is recorded once however often it is checked.
-	require.Error(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, ungranted, "")))
-	require.Error(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, ungranted, "")))
+	require.Error(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, ungranted, testProjectID)))
+	require.Error(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, ungranted, testProjectID)))
 	// A nested call keeps the request's record rather than starting over.
-	require.NoError(t, engine.Require(WithOneChallengePerResource(ctx), MCPCheck(ScopeMCPConnect, granted, "")))
+	require.NoError(t, engine.Require(WithOneChallengePerResource(ctx), MCPCheck(ScopeMCPConnect, granted, testProjectID)))
 
 	require.Equal(t, [][2]string{{granted, "allow"}, {ungranted, "deny"}}, recordedChallengeOutcomes(t, conn))
 }
@@ -83,8 +83,8 @@ func TestWithOneChallengePerResource_recordsADenialAfterAnAllow(t *testing.T) {
 
 	// Connecting is allowed, but this destructive tool is not: the refusal
 	// is a real one and must still show.
-	require.NoError(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, granted, "")))
-	require.Error(t, engine.Require(ctx, MCPToolCallCheck(granted, MCPToolCallDimensions{Tool: "delete", Disposition: DispositionDestructive, ProjectID: ""})))
+	require.NoError(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, granted, testProjectID)))
+	require.Error(t, engine.Require(ctx, MCPToolCallCheck(granted, MCPToolCallDimensions{Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID})))
 
 	require.Equal(t, [][2]string{{granted, "allow"}, {granted, "deny"}}, recordedChallengeOutcomes(t, conn))
 }
@@ -102,17 +102,17 @@ func TestWithOneChallengePerResource_recordsEachRefusedToolOnce(t *testing.T) {
 	}{
 		{
 			name:  "two tools",
-			calls: []MCPToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: ""}, {Tool: "drop", Disposition: DispositionDestructive, ProjectID: ""}},
+			calls: []MCPToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID}, {Tool: "drop", Disposition: DispositionDestructive, ProjectID: testProjectID}},
 			want:  2,
 		},
 		{
 			name:  "one tool twice",
-			calls: []MCPToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: ""}, {Tool: "delete", Disposition: DispositionDestructive, ProjectID: ""}},
+			calls: []MCPToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID}, {Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID}},
 			want:  1,
 		},
 		{
 			name:  "one tool under two dispositions",
-			calls: []MCPToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: ""}, {Tool: "delete", Disposition: DispositionOpenWorld, ProjectID: ""}},
+			calls: []MCPToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID}, {Tool: "delete", Disposition: DispositionOpenWorld, ProjectID: testProjectID}},
 			want:  2,
 		},
 	} {
@@ -146,9 +146,9 @@ func TestWithoutChallenges_recordsNothing(t *testing.T) {
 	ctx, engine, conn, granted := challengeScopeFixture(t)
 	silent := WithoutChallenges(WithOneChallengePerResource(ctx))
 
-	require.NoError(t, engine.Require(silent, MCPCheck(ScopeMCPConnect, granted, "")))
+	require.NoError(t, engine.Require(silent, MCPCheck(ScopeMCPConnect, granted, testProjectID)))
 	require.Error(t, engine.Require(silent, MCPCheck(ScopeMCPConnect, uuid.NewString(), "")))
-	matched, err := engine.FindMatched(silent, []Check{MCPCheck(ScopeMCPConnect, granted, "")})
+	matched, err := engine.FindMatched(silent, []Check{MCPCheck(ScopeMCPConnect, granted, testProjectID)})
 	require.NoError(t, err)
 	require.Equal(t, []bool{true}, matched)
 
@@ -165,10 +165,10 @@ func TestWithOneChallengePerResource_batchesDoNotTakeAResourcesSlot(t *testing.T
 	// A batch filtering the server's tools records, but leaves the server's
 	// own denial to be recorded when a call names it. Once that is recorded,
 	// a later batch about the server records nothing.
-	_, err := engine.FindMatched(ctx, []Check{MCPToolCallCheck(ungranted, MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""})})
+	_, err := engine.FindMatched(ctx, []Check{MCPToolCallCheck(ungranted, MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: testProjectID})})
 	require.NoError(t, err)
-	require.Error(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, ungranted, "")))
-	_, err = engine.FindMatched(ctx, []Check{MCPToolCallCheck(ungranted, MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""})})
+	require.Error(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, ungranted, testProjectID)))
+	_, err = engine.FindMatched(ctx, []Check{MCPToolCallCheck(ungranted, MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: testProjectID})})
 	require.NoError(t, err)
 
 	// A batch row names no single resource.

@@ -325,6 +325,17 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 		dimensions := maps.Clone(grant.Selector)
 		delete(dimensions, authz.SelectorKeyResourceKind)
 		delete(dimensions, authz.SelectorKeyResourceID)
+		// A check must carry every dimension its resource kind requires. A
+		// grant that leaves one unbounded reaches any value, so probe with a
+		// placeholder.
+		for _, key := range authz.RequiredCheckDimensions(authz.ResourceKindForScope(scope)) {
+			if value := dimensions[key]; value == "" || value == authz.WildcardResource {
+				if dimensions == nil {
+					dimensions = map[string]string{}
+				}
+				dimensions[key] = "platform-mcp-catalogue-probe"
+			}
+		}
 		allowed, err := authz.GrantsAuthorize(grants, authz.Check{
 			Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions,
 		})

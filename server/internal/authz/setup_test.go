@@ -18,6 +18,10 @@ import (
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
+// testProjectID is the project MCP checks name in tests whose grants do not
+// bound the project. Every MCP check must carry one.
+const testProjectID = "project-test"
+
 var (
 	cloneTestDatabase   testenv.PostgresDBCloneFunc
 	newClickhouseClient testenv.ClickhouseClientFunc

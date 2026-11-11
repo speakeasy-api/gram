@@ -49,14 +49,19 @@ func (c Check) isAuthClientCheck() bool {
 	return c.ResourceKind == ResourceKindMCPAuthClient || ResourceKindForScope(c.Scope) == ResourceKindMCPAuthClient
 }
 
+// resourceKind is the check's resource kind: ResourceKind when set, otherwise
+// the kind derived from the scope.
+func (c Check) resourceKind() string {
+	if c.ResourceKind != "" {
+		return c.ResourceKind
+	}
+	return ResourceKindForScope(c.Scope)
+}
+
 // selector converts the check into a Selector for matching against grant selectors.
 func (c Check) selector() Selector {
-	kind := c.ResourceKind
-	if kind == "" {
-		kind = ResourceKindForScope(c.Scope)
-	}
 	s := Selector{
-		SelectorKeyResourceKind: kind,
+		SelectorKeyResourceKind: c.resourceKind(),
 		SelectorKeyResourceID:   c.ResourceID,
 	}
 	maps.Copy(s, c.Dimensions)

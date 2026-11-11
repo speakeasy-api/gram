@@ -367,8 +367,8 @@ func TestPrincipalCredentialsHonorLiveServerRestriction(t *testing.T) {
 			} else {
 				ctx = contextvalues.SetOAuthClientID(ctx, "test-agent-client")
 			}
-			selected := authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: "selected-server"}
-			other := authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: "other-server"}
+			selected := authz.MCPCheck(authz.ScopeMCPConnect, "selected-server", fixture.projectID)
+			other := authz.MCPCheck(authz.ScopeMCPConnect, "other-server", fixture.projectID)
 			prepared, err := fixture.engine.PrepareContext(ctx)
 			require.NoError(t, err)
 			require.NoError(t, fixture.engine.Require(prepared, selected))

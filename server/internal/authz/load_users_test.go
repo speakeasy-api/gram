@@ -70,10 +70,10 @@ func TestLoadUserGrants_matchesIndividualPolicies(t *testing.T) {
 		require.NoError(t, err)
 		require.ElementsMatch(t, individual, batch[id], "owner %q", id)
 	}
-	check := Check{Scope: ScopeMCPConnect, ResourceID: "direct-resource"}
+	check := MCPCheck(ScopeMCPConnect, "direct-resource", testProjectID)
 	require.True(t, GrantsSatisfy(batch["owner_direct"], check))
 	require.False(t, GrantsSatisfy(batch["owner_denied"], check), "another owner's direct grants must not leak")
-	require.False(t, GrantsSatisfy(batch["owner_denied"], Check{Scope: ScopeMCPConnect, ResourceID: "other-org-resource"}))
+	require.False(t, GrantsSatisfy(batch["owner_denied"], MCPCheck(ScopeMCPConnect, "other-org-resource", testProjectID)))
 }
 
 func TestLoadUserGrants_emptyAndInvalidInputsDoNotQuery(t *testing.T) {

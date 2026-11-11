@@ -46,7 +46,7 @@ func TestEngineRequire_LastDenialWins(t *testing.T) {
 	// A handler probes one scope, swallows the refusal, then fails on another:
 	// the explanation must match the refusal that produced the response.
 	require.Error(t, engine.Require(ctx, Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil}))
-	require.Error(t, engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "mcp_1", Dimensions: nil}))
+	require.Error(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, "mcp_1", testProjectID)))
 
 	denial, ok := RecordedDenial(ctx)
 	require.True(t, ok)
@@ -81,13 +81,13 @@ func TestEngineEvaluateLoadedGrants_DoesNotRecord(t *testing.T) {
 	ctx := WithDenialRecorder(GrantsToContext(enterpriseSessionCtx(t), nil))
 
 	// A probe of another principal's grants says nothing about the caller.
-	require.Error(t, engine.EvaluateLoadedGrants(ctx, nil, Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "mcp_1", Dimensions: nil}))
+	require.Error(t, engine.EvaluateLoadedGrants(ctx, nil, MCPCheck(ScopeMCPConnect, "mcp_1", testProjectID)))
 	_, ok := RecordedDenial(ctx)
 	require.False(t, ok)
 
 	// Nor does it overwrite the caller's own refusal.
 	require.Error(t, engine.Require(ctx, Check{Scope: ScopeLogRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil}))
-	require.Error(t, engine.EvaluateLoadedGrants(ctx, nil, Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "mcp_1", Dimensions: nil}))
+	require.Error(t, engine.EvaluateLoadedGrants(ctx, nil, MCPCheck(ScopeMCPConnect, "mcp_1", testProjectID)))
 
 	denial, ok := RecordedDenial(ctx)
 	require.True(t, ok)
@@ -118,7 +118,7 @@ func TestEngineRequireAny_RecordsTheLeastPrivilegedAlternative(t *testing.T) {
 		{
 			name:   "the scope the other alternative implies",
 			grants: nil,
-			checks: []Check{{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "mcp_1", Dimensions: nil}, {Scope: ScopeMCPRead, ResourceKind: "", ResourceID: "mcp_1", Dimensions: nil}},
+			checks: []Check{MCPCheck(ScopeMCPWrite, "mcp_1", testProjectID), MCPCheck(ScopeMCPRead, "mcp_1", testProjectID)},
 			want:   Denial{Scope: ScopeMCPRead, ResourceKind: "mcp"},
 			none:   false,
 		},
