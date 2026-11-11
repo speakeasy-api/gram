@@ -16,7 +16,7 @@ import (
 // The shared gate answers for a member's own session with no grant, and for
 // nobody while impersonating: the support block runs before the owner rule, as
 // it does when the transcript itself is opened.
-func TestSessionAccess_AnswersForSession_SupportSessionRefused(t *testing.T) {
+func TestSessionAccess_CanAccess_SupportSessionRefused(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx, userID := memberSessionCtx(t, ti)
@@ -27,7 +27,7 @@ func TestSessionAccess_AnswersForSession_SupportSessionRefused(t *testing.T) {
 	access := chat.NewSessionAccess(logger, ti.conn, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()))
 	own := seedChat(t, ctx, ti, userID, "", "my session")
 
-	answers, err := access.AnswersForSession(ctx, own)
+	answers, err := access.CanAccess(ctx, own)
 	require.NoError(t, err)
 	require.True(t, answers, "a member answers for their own session")
 
@@ -37,7 +37,7 @@ func TestSessionAccess_AnswersForSession_SupportSessionRefused(t *testing.T) {
 	supportCtx := contextvalues.WithValidatedSupportSession(ctx, &support)
 	require.True(t, contextvalues.IsSupportSession(supportCtx))
 
-	answers, err = access.AnswersForSession(supportCtx, own)
+	answers, err = access.CanAccess(supportCtx, own)
 	require.NoError(t, err)
 	require.False(t, answers, "impersonation answers for no session")
 }

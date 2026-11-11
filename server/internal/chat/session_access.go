@@ -33,10 +33,10 @@ func NewSessionAccess(logger *slog.Logger, db repo.DBTX, authzEngine *authz.Engi
 	}
 }
 
-// AnswersForSession reports whether the caller may read the session with no
+// CanAccess reports whether the caller may read the session with no
 // chat:read grant: they own it, or own or edit the agent behind an agent-only
 // session. It records no denial and, like the chat gate, admits the runtime.
-func (a *SessionAccess) AnswersForSession(ctx context.Context, chatID uuid.UUID) (bool, error) {
+func (a *SessionAccess) CanAccess(ctx context.Context, chatID uuid.UUID) (bool, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return false, nil

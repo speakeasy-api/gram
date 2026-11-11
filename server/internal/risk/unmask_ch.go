@@ -128,7 +128,7 @@ func (s *Service) requireChatRead(ctx context.Context, authCtx *contextvalues.Au
 	if chatID == uuid.Nil || s.sessionAccess == nil || !ownerPathCaller(ctx, authCtx) {
 		return err
 	}
-	answers, accessErr := s.sessionAccess.AnswersForSession(ctx, chatID)
+	answers, accessErr := s.sessionAccess.CanAccess(ctx, chatID)
 	if accessErr != nil {
 		return fmt.Errorf("authorize risk match reveal by session owner: %w", accessErr)
 	}
