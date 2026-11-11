@@ -26,11 +26,12 @@ func (e *Engine) RequireUserOrganizationScopeWithDBTX(ctx context.Context, db ac
 		return oops.C(oops.CodeForbidden)
 	}
 
-	enforce, err := e.ShouldEnforce(ctx)
+	enforce, err := e.shouldEnforce(ctx)
 	if err != nil {
 		return err
 	}
 	if !enforce {
+		recordDecision(ctx, DecisionOperationEvaluateLoaded, DecisionModeSkipped)
 		authCtx, _ := contextvalues.GetAuthContext(ctx)
 		if authCtx.APIKeyID != "" {
 			// API keys are bound to their authenticated organization outside RBAC.

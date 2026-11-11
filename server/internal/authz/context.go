@@ -72,7 +72,7 @@ type AdmissionBoundary struct {
 func (e *Engine) CaptureAdmissionBoundary(ctx context.Context) (AdmissionBoundary, error) {
 	policies, valid := grantAuthorizationFromContext(ctx)
 	if !valid {
-		enforce, err := e.ShouldEnforce(ctx)
+		enforce, err := e.shouldEnforce(ctx)
 		if err != nil {
 			return AdmissionBoundary{policies: policies, valid: false}, fmt.Errorf("check admission enforcement: %w", err)
 		}

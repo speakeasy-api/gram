@@ -210,10 +210,11 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 }
 
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {
-	enforce, err := e.ShouldEnforce(ctx)
+	enforce, err := e.shouldEnforce(ctx)
 	if err != nil {
 		return err
 	}
+	recordDecision(ctx, DecisionOperationRequire, decisionModeFor(enforce))
 	if !enforce {
 		if !all(checks, unenforcedAllows) {
 			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
@@ -243,6 +244,7 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 // consulting ShouldEnforce or reading grants from context. Request handlers
 // should use Require so normal request enforcement semantics apply.
 func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, checks ...Check) error {
+	recordDecision(ctx, DecisionOperationEvaluateLoaded, DecisionModeEnforced)
 	if _, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok {
 		return oops.C(oops.CodeForbidden)
 	}
@@ -337,10 +339,11 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 }
 
 func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
-	enforce, err := e.ShouldEnforce(ctx)
+	enforce, err := e.shouldEnforce(ctx)
 	if err != nil {
 		return err
 	}
+	recordDecision(ctx, DecisionOperationRequireAny, decisionModeFor(enforce))
 	if !enforce {
 		if len(checks) > 0 && !slices.ContainsFunc(checks, unenforcedAllows) {
 			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
@@ -518,10 +521,11 @@ func leastPrivilegedAlternative(checks []Check, blocked []bool) (Check, bool) {
 // failures (missing prepared grants, invalid check); a merely unsatisfied check
 // yields (false, nil).
 func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
-	enforce, err := e.ShouldEnforce(ctx)
+	enforce, err := e.shouldEnforce(ctx)
 	if err != nil {
 		return false, err
 	}
+	recordDecision(ctx, DecisionOperationEvaluate, decisionModeFor(enforce))
 	if !enforce {
 		return all(checks, unenforcedAllows), nil
 	}
@@ -554,10 +558,11 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 // is authorized for. When RBAC is not enforced all resource IDs are returned
 // except those of auth-client checks, which are omitted.
 func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
-	enforce, err := e.ShouldEnforce(ctx)
+	enforce, err := e.shouldEnforce(ctx)
 	if err != nil {
 		return nil, err
 	}
+	recordDecision(ctx, DecisionOperationFilter, decisionModeFor(enforce))
 
 	if !enforce {
 		ids := make([]string, 0, len(checks))
@@ -661,10 +666,11 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 // (same as [Filter]); per-check logs are intentionally avoided so callers can
 // safely use this with large input sets like a full tools/list.
 func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error) {
-	enforce, err := e.ShouldEnforce(ctx)
+	enforce, err := e.shouldEnforce(ctx)
 	if err != nil {
 		return nil, err
 	}
+	recordDecision(ctx, DecisionOperationFindMatched, decisionModeFor(enforce))
 
 	if !enforce {
 		out := make([]bool, len(checks))
@@ -754,7 +760,20 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 	return matched, nil
 }
 
+// ShouldEnforce reports whether RBAC is enforced for the request. A handler
+// that branches on it is making an authorization decision, so the call is
+// recorded like one; the engine's own entry points use shouldEnforce and
+// record under their own operation.
 func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
+	enforce, err := e.shouldEnforce(ctx)
+	if err != nil {
+		return false, err
+	}
+	recordDecision(ctx, DecisionOperationShouldEnforce, decisionModeFor(enforce))
+	return enforce, nil
+}
+
+func (e *Engine) shouldEnforce(ctx context.Context) (bool, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return false, oops.C(oops.CodeUnauthorized)
