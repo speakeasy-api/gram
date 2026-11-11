@@ -254,22 +254,31 @@ func TestOAuthSecurity(t *testing.T) {
 				require.NoError(t, json.Unmarshal(registered.Body.Bytes(), &client))
 				query := authorizationQuery(client.ID)
 				query.Set("redirect_uri", callback)
-				page := f.request(http.MethodGet, "/channels/oauth/authorize?"+query.Encode(), "", "")
-				require.Equal(t, http.StatusOK, page.Code)
-				policy := page.Header().Get("Content-Security-Policy")
-				require.NotContains(t, policy, "form-action")
-				require.Contains(t, policy, "frame-ancestors 'none'")
-				require.Contains(t, policy, "default-src 'none'")
-				require.Equal(t, "same-origin", page.Header().Get("Referrer-Policy"))
-				form := consentFields(t, page.Body.String())
-				form.Set("decision", "allow")
-				approved := f.request(http.MethodPost, "/channels/oauth/authorize", form.Encode(), testOrigin, page.Result().Cookies()...)
-				require.Equal(t, http.StatusSeeOther, approved.Code)
-				redirect, err := url.Parse(approved.Header().Get("Location"))
-				require.NoError(t, err)
-				require.NotEmpty(t, redirect.Query().Get("code"))
-				redirect.RawQuery = ""
-				require.Equal(t, callback, redirect.String())
+				for _, decision := range []string{"allow", "deny"} {
+					page := f.request(http.MethodGet, "/channels/oauth/authorize?"+query.Encode(), "", "")
+					require.Equal(t, http.StatusOK, page.Code)
+					policy := page.Header().Get("Content-Security-Policy")
+					require.NotContains(t, policy, "form-action")
+					require.Contains(t, policy, "frame-ancestors 'none'")
+					require.Contains(t, policy, "default-src 'none'")
+					require.Equal(t, "same-origin", page.Header().Get("Referrer-Policy"))
+					form := consentFields(t, page.Body.String())
+					form.Set("decision", decision)
+					response := f.request(http.MethodPost, "/channels/oauth/authorize", form.Encode(), testOrigin, page.Result().Cookies()...)
+					require.Equal(t, http.StatusSeeOther, response.Code)
+					redirect, err := url.Parse(response.Header().Get("Location"))
+					require.NoError(t, err)
+					require.Equal(t, query.Get("state"), redirect.Query().Get("state"))
+					if decision == "allow" {
+						require.NotEmpty(t, redirect.Query().Get("code"))
+						require.Empty(t, redirect.Query().Get("error"))
+					} else {
+						require.Empty(t, redirect.Query().Get("code"))
+						require.Equal(t, "access_denied", redirect.Query().Get("error"))
+					}
+					redirect.RawQuery = ""
+					require.Equal(t, callback, redirect.String())
+				}
 			})
 		}
 	})
