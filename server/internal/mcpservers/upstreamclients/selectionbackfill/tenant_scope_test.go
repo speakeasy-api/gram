@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -34,6 +35,10 @@ func TestProjectIssuerTenantPrecedenceMatchesCoverageAndRecording(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, live, 1)
 	require.Equal(t, f.orgID, live[0].OrganizationID)
+	classes, err := authclientbackfill.New(f.pool).ListLiveCredentialClasses(ctx, authclientbackfill.ListLiveCredentialClassesParams{OrganizationID: f.orgID, Cursor: uuid.Nil, PageSize: 10})
+	require.NoError(t, err)
+	require.Len(t, classes, 1, "typed coverage must discover the same canonical-tenant lineage")
+	require.Equal(t, credential, classes[0].CredentialID)
 	coverage, err := f.q.ListUpstreamClientSelectionCoverage(ctx, ListUpstreamClientSelectionCoverageParams{UserSessionIssuerID: issuer, CredentialKind: "user_session", CredentialID: credential})
 	require.NoError(t, err)
 	require.Len(t, coverage, 1)

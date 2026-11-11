@@ -2527,10 +2527,13 @@ JOIN user_session_issuers AS usi
   ON usi.id = s.user_session_issuer_id
 LEFT JOIN projects AS p
   ON p.id = usi.project_id
-WHERE s.deleted IS FALSE
+WHERE usi.deleted IS FALSE
+  AND (usi.project_id IS NULL OR p.deleted IS FALSE)
+  AND (s.organization_id IS NULL OR s.organization_id = CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END)
+  AND s.deleted IS FALSE
   AND s.refresh_expires_at > clock_timestamp()
   AND COALESCE(s.credential_id, s.id) > $1::uuid
-  AND COALESCE(usi.organization_id, p.organization_id) = $2::text
+  AND CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END = $2::text
 ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
 LIMIT $3::int
 `
