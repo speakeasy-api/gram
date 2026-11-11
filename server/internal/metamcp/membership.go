@@ -89,6 +89,7 @@ func (w GatewayWriter) CreateGateway(ctx context.Context, tx pgx.Tx, actor Actor
 		if _, err := txRepo.LockUserSessionIssuerForMetaMCP(ctx, repo.LockUserSessionIssuerForMetaMCPParams{
 			UserSessionIssuerID: issuerID.UUID,
 			ProjectID:           actor.ProjectID,
+			OrganizationID:      actor.OrganizationID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return repo.MetaMcpServer{}, ErrIssuerNotInProject
