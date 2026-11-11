@@ -371,7 +371,9 @@ func TestMemoryDigests_RegeneratedSummaryReturnsToRecall(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, recallChatIDs(), chatID)
 
-	// Building again must leave the old day digest and its snapshot alone.
+	// A run (invalidate, then build) must leave the old day digest and its
+	// snapshot alone: the chat is still eligible, only its summary changed.
+	require.NoError(t, job.Invalidate(ctx))
 	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "day", Now: now})
 	require.NoError(t, err)
 	require.Zero(t, result.Built)
