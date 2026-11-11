@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -308,19 +307,13 @@ func TestLoadChat_RBAC_AgentOwnerCannotReadHumanSession(t *testing.T) {
 
 	agentID := seedAgent(t, ctx, ti, authCtx.UserID, "My Agent")
 	selfCtx := authztest.WithExactGrants(t, ctx)
-	for name, chatID := range map[string]uuid.UUID{
+	for _, chatID := range map[string]uuid.UUID{
 		"user_id":          seedChat(t, ctx, ti, "other-user-id", "", "human session"),
 		"external_user_id": seedChat(t, ctx, ti, "", "someone@example.com", "external session"),
 	} {
-		linked, err := hooksrepo.New(ti.conn).LinkChatActingAgent(ctx, hooksrepo.LinkChatActingAgentParams{
-			AgentID:   uuid.NullUUID{UUID: agentID, Valid: true},
-			ID:        chatID,
-			ProjectID: ti.projectID,
-		})
-		require.NoError(t, err, name)
-		require.Equal(t, int64(1), linked, name)
+		stampActingAgent(t, ctx, ti, chatID, agentID)
 
-		_, err = ti.service.LoadChat(selfCtx, loadPayload(chatID.String()))
+		_, err := ti.service.LoadChat(selfCtx, loadPayload(chatID.String()))
 		requireOopsCode(t, err, oops.CodeForbidden)
 	}
 }
