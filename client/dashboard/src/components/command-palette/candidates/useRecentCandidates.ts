@@ -4,12 +4,6 @@ import { useNavigate } from "react-router";
 import { getRecentLabelOverride, useRecentlyVisited } from "../recentlyVisited";
 import type { LauncherCandidate } from "./types";
 
-// An identity detail page (`.../identities/<urn>/...`) registers the person's
-// display name — their email when no name is known — as its recent label.
-// The identities index itself has no person in its label and is not matched.
-const IDENTITY_PAGE_RE = /\/identities\/[^/]+/;
-const CHANNELS_PAGE_RE = /\/channels(?:[/?#]|$)/;
-
 /**
  * Recently visited pages (localStorage) as candidates. Takes the same gating
  * the palette applies today: the read only happens while the palette is open
@@ -43,14 +37,7 @@ export function useRecentCandidates({
         // Prefer a live name override over a stored URL-derived fallback so
         // id-keyed pages show the resource name once it has loaded.
         const label = getRecentLabelOverride(recent.href) ?? recent.label;
-        // A person's name ranks by fuzzy alone, like People: it never leaves
-        // the tenant.
-        // Channels recents normally say only "Channels", but never trust a
-        // persisted label or future override to be free of DM identity data.
-        const fuzzyOnly =
-          IDENTITY_PAGE_RE.test(recent.href) ||
-          CHANNELS_PAGE_RE.test(recent.href) ||
-          undefined;
+
         return {
           id: `recent:${recent.href}`,
           kind: "recent",
@@ -58,7 +45,6 @@ export function useRecentCandidates({
           detail: "Recently visited",
           keywords: [recent.href],
           verbs: ["open"],
-          fuzzyOnly,
           icon: recent.icon as IconName | undefined,
           group: "Recently Visited",
           run: () => {
