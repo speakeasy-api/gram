@@ -98,7 +98,7 @@ export function PlatformCredentialList(): JSX.Element {
           </Button>
         </div>
       )}
-      {query.data && query.data.credentials.length > 0 && (
+      {!query.error && query.data && query.data.credentials.length > 0 && (
         <div className="overflow-auto">
           <DataTable>
             <DataTable.Header table={table} />
@@ -110,7 +110,7 @@ export function PlatformCredentialList(): JSX.Element {
           </DataTable>
         </div>
       )}
-      {query.data?.credentials.length === 0 && (
+      {!query.error && query.data?.credentials.length === 0 && (
         <p className="text-muted-foreground text-sm">
           No platform credentials. Create one before provisioning platform
           signing keys.

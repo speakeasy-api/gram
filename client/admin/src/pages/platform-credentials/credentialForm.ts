@@ -110,6 +110,9 @@ export function formProblem(form: CredentialFormState): string | undefined {
   ) {
     return "Enter the pool ID, provider ID and project number.";
   }
+  if (form.method === "wif" && !/^\d+$/.test(form.wifProjectNumber.trim())) {
+    return "The GCP project number is digits only.";
+  }
   return undefined;
 }
 

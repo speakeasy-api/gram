@@ -103,76 +103,80 @@ export function CredentialEditor({
         void submit();
       }}
     >
-      <Field label="Name">
-        <Input
-          required
-          value={form.name}
-          onChange={(event) => set({ name: event.target.value })}
-        />
-      </Field>
-      <Field label="Authentication" hint={method?.description}>
-        <Select
-          value={form.method}
-          onValueChange={(value) => set({ method: value as GcpAuthMethod })}
-        >
-          <SelectTrigger aria-label="Authentication">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {GCP_AUTH_METHODS.map((m) => (
-              <SelectItem key={m.value} value={m.value}>
-                {m.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      {form.method === "wif" && (
-        <>
-          <Field label="WIF pool ID">
+      {/* Disabled while saving: the request carries the values from submit
+          time, so an edit made in flight would be silently dropped. */}
+      <fieldset disabled={pending} className="grid gap-4">
+        <Field label="Name">
+          <Input
+            required
+            value={form.name}
+            onChange={(event) => set({ name: event.target.value })}
+          />
+        </Field>
+        <Field label="Authentication" hint={method?.description}>
+          <Select
+            value={form.method}
+            onValueChange={(value) => set({ method: value as GcpAuthMethod })}
+          >
+            <SelectTrigger aria-label="Authentication">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {GCP_AUTH_METHODS.map((m) => (
+                <SelectItem key={m.value} value={m.value}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        {form.method === "wif" && (
+          <>
+            <Field label="WIF pool ID">
+              <Input
+                className="font-mono"
+                value={form.wifPoolId}
+                onChange={(event) => set({ wifPoolId: event.target.value })}
+              />
+            </Field>
+            <Field label="WIF provider ID">
+              <Input
+                className="font-mono"
+                value={form.wifProviderId}
+                onChange={(event) => set({ wifProviderId: event.target.value })}
+              />
+            </Field>
+            <Field label="GCP project number">
+              <Input
+                className="font-mono"
+                inputMode="numeric"
+                value={form.wifProjectNumber}
+                onChange={(event) =>
+                  set({ wifProjectNumber: event.target.value })
+                }
+              />
+            </Field>
+          </>
+        )}
+        {form.method !== "ambient" && (
+          <Field
+            label={
+              form.method === "wif"
+                ? "Service account to impersonate (optional)"
+                : "Service account to impersonate"
+            }
+            hint="For example signer@project-id.iam.gserviceaccount.com."
+          >
             <Input
               className="font-mono"
-              value={form.wifPoolId}
-              onChange={(event) => set({ wifPoolId: event.target.value })}
-            />
-          </Field>
-          <Field label="WIF provider ID">
-            <Input
-              className="font-mono"
-              value={form.wifProviderId}
-              onChange={(event) => set({ wifProviderId: event.target.value })}
-            />
-          </Field>
-          <Field label="GCP project number">
-            <Input
-              className="font-mono"
-              inputMode="numeric"
-              value={form.wifProjectNumber}
+              value={form.impersonateServiceAccount}
               onChange={(event) =>
-                set({ wifProjectNumber: event.target.value })
+                set({ impersonateServiceAccount: event.target.value })
               }
             />
           </Field>
-        </>
-      )}
-      {form.method !== "ambient" && (
-        <Field
-          label={
-            form.method === "wif"
-              ? "Service account to impersonate (optional)"
-              : "Service account to impersonate"
-          }
-          hint="For example signer@project-id.iam.gserviceaccount.com."
-        >
-          <Input
-            className="font-mono"
-            value={form.impersonateServiceAccount}
-            onChange={(event) =>
-              set({ impersonateServiceAccount: event.target.value })
-            }
-          />
-        </Field>
-      )}
+        )}
+      </fieldset>
       {credential && (
         <p className="text-muted-foreground text-sm">
           Saving replaces the whole configuration. The server refuses the change

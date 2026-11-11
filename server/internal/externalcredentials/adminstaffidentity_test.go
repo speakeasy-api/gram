@@ -134,3 +134,18 @@ func TestPlatformCredentials_PlatformServiceRefusesDashboardWrites(t *testing.T)
 	})
 	requireOopsCode(t, err, oops.CodeUnavailable)
 }
+
+func TestPlatformCredentials_RejectsNonNumericWifProjectNumber(t *testing.T) {
+	t.Parallel()
+	svc := newPlatformTestService(t)
+
+	_, err := svc.CreateGcpIamPlatformCredential(withStaffIdentity(t.Context()), &adminecgen.CreateGcpIamPlatformCredentialPayload{
+		SessionToken:              nil,
+		Name:                      "wif",
+		ImpersonateServiceAccount: nil,
+		WifPoolID:                 new("pool"),
+		WifProviderID:             new("provider"),
+		WifProjectNumber:          new("abc"),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}

@@ -123,9 +123,9 @@ describe("PlatformCredentialList", () => {
       target: { value: "new@example-project.iam.gserviceaccount.com" },
     });
     fireEvent.click(
-      screen
-        .getAllByRole("button", { name: "Create credential" })
-        .at(-1) as HTMLElement,
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Create credential",
+      }),
     );
 
     await waitFor(() =>

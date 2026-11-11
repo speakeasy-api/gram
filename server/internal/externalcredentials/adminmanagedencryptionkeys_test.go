@@ -55,4 +55,5 @@ func TestGcpIamPlatformCredential_GuardsManagedEncryptionKeys(t *testing.T) {
 
 	require.NoError(t, q.MarkManagedEncryptionKeyDisabled(ctx, oerepo.MarkManagedEncryptionKeyDisabledParams{ExternalKeyID: key.ID, OrganizationID: ti.orgID}))
 	require.NoError(t, update("renamed", gramProjectServiceAccount("other")))
+	require.NoError(t, remove(), "a disabled key no longer blocks the delete")
 }

@@ -97,6 +97,19 @@ describe("formProblem", () => {
     ).toBeDefined();
   });
 
+  it("requires a numeric wif project number", () => {
+    expect(
+      formProblem(
+        form({
+          method: "wif",
+          wifPoolId: "p",
+          wifProviderId: "v",
+          wifProjectNumber: "abc",
+        }),
+      ),
+    ).toBe("The GCP project number is digits only.");
+  });
+
   it("accepts a complete form", () => {
     expect(
       formProblem(

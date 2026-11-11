@@ -113,6 +113,7 @@ function Verification({ id }: { id: string }): JSX.Element {
   const verify = async () => {
     setPending(true);
     setError("");
+    setResult(undefined);
     try {
       setResult(await verifyGcpIamPlatformCredential(id));
     } catch (e) {

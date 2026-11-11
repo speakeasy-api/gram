@@ -1069,6 +1069,11 @@ func (s *Service) resolveGcpColumns(ctx context.Context, logger *slog.Logger, in
 	if wifSet != 0 && wifSet != 3 {
 		return cols, oops.E(oops.CodeBadRequest, nil, "wif_pool_id, wif_provider_id, and wif_project_number must be set together").LogError(ctx, logger)
 	}
+	// GCP project numbers are decimal digits; anything else could never
+	// resolve as a Workload Identity Federation audience.
+	if projectNumber.Valid && strings.IndexFunc(projectNumber.String, func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
+		return cols, oops.E(oops.CodeBadRequest, nil, "wif_project_number must be the numeric GCP project number").LogWarn(ctx, logger)
+	}
 
 	return cols, nil
 }
