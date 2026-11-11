@@ -15,7 +15,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/mail"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -28,52 +30,51 @@ import (
 const (
 	vaultScope             = "https://www.googleapis.com/auth/ediscovery"
 	storageScope           = "https://www.googleapis.com/auth/devstorage.read_only"
+	orgUnitScope           = "https://www.googleapis.com/auth/admin.directory.orgunit.readonly"
 	maxAPIBytes      int64 = 4 << 20
 	maxDownloadBytes int64 = 128 << 20
 	minRSAKeyBits          = 2048
+	maxOrgUnits            = 10000
 )
 
 // ErrMatterNotOpen reports a matter Google Vault returned but cannot export
 // from: closed or deleted matters accept no new exports.
 var ErrMatterNotOpen = errors.New("vault matter must be OPEN; reopen it in Google Vault before exporting")
 
-// Credentials is the encrypted API-key wrapper. OrgUnitID must identify the
-// root organizational unit to include the whole organization: ENTIRE_ORG is
-// documented as Gmail-only, not supported for Gemini.
-type Credentials struct {
-	ServiceAccount json.RawMessage `json:"service_account"`
-	DelegatedUser  string          `json:"delegated_user"`
-	OrgUnitID      string          `json:"org_unit_id"`
+// Config is everything a client needs. ServiceAccountJSON is the secret key
+// file; the rest is non-secret and stored beside it. MatterID is needed for
+// export calls and OrgUnitID only to create exports, so setup can list org
+// units and create the matter before either is chosen.
+type Config struct {
+	ServiceAccountJSON string
+	// DelegatedUser is the Workspace admin the service account acts as. Vault
+	// authorizes every call against this user's license and privileges.
+	DelegatedUser string
+	MatterID      string
+	// OrgUnitID scopes exports. Vault documents ENTIRE_ORG as Gmail-only, so
+	// organization-wide coverage means selecting the root organizational unit.
+	OrgUnitID string
 }
 
-// ParseCredentials validates locally, without contacting Google's token service.
-// Errors deliberately exclude supplied JSON, private keys, and upstream bodies.
-func ParseCredentials(raw string) (*Credentials, error) {
-	var c Credentials
-	if err := json.Unmarshal([]byte(raw), &c); err != nil {
-		return nil, errors.New("invalid Vault credential wrapper")
-	}
-	if strings.TrimSpace(c.DelegatedUser) == "" {
-		return nil, errors.New("vault delegated_user is required")
-	}
-	if strings.TrimSpace(c.OrgUnitID) == "" {
-		return nil, errors.New("vault org_unit_id is required")
-	}
+// ParseServiceAccount validates a Google service account key file locally,
+// without contacting Google's token service. Errors deliberately exclude the
+// supplied JSON and private key.
+func ParseServiceAccount(raw string) error {
 	var sa struct {
 		Type     string `json:"type"`
 		Email    string `json:"client_email"`
 		Key      string `json:"private_key"`
 		TokenURI string `json:"token_uri"`
 	}
-	if err := json.Unmarshal(c.ServiceAccount, &sa); err != nil || sa.Type != "service_account" || strings.TrimSpace(sa.Email) == "" {
-		return nil, errors.New("invalid Vault service account")
+	if err := json.Unmarshal([]byte(raw), &sa); err != nil || sa.Type != "service_account" || strings.TrimSpace(sa.Email) == "" {
+		return errors.New("invalid Google service account key file")
 	}
 	if sa.TokenURI != "https://accounts.google.com/o/oauth2/token" && sa.TokenURI != "https://oauth2.googleapis.com/token" {
-		return nil, errors.New("vault service account token_uri must be a standard Google token endpoint")
+		return errors.New("service account token_uri must be a standard Google token endpoint")
 	}
 	block, rest := pem.Decode([]byte(sa.Key))
 	if block == nil || len(bytes.TrimSpace(rest)) != 0 {
-		return nil, errors.New("invalid Vault RSA private key")
+		return errors.New("invalid service account RSA private key")
 	}
 	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
@@ -81,51 +82,92 @@ func ParseCredentials(raw string) (*Credentials, error) {
 	}
 	rsaKey, ok := key.(*rsa.PrivateKey)
 	if err != nil || !ok || rsaKey.Validate() != nil {
-		return nil, errors.New("invalid Vault RSA private key")
+		return errors.New("invalid service account RSA private key")
 	}
 	// Google still accepts uploaded RSA_1024 service-account keys, which are
 	// below the RFC 7518 minimum for RS256 signatures.
 	if rsaKey.N.BitLen() < minRSAKeyBits {
-		return nil, errors.New("vault RSA private key must be at least 2048 bits")
+		return errors.New("service account RSA private key must be at least 2048 bits")
 	}
-	return &c, nil
+	return nil
+}
+
+// ValidateDelegatedUser checks the admin email locally. It must be a bare
+// address: it becomes the JWT subject Google's token service resolves.
+func ValidateDelegatedUser(email string) error {
+	parsed, err := mail.ParseAddress(email)
+	if err != nil || parsed.Address != email || parsed.Name != "" || len(email) > 320 {
+		return errors.New("delegated admin must be a Workspace user email address")
+	}
+	return nil
 }
 
 type Client struct {
+	// httpClient carries the Vault and Cloud Storage scopes; directoryClient
+	// only the org-unit read scope, so export traffic never holds directory
+	// access and a missing directory delegation cannot break exports.
 	httpClient       *guardian.HTTPClient
+	directoryClient  *guardian.HTTPClient
 	matterID         string
 	orgUnitID        string
 	baseURL          string
 	storageURL       string
+	directoryURL     string
 	maxAPIBytes      int64
 	maxDownloadBytes int64
 }
 
-// NewClient requires an existing Vault matter. Authentication uses domain-wide
-// delegation, and both token exchanges and API requests use guardian transports.
-func NewClient(rawCredentials string, matterID string, policy *guardian.Policy) (*Client, error) {
-	creds, err := ParseCredentials(rawCredentials)
-	if err != nil {
+// NewClient authenticates with domain-wide delegation as cfg.DelegatedUser.
+// Token exchanges and API requests both use guardian transports.
+func NewClient(cfg Config, policy *guardian.Policy) (*Client, error) {
+	if err := ParseServiceAccount(cfg.ServiceAccountJSON); err != nil {
 		return nil, err
 	}
-	if _, err := uuid.Parse(matterID); err != nil {
-		return nil, errors.New("vault matter ID must be a UUID")
+	if err := ValidateDelegatedUser(cfg.DelegatedUser); err != nil {
+		return nil, err
+	}
+	if cfg.MatterID != "" {
+		if _, err := uuid.Parse(cfg.MatterID); err != nil {
+			return nil, errors.New("vault matter ID must be a UUID")
+		}
 	}
 	if policy == nil {
 		return nil, errors.New("vault client requires guardian policy")
 	}
-	config, err := google.JWTConfigFromJSON(creds.ServiceAccount, vaultScope, storageScope)
-	if err != nil {
-		return nil, errors.New("invalid Vault service account configuration")
-	}
-	config.Subject = creds.DelegatedUser
-	// No retries: export creation is not idempotent. Never follow redirects with
-	// service-account assertions, access tokens, or exported conversation data.
+	// No retries: export and matter creation are not idempotent. Never follow
+	// redirects with service-account assertions, access tokens, or exported
+	// conversation data.
 	base := policy.PooledClient(guardian.WithCheckRedirect(denyRedirect))
 	base.Timeout = 30 * time.Second
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, base)
-	transport := &oauth2.Transport{Source: config.TokenSource(ctx), Base: base.Transport}
-	return &Client{httpClient: &guardian.HTTPClient{Transport: transport, CheckRedirect: denyRedirect, Timeout: 2 * time.Minute}, matterID: matterID, orgUnitID: creds.OrgUnitID, baseURL: "https://vault.googleapis.com/v1", storageURL: "https://storage.googleapis.com/storage/v1", maxAPIBytes: maxAPIBytes, maxDownloadBytes: maxDownloadBytes}, nil
+	newHTTPClient := func(scopes ...string) (*guardian.HTTPClient, error) {
+		config, err := google.JWTConfigFromJSON([]byte(cfg.ServiceAccountJSON), scopes...)
+		if err != nil {
+			return nil, errors.New("invalid Google service account configuration")
+		}
+		config.Subject = cfg.DelegatedUser
+		transport := &oauth2.Transport{Source: config.TokenSource(ctx), Base: base.Transport}
+		return &guardian.HTTPClient{Transport: transport, CheckRedirect: denyRedirect, Timeout: 2 * time.Minute}, nil
+	}
+	vaultHTTP, err := newHTTPClient(vaultScope, storageScope)
+	if err != nil {
+		return nil, err
+	}
+	directoryHTTP, err := newHTTPClient(orgUnitScope)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		httpClient:       vaultHTTP,
+		directoryClient:  directoryHTTP,
+		matterID:         cfg.MatterID,
+		orgUnitID:        cfg.OrgUnitID,
+		baseURL:          "https://vault.googleapis.com/v1",
+		storageURL:       "https://storage.googleapis.com/storage/v1",
+		directoryURL:     "https://admin.googleapis.com/admin/directory/v1",
+		maxAPIBytes:      maxAPIBytes,
+		maxDownloadBytes: maxDownloadBytes,
+	}, nil
 }
 
 func denyRedirect(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
@@ -147,7 +189,138 @@ type File struct {
 
 func (c *Client) matterPath() string { return c.baseURL + "/matters/" + url.PathEscape(c.matterID) }
 
+// errNoMatter guards matter-scoped calls on a client built for setup only.
+var errNoMatter = errors.New("vault matter ID is not configured")
+
+// EnsureMatter returns the ID of an open matter with this name that the
+// delegated admin can see, creating one when none exists. Reusing by name keeps
+// reconnects and retried saves on one matter. Concurrent creates can leave
+// duplicates, so the smallest ID wins.
+func (c *Client) EnsureMatter(ctx context.Context, name, description string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", errors.New("vault matter name is required")
+	}
+	var matches []string
+	pageToken := ""
+	seen := map[string]bool{}
+	for {
+		query := url.Values{"pageSize": {"100"}, "state": {"OPEN"}, "view": {"BASIC"}}
+		if pageToken != "" {
+			query.Set("pageToken", pageToken)
+		}
+		data, err := c.request(ctx, http.MethodGet, c.baseURL+"/matters?"+query.Encode(), nil, c.maxAPIBytes)
+		if err != nil {
+			return "", err
+		}
+		var page struct {
+			Matters []struct {
+				ID    string `json:"matterId"`
+				Name  string `json:"name"`
+				State string `json:"state"`
+			} `json:"matters"`
+			NextPageToken string `json:"nextPageToken"`
+		}
+		if err := json.Unmarshal(data, &page); err != nil {
+			return "", errors.New("invalid Vault matters response")
+		}
+		for _, matter := range page.Matters {
+			if matter.Name != name || matter.State != "OPEN" {
+				continue
+			}
+			if _, err := uuid.Parse(matter.ID); err != nil {
+				return "", errors.New("invalid Vault matter response")
+			}
+			matches = append(matches, matter.ID)
+		}
+		if page.NextPageToken == "" {
+			break
+		}
+		if seen[page.NextPageToken] || len(seen) >= 1000 {
+			return "", errors.New("invalid or excessive Vault matter pagination")
+		}
+		pageToken = page.NextPageToken
+		seen[pageToken] = true
+	}
+	if len(matches) > 0 {
+		return slices.Min(matches), nil
+	}
+	data, err := c.request(ctx, http.MethodPost, c.baseURL+"/matters", map[string]string{"name": name, "description": description}, c.maxAPIBytes)
+	if err != nil {
+		return "", err
+	}
+	var created struct {
+		ID    string `json:"matterId"`
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(data, &created); err != nil {
+		return "", errors.New("invalid Vault matter response")
+	}
+	if _, err := uuid.Parse(created.ID); err != nil {
+		return "", errors.New("invalid Vault matter response")
+	}
+	if created.State != "OPEN" {
+		return "", ErrMatterNotOpen
+	}
+	return created.ID, nil
+}
+
+// OrgUnit is one Workspace organizational unit the delegated admin can read.
+type OrgUnit struct {
+	ID          string
+	Path        string
+	Name        string
+	Description string
+}
+
+// ListOrgUnits returns every organizational unit including the root (path
+// "/"), sorted by path, using only the directory read scope.
+func (c *Client) ListOrgUnits(ctx context.Context) ([]OrgUnit, error) {
+	data, err := c.requestWith(ctx, c.directoryClient, http.MethodGet, c.directoryURL+"/customer/my_customer/orgunits?type=allIncludingParent", nil, c.maxAPIBytes)
+	if err != nil {
+		return nil, err
+	}
+	var page struct {
+		Units []struct {
+			ID                string `json:"orgUnitId"`
+			Path              string `json:"orgUnitPath"`
+			Name              string `json:"name"`
+			Description       string `json:"description"`
+			ParentID          string `json:"parentOrgUnitId"`
+			ParentOrgUnitPath string `json:"parentOrgUnitPath"`
+		} `json:"organizationUnits"`
+	}
+	if err := json.Unmarshal(data, &page); err != nil {
+		return nil, errors.New("invalid Workspace organizational units response")
+	}
+	if len(page.Units) > maxOrgUnits {
+		return nil, errors.New("workspace has too many organizational units to list")
+	}
+	units := make([]OrgUnit, 0, len(page.Units)+1)
+	hasRoot := false
+	rootID := ""
+	for _, unit := range page.Units {
+		if unit.ID == "" || !strings.HasPrefix(unit.Path, "/") {
+			return nil, errors.New("invalid Workspace organizational unit")
+		}
+		hasRoot = hasRoot || unit.Path == "/"
+		if unit.ParentOrgUnitPath == "/" && unit.ParentID != "" {
+			rootID = unit.ParentID
+		}
+		units = append(units, OrgUnit{ID: unit.ID, Path: unit.Path, Name: unit.Name, Description: unit.Description})
+	}
+	// Some tenants omit the root even with allIncludingParent; every top-level
+	// unit still names it as its parent.
+	if !hasRoot && rootID != "" {
+		units = append(units, OrgUnit{ID: rootID, Path: "/", Name: "", Description: ""})
+	}
+	slices.SortFunc(units, func(a, b OrgUnit) int { return strings.Compare(a.Path, b.Path) })
+	return units, nil
+}
+
 func (c *Client) GetMatter(ctx context.Context) error {
+	if c.matterID == "" {
+		return errNoMatter
+	}
 	data, err := c.request(ctx, http.MethodGet, c.matterPath()+"?view=BASIC", nil, c.maxAPIBytes)
 	if err != nil {
 		return err
@@ -167,6 +340,9 @@ func (c *Client) GetMatter(ctx context.Context) error {
 // CreateExport uses ORG_UNIT, not ENTIRE_ORG (which is Gmail-only).
 // A root OU ID must be configured explicitly; an empty OU is not documented.
 func (c *Client) CreateExport(ctx context.Context, name string, start, end time.Time) (*Export, error) {
+	if c.matterID == "" {
+		return nil, errNoMatter
+	}
 	if strings.TrimSpace(c.orgUnitID) == "" {
 		return nil, errors.New("vault Gemini exports require org_unit_id; supply the root organizational unit ID for organization-wide coverage")
 	}
@@ -182,6 +358,9 @@ func (c *Client) CreateExport(ctx context.Context, name string, start, end time.
 }
 
 func (c *Client) GetExport(ctx context.Context, id string) (*Export, error) {
+	if c.matterID == "" {
+		return nil, errNoMatter
+	}
 	if id == "" || id == "." || id == ".." {
 		return nil, errors.New("invalid Vault export ID")
 	}
@@ -195,6 +374,9 @@ func (c *Client) GetExport(ctx context.Context, id string) (*Export, error) {
 // DeleteExport deletes a job in this client's fixed matter. Callers must not
 // remove a successful job until their ingestion checkpoint is durable.
 func (c *Client) DeleteExport(ctx context.Context, id string) error {
+	if c.matterID == "" {
+		return errNoMatter
+	}
 	if id == "" || id == "." || id == ".." {
 		return errors.New("invalid Vault export ID")
 	}
@@ -205,6 +387,9 @@ func (c *Client) DeleteExport(ctx context.Context, id string) error {
 // FindExport locates a deterministic export name across all pages. Multiple
 // matches are rejected rather than choosing an arbitrary job after a lost reply.
 func (c *Client) FindExport(ctx context.Context, name string) (*Export, error) {
+	if c.matterID == "" {
+		return nil, errNoMatter
+	}
 	if strings.TrimSpace(name) == "" {
 		return nil, errors.New("vault export name is required")
 	}
@@ -335,6 +520,10 @@ func (e *HTTPError) CredentialsRejected() bool {
 }
 
 func (c *Client) request(ctx context.Context, method, endpoint string, body any, limit int64) ([]byte, error) {
+	return c.requestWith(ctx, c.httpClient, method, endpoint, body, limit)
+}
+
+func (c *Client) requestWith(ctx context.Context, client *guardian.HTTPClient, method, endpoint string, body any, limit int64) ([]byte, error) {
 	var reader io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -353,7 +542,7 @@ func (c *Client) request(ctx context.Context, method, endpoint string, body any,
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("vault request cancelled: %w", err)
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("vault request cancelled: %w", ctx.Err())

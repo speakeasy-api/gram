@@ -16,7 +16,6 @@ import (
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/geminivault"
 )
 
 const (
@@ -128,19 +127,6 @@ func (v *CredentialVerifier) probe(ctx context.Context, schedule string, creds C
 	since := now.Add(-credentialProbeLookback)
 
 	switch schedule {
-	case ScheduleGeminiCompliance:
-		if creds.ExternalOrganizationID == nil {
-			return nil
-		}
-		// The sync's first read is FindExport, but listing exports cannot tell
-		// a closed matter from an open one. Reading the matter exercises the
-		// same token exchange and matter access, and also confirms the matter
-		// is OPEN, which every export the sync creates requires.
-		client, err := geminivault.NewClient(creds.APIKey, *creds.ExternalOrganizationID, v.guardian)
-		if err != nil {
-			return fmt.Errorf("create Gemini Vault credential probe client: %w", err)
-		}
-		return client.GetMatter(ctx) //nolint:wrapcheck // preserve typed provider status for rejection classification.
 	case ScheduleCursor:
 		client := cursorapi.New(v.guardian,
 			cursorapi.WithAPIKey(creds.APIKey),
@@ -238,21 +224,10 @@ func listLogsProbe(ctx context.Context, client *codexapi.Client, eventType strin
 // it refused the configuration itself: a bad key, a missing scope, an API the
 // key is not entitled to. Unlike the poll path (pollRejectedByProvider), 400
 // and 422 do not count — a probe sends a fixed minimal request, so a
-// request-shaped complaint is about the probe, not the credentials. The
-// exceptions are Gemini answers about the configuration itself: any 4xx from
-// Google's token endpoint, and a matter that exists but is not open (status 0,
-// since Vault answered 200).
+// request-shaped complaint is about the probe, not the credentials.
+// gemini_compliance verifies its own setup (prepareGemini) and has no probe.
 func providerRejectedCredentials(err error) (int, bool) {
-	if errors.Is(err, geminivault.ErrMatterNotOpen) {
-		return 0, true
-	}
 	status := 0
-	if providerErr, ok := errors.AsType[*geminivault.HTTPError](err); ok {
-		if providerErr.CredentialsRejected() {
-			return providerErr.StatusCode, true
-		}
-		status = providerErr.StatusCode
-	}
 	if cursorErr, ok := errors.AsType[*cursorapi.HTTPError](err); ok {
 		status = cursorErr.StatusCode
 	}
@@ -275,24 +250,5 @@ func providerRejectedCredentials(err error) (int, bool) {
 // with. The provider's own text names the API, the status and usually the
 // missing entitlement — what the user needs to fix the key.
 func credentialRejectionError(schedule string, cause error) error {
-	if schedule == ScheduleGeminiCompliance {
-		if errors.Is(cause, geminivault.ErrMatterNotOpen) {
-			return oops.E(oops.CodeInvalid, cause, "Google Vault matter is not open; reopen it in Google Vault or use an open matter")
-		}
-		if providerErr, ok := errors.AsType[*geminivault.HTTPError](cause); ok {
-			if providerErr.CredentialsRejected() {
-				return oops.E(oops.CodeUnauthorized, cause, "Google rejected the service account credentials; check the key, the domain-wide delegation scopes, and the delegated user")
-			}
-			switch providerErr.StatusCode {
-			case 401:
-				return oops.E(oops.CodeUnauthorized, cause, "Google Vault rejected the service account credentials")
-			case 403:
-				return oops.E(oops.CodeForbidden, cause, "Google Vault access denied; check domain-wide delegation, delegated user permissions, and matter access")
-			default:
-				return oops.E(oops.CodeInvalid, cause, "Google Vault rejected the configured matter; check the matter UUID and delegated user access")
-			}
-		}
-	}
-
 	return oops.E(oops.CodeInvalid, cause, "%s", fmt.Sprintf("provider rejected these credentials for the %s sync: %s", schedule, cause.Error()))
 }

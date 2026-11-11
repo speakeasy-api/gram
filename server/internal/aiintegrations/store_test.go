@@ -219,7 +219,7 @@ func TestUpsertWithTxRequiresCodexOrganizationID(t *testing.T) {
 
 	workspaceID := "75179082-77da-4127-8031-fce17dddb623"
 	require.Error(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
-		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderCodexCompliance, "codex-key", true, true, &workspaceID, nil, nil, nil)
+		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderCodexCompliance, "codex-key", true, true, &workspaceID, ProviderSettings{}, nil, nil, nil)
 		return err
 	}))
 }
@@ -231,7 +231,7 @@ func TestUpsertWithTxRejectsCodexPathLikeOrganizationID(t *testing.T) {
 
 	externalOrgID := "org-openai/../other"
 	require.Error(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
-		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderCodexCompliance, "codex-key", true, true, &externalOrgID, nil, nil, nil)
+		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderCodexCompliance, "codex-key", true, true, &externalOrgID, ProviderSettings{}, nil, nil, nil)
 		return err
 	}))
 }
@@ -518,7 +518,7 @@ func upsertConfigWithTx(
 	var result UpsertResult
 	require.NoError(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
 		var err error
-		result, err = store.upsertWithTx(ctx, tx, orgID, provider, apiKey, apiKeySupplied, enabled, externalOrganizationID, nil, resetPollWatermarkAt, nil)
+		result, err = store.upsertWithTx(ctx, tx, orgID, provider, apiKey, apiKeySupplied, enabled, externalOrganizationID, ProviderSettings{}, nil, resetPollWatermarkAt, nil)
 		return err
 	}))
 	return result
@@ -558,6 +558,7 @@ func insertConfigWithProviderScheduleOnly(t *testing.T, ctx context.Context, con
 		ApiKeyEncrypted:        encryptedKey,
 		Enabled:                enabled,
 		BillingMode:            pgtype.Text{String: "", Valid: false},
+		Settings:               []byte("{}"),
 	})
 	require.NoError(t, err)
 
@@ -607,7 +608,7 @@ func TestUpsertRejectsNonUUIDWorkspaceIDForChatGPTCompliance(t *testing.T) {
 	// upsert rather than failing every background poll later.
 	orgStyleID := "org-123abc"
 	err := pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
-		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &orgStyleID, nil, nil, nil)
+		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &orgStyleID, ProviderSettings{}, nil, nil, nil)
 		return err
 	})
 	require.Error(t, err)
@@ -723,37 +724,89 @@ func TestGeminiProviderRegistration(t *testing.T) {
 	require.Equal(t, time.Hour, pollIntervalForSchedule(ScheduleGeminiCompliance))
 }
 
-func TestGeminiCredentialsRejectMalformedWrapper(t *testing.T) {
+func TestGeminiConfigValidation(t *testing.T) {
 	t.Parallel()
+	key := geminiTestServiceAccount(t)
 	matterID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-	for _, key := range []string{"not json", `{}`, `{"service_account":{},"delegated_user":"admin@example.com"}`, `{"service_account":"not an object","delegated_user":"admin@example.com"}`} {
-		err := validateGeminiCredentials(key, &matterID)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "valid Gemini Vault credential JSON")
-		require.NotContains(t, err.Error(), key)
+	settings := geminiTestSettings()
+	require.NoError(t, validateGeminiConfig(key, settings, &matterID))
+	// Malformed keys, including the retired wrapper format, never echo input.
+	for _, bad := range []string{"not json", `{}`, `{"service_account":{},"delegated_user":"admin@example.com"}`} {
+		err := validateGeminiConfig(bad, settings, &matterID)
+		require.ErrorContains(t, err, "service account JSON key file")
+		require.NotContains(t, err.Error(), bad)
 	}
+	noAdmin := settings
+	noAdmin.DelegatedUser = "not-an-email"
+	require.ErrorContains(t, validateGeminiConfig(key, noAdmin, &matterID), "delegated_user")
+	require.Error(t, validateGeminiConfig(key, settings, nil))
+	require.Error(t, validateGeminiConfig(key, settings, conv.PtrEmpty("not-a-uuid")))
+	// A unit ID always travels with the path listOrgUnits returned for it.
+	half := settings
+	half.OrgUnitPath = ""
+	require.ErrorContains(t, validateGeminiConfig(key, half, &matterID), "org_unit_id")
+	unselected := settings
+	unselected.OrgUnitID, unselected.OrgUnitPath = "", ""
+	require.NoError(t, validateGeminiConfig(key, unselected, &matterID))
 }
 
-func geminiTestCredentials(t *testing.T) string {
+func geminiTestServiceAccount(t *testing.T) string {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	privateKey, err := x509.MarshalPKCS8PrivateKey(key)
 	require.NoError(t, err)
-	raw, err := json.Marshal(map[string]any{
-		"service_account": map[string]string{"type": "service_account", "client_email": "service@example.com", "private_key": string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKey})), "token_uri": "https://oauth2.googleapis.com/token"},
-		"delegated_user":  "admin@example.com",
-		"org_unit_id":     "root-unit-placeholder",
-	})
+	raw, err := json.Marshal(map[string]string{"type": "service_account", "client_email": "service@example.com", "private_key": string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKey})), "token_uri": "https://oauth2.googleapis.com/token"})
 	require.NoError(t, err)
 	return string(raw)
+}
+
+func geminiTestSettings() ProviderSettings {
+	return ProviderSettings{DelegatedUser: "admin@example.com", OrgUnitID: "id:root-placeholder", OrgUnitPath: "/"}
+}
+
+func upsertGeminiConfigWithTx(t *testing.T, ctx context.Context, conn *pgxpool.Pool, store *Store, orgID string, settings ProviderSettings, enabled bool) UpsertResult {
+	t.Helper()
+	matterID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	var result UpsertResult
+	require.NoError(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		var err error
+		result, err = store.upsertWithTx(ctx, tx, orgID, ProviderGeminiCompliance, geminiTestServiceAccount(t), true, enabled, &matterID, settings, nil, nil, nil)
+		return err
+	}))
+	return result
+}
+
+func TestGeminiSettingsRoundTripAndHoldSyncWithoutOrgUnit(t *testing.T) {
+	t.Parallel()
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	unselected := geminiTestSettings()
+	unselected.OrgUnitID, unselected.OrgUnitPath = "", ""
+	held := upsertGeminiConfigWithTx(t, ctx, conn, store, orgID, unselected, true)
+	require.False(t, held.Config.Enabled, "no org unit means nothing to export yet")
+	require.Equal(t, unselected, held.Config.Settings)
+
+	selected := upsertGeminiConfigWithTx(t, ctx, conn, store, orgID, geminiTestSettings(), true)
+	require.True(t, selected.Config.Enabled)
+	loaded, _, err := store.loadForOrgAndProviderRow(ctx, orgID, ProviderGeminiCompliance)
+	require.NoError(t, err)
+	require.Equal(t, geminiTestSettings(), loaded.Settings)
+
+	// Other providers never carry Gemini settings.
+	workspaceID := testWorkspaceID
+	require.NoError(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		result, err := store.upsertWithTx(ctx, tx, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &workspaceID, geminiTestSettings(), nil, nil, nil)
+		require.Equal(t, ProviderSettings{}, result.Config.Settings)
+		return err
+	}))
 }
 
 func TestGeminiPollSuccessPreservesPendingWatermarkAndHourlyCadence(t *testing.T) {
 	t.Parallel()
 	ctx, conn, store, orgID := newStoreTestDB(t)
 	matterID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderGeminiCompliance, geminiTestCredentials(t), true, true, &matterID, nil)
+	created := upsertGeminiConfigWithTx(t, ctx, conn, store, orgID, geminiTestSettings(), true)
+	require.Equal(t, matterID, *created.Config.ExternalOrganizationID)
 	require.Equal(t, map[string]string{ScheduleGeminiCompliance: SyncKindCursor}, listSyncSchedules(t, ctx, conn, created.Config.ID))
 	watermark := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	pollTime := watermark.Add(30 * 24 * time.Hour)
@@ -764,6 +817,4 @@ func TestGeminiPollSuccessPreservesPendingWatermarkAndHourlyCadence(t *testing.T
 	require.Equal(t, watermark, cfg.PollWatermarkAt)
 	require.WithinDuration(t, pollTime.Add(time.Hour), cfg.NextPollAfter, time.Microsecond)
 	require.JSONEq(t, cursor, cfg.LastCursor)
-	require.Error(t, validateGeminiCredentials(geminiTestCredentials(t), nil))
-	require.Error(t, validateGeminiCredentials(geminiTestCredentials(t), conv.PtrEmpty("not-a-uuid")))
 }

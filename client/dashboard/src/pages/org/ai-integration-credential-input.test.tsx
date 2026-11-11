@@ -13,8 +13,11 @@ const gemini = AI_INTEGRATION_PROVIDERS.find(
 
 it("registers Gemini text exports with the matching hourly event stream", () => {
   expect(gemini.providerId).toBe("gemini");
-  expect(gemini.requiresOrganizationId).toBe(true);
-  expect(gemini.organizationIdLabel).toBe("Vault matter ID");
+  // Speakeasy finds or creates the Vault matter; the admin and unit are
+  // separate fields, not part of the key.
+  expect(gemini.requiresOrganizationId).toBe(false);
+  expect(gemini.delegatedUser?.label).toBe("Delegated admin email");
+  expect(gemini.selectsOrgUnit).toBe(true);
   expect(providerSchedules(gemini)).toEqual([
     expect.objectContaining({
       schedule: "gemini_compliance",
@@ -31,9 +34,13 @@ it("registers Gemini text exports with the matching hourly event stream", () => 
   expect(guide).toContain(
     "https://www.googleapis.com/auth/devstorage.read_only",
   );
-  expect(guide).toContain("org_unit_id");
-  expect(guide).toContain("root organizational-unit ID");
+  expect(guide).toContain(
+    "https://www.googleapis.com/auth/admin.directory.orgunit.readonly",
+  );
+  expect(guide).toContain("Manage Matters");
+  expect(guide).toContain("Entire organization");
   expect(guide).toContain("completed UTC days");
+  expect(guide).not.toContain("delegated_user");
 });
 
 it("accepts multiline JSON while masking secrets and opting out of browser persistence", () => {
@@ -58,7 +65,7 @@ it("accepts multiline JSON while masking secrets and opting out of browser persi
   expect(field.getAttribute("data-1p-ignore")).toBe("true");
   expect(field.getAttribute("data-lpignore")).toBe("true");
   const credentials =
-    '{\n  "service_account": {"private_key": "DEMO_KEY"},\n  "delegated_user": "admin@example.com",\n  "org_unit_id": "id:EXAMPLE"\n}';
+    '{\n  "type": "service_account",\n  "client_email": "service@example.iam.gserviceaccount.com",\n  "private_key": "DEMO_KEY"\n}';
   fireEvent.change(field, { target: { value: credentials } });
   expect(onChange).toHaveBeenCalledWith(credentials);
 });

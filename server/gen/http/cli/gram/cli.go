@@ -125,7 +125,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"agent (get-plugins|get-my-connections|get-claude-observability-plugin|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|report-crash|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
-		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
+		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-org-units|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (signal-definition|signal-findings|query|describe|dimension-values)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
@@ -507,6 +507,11 @@ func ParseEndpoint(
 		aiIntegrationsDeleteConfigBodyFlag         = aiIntegrationsDeleteConfigFlags.String("body", "REQUIRED", "")
 		aiIntegrationsDeleteConfigApikeyTokenFlag  = aiIntegrationsDeleteConfigFlags.String("apikey-token", "", "")
 		aiIntegrationsDeleteConfigSessionTokenFlag = aiIntegrationsDeleteConfigFlags.String("session-token", "", "")
+
+		aiIntegrationsListOrgUnitsFlags            = flag.NewFlagSet("list-org-units", flag.ExitOnError)
+		aiIntegrationsListOrgUnitsProviderFlag     = aiIntegrationsListOrgUnitsFlags.String("provider", "REQUIRED", "")
+		aiIntegrationsListOrgUnitsApikeyTokenFlag  = aiIntegrationsListOrgUnitsFlags.String("apikey-token", "", "")
+		aiIntegrationsListOrgUnitsSessionTokenFlag = aiIntegrationsListOrgUnitsFlags.String("session-token", "", "")
 
 		aiIntegrationsListSchedulesFlags            = flag.NewFlagSet("list-schedules", flag.ExitOnError)
 		aiIntegrationsListSchedulesProviderFlag     = aiIntegrationsListSchedulesFlags.String("provider", "REQUIRED", "")
@@ -5700,6 +5705,7 @@ func ParseEndpoint(
 	aiIntegrationsGetConfigFlags.Usage = aiIntegrationsGetConfigUsage
 	aiIntegrationsUpsertConfigFlags.Usage = aiIntegrationsUpsertConfigUsage
 	aiIntegrationsDeleteConfigFlags.Usage = aiIntegrationsDeleteConfigUsage
+	aiIntegrationsListOrgUnitsFlags.Usage = aiIntegrationsListOrgUnitsUsage
 	aiIntegrationsListSchedulesFlags.Usage = aiIntegrationsListSchedulesUsage
 	aiIntegrationsSetScheduleEnabledFlags.Usage = aiIntegrationsSetScheduleEnabledUsage
 	aiIntegrationsRetryScheduleFlags.Usage = aiIntegrationsRetryScheduleUsage
@@ -7236,6 +7242,9 @@ func ParseEndpoint(
 
 			case "delete-config":
 				epf = aiIntegrationsDeleteConfigFlags
+
+			case "list-org-units":
+				epf = aiIntegrationsListOrgUnitsFlags
 
 			case "list-schedules":
 				epf = aiIntegrationsListSchedulesFlags
@@ -10634,6 +10643,9 @@ func ParseEndpoint(
 			case "delete-config":
 				endpoint = c.DeleteConfig()
 				data, err = aiintegrationsc.BuildDeleteConfigPayload(*aiIntegrationsDeleteConfigBodyFlag, *aiIntegrationsDeleteConfigApikeyTokenFlag, *aiIntegrationsDeleteConfigSessionTokenFlag)
+			case "list-org-units":
+				endpoint = c.ListOrgUnits()
+				data, err = aiintegrationsc.BuildListOrgUnitsPayload(*aiIntegrationsListOrgUnitsProviderFlag, *aiIntegrationsListOrgUnitsApikeyTokenFlag, *aiIntegrationsListOrgUnitsSessionTokenFlag)
 			case "list-schedules":
 				endpoint = c.ListSchedules()
 				data, err = aiintegrationsc.BuildListSchedulesPayload(*aiIntegrationsListSchedulesProviderFlag, *aiIntegrationsListSchedulesApikeyTokenFlag, *aiIntegrationsListSchedulesSessionTokenFlag)
@@ -15007,6 +15019,7 @@ func aiIntegrationsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-config: Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.`)
 	fmt.Fprintln(os.Stderr, `    upsert-config: Create or update the org-wide AI integration config for a provider.`)
 	fmt.Fprintln(os.Stderr, `    delete-config: Delete the org-wide AI integration config for a provider.`)
+	fmt.Fprintln(os.Stderr, `    list-org-units: List the Google Workspace organizational units a saved gemini_compliance connection can export, using its stored service account and delegated admin. Requires the admin.directory.orgunit.readonly delegation scope.`)
 	fmt.Fprintln(os.Stderr, `    list-schedules: List the sync schedules and their scheduler state for a provider's org-wide AI integration config. Returns an empty list when no config is set.`)
 	fmt.Fprintln(os.Stderr, `    set-schedule-enabled: Enable or disable one sync schedule of a provider's org-wide AI integration config. Disabled schedules are skipped by the poller until re-enabled.`)
 	fmt.Fprintln(os.Stderr, `    retry-schedule: Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak. The scheduler picks it up on its next tick.`)
@@ -15117,7 +15130,7 @@ func aiIntegrationsUpsertConfigUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations upsert-config --body '{\n      \"api_key\": \"abc123\",\n      \"billing_mode\": \"abc123\",\n      \"enabled\": false,\n      \"external_organization_id\": \"abc123\",\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations upsert-config --body '{\n      \"api_key\": \"abc123\",\n      \"billing_mode\": \"abc123\",\n      \"delegated_user\": \"abc123\",\n      \"enabled\": false,\n      \"external_organization_id\": \"abc123\",\n      \"org_unit_id\": \"abc123\",\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func aiIntegrationsDeleteConfigUsage() {
@@ -15140,6 +15153,28 @@ func aiIntegrationsDeleteConfigUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations delete-config --body '{\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func aiIntegrationsListOrgUnitsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations list-org-units", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the Google Workspace organizational units a saved gemini_compliance connection can export, using its stored service account and delegated admin. Requires the admin.directory.orgunit.readonly delegation scope.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations list-org-units --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func aiIntegrationsListSchedulesUsage() {

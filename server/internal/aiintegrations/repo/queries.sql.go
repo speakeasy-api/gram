@@ -724,6 +724,7 @@ INSERT INTO ai_integration_configs (
   , api_key_encrypted
   , enabled
   , billing_mode
+  , settings
 ) VALUES (
     $1
   , $2
@@ -732,6 +733,7 @@ INSERT INTO ai_integration_configs (
   , $5
   , $6
   , $7
+  , $8
 )
 RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted, settings
 `
@@ -744,6 +746,7 @@ type InsertConfigParams struct {
 	ApiKeyEncrypted        string
 	Enabled                bool
 	BillingMode            pgtype.Text
+	Settings               []byte
 }
 
 func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiIntegrationConfig, error) {
@@ -755,6 +758,7 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiI
 		arg.ApiKeyEncrypted,
 		arg.Enabled,
 		arg.BillingMode,
+		arg.Settings,
 	)
 	var i AiIntegrationConfig
 	err := row.Scan(
@@ -1325,9 +1329,10 @@ SET project_id = $1,
     external_organization_id = $2,
     enabled = $3,
     billing_mode = $4,
+    settings = $5,
     updated_at = clock_timestamp()
-WHERE organization_id = $5
-  AND provider = $6
+WHERE organization_id = $6
+  AND provider = $7
   AND deleted IS FALSE
 RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted, settings
 `
@@ -1337,6 +1342,7 @@ type UpdateConfigSettingsParams struct {
 	ExternalOrganizationID pgtype.Text
 	Enabled                bool
 	BillingMode            pgtype.Text
+	Settings               []byte
 	OrganizationID         string
 	Provider               string
 }
@@ -1347,6 +1353,7 @@ func (q *Queries) UpdateConfigSettings(ctx context.Context, arg UpdateConfigSett
 		arg.ExternalOrganizationID,
 		arg.Enabled,
 		arg.BillingMode,
+		arg.Settings,
 		arg.OrganizationID,
 		arg.Provider,
 	)

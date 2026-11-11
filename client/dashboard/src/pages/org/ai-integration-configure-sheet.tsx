@@ -1,5 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { AIIntegrationCredentialInput } from "./ai-integration-credential-input";
+import { AIIntegrationWorkspaceFields } from "./ai-integration-workspace-fields";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -140,6 +141,12 @@ export function ConfigureSheet({
               />
             </Stack>
           ) : null}
+
+          <AIIntegrationWorkspaceFields
+            provider={provider}
+            form={form}
+            active={open}
+          />
 
           <Stack gap={2}>
             <Label htmlFor={billingModeFieldId}>Billing mode</Label>

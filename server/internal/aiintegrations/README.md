@@ -135,30 +135,34 @@ When adding a provider:
 Google Vault. It does not import Gemini API/Vertex AI traffic, Workspace side-panel
 conversations, attachments, media, or token/cost estimates.
 
-Configure an existing **open Vault matter UUID** as `external_organization_id`.
-The encrypted `api_key` field holds this JSON wrapper:
+Setup is two saves. The encrypted `api_key` holds only the Google service
+account JSON key file, unchanged; the non-secret settings live in the config's
+`settings` column so the dashboard can redisplay and edit them without the key.
 
-```json
-{
-  "service_account": {
-    "type": "service_account",
-    "...": "complete Google service-account JSON key"
-  },
-  "delegated_user": "admin@example.com",
-  "org_unit_id": "<ROOT_ORGANIZATIONAL_UNIT_ID>"
-}
-```
+1. **Credentials.** Save the key file with `delegated_user`, the Workspace admin
+   the service account acts as. Speakeasy checks them with Google and finds or
+   creates its own open Vault matter, `Speakeasy Gemini import`, storing its ID as
+   `external_organization_id` (an explicit matter UUID is still accepted). The
+   connection is saved but held: it cannot sync without an export scope.
+2. **Scope.** `listOrgUnits` returns the organizational units the delegated admin
+   can read, including the root (`/`). Saving one as `org_unit_id` validates it
+   against that list, stores its path, and starts syncing. Select the root for
+   organization-wide coverage: Vault documents `ENTIRE_ORG` as Gmail-only, so the
+   importer uses an explicit `ORG_UNIT` query. Changing the unit restarts the
+   backfill for the new scope.
 
-All three fields are required. Enable the Vault API and authorize the service
-account's client ID for domain-wide delegation with both
-`https://www.googleapis.com/auth/ediscovery` and
-`https://www.googleapis.com/auth/devstorage.read_only`. The delegated admin needs
-Vault licensing, access to the matter, and search/export privileges for the selected
-organizational unit. Select the root organizational unit for organization-wide
-coverage: Vault documents `ENTIRE_ORG` as Gmail-only, so the importer uses an
-explicit `ORG_UNIT` query. Saving probes the matter, not a full export; successful
-save does not prove export/download authorization. Credentials never leave through
-read APIs or error bodies.
+Enable the Vault API and the Admin SDK API, and authorize the service account's
+client ID for domain-wide delegation with
+`https://www.googleapis.com/auth/ediscovery`,
+`https://www.googleapis.com/auth/devstorage.read_only` and
+`https://www.googleapis.com/auth/admin.directory.orgunit.readonly`. Directory calls
+use a separate token holding only the last scope. The delegated admin needs a
+Vault license, the Manage Matters, Manage Searches and Manage Exports privileges,
+and permission to read organizational units; covered users need Vault licenses.
+`ediscovery` grants all of Vault for every service, so the importer's Gemini-only
+corpus is enforced in code, not by Google; prefer a dedicated delegated admin.
+Saves only call Google when the key, admin, matter or unit changes, or when the
+connection is turned on. Credentials never leave through read APIs or error bodies.
 
 ### Export lifecycle and guarantees
 
@@ -212,9 +216,9 @@ Sources: [Query](https://developers.google.com/workspace/vault/reference/rest/v1
 [exports](https://developers.google.com/workspace/vault/guides/exports),
 [Gemini export contents](https://knowledge.workspace.google.com/vault/exports/vault-export-contents).
 
-Platform MCP assessment: existing tools do not manage organization-level AI
-integration secrets; this provider does not change a current MCP contract. Setup
-remains in the audited organization-admin API/dashboard rather than introducing
-an unrelated project-scoped secret-provisioning tool. Command K keeps the existing
-AI Integrations page action; fixed provider entries have no separately named
-resource detail route to index.
+Platform MCP assessment: no AI integration provider has a Platform MCP tool,
+and Gemini setup needs a service account private key, which agent tools must not
+handle. `listOrgUnits` only serves that setup flow, so it adds no MCP tool either;
+schedule status and pause stay in the shared per-provider schedule API. Command K
+keeps the existing AI Integrations page action; fixed provider entries have no
+separately named resource detail route to index.

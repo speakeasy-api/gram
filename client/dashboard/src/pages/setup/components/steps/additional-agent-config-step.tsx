@@ -2,6 +2,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Check, ChevronRight } from "lucide-react";
 import { AIIntegrationCredentialInput } from "@/pages/org/ai-integration-credential-input";
+import { AIIntegrationWorkspaceFields } from "@/pages/org/ai-integration-workspace-fields";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
@@ -402,6 +403,12 @@ function ProviderConfigDrawer({
                       />
                     </div>
                   ) : null}
+
+                  <AIIntegrationWorkspaceFields
+                    provider={provider}
+                    form={form}
+                    active
+                  />
                 </div>
               ) : null}
             </div>

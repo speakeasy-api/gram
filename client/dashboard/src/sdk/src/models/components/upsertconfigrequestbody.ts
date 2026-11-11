@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpsertConfigRequestBody = {
   /**
-   * Provider API key. For gemini_compliance, JSON with service_account (a Google service account JSON object) delegated_user (a Workspace administrator email), and org_unit_id (the Google Workspace root organizational unit ID for organization-wide coverage). Stored encrypted at rest; never returned on reads.
+   * Provider API key. For gemini_compliance, the Google service account JSON key file, unchanged. Empty keeps the saved key. Stored encrypted at rest; never returned on reads.
    */
   apiKey: string;
   /**
@@ -15,13 +15,21 @@ export type UpsertConfigRequestBody = {
    */
   billingMode?: string | undefined;
   /**
-   * Whether the integration should be active.
+   * gemini_compliance only: the Google Workspace admin email the service account acts as through domain-wide delegation. Omit to keep the saved value.
+   */
+  delegatedUser?: string | undefined;
+  /**
+   * Whether the integration should be active. gemini_compliance stays inactive until an organizational unit is saved.
    */
   enabled: boolean;
   /**
-   * Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID), and gemini_compliance (existing Google Vault matter UUID).
+   * Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID). Optional for gemini_compliance (an open Google Vault matter UUID); omit it and Speakeasy finds or creates its own matter.
    */
   externalOrganizationId?: string | undefined;
+  /**
+   * gemini_compliance only: the Google Workspace organizational unit to export, from listOrgUnits. Select the root unit for the whole organization. Syncing starts once one is saved. Omit to keep the saved value.
+   */
+  orgUnitId?: string | undefined;
   /**
    * AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
    */
@@ -32,8 +40,10 @@ export type UpsertConfigRequestBody = {
 export type UpsertConfigRequestBody$Outbound = {
   api_key: string;
   billing_mode?: string | undefined;
+  delegated_user?: string | undefined;
   enabled: boolean;
   external_organization_id?: string | undefined;
+  org_unit_id?: string | undefined;
   provider: string;
 };
 
@@ -45,15 +55,19 @@ export const UpsertConfigRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     apiKey: z.string(),
     billingMode: z.optional(z.string()),
+    delegatedUser: z.optional(z.string()),
     enabled: z.boolean(),
     externalOrganizationId: z.optional(z.string()),
+    orgUnitId: z.optional(z.string()),
     provider: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       apiKey: "api_key",
       billingMode: "billing_mode",
+      delegatedUser: "delegated_user",
       externalOrganizationId: "external_organization_id",
+      orgUnitId: "org_unit_id",
     });
   }),
 );

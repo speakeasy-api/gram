@@ -2,6 +2,7 @@ package aiintegrations
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -268,19 +269,21 @@ type Config struct {
 	Provider               string
 	ProjectID              uuid.UUID
 	ExternalOrganizationID *string
-	BillingMode            string
-	APIKey                 string
-	Enabled                bool
-	PollWatermarkAt        time.Time
-	PollCheckpoint         timewindowpoller.PollCheckpoint
-	NextPollAfter          time.Time
-	LastPollError          string
-	LastPollFailedAt       time.Time
-	LastPollSuccessAt      time.Time
-	ConsecutiveFailures    int32
-	LastCursor             string
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
+	// Settings holds non-secret provider settings stored beside the key.
+	Settings            ProviderSettings
+	BillingMode         string
+	APIKey              string
+	Enabled             bool
+	PollWatermarkAt     time.Time
+	PollCheckpoint      timewindowpoller.PollCheckpoint
+	NextPollAfter       time.Time
+	LastPollError       string
+	LastPollFailedAt    time.Time
+	LastPollSuccessAt   time.Time
+	ConsecutiveFailures int32
+	LastCursor          string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type UsagePollCandidate struct {
@@ -357,7 +360,7 @@ func (s *Store) loadForOrgAndProviderRow(ctx context.Context, orgID string, prov
 	return cfg, &row, nil
 }
 
-func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, externalOrganizationID *string, billingMode *string, resetPollWatermarkAt *time.Time, rejections []ScheduleRejection) (UpsertResult, error) {
+func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, externalOrganizationID *string, settings ProviderSettings, billingMode *string, resetPollWatermarkAt *time.Time, rejections []ScheduleRejection) (UpsertResult, error) {
 	provider, err := normalizeProvider(provider)
 	if err != nil {
 		return UpsertResult{}, err
@@ -384,11 +387,19 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 	}
 
 	if provider == ProviderGeminiCompliance {
-		if err := validateGeminiCredentials(apiKey, externalOrganizationID); err != nil {
+		if err := validateGeminiConfig(apiKey, settings, externalOrganizationID); err != nil {
 			return UpsertResult{}, err
 		}
 		trimmed := strings.TrimSpace(*externalOrganizationID)
 		externalOrganizationID = &trimmed
+		// Syncing needs an export scope; hold the connection until one is set.
+		enabled = enabled && settings.OrgUnitID != ""
+	} else {
+		settings = ProviderSettings{DelegatedUser: "", OrgUnitID: "", OrgUnitPath: ""}
+	}
+	encodedSettings, err := json.Marshal(settings)
+	if err != nil {
+		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to encode ai integration settings")
 	}
 
 	q := repo.New(dbtx)
@@ -421,6 +432,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			ApiKeyEncrypted:        encrypted,
 			Enabled:                enabled,
 			BillingMode:            conv.PtrToPGTextEmpty(billingMode),
+			Settings:               encodedSettings,
 		})
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
@@ -433,6 +445,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			ExternalOrganizationID: conv.PtrToPGTextEmpty(externalOrganizationID),
 			Enabled:                enabled,
 			BillingMode:            conv.PtrToPGTextEmpty(billingMode),
+			Settings:               encodedSettings,
 		})
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
@@ -1055,6 +1068,7 @@ func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config,
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		Settings:               decodeProviderSettings(row.Settings),
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
@@ -1087,6 +1101,7 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		Settings:               decodeProviderSettings(row.Settings),
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
@@ -1119,6 +1134,7 @@ func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow)
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		Settings:               decodeProviderSettings(row.Settings),
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
@@ -1151,6 +1167,7 @@ func (s *Store) configFromUsagePollConfigBySyncIDRow(row repo.GetUsagePollConfig
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		Settings:               decodeProviderSettings(row.Settings),
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
@@ -1183,6 +1200,7 @@ func (s *Store) configFromProviderUsagePollConfigByIDRow(row repo.GetProviderUsa
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		Settings:               decodeProviderSettings(row.Settings),
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
@@ -1215,6 +1233,7 @@ func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.Ensure
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		Settings:               decodeProviderSettings(row.Settings),
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
@@ -1262,6 +1281,7 @@ func emptyConfig(orgID string, provider string) Config {
 		Provider:               provider,
 		ProjectID:              uuid.Nil,
 		ExternalOrganizationID: nil,
+		Settings:               ProviderSettings{DelegatedUser: "", OrgUnitID: "", OrgUnitPath: ""},
 		BillingMode:            "",
 		APIKey:                 "",
 		Enabled:                false,
@@ -1278,12 +1298,40 @@ func emptyConfig(orgID string, provider string) Config {
 	}
 }
 
-func validateGeminiCredentials(apiKey string, matterID *string) error {
-	if _, err := geminivault.ParseCredentials(apiKey); err != nil {
-		return oops.E(oops.CodeInvalid, nil, "api_key must be valid Gemini Vault credential JSON containing a service_account object with a valid RSA private key and Google token endpoint, plus delegated_user and org_unit_id")
+// ProviderSettings is the non-secret, admin-visible configuration stored in
+// ai_integration_configs.settings. Only gemini_compliance uses it today.
+type ProviderSettings struct {
+	// DelegatedUser is the Workspace admin the Gemini service account acts as.
+	DelegatedUser string `json:"delegated_user,omitempty"`
+	// OrgUnitID scopes Gemini exports; the root unit covers the organization.
+	OrgUnitID string `json:"org_unit_id,omitempty"`
+	// OrgUnitPath is the selected unit's path, kept for display.
+	OrgUnitPath string `json:"org_unit_path,omitempty"`
+}
+
+// decodeProviderSettings reads stored settings. Only this package writes the
+// column, after validation, so unreadable JSON decodes as empty settings and
+// the provider's own checks report what is missing.
+func decodeProviderSettings(raw []byte) ProviderSettings {
+	var settings ProviderSettings
+	if len(raw) == 0 || json.Unmarshal(raw, &settings) != nil {
+		return ProviderSettings{DelegatedUser: "", OrgUnitID: "", OrgUnitPath: ""}
+	}
+	return settings
+}
+
+func validateGeminiConfig(apiKey string, settings ProviderSettings, matterID *string) error {
+	if err := geminivault.ParseServiceAccount(apiKey); err != nil {
+		return oops.E(oops.CodeInvalid, nil, "api_key must be a valid Google service account JSON key file with an RSA private key of at least 2048 bits and a Google token endpoint")
+	}
+	if err := geminivault.ValidateDelegatedUser(settings.DelegatedUser); err != nil {
+		return oops.E(oops.CodeInvalid, nil, "delegated_user must be the email address of a Google Workspace admin")
 	}
 	if matterID == nil || !chatgptWorkspaceIDPattern.MatchString(strings.TrimSpace(*matterID)) {
-		return oops.E(oops.CodeInvalid, nil, "external_organization_id must be an existing Google Vault matter UUID")
+		return oops.E(oops.CodeInvalid, nil, "external_organization_id must be a Google Vault matter UUID")
+	}
+	if (settings.OrgUnitID == "") != (settings.OrgUnitPath == "") {
+		return oops.E(oops.CodeInvalid, nil, "org_unit_id must be one of the units listOrgUnits returns")
 	}
 	return nil
 }

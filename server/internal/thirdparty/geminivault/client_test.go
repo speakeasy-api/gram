@@ -27,13 +27,13 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func credentialFixture(t *testing.T) map[string]any {
+func serviceAccountFixture(t *testing.T) map[string]any {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	der, err := x509.MarshalPKCS8PrivateKey(key)
 	require.NoError(t, err)
-	return map[string]any{"delegated_user": "admin@example.com", "org_unit_id": "root-ou", "service_account": map[string]any{"type": "service_account", "client_email": "service@example.iam.gserviceaccount.com", "private_key": string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})), "token_uri": "https://oauth2.googleapis.com/token"}}
+	return map[string]any{"type": "service_account", "client_email": "service@example.iam.gserviceaccount.com", "private_key": string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})), "token_uri": "https://oauth2.googleapis.com/token"}
 }
 
 func encode(t *testing.T, value any) string {
@@ -43,29 +43,24 @@ func encode(t *testing.T, value any) string {
 	return string(data)
 }
 
-func TestCredentials(t *testing.T) {
+func TestParseServiceAccount(t *testing.T) {
 	t.Parallel()
-	fixture := credentialFixture(t)
+	fixture := serviceAccountFixture(t)
 	raw := encode(t, fixture)
-	credentials, err := ParseCredentials(raw)
-	require.NoError(t, err)
-	require.Equal(t, "admin@example.com", credentials.DelegatedUser)
+	require.NoError(t, ParseServiceAccount(raw))
 	tests := []struct {
 		name string
 		edit func(map[string]any)
 	}{
-		{"missing OU", func(c map[string]any) { delete(c, "org_unit_id") }},
-		{"blank OU", func(c map[string]any) { c["org_unit_id"] = " \t\n" }},
-		{"missing subject", func(c map[string]any) { c["delegated_user"] = " " }},
-		{"missing service account", func(c map[string]any) { delete(c, "service_account") }},
-		{"wrong type", func(c map[string]any) { testAccount(c)["type"] = "authorized_user" }},
-		{"bad key", func(c map[string]any) { testAccount(c)["private_key"] = "SECRET" }},
+		{"wrong type", func(c map[string]any) { c["type"] = "authorized_user" }},
+		{"missing email", func(c map[string]any) { delete(c, "client_email") }},
+		{"bad key", func(c map[string]any) { c["private_key"] = "SECRET" }},
 	}
 	for _, endpoint := range []string{"https://attacker.example/token", "https://oauth2.googleapis.com/token?x=1", "http://oauth2.googleapis.com/token", "https://oauth2.googleapis.com/token/", "https://oauth2.googleapis.com@attacker.example/token"} {
 		tests = append(tests, struct {
 			name string
 			edit func(map[string]any)
-		}{endpoint, func(c map[string]any) { testAccount(c)["token_uri"] = endpoint }})
+		}{endpoint, func(c map[string]any) { c["token_uri"] = endpoint }})
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -73,33 +68,41 @@ func TestCredentials(t *testing.T) {
 			var c map[string]any
 			require.NoError(t, json.Unmarshal([]byte(raw), &c))
 			tc.edit(c)
-			_, err := ParseCredentials(encode(t, c))
+			err := ParseServiceAccount(encode(t, c))
 			require.Error(t, err)
 			require.NotContains(t, err.Error(), "SECRET")
 		})
 	}
 	for _, endpoint := range []string{"https://accounts.google.com/o/oauth2/token", "https://oauth2.googleapis.com/token"} {
-		testAccount(fixture)["token_uri"] = endpoint
-		_, err := ParseCredentials(encode(t, fixture))
-		require.NoError(t, err)
+		fixture["token_uri"] = endpoint
+		require.NoError(t, ParseServiceAccount(encode(t, fixture)))
 	}
 	ec, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	der, err := x509.MarshalPKCS8PrivateKey(ec)
 	require.NoError(t, err)
-	testAccount(fixture)["private_key"] = string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
-	_, err = ParseCredentials(encode(t, fixture))
-	require.ErrorContains(t, err, "RSA")
+	fixture["private_key"] = string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+	require.ErrorContains(t, ParseServiceAccount(encode(t, fixture)), "RSA")
 	weak, err := rsa.GenerateKey(rand.Reader, 1024)
 	require.NoError(t, err)
 	der, err = x509.MarshalPKCS8PrivateKey(weak)
 	require.NoError(t, err)
-	testAccount(fixture)["private_key"] = string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
-	_, err = ParseCredentials(encode(t, fixture))
-	require.ErrorContains(t, err, "at least 2048 bits")
-	_, err = ParseCredentials("{SECRET")
+	fixture["private_key"] = string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+	require.ErrorContains(t, ParseServiceAccount(encode(t, fixture)), "at least 2048 bits")
+	// The old wrapper format is not a key file.
+	wrapper := encode(t, map[string]any{"service_account": serviceAccountFixture(t), "delegated_user": "admin@example.com"})
+	require.Error(t, ParseServiceAccount(wrapper))
+	err = ParseServiceAccount("{SECRET")
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "SECRET")
+}
+
+func TestValidateDelegatedUser(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, ValidateDelegatedUser("vault-export@example.com"))
+	for _, email := range []string{"", " admin@example.com", "admin", "Admin <admin@example.com>", "admin@example.com, other@example.com", strings.Repeat("a", 310) + "@example.com"} {
+		require.Error(t, ValidateDelegatedUser(email), email)
+	}
 }
 
 func testClient(t *testing.T, handler http.HandlerFunc) *Client {
@@ -107,24 +110,145 @@ func testClient(t *testing.T, handler http.HandlerFunc) *Client {
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 	// Exercise the same OAuth bearer transport without a live token exchange.
-	client := server.Client()
-	client.Transport = &oauth2.Transport{Source: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}), Base: client.Transport}
-	client.CheckRedirect = denyRedirect
-	return &Client{httpClient: client, matterID: "matter", orgUnitID: "root-ou", baseURL: server.URL + "/v1", storageURL: server.URL + "/storage/v1", maxAPIBytes: 4096, maxDownloadBytes: 1024}
+	// server.Client returns one shared client, so build separate ones per scope.
+	newClient := func(token string) *http.Client {
+		return &http.Client{Transport: &oauth2.Transport{Source: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token}), Base: server.Client().Transport}, CheckRedirect: denyRedirect}
+	}
+	client := newClient("test-token")
+	directory := newClient("directory-token")
+	return &Client{httpClient: client, directoryClient: directory, matterID: "matter", orgUnitID: "root-ou", baseURL: server.URL + "/v1", storageURL: server.URL + "/storage/v1", directoryURL: server.URL + "/admin/directory/v1", maxAPIBytes: 4096, maxDownloadBytes: 1024}
 }
 
 func TestNewClient(t *testing.T) {
 	t.Parallel()
-	raw := encode(t, credentialFixture(t))
+	cfg := Config{ServiceAccountJSON: encode(t, serviceAccountFixture(t)), DelegatedUser: "admin@example.com", MatterID: "00000000-0000-4000-8000-000000000001", OrgUnitID: "id:root"}
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
-	client, err := NewClient(raw, "00000000-0000-4000-8000-000000000001", policy)
+	client, err := NewClient(cfg, policy)
 	require.NoError(t, err)
 	require.Equal(t, "https://vault.googleapis.com/v1", client.baseURL)
 	require.Equal(t, "https://storage.googleapis.com/storage/v1", client.storageURL)
-	_, err = NewClient(raw, "bad/id", policy)
+	require.Equal(t, "https://admin.googleapis.com/admin/directory/v1", client.directoryURL)
+	// Setup clients carry no matter or org unit yet.
+	setup := cfg
+	setup.MatterID, setup.OrgUnitID = "", ""
+	setupClient, err := NewClient(setup, policy)
+	require.NoError(t, err)
+	require.ErrorIs(t, setupClient.GetMatter(t.Context()), errNoMatter)
+	bad := cfg
+	bad.MatterID = "bad/id"
+	_, err = NewClient(bad, policy)
 	require.Error(t, err)
-	_, err = NewClient(raw, "00000000-0000-4000-8000-000000000001", nil)
+	bad = cfg
+	bad.DelegatedUser = "not-an-email"
+	_, err = NewClient(bad, policy)
 	require.Error(t, err)
+	_, err = NewClient(cfg, nil)
+	require.Error(t, err)
+}
+
+func TestEnsureMatter(t *testing.T) {
+	t.Parallel()
+	const name = "Speakeasy Gemini import"
+	t.Run("reuses the smallest open match across pages", func(t *testing.T) {
+		t.Parallel()
+		client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodGet, r.Method)
+			assert.Equal(t, "/v1/matters", r.URL.Path)
+			assert.Equal(t, "OPEN", r.URL.Query().Get("state"))
+			if r.URL.Query().Get("pageToken") == "" {
+				_, _ = fmt.Fprintf(w, `{"matters":[{"matterId":"00000000-0000-4000-8000-000000000009","name":%q,"state":"OPEN"},{"matterId":"00000000-0000-4000-8000-000000000001","name":"other","state":"OPEN"}],"nextPageToken":"next"}`, name)
+				return
+			}
+			_, _ = fmt.Fprintf(w, `{"matters":[{"matterId":"00000000-0000-4000-8000-000000000002","name":%q,"state":"OPEN"}]}`, name)
+		})
+		id, err := client.EnsureMatter(t.Context(), name, "description")
+		require.NoError(t, err)
+		require.Equal(t, "00000000-0000-4000-8000-000000000002", id)
+	})
+	t.Run("creates when none is open", func(t *testing.T) {
+		t.Parallel()
+		created := false
+		client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method + " " + r.URL.Path {
+			case "GET /v1/matters":
+				_, _ = fmt.Fprint(w, `{}`)
+			case "POST /v1/matters":
+				var body map[string]string
+				assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+				assert.Equal(t, name, body["name"])
+				assert.Equal(t, "description", body["description"])
+				created = true
+				_, _ = fmt.Fprint(w, `{"matterId":"00000000-0000-4000-8000-000000000003","state":"OPEN"}`)
+			default:
+				t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			}
+		})
+		id, err := client.EnsureMatter(t.Context(), name, "description")
+		require.NoError(t, err)
+		require.True(t, created)
+		require.Equal(t, "00000000-0000-4000-8000-000000000003", id)
+	})
+	t.Run("surfaces refusals with their status", func(t *testing.T) {
+		t.Parallel()
+		client := testClient(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(403); _, _ = fmt.Fprint(w, "SECRET") })
+		_, err := client.EnsureMatter(t.Context(), name, "description")
+		status, ok := errors.AsType[*HTTPError](err)
+		require.True(t, ok)
+		require.Equal(t, 403, status.StatusCode)
+		require.NotContains(t, err.Error(), "SECRET")
+	})
+	t.Run("rejects a malformed matter ID", func(t *testing.T) {
+		t.Parallel()
+		client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintf(w, `{"matters":[{"matterId":"../other","name":%q,"state":"OPEN"}]}`, name)
+		})
+		_, err := client.EnsureMatter(t.Context(), name, "description")
+		require.Error(t, err)
+	})
+}
+
+func TestListOrgUnits(t *testing.T) {
+	t.Parallel()
+	t.Run("returns the root and sorts by path", func(t *testing.T) {
+		t.Parallel()
+		client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			// Directory calls use their own narrowly scoped token.
+			assert.Equal(t, "Bearer directory-token", r.Header.Get("Authorization"))
+			assert.Equal(t, "/admin/directory/v1/customer/my_customer/orgunits", r.URL.Path)
+			assert.Equal(t, "allIncludingParent", r.URL.Query().Get("type"))
+			_, _ = fmt.Fprint(w, `{"organizationUnits":[{"orgUnitId":"id:sales","orgUnitPath":"/Sales","name":"Sales","parentOrgUnitId":"id:root","parentOrgUnitPath":"/"},{"orgUnitId":"id:root","orgUnitPath":"/","name":"Example Co"}]}`)
+		})
+		units, err := client.ListOrgUnits(t.Context())
+		require.NoError(t, err)
+		require.Equal(t, []OrgUnit{{ID: "id:root", Path: "/", Name: "Example Co", Description: ""}, {ID: "id:sales", Path: "/Sales", Name: "Sales", Description: ""}}, units)
+	})
+	t.Run("derives an omitted root from its children", func(t *testing.T) {
+		t.Parallel()
+		client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprint(w, `{"organizationUnits":[{"orgUnitId":"id:sales","orgUnitPath":"/Sales","name":"Sales","parentOrgUnitId":"id:root","parentOrgUnitPath":"/"}]}`)
+		})
+		units, err := client.ListOrgUnits(t.Context())
+		require.NoError(t, err)
+		require.Equal(t, "/", units[0].Path)
+		require.Equal(t, "id:root", units[0].ID)
+	})
+	t.Run("rejects malformed units", func(t *testing.T) {
+		t.Parallel()
+		client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprint(w, `{"organizationUnits":[{"orgUnitId":"","orgUnitPath":"/Sales"}]}`)
+		})
+		_, err := client.ListOrgUnits(t.Context())
+		require.Error(t, err)
+	})
+	t.Run("surfaces a missing directory scope as a token-exchange rejection", func(t *testing.T) {
+		t.Parallel()
+		client := testClient(t, func(w http.ResponseWriter, r *http.Request) { t.Error("failed token must not reach the directory") })
+		client.directoryClient.Transport = &oauth2.Transport{Source: failingTokenSource{err: &oauth2.RetrieveError{Response: &http.Response{StatusCode: 401}, ErrorCode: "unauthorized_client"}}, Base: client.directoryClient.Transport}
+		_, err := client.ListOrgUnits(t.Context())
+		status, ok := errors.AsType[*HTTPError](err)
+		require.True(t, ok)
+		require.True(t, status.CredentialsRejected())
+	})
 }
 
 func TestExportRequests(t *testing.T) {
@@ -358,14 +482,6 @@ func TestCancellationPreservesSafeCause(t *testing.T) {
 	cancel()
 	_, err := client.GetExport(ctx, "id")
 	require.ErrorIs(t, err, context.Canceled)
-}
-
-func testAccount(c map[string]any) map[string]any {
-	account, ok := c["service_account"].(map[string]any)
-	if !ok {
-		panic("invalid test credential fixture")
-	}
-	return account
 }
 
 func TestDownloadIntegrity(t *testing.T) {

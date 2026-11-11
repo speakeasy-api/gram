@@ -31,20 +31,27 @@ type UpsertConfigRequestBody struct {
 	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
 	// gemini_compliance.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
-	// Provider API key. For gemini_compliance, JSON with service_account (a Google
-	// service account JSON object) delegated_user (a Workspace administrator
-	// email), and org_unit_id (the Google Workspace root organizational unit ID
-	// for organization-wide coverage). Stored encrypted at rest; never returned on
-	// reads.
+	// Provider API key. For gemini_compliance, the Google service account JSON key
+	// file, unchanged. Empty keeps the saved key. Stored encrypted at rest; never
+	// returned on reads.
 	APIKey *string `form:"api_key,omitempty" json:"api_key,omitempty" xml:"api_key,omitempty"`
 	// Provider scope identifier. Required for anthropic_compliance and
 	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
-	// UUID), and gemini_compliance (existing Google Vault matter UUID).
+	// UUID). Optional for gemini_compliance (an open Google Vault matter UUID);
+	// omit it and Speakeasy finds or creates its own matter.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
+	// gemini_compliance only: the Google Workspace admin email the service account
+	// acts as through domain-wide delegation. Omit to keep the saved value.
+	DelegatedUser *string `form:"delegated_user,omitempty" json:"delegated_user,omitempty" xml:"delegated_user,omitempty"`
+	// gemini_compliance only: the Google Workspace organizational unit to export,
+	// from listOrgUnits. Select the root unit for the whole organization. Syncing
+	// starts once one is saved. Omit to keep the saved value.
+	OrgUnitID *string `form:"org_unit_id,omitempty" json:"org_unit_id,omitempty" xml:"org_unit_id,omitempty"`
 	// How the provider org is billed: 'metered', 'flat_rate', or 'unknown'.
 	// Free-form; omit to leave the existing value unchanged.
 	BillingMode *string `form:"billing_mode,omitempty" json:"billing_mode,omitempty" xml:"billing_mode,omitempty"`
-	// Whether the integration should be active.
+	// Whether the integration should be active. gemini_compliance stays inactive
+	// until an organizational unit is saved.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
@@ -121,8 +128,18 @@ type GetConfigResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Provider scope identifier. Required for anthropic_compliance and
 	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
-	// UUID); omitted for providers that do not need one.
+	// UUID); for gemini_compliance, the Google Vault matter exports are created
+	// in. Omitted for providers that do not need one.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
+	// gemini_compliance only: the Google Workspace admin email the service account
+	// acts as. Omitted for other providers.
+	DelegatedUser *string `form:"delegated_user,omitempty" json:"delegated_user,omitempty" xml:"delegated_user,omitempty"`
+	// gemini_compliance only: the selected Google Workspace organizational unit.
+	// Omitted until one is saved.
+	OrgUnitID *string `form:"org_unit_id,omitempty" json:"org_unit_id,omitempty" xml:"org_unit_id,omitempty"`
+	// gemini_compliance only: the selected organizational unit's path; "/" is the
+	// whole organization. Omitted until one is saved.
+	OrgUnitPath *string `form:"org_unit_path,omitempty" json:"org_unit_path,omitempty" xml:"org_unit_path,omitempty"`
 	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
 	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
 	// 'unknown'. Empty/omitted when not declared.
@@ -168,8 +185,18 @@ type UpsertConfigResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Provider scope identifier. Required for anthropic_compliance and
 	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
-	// UUID); omitted for providers that do not need one.
+	// UUID); for gemini_compliance, the Google Vault matter exports are created
+	// in. Omitted for providers that do not need one.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
+	// gemini_compliance only: the Google Workspace admin email the service account
+	// acts as. Omitted for other providers.
+	DelegatedUser *string `form:"delegated_user,omitempty" json:"delegated_user,omitempty" xml:"delegated_user,omitempty"`
+	// gemini_compliance only: the selected Google Workspace organizational unit.
+	// Omitted until one is saved.
+	OrgUnitID *string `form:"org_unit_id,omitempty" json:"org_unit_id,omitempty" xml:"org_unit_id,omitempty"`
+	// gemini_compliance only: the selected organizational unit's path; "/" is the
+	// whole organization. Omitted until one is saved.
+	OrgUnitPath *string `form:"org_unit_path,omitempty" json:"org_unit_path,omitempty" xml:"org_unit_path,omitempty"`
 	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
 	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
 	// 'unknown'. Empty/omitted when not declared.
@@ -198,6 +225,13 @@ type UpsertConfigResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// ISO 8601 timestamp of the most recent change. Omitted when no config is set.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ListOrgUnitsResponseBody is the type of the "aiIntegrations" service
+// "listOrgUnits" endpoint HTTP response body.
+type ListOrgUnitsResponseBody struct {
+	// Units the saved delegated admin can read, including the root.
+	OrgUnits []*AIIntegrationOrgUnitResponseBody `form:"org_units" json:"org_units" xml:"org_units"`
 }
 
 // ListSchedulesResponseBody is the type of the "aiIntegrations" service
@@ -1408,6 +1442,192 @@ type DeleteConfigGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListOrgUnitsUnauthorizedResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "unauthorized"
+// error.
+type ListOrgUnitsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrgUnitsForbiddenResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "forbidden" error.
+type ListOrgUnitsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrgUnitsBadRequestResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "bad_request"
+// error.
+type ListOrgUnitsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrgUnitsNotFoundResponseBody is the type of the "aiIntegrations" service
+// "listOrgUnits" endpoint HTTP response body for the "not_found" error.
+type ListOrgUnitsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrgUnitsConflictResponseBody is the type of the "aiIntegrations" service
+// "listOrgUnits" endpoint HTTP response body for the "conflict" error.
+type ListOrgUnitsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrgUnitsUnsupportedMediaResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListOrgUnitsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrgUnitsInvalidResponseBody is the type of the "aiIntegrations" service
+// "listOrgUnits" endpoint HTTP response body for the "invalid" error.
+type ListOrgUnitsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrgUnitsInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "listOrgUnits" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListOrgUnitsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrgUnitsUnexpectedResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "unexpected"
+// error.
+type ListOrgUnitsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrgUnitsGatewayErrorResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListOrgUnitsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListSchedulesUnauthorizedResponseBody is the type of the "aiIntegrations"
 // service "listSchedules" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1974,6 +2194,19 @@ type RetryScheduleGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// AIIntegrationOrgUnitResponseBody is used to define fields on response body
+// types.
+type AIIntegrationOrgUnitResponseBody struct {
+	// Organizational unit ID, e.g. id:03ph8a2z1a2b3c4.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Full path; "/" is the root, covering the whole organization.
+	Path string `form:"path" json:"path" xml:"path"`
+	// Display name. Empty when Google omits it.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Admin-entered description. Omitted when empty.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
 // AIIntegrationScheduleStateResponseBody is used to define fields on response
 // body types.
 type AIIntegrationScheduleStateResponseBody struct {
@@ -2045,6 +2278,9 @@ func NewGetConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *GetConfi
 		Provider:               res.Provider,
 		ProjectID:              res.ProjectID,
 		ExternalOrganizationID: res.ExternalOrganizationID,
+		DelegatedUser:          res.DelegatedUser,
+		OrgUnitID:              res.OrgUnitID,
+		OrgUnitPath:            res.OrgUnitPath,
 		BillingMode:            res.BillingMode,
 		Enabled:                res.Enabled,
 		HasAPIKey:              res.HasAPIKey,
@@ -2068,6 +2304,9 @@ func NewUpsertConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *Upser
 		Provider:               res.Provider,
 		ProjectID:              res.ProjectID,
 		ExternalOrganizationID: res.ExternalOrganizationID,
+		DelegatedUser:          res.DelegatedUser,
+		OrgUnitID:              res.OrgUnitID,
+		OrgUnitPath:            res.OrgUnitPath,
 		BillingMode:            res.BillingMode,
 		Enabled:                res.Enabled,
 		HasAPIKey:              res.HasAPIKey,
@@ -2078,6 +2317,25 @@ func NewUpsertConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *Upser
 		LastPollFailedAt:       res.LastPollFailedAt,
 		CreatedAt:              res.CreatedAt,
 		UpdatedAt:              res.UpdatedAt,
+	}
+	return body
+}
+
+// NewListOrgUnitsResponseBody builds the HTTP response body from the result of
+// the "listOrgUnits" endpoint of the "aiIntegrations" service.
+func NewListOrgUnitsResponseBody(res *aiintegrations.ListAIIntegrationOrgUnitsResult) *ListOrgUnitsResponseBody {
+	body := &ListOrgUnitsResponseBody{}
+	if res.OrgUnits != nil {
+		body.OrgUnits = make([]*AIIntegrationOrgUnitResponseBody, len(res.OrgUnits))
+		for i, val := range res.OrgUnits {
+			if val == nil {
+				body.OrgUnits[i] = nil
+				continue
+			}
+			body.OrgUnits[i] = marshalAiintegrationsAIIntegrationOrgUnitToAIIntegrationOrgUnitResponseBody(val)
+		}
+	} else {
+		body.OrgUnits = []*AIIntegrationOrgUnitResponseBody{}
 	}
 	return body
 }
@@ -3016,6 +3274,148 @@ func NewDeleteConfigGatewayErrorResponseBody(res *goa.ServiceError) *DeleteConfi
 	return body
 }
 
+// NewListOrgUnitsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listOrgUnits" endpoint of the "aiIntegrations" service.
+func NewListOrgUnitsUnauthorizedResponseBody(res *goa.ServiceError) *ListOrgUnitsUnauthorizedResponseBody {
+	body := &ListOrgUnitsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrgUnitsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listOrgUnits" endpoint of the "aiIntegrations" service.
+func NewListOrgUnitsForbiddenResponseBody(res *goa.ServiceError) *ListOrgUnitsForbiddenResponseBody {
+	body := &ListOrgUnitsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrgUnitsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listOrgUnits" endpoint of the "aiIntegrations" service.
+func NewListOrgUnitsBadRequestResponseBody(res *goa.ServiceError) *ListOrgUnitsBadRequestResponseBody {
+	body := &ListOrgUnitsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrgUnitsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listOrgUnits" endpoint of the "aiIntegrations" service.
+func NewListOrgUnitsNotFoundResponseBody(res *goa.ServiceError) *ListOrgUnitsNotFoundResponseBody {
+	body := &ListOrgUnitsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrgUnitsConflictResponseBody builds the HTTP response body from the
+// result of the "listOrgUnits" endpoint of the "aiIntegrations" service.
+func NewListOrgUnitsConflictResponseBody(res *goa.ServiceError) *ListOrgUnitsConflictResponseBody {
+	body := &ListOrgUnitsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrgUnitsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listOrgUnits" endpoint of the "aiIntegrations"
+// service.
+func NewListOrgUnitsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListOrgUnitsUnsupportedMediaResponseBody {
+	body := &ListOrgUnitsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrgUnitsInvalidResponseBody builds the HTTP response body from the
+// result of the "listOrgUnits" endpoint of the "aiIntegrations" service.
+func NewListOrgUnitsInvalidResponseBody(res *goa.ServiceError) *ListOrgUnitsInvalidResponseBody {
+	body := &ListOrgUnitsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrgUnitsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listOrgUnits" endpoint of the "aiIntegrations"
+// service.
+func NewListOrgUnitsInvariantViolationResponseBody(res *goa.ServiceError) *ListOrgUnitsInvariantViolationResponseBody {
+	body := &ListOrgUnitsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrgUnitsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listOrgUnits" endpoint of the "aiIntegrations" service.
+func NewListOrgUnitsUnexpectedResponseBody(res *goa.ServiceError) *ListOrgUnitsUnexpectedResponseBody {
+	body := &ListOrgUnitsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrgUnitsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listOrgUnits" endpoint of the "aiIntegrations" service.
+func NewListOrgUnitsGatewayErrorResponseBody(res *goa.ServiceError) *ListOrgUnitsGatewayErrorResponseBody {
+	body := &ListOrgUnitsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListSchedulesUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "listSchedules" endpoint of the "aiIntegrations" service.
 func NewListSchedulesUnauthorizedResponseBody(res *goa.ServiceError) *ListSchedulesUnauthorizedResponseBody {
@@ -3501,6 +3901,8 @@ func NewUpsertConfigPayload(body *UpsertConfigRequestBody, apikeyToken *string, 
 		Provider:               *body.Provider,
 		APIKey:                 *body.APIKey,
 		ExternalOrganizationID: body.ExternalOrganizationID,
+		DelegatedUser:          body.DelegatedUser,
+		OrgUnitID:              body.OrgUnitID,
 		BillingMode:            body.BillingMode,
 		Enabled:                *body.Enabled,
 	}
@@ -3516,6 +3918,17 @@ func NewDeleteConfigPayload(body *DeleteConfigRequestBody, apikeyToken *string, 
 	v := &aiintegrations.DeleteConfigPayload{
 		Provider: *body.Provider,
 	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListOrgUnitsPayload builds a aiIntegrations service listOrgUnits endpoint
+// payload.
+func NewListOrgUnitsPayload(provider string, apikeyToken *string, sessionToken *string) *aiintegrations.ListOrgUnitsPayload {
+	v := &aiintegrations.ListOrgUnitsPayload{}
+	v.Provider = provider
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

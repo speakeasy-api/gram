@@ -20,7 +20,7 @@ func TestGeminiImportStoresTranscriptsIdempotentlyAndLinksOwner(t *testing.T) {
 	t.Parallel()
 	ctx, conn, store, orgID := newStoreTestDB(t)
 	matterID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderGeminiCompliance, geminiTestCredentials(t), true, true, &matterID, nil)
+	created := upsertGeminiConfigWithTx(t, ctx, conn, store, orgID, geminiTestSettings(), true)
 	cfg := created.Config
 	user, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{ID: "user_" + uuid.NewString(), Email: "person@example.com", DisplayName: "Example Person", PhotoUrl: conv.ToPGTextEmpty(""), Admin: false})
 	require.NoError(t, err)

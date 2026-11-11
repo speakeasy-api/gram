@@ -3,6 +3,7 @@ import {
   useAiIntegrationConfig,
 } from "@gram/client/react-query/aiIntegrationConfig";
 import { useDeleteAIIntegrationConfigMutation } from "@gram/client/react-query/deleteAIIntegrationConfig";
+import { invalidateAllAiIntegrationOrgUnits } from "@gram/client/react-query/aiIntegrationOrgUnits";
 import { useUpsertAIIntegrationConfigMutation } from "@gram/client/react-query/upsertAIIntegrationConfig";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -30,6 +31,12 @@ export type AIIntegrationConfigForm = {
   setApiKey: Dispatch<SetStateAction<string>>;
   organizationId: string;
   setOrganizationId: Dispatch<SetStateAction<string>>;
+  delegatedUser: string;
+  setDelegatedUser: Dispatch<SetStateAction<string>>;
+  orgUnitId: string;
+  setOrgUnitId: Dispatch<SetStateAction<string>>;
+  // Saved, but syncing waits for an org unit (gemini_compliance step 2).
+  awaitingOrgUnit: boolean;
   billingMode: string;
   setBillingMode: Dispatch<SetStateAction<string>>;
   isConfigured: boolean;
@@ -53,15 +60,28 @@ export function useAIIntegrationConfigForm(
   const [enabled, setEnabled] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [organizationId, setOrganizationId] = useState("");
+  const [delegatedUser, setDelegatedUser] = useState("");
+  const [orgUnitId, setOrgUnitId] = useState("");
   const [billingMode, setBillingMode] = useState("unknown");
   const lastSyncedConfigIdRef = useRef<string | null>(null);
 
   const { mutate: upsert, status: upsertStatus } =
     useUpsertAIIntegrationConfigMutation({
-      onSuccess: () => {
-        toast.success("AI integration saved");
+      onSuccess: (saved) => {
         setApiKey("");
         void invalidateAllAiIntegrationConfig(queryClient);
+        if (provider.selectsOrgUnit) {
+          // The unit list depends on the saved key and delegated admin.
+          void invalidateAllAiIntegrationOrgUnits(queryClient);
+          if (!saved.orgUnitId) {
+            // Keep the form open: the next step is choosing what to export.
+            toast.success(
+              "Credentials saved. Choose an organizational unit to start syncing.",
+            );
+            return;
+          }
+        }
+        toast.success("AI integration saved");
         options.onSaveSuccess?.();
       },
       onError: (err) => {
@@ -76,6 +96,8 @@ export function useAIIntegrationConfigForm(
         setEnabled(false);
         setApiKey("");
         setOrganizationId("");
+        setDelegatedUser("");
+        setOrgUnitId("");
         setBillingMode("unknown");
         void invalidateAllAiIntegrationConfig(queryClient);
         options.onDeleteSuccess?.();
@@ -87,6 +109,9 @@ export function useAIIntegrationConfigForm(
 
   const isConfigured = Boolean(data?.id);
   const hasSavedKey = Boolean(data?.hasApiKey);
+  const awaitingOrgUnit = Boolean(
+    provider.selectsOrgUnit && isConfigured && !data?.orgUnitId,
+  );
 
   useEffect(() => {
     if (!data?.id) {
@@ -95,6 +120,8 @@ export function useAIIntegrationConfigForm(
       setEnabled(false);
       setApiKey("");
       setOrganizationId("");
+      setDelegatedUser("");
+      setOrgUnitId("");
       setBillingMode("unknown");
       return;
     }
@@ -104,6 +131,8 @@ export function useAIIntegrationConfigForm(
     setEnabled(data.enabled);
     setApiKey("");
     setOrganizationId(data.externalOrganizationId ?? "");
+    setDelegatedUser(data.delegatedUser ?? "");
+    setOrgUnitId(data.orgUnitId ?? "");
     setBillingMode(data.billingMode ?? "unknown");
   }, [data]);
 
@@ -114,12 +143,18 @@ export function useAIIntegrationConfigForm(
     if (provider.requiresOrganizationId && organizationId.trim() === "") {
       return false;
     }
+    if (provider.delegatedUser && delegatedUser.trim() === "") return false;
+    if (awaitingOrgUnit && orgUnitId === "") return false;
     return true;
   }, [
     apiKey,
+    awaitingOrgUnit,
+    delegatedUser,
     hasSavedKey,
     isMutating,
+    orgUnitId,
     organizationId,
+    provider.delegatedUser,
     provider.requiresOrganizationId,
   ]);
 
@@ -129,13 +164,18 @@ export function useAIIntegrationConfigForm(
         upsertConfigRequestBody: {
           provider: provider.provider,
           apiKey: apiKey.trim(),
-          // A first-time connect starts enabled; the connection switch and
-          // dialog manage the flag from then on.
-          enabled: isConfigured ? enabled : true,
+          // A first-time connect starts enabled, as does choosing the first
+          // org unit for a connection held until one is picked; the
+          // connection switch and dialog manage the flag from then on.
+          enabled: isConfigured && !awaitingOrgUnit ? enabled : true,
           billingMode,
           ...(provider.requiresOrganizationId
             ? { externalOrganizationId: organizationId.trim() }
             : {}),
+          ...(provider.delegatedUser
+            ? { delegatedUser: delegatedUser.trim() }
+            : {}),
+          ...(provider.selectsOrgUnit && orgUnitId !== "" ? { orgUnitId } : {}),
         },
       },
     });
@@ -182,6 +222,11 @@ export function useAIIntegrationConfigForm(
     setApiKey,
     organizationId,
     setOrganizationId,
+    delegatedUser,
+    setDelegatedUser,
+    orgUnitId,
+    setOrgUnitId,
+    awaitingOrgUnit,
     billingMode,
     setBillingMode,
     isConfigured,

@@ -14,7 +14,10 @@ var Config = Type("AIIntegrationConfig", func() {
 	Attribute("organization_id", String, "Organization the config belongs to.")
 	Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.")
 	Attribute("project_id", String, "Project used as the telemetry write target. Omitted when no config is set.")
-	Attribute("external_organization_id", String, "Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); omitted for providers that do not need one.")
+	Attribute("external_organization_id", String, "Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); for gemini_compliance, the Google Vault matter exports are created in. Omitted for providers that do not need one.")
+	Attribute("delegated_user", String, "gemini_compliance only: the Google Workspace admin email the service account acts as. Omitted for other providers.")
+	Attribute("org_unit_id", String, "gemini_compliance only: the selected Google Workspace organizational unit. Omitted until one is saved.")
+	Attribute("org_unit_path", String, "gemini_compliance only: the selected organizational unit's path; \"/\" is the whole organization. Omitted until one is saved.")
 	Attribute("billing_mode", String, "How the provider org is billed: 'metered' (pay-per-token; dashboard cost is real spend), 'flat_rate' (subscription seats; cost is an estimate), or 'unknown'. Empty/omitted when not declared.")
 	Attribute("enabled", Boolean, "Whether the provider integration is active.")
 	Attribute("has_api_key", Boolean, "Whether an API key is currently stored. The key itself is never returned.")
@@ -82,6 +85,21 @@ var ListSchedulesResult = Type("ListAIIntegrationSchedulesResult", func() {
 	Attribute("organization_id", String, "Organization the schedules belong to.")
 	Attribute("provider", String, "AI provider identifier.")
 	Attribute("schedules", ArrayOf(ScheduleState), "Scheduler state for each of the provider's sync schedules.")
+})
+
+var OrgUnit = Type("AIIntegrationOrgUnit", func() {
+	Description("A Google Workspace organizational unit the delegated admin can read.")
+	Required("id", "path", "name")
+	Attribute("id", String, "Organizational unit ID, e.g. id:03ph8a2z1a2b3c4.")
+	Attribute("path", String, "Full path; \"/\" is the root, covering the whole organization.")
+	Attribute("name", String, "Display name. Empty when Google omits it.")
+	Attribute("description", String, "Admin-entered description. Omitted when empty.")
+})
+
+var ListOrgUnitsResult = Type("ListAIIntegrationOrgUnitsResult", func() {
+	Description("Organizational units available to a gemini_compliance connection, sorted by path.")
+	Required("org_units")
+	Attribute("org_units", ArrayOf(OrgUnit), "Units the saved delegated admin can read, including the root.")
 })
 
 var _ = Service("aiIntegrations", func() {
@@ -193,10 +211,12 @@ var _ = Service("aiIntegrations", func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.")
-			Attribute("api_key", String, "Provider API key. For gemini_compliance, JSON with service_account (a Google service account JSON object) delegated_user (a Workspace administrator email), and org_unit_id (the Google Workspace root organizational unit ID for organization-wide coverage). Stored encrypted at rest; never returned on reads.")
-			Attribute("external_organization_id", String, "Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID), and gemini_compliance (existing Google Vault matter UUID).")
+			Attribute("api_key", String, "Provider API key. For gemini_compliance, the Google service account JSON key file, unchanged. Empty keeps the saved key. Stored encrypted at rest; never returned on reads.")
+			Attribute("external_organization_id", String, "Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID). Optional for gemini_compliance (an open Google Vault matter UUID); omit it and Speakeasy finds or creates its own matter.")
+			Attribute("delegated_user", String, "gemini_compliance only: the Google Workspace admin email the service account acts as through domain-wide delegation. Omit to keep the saved value.")
+			Attribute("org_unit_id", String, "gemini_compliance only: the Google Workspace organizational unit to export, from listOrgUnits. Select the root unit for the whole organization. Syncing starts once one is saved. Omit to keep the saved value.")
 			Attribute("billing_mode", String, "How the provider org is billed: 'metered', 'flat_rate', or 'unknown'. Free-form; omit to leave the existing value unchanged.")
-			Attribute("enabled", Boolean, "Whether the integration should be active.")
+			Attribute("enabled", Boolean, "Whether the integration should be active. gemini_compliance stays inactive until an organizational unit is saved.")
 			Required("provider", "api_key", "enabled")
 		})
 
@@ -241,6 +261,36 @@ var _ = Service("aiIntegrations", func() {
 		Meta("openapi:operationId", "deleteAIIntegrationConfig")
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteConfig")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteAIIntegrationConfig"}`)
+	})
+
+	Method("listOrgUnits", func() {
+		Description("List the Google Workspace organizational units a saved gemini_compliance connection can export, using its stored service account and delegated admin. Requires the admin.directory.orgunit.readonly delegation scope.")
+
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			Attribute("provider", String, "AI provider identifier. Only gemini_compliance is supported.")
+			Required("provider")
+		})
+
+		Result(ListOrgUnitsResult)
+
+		HTTP(func() {
+			GET("/rpc/aiIntegrations.listOrgUnits")
+			Param("provider")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAIIntegrationOrgUnits")
+		Meta("openapi:extension:x-speakeasy-name-override", "listOrgUnits")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIIntegrationOrgUnits"}`)
 	})
 
 	Method("listSchedules", func() {

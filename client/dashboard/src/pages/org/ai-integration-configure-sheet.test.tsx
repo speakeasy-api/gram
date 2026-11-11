@@ -4,6 +4,15 @@ import { ConfigureSheet } from "./ai-integration-configure-sheet";
 import { AI_INTEGRATION_PROVIDERS } from "./ai-integration-providers";
 import type { AIIntegrationConfigForm } from "./use-ai-integration-config-form";
 
+vi.mock("@gram/client/react-query/aiIntegrationOrgUnits", () => ({
+  useAiIntegrationOrgUnits: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+}));
+
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasAllScopes: () => true,
@@ -28,6 +37,11 @@ function stubForm(
     setApiKey,
     organizationId: "",
     setOrganizationId: noop,
+    delegatedUser: "",
+    setDelegatedUser: noop,
+    orgUnitId: "",
+    setOrgUnitId: noop,
+    awaitingOrgUnit: false,
     billingMode: "",
     setBillingMode: noop,
     isConfigured: false,

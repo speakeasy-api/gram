@@ -36,11 +36,15 @@ export type AIIntegrationConfig = {
    */
   createdAt?: Date | undefined;
   /**
+   * gemini_compliance only: the Google Workspace admin email the service account acts as. Omitted for other providers.
+   */
+  delegatedUser?: string | undefined;
+  /**
    * Whether the provider integration is active.
    */
   enabled: boolean;
   /**
-   * Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); omitted for providers that do not need one.
+   * Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); for gemini_compliance, the Google Vault matter exports are created in. Omitted for providers that do not need one.
    */
   externalOrganizationId?: string | undefined;
   /**
@@ -71,6 +75,14 @@ export type AIIntegrationConfig = {
    * ISO 8601 timestamp for the next scheduled usage poll. Omitted when no config is set.
    */
   nextPollAfter?: Date | undefined;
+  /**
+   * gemini_compliance only: the selected Google Workspace organizational unit. Omitted until one is saved.
+   */
+  orgUnitId?: string | undefined;
+  /**
+   * gemini_compliance only: the selected organizational unit's path; "/" is the whole organization. Omitted until one is saved.
+   */
+  orgUnitPath?: string | undefined;
   /**
    * Organization the config belongs to.
    */
@@ -105,6 +117,7 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
     created_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    delegated_user: z.optional(z.string()),
     enabled: z.boolean(),
     external_organization_id: z.optional(z.string()),
     has_api_key: z.boolean(),
@@ -120,6 +133,8 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
     next_poll_after: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    org_unit_id: z.optional(z.string()),
+    org_unit_path: z.optional(z.string()),
     organization_id: z.string(),
     project_id: z.optional(z.string()),
     provider: z.string(),
@@ -131,6 +146,7 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "billing_mode": "billingMode",
       "created_at": "createdAt",
+      "delegated_user": "delegatedUser",
       "external_organization_id": "externalOrganizationId",
       "has_api_key": "hasApiKey",
       "last_poll_error": "lastPollError",
@@ -138,6 +154,8 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
       "last_poll_status": "lastPollStatus",
       "last_polled_at": "lastPolledAt",
       "next_poll_after": "nextPollAfter",
+      "org_unit_id": "orgUnitId",
+      "org_unit_path": "orgUnitPath",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "updated_at": "updatedAt",

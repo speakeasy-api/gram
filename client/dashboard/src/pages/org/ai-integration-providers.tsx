@@ -32,6 +32,16 @@ export type AIIntegrationProvider = {
   organizationIdLabel?: string;
   organizationIdPlaceholder?: string;
   helpText?: ReactNode;
+  // A Workspace admin email saved beside the key, which the service account
+  // acts as (gemini_compliance's delegated admin).
+  delegatedUser?: {
+    label: string;
+    placeholder: string;
+    helpText?: string;
+  };
+  // After the first save, pick the Workspace organizational unit to export;
+  // syncing waits until one is saved.
+  selectsOrgUnit?: boolean;
 };
 
 type AIIntegrationScheduleKind = "events" | "metrics";
@@ -74,6 +84,14 @@ export function providerSchedules(
       },
     ]
   );
+}
+
+// The root unit ("/") covers the whole organization.
+export function orgUnitLabel(unit: { path: string; name: string }): string {
+  if (unit.path !== "/") return unit.path;
+  return unit.name
+    ? `Entire organization (${unit.name})`
+    : "Entire organization";
 }
 
 const CURSOR_AI_INTEGRATION: AIIntegrationProvider = {
@@ -383,36 +401,40 @@ const GEMINI_AI_INTEGRATION: AIIntegrationProvider = {
       {
         title: "Prepare Google Vault",
         description:
-          "Enable the Google Vault API in your Google Cloud project. Create or select an existing Vault matter and copy its UUID. Configure retention rules that preserve the Gemini conversations you need to review. Copy the organizational-unit ID for the export scope; use the root organizational-unit ID to cover the whole organization.",
+          'Make sure Google Vault retains the Gemini conversations you need: set a Gemini retention rule, and give every user whose chats you want a Vault license. Speakeasy creates its own Vault matter, "Speakeasy Gemini import", the first time you save.',
         helpLink: {
           url: "https://vault.google.com/",
           linkLabel: "Google Vault",
-          sentence: "Open {LINK} to find your matter ID",
+          sentence: "Manage retention in {LINK}",
         },
       },
       {
-        title: "Configure a delegated service account",
+        title: "Create a delegated service account",
         description:
-          "Create a Google service account with domain-wide delegation. In the Workspace Admin console, authorize its client ID for https://www.googleapis.com/auth/ediscovery and https://www.googleapis.com/auth/devstorage.read_only. Delegate to a Vault-licensed administrator with access to the matter and permission to search and export Gemini data.",
+          "In Google Cloud, enable the Google Vault API and the Admin SDK API, create a service account, and download its JSON key. In the Workspace Admin console, authorize the service account's client ID for domain-wide delegation with https://www.googleapis.com/auth/ediscovery, https://www.googleapis.com/auth/devstorage.read_only and https://www.googleapis.com/auth/admin.directory.orgunit.readonly. Choose a delegated admin with a Vault license, the Manage Matters, Manage Searches and Manage Exports privileges, and permission to read organizational units.",
       },
       {
-        title: "Paste credentials and the matter ID",
+        title: "Connect and choose what to export",
         description:
-          'Download the service account JSON key. Wrap the entire JSON object as {"service_account": <service account JSON object>, "delegated_user": "admin@example.com", "org_unit_id": "id:..."}, then paste the wrapper and your existing Vault matter UUID below. All three wrapper fields are required. Speakeasy imports text chats from completed UTC days, initially looking back 30 days; exports are not real-time and availability depends on retention.',
+          "Paste the JSON key file and the delegated admin's email, then save. Speakeasy checks them with Google and lists your organizational units: choose the root unit, shown as Entire organization, to cover everyone. Syncing starts once a unit is saved. Speakeasy imports text chats from completed UTC days, initially looking back 30 days; exports are not real-time and availability depends on retention.",
         showsForm: true,
       },
     ],
   },
   providerId: "gemini",
-  apiKeyLabel: "Delegated service account JSON",
-  apiKeyPlaceholder:
-    '{"service_account": {…}, "delegated_user": "admin@example.com", "org_unit_id": "id:..."}',
+  apiKeyLabel: "Service account JSON key",
+  apiKeyPlaceholder: 'Paste the key file: {"type": "service_account", …}',
   apiKeyMultiline: true,
-  requiresOrganizationId: true,
-  organizationIdLabel: "Vault matter ID",
-  organizationIdPlaceholder: "00000000-0000-0000-0000-000000000000",
+  requiresOrganizationId: false,
   helpText:
-    "Include service_account, delegated_user, and org_unit_id in the JSON wrapper. Credentials are hidden and cleared when you close this panel.",
+    "Paste the key file as downloaded. It is hidden and cleared when you close this panel.",
+  delegatedUser: {
+    label: "Delegated admin email",
+    placeholder: "vault-export@example.com",
+    helpText:
+      "The Workspace admin the service account acts as. Use a dedicated account with only the Vault and organizational-unit privileges above.",
+  },
+  selectsOrgUnit: true,
 };
 
 export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [

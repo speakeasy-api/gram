@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/geminivault"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -42,6 +43,8 @@ type Service struct {
 	store        *Store
 	credentials  *CredentialVerifier
 	configPoller ConfigPoller
+	// newGeminiClient builds the Vault client Gemini setup uses; tests stub it.
+	newGeminiClient func(geminivault.Config) (geminiSetupClient, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -73,6 +76,9 @@ func NewService(
 		store:        NewStore(logger, db, encryptionClient),
 		credentials:  NewCredentialVerifier(logger, guardianPolicy),
 		configPoller: configPoller,
+		newGeminiClient: func(cfg geminivault.Config) (geminiSetupClient, error) {
+			return geminivault.NewClient(cfg, guardianPolicy)
+		},
 	}
 }
 
@@ -153,10 +159,30 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	externalOrgChanged := beforeRow != nil &&
 		conv.PtrValOr(externalOrganizationID, "") != conv.PtrValOr(before.ExternalOrganizationID, "")
 
+	settings := ProviderSettings{DelegatedUser: "", OrgUnitID: "", OrgUnitPath: ""}
+	orgUnitChanged := false
 	if provider == ProviderGeminiCompliance {
-		if err := validateGeminiCredentials(apiKey, externalOrganizationID); err != nil {
+		var beforeConfig *Config
+		if beforeRow != nil {
+			beforeConfig = &before
+		}
+		setup, err := s.prepareGemini(ctx, geminiSetupRequest{
+			APIKey:         apiKey,
+			APIKeySupplied: apiKeySupplied,
+			DelegatedUser:  payload.DelegatedUser,
+			OrgUnitID:      payload.OrgUnitID,
+			MatterID:       payload.ExternalOrganizationID,
+			Before:         beforeConfig,
+			Reenabled:      payload.Enabled && beforeRow != nil && !before.Enabled,
+		})
+		if err != nil {
 			return nil, err
 		}
+		settings = setup.Settings
+		externalOrganizationID = &setup.MatterID
+		externalOrgChanged = beforeRow != nil && setup.MatterID != conv.PtrValOr(before.ExternalOrganizationID, "")
+		// A new export scope needs its own backfill.
+		orgUnitChanged = beforeRow != nil && setup.Settings.OrgUnitID != before.Settings.OrgUnitID
 	}
 
 	// billing_mode is admin-declared and independent of the API key. Omit it to
@@ -183,7 +209,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		Provider:               provider,
 		APIKey:                 apiKey,
 		ExternalOrganizationID: externalOrganizationID,
-	}, payload.Enabled && (credentialsChanged || reenabled))
+	}, provider != ProviderGeminiCompliance && payload.Enabled && (credentialsChanged || reenabled))
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +222,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	// backfills usage emitted just before the key was configured.
 	watermark := time.Now().UTC().Add(-initialPollLookbackForProvider(provider))
 	resetPollWatermarkAt := conv.Ternary(
-		beforeRow != nil && (apiKeySupplied || externalOrgChanged),
+		beforeRow != nil && (apiKeySupplied || externalOrgChanged || orgUnitChanged),
 		&watermark,
 		nil,
 	)
@@ -207,7 +233,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, externalOrganizationID, billingMode, resetPollWatermarkAt, rejections)
+	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, externalOrganizationID, settings, billingMode, resetPollWatermarkAt, rejections)
 	if err != nil {
 		return nil, err
 	}
@@ -607,6 +633,9 @@ func emptyView(orgID, provider string) *gen.AIIntegrationConfig {
 		Provider:               provider,
 		ProjectID:              nil,
 		ExternalOrganizationID: nil,
+		DelegatedUser:          nil,
+		OrgUnitID:              nil,
+		OrgUnitPath:            nil,
 		BillingMode:            nil,
 		Enabled:                false,
 		HasAPIKey:              false,
@@ -651,6 +680,9 @@ func buildView(cfg Config, idValue uuid.UUID) *gen.AIIntegrationConfig {
 		Provider:               cfg.Provider,
 		ProjectID:              &projectID,
 		ExternalOrganizationID: conv.PtrValOrEmpty(&cfg.ExternalOrganizationID, nil),
+		DelegatedUser:          conv.PtrEmpty(cfg.Settings.DelegatedUser),
+		OrgUnitID:              conv.PtrEmpty(cfg.Settings.OrgUnitID),
+		OrgUnitPath:            conv.PtrEmpty(cfg.Settings.OrgUnitPath),
 		BillingMode:            conv.PtrEmpty(cfg.BillingMode),
 		Enabled:                cfg.Enabled,
 		HasAPIKey:              cfg.APIKey != "",

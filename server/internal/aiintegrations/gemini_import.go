@@ -54,8 +54,8 @@ type geminiExportCursor struct {
 	Through  time.Time `json:"through"`
 	Sequence uint64    `json:"sequence"`
 	ExportID string    `json:"export_id,omitempty"`
-	Start    time.Time `json:"start,omitempty"`
-	End      time.Time `json:"end,omitempty"`
+	Start    time.Time `json:"start"`
+	End      time.Time `json:"end"`
 }
 
 // GeminiImportService imports managed Gemini app text transcripts from Vault.
@@ -80,7 +80,15 @@ func NewGeminiImportService(logger *slog.Logger, db *pgxpool.Pool, policy *guard
 			if cfg.ExternalOrganizationID == nil {
 				return nil, errors.New("gemini Vault matter ID is required")
 			}
-			return vault.NewClient(cfg.APIKey, *cfg.ExternalOrganizationID, policy)
+			if cfg.Settings.OrgUnitID == "" {
+				return nil, errors.New("gemini sync requires a selected organizational unit")
+			}
+			return vault.NewClient(vault.Config{
+				ServiceAccountJSON: cfg.APIKey,
+				DelegatedUser:      cfg.Settings.DelegatedUser,
+				MatterID:           *cfg.ExternalOrganizationID,
+				OrgUnitID:          cfg.Settings.OrgUnitID,
+			}, policy)
 		},
 		heartbeat:   heartbeat,
 		importFiles: nil,
