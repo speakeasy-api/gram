@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   hostedToolset: undefined as
     | { id: string; slug: string; name: string }
     | undefined,
+  hostedToolsetLoading: false,
   canReadPlugins: false,
   plugins: [] as unknown[],
   publishStatus: {} as Record<string, unknown>,
@@ -66,7 +67,7 @@ vi.mock("@/hooks/useToolsetUrl", () => ({
 vi.mock("@/pages/mcp/x/hosted/useHostedToolset", () => ({
   useHostedToolset: (server: unknown) => ({
     toolset: server ? state.hostedToolset : undefined,
-    isLoading: false,
+    isLoading: !!server && state.hostedToolsetLoading,
     isError: false,
     refetch: () => {},
   }),
@@ -159,6 +160,7 @@ beforeEach(() => {
   state.url = "https://mcp.slack.com/mcp";
   state.server = undefined;
   state.hostedToolset = undefined;
+  state.hostedToolsetLoading = false;
   state.canReadPlugins = false;
   state.plugins = [];
   state.publishStatus = {};
@@ -255,8 +257,19 @@ it("leaves a hosted server's Authentication open while required variables are mi
 
 it("can't confirm a hosted server's Authentication before its toolset loads", () => {
   state.server = HOSTED_SERVER;
+  state.hostedToolsetLoading = true;
   renderReadiness();
   expect(readiness("Authentication")).toBe("null");
+  expect(
+    screen.getByText(/Checking required environment variables/),
+  ).toBeTruthy();
+});
+
+it("reports a finished toolset lookup with no match as not found", () => {
+  state.server = HOSTED_SERVER;
+  renderReadiness();
+  expect(readiness("Authentication")).toBe("null");
+  expect(screen.getByText(/toolset could not be found/)).toBeTruthy();
 });
 
 it("finds plugin membership by the loaded toolset when the summary is missing", () => {

@@ -22,7 +22,12 @@ export function useChatSessionHeaders(enabled: boolean): {
   const createSession = useChatSessionsCreateMutation();
 
   const query = useQuery({
-    queryKey: ["inspectChatSession", project.id, session.user.id],
+    queryKey: [
+      "inspectChatSession",
+      project.id,
+      session.user.id,
+      sessionKey(session.session),
+    ],
     enabled,
     // The token lives for an hour (expiresAfter below). Mint a new one well
     // before then so a tab left open never sends an expired token; a tab
@@ -69,4 +74,18 @@ export function useChatSessionHeaders(enabled: boolean): {
     error: query.error,
     refetch: retry,
   };
+}
+
+/**
+ * A short, non-reversible key for the auth session, so a new sign-in by the
+ * same user mints a fresh chat token without putting the session in the cache.
+ */
+function sessionKey(value: string): string {
+  // FNV-1a, 32-bit.
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
 }

@@ -101,10 +101,12 @@ function fieldFor(name: string, def: unknown, required: boolean): ToolField {
     return { ...base, kind: "const", value: def.const, typeLabel: "const" };
   }
 
-  const enumValues = Array.isArray(def.enum)
-    ? def.enum.filter((value) => value !== null)
-    : [];
-  if (enumValues.length > 0 && enumValues.every(isScalar)) {
+  // null stays a choice, so a required nullable enum can still send null.
+  const enumValues: unknown[] = Array.isArray(def.enum) ? def.enum : [];
+  if (
+    enumValues.some((value) => value !== null) &&
+    enumValues.every((value) => value === null || isScalar(value))
+  ) {
     return {
       ...base,
       kind: "enum",
@@ -194,7 +196,11 @@ export function toArguments(
     }
     const raw = values[field.name] ?? "";
     if (field.kind === "arguments") {
-      if (raw.trim() === "") continue;
+      if (raw.trim() === "") {
+        if (field.required)
+          return { ok: false, error: "Arguments are required." };
+        continue;
+      }
       let parsed: unknown;
       try {
         parsed = JSON.parse(raw);

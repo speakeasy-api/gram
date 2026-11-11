@@ -37,6 +37,7 @@ vi.mock("@/components/ui/CodeSnippet", () => ({
 
 const state = vi.hoisted(() => ({
   mint: vi.fn(),
+  catalogMintRefetch: vi.fn(),
   data: undefined as GatewayInspection | undefined,
   loading: false,
   accessToken: undefined as string | undefined,
@@ -85,7 +86,11 @@ vi.mock("@/hooks/useUserSessionToken", () => ({
       error: input.target.discoveryMode
         ? new Error("Gateway discovery settings are not available")
         : null,
-      refetch: vi.fn(),
+      refetch: (
+        input.target as { connectionVersion?: string }
+      ).connectionVersion?.endsWith(":catalog")
+        ? state.catalogMintRefetch
+        : vi.fn(),
     };
   },
 }));
@@ -333,4 +338,37 @@ it("says so when the gateway couldn't list its servers", () => {
   expect(
     screen.getByText(/Couldn't list this gateway's servers/i),
   ).toBeTruthy();
+});
+
+it("names a failed Code Mode catalog sign-in and retries the mint", () => {
+  state.data = {
+    discoveryMode: "code_mode",
+    tools: [{ name: "execute_code" }],
+    instructions: undefined,
+    protocolVersion: undefined,
+    serverName: undefined,
+    servers: undefined,
+  };
+  render(
+    <TooltipProvider>
+      <MemoryRouter>
+        <GatewayInspectTab
+          metaMcpServer={
+            {
+              id: "gateway-test",
+              discoveryMode: "code_mode",
+              codeModeEnabled: true,
+            } as MetaMcpServer
+          }
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
+  );
+  expect(
+    screen.getByText(/Couldn't sign in to list this gateway's servers/i),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(state.catalogMintRefetch).toHaveBeenCalled();
 });

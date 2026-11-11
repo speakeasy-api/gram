@@ -328,4 +328,53 @@ describe("toArguments", () => {
       args: { title: "Hello", n: 42, on: true, off: false, meta: { a: [1] } },
     });
   });
+
+  it("keeps null as a choice in a nullable enum", () => {
+    const [color] = extractFields({
+      properties: { color: { enum: ["red", null] } },
+      required: ["color"],
+    });
+    expect(color).toMatchObject({
+      kind: "enum",
+      options: [
+        { label: "red", value: "red" },
+        { label: "null", value: null },
+      ],
+    });
+    if (!color) throw new Error("no field");
+    expect(toArguments([color], { color: optionKey(null) })).toEqual({
+      ok: true,
+      args: { color: null },
+    });
+  });
+
+  it("requires arguments when a composed editor is left blank", () => {
+    const fields = extractFields({ oneOf: [{ type: "object" }] });
+    expect(toArguments(fields, { arguments: "  " })).toEqual({
+      ok: false,
+      error: "Arguments are required.",
+    });
+  });
+
+  it.each([
+    ["allOf", { allOf: [{ properties: { a: { type: "string" } } }] }],
+    [
+      "oneOf",
+      {
+        oneOf: [
+          { properties: { a: { type: "string" } } },
+          { properties: { b: { type: "string" } } },
+        ],
+      },
+    ],
+    ["$ref", { $ref: "#/$defs/Args", $defs: { Args: { type: "object" } } }],
+    [
+      "patternProperties",
+      { type: "object", patternProperties: { "^x-": { type: "string" } } },
+    ],
+  ])("reads a root %s as one arguments editor", (_name, schema) => {
+    expect(extractFields(schema)).toMatchObject([
+      { name: "arguments", kind: "arguments", required: true, schema },
+    ]);
+  });
 });

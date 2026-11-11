@@ -229,7 +229,8 @@ function GatewayInspectConnection({
     mode === "progressive"
       ? !!data && data.servers === undefined
       : mode === "code_mode"
-        ? catalog.isError ||
+        ? !!catalogToken.error ||
+          catalog.isError ||
           (!!catalog.data && catalog.data.servers === undefined)
         : false;
 
@@ -330,11 +331,18 @@ function GatewayInspectConnection({
   const catalogFailure = catalogFailed ? (
     <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
       <StatusDot tone="destructive" />
-      Couldn&apos;t list this gateway&apos;s servers, so their tools aren&apos;t
-      shown.
+      {mode === "code_mode" && catalogToken.error
+        ? "Couldn't sign in to list this gateway's servers, so their tools aren't shown."
+        : "Couldn't list this gateway's servers, so their tools aren't shown."}
       <button
         type="button"
-        onClick={mode === "code_mode" ? catalog.refetch : inspection.refetch}
+        onClick={
+          mode !== "code_mode"
+            ? inspection.refetch
+            : catalogToken.error
+              ? catalogToken.refetch
+              : catalog.refetch
+        }
         className="text-foreground underline underline-offset-2"
       >
         Try again

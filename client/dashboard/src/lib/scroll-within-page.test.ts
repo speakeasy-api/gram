@@ -52,9 +52,18 @@ describe("scrollWithinPage", () => {
     target.scrollIntoView = scrollIntoView;
     const scrollTo = vi.spyOn(pane, "scrollTo").mockImplementation(() => {});
 
+    vi.spyOn(pane, "getBoundingClientRect").mockReturnValue({
+      top: 100,
+    } as DOMRect);
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+      top: 700,
+    } as DOMRect);
+    Object.defineProperty(pane, "scrollTop", { value: 250 });
+
     scrollWithinPage(target, { behavior: "auto" });
 
     expect(scrollIntoView).not.toHaveBeenCalled();
-    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "auto" });
+    // 700 - 100 + 250 - 32 (default offset)
+    expect(scrollTo).toHaveBeenCalledWith({ top: 818, behavior: "auto" });
   });
 });

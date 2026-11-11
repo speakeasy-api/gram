@@ -6,6 +6,7 @@ import { useGatewayDetailChrome } from "./useGatewayDetailChrome";
 const state = vi.hoisted(() => ({
   rows: [] as { classification: string }[],
   isLoadingMembers: false,
+  membersFailed: false,
   userSessionIssuerId: undefined as string | undefined,
 }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project" }) }));
@@ -26,6 +27,7 @@ vi.mock("@/pages/mcp/gateway/useGatewayMemberRows", () => ({
   useGatewayMemberRows: () => ({
     rows: state.rows,
     isLoading: state.isLoadingMembers,
+    isError: state.membersFailed,
   }),
 }));
 vi.mock("@/pages/mcp/gateway/GatewaySettingsTab", () => ({
@@ -83,6 +85,7 @@ afterEach(cleanup);
 beforeEach(() => {
   state.rows = [];
   state.isLoadingMembers = false;
+  state.membersFailed = false;
   state.userSessionIssuerId = undefined;
 });
 
@@ -105,6 +108,13 @@ it("can't confirm members while they load", () => {
   state.isLoadingMembers = true;
   renderReadiness();
   expect(row("Members").getAttribute("data-ready")).toBe("null");
+});
+
+it("stays neutral when members fail to load", () => {
+  state.membersFailed = true;
+  renderReadiness();
+  expect(row("Members").getAttribute("data-ready")).toBe("null");
+  expect(row("Members").textContent).toContain("could not be loaded");
 });
 
 it("treats sign-in as optional, so an anonymous gateway can be ready", () => {

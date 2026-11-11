@@ -43,7 +43,11 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
   const endpoints = endpointsResult?.mcpEndpoints ?? [];
   const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
   const installPageUrl = gatewayInstallPageUrl(endpoints);
-  const { rows, isLoading: isLoadingMembers } = useGatewayMemberRows(id);
+  const {
+    rows,
+    isLoading: isLoadingMembers,
+    isError: membersFailed,
+  } = useGatewayMemberRows(id);
   const { hasScope } = useRBAC();
   // Mirrors the mcp_servers sidebar: the tab reads org membership as well as
   // the resource, so hide it rather than render a permission wall.
@@ -79,13 +83,15 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
           label: "Members",
           description: isLoadingMembers
             ? "Checking this gateway's members."
-            : servable > 0
-              ? `Fronting ${servable} MCP ${servable === 1 ? "server" : "servers"}.`
-              : rows.length > 0
-                ? "None of this gateway's members can be served. Add a hosted or proxied MCP server."
-                : "Add MCP servers for this gateway to front.",
+            : membersFailed
+              ? "This gateway's members could not be loaded."
+              : servable > 0
+                ? `Fronting ${servable} MCP ${servable === 1 ? "server" : "servers"}.`
+                : rows.length > 0
+                  ? "None of this gateway's members can be served. Add a hosted or proxied MCP server."
+                  : "Add MCP servers for this gateway to front.",
           // Member management lives on the Overview tab.
-          ready: isLoadingMembers ? null : servable > 0,
+          ready: isLoadingMembers || membersFailed ? null : servable > 0,
           href: gatewayTabHref(routes, id, "overview"),
         },
         {

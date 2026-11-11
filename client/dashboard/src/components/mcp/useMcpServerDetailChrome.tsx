@@ -182,8 +182,11 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   const isCanonical = !!mcpServer && isCanonicalHostedWrapper(mcpServer);
   // The same load the detail page does, so it is shared from the cache; it
   // finds the toolset from the list when the read omits its summary.
-  const { toolset: canonicalToolset, isError: canonicalToolsetFailed } =
-    useHostedToolset(isCanonical ? mcpServer : undefined);
+  const {
+    toolset: canonicalToolset,
+    isError: canonicalToolsetFailed,
+    isLoading: isLoadingCanonicalToolset,
+  } = useHostedToolset(isCanonical ? mcpServer : undefined);
   const canonicalToolsetSlug = canonicalToolset?.slug;
   const { data: environmentsData, isPending: isPendingEnvironments } =
     useListEnvironments(undefined, undefined, {
@@ -312,6 +315,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
             ? hostedAuthenticationCheck({
                 canonical: isCanonical,
                 toolsetLoaded: canonicalToolset !== undefined,
+                toolsetLoading: isLoadingCanonicalToolset,
                 toolsetFailed: canonicalToolsetFailed,
                 settling: isPendingEnvironments || isPendingMetadata,
                 missingRequiredEnvVars,
@@ -468,6 +472,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
 function hostedAuthenticationCheck({
   canonical,
   toolsetLoaded,
+  toolsetLoading,
   toolsetFailed,
   settling,
   missingRequiredEnvVars,
@@ -475,6 +480,8 @@ function hostedAuthenticationCheck({
   /** Only the toolset's own wrapper has its variables checked here. */
   canonical: boolean;
   toolsetLoaded: boolean;
+  /** The lookup is in flight; a finished lookup with no toolset is a miss. */
+  toolsetLoading: boolean;
   toolsetFailed: boolean;
   settling: boolean;
   missingRequiredEnvVars: number;
@@ -485,6 +492,13 @@ function hostedAuthenticationCheck({
   if (toolsetFailed) {
     return {
       description: "Required environment variables could not be checked.",
+      ready: null,
+    };
+  }
+  if (!toolsetLoaded && !toolsetLoading) {
+    return {
+      description:
+        "This server's toolset could not be found, so its required environment variables cannot be checked.",
       ready: null,
     };
   }

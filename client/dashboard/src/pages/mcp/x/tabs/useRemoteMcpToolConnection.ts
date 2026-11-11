@@ -156,8 +156,9 @@ export function useRemoteMcpToolConnection({
   }, [canFirstPartyConnect, platformSlug]);
 
   // A chat session that couldn't be created leaves nothing to connect with;
-  // report it as a failed listing so the retry mints a new one.
-  const chatFailed = usesChatSession && !!chat.error;
+  // report it as a failed listing so the retry mints a new one. A failed
+  // background refresh keeps the previous token, so it is not fatal.
+  const chatFailed = usesChatSession && !!chat.error && !chat.headers;
   const isError = isListError || chatFailed;
   const refetch = chatFailed ? chat.refetch : refetchTools;
 
