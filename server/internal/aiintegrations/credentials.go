@@ -132,6 +132,10 @@ func (v *CredentialVerifier) probe(ctx context.Context, schedule string, creds C
 		if creds.ExternalOrganizationID == nil {
 			return nil
 		}
+		// The sync's first read is FindExport, but listing exports cannot tell
+		// a closed matter from an open one. Reading the matter exercises the
+		// same token exchange and matter access, and also confirms the matter
+		// is OPEN, which every export the sync creates requires.
 		client, err := geminivault.NewClient(creds.APIKey, *creds.ExternalOrganizationID, v.guardian)
 		if err != nil {
 			return fmt.Errorf("create Gemini Vault credential probe client: %w", err)
@@ -234,10 +238,19 @@ func listLogsProbe(ctx context.Context, client *codexapi.Client, eventType strin
 // it refused the configuration itself: a bad key, a missing scope, an API the
 // key is not entitled to. Unlike the poll path (pollRejectedByProvider), 400
 // and 422 do not count — a probe sends a fixed minimal request, so a
-// request-shaped complaint is about the probe, not the credentials.
+// request-shaped complaint is about the probe, not the credentials. The
+// exceptions are Gemini answers about the configuration itself: any 4xx from
+// Google's token endpoint, and a matter that exists but is not open (status 0,
+// since Vault answered 200).
 func providerRejectedCredentials(err error) (int, bool) {
+	if errors.Is(err, geminivault.ErrMatterNotOpen) {
+		return 0, true
+	}
 	status := 0
 	if providerErr, ok := errors.AsType[*geminivault.HTTPError](err); ok {
+		if providerErr.CredentialsRejected() {
+			return providerErr.StatusCode, true
+		}
 		status = providerErr.StatusCode
 	}
 	if cursorErr, ok := errors.AsType[*cursorapi.HTTPError](err); ok {
@@ -263,7 +276,13 @@ func providerRejectedCredentials(err error) (int, bool) {
 // missing entitlement — what the user needs to fix the key.
 func credentialRejectionError(schedule string, cause error) error {
 	if schedule == ScheduleGeminiCompliance {
+		if errors.Is(cause, geminivault.ErrMatterNotOpen) {
+			return oops.E(oops.CodeInvalid, cause, "Google Vault matter is not open; reopen it in Google Vault or use an open matter")
+		}
 		if providerErr, ok := errors.AsType[*geminivault.HTTPError](cause); ok {
+			if providerErr.CredentialsRejected() {
+				return oops.E(oops.CodeUnauthorized, cause, "Google rejected the service account credentials; check the key, the domain-wide delegation scopes, and the delegated user")
+			}
 			switch providerErr.StatusCode {
 			case 401:
 				return oops.E(oops.CodeUnauthorized, cause, "Google Vault rejected the service account credentials")

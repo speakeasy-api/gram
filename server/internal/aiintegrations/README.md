@@ -140,7 +140,10 @@ The encrypted `api_key` field holds this JSON wrapper:
 
 ```json
 {
-  "service_account": { "type": "service_account", "...": "complete Google service-account JSON key" },
+  "service_account": {
+    "type": "service_account",
+    "...": "complete Google service-account JSON key"
+  },
   "delegated_user": "admin@example.com",
   "org_unit_id": "<ROOT_ORGANIZATIONAL_UNIT_ID>"
 }

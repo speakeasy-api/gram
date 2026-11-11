@@ -37,7 +37,7 @@ it("registers Gemini text exports with the matching hourly event stream", () => 
 });
 
 it("accepts multiline JSON while masking secrets and opting out of browser persistence", () => {
-  const onChange = vi.fn();
+  const onChange = vi.fn<(value: string) => void>();
   render(
     <AIIntegrationCredentialInput
       id="credentials"
@@ -50,9 +50,12 @@ it("accepts multiline JSON while masking secrets and opting out of browser persi
   );
   const field = screen.getByRole("textbox") as HTMLTextAreaElement;
   expect(field.tagName).toBe("TEXTAREA");
-  expect(field.className).toContain("[-webkit-text-security:disc]");
+  expect(field.parentElement?.className).toContain(
+    "[&_textarea]:[-webkit-text-security:disc]",
+  );
   expect(field.autocomplete).toBe("off");
   expect(field.getAttribute("spellcheck")).toBe("false");
+  expect(field.getAttribute("data-1p-ignore")).toBe("true");
   expect(field.getAttribute("data-lpignore")).toBe("true");
   const credentials =
     '{\n  "service_account": {"private_key": "DEMO_KEY"},\n  "delegated_user": "admin@example.com",\n  "org_unit_id": "id:EXAMPLE"\n}';
@@ -69,13 +72,16 @@ it("keeps existing providers on a password input and never fills saved secrets",
       id="credentials"
       provider={provider}
       value=""
-      onChange={vi.fn()}
+      onChange={vi.fn<(value: string) => void>()}
       hasSavedKey
       disabled={false}
     />,
   );
   const field = container.querySelector("input")!;
   expect(field.type).toBe("password");
+  // Browsers ignore autocomplete="off" on password inputs.
+  expect(field.autocomplete).toBe("new-password");
+  expect(field.getAttribute("data-1p-ignore")).toBe("true");
   expect(field.value).toBe("");
   expect(field.placeholder).toContain("saved");
 });

@@ -27,23 +27,22 @@ export function AIIntegrationCredentialInput({
         value={value}
         onChange={onChange}
         type="password"
+        noAutofill
         disabled={disabled}
       />
     );
   }
+  // Pasted JSON needs a textarea, which has no password mode. Input's
+  // className styles its wrapper, so the mask targets the textarea inside it.
   return (
-    <textarea
+    <Input
       id={id}
       placeholder={placeholder}
       value={value}
-      onChange={(event) => onChange(event.target.value)}
-      rows={8}
-      autoComplete="off"
-      autoCorrect="off"
-      spellCheck={false}
-      data-1p-ignore
-      data-lpignore="true"
-      className="border-input bg-background w-full rounded-md border px-3 py-2 font-mono text-sm [-webkit-text-security:disc]"
+      onChange={onChange}
+      lines={8}
+      noAutofill
+      className="font-mono [&_textarea]:[-webkit-text-security:disc]"
       disabled={disabled}
     />
   );

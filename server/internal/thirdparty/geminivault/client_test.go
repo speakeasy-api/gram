@@ -89,6 +89,13 @@ func TestCredentials(t *testing.T) {
 	testAccount(fixture)["private_key"] = string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
 	_, err = ParseCredentials(encode(t, fixture))
 	require.ErrorContains(t, err, "RSA")
+	weak, err := rsa.GenerateKey(rand.Reader, 1024)
+	require.NoError(t, err)
+	der, err = x509.MarshalPKCS8PrivateKey(weak)
+	require.NoError(t, err)
+	testAccount(fixture)["private_key"] = string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+	_, err = ParseCredentials(encode(t, fixture))
+	require.ErrorContains(t, err, "at least 2048 bits")
 	_, err = ParseCredentials("{SECRET")
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "SECRET")
@@ -265,7 +272,7 @@ func TestRequestSafety(t *testing.T) {
 		t.Run("matter "+state, func(t *testing.T) {
 			t.Parallel()
 			client := testClient(t, func(w http.ResponseWriter, r *http.Request) { _, _ = fmt.Fprintf(w, `{"state":%q}`, state) })
-			require.ErrorContains(t, client.GetMatter(t.Context()), "OPEN")
+			require.ErrorIs(t, client.GetMatter(t.Context()), ErrMatterNotOpen)
 		})
 	}
 }
@@ -310,17 +317,37 @@ func (s failingTokenSource) Token() (*oauth2.Token, error) { return nil, s.err }
 func TestTokenErrorsNeverExposeSecrets(t *testing.T) {
 	t.Parallel()
 	secret := "private-assertion-and-upstream-body"
-	for _, tokenErr := range []error{
-		&oauth2.RetrieveError{Response: &http.Response{StatusCode: 401}, Body: []byte(secret), ErrorCode: "invalid_grant", ErrorDescription: secret},
-		fmt.Errorf("refresh failed: %w", &oauth2.RetrieveError{Response: &http.Response{StatusCode: 400}, Body: []byte(secret)}),
-		errors.New(secret),
+	for _, tc := range []struct {
+		tokenErr     error
+		wantError    string
+		wantStatus   int
+		wantRejected bool
+	}{
+		// unauthorized_client: domain-wide delegation does not grant the scopes.
+		{&oauth2.RetrieveError{Response: &http.Response{StatusCode: 401}, Body: []byte(secret), ErrorCode: "unauthorized_client", ErrorDescription: secret}, "vault token exchange returned HTTP 401", 401, true},
+		// invalid_grant: a deleted key or unknown delegated user.
+		{fmt.Errorf("refresh failed: %w", &oauth2.RetrieveError{Response: &http.Response{StatusCode: 400}, Body: []byte(secret)}), "vault token exchange returned HTTP 400", 400, true},
+		// Throttling and outages stay retryable.
+		{&oauth2.RetrieveError{Response: &http.Response{StatusCode: 429}, Body: []byte(secret)}, "vault token exchange returned HTTP 429", 429, false},
+		{&oauth2.RetrieveError{Response: &http.Response{StatusCode: 503}, Body: []byte(secret)}, "vault token exchange returned HTTP 503", 503, false},
+		{&oauth2.RetrieveError{Body: []byte(secret)}, "vault request failed", 0, false},
+		{errors.New(secret), "vault request failed", 0, false},
 	} {
 		client := testClient(t, func(w http.ResponseWriter, r *http.Request) { t.Error("failed token must not reach API") })
-		client.httpClient.Transport = &oauth2.Transport{Source: failingTokenSource{err: tokenErr}, Base: client.httpClient.Transport}
+		client.httpClient.Transport = &oauth2.Transport{Source: failingTokenSource{err: tc.tokenErr}, Base: client.httpClient.Transport}
 		_, err := client.GetExport(t.Context(), "id")
-		require.EqualError(t, err, "vault request failed")
+		require.EqualError(t, err, tc.wantError)
 		require.NotContains(t, err.Error(), secret)
+		status, ok := errors.AsType[*HTTPError](err)
+		require.Equal(t, tc.wantStatus != 0, ok)
+		if ok {
+			require.True(t, status.TokenExchange)
+			require.Equal(t, tc.wantStatus, status.StatusCode)
+			require.Equal(t, tc.wantRejected, status.CredentialsRejected())
+		}
 	}
+	// A Vault or Cloud Storage status is not a token-exchange rejection.
+	require.False(t, (&HTTPError{StatusCode: 401}).CredentialsRejected())
 }
 
 func TestCancellationPreservesSafeCause(t *testing.T) {

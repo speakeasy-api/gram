@@ -29,7 +29,12 @@ const (
 	storageScope           = "https://www.googleapis.com/auth/devstorage.read_only"
 	maxAPIBytes      int64 = 4 << 20
 	maxDownloadBytes int64 = 128 << 20
+	minRSAKeyBits          = 2048
 )
+
+// ErrMatterNotOpen reports a matter Google Vault returned but cannot export
+// from: closed or deleted matters accept no new exports.
+var ErrMatterNotOpen = errors.New("vault matter must be OPEN; reopen it in Google Vault before exporting")
 
 // Credentials is the encrypted API-key wrapper. OrgUnitID must identify the
 // root organizational unit to include the whole organization: ENTIRE_ORG is
@@ -76,6 +81,11 @@ func ParseCredentials(raw string) (*Credentials, error) {
 	rsaKey, ok := key.(*rsa.PrivateKey)
 	if err != nil || !ok || rsaKey.Validate() != nil {
 		return nil, errors.New("invalid Vault RSA private key")
+	}
+	// Google still accepts uploaded RSA_1024 service-account keys, which are
+	// below the RFC 7518 minimum for RS256 signatures.
+	if rsaKey.N.BitLen() < minRSAKeyBits {
+		return nil, errors.New("vault RSA private key must be at least 2048 bits")
 	}
 	return &c, nil
 }
@@ -148,7 +158,7 @@ func (c *Client) GetMatter(ctx context.Context) error {
 		return errors.New("invalid Vault matter response")
 	}
 	if matter.State != "OPEN" {
-		return errors.New("vault matter must be OPEN; reopen it in Google Vault before exporting")
+		return ErrMatterNotOpen
 	}
 	return nil
 }
@@ -287,10 +297,26 @@ func (c *Client) Download(ctx context.Context, file File) ([]byte, error) {
 }
 
 // HTTPError exposes only the status code, never upstream response bodies.
-type HTTPError struct{ StatusCode int }
+// TokenExchange marks a status from Google's OAuth token endpoint rather than
+// from Vault or Cloud Storage.
+type HTTPError struct {
+	StatusCode    int
+	TokenExchange bool
+}
 
 func (e *HTTPError) Error() string {
+	if e.TokenExchange {
+		return fmt.Sprintf("vault token exchange returned HTTP %d", e.StatusCode)
+	}
 	return fmt.Sprintf("vault request returned HTTP %d", e.StatusCode)
+}
+
+// CredentialsRejected reports that Google refused to mint a token for the
+// configured service account. The token endpoint answers 400 invalid_grant for
+// a deleted key or unknown delegated user and 401 unauthorized_client when
+// domain-wide delegation does not grant the scopes; no retry can fix either.
+func (e *HTTPError) CredentialsRejected() bool {
+	return e.TokenExchange && e.StatusCode >= 400 && e.StatusCode < 500 && e.StatusCode != http.StatusTooManyRequests
 }
 
 func (c *Client) request(ctx context.Context, method, endpoint string, body any, limit int64) ([]byte, error) {
@@ -317,11 +343,16 @@ func (c *Client) request(ctx context.Context, method, endpoint string, body any,
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("vault request cancelled: %w", ctx.Err())
 		}
+		// Keep only the token endpoint's status, never its upstream body,
+		// matching the API error path below.
+		if retrieveErr, ok := errors.AsType[*oauth2.RetrieveError](err); ok && retrieveErr.Response != nil {
+			return nil, &HTTPError{StatusCode: retrieveErr.Response.StatusCode, TokenExchange: true}
+		}
 		return nil, errors.New("vault request failed")
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, &HTTPError{StatusCode: resp.StatusCode}
+		return nil, &HTTPError{StatusCode: resp.StatusCode, TokenExchange: false}
 	}
 	if resp.ContentLength > limit {
 		return nil, errors.New("vault response exceeds size limit")

@@ -141,6 +141,11 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo Gemini compliance config: %w", err)
 	}
+	if err := s.q.ActivityInsertGeminiComplianceSync(ctx, repo.ActivityInsertGeminiComplianceSyncParams{
+		ID: s.det("gemini-compliance-sync"), ConfigID: s.det("gemini-compliance-config"),
+	}); err != nil {
+		return fmt.Errorf("insert demo Gemini compliance sync: %w", err)
+	}
 
 	amara := demoUsers[0]
 	jonas := demoUsers[1]

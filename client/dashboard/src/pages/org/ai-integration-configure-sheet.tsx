@@ -90,14 +90,14 @@ export function ConfigureSheet({
     form.remove();
   };
 
+  // Every close path, including Cancel, drops a pasted service-account key.
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && provider.apiKeyMultiline) form.setApiKey("");
+    onOpenChange(nextOpen);
+  };
+
   return (
-    <Sheet
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen && provider.apiKeyMultiline) form.setApiKey("");
-        onOpenChange(nextOpen);
-      }}
-    >
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle>
@@ -183,7 +183,7 @@ export function ConfigureSheet({
             </RequireScope>
           ) : null}
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            <Button variant="secondary" onClick={() => handleOpenChange(false)}>
               <Button.Text>Cancel</Button.Text>
             </Button>
             <RequireScope scope="org:admin" level="component">

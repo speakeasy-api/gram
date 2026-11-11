@@ -32,6 +32,12 @@ DELETE FROM ai_integration_configs WHERE organization_id = @organization_id AND 
 INSERT INTO ai_integration_configs (id, organization_id, project_id, provider, api_key_encrypted, external_organization_id, enabled)
 VALUES (@id, @organization_id, @project_id, 'gemini_compliance', '', @matter_id, false);
 
+-- The dashboard reads a config through its primary sync row, so the paused
+-- example needs one. The disabled config keeps it out of poll candidates.
+-- name: ActivityInsertGeminiComplianceSync :exec
+INSERT INTO ai_integration_syncs (id, ai_integration_config_id, schedule, kind)
+VALUES (@id, @config_id, 'gemini_compliance', 'cursor');
+
 -- name: ActivityCountSafeGeminiComplianceConfig :one
 SELECT count(*) FROM ai_integration_configs
 WHERE organization_id = @organization_id AND project_id = @project_id

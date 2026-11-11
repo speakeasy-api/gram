@@ -362,6 +362,23 @@ func (q *Queries) ActivityInsertGeminiComplianceConfig(ctx context.Context, arg 
 	return err
 }
 
+const activityInsertGeminiComplianceSync = `-- name: ActivityInsertGeminiComplianceSync :exec
+INSERT INTO ai_integration_syncs (id, ai_integration_config_id, schedule, kind)
+VALUES ($1, $2, 'gemini_compliance', 'cursor')
+`
+
+type ActivityInsertGeminiComplianceSyncParams struct {
+	ID       uuid.UUID
+	ConfigID uuid.UUID
+}
+
+// The dashboard reads a config through its primary sync row, so the paused
+// example needs one. The disabled config keeps it out of poll candidates.
+func (q *Queries) ActivityInsertGeminiComplianceSync(ctx context.Context, arg ActivityInsertGeminiComplianceSyncParams) error {
+	_, err := q.db.Exec(ctx, activityInsertGeminiComplianceSync, arg.ID, arg.ConfigID)
+	return err
+}
+
 const activityInsertKillswitchAuditLog = `-- name: ActivityInsertKillswitchAuditLog :exec
 INSERT INTO audit_logs
   (id, organization_id, project_id, actor_id, actor_type, actor_display_name,

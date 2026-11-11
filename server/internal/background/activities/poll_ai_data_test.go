@@ -563,4 +563,16 @@ func TestGeminiPollProviderErrors(t *testing.T) {
 		require.True(t, pollProviderUnavailable(cause))
 		require.Equal(t, status, pollUnavailableHTTPStatus(cause))
 	}
+	// A refused token exchange names the credential fix, not the export request.
+	for _, status := range []int{400, 401} {
+		cause := fmt.Errorf("read Vault: %w", &geminivault.HTTPError{StatusCode: status, TokenExchange: true})
+		require.True(t, pollRejectedByProvider(cause))
+		var shareable *oops.ShareableError
+		require.ErrorAs(t, shareablePollError(aiintegrations.ScheduleGeminiCompliance, cause), &shareable)
+		require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+		require.Contains(t, shareable.Error(), "domain-wide delegation")
+	}
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, shareablePollError(aiintegrations.ScheduleGeminiCompliance, errors.New("parse export")), &shareable)
+	require.Equal(t, "sync gemini conversation data", shareable.Error())
 }

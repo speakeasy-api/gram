@@ -309,6 +309,9 @@ func providerDetail(body string) string {
 
 func shareablePollError(schedule string, cause error) error {
 	if providerErr, ok := errors.AsType[*geminivault.HTTPError](cause); ok {
+		if providerErr.CredentialsRejected() {
+			return oops.E(oops.CodeUnauthorized, cause, "Google rejected the configured service account credentials; check the key, the domain-wide delegation scopes, and the delegated user")
+		}
 		switch providerErr.StatusCode {
 		case 401:
 			return oops.E(oops.CodeUnauthorized, cause, "Google Vault rejected the configured service account credentials")
@@ -413,6 +416,8 @@ func shareablePollError(schedule string, cause error) error {
 		message = "sync chatgpt conversation data"
 	case aiintegrations.ScheduleCodexCloudSessions:
 		message = "sync codex cloud session data"
+	case aiintegrations.ScheduleGeminiCompliance:
+		message = "sync gemini conversation data"
 	}
 	return oops.E(oops.CodeUnexpected, cause, "%s", message)
 }
