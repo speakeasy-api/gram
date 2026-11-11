@@ -623,9 +623,10 @@ func TestRefreshSweep_ProjectClientWithOrganizationSignIn(t *testing.T) {
 				slug := "sweep-org-" + reach + "-" + tenancy
 				ctx, o := seedOfferedRegistration(t, slug, "https://issuer.example.com/"+slug)
 				organization := conv.ToPGText(o.organization)
-				if tenancy == "foreign-organization" {
+				switch tenancy {
+				case "foreign-organization":
 					organization = conv.ToPGText(createOrganization(t, ctx, o.ti.conn, slug+"-org"))
-				} else if tenancy == "tenantless" {
+				case "tenantless":
 					organization = pgtype.Text{}
 				}
 				require.NoError(t, testrepo.New(o.ti.conn).SetUserSessionIssuerTenancyFixture(ctx, testrepo.SetUserSessionIssuerTenancyFixtureParams{

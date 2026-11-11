@@ -2550,6 +2550,13 @@ WITH due AS (
         (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
+      -- A direct binding does not validate the upstream provider's ownership.
+      -- Only the client's own project or an org/global provider available to
+      -- this tenant may receive the stored refresh token.
+      AND (
+        i.project_id = c.project_id
+        OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+      )
       AND (
         EXISTS (
           SELECT 1 FROM user_sessions AS gs
@@ -2687,6 +2694,13 @@ WHERE s.id = @id
       AND (
         (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+      )
+      -- A direct binding does not validate the upstream provider's ownership.
+      -- Only the client's own project or an org/global provider available to
+      -- this tenant may receive the stored refresh token.
+      AND (
+        i.project_id = c.project_id
+        OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
       AND (
         EXISTS (
