@@ -77,7 +77,7 @@ func (l *Logger) Log(ctx context.Context, record log.Record) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), l.timeout)
 	defer cancel()
 
-	inbound, err := l.prepare(ctx, &record)
+	inbound, err := l.Prepare(ctx, &record)
 	if err != nil {
 		return err
 	}
@@ -96,14 +96,15 @@ func (l *Logger) Publish(ctx context.Context, record log.Record) gcp.PublishResu
 	if l.closed {
 		return gcp.NewErrPublishResult(ErrClosed)
 	}
-	inbound, err := l.prepare(ctx, &record)
+	inbound, err := l.Prepare(ctx, &record)
 	if err != nil {
 		return gcp.NewErrPublishResult(err)
 	}
 	return wrapPublishError{result: l.publisher.Publish(ctx, inbound)}
 }
 
-func (l *Logger) prepare(ctx context.Context, record *log.Record) (*otelv1.InboundLogRecord, error) {
+// Prepare builds and validates the record Log and Publish would send, without sending it.
+func (l *Logger) Prepare(ctx context.Context, record *log.Record) (*otelv1.InboundLogRecord, error) {
 	inbound, err := l.inbound(ctx, record)
 	if err != nil {
 		return nil, err

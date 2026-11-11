@@ -28,6 +28,8 @@ const (
 	relayNonSensitiveDestinationCacheTTL = 60 * time.Second
 	relayDestinationCacheMaxEntries      = 1024
 	maxRelayErrorBodyBytes               = 4 * 1024
+	relayMaxRetries                      = 1
+	relayRequestTimeout                  = 10 * time.Second
 )
 
 type relayReason string
@@ -57,6 +59,8 @@ type signalRelay struct {
 	endpointPath     string
 	signalName       string
 	now              func() time.Time
+	maxRetries       int
+	timeout          time.Duration
 
 	cacheMu          sync.RWMutex
 	destinationCache map[relayRouteKey]cachedRelayDestination
@@ -115,6 +119,8 @@ func newSignalRelay(
 		endpointPath:     endpointPath,
 		signalName:       signalName,
 		now:              time.Now,
+		maxRetries:       relayMaxRetries,
+		timeout:          relayRequestTimeout,
 		cacheMu:          sync.RWMutex{},
 		destinationCache: make(map[relayRouteKey]cachedRelayDestination),
 		destinationLoads: singleflight.Group{},
@@ -212,7 +218,7 @@ func (r *signalRelay) newDestination(
 	defaultCheckRetry := retryConfig.CheckRetry
 	retryConfig.WaitMin = 100 * time.Millisecond
 	retryConfig.WaitMax = time.Second
-	retryConfig.MaxAttempts = 1
+	retryConfig.MaxAttempts = r.maxRetries
 	retryConfig.CheckRetry = func(ctx context.Context, response *http.Response, err error) (bool, error) {
 		retry, retryErr := defaultCheckRetry(ctx, response, err)
 		if retry || retryErr != nil {
@@ -233,7 +239,7 @@ func (r *signalRelay) newDestination(
 	} else {
 		httpClient = r.policy.PooledClient(guardian.WithRetryConfig(retryConfig))
 	}
-	httpClient.Timeout = 10 * time.Second
+	httpClient.Timeout = r.timeout
 
 	return &relayDestination{
 		organizationID:       key.organizationID,
@@ -338,20 +344,22 @@ func (r *signalRelay) cachedDestination(key relayRouteKey, now time.Time) (*rela
 }
 
 func (d *relayDestination) export(ctx context.Context, message proto.Message) error {
-	return d.exportWithLimit(ctx, message, 0)
+	_, err := d.exportWithLimit(ctx, message, 0)
+	return err
 }
 
-func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Message, maxBytes int) error {
+// exportWithLimit returns the destination's HTTP status, zero when no response arrived.
+func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Message, maxBytes int) (int, error) {
 	body, err := proto.Marshal(message)
 	if err != nil {
-		return &relayExportError{
+		return 0, &relayExportError{
 			reason:    relayReasonInvalid,
 			retryable: false,
 			err:       fmt.Errorf("marshal OTLP %s export: %w", d.signalName, err),
 		}
 	}
 	if maxBytes > 0 && len(body) > maxBytes {
-		return &relayExportError{
+		return 0, &relayExportError{
 			reason:    relayReasonInvalid,
 			retryable: false,
 			err:       fmt.Errorf("OTLP %s export is %d bytes, limit is %d", d.signalName, len(body), maxBytes),
@@ -360,7 +368,7 @@ func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Me
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.endpoint, bytes.NewReader(body))
 	if err != nil {
-		return &relayExportError{
+		return 0, &relayExportError{
 			reason:    relayReasonPermanentHTTPError,
 			retryable: false,
 			err:       fmt.Errorf("create OTLP %s export request: %w", d.signalName, err),
@@ -375,7 +383,7 @@ func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Me
 
 	response, err := d.httpClient.Do(req)
 	if err != nil {
-		return &relayExportError{
+		return 0, &relayExportError{
 			reason:    relayReasonNetworkError,
 			retryable: true,
 			err:       fmt.Errorf("send OTLP %s export: %w", d.signalName, err),
@@ -385,7 +393,7 @@ func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Me
 
 	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
 		_, _ = io.Copy(io.Discard, response.Body)
-		return nil
+		return response.StatusCode, nil
 	}
 
 	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, maxRelayErrorBodyBytes))
@@ -396,7 +404,7 @@ func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Me
 	if !retryable && responseSnippet != "" {
 		responseErr = fmt.Errorf("OTLP %s export returned %s: %s", d.signalName, response.Status, responseSnippet)
 	}
-	return &relayExportError{
+	return response.StatusCode, &relayExportError{
 		reason:    reason,
 		retryable: retryable,
 		err:       responseErr,
