@@ -53,6 +53,8 @@ const (
 	ScopeChatWrite               Scope = "chat:write"
 	ScopeInferenceExecute        Scope = "inference:execute"
 	ScopeLogRead                 Scope = "log:read"
+	ScopeMemoryRead              Scope = "memory:read"
+	ScopeMemoryWrite             Scope = "memory:write"
 	ScopeAgentRead               Scope = "agent:read"
 	ScopeAgentWrite              Scope = "agent:write"
 	ScopeAgentAuthorize          Scope = "agent:authorize"
@@ -131,6 +133,15 @@ var adminScopes = []Scope{
 	// agent a credential.
 	ScopeWorkloadRead,
 	ScopeWorkloadWrite,
+	// Organizational Memory is an org-level capability that admins turn on and
+	// curate, so org:admin gets memory:read and memory:write by default.
+	// Members still need an explicit grant because team memory summarizes
+	// every member's sessions in a project. It exposes masked session
+	// summaries, memos and digests, never raw transcripts, so the scope
+	// catalog does not mark it sensitive the way it marks chat:read.
+	// memory:write satisfies memory:read via scopeExpansions.
+	ScopeMemoryRead,
+	ScopeMemoryWrite,
 	// chat:read and chat:write are intentionally NOT defaults for any system
 	// role: reading other members' session transcripts is sensitive, and
 	// mutating them (rename, feedback, delete) is destructive, so both must be
@@ -192,6 +203,8 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeChatWrite:               scopeVisibilityUserVisible,
 	ScopeInferenceExecute:        scopeVisibilityUserVisible,
 	ScopeLogRead:                 scopeVisibilityUserVisible,
+	ScopeMemoryRead:              scopeVisibilityUserVisible,
+	ScopeMemoryWrite:             scopeVisibilityUserVisible,
 	ScopeAgentRead:               scopeVisibilityUserVisible,
 	ScopeAgentWrite:              scopeVisibilityUserVisible,
 	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
@@ -333,6 +346,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeChatWrite:               nil,
 	ScopeInferenceExecute:        nil,
 	ScopeLogRead:                 nil,
+	ScopeMemoryRead:              {ScopeMemoryWrite},
+	ScopeMemoryWrite:             nil,
 	ScopeAgentRead:               nil,
 	ScopeAgentWrite:              nil,
 	ScopeAgentAuthorize:          nil,
@@ -390,6 +405,8 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeChatWrite:               "",
 	ScopeInferenceExecute:        "",
 	ScopeLogRead:                 "",
+	ScopeMemoryRead:              "",
+	ScopeMemoryWrite:             "",
 	ScopeAgentRead:               "",
 	ScopeAgentWrite:              "",
 	ScopeAgentAuthorize:          "",
