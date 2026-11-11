@@ -175,6 +175,14 @@ func TestIngest_ShadowMCPBlockAllClassifiesServers(t *testing.T) {
 			deviceInventory: []MCPServerEntry{{Source: "claude", Name: "linear", Command: "npx linear-mcp"}},
 		},
 		{name: "built-in missing from the device copy is allowed", toolName: "mcp__ccd_turn__wrap_up", deviceInventory: []MCPServerEntry{{Source: "claude", Name: "linear"}}},
+		{
+			name:       "codex server whose tool prefix holds a double underscore is denied",
+			adapter:    "codex",
+			toolName:   "mcp__foo__bar__list",
+			serverName: "foo--bar",
+			inventory:  []MCPServerEntry{{Source: "codex", Name: "foo--bar", ToolPrefix: "foo__bar", Command: "npx foo-bar-mcp"}},
+			wantDenied: true,
+		},
 	}
 
 	for _, tc := range tests {

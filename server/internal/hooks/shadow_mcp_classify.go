@@ -160,6 +160,12 @@ func (s *Service) classifyCanonicalShadowMCP(ctx context.Context, payload *gen.I
 		if inventory.loaded {
 			facts.InventoryLoaded = true
 			facts.URL, facts.Command, facts.Installed = inventoryServerFacts(inventory.entries, serverName)
+			// A Codex tool prefix can itself contain "__", which truncates
+			// the server segment of the tool name; the longest configured
+			// prefix that starts the tool name still names the server.
+			if matched := matchCodexCachedMCPEntry(inventory.entries, rawToolName); !facts.Installed && matched != nil && matched.ToolPrefix != "" {
+				facts.URL, facts.Command, facts.Installed = strings.TrimSpace(matched.URL), strings.TrimSpace(matched.Command), true
+			}
 			target.inventoryURL = facts.URL
 			target.inventoryCommand = facts.Command
 			if facts.URL != "" {
