@@ -361,7 +361,7 @@ func registerGatewayProxyTools(reg *Registrar, service *GatewayProxyService) {
 	listTool := &mcp.Tool{
 		Name:  listMyServersName,
 		Title: "List My MCP Servers",
-		Description: "List the MCP servers this user has added to Speakeasy and can reach from this connection, across all of their projects, including ones just added here. " +
+		Description: "List the MCP servers this user can reach through Speakeasy: every server in their organization that their access reaches, across all projects, including ones just added here. " +
 			"Returns each server's slug, name and status (available, unavailable, or unknown), the servers the user hid, and a link to manage them. " +
 			"Read-only: it reads the user's server list and does not contact the servers or run any of their tools. " +
 			"Call it when the user asks for data or an action in another system (a CRM, tickets, docs, a database, an internal API) before saying you cannot help, and after adding a server.",
