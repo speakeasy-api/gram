@@ -62,14 +62,14 @@ func QuestionRecall(ctx context.Context, corpus *memoryeval.Corpus, arms []Arm) 
 				}
 				keywordIDs = append(keywordIDs, keyword.ChatIDs...)
 			}
-			if retrievedSources(q, keywordIDs) {
+			if retrievedSources(corpus, q, keywordIDs) {
 				row.Keyword++
 			}
 			natural, err := a.Search(ctx, recallQuery(q.Text))
 			if err != nil {
 				return RecallReport{}, fmt.Errorf("%s question search for %s: %w", a.Name, q.ID, err)
 			}
-			if retrievedSources(q, natural.ChatIDs) {
+			if retrievedSources(corpus, q, natural.ChatIDs) {
 				row.Natural++
 			}
 		}
@@ -85,9 +85,13 @@ func recallQuery(text string) string {
 	return text
 }
 
-func retrievedSources(q memoryeval.Question, found []uuid.UUID) bool {
+// retrievedSources resolves each source key through the corpus, so a corpus
+// loaded with tenant-derived chat IDs (WithChatIDs) is scored by the IDs it
+// was actually stored under.
+func retrievedSources(corpus *memoryeval.Corpus, q memoryeval.Question, found []uuid.UUID) bool {
 	for _, key := range q.Sources {
-		if !slices.Contains(found, memoryeval.ChatID(key)) {
+		chat, ok := corpus.Chat(key)
+		if !ok || !slices.Contains(found, chat.ID) {
 			return false
 		}
 	}
