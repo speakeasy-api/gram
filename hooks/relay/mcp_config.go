@@ -36,11 +36,19 @@ func readMCPConfigBounded(path string) []byte {
 
 // joinMCPServerCommand joins a stdio server's command and args the same way
 // every provider presents them, so servers launched by the same executable
-// keep their distinguishing provenance.
+// keep their distinguishing provenance. Every argument is shell-quoted, so
+// argv boundaries survive flattening: downstream, redactCommand tokenizes
+// quote-aware and masks a quoted argument whole — a raw-space join would let
+// a secret argument containing whitespace leak its remaining words.
 func joinMCPServerCommand(command string, args []string) string {
 	command = strings.TrimSpace(command)
-	if command != "" && len(args) > 0 {
-		return strings.Join(append([]string{command}, args...), " ")
+	if command == "" {
+		return ""
 	}
-	return command
+	argv := append([]string{command}, args...)
+	out := make([]string, 0, len(argv))
+	for _, a := range argv {
+		out = append(out, shellQuoteArg(a))
+	}
+	return strings.Join(out, " ")
 }

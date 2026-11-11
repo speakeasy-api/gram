@@ -67,18 +67,56 @@ var (
 	tokenPrefixRE = regexp.MustCompile(`(?i)://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)`)
 )
 
+// splitCommandFields splits a command line on unquoted whitespace, keeping
+// each quoted segment (single or double quotes) as one field with the quotes
+// stripped. A secret argument containing whitespace therefore stays a single
+// token and is masked whole, instead of leaking its remaining words when the
+// flattened command is re-split on spaces.
+func splitCommandFields(raw string) []string {
+	var out []string
+	var cur strings.Builder
+	inQuote := byte(0)
+	started := false
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		switch {
+		case inQuote != 0:
+			if c == inQuote {
+				inQuote = 0
+			} else {
+				cur.WriteByte(c)
+			}
+		case c == '\'' || c == '"':
+			inQuote = c
+			started = true
+		case c == ' ' || c == '\t':
+			if started || cur.Len() > 0 {
+				out = append(out, cur.String())
+				cur.Reset()
+				started = false
+			}
+		default:
+			cur.WriteByte(c)
+			started = true
+		}
+	}
+	if started || cur.Len() > 0 {
+		out = append(out, cur.String())
+	}
+	return out
+}
+
 // redactCommand masks secret flag values and inline tokens in a stdio MCP
-// launch command. Tokenization splits on spaces and cannot see through shell
-// quoting; the patterns cover the common unquoted shapes, matching the bash
-// senders' behavior so a repointed server keeps a stable redacted identity.
+// launch command. Tokenization is quote-aware (splitCommandFields), so a
+// quoted argument is masked as one unit; the patterns cover the common
+// shapes, matching the bash senders' behavior so a repointed server keeps a
+// stable redacted identity.
 func redactCommand(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""
 	}
-	raw = strings.ReplaceAll(raw, `"`, "")
-	raw = strings.ReplaceAll(raw, "'", "")
-	fields := strings.Fields(raw)
+	fields := splitCommandFields(raw)
 	out := make([]string, 0, len(fields))
 	maskNext := false
 	// schemeNext marks a pending mask that came from a header, whose value may
@@ -126,12 +164,6 @@ func redactCommand(raw string) string {
 			} else {
 				out = append(out, "***")
 			}
-		case secretFlagRE.MatchString(f):
-			out = append(out, f)
-			maskNext = true
-		// A token is URL-shaped only when its first colon opens "://"; a
-		// keyword-bearing scheme (oauth://) must not read as a header, and a
-		// no-space header whose value is a URL must not read as one.
 		case secretHeaderRE.MatchString(f) || (strings.Index(f, "://") != strings.IndexByte(f, ':') && genericSecretHeaderRE.MatchString(f)):
 			// `--header "X-API-Key: abc"` tokenizes the value into the next
 			// field after quote stripping; a header with nothing after its
@@ -150,12 +182,25 @@ func redactCommand(raw string) string {
 				out = append(out, f[:i]+": "+value)
 				maskNext = true
 			default:
+				// A quoted header value can carry scheme and credential in
+				// one field ("Authorization: Bearer TOKEN"); the scheme is
+				// not the secret, so only the credential is masked.
+				if sp := strings.IndexByte(value, ' '); sp > 0 && authSchemeRE.MatchString(value[:sp]) {
+					out = append(out, f[:i]+": "+value[:sp]+" ***")
+					break
+				}
 				out = append(out, f[:i]+": ***")
 				// A no-space header ("Cookie:sid=abc; csrf=def") carries the
 				// first fragment in this token; a ';'-terminated value means
 				// more fragments follow.
 				cookieNext = isCookie && strings.HasSuffix(value, ";")
 			}
+		case secretFlagRE.MatchString(f):
+			out = append(out, f)
+			maskNext = true
+		// A token is URL-shaped only when its first colon opens "://"; a
+		// keyword-bearing scheme (oauth://) must not read as a header, and a
+		// no-space header whose value is a URL must not read as one.
 		case strings.EqualFold(f, "bearer"):
 			out = append(out, f)
 			maskNext = true
