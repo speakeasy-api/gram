@@ -215,9 +215,12 @@ func TestCoworkShipsNewLinesOnEachStop(t *testing.T) {
 	require.Equal(t, first.OffsetEnd, uploads[1].OffsetStart)
 	require.Equal(t, []string{"a-2", "u-2"}, entryUUIDs(t, uploads[1]))
 
-	// Nothing new: no request at all.
+	// Nothing new: no upload. (Per-event hooks run in Cowork too, so a
+	// prompt agenthooks backfills from the transcript may reach the ingest
+	// endpoint; only transcript uploads are counted here.)
 	invokeClaude(t, cfg, claudeStop(transcript))
-	require.Equal(t, int32(2), ts.requests.Load())
+	uploads, _ = ts.recorded()
+	require.Len(t, uploads, 2)
 }
 
 func TestCoworkRetriesUnsettledUpload(t *testing.T) {
