@@ -101,7 +101,7 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 | `server/internal/authz/precedence.go`  | Principal precedence: direct concrete grants outrank blocklist exclusions inherited from roles or `user:all`.                                             |
 | `server/internal/authz/provisioner.go` | New-organization provisioning for built-in role grants and the initial Admin assignment.                                                                  |
 | `server/internal/authz/scopes.go`      | Scope type, constants and `Parts`.                                                                                                                        |
-| `server/internal/authz/catalog.go`     | The scope catalogue: one entry per grantable scope with its rules and role defaults, plus the `Scope` methods that read it.                               |
+| `server/internal/authz/catalog.go`     | Scope catalogue: one entry per grantable scope (rules, role defaults) and the `Scope` methods that read it.                                               |
 | `server/internal/authz/selector.go`    | `Selector` type, matching rules, `NewSelector`/`NewGrant` helpers, `ValidateSelector`, the prefix fallback behind `Scope.ResourceKind`, disposition vocabulary, `SelectorFromRow`. |
 | `server/internal/authztest/helpers.go` | Test helpers other packages reuse for RBAC setup, including `WithExactGrants`.                                                                            |
 | `server/internal/access/impl.go`       | Implementation of the `/rpc/access.*` Goa service.                                                                                                        |
