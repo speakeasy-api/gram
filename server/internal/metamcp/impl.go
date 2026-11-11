@@ -1052,7 +1052,7 @@ func (s *Service) lockIssuerReference(ctx context.Context, txRepo *repo.Queries,
 		OrganizationID:      organizationID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeInvalid, err, "user_session_issuer_id does not reference a live issuer in this project").LogError(ctx, s.logger)
+			return oops.E(oops.CodeInvalid, err, "%s", ErrIssuerNotInProject.Error()).LogError(ctx, s.logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock user session issuer").LogError(ctx, s.logger)
 	}

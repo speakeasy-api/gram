@@ -97,6 +97,7 @@ func TestMetaMcpServer_RejectsInvalidIssuerScope(t *testing.T) {
 				Name: "invalid issuer gateway", UserSessionIssuerID: conv.PtrEmpty(issuerID.String()),
 			})
 			requireOopsCode(t, err, oops.CodeInvalid)
+			require.ErrorContains(t, err, "live issuer available to this project")
 
 			created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "unchanged gateway"})
 			require.NoError(t, err)
@@ -104,6 +105,7 @@ func TestMetaMcpServer_RejectsInvalidIssuerScope(t *testing.T) {
 				ID: created.ID, Name: "must not persist", UserSessionIssuerID: conv.PtrEmpty(issuerID.String()),
 			})
 			requireOopsCode(t, err, oops.CodeInvalid)
+			require.ErrorContains(t, err, "live issuer available to this project")
 			fetched, err := ti.service.GetMetaMcpServer(ctx, &gen.GetMetaMcpServerPayload{ID: created.ID})
 			require.NoError(t, err)
 			require.Equal(t, created.Name, fetched.Name)

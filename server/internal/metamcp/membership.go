@@ -36,7 +36,7 @@ import (
 var (
 	ErrGatewayNotFound               = errors.New("meta mcp server not found")
 	ErrMembershipNotFound            = errors.New("meta mcp membership not found")
-	ErrIssuerNotInProject            = errors.New("user_session_issuer_id does not reference a live issuer in this project")
+	ErrIssuerNotInProject            = errors.New("user_session_issuer_id does not reference a live issuer available to this project")
 	ErrMemberServerNotInProject      = errors.New("mcp_server_id does not reference a live server in this project")
 	ErrMemberServerHasNoSlug         = errors.New("mcp server has no slug; update the server to generate one before attaching it")
 	ErrMemberServerUnproxied         = errors.New("unproxied mcp servers cannot be meta mcp members")
