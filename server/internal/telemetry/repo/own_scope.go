@@ -23,7 +23,7 @@ type OwnScope struct {
 	IdentityOrg string
 }
 
-// telemetryLogsPredicate scopes raw telemetry_logs rows. Legs are a flat OR: hosted MCP rows
+// telemetryLogsPredicate scopes raw telemetry_logs rows. Arms are a flat OR: hosted MCP rows
 // keep the external id in user.id, the member's email in user.email, and the internal id only in
 // gram.auth.user_id. Columns are table-qualified so a per-chat aggregate aliasing user_id reads the column.
 func (s *OwnScope) telemetryLogsPredicate() squirrel.Sqlizer {
@@ -84,7 +84,7 @@ func foldOrg(canonicalIdentityOrg string, scope *OwnScope) string {
 
 // emailPredicate folds through identity_map when the org has one, else
 // matches the literal address case-insensitively. Unlike per-person filters,
-// dropping the leg here would hide the member's own rows.
+// dropping the arm here would hide the member's own rows.
 func (s *OwnScope) emailPredicate(column string) squirrel.Sqlizer {
 	orgLit := canonicalIdentityOrgLiteral(s.IdentityOrg)
 	if orgLit == "" {
@@ -93,7 +93,7 @@ func (s *OwnScope) emailPredicate(column string) squirrel.Sqlizer {
 	return canonicalEmailPredicate(orgLit, column, []string{s.UserEmail})
 }
 
-// failClosed matches no rows when no identity leg exists.
+// failClosed matches no rows when no identity arm exists.
 func failClosed(preds squirrel.Or) squirrel.Sqlizer {
 	if len(preds) == 0 {
 		return squirrel.Expr("0")
