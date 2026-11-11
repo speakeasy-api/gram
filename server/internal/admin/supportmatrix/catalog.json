@@ -519,7 +519,7 @@
         },
         "blocking": {
           "status": "impossible",
-          "note": "no policy enforcement in Cowork",
+          "note": "warn policies notify after the turn; nothing is blocked",
           "verify": false
         },
         "mcp-redaction": {

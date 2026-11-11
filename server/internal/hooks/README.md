@@ -86,7 +86,8 @@ The standard Claude plugin switches modes by itself. Claude's admin plugin
 settings install it in Claude Code and in the Cowork VM alike. When Claude Code
 reports the Cowork entrypoint (`CLAUDE_CODE_ENTRYPOINT=remote_cowork`, which
 every hook process inherits), the binary relays no per-event hook, so no policy
-is enforced there, and ships the transcript from Stop instead. Everywhere else
+can stop a prompt there, and ships the transcript from Stop instead. Warn
+policies are answered from that Stop (see below). Everywhere else
 it relays per-event hooks as before. Every event of a session reads the same
 environment, so a session never mixes per-event rows with `claude-transcript:`
 rows.
@@ -105,6 +106,20 @@ Cowork VM the binary relays no per-event hooks to translate.
 
 Each entry's uuid keys its rows (`external_message_id` prefixed
 `claude-transcript:`), so a re-sent line is never stored twice.
+
+### Warn policies in Cowork
+
+No per-event hook runs in the Cowork VM, so the first time the server sees a
+prompt is the Stop that ships it. When an upload stores new rows, the server
+checks the upload's user prompts from the last 15 minutes (at most five)
+against the project's enforcing policies and returns the warn matches as
+`warnings` beside `stored`. The binary then answers that Stop with
+`decision: block` and a reason, so Claude continues once and tells the user,
+plus a `systemMessage` carrying the same warning. The next Stop ships no new
+prompt and finishes. The prompt has already reached the model, so the warning
+is a notice: there is no acknowledgement link, and block and quarantine
+matches are left to the background scan. A full re-send stores nothing new and
+warns nobody twice.
 
 The binary advances its read offset past a batch only once the batch is
 settled, and resends anything unsettled on the next Stop:

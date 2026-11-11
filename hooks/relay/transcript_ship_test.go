@@ -732,3 +732,40 @@ func TestCoworkUploadNamesTheClaudeAccount(t *testing.T) {
 	require.Len(t, uploads, 1)
 	require.Equal(t, "cowork@example.com", uploads[0].UserEmail)
 }
+
+// TestCoworkSurfacesServerWarnings: Cowork relays no per-event hook, so a warn
+// policy can only act on the prompt once the transcript reaches the server.
+// The warnings the server returns make Claude continue once and tell the user;
+// a Stop that ships nothing new finishes as before.
+func TestCoworkSurfacesServerWarnings(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	ts.setBody(func(n int) []byte {
+		if n > 1 {
+			return []byte(`{"stored":1}`)
+		}
+		return []byte(`{"stored":2,"warnings":[{"policy_id":"p-1","policy_name":"PII policy","message":"EXAMPLE-MATCH looks like sensitive information."}]}`)
+	})
+	cfg := coworkConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, transcriptUser+transcriptAssistant)
+
+	res := invokeClaude(t, cfg, claudeStop(transcript))
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	var out struct {
+		Decision      string `json:"decision"`
+		Reason        string `json:"reason"`
+		SystemMessage string `json:"systemMessage"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(res.Stdout), &out), res.Stdout)
+	require.Equal(t, "block", out.Decision, "Claude continues so the user is told")
+	require.Contains(t, out.Reason, `Speakeasy policy "PII policy": EXAMPLE-MATCH looks like sensitive information.`)
+	require.Equal(t, `Speakeasy policy "PII policy": EXAMPLE-MATCH looks like sensitive information.`, out.SystemMessage)
+
+	// Claude's reply lands; the next Stop ships it and, with no warning, finishes.
+	appendTranscript(t, transcript, transcriptLater)
+	res = invokeClaude(t, cfg, claudeStop(transcript))
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.NotContains(t, res.Stdout, `"decision":"block"`)
+	require.Equal(t, int32(2), ts.requests.Load())
+}

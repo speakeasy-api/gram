@@ -144,6 +144,12 @@ func (e *claudeTranscriptEntries) UnmarshalJSON(data []byte) error {
 
 type claudeTranscriptResult struct {
 	Stored int64 `json:"stored"`
+	// Warnings carries the warn-policy matches found in the upload's newly
+	// stored user prompts. Cowork runs no per-event hooks, so these prompts
+	// were never evaluated before they reached the model; the binary surfaces
+	// the warnings from Stop instead. Omitted when there are none, so older
+	// binaries that read only stored are unaffected.
+	Warnings []claudeTranscriptWarning `json:"warnings,omitempty"`
 }
 
 // AttachTranscript mounts the transcript intake endpoint. It
@@ -176,7 +182,7 @@ func (s *Service) serveTranscript(w http.ResponseWriter, r *http.Request) {
 	// on its next Stop finds the rows and stores nothing twice.
 	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), claudeTranscriptPersistTimeout)
 	defer cancel()
-	stored, err := s.persistClaudeTranscript(persistCtx, authCtx, upload)
+	persisted, err := s.persistClaudeTranscript(persistCtx, authCtx, upload)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, errChatProjectMismatch) {
@@ -190,9 +196,11 @@ func (s *Service) serveTranscript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	warnings := s.claudeTranscriptWarnings(ctx, authCtx, upload.SessionID, persisted)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(claudeTranscriptResult{Stored: stored})
+	_ = json.NewEncoder(w).Encode(claudeTranscriptResult{Stored: persisted.stored, Warnings: warnings})
 }
 
 // readClaudeTranscriptUpload decodes and validates the request body. The
@@ -239,9 +247,18 @@ func statusForBodyError(err error) int {
 	return http.StatusBadRequest
 }
 
+// claudeTranscriptPersisted describes one stored upload: how many rows were
+// new, who the session belongs to, and the rows the upload carried.
+type claudeTranscriptPersisted struct {
+	stored   int64
+	metadata SessionMetadata
+	rows     []claudeTranscriptRow
+}
+
 // persistClaudeTranscript stores the upload's conversation entries in the
-// session's chat and returns how many rows were newly stored.
-func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextvalues.AuthContext, upload *claudeTranscriptUpload) (int64, error) {
+// session's chat and reports how many rows were newly stored.
+func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextvalues.AuthContext, upload *claudeTranscriptUpload) (claudeTranscriptPersisted, error) {
+	var none claudeTranscriptPersisted
 	projectID := *authCtx.ProjectID
 	// Identity and surface resolution reuse the canonical ingest path, so a
 	// transcript session is attributed exactly as a hook-captured one would be.
@@ -251,18 +268,18 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 
 	enabled, err := s.sessionCaptureEnabled(ctx, &metadata, projectID)
 	if err != nil || !enabled {
-		return 0, err
+		return none, err
 	}
 
 	rows := claudeTranscriptRows(upload.Entries, s.now().UTC())
 	if len(rows) == 0 {
-		return 0, nil
+		return none, nil
 	}
 
 	hookSource := conv.Default(s.claudeSessionSurface(ctx, &metadata), agentVariantCowork)
 	chatID := sessionIDToUUID(upload.SessionID)
 	if err := s.ensureHookChat(ctx, s.repo, &metadata, chatID, projectID, claudeTranscriptTitle(rows, hookSource)); err != nil {
-		return 0, err
+		return none, err
 	}
 
 	writes := make([]chat.ExternalMessageWrite, 0, len(rows))
@@ -314,12 +331,12 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 
 	stored, err := s.writer.WriteExternalWithContentParts(ctx, projectID, writes, nil)
 	if err != nil {
-		return stored, fmt.Errorf("write claude transcript messages: %w", err)
+		return claudeTranscriptPersisted{stored: stored, metadata: metadata, rows: nil}, fmt.Errorf("write claude transcript messages: %w", err)
 	}
 	if stored > 0 && assistantTurn {
 		s.scheduleCanonicalChatTitle(ctx, authCtx, chatID, hookSource)
 	}
-	return stored, nil
+	return claudeTranscriptPersisted{stored: stored, metadata: metadata, rows: rows}, nil
 }
 
 // claudeTranscriptPayload projects the upload onto a canonical ingest payload

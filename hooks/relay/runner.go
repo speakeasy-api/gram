@@ -511,7 +511,9 @@ func cursorMCPEcho(base *agenthooks.Event, toolName string) bool {
 
 func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks.StopDecision, error) {
 	if coworkTranscriptMode(&e.Event) {
-		r.shipTranscript(ctx, e)
+		if warnings := r.shipTranscript(ctx, e); len(warnings) > 0 {
+			return coworkWarnDecision(warnings), nil
+		}
 		return agenthooks.Finish(), nil
 	}
 	r.deliver(ctx, e)
