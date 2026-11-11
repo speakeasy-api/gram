@@ -1935,6 +1935,11 @@ type HookIngestSessionRequestBody struct {
 	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
 	// Model identifier reported by the local agent.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// True when the client ships this session's transcript to the transcript
+	// endpoint (Claude Cowork). The server still evaluates policy and records hook
+	// telemetry for the event, but stores no conversation rows from it, so the
+	// transcript is the only writer of the session's chat history.
+	TranscriptCapture *bool `form:"transcript_capture,omitempty" json:"transcript_capture,omitempty" xml:"transcript_capture,omitempty"`
 }
 
 // HookIngestEventRequestBody is used to define fields on request body types.

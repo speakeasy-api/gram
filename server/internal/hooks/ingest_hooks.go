@@ -1173,6 +1173,13 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 		}
 	}
 	s.teeCanonicalHookToEventFeed(ctx, payload, authCtx, &metadata, hookSource, blockReason, teeRows)
+	// A client that ships the session transcript (Claude Cowork) sends its
+	// per-event hooks for policy and telemetry only. The transcript is the one
+	// writer of the session's chat rows, so storing this event's row as well
+	// would record every message twice.
+	if transcriptCaptured(payload) {
+		return
+	}
 	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 	if err != nil {
 		event := "hooks_ingest_chat_persist_failed"
@@ -2615,4 +2622,10 @@ func jsonString(v any) string {
 		}
 		return string(b)
 	}
+}
+
+// transcriptCaptured reports whether the client ships this session's
+// transcript separately, so the event must not write conversation rows.
+func transcriptCaptured(payload *gen.IngestPayload) bool {
+	return payload != nil && payload.Session != nil && conv.PtrValOr(payload.Session.TranscriptCapture, false)
 }

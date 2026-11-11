@@ -366,6 +366,8 @@ func claudeTranscriptPayload(upload *claudeTranscriptUpload) *gen.IngestPayload 
 			TurnID: nil,
 			Cwd:    conv.PtrEmpty(strings.TrimSpace(upload.Cwd)),
 			Model:  nil,
+			// Unused: this payload is never ingested as an event.
+			TranscriptCapture: nil,
 		},
 		Event: &gen.HookIngestEvent{Type: "session.updated", OccurredAt: nil},
 		Data:  nil,

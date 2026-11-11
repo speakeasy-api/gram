@@ -2127,10 +2127,11 @@ func unmarshalHookIngestSessionRequestBodyToHooksHookIngestSession(v *HookIngest
 		return nil
 	}
 	res := &hooks.HookIngestSession{
-		ID:     v.ID,
-		TurnID: v.TurnID,
-		Cwd:    v.Cwd,
-		Model:  v.Model,
+		ID:                v.ID,
+		TurnID:            v.TurnID,
+		Cwd:               v.Cwd,
+		Model:             v.Model,
+		TranscriptCapture: v.TranscriptCapture,
 	}
 
 	return res

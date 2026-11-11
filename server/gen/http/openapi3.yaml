@@ -113987,6 +113987,9 @@ components:
                 model:
                     type: string
                     description: Model identifier reported by the local agent.
+                transcript_capture:
+                    type: boolean
+                    description: True when the client ships this session's transcript to the transcript endpoint (Claude Cowork). The server still evaluates policy and records hook telemetry for the event, but stores no conversation rows from it, so the transcript is the only writer of the session's chat history.
                 turn_id:
                     type: string
                     description: Generation, request, or turn identifier.

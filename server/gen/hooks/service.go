@@ -397,6 +397,11 @@ type HookIngestSession struct {
 	Cwd *string
 	// Model identifier reported by the local agent.
 	Model *string
+	// True when the client ships this session's transcript to the transcript
+	// endpoint (Claude Cowork). The server still evaluates policy and records hook
+	// telemetry for the event, but stores no conversation rows from it, so the
+	// transcript is the only writer of the session's chat history.
+	TranscriptCapture *bool
 }
 
 // Metadata about the local hook adapter that translated a provider event into

@@ -155,6 +155,7 @@ var HookIngestSession = Type("HookIngestSession", func() {
 	Attribute("turn_id", String, "Generation, request, or turn identifier.")
 	Attribute("cwd", String, "Current working directory when the event fired.")
 	Attribute("model", String, "Model identifier reported by the local agent.")
+	Attribute("transcript_capture", Boolean, "True when the client ships this session's transcript to the transcript endpoint (Claude Cowork). The server still evaluates policy and records hook telemetry for the event, but stores no conversation rows from it, so the transcript is the only writer of the session's chat history.")
 })
 
 var HookIngestEvent = Type("HookIngestEvent", func() {

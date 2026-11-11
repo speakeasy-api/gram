@@ -375,12 +375,19 @@ func sessionOf(base *agenthooks.Event) *components.HookIngestSession {
 		turnID = agentTurnPrefix + adapterSlug(base.Provider) + ":" + turnID
 	}
 	s := &components.HookIngestSession{
-		ID:     optStr(base.Session.ID),
-		TurnID: optStr(turnID),
-		Cwd:    optStr(base.Session.CWD),
-		Model:  optStr(base.Session.Model),
+		ID:                optStr(base.Session.ID),
+		TurnID:            optStr(turnID),
+		Cwd:               optStr(base.Session.CWD),
+		Model:             optStr(base.Session.Model),
+		TranscriptCapture: nil,
 	}
-	if s.ID == nil && s.TurnID == nil && s.Cwd == nil && s.Model == nil {
+	// Inside the Cowork VM the Stop hook ships the session transcript, which
+	// is the one writer of its chat rows. Per-event hooks still go to the
+	// server for policy and telemetry, flagged so they store no rows.
+	if coworkTranscriptMode(base) {
+		s.TranscriptCapture = new(true)
+	}
+	if s.ID == nil && s.TurnID == nil && s.Cwd == nil && s.Model == nil && s.TranscriptCapture == nil {
 		return nil
 	}
 	return s

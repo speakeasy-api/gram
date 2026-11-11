@@ -18,6 +18,8 @@ import (
 	"github.com/speakeasy-api/agenthooks/agenthookstest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
 // transcriptServerMaxBodyBytes is the server's request body cap
@@ -443,23 +445,58 @@ func TestCoworkKeepsChunkWithoutAcknowledgement(t *testing.T) {
 	require.Equal(t, entryUUIDs(t, uploads[0]), entryUUIDs(t, uploads[1]))
 }
 
-func TestCoworkRelaysNoOtherEvent(t *testing.T) {
+// TestCoworkGatesEventsWithoutCapture: inside the Cowork VM the transcript
+// shipped from Stop is the one writer of the session's chat rows, but prompt,
+// tool and permission events still reach the server so policy is enforced in
+// real time. Their envelopes carry transcript_capture so the server stores no
+// rows from them; the observe-only events stay local.
+func TestCoworkGatesEventsWithoutCapture(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	ts := newTranscriptServer(t)
-	cfg := coworkConfig(t, ts.URL)
+	fs := newFakeServer(t, func(p components.IngestRequestBody) (int, decision) {
+		if p.Event.Type == components.TypeToolRequested {
+			return http.StatusOK, decision{Decision: "deny", Reason: "", Message: "Blocked by policy"}
+		}
+		return http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
+	})
+	cfg := coworkConfig(t, fs.URL)
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, transcriptUser)
 
+	res := invokeClaude(t, cfg, map[string]any{"session_id": "sess-cowork-1", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "UserPromptSubmit", "prompt": "list the files"})
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.NotContains(t, string(res.Stdout), `"decision":"block"`)
+
+	res = invokeClaude(t, cfg, map[string]any{"session_id": "sess-cowork-1", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": "ls"}, "tool_use_id": "toolu_1"})
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "the server's deny is enforced in Cowork")
+
 	for _, payload := range []map[string]any{
-		{"session_id": "sess-cowork-1", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "UserPromptSubmit", "prompt": "list the files"},
-		{"session_id": "sess-cowork-1", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": "ls"}, "tool_use_id": "toolu_1"},
 		{"session_id": "sess-cowork-1", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "SessionStart", "source": "startup"},
 		{"session_id": "sess-cowork-1", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "SubagentStop", "stop_hook_active": false},
 	} {
 		res := invokeClaude(t, cfg, payload)
 		require.Equal(t, 0, res.ExitCode, res.Stderr)
 	}
-	require.Equal(t, int32(0), ts.requests.Load())
+
+	require.Equal(t, 2, fs.count(), "only the prompt and the tool request reach the server")
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	for _, req := range fs.requests {
+		require.NotNil(t, req.Session)
+		require.Equal(t, true, *req.Session.TranscriptCapture, "Cowork events must not write chat rows")
+	}
+}
+
+func TestClaudeCodeEventsKeepCapture(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+
+	res := invokeClaude(t, cfg, map[string]any{"session_id": "sess-cli-1", "cwd": "/work/repo", "hook_event_name": "UserPromptSubmit", "prompt": "list the files"})
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.Equal(t, 1, fs.count())
+	require.Nil(t, fs.last().Session.TranscriptCapture, "outside Cowork the event is the capture path")
 }
 
 func TestTranscriptUploadSettled(t *testing.T) {
@@ -766,6 +803,6 @@ func TestCoworkSurfacesServerWarnings(t *testing.T) {
 	appendTranscript(t, transcript, transcriptLater)
 	res = invokeClaude(t, cfg, claudeStop(transcript))
 	require.Equal(t, 0, res.ExitCode, res.Stderr)
-	require.NotContains(t, res.Stdout, `"decision":"block"`)
+	require.NotContains(t, string(res.Stdout), `"decision":"block"`)
 	require.Equal(t, int32(2), ts.requests.Load())
 }

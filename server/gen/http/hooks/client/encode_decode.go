@@ -2194,10 +2194,11 @@ func marshalHooksHookIngestSessionToHookIngestSessionRequestBody(v *hooks.HookIn
 		return nil
 	}
 	res := &HookIngestSessionRequestBody{
-		ID:     v.ID,
-		TurnID: v.TurnID,
-		Cwd:    v.Cwd,
-		Model:  v.Model,
+		ID:                v.ID,
+		TurnID:            v.TurnID,
+		Cwd:               v.Cwd,
+		Model:             v.Model,
+		TranscriptCapture: v.TranscriptCapture,
 	}
 
 	return res
@@ -2493,10 +2494,11 @@ func marshalHookIngestSessionRequestBodyToHooksHookIngestSession(v *HookIngestSe
 		return nil
 	}
 	res := &hooks.HookIngestSession{
-		ID:     v.ID,
-		TurnID: v.TurnID,
-		Cwd:    v.Cwd,
-		Model:  v.Model,
+		ID:                v.ID,
+		TurnID:            v.TurnID,
+		Cwd:               v.Cwd,
+		Model:             v.Model,
+		TranscriptCapture: v.TranscriptCapture,
 	}
 
 	return res

@@ -479,7 +479,7 @@ func ahpPayload(source string, harness *ahp.Harness, id, rawType, occurredAt, ev
 	}
 	if session.Present && session.Value != nil {
 		s := session.Value
-		payload.Session = &gen.HookIngestSession{ID: &s.ID, TurnID: conv.PtrEmpty(turnID), Cwd: conv.PtrEmpty(s.CWD.Value), Model: conv.PtrEmpty(s.Model.Value)}
+		payload.Session = &gen.HookIngestSession{ID: &s.ID, TurnID: conv.PtrEmpty(turnID), Cwd: conv.PtrEmpty(s.CWD.Value), Model: conv.PtrEmpty(s.Model.Value), TranscriptCapture: nil}
 	}
 	return payload
 }

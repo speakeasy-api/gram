@@ -83,14 +83,17 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 		Timeout:         0,
 	}))
 
-	// Inside Claude's Cowork VM the relay only ships the session transcript
-	// from Stop (onStop); every other handler answers with its neutral
-	// decision and sends nothing. See coworkTranscriptMode.
-	runner.OnPromptSubmitted(outsideCowork(r.onPrompt, agenthooks.AcceptPrompt))
-	runner.OnToolPre(outsideCowork(r.onToolPre, agenthooks.NoDecision))
-	runner.OnPermission(outsideCowork(r.onPermission, agenthooks.NoDecision))
-	runner.OnToolPost(outsideCowork(r.onToolPost, agenthooks.Observed))
-	runner.OnToolError(outsideCowork(r.onToolPost, agenthooks.Observed))
+	// Inside Claude's Cowork VM the Stop hook ships the session transcript
+	// (onStop), which is the one writer of the session's chat rows. Prompt,
+	// tool and permission events still go to the server so policy is enforced
+	// in real time; their envelopes carry transcript_capture, so the server
+	// stores no rows from them. The observe-only handlers stay off there. See
+	// coworkTranscriptMode.
+	runner.OnPromptSubmitted(r.onPrompt)
+	runner.OnToolPre(r.onToolPre)
+	runner.OnPermission(r.onPermission)
+	runner.OnToolPost(r.onToolPost)
+	runner.OnToolError(r.onToolPost)
 	runner.OnStop(r.onStop)
 	runner.OnSubagentStop(r.onStop)
 	runner.OnSessionStart(outsideCowork(r.onSessionStart, agenthooks.ContinueSession))

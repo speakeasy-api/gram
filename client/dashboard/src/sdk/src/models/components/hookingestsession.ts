@@ -22,6 +22,10 @@ export type HookIngestSession = {
    */
   model?: string | undefined;
   /**
+   * True when the client ships this session's transcript to the transcript endpoint (Claude Cowork). The server still evaluates policy and records hook telemetry for the event, but stores no conversation rows from it, so the transcript is the only writer of the session's chat history.
+   */
+  transcriptCapture?: boolean | undefined;
+  /**
    * Generation, request, or turn identifier.
    */
   turnId?: string | undefined;
@@ -32,6 +36,7 @@ export type HookIngestSession$Outbound = {
   cwd?: string | undefined;
   id?: string | undefined;
   model?: string | undefined;
+  transcript_capture?: boolean | undefined;
   turn_id?: string | undefined;
 };
 
@@ -44,10 +49,12 @@ export const HookIngestSession$outboundSchema: z.ZodMiniType<
     cwd: z.optional(z.string()),
     id: z.optional(z.string()),
     model: z.optional(z.string()),
+    transcriptCapture: z.optional(z.boolean()),
     turnId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      transcriptCapture: "transcript_capture",
       turnId: "turn_id",
     });
   }),
