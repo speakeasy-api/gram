@@ -125,6 +125,10 @@ func RecordedDecisions(ctx context.Context) (summary DecisionSummary, ok bool) {
 // no-op outside a recorded request, so the engine behaves the same in
 // background jobs and tests that install nothing.
 func recordDecision(ctx context.Context, operation DecisionOperation, mode DecisionMode) {
+	if decisionObserver != nil {
+		decisionObserver(ctx, operation, mode)
+	}
+
 	recorder, ok := ctx.Value(decisionRecorderKey{}).(*decisionRecorder)
 	if !ok {
 		return

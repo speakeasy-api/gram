@@ -1842,6 +1842,20 @@ jobs:
           # and fail events of 'go test -json' (no output lines) to this file,
           # relative to server/. Each event carries its time and elapsed.
           GOTESTSUM_JSONFILE_TIMING_EVENTS: test-timings.json
+          # Each authz decision records the server methods on its stack here;
+          # the authz-coverage job below turns the records into the endpoint
+          # coverage report.
+          GRAM_AUTHZ_COVERAGE_DIR: ${{ github.workspace }}/server/authz-coverage
+
+      - name: Upload authz coverage records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: authz-coverage-shard-${{ matrix.shard }}
+          path: server/authz-coverage
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 7
 
       - name: Upload test timings
         # Uploaded even when tests fail or the job is cancelled, so slow and
@@ -1871,6 +1885,39 @@ jobs:
           go run github.com/speakeasy-api/gram/ci/cmd/flaky gate
           -junit server/junit-report.xml
           -run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+  # Every management API endpoint must be seen making an authz decision in
+  # some test, or be allowlisted with the reason it makes none. See
+  # ci/cmd/authzcoverage.
+  authz-coverage:
+    name: authz-coverage
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [changes, server-test]
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      - name: Download authz coverage records
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: authz-coverage-shard-*
+          path: authz-coverage
+
+      - name: Check endpoint coverage
+        run: mise run test:authz-coverage --records authz-coverage
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
@@ -2881,6 +2928,7 @@ jobs:
       - server-build
       - server-checks
       - server-test
+      - authz-coverage
       - demo-seed-safety
       - docker-build-server
       - docker-build-client
