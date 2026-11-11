@@ -91,7 +91,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/killswitchapi"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
-	"github.com/speakeasy-api/gram/server/internal/launcher"
 	"github.com/speakeasy-api/gram/server/internal/litellm"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
@@ -185,7 +184,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/tokenexchange"
 	"github.com/speakeasy-api/gram/server/internal/tools"
@@ -1748,7 +1746,7 @@ func newStartCommand() *cli.Command {
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithOrganizationHosts(orgHosts)
 			plugins.Attach(mux, pluginsSvc)
 			agentService.WithClaudeObservabilityPlugins(pluginsSvc)
-			launcher.Attach(mux, launcher.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, openRouter, typesafe.NewClient(guardianPolicy.PooledClient(), logger, typesafe.WithTracerProvider(tracerProvider))))
+
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
 			sigintSvc := sigint.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures)
 			sigint.Attach(mux, sigintSvc)
