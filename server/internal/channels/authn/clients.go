@@ -169,7 +169,7 @@ func (s *Service) clientError(w http.ResponseWriter, r *http.Request, code strin
 // the shared native-app scheme policy.
 func validateRedirectURI(raw string) error {
 	if err := oauthwire.ValidateRedirectURI(raw); err != nil {
-		return err
+		return fmt.Errorf("validate redirect URI: %w", err)
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil || strings.Contains(raw, "#") || parsed.User != nil {

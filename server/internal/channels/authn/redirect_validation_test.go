@@ -71,8 +71,8 @@ func TestChannelsRedirectPersistence(t *testing.T) {
 		response := f.request(http.MethodPost, "/channels/oauth/register", string(body), "")
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 		require.JSONEq(t, `{"error":"invalid_redirect_uri"}`, response.Body.String())
-		var count int
-		require.NoError(t, db.QueryRow(t.Context(), "SELECT count(*) FROM channels_oauth_clients").Scan(&count))
+		count, err := fixturerepo.New(db).CountRows(t.Context(), "channels_oauth_clients")
+		require.NoError(t, err)
 		require.Zero(t, count, "invalid registration must not persist any redirects")
 
 		f.service.clients = fakeMetadataResolver{document: &cimd.Document{ClientID: clientID, ClientName: "Invalid callback client", RedirectURIs: []string{testRedirect, redirect}, TokenEndpointAuthMethod: "none"}}
