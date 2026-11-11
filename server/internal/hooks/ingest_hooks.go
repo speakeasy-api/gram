@@ -1173,11 +1173,11 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 		}
 	}
 	s.teeCanonicalHookToEventFeed(ctx, payload, authCtx, &metadata, hookSource, blockReason, teeRows)
-	// A client that ships the session transcript (Claude Cowork) sends its
-	// per-event hooks for policy and telemetry only. The transcript is the one
-	// writer of the session's chat rows, so storing this event's row as well
-	// would record every message twice.
+	// A client that also ships the session transcript (Claude Cowork) keys
+	// its rows by the ids the transcript shares, so the two paths store each
+	// prompt and tool call once. See claude_cowork_rows.go.
 	if transcriptCaptured(payload) {
+		s.persistCoworkEventRow(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 		return
 	}
 	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
@@ -2624,8 +2624,40 @@ func jsonString(v any) string {
 	}
 }
 
-// transcriptCaptured reports whether the client ships this session's
-// transcript separately, so the event must not write conversation rows.
+// transcriptCaptured reports whether the client also ships this session's
+// transcript, so the event's row must use the key the transcript shares.
 func transcriptCaptured(payload *gen.IngestPayload) bool {
 	return payload != nil && payload.Session != nil && conv.PtrValOr(payload.Session.TranscriptCapture, false)
+}
+
+// persistCoworkEventRow stores a transcript-capture session's event under the
+// key its transcript entry shares. Events without a shared id are left to the
+// transcript.
+func (s *Service) persistCoworkEventRow(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) {
+	sessionID := canonicalSessionID(payload)
+	if sessionID == "" || authCtx.ProjectID == nil {
+		return
+	}
+	row, ok := coworkEventRow(payload, occurredAt)
+	if !ok {
+		return
+	}
+	title := canonicalPlaceholderTitle(hookSource)
+	if row.role == "user" {
+		title = chat.DerivedTitle(row.content)
+	}
+	if _, err := s.writeClaudeRows(ctx, authCtx, metadata, sessionIDToUUID(sessionID), []claudeTranscriptRow{row}, hookSource, "", title); err != nil {
+		event := "hooks_ingest_chat_persist_failed"
+		if errors.Is(err, errChatProjectMismatch) {
+			event = "hooks_ingest_chat_project_mismatch"
+		}
+		s.logger.WarnContext(ctx, "failed to persist cowork hook conversation event",
+			attr.SlogEvent(event),
+			attr.SlogError(err),
+			attr.SlogHookSource(payload.Source.Adapter),
+			attr.SlogHookEvent(payload.Event.Type),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogProjectID(authCtx.ProjectID.String()),
+		)
+	}
 }

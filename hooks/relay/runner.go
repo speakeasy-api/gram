@@ -83,12 +83,14 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 		Timeout:         0,
 	}))
 
-	// Inside Claude's Cowork VM the Stop hook ships the session transcript
-	// (onStop), which is the one writer of the session's chat rows. Prompt,
-	// tool and permission events still go to the server so policy is enforced
-	// in real time; their envelopes carry transcript_capture, so the server
-	// stores no rows from them. The observe-only handlers stay off there. See
-	// coworkTranscriptMode.
+	// Inside Claude's Cowork VM, prompt, tool and permission events go to the
+	// server as they do in Claude Code, so policy is enforced in real time and
+	// the session is captured per event. The Stop hook also ships the session
+	// transcript (onStop) to backfill what no hook saw: the first prompt,
+	// typed in chat before the session moved to Cowork, and assistant text.
+	// The envelopes carry transcript_capture, so the server keys prompts and
+	// tool calls by the ids the transcript shares and stores each once. The
+	// observe-only handlers stay off there. See coworkTranscriptMode.
 	runner.OnPromptSubmitted(r.onPrompt)
 	runner.OnToolPre(r.onToolPre)
 	runner.OnPermission(r.onPermission)

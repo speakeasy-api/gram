@@ -85,16 +85,22 @@ without approval, discovery skips the **entire backend**, including inline-text 
 The standard Claude plugin switches modes by itself. Claude's admin plugin
 settings install it in Claude Code and in the Cowork VM alike. When Claude Code
 reports the Cowork entrypoint (`CLAUDE_CODE_ENTRYPOINT=remote_cowork`, which
-every hook process inherits), the binary ships the transcript from Stop, and
-the transcript is the one writer of the session's chat rows. Prompt, tool and
-permission events still go to `/rpc/hooks.ingest` so policy is enforced in real
-time, with `session.transcript_capture: true` on the envelope: the server
-evaluates them and records hook telemetry but stores no conversation rows from
-them, so no message is stored twice. Session start, inventory, notification
-and config events stay local in the VM. Everywhere else
-it relays per-event hooks as before. Every event of a session reads the same
-environment, so a session never mixes per-event rows with `claude-transcript:`
-rows.
+every hook process inherits), prompt, tool and permission events go to
+`/rpc/hooks.ingest` as they do in Claude Code, so policy is enforced in real
+time and the session is captured per event. The org instruction moves every
+unified session into Cowork, so the only message no hook sees is the first,
+typed in chat before the move. The binary therefore also ships the transcript
+from Stop, which backfills that prompt and the assistant text no hook reports.
+Session start, inventory, notification and config events stay local in the VM.
+
+Both paths can describe the same prompt or tool call. Envelopes from the VM
+carry `session.transcript_capture: true`, and both paths then key those rows by
+the ids Claude reports to both: `claude-prompt:<prompt_id>` (the transcript's
+`promptId`), `claude-tool-call:<tool_use_id>` and
+`claude-tool-result:<tool_use_id>`. The `(chat_id, external_message_id)` unique
+index keeps one row per message whichever path writes first and however often
+either is re-sent. Rows only the transcript describes keep the
+`claude-transcript:<uuid>` key.
 
 Capture needs both halves deployed: a pinned hooks binary that includes the
 Cowork mode, and an ingress rule forwarding `/transcript` to the server.

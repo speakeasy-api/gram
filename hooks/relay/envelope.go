@@ -381,9 +381,9 @@ func sessionOf(base *agenthooks.Event) *components.HookIngestSession {
 		Model:             optStr(base.Session.Model),
 		TranscriptCapture: nil,
 	}
-	// Inside the Cowork VM the Stop hook ships the session transcript, which
-	// is the one writer of its chat rows. Per-event hooks still go to the
-	// server for policy and telemetry, flagged so they store no rows.
+	// Inside the Cowork VM the Stop hook also ships the session transcript.
+	// The flag tells the server to key this event's row by the id the
+	// transcript shares, so the two never store a message twice.
 	if coworkTranscriptMode(base) {
 		s.TranscriptCapture = new(true)
 	}

@@ -278,8 +278,22 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 
 	hookSource := conv.Default(s.claudeSessionSurface(ctx, &metadata), agentVariantCowork)
 	chatID := sessionIDToUUID(upload.SessionID)
-	if err := s.ensureHookChat(ctx, s.repo, &metadata, chatID, projectID, claudeTranscriptTitle(rows, hookSource)); err != nil {
-		return none, err
+	stored, err := s.writeClaudeRows(ctx, authCtx, &metadata, chatID, rows, hookSource, claudeTranscriptOrigin, claudeTranscriptTitle(rows, hookSource))
+	if err != nil {
+		return claudeTranscriptPersisted{stored: stored, metadata: metadata, rows: nil}, err
+	}
+	return claudeTranscriptPersisted{stored: stored, metadata: metadata, rows: rows}, nil
+}
+
+// writeClaudeRows stores Claude conversation rows keyed by external message id
+// and returns how many were new. A row whose key the chat already holds is
+// skipped by the (chat_id, external_message_id) unique index, which is what
+// lets the Cowork per-event hooks and the transcript both write a message
+// without storing it twice.
+func (s *Service) writeClaudeRows(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, chatID uuid.UUID, rows []claudeTranscriptRow, hookSource, origin, title string) (int64, error) {
+	projectID := *authCtx.ProjectID
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, title); err != nil {
+		return 0, err
 	}
 
 	writes := make([]chat.ExternalMessageWrite, 0, len(rows))
@@ -310,7 +324,7 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 				PromptTokens:     0,
 				CompletionTokens: 0,
 				TotalTokens:      0,
-				Origin:           conv.ToPGText(claudeTranscriptOrigin),
+				Origin:           conv.ToPGTextEmpty(origin),
 				UserAgent:        conv.ToPGTextEmpty(""),
 				IpAddress:        conv.ToPGTextEmpty(""),
 				Source:           conv.ToPGTextEmpty(hookSource),
@@ -331,12 +345,12 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 
 	stored, err := s.writer.WriteExternalWithContentParts(ctx, projectID, writes, nil)
 	if err != nil {
-		return claudeTranscriptPersisted{stored: stored, metadata: metadata, rows: nil}, fmt.Errorf("write claude transcript messages: %w", err)
+		return stored, fmt.Errorf("write claude conversation rows: %w", err)
 	}
 	if stored > 0 && assistantTurn {
 		s.scheduleCanonicalChatTitle(ctx, authCtx, chatID, hookSource)
 	}
-	return claudeTranscriptPersisted{stored: stored, metadata: metadata, rows: rows}, nil
+	return stored, nil
 }
 
 // claudeTranscriptPayload projects the upload onto a canonical ingest payload
@@ -396,7 +410,10 @@ type claudeTranscriptLine struct {
 	IsSidechain      bool   `json:"isSidechain"`
 	IsMeta           bool   `json:"isMeta"`
 	IsCompactSummary bool   `json:"isCompactSummary"`
-	Message          struct {
+	// PromptID is Claude Code's id for the user turn, the same value the
+	// UserPromptSubmit hook reports as prompt_id.
+	PromptID string `json:"promptId"`
+	Message  struct {
 		ID      string          `json:"id"`
 		Model   string          `json:"model"`
 		Content json.RawMessage `json:"content"`
@@ -426,10 +443,12 @@ type claudeTranscriptToolFunction struct {
 
 // claudeTranscriptRow is one chat row derived from a transcript entry.
 type claudeTranscriptRow struct {
-	externalID   string
-	role         string
-	content      string
-	toolCallID   string
+	externalID string
+	role       string
+	content    string
+	toolCallID string
+	// toolUseID is the id of the tool call an assistant tool_use row carries.
+	toolUseID    string
 	toolCalls    []byte
 	finishReason string
 	model        string
@@ -477,6 +496,11 @@ func claudeTranscriptRows(entries []json.RawMessage, now time.Time) []claudeTran
 			row.externalID = base
 			if len(entryRows) > 1 {
 				row.externalID = fmt.Sprintf("%s/block:%d", base, i)
+			}
+			// Prompts and tool traffic use the ids the per-event hooks report
+			// too, so whichever path writes first owns the row.
+			if key := claudeSharedRowKey(*row, line.PromptID); key != "" {
+				row.externalID = key
 			}
 			// Rows split from one entry keep their order at the entry's time.
 			row.createdAt = createdAt.Add(time.Duration(i) * time.Microsecond)
@@ -527,6 +551,7 @@ func claudeTranscriptEntryRows(line claudeTranscriptLine, blocks []claudeTranscr
 				continue
 			}
 			row := claudeTranscriptBaseRow(line, "assistant")
+			row.toolUseID = conv.StripNUL(block.ID)
 			row.toolCalls = calls
 			row.finishReason = "tool_calls"
 			rows = append(rows, row)
@@ -559,6 +584,7 @@ func claudeTranscriptBaseRow(line claudeTranscriptLine, role string) claudeTrans
 		role:         role,
 		content:      "",
 		toolCallID:   "",
+		toolUseID:    "",
 		toolCalls:    nil,
 		finishReason: "",
 		model:        "",

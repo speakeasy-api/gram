@@ -519,7 +519,7 @@
         },
         "blocking": {
           "status": "supported",
-          "note": "per-event hooks enforce; the transcript stores the rows",
+          "note": "per-event hooks enforce, as in Claude Code",
           "verify": true
         },
         "mcp-redaction": {

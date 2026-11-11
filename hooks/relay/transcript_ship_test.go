@@ -445,12 +445,12 @@ func TestCoworkKeepsChunkWithoutAcknowledgement(t *testing.T) {
 	require.Equal(t, entryUUIDs(t, uploads[0]), entryUUIDs(t, uploads[1]))
 }
 
-// TestCoworkGatesEventsWithoutCapture: inside the Cowork VM the transcript
-// shipped from Stop is the one writer of the session's chat rows, but prompt,
-// tool and permission events still reach the server so policy is enforced in
-// real time. Their envelopes carry transcript_capture so the server stores no
-// rows from them; the observe-only events stay local.
-func TestCoworkGatesEventsWithoutCapture(t *testing.T) {
+// TestCoworkRelaysGatedEvents: inside the Cowork VM, prompt, tool and
+// permission events reach the server as in Claude Code, so policy is enforced
+// in real time. Their envelopes carry transcript_capture so the server keys
+// their rows by the ids the shipped transcript shares; the observe-only events
+// stay local.
+func TestCoworkRelaysGatedEvents(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	fs := newFakeServer(t, func(p components.IngestRequestBody) (int, decision) {
 		if p.Event.Type == components.TypeToolRequested {
@@ -483,7 +483,7 @@ func TestCoworkGatesEventsWithoutCapture(t *testing.T) {
 	defer fs.mu.Unlock()
 	for _, req := range fs.requests {
 		require.NotNil(t, req.Session)
-		require.Equal(t, true, *req.Session.TranscriptCapture, "Cowork events must not write chat rows")
+		require.Equal(t, true, *req.Session.TranscriptCapture, "Cowork events share their row keys with the transcript")
 	}
 }
 
