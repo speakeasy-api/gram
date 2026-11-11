@@ -61,7 +61,7 @@ func recordDenial(ctx context.Context, err error) {
 	}
 	kind := denied.Selector[SelectorKeyResourceKind]
 	if kind == "" {
-		kind = ResourceKindForScope(denied.Scope)
+		kind = denied.Scope.ResourceKind()
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()

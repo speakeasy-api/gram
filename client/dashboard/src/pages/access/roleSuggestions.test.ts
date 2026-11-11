@@ -46,7 +46,7 @@ function def(
   };
 }
 
-// The inclusions are a hand-written subset of the server's scopeExpansions;
+// The inclusions are a hand-written subset of the server catalogue's inclusion graph;
 // the server's catalog tests guard the full graph.
 const catalogue = scopeCatalogue([
   def("org:read"),

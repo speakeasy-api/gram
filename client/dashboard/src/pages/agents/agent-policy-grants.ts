@@ -51,7 +51,7 @@ export function agentPolicyUnrestrictedLabel(kind: string | undefined): string {
 
 /**
  * The resource kind a scope's selectors must carry. Mirrors
- * `ResourceKindForScope` in server/internal/authz/selector.go, which derives it
+ * `Scope.ResourceKind` in server/internal/authz/catalog.go, which derives it
  * from the scope; `ValidateSelector` rejects a selector that disagrees.
  * mcp:auth grants are deliberately unrepresentable here until the auth client
  * editor exists, so stored ones are preserved and locked.

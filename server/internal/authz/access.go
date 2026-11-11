@@ -46,14 +46,14 @@ func (c Check) matchesAllowSelector(selector Selector) bool {
 // isAuthClientCheck reports whether c targets an auth client. Those checks
 // always match strictly, so a grant constraint the check omits never matches.
 func (c Check) isAuthClientCheck() bool {
-	return c.ResourceKind == ResourceKindMCPAuthClient || ResourceKindForScope(c.Scope) == ResourceKindMCPAuthClient
+	return c.ResourceKind == ResourceKindMCPAuthClient || c.Scope.ResourceKind() == ResourceKindMCPAuthClient
 }
 
 // selector converts the check into a Selector for matching against grant selectors.
 func (c Check) selector() Selector {
 	kind := c.ResourceKind
 	if kind == "" {
-		kind = ResourceKindForScope(c.Scope)
+		kind = c.Scope.ResourceKind()
 	}
 	s := Selector{
 		SelectorKeyResourceKind: kind,
@@ -95,7 +95,7 @@ func (c Check) expand() []Check {
 		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser},
 	}
 	// Additional scopes that also satisfy this check.
-	for _, s := range scopeExpansions[c.Scope] {
+	for _, s := range c.Scope.satisfiedBy() {
 		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser})
 	}
 	// Root administers everything but uses no auth client.

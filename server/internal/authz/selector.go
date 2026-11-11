@@ -146,17 +146,14 @@ func selectorValueMatches(key, grantVal, checkVal, representedUser string) bool 
 		(checkVal == SelectorValueRepresentedUser && grantVal == representedUser)
 }
 
-// ResourceKindForScope derives the selector resource kind from a scope.
-func ResourceKindForScope(scope Scope) string {
-	if scope == ScopeMCPAuth || scope == ScopeMCPBlockedAuth {
-		return ResourceKindMCPAuthClient
-	}
+// resourceKindForUnregisteredScope keeps answering for scope names the
+// catalogue does not define, such as the retired remote-mcp:* family, by
+// their resource prefix.
+func resourceKindForUnregisteredScope(scope Scope) string {
 	switch scope.Parts().Resource {
 	case "project", "plugin", "log":
 		return ResourceKindProject
-	case "remote-mcp":
-		return ResourceKindMCP
-	case "mcp":
+	case "remote-mcp", "mcp":
 		return ResourceKindMCP
 	case "org":
 		return ResourceKindOrg
@@ -248,7 +245,7 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		return fmt.Errorf("selector must include both resource_kind and resource_id")
 	}
 
-	expectedKind := ResourceKindForScope(scope)
+	expectedKind := scope.ResourceKind()
 	if scope == ScopeRoot {
 		if kind != ResourceKindWildcard {
 			return fmt.Errorf("root scope requires resource_kind=%s, got %q", ResourceKindWildcard, kind)
@@ -316,7 +313,7 @@ func ValidateSelector(scope Scope, sel Selector) error {
 // NewSelector creates a selector with resource_kind derived from scope.
 func NewSelector(scope Scope, resourceID string) Selector {
 	return Selector{
-		SelectorKeyResourceKind: ResourceKindForScope(scope),
+		SelectorKeyResourceKind: scope.ResourceKind(),
 		SelectorKeyResourceID:   resourceID,
 	}
 }

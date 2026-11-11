@@ -8,7 +8,7 @@ const knownScopes: ReadonlySet<string> = new Set(Object.values(Scope));
 
 /**
  * Derive the resource kind from a scope's family prefix.
- * Mirrors the server-side ResourceKindForScope in authz/selector.go.
+ * Mirrors the server-side Scope.ResourceKind in authz/catalog.go.
  * mcp:auth is not checkable client-side: the server binds the connection owner.
  */
 export function resourceKindForScope(scope: string): string {
@@ -76,7 +76,7 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   // The mcp:blocked_* scopes are independent of one another, unlike the
   // other families: connecting to a server and administering it are
   // different jobs, so a block on one takes nothing from the others. Mirrors
-  // scopeExpansions in server/internal/authz/scopes.go.
+  // the scope catalogue in server/internal/authz/catalog.go.
   "mcp:read": ["mcp:blocked_read"],
   "mcp:write": ["mcp:blocked_write"],
   "mcp:connect": ["mcp:blocked_connect"],

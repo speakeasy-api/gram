@@ -50,16 +50,16 @@ func personalClientCheck(owner string) Check {
 func TestMCPAuthScopesUseAuthClientResourceKind(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, ResourceKindMCPAuthClient, ResourceKindForScope(ScopeMCPAuth))
-	require.Equal(t, ResourceKindMCPAuthClient, ResourceKindForScope(ScopeMCPBlockedAuth))
-	require.Equal(t, ResourceKindMCP, ResourceKindForScope(ScopeMCPConnect))
+	require.Equal(t, ResourceKindMCPAuthClient, ScopeMCPAuth.ResourceKind())
+	require.Equal(t, ResourceKindMCPAuthClient, ScopeMCPBlockedAuth.ResourceKind())
+	require.Equal(t, ResourceKindMCP, ScopeMCPConnect.ResourceKind())
 
-	exclusion, ok := ExclusionScopeFor(ScopeMCPAuth)
+	exclusion, ok := ScopeMCPAuth.BlockedBy()
 	require.True(t, ok)
 	require.Equal(t, ScopeMCPBlockedAuth, exclusion)
-	require.Equal(t, []Scope{ScopeMCPAuth}, ScopeImplicationClosure(ScopeMCPAuth))
+	require.Equal(t, []Scope{ScopeMCPAuth}, ScopeMCPAuth.ImpliedScopes())
 	for _, scope := range []Scope{ScopeMCPConnect, ScopeMCPWrite, ScopeOrgAdmin} {
-		require.NotContains(t, ScopeImplicationClosure(scope), ScopeMCPAuth, "%s must not imply mcp:auth", scope)
+		require.NotContains(t, scope.ImpliedScopes(), ScopeMCPAuth, "%s must not imply mcp:auth", scope)
 	}
 }
 

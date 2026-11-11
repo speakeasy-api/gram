@@ -344,11 +344,11 @@ func (s *Service) ListAgentPolicyScopes(ctx context.Context, _ *gen.ListAgentPol
 
 func scopeDefinition(entry authz.ScopeEntry) *gen.ScopeDefinition {
 	var exclusionScope *string
-	if exclusion, ok := authz.ExclusionScopeFor(entry.Scope); ok {
+	if exclusion, ok := entry.Scope.BlockedBy(); ok {
 		exclusionScopeValue := string(exclusion)
 		exclusionScope = &exclusionScopeValue
 	}
-	visibility, ok := authz.ScopeVisibilityFor(entry.Scope)
+	visibility, ok := entry.Scope.Visibility()
 	if !ok {
 		visibility = authz.ScopeVisibilityInternal
 	}

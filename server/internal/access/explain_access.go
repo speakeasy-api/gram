@@ -245,7 +245,7 @@ func effectiveToolAccess(grants []authz.Grant, check authz.Check, explanation au
 
 func selectorReachesMCP(selector authz.Selector, check authz.Check) bool {
 	for key, want := range map[string]string{
-		authz.SelectorKeyResourceKind: authz.ResourceKindForScope(check.Scope),
+		authz.SelectorKeyResourceKind: check.Scope.ResourceKind(),
 		authz.SelectorKeyResourceID:   check.ResourceID,
 		authz.SelectorKeyProjectID:    check.Dimensions[authz.SelectorKeyProjectID],
 	} {

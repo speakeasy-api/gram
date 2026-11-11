@@ -17,43 +17,6 @@ func TestScopeParts(t *testing.T) {
 	require.Equal(t, ScopeParts{Resource: "root", Action: ""}, ScopeRoot.Parts())
 }
 
-func TestUserVisibleScopesCoverDefinedPublicScopes(t *testing.T) {
-	t.Parallel()
-
-	seen := make(map[Scope]struct{}, len(scopeVisibilityByScope))
-	for scope, visibility := range scopeVisibilityByScope {
-		if visibility != scopeVisibilityUserVisible {
-			continue
-		}
-		require.NotEqual(t, ScopeRoot, scope)
-		require.Contains(t, scopeExpansions, scope)
-		require.NotContains(t, seen, scope)
-		seen[scope] = struct{}{}
-	}
-
-	for scope := range scopeExpansions {
-		if scope == ScopeRoot {
-			continue
-		}
-		if scopeVisibilityByScope[scope] == scopeVisibilityInternal {
-			continue
-		}
-		require.Contains(t, seen, scope)
-	}
-}
-
-func TestScopeVisibilityCoversKnownScopes(t *testing.T) {
-	t.Parallel()
-
-	for scope := range scopeExpansions {
-		if scope == ScopeRoot {
-			continue
-		}
-
-		require.Contains(t, scopeVisibilityByScope, scope)
-	}
-}
-
 func TestAgentManagementScopesAreIndependent(t *testing.T) {
 	t.Parallel()
 
@@ -80,7 +43,7 @@ func TestDeviceAgentScopesAreSatisfiedByOrgAdminOnly(t *testing.T) {
 		check := Check{Scope: scope, ResourceID: "org_123"}
 		require.True(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgAdmin, "org_123")}, check), scope)
 		require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgRead, "org_123")}, check), scope)
-		require.Equal(t, []Scope{scope}, ScopeImplicationClosure(scope))
+		require.Equal(t, []Scope{scope}, scope.ImpliedScopes())
 		require.False(t, GrantsSatisfy([]Grant{NewGrant(scope, "org_123")}, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}))
 	}
 	require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgDeviceAgentSync, "org_123")}, Check{Scope: ScopeOrgHooksIngest, ResourceID: "org_123"}))
@@ -110,37 +73,37 @@ func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		exclusion, ok := ExclusionScopeFor(tc.scope)
+		exclusion, ok := tc.scope.BlockedBy()
 		require.True(t, ok)
 		require.Equal(t, tc.expected, exclusion)
 	}
 
-	_, ok := ExclusionScopeFor(ScopeRiskPolicyBypass)
+	_, ok := ScopeRiskPolicyBypass.BlockedBy()
 	require.False(t, ok)
 }
 
 func TestBlocklistScopeExpansions(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, []Scope{ScopeOrgBlockedRead}, scopeExpansions[ScopeOrgBlockedAdmin])
-	require.Equal(t, []Scope{ScopeProjectBlockedRead}, scopeExpansions[ScopeProjectBlockedWrite])
+	require.Equal(t, []Scope{ScopeOrgBlockedRead}, ScopeOrgBlockedAdmin.satisfiedBy())
+	require.Equal(t, []Scope{ScopeProjectBlockedRead}, ScopeProjectBlockedWrite.satisfiedBy())
 	// The mcp:blocked_* scopes are the exception: they are independent of
 	// one another, so a block on connect leaves view and manage standing.
 	// Connecting to a server and administering it are different jobs.
-	require.Nil(t, scopeExpansions[ScopeMCPBlockedConnect])
-	require.Nil(t, scopeExpansions[ScopeMCPBlockedRead])
-	require.Nil(t, scopeExpansions[ScopeMCPBlockedWrite])
-	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExpansions[ScopeEnvironmentBlockedWrite])
-	require.Equal(t, []Scope{ScopeSkillBlockedRead}, scopeExpansions[ScopeSkillBlockedWrite])
-	require.Equal(t, []Scope{ScopeAssistantBlockedRead}, scopeExpansions[ScopeAssistantBlockedWrite])
+	require.Nil(t, ScopeMCPBlockedConnect.satisfiedBy())
+	require.Nil(t, ScopeMCPBlockedRead.satisfiedBy())
+	require.Nil(t, ScopeMCPBlockedWrite.satisfiedBy())
+	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, ScopeEnvironmentBlockedWrite.satisfiedBy())
+	require.Equal(t, []Scope{ScopeSkillBlockedRead}, ScopeSkillBlockedWrite.satisfiedBy())
+	require.Equal(t, []Scope{ScopeAssistantBlockedRead}, ScopeAssistantBlockedWrite.satisfiedBy())
 }
 
 func TestCalculateSubScopesExcludesInternalBlocklistScopes(t *testing.T) {
 	t.Parallel()
 
-	require.Empty(t, CalculateSubScopes(ScopeMCPBlockedConnect))
-	require.Empty(t, CalculateSubScopes(ScopeMCPBlockedRead))
-	require.Empty(t, CalculateSubScopes(ScopeProjectBlockedRead))
+	require.Empty(t, ScopeMCPBlockedConnect.SubScopes())
+	require.Empty(t, ScopeMCPBlockedRead.SubScopes())
+	require.Empty(t, ScopeProjectBlockedRead.SubScopes())
 }
 
 func TestSystemRoleAdminExcludesRiskPolicyScopes(t *testing.T) {
@@ -188,14 +151,14 @@ func TestLogReadNotImpliedByProjectOrOrgScopes(t *testing.T) {
 	t.Parallel()
 
 	for _, scope := range []Scope{ScopeProjectRead, ScopeProjectWrite, ScopeOrgRead, ScopeOrgAdmin} {
-		require.NotContains(t, ScopeImplicationClosure(scope), ScopeLogRead, scope)
+		require.NotContains(t, scope.ImpliedScopes(), ScopeLogRead, scope)
 	}
-	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeLogRead))
+	require.Equal(t, ResourceKindProject, ScopeLogRead.ResourceKind())
 }
 
 // environment:read is not a member default: environment values include secrets,
 // so viewing them must be granted explicitly via a custom role. Admins retain
-// environment:read/write via adminScopes.
+// environment:read/write as admin defaults.
 func TestSystemRoleMemberExcludesEnvironmentRead(t *testing.T) {
 	t.Parallel()
 
@@ -502,7 +465,7 @@ func TestFlattenRoleGrants_deduplicatesByScopeAndSelector(t *testing.T) {
 func TestScopeExpansions_isDAG(t *testing.T) {
 	t.Parallel()
 
-	for start := range scopeExpansions {
+	for _, start := range RegisteredScopes() {
 		inStack := make(map[Scope]bool)
 		visited := make(map[Scope]bool)
 		var hasCycle func(s Scope) bool
@@ -515,13 +478,13 @@ func TestScopeExpansions_isDAG(t *testing.T) {
 			}
 			visited[s] = true
 			inStack[s] = true
-			if slices.ContainsFunc(scopeExpansions[s], hasCycle) {
+			if slices.ContainsFunc(s.satisfiedBy(), hasCycle) {
 				return true
 			}
 			inStack[s] = false
 			return false
 		}
-		require.False(t, hasCycle(start), "cycle detected in scopeExpansions from scope %q", start)
+		require.False(t, hasCycle(start), "cycle detected in satisfiedBy from scope %q", start)
 	}
 }
 
@@ -550,7 +513,7 @@ func TestCalculateSubScopes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.scope, func(t *testing.T) {
 			t.Parallel()
-			got := CalculateSubScopes(Scope(tt.scope))
+			got := Scope(tt.scope).SubScopes()
 			require.Equal(t, tt.want, got)
 		})
 	}
@@ -559,15 +522,16 @@ func TestCalculateSubScopes(t *testing.T) {
 func TestCalculateSubScopes_inverseOfScopeExpansions(t *testing.T) {
 	t.Parallel()
 
-	for lower, highers := range scopeExpansions {
-		if scopeVisibilityByScope[lower] != scopeVisibilityUserVisible {
+	for _, entry := range scopeDefinitions {
+		lower := entry.Scope
+		if entry.visibility != scopeVisibilityUserVisible {
 			continue
 		}
-		for _, h := range highers {
-			if scopeVisibilityByScope[h] != scopeVisibilityUserVisible {
+		for _, h := range entry.satisfiedBy {
+			if scopeIndex[h].visibility != scopeVisibilityUserVisible {
 				continue
 			}
-			require.Contains(t, CalculateSubScopes(h), string(lower),
+			require.Contains(t, h.SubScopes(), string(lower),
 				"higher scope %q should imply lower scope %q", h, lower)
 		}
 	}
@@ -583,16 +547,16 @@ func TestWorkloadScopeShape(t *testing.T) {
 
 	// write satisfies read, as in the mcp and skill families, so a holder of
 	// workload:write never needs workload:read granted alongside it.
-	require.Equal(t, []Scope{ScopeWorkloadWrite}, scopeExpansions[ScopeWorkloadRead])
-	require.Nil(t, scopeExpansions[ScopeWorkloadWrite])
-	require.Equal(t, []Scope{ScopeWorkloadBlockedRead}, scopeExpansions[ScopeWorkloadBlockedWrite])
+	require.Equal(t, []Scope{ScopeWorkloadWrite}, ScopeWorkloadRead.satisfiedBy())
+	require.Nil(t, ScopeWorkloadWrite.satisfiedBy())
+	require.Equal(t, []Scope{ScopeWorkloadBlockedRead}, ScopeWorkloadBlockedWrite.satisfiedBy())
 
 	// Each verb has a blocklist twin, so an exception can be carved out of a
 	// wildcard grant the same way it can for every other resource.
-	blockedRead, ok := ExclusionScopeFor(ScopeWorkloadRead)
+	blockedRead, ok := ScopeWorkloadRead.BlockedBy()
 	require.True(t, ok)
 	require.Equal(t, ScopeWorkloadBlockedRead, blockedRead)
-	blockedWrite, ok := ExclusionScopeFor(ScopeWorkloadWrite)
+	blockedWrite, ok := ScopeWorkloadWrite.BlockedBy()
 	require.True(t, ok)
 	require.Equal(t, ScopeWorkloadBlockedWrite, blockedWrite)
 
@@ -601,8 +565,8 @@ func TestWorkloadScopeShape(t *testing.T) {
 	// large. It is deliberately the same string as urn.PrincipalTypeWorkload,
 	// which names the machine principal; the two never meet, because a
 	// selector's resource_kind is never compared against a principal type.
-	require.Equal(t, ResourceKindWorkload, ResourceKindForScope(ScopeWorkloadWrite))
-	require.Equal(t, ResourceKindWorkload, ResourceKindForScope(ScopeWorkloadRead))
+	require.Equal(t, ResourceKindWorkload, ScopeWorkloadWrite.ResourceKind())
+	require.Equal(t, ResourceKindWorkload, ScopeWorkloadRead.ResourceKind())
 }
 
 func TestWorkloadScopeIsAdminAndMemberDefault(t *testing.T) {
@@ -610,12 +574,12 @@ func TestWorkloadScopeIsAdminAndMemberDefault(t *testing.T) {
 
 	// Administrators configure workload identity, beside agent:authorize: both
 	// hand a machine an agent's authority.
-	require.True(t, slices.Contains(adminScopes, ScopeWorkloadRead))
-	require.True(t, slices.Contains(adminScopes, ScopeWorkloadWrite))
+	require.True(t, slices.Contains(SystemRoleScopes(SystemRoleAdmin), ScopeWorkloadRead))
+	require.True(t, slices.Contains(SystemRoleScopes(SystemRoleAdmin), ScopeWorkloadWrite))
 
 	// workload:read is a member default so that team members can view the Access
 	// Hub in preview deployments. workload:write remains admin-only since it
 	// allows granting machine access.
-	require.True(t, slices.Contains(memberScopes, ScopeWorkloadRead))
-	require.False(t, slices.Contains(memberScopes, ScopeWorkloadWrite))
+	require.True(t, slices.Contains(SystemRoleScopes(SystemRoleMember), ScopeWorkloadRead))
+	require.False(t, slices.Contains(SystemRoleScopes(SystemRoleMember), ScopeWorkloadWrite))
 }

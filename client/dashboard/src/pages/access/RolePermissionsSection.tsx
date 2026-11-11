@@ -37,7 +37,7 @@ export interface ScopeGroup {
 /**
  * MCP permissions for administering servers rather than using them. They sit
  * under Platform access, but each still lets its holder connect to the servers
- * it covers with every tool (scopeExpansions in server/internal/authz/scopes.go).
+ * it covers with every tool (the scope catalogue in server/internal/authz/catalog.go).
  */
 const MCP_ADMIN_SCOPES: ReadonlySet<string> = new Set([
   "mcp:read",

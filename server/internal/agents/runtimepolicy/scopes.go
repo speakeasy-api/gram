@@ -149,7 +149,7 @@ func ValidateRuntimeScope(version RuntimeScopeRegistryVersion, scope authz.Scope
 		return fmt.Errorf("unsupported agent runtime scope registry version %d", version)
 	}
 
-	for _, implied := range authz.ScopeImplicationClosure(scope) {
+	for _, implied := range scope.ImpliedScopes() {
 		definition, ok := runtimeScopeDefinitions[implied]
 		if !ok {
 			return fmt.Errorf("scope %q is not registered", implied)

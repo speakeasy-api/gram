@@ -268,7 +268,7 @@ func delegatedPolicyClosure(requested []DelegatedPolicyGrant) ([]DelegatedPolicy
 	effective := make([]DelegatedPolicyGrant, 0, len(requested))
 	seen := make(map[string]struct{}, len(requested))
 	for _, grant := range requested {
-		for _, scope := range authz.ScopeImplicationClosure(grant.Scope) {
+		for _, scope := range grant.Scope.ImpliedScopes() {
 			implied := DelegatedPolicyGrant{Scope: scope, Selector: cloneSelector(grant.Selector)}
 			key, err := delegatedPolicyGrantKey(implied)
 			if err != nil {

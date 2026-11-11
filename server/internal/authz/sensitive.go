@@ -78,7 +78,7 @@ func (c *coverage) covers(other *coverage) bool {
 func impliedCoverage(held []ScopeCoverage) map[Scope]*coverage {
 	implied := make(map[Scope]*coverage, len(held))
 	for _, holding := range held {
-		for _, satisfied := range ScopeImplicationClosure(holding.Scope) {
+		for _, satisfied := range holding.Scope.ImpliedScopes() {
 			reach, ok := implied[satisfied]
 			if !ok {
 				reach = &coverage{unrestricted: false, restricted: make(map[string]struct{})}

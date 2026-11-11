@@ -40,11 +40,11 @@ func TestScopeCatalog_EntriesAreComplete(t *testing.T) {
 		require.Contains(t, ScopeCategories, entry.Category, "%s: category", entry.Scope)
 		require.NotEmpty(t, entry.ResourceType, "%s: resource type", entry.Scope)
 
-		surface, ok := GrantSurfaceForScope(entry.Scope)
+		surface, ok := entry.Scope.GrantSurface()
 		require.True(t, ok, "%s: grant surface", entry.Scope)
 		require.NotEmpty(t, surface)
 
-		visibility, ok := ScopeVisibilityFor(entry.Scope)
+		visibility, ok := entry.Scope.Visibility()
 		require.True(t, ok)
 		if visibility == ScopeVisibilityInternal {
 			require.True(t, strings.HasPrefix(entry.Label, "Exception: "), "%s: internal scopes are labelled as exceptions", entry.Scope)
@@ -131,7 +131,7 @@ func TestScopeNames_FollowTheCatalogue(t *testing.T) {
 	slices.Sort(sorted)
 	require.Len(t, slices.Compact(sorted), len(exclusions), "each exclusion scope is listed once")
 	for _, entry := range scopeCatalog {
-		exclusion, ok := ExclusionScopeFor(entry.Scope)
+		exclusion, ok := entry.Scope.BlockedBy()
 		if ok {
 			require.Contains(t, exclusions, string(exclusion), "%s: exclusion scope missing", entry.Scope)
 		}
@@ -170,4 +170,67 @@ func TestScopeCategories_AreDistinct(t *testing.T) {
 	sorted := slices.Clone(ScopeCategories)
 	slices.Sort(sorted)
 	require.Len(t, slices.Compact(sorted), len(ScopeCategories))
+}
+
+// Every exception scope must withdraw something: be the blockedBy of an allow
+// scope, or satisfy a narrower exception scope that is. An exception scope
+// nobody reaches would store grants the engine never reads.
+func TestScopeCatalog_ExceptionScopesAreReachable(t *testing.T) {
+	t.Parallel()
+
+	reached := make(map[Scope]bool)
+	for _, entry := range scopeDefinitions {
+		if entry.blockedBy != "" {
+			reached[entry.blockedBy] = true
+		}
+	}
+	for _, entry := range scopeDefinitions {
+		if reached[entry.Scope] {
+			for _, broader := range entry.satisfiedBy {
+				reached[broader] = true
+			}
+		}
+	}
+
+	for _, entry := range scopeCatalog {
+		if entry.visibility == scopeVisibilityInternal {
+			require.True(t, reached[entry.Scope], "%s: exception scope withdraws nothing", entry.Scope)
+		}
+		if entry.blockedBy != "" {
+			_, ok := ScopeEntryFor(entry.blockedBy)
+			require.True(t, ok, "%s: blockedBy %s is not catalogued", entry.Scope, entry.blockedBy)
+		}
+		for _, satisfying := range entry.satisfiedBy {
+			_, ok := ScopeEntryFor(satisfying)
+			require.True(t, ok, "%s: satisfiedBy %s is not catalogued", entry.Scope, satisfying)
+		}
+	}
+}
+
+// Resource kinds are data on each entry. Today they agree with the scope's
+// prefix everywhere except the auth-client scopes, which are checked against
+// the client rather than a server. A new disagreement must be deliberate.
+func TestScopeCatalog_ResourceTypeFollowsPrefixExceptAuthClients(t *testing.T) {
+	t.Parallel()
+
+	for _, entry := range scopeDefinitions {
+		if entry.Scope == ScopeMCPAuth || entry.Scope == ScopeMCPBlockedAuth {
+			require.Equal(t, ResourceKindMCPAuthClient, entry.ResourceType, entry.Scope)
+			continue
+		}
+		require.Equal(t, resourceKindForUnregisteredScope(entry.Scope), entry.ResourceType, entry.Scope)
+	}
+}
+
+// Root is registered so stored root grants evaluate, but it is never listed.
+func TestScopeCatalog_RootIsRegisteredButNotCatalogued(t *testing.T) {
+	t.Parallel()
+
+	require.Contains(t, RegisteredScopes(), ScopeRoot)
+	_, ok := ScopeEntryFor(ScopeRoot)
+	require.False(t, ok)
+	visibility, ok := ScopeRoot.Visibility()
+	require.True(t, ok)
+	require.Equal(t, ScopeVisibilityInternal, visibility)
+	require.Equal(t, ResourceKindWildcard, ScopeRoot.ResourceKind())
 }

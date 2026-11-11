@@ -198,76 +198,76 @@ func TestSelector_UnmarshalJSON(t *testing.T) {
 func TestResourceKindForScope_buildScopes(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "project", ResourceKindForScope(ScopeProjectRead))
-	require.Equal(t, "project", ResourceKindForScope(ScopeProjectBlockedRead))
-	require.Equal(t, "project", ResourceKindForScope(ScopeProjectWrite))
-	require.Equal(t, "project", ResourceKindForScope(ScopeProjectBlockedWrite))
+	require.Equal(t, "project", ScopeProjectRead.ResourceKind())
+	require.Equal(t, "project", ScopeProjectBlockedRead.ResourceKind())
+	require.Equal(t, "project", ScopeProjectWrite.ResourceKind())
+	require.Equal(t, "project", ScopeProjectBlockedWrite.ResourceKind())
 }
 
 func TestResourceKindForScope_mcpScopes(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPRead))
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPBlockedRead))
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPWrite))
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPBlockedWrite))
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPConnect))
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPBlockedConnect))
+	require.Equal(t, "mcp", ScopeMCPRead.ResourceKind())
+	require.Equal(t, "mcp", ScopeMCPBlockedRead.ResourceKind())
+	require.Equal(t, "mcp", ScopeMCPWrite.ResourceKind())
+	require.Equal(t, "mcp", ScopeMCPBlockedWrite.ResourceKind())
+	require.Equal(t, "mcp", ScopeMCPConnect.ResourceKind())
+	require.Equal(t, "mcp", ScopeMCPBlockedConnect.ResourceKind())
 }
 
 func TestResourceKindForScope_remoteMCPScopes(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "mcp", ResourceKindForScope(Scope("remote-mcp:read")))
-	require.Equal(t, "mcp", ResourceKindForScope(Scope("remote-mcp:write")))
-	require.Equal(t, "mcp", ResourceKindForScope(Scope("remote-mcp:connect")))
+	require.Equal(t, "mcp", Scope("remote-mcp:read").ResourceKind())
+	require.Equal(t, "mcp", Scope("remote-mcp:write").ResourceKind())
+	require.Equal(t, "mcp", Scope("remote-mcp:connect").ResourceKind())
 }
 
 func TestResourceKindForScope_orgScopes(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "org", ResourceKindForScope(ScopeOrgRead))
-	require.Equal(t, "org", ResourceKindForScope(ScopeOrgBlockedRead))
-	require.Equal(t, "org", ResourceKindForScope(ScopeOrgAdmin))
-	require.Equal(t, "org", ResourceKindForScope(ScopeOrgBlockedAdmin))
+	require.Equal(t, "org", ScopeOrgRead.ResourceKind())
+	require.Equal(t, "org", ScopeOrgBlockedRead.ResourceKind())
+	require.Equal(t, "org", ScopeOrgAdmin.ResourceKind())
+	require.Equal(t, "org", ScopeOrgBlockedAdmin.ResourceKind())
 }
 
 func TestResourceKindForScope_rootScope(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "*", ResourceKindForScope(ScopeRoot))
+	require.Equal(t, "*", ScopeRoot.ResourceKind())
 }
 
 func TestResourceKindForScope_riskPolicyScope(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, ResourceKindRiskPolicy, ResourceKindForScope(ScopeRiskPolicyEvaluate))
-	require.Equal(t, ResourceKindRiskPolicy, ResourceKindForScope(ScopeRiskPolicyBypass))
+	require.Equal(t, ResourceKindRiskPolicy, ScopeRiskPolicyEvaluate.ResourceKind())
+	require.Equal(t, ResourceKindRiskPolicy, ScopeRiskPolicyBypass.ResourceKind())
 }
 
 func TestResourceKindForScope_environmentScopes(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentRead))
-	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentBlockedRead))
-	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentWrite))
-	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentBlockedWrite))
+	require.Equal(t, ResourceKindEnvironment, ScopeEnvironmentRead.ResourceKind())
+	require.Equal(t, ResourceKindEnvironment, ScopeEnvironmentBlockedRead.ResourceKind())
+	require.Equal(t, ResourceKindEnvironment, ScopeEnvironmentWrite.ResourceKind())
+	require.Equal(t, ResourceKindEnvironment, ScopeEnvironmentBlockedWrite.ResourceKind())
 }
 
 func TestResourceKindForScope_skillScopes(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillRead))
-	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillBlockedRead))
-	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillWrite))
-	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillBlockedWrite))
+	require.Equal(t, ResourceKindSkill, ScopeSkillRead.ResourceKind())
+	require.Equal(t, ResourceKindSkill, ScopeSkillBlockedRead.ResourceKind())
+	require.Equal(t, ResourceKindSkill, ScopeSkillWrite.ResourceKind())
+	require.Equal(t, ResourceKindSkill, ScopeSkillBlockedWrite.ResourceKind())
 }
 
 func TestResourceKindForScope_agentScopes(t *testing.T) {
 	t.Parallel()
 
 	for _, scope := range []Scope{ScopeAgentRead, ScopeAgentWrite, ScopeAgentAuthorize, ScopeAgentTransfer} {
-		require.Equal(t, ResourceKindAgent, ResourceKindForScope(scope))
+		require.Equal(t, ResourceKindAgent, scope.ResourceKind())
 	}
 }
 
@@ -287,10 +287,10 @@ func TestValidateSelector_agentRequiresAgentResourceKind(t *testing.T) {
 func TestResourceKindForScope_assistantScopes(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantRead))
-	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantBlockedRead))
-	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantWrite))
-	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantBlockedWrite))
+	require.Equal(t, ResourceKindAssistant, ScopeAssistantRead.ResourceKind())
+	require.Equal(t, ResourceKindAssistant, ScopeAssistantBlockedRead.ResourceKind())
+	require.Equal(t, ResourceKindAssistant, ScopeAssistantWrite.ResourceKind())
+	require.Equal(t, ResourceKindAssistant, ScopeAssistantBlockedWrite.ResourceKind())
 }
 
 func TestValidateSelector_assistantUsesProjectIDWithAssistantResourceKind(t *testing.T) {

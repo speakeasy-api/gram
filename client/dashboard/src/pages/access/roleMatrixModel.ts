@@ -33,7 +33,7 @@ export const LEVEL_LABEL: Record<Level, string> = {
   manage: "Manage",
 };
 
-/** The MCP scope each level stores as (scopeExpansions in authz/scopes.go). */
+/** The MCP scope each level stores as (the scope catalogue in authz/catalog.go). */
 const MCP_LEVEL_SCOPE: Record<Level, Scope> = {
   use: "mcp:connect" as Scope,
   view: "mcp:read" as Scope,
@@ -698,8 +698,8 @@ export function unblockPlatformScope(
 
 /**
  * The Blocked column for a platform row. A block on View also blocks Manage
- * (scopeExpansions), so blocking stores on View alone and takes back what the
- * row grants; unblocking takes back the blocks everywhere on both. Blocks on
+ * (satisfiedBy in the scope catalogue), so blocking stores on View alone and
+ * takes back what the row grants; unblocking takes back the blocks everywhere on both. Blocks on
  * some projects stay either way.
  */
 export function setPlatformBlocked(

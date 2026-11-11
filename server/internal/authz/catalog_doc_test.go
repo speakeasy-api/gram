@@ -53,7 +53,7 @@ func renderScopeTable(t *testing.T, entries []ScopeEntry) string {
 	header := []string{"Scope", "Label", "Category", "Visibility", "Sensitive", "Includes", "Description"}
 	rows := make([][]string, 0, len(entries))
 	for _, entry := range entries {
-		visibility, ok := ScopeVisibilityFor(entry.Scope)
+		visibility, ok := entry.Scope.Visibility()
 		require.True(t, ok, "%s: no visibility in the catalogue", entry.Scope)
 		sensitive := "no"
 		if entry.Sensitive() {

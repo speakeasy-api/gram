@@ -25,7 +25,7 @@ func (r Resource) Validate() error {
 	if r.ResourceID == "" {
 		return fmt.Errorf("resource id is required")
 	}
-	if ResourceKindForScope(r.Scope) == WildcardResource {
+	if r.Scope.ResourceKind() == WildcardResource {
 		return fmt.Errorf("scope %q does not map to a resource kind", r.Scope)
 	}
 
@@ -33,7 +33,7 @@ func (r Resource) Validate() error {
 }
 
 func (r Resource) Kind() string {
-	return ResourceKindForScope(r.Scope)
+	return r.Scope.ResourceKind()
 }
 
 // ResourceGrant describes grant changes for one resource-scoped permission and
@@ -362,7 +362,7 @@ func ListGrantsForResourceIDs(ctx context.Context, db repo.DBTX, organizationID 
 	if len(resourceIDs) == 0 {
 		return nil, nil
 	}
-	resourceKind := ResourceKindForScope(scope)
+	resourceKind := scope.ResourceKind()
 	if resourceKind == WildcardResource {
 		return nil, fmt.Errorf("scope %q does not map to a resource kind", scope)
 	}

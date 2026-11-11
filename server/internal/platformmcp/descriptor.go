@@ -313,7 +313,7 @@ func grantsAuthorizeAnyScope(grants []authz.Grant, organizationID string, scopes
 
 func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, scope authz.Scope) bool {
 	for _, grant := range grants {
-		if grant.Scope != authz.ScopeRoot && !slices.Contains(authz.ScopeImplicationClosure(grant.Scope), scope) {
+		if grant.Scope != authz.ScopeRoot && !slices.Contains(grant.Scope.ImpliedScopes(), scope) {
 			continue
 		}
 		resourceID := grant.Selector.ResourceID()

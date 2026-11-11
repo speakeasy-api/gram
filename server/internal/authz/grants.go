@@ -77,8 +77,8 @@ func GrantsAuthorize(grants []Grant, check Check) (bool, error) {
 // roles. These are seeded when an organization is provisioned. Existing grants
 // for a built-in role are preserved, and custom roles are never touched.
 var SystemRoleGrants = map[string][]*RoleGrant{
-	SystemRoleAdmin:  roleGrantsForScopes(adminScopes),
-	SystemRoleMember: roleGrantsForScopes(memberScopes),
+	SystemRoleAdmin:  roleGrantsForScopes(SystemRoleScopes(SystemRoleAdmin)),
+	SystemRoleMember: roleGrantsForScopes(SystemRoleScopes(SystemRoleMember)),
 }
 
 // SystemRoleAssistantGrants returns the assistant-kind grants from a built-in
@@ -86,7 +86,7 @@ var SystemRoleGrants = map[string][]*RoleGrant{
 func SystemRoleAssistantGrants(roleSlug string) []*RoleGrant {
 	var grants []*RoleGrant
 	for _, grant := range SystemRoleGrants[roleSlug] {
-		if ResourceKindForScope(Scope(grant.Scope)) == ResourceKindAssistant {
+		if Scope(grant.Scope).ResourceKind() == ResourceKindAssistant {
 			grants = append(grants, &RoleGrant{Scope: grant.Scope, Selectors: nil})
 		}
 	}
@@ -469,7 +469,7 @@ func buildScopedGrants(keys []string, grouped map[string]scopeAgg) []*ScopedGran
 	grants := make([]*ScopedGrant, 0, len(keys))
 	for _, key := range keys {
 		agg := grouped[key]
-		subScopes := CalculateSubScopes(Scope(key))
+		subScopes := Scope(key).SubScopes()
 
 		grant := &ScopedGrant{Scope: key, SubScopes: subScopes, Selectors: nil}
 		if !agg.unrestricted {
@@ -560,13 +560,13 @@ func grantMatchingCheck(grant *Grant, checks []Check) *Check {
 // give platform admins (e.g. during org impersonation) unrestricted access without
 // exposing internal blocklist storage scopes as standalone permissions.
 func allScopeGrants() []Grant {
-	grants := make([]Grant, 0, len(scopeVisibilityByScope))
-	for s, visibility := range scopeVisibilityByScope {
+	grants := make([]Grant, 0, len(scopeDefinitions))
+	for _, entry := range scopeDefinitions {
 		// Administering an organization implies no use of its auth clients.
-		if visibility != scopeVisibilityUserVisible || s == ScopeMCPAuth {
+		if entry.visibility != scopeVisibilityUserVisible || entry.Scope == ScopeMCPAuth {
 			continue
 		}
-		grants = append(grants, NewGrant(s, WildcardResource))
+		grants = append(grants, NewGrant(entry.Scope, WildcardResource))
 	}
 	return grants
 }

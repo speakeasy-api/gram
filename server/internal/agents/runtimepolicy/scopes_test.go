@@ -33,7 +33,7 @@ func TestRuntimeSafeScopesHaveSafeImplicationClosures(t *testing.T) {
 		t.Run(string(scope), func(t *testing.T) {
 			t.Parallel()
 			require.NoError(t, ValidateRuntimeScope(CurrentRuntimeScopeRegistryVersion, scope))
-			for _, implied := range authz.ScopeImplicationClosure(scope) {
+			for _, implied := range scope.ImpliedScopes() {
 				impliedDefinition, ok := runtimeScopeDefinitions[implied]
 				require.True(t, ok, "implication %q must remain registered", implied)
 				require.Equal(t, RuntimeScopeLifecycleActive, impliedDefinition.lifecycle)
@@ -98,9 +98,9 @@ func TestRuntimeScopeAllowlist(t *testing.T) {
 func TestRuntimeScopeImplicationClosure(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, []authz.Scope{authz.ScopeMCPConnect, authz.ScopeMCPRead, authz.ScopeMCPWrite}, authz.ScopeImplicationClosure(authz.ScopeMCPWrite))
-	require.Equal(t, []authz.Scope{authz.ScopeProjectRead, authz.ScopeProjectWrite}, authz.ScopeImplicationClosure(authz.ScopeProjectWrite))
-	require.Equal(t, []authz.Scope{authz.ScopeSkillRead}, authz.ScopeImplicationClosure(authz.ScopeSkillRead))
+	require.Equal(t, []authz.Scope{authz.ScopeMCPConnect, authz.ScopeMCPRead, authz.ScopeMCPWrite}, authz.ScopeMCPWrite.ImpliedScopes())
+	require.Equal(t, []authz.Scope{authz.ScopeProjectRead, authz.ScopeProjectWrite}, authz.ScopeProjectWrite.ImpliedScopes())
+	require.Equal(t, []authz.Scope{authz.ScopeSkillRead}, authz.ScopeSkillRead.ImpliedScopes())
 }
 
 func TestRetiredScopeTombstonesFailClosedIndependently(t *testing.T) {
