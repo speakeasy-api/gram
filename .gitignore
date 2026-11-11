@@ -106,6 +106,8 @@ __pycache__/
 
 # Traces, videos and screenshots from the e2e suite (mise run test:wake-stack)
 e2e/.playwright
+# Magellan explorer runs: findings, screenshots, transcripts (mise run magellan:explore)
+magellan/.runs
 
 # Riptide artifacts (cloud-synced)
 .humanlayer/tasks/
