@@ -174,6 +174,15 @@ func TestIngest_ShadowMCPBlockAllClassifiesServers(t *testing.T) {
 			inventory:       []MCPServerEntry{},
 			deviceInventory: []MCPServerEntry{{Source: "claude", Name: "linear", Command: "npx linear-mcp"}},
 		},
+		{name: "claude.ai connector without an inventory is denied", toolName: "mcp__claude_ai_Linear__list_issues", wantDenied: true},
+		{name: "plugin server missing from the inventory is denied", toolName: "mcp__plugin_slack_slack__send_message", inventory: []MCPServerEntry{}, wantDenied: true},
+		{
+			name:      "claude.ai connector resolved to a Speakeasy-hosted URL is allowed",
+			toolName:  "mcp__claude_ai_Team_tools__list_tools",
+			inventory: []MCPServerEntry{{Source: "claude.ai", Name: "Team tools", URL: builtinTestHostedURL}},
+		},
+		{name: "desktop terminal built-in without an inventory is allowed", toolName: "mcp__terminal__run_in_terminal"},
+		{name: "desktop visualize built-in without an inventory is allowed", toolName: "mcp__visualize__show_widget"},
 		{name: "built-in missing from the device copy is allowed", toolName: "mcp__ccd_turn__wrap_up", deviceInventory: []MCPServerEntry{{Source: "claude", Name: "linear"}}},
 		{
 			name:       "codex server whose tool prefix holds a double underscore is denied",
@@ -286,6 +295,16 @@ func TestClaude_PreToolUse_ShadowMCPBlockAllClassifiesServers(t *testing.T) {
 			want:      "allow",
 		},
 		{name: "connector without any inventory is denied", toolName: "mcp__" + builtinTestConnector + "__list_issues", want: "deny"},
+		{name: "claude.ai connector without any inventory is denied", toolName: "mcp__claude_ai_Linear__list_issues", want: "deny"},
+		{name: "plugin server missing from the inventory is denied", toolName: "mcp__plugin_slack_slack__send_message", inventory: []MCPServerEntry{}, want: "deny"},
+		{
+			name:      "plugin server configured with a Speakeasy-hosted URL is allowed",
+			toolName:  "mcp__plugin_team_team__list_tools",
+			inventory: []MCPServerEntry{{Source: "plugin", PluginName: "team", Name: "team", URL: builtinTestHostedURL}},
+			want:      "allow",
+		},
+		{name: "desktop scheduled tasks built-in without any inventory is allowed", toolName: "mcp__scheduled-tasks__list_scheduled_tasks", want: "allow"},
+		{name: "desktop registry built-in without any inventory is allowed", toolName: "mcp__mcp-registry__search_mcp_registry", want: "allow"},
 		{
 			name:            "server the device copy configures is denied without a session inventory",
 			toolName:        "mcp__linear__list_issues",
@@ -389,6 +408,8 @@ func TestCanonicalIngest_AgentBuiltinServerFindings(t *testing.T) {
 		{name: "known built-in with an inventory yields no finding", toolName: "mcp__claude-in-chrome__tabs_context_mcp", events: requested, inventory: []MCPServerEntry{}},
 		{name: "known built-in without an inventory yields no finding", toolName: "mcp__claude-in-chrome__tabs_context_mcp", events: requested},
 		{name: "unlisted built-in without an inventory yields no finding", toolName: "mcp__ccd_new_tool__run", events: requested},
+		{name: "claude.ai connector without an inventory is reported", toolName: "mcp__claude_ai_Linear__list_issues", events: requested, wantFinding: true},
+		{name: "plugin server missing from the inventory is reported", toolName: "mcp__plugin_slack_slack__send_message", events: requested, inventory: []MCPServerEntry{}, wantFinding: true},
 		{
 			name:     "vendor bundle command yields no finding",
 			toolName: "mcp__computer_use__click",

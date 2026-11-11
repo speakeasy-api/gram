@@ -93,6 +93,21 @@ func TestClassifyServer(t *testing.T) {
 			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindBuiltin, Evidence: shadowmcp.BuiltinEvidenceUnverified},
 		},
 		{
+			name:  "claude.ai connector prefix without an inventory",
+			facts: shadowmcp.ServerFacts{Name: "claude_ai_Linear"},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindInstalled},
+		},
+		{
+			name:  "plugin server prefix missing from the inventory",
+			facts: shadowmcp.ServerFacts{Name: "plugin_slack_slack", InventoryLoaded: true},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindInstalled},
+		},
+		{
+			name:  "claude.ai connector prefix with a resolved URL is judged by the URL",
+			facts: shadowmcp.ServerFacts{Name: "claude_ai_Linear", URL: "https://mcp.example.test/mcp", InventoryLoaded: true},
+			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindURL},
+		},
+		{
 			name:  "no server name",
 			facts: shadowmcp.ServerFacts{Name: "  ", InventoryLoaded: true},
 			want:  shadowmcp.Classification{Kind: shadowmcp.ServerKindUnidentified},
@@ -162,4 +177,31 @@ func TestCursorServerIdentifiers(t *testing.T) {
 	require.True(t, shadowmcp.IsCursorUserInstalledIdentifier("user-vendor.ext-Tracker"))
 	require.False(t, shadowmcp.IsCursorUserInstalledIdentifier("user-"))
 	require.False(t, shadowmcp.IsCursorServerIdentifier("Linear"))
+}
+
+func TestHasInstalledServerNamePrefix(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"claude_ai_Linear", "claude_ai_Slack_Remote", "plugin_slack_slack", "plugin_kitchen-sink_Linear"} {
+		require.True(t, shadowmcp.HasInstalledServerNamePrefix(name), name)
+	}
+
+	// Desktop and CLI built-ins never carry either prefix, so none of them can
+	// be mistaken for an installed server.
+	builtins := []string{
+		"terminal", "visualize", "mcp-registry", "scheduled-tasks",
+		"ccd_turn", "ccd_session", "ccd_session_mgmt", "ccd_pr", "ccd_view", "ccd_window",
+		"ccd_sidebar", "ccd_settings", "ccd_host", "ccd_directory", "ccd_connectors", "ccd_new_tool",
+		"Claude_Browser", "Claude_Code_iOS_Simulator", "Claude_Preview",
+		"claude-in-chrome", "computer-use",
+	}
+	for _, name := range builtins {
+		require.False(t, shadowmcp.HasInstalledServerNamePrefix(name), name)
+		require.True(t, shadowmcp.ClassifyServer(shadowmcp.ServerFacts{Name: name}).IsBuiltin(), name)
+		require.True(t, shadowmcp.ClassifyServer(shadowmcp.ServerFacts{Name: name, InventoryLoaded: true}).IsBuiltin(), name)
+	}
+
+	for _, name := range []string{"", "claude_ai_", "plugin_", "Claude_AI_Linear", "Plugin_slack_slack", "claude_ai", "plugins"} {
+		require.False(t, shadowmcp.HasInstalledServerNamePrefix(name), name)
+	}
 }

@@ -458,10 +458,11 @@ func resolvedServerIdentity(prov telemetryrepo.MCPProvenance, serverPrefix strin
 
 // isBuiltinServer reports whether an unresolved MCP call targets a coding
 // agent built-in: ingest recorded built-in evidence for it, or its
-// mcp__<server>__ name is on the known built-in list. A connector UUID name is
-// never a built-in, whatever the row says.
+// mcp__<server>__ name is on the known built-in list. A connector UUID name,
+// or a claude.ai connector or plugin server prefix, is never a built-in,
+// whatever the row says.
 func isBuiltinServer(prov telemetryrepo.MCPProvenance, provFound bool, toolName, serverPrefix string) bool {
-	if serverPrefix == "" || shadowmcp.IsConnectorUUID(serverPrefix) {
+	if serverPrefix == "" || shadowmcp.IsConnectorUUID(serverPrefix) || shadowmcp.HasInstalledServerNamePrefix(serverPrefix) {
 		return false
 	}
 	if provFound {

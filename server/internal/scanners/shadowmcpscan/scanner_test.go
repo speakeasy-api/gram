@@ -920,6 +920,18 @@ func TestScanner_AgentBuiltinServers(t *testing.T) {
 			wantFlagged: true,
 		},
 		{
+			name:        "built-in evidence on a claude.ai connector prefix is flagged",
+			toolName:    "mcp__claude_ai_Linear__list_issues",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "", ServerIdentity: "claude_ai_Linear", HookSource: "claude", BuiltinEvidence: "unverified"}},
+			wantFlagged: true,
+		},
+		{
+			name:        "built-in evidence on a plugin server prefix is flagged",
+			toolName:    "mcp__plugin_slack_slack__send_message",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "plugin_slack_slack", ServerURL: "", ServerIdentity: "plugin_slack_slack", HookSource: "claude", BuiltinEvidence: "not_in_inventory"}},
+			wantFlagged: true,
+		},
+		{
 			name:        "unlisted name with bare prefix provenance and no evidence is flagged",
 			toolName:    "mcp__ccd_custom__run",
 			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "ccd_custom", ServerURL: "", ServerIdentity: "ccd_custom", HookSource: "claude"}},
@@ -958,6 +970,7 @@ func TestScanner_AgentBuiltinServers(t *testing.T) {
 				"list_issues":      true,
 				"run":              true,
 				"click":            true,
+				"send_message":     true,
 			}, orgIDs: nil}
 			prov := &fakeProvenance{found: tc.provenance, err: tc.lookupErr, gotIDs: nil, gotSince: time.Time{}, callCount: 0}
 			coverage := &fakeCoverage{}

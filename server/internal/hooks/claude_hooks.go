@@ -1316,7 +1316,8 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	}
 
 	// Only a server that cannot be a built-in reaches here without an
-	// inventory: a connector named by its UUID. Its URL is unknown until the
+	// inventory: a connector named by its UUID, or a claude.ai connector or
+	// plugin server named by its prefix. Its URL is unknown until the
 	// inventory loads and may be Speakeasy-hosted, so deny with a
 	// retry-or-restart message rather than calling it Shadow MCP outright.
 	if !inventory.loaded {

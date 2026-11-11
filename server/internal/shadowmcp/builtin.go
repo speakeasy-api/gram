@@ -195,7 +195,9 @@ func (c Classification) IsBuiltin() bool {
 //     URL is unknown: Shadow MCP.
 //  3. A known launch command is a user-installed local server, Shadow MCP,
 //     unless its executable lives inside a coding agent's own bundle.
-//  4. Install evidence without a URL or command is Shadow MCP.
+//  4. Install evidence without a URL or command is Shadow MCP. A Claude
+//     server name with the claude.ai connector or plugin prefix is install
+//     evidence on its own.
 //  5. Anything else is a built-in.
 //
 // Rule 5 accepts missing some Shadow MCP servers in exchange for never
@@ -219,7 +221,7 @@ func ClassifyServer(facts ServerFacts) Classification {
 		return Classification{Kind: ServerKindUnidentified, Evidence: BuiltinEvidenceNone}
 	}
 	cursorIdentifier := strings.TrimSpace(facts.CursorServerIdentifier)
-	if facts.Installed || IsCursorUserInstalledIdentifier(cursorIdentifier) {
+	if facts.Installed || IsCursorUserInstalledIdentifier(cursorIdentifier) || HasInstalledServerNamePrefix(name) {
 		return Classification{Kind: ServerKindInstalled, Evidence: BuiltinEvidenceNone}
 	}
 
@@ -233,6 +235,25 @@ func ClassifyServer(facts ServerFacts) Classification {
 		evidence = BuiltinEvidenceNotInInventory
 	}
 	return Classification{Kind: ServerKindBuiltin, Evidence: evidence}
+}
+
+// installedServerNamePrefixes start the server segment Claude Code gives
+// tool names of servers the user installed: "claude_ai_" for claude.ai
+// connectors and "plugin_" for Claude plugin servers. No coding agent built-in
+// uses either prefix. Matched case-sensitively, as Claude writes them.
+var installedServerNamePrefixes = []string{"claude_ai_", "plugin_"}
+
+// HasInstalledServerNamePrefix reports whether a server name carries a prefix
+// that only servers the user installed have, which is install evidence even
+// when no MCP inventory resolves the server.
+func HasInstalledServerNamePrefix(serverName string) bool {
+	serverName = strings.TrimSpace(serverName)
+	for _, prefix := range installedServerNamePrefixes {
+		if hasNonEmptySuffix(serverName, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // connectorUUIDPattern matches the canonical 8-4-4-4-12 hexadecimal form the
