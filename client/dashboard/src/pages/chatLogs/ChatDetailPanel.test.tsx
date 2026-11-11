@@ -126,6 +126,7 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/contexts/Auth", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/contexts/Auth")>()),
   useIsPlatformAdmin: () => false,
+  useProject: () => ({ id: "project-1" }),
   useSession: () => ({
     // Distinct from the chat owner so the owner resolves to the member name
     // instead of collapsing to "You".
@@ -133,16 +134,13 @@ vi.mock("@/contexts/Auth", async (importOriginal) => ({
   }),
 }));
 
-vi.mock("@/components/observe/observeDeepLink", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@/components/observe/observeDeepLink")
-  >()),
-  useCanViewToolLogs: () => false,
-}));
-
-// The agent is in the inventory the reader may read, so it links.
+// The agent is in the inventory the reader may read, so it links. The viewer
+// owns it, so its sessions' tool calls are theirs to read without log:read.
 vi.mock("@/hooks/useReadableAgents", () => ({
-  useReadableAgents: () => ({ data: [{ id: "agent-1" }], isError: false }),
+  useReadableAgents: () => ({
+    data: [{ id: "agent-1", ownerUserId: "gram-user-viewer" }],
+    isError: false,
+  }),
 }));
 
 vi.mock("@/components/ui/Tooltip", () => ({
@@ -342,6 +340,36 @@ describe("ChatDetailSheet session actor", () => {
     expect(within(details).getByText("Ada Lovelace")).toBeTruthy();
 
     expect(userTurnName()).toBe("Ada Lovelace");
+  });
+});
+
+describe("ChatDetailSheet tool calls without log:read", () => {
+  afterEach(() => {
+    cleanup();
+    state.chat = undefined;
+  });
+
+  /**
+   * Whether the panel reads the session's tool calls: the count row in
+   * Session details and the Actions menu's Tool calls view share one gate.
+   */
+  function offersToolCalls(): boolean {
+    return within(openSessionDetails()).queryByText("Tool calls") !== null;
+  }
+
+  it("offers the Tool calls view on the viewer's own session", () => {
+    renderPanel(makeChat({ userId: "gram-user-viewer" }));
+    expect(offersToolCalls()).toBe(true);
+  });
+
+  it("offers it on a session driven by an agent the viewer owns", () => {
+    renderPanel(makeChat({ agentId: "agent-1", agentName: "Release bot" }));
+    expect(offersToolCalls()).toBe(true);
+  });
+
+  it("withholds it on another member's session", () => {
+    renderPanel(makeChat({ userId: "gram-user-1" }));
+    expect(offersToolCalls()).toBe(false);
   });
 });
 

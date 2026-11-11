@@ -130,7 +130,7 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 		WithRiskAnalysisStatus(NewRiskAnalysisStatusService(logger, pool, nil)).
 		WithRiskFindings(NewRiskFindingsService(pool, nil, key), budget).
 		WithRiskFindingList(NewRiskFindingListService(pool, nil, key), budget).
-		WithChatMetadata(NewChatMetadataService(pool, chatfindings.New(pool, findings), budget, key)).
+		WithChatMetadata(NewChatMetadataService(pool, liveEngine, chatfindings.New(pool, findings), budget, key)).
 		WithToolExposure(toolExposure).
 		WithProjectLifecycle(projectLifecycle)
 

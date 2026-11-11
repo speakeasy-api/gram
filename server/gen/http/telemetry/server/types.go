@@ -1157,10 +1157,17 @@ type QueryTumDetailsResponseBody struct {
 // ListSessionsResponseBody is the type of the "telemetry" service
 // "listSessions" endpoint HTTP response body.
 type ListSessionsResponseBody struct {
-	// List of chat session summaries
+	// List of chat session summaries. Only sessions from projects the caller holds
+	// chat:read on are listed.
 	Sessions []*SessionSummaryResponseBody `form:"sessions" json:"sessions" xml:"sessions"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// True when sessions were withheld because the caller lacks chat:read on one
+	// or more projects. The totals still cover every matching session.
+	Scoped bool `form:"scoped" json:"scoped" xml:"scoped"`
+	// Aggregates over every matching session in the organization. Present only
+	// when scoped is true.
+	Totals *SessionTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
 }
 
 // ListFilterOptionsResponseBody is the type of the "telemetry" service
@@ -9338,6 +9345,24 @@ type SessionSummaryResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 }
 
+// SessionTotalsResponseBody is used to define fields on response body types.
+type SessionTotalsResponseBody struct {
+	// Number of matching chat sessions
+	SessionCount int64 `form:"session_count" json:"session_count" xml:"session_count"`
+	// Number of LLM completion messages across the sessions
+	MessageCount int64 `form:"message_count" json:"message_count" xml:"message_count"`
+	// Number of tool calls across the sessions
+	ToolCallCount int64 `form:"tool_call_count" json:"tool_call_count" xml:"tool_call_count"`
+	// Total input tokens used
+	TotalInputTokens int64 `form:"total_input_tokens" json:"total_input_tokens" xml:"total_input_tokens"`
+	// Total output tokens used
+	TotalOutputTokens int64 `form:"total_output_tokens" json:"total_output_tokens" xml:"total_output_tokens"`
+	// Total tokens used
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Total cost in USD
+	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
+}
+
 // FilterOptionResponseBody is used to define fields on response body types.
 type FilterOptionResponseBody struct {
 	// Unique identifier for the option
@@ -10502,6 +10527,7 @@ func NewQueryTumDetailsResponseBody(res *telemetry.TumDetailsResult) *QueryTumDe
 func NewListSessionsResponseBody(res *telemetry.ListSessionsResult) *ListSessionsResponseBody {
 	body := &ListSessionsResponseBody{
 		NextCursor: res.NextCursor,
+		Scoped:     res.Scoped,
 	}
 	if res.Sessions != nil {
 		body.Sessions = make([]*SessionSummaryResponseBody, len(res.Sessions))
@@ -10514,6 +10540,9 @@ func NewListSessionsResponseBody(res *telemetry.ListSessionsResult) *ListSession
 		}
 	} else {
 		body.Sessions = []*SessionSummaryResponseBody{}
+	}
+	if res.Totals != nil {
+		body.Totals = marshalTelemetrySessionTotalsToSessionTotalsResponseBody(res.Totals)
 	}
 	return body
 }

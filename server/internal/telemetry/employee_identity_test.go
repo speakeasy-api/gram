@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -145,10 +144,7 @@ func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	projectID := authCtx.ProjectID.String()
 	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
@@ -209,10 +205,7 @@ func TestCostAnalytics_DoesNotExpandAmbiguousAccountEmail(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	firstID, firstEmail := seedConnectedOrgUser(t, ctx, ti, "first")
 	secondID, secondEmail := seedConnectedOrgUser(t, ctx, ti, "second")

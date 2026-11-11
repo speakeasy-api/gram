@@ -66,6 +66,34 @@ func (q *Queries) CountLiveManagedExternalKeysByCredential(ctx context.Context, 
 	return count, err
 }
 
+const countManagedEncryptionKeysByCredential = `-- name: CountManagedEncryptionKeysByCredential :one
+SELECT count(*)
+FROM managed_encryption_keys AS mek
+JOIN external_keys AS ek
+  ON ek.id = mek.external_key_id
+ AND ek.organization_id = mek.organization_id
+WHERE ek.external_credential_id = $1::uuid
+  AND ek.deleted IS FALSE
+  AND mek.kms_disabled_at IS NULL
+`
+
+// Speakeasy-managed organization encryption keys (KEKs) that reach their KMS
+// key through this platform credential. Every one pins the credential's id and
+// impersonated account, so changing its identity or deleting it makes each
+// organization using one fail closed. Keys the cleanup sweep has disabled no
+// longer need the credential: the sweep revokes the grant before it sets
+// kms_disabled_at. Run after LockExternalCredentialForUpdate: the key's
+// external_keys row is inserted in the same transaction as its
+// managed_encryption_keys row, and that insert's foreign key check takes FOR
+// KEY SHARE on the credential, so a concurrent key either shows up here or
+// waits behind the lock.
+func (q *Queries) CountManagedEncryptionKeysByCredential(ctx context.Context, externalCredentialID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countManagedEncryptionKeysByCredential, externalCredentialID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAwsIamCredential = `-- name: CreateAwsIamCredential :one
 INSERT INTO aws_iam_credentials (
   external_credential_id,
