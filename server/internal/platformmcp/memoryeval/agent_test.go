@@ -339,6 +339,7 @@ type armStats struct {
 	totalByKind     map[memoryeval.QuestionKind]int
 	citedAnswers    int
 	validCited      int
+	otherCitations  int
 	answerable      int
 	leaks           map[string]bool
 	isolation       map[string]bool
@@ -408,13 +409,21 @@ func summarize(corpus *memoryeval.Corpus, runs int, arms []arm, answers []answer
 			s.answerable++
 			if len(ans.citations) > 0 {
 				s.citedAnswers++
-				valid := true
-				for _, c := range ans.citations {
-					valid = valid && c.kind == "chat" && corpus.ChatCitationValid(ans.question, c.id)
+			}
+			// Memo and digest citations are counted on their own: the corpus
+			// only knows which chats back an answer, so they neither help nor
+			// spoil the chat citation check.
+			chats, valid := 0, true
+			for _, c := range ans.citations {
+				if c.kind != "chat" {
+					s.otherCitations++
+					continue
 				}
-				if valid {
-					s.validCited++
-				}
+				chats++
+				valid = valid && corpus.ChatCitationValid(ans.question, c.id)
+			}
+			if chats > 0 && valid {
+				s.validCited++
 			}
 		}
 	}
@@ -443,7 +452,7 @@ func renderReport(corpus *memoryeval.Corpus, answerModel, judgeModel string, run
 		}
 		citations := "n/a"
 		if s.answerable > 0 && len(a.tools) > 0 {
-			citations = fmt.Sprintf("%.0f%%", 100*float64(s.validCited)/float64(s.answerable))
+			citations = fmt.Sprintf("%.0f%% (%d memo/digest)", 100*float64(s.validCited)/float64(s.answerable), s.otherCitations)
 		}
 		hardCorrect, hardTotal := 0, 0
 		for k, total := range s.totalByKind {
@@ -459,7 +468,7 @@ func renderReport(corpus *memoryeval.Corpus, answerModel, judgeModel string, run
 			citations, len(s.leaks), sortedKeys(s.leaks), len(s.isolation), sortedKeys(s.isolation),
 			s.notFound, s.negatives, s.toolTokens/max(s.answers, 1), s.retrievalMisses, s.reasoningMisses, s.errors)
 	}
-	b.WriteString("\nCounts in the kind columns are summed across runs. Hard set is accuracy on the temporal and synthesis questions, which share no keywords with their sources and each need three or more chats weeks apart. Valid citations is the share of answerable questions whose answer cites at least one source and only sources that contain the answer.\n")
+	b.WriteString("\nCounts in the kind columns are summed across runs. Hard set is accuracy on the temporal and synthesis questions, which share no keywords with their sources and each need three or more chats weeks apart. Valid citations is the share of answerable questions whose answer cites at least one chat and only chats that contain the answer; memo and digest citations are not checked against the corpus and are counted in brackets.\n")
 	return b.String()
 }
 
