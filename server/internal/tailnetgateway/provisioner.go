@@ -14,8 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tailscaleapi"
 )
@@ -68,10 +68,11 @@ type ProvisionerConfig struct {
 // for empty slots; Observe reads gateway heartbeats; teardown deletes the
 // devices and service through the Tailscale API.
 type Provisioner struct {
-	db  *pgxpool.Pool
-	enc *encryption.Client
-	api tailscaleapi.Client
-	cfg ProvisionerConfig
+	db   *pgxpool.Pool
+	enc  *orgencryption.Service
+	keys KeyProvisioner
+	api  tailscaleapi.Client
+	cfg  ProvisionerConfig
 }
 
 var (
@@ -79,10 +80,12 @@ var (
 	_ k8s.NetworkIngressCredentialedDeleter = (*Provisioner)(nil)
 )
 
-// NewProvisioner validates the configuration and returns the provider. enc
-// may be nil, in which case Apply is unavailable while observation and
-// teardown still work.
-func NewProvisioner(db *pgxpool.Pool, enc *encryption.Client, api tailscaleapi.Client, cfg ProvisionerConfig) (*Provisioner, error) {
+// NewProvisioner validates the configuration and returns the provider. Auth
+// keys and node state are sealed under each organization's key: keys mints
+// the organization's data key on first use and enc encrypts with it. Either
+// may be nil when organization encryption is not configured, in which case
+// Apply is unavailable while observation and teardown still work.
+func NewProvisioner(db *pgxpool.Pool, enc *orgencryption.Service, keys KeyProvisioner, api tailscaleapi.Client, cfg ProvisionerConfig) (*Provisioner, error) {
 	if db == nil || api == nil {
 		return nil, errors.New("tailnet gateway provisioner requires a database and Tailscale API client")
 	}
@@ -101,7 +104,7 @@ func NewProvisioner(db *pgxpool.Pool, enc *encryption.Client, api tailscaleapi.C
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Provisioner{db: db, enc: enc, api: api, cfg: cfg}, nil
+	return &Provisioner{db: db, enc: enc, keys: keys, api: api, cfg: cfg}, nil
 }
 
 type owner struct {
@@ -143,8 +146,8 @@ func (p *Provisioner) validateDesired(desired k8s.NetworkIngressDesired) (tailsc
 	if err := ValidateLabel(desired.Hostname); err != nil {
 		return tailscaleapi.Credentials{}, errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), fmt.Errorf("%w: %w", k8s.ErrNetworkIngressInvalidDesiredState, err)
 	}
-	if p.enc == nil {
-		return tailscaleapi.Credentials{}, errorObservation(""), errors.New("tailnet gateway provisioner has no encryption key to store auth keys")
+	if p.enc == nil || p.keys == nil {
+		return tailscaleapi.Credentials{}, errorObservation(""), errors.New("tailnet gateway provisioner needs organization encryption to store auth keys")
 	}
 	creds, err := credentialsFrom(desired.Credentials)
 	if err != nil {
@@ -177,6 +180,17 @@ func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesir
 	creds, observation, err := p.validateDesired(desired)
 	if err != nil {
 		return observation, err
+	}
+	// Auth keys and node state are sealed under the organization's key, so
+	// make sure it has one before minting anything.
+	if err := p.keys.EnsureUseCase(ctx, desired.OrganizationID, EncryptionUseCase, orgencryption.SystemActor()); err != nil {
+		return encryptionFailure(fmt.Errorf("ensure gateway encryption key: %w", err))
+	}
+	// A key that exists can still be suspended or unreachable. Check it can
+	// seal before minting: an auth key Tailscale issued that cannot be stored
+	// is wasted, and every later pass would mint more.
+	if _, err := p.encryptAuthKey(ctx, desired.OrganizationID, ""); err != nil {
+		return encryptionFailure(err)
 	}
 
 	err = p.api.UpsertService(ctx, creds, tailscaleapi.Service{
@@ -228,7 +242,7 @@ func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesir
 		}
 		registered, err := store.Registered(ctx)
 		if err != nil {
-			return errorObservation(""), fmt.Errorf("check gateway slot registration: %w", err)
+			return encryptionFailure(fmt.Errorf("check gateway slot registration: %w", err))
 		}
 		if registered && node.Status == string(NodeStatusNeedsLogin) {
 			if err := p.resetRefusedSlot(ctx, creds, store, node); err != nil {
@@ -248,9 +262,9 @@ func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesir
 		if err != nil {
 			return apiFailure(err)
 		}
-		ciphertext, err := p.enc.Encrypt([]byte(key.Key))
+		ciphertext, err := p.encryptAuthKey(ctx, desired.OrganizationID, key.Key)
 		if err != nil {
-			return errorObservation(""), fmt.Errorf("encrypt gateway auth key: %w", err)
+			return encryptionFailure(err)
 		}
 		expires := key.Expires
 		if expires.IsZero() {
@@ -515,4 +529,28 @@ func apiFailure(err error) (k8s.NetworkIngressObservation, error) {
 // FindOrphans is a no-op: the gateway owns no Kubernetes resources.
 func (p *Provisioner) FindOrphans(context.Context, []k8s.NetworkIngressResourceNames) ([]k8s.NetworkIngressOrphan, error) {
 	return nil, nil
+}
+
+// encryptAuthKey seals a freshly minted auth key under the organization's
+// key, bound to the column it is stored in.
+func (p *Provisioner) encryptAuthKey(ctx context.Context, organizationID, authKey string) (string, error) {
+	keys, err := p.enc.For(organizationID, EncryptionUseCase)
+	if err != nil {
+		return "", fmt.Errorf("gateway auth key encryption: %w", err)
+	}
+	ciphertext, err := keys.Encrypt(ctx, authKeyColumn, []byte(authKey))
+	if err != nil {
+		return "", fmt.Errorf("encrypt gateway auth key: %w", err)
+	}
+	return ciphertext, nil
+}
+
+// encryptionFailure is the observation for an encryption error. An
+// organization key that is suspended or unreachable gets its own code,
+// because for a customer-managed key only the customer can fix it.
+func encryptionFailure(err error) (k8s.NetworkIngressObservation, error) {
+	if encryptionKeyUnavailable(err) {
+		return errorObservation(k8s.NetworkIngressErrorEncryptionKeyUnavailable), err
+	}
+	return errorObservation(""), err
 }

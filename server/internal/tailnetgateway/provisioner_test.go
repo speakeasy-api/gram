@@ -16,15 +16,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tailscaleapi"
 )
 
 type provisionerFixture struct {
 	db          *pgxpool.Pool
-	enc         *encryption.Client
 	api         *tailscaleapi.Fake
 	provisioner *tailnetgateway.Provisioner
 	now         time.Time
@@ -37,7 +36,6 @@ func newProvisionerFixture(t *testing.T, name string) *provisionerFixture {
 	t.Helper()
 	db, err := infra.CloneTestDatabase(t, name)
 	require.NoError(t, err)
-	enc := testenv.NewEncryptionClient(t)
 	api := tailscaleapi.NewFake()
 	// Heartbeats are stamped by the database clock, so the provisioner's
 	// clock must be the real one for freshness to mean anything.
@@ -46,13 +44,13 @@ func newProvisionerFixture(t *testing.T, name string) *provisionerFixture {
 	ingressID, orgID := seedIngress(t, db, name)
 	resources, err := k8s.NewNetworkIngressResourceNames(ingressID)
 	require.NoError(t, err)
-	provisioner, err := tailnetgateway.NewProvisioner(db, enc, api, tailnetgateway.ProvisionerConfig{
+	provisioner, err := tailnetgateway.NewProvisioner(db, orgEncryption(t, db).Service, orgEncryption(t, db).Provisioner, api, tailnetgateway.ProvisionerConfig{
 		Tag: tailnetgateway.DefaultTag, Slots: 3, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 	// seedIngress creates a gateway ingress; tests of the operator path
 	// clear the runtime with setRuntime.
-	return &provisionerFixture{db: db, enc: enc, api: api, provisioner: provisioner, now: now, ingressID: ingressID, orgID: orgID, resources: resources}
+	return &provisionerFixture{db: db, api: api, provisioner: provisioner, now: now, ingressID: ingressID, orgID: orgID, resources: resources}
 }
 
 // setRuntime records which runtime hosts the fixture's ingress; empty means
@@ -111,8 +109,7 @@ func TestProvisionerApplyDefinesServiceAndMintsKeysPerSlot(t *testing.T) {
 	for i, node := range nodes {
 		require.EqualValues(t, i, node.Slot)
 		require.True(t, node.AuthKeyEncrypted.Valid)
-		plain, err := f.enc.Decrypt(node.AuthKeyEncrypted.String)
-		require.NoError(t, err)
+		plain := openAuthKey(t, f.db, f.orgID, node.AuthKeyEncrypted.String)
 		require.Equal(t, f.api.Keys()[i].Key, plain)
 		require.False(t, node.RetiredAt.Valid)
 	}
@@ -123,11 +120,9 @@ func TestProvisionerApplyDefinesServiceAndMintsKeysPerSlot(t *testing.T) {
 
 	// A slot that registered no longer needs a key even when its key is gone;
 	// a slot with only partial state still does.
-	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, f.ingressID, f.orgID, 1)
-	require.NoError(t, err)
+	store := newStateStore(t, f.db, f.ingressID, f.orgID, 1)
 	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`[{"ID":"p1"}]`)))
-	partial, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, f.ingressID, f.orgID, 2)
-	require.NoError(t, err)
+	partial := newStateStore(t, f.db, f.ingressID, f.orgID, 2)
 	require.NoError(t, partial.WriteState(ipn.MachineKeyStateKey, []byte("machine-only")))
 	require.NoError(t, repo.New(f.db).ClearNetworkIngressNodeAuthKey(ctx, repo.ClearNetworkIngressNodeAuthKeyParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 1}))
 	require.NoError(t, repo.New(f.db).ClearNetworkIngressNodeAuthKey(ctx, repo.ClearNetworkIngressNodeAuthKeyParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 2}))
@@ -153,7 +148,7 @@ func TestProvisionerScaleDownPurgesRetiredSlotsAfterHostsStop(t *testing.T) {
 	require.NoError(t, err)
 	f.heartbeat(t, 2, tailnetgateway.NodeStatusOnline, "nTHREE")
 
-	smaller, err := tailnetgateway.NewProvisioner(f.db, f.enc, f.api, tailnetgateway.ProvisionerConfig{
+	smaller, err := tailnetgateway.NewProvisioner(f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
 		Tag: tailnetgateway.DefaultTag, Slots: 2, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
@@ -260,7 +255,7 @@ func TestProvisionerObserveFollowsHeartbeats(t *testing.T) {
 
 	// Heartbeats older than the staleness window mean the gateway is gone.
 	f.heartbeat(t, 0, tailnetgateway.NodeStatusOnline, "nONE")
-	stale, err := tailnetgateway.NewProvisioner(f.db, f.enc, f.api, tailnetgateway.ProvisionerConfig{
+	stale, err := tailnetgateway.NewProvisioner(f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
 		Tag: tailnetgateway.DefaultTag, Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: 2 * time.Minute,
 		Now: func() time.Time { return time.Now().Add(time.Hour) },
 	})
@@ -276,8 +271,7 @@ func TestProvisionerDeleteWaitsForHostsThenRemovesDevices(t *testing.T) {
 	f := newProvisionerFixture(t, "tailnetprovdelete")
 	_, err := f.provisioner.Apply(ctx, f.desired(t))
 	require.NoError(t, err)
-	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, f.ingressID, f.orgID, 0)
-	require.NoError(t, err)
+	store := newStateStore(t, f.db, f.ingressID, f.orgID, 0)
 	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("registered")))
 	f.heartbeat(t, 0, tailnetgateway.NodeStatusOnline, "nONE")
 	f.heartbeat(t, 1, tailnetgateway.NodeStatusOnline, "nTWO")
@@ -382,8 +376,7 @@ func TestProvisionerReplacesRefusedIdentity(t *testing.T) {
 	f := newProvisionerFixture(t, "tailnetprovrefused")
 	_, err := f.provisioner.Apply(ctx, f.desired(t))
 	require.NoError(t, err)
-	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, f.ingressID, f.orgID, 0)
-	require.NoError(t, err)
+	store := newStateStore(t, f.db, f.ingressID, f.orgID, 0)
 	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("machine-key")))
 	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"profile-1":{"ID":"profile-1","Name":"speakeasy-gw-0"}}`)))
 	require.NoError(t, repo.New(f.db).ClearNetworkIngressNodeAuthKey(ctx, repo.ClearNetworkIngressNodeAuthKeyParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 0}))
@@ -567,4 +560,52 @@ func TestCompositeWithoutOperatorIsPlainGateway(t *testing.T) {
 	_, err = composite.Apply(ctx, f.desired(t))
 	require.ErrorIs(t, err, k8s.ErrNetworkIngressUnsupportedProvider)
 	require.ErrorIs(t, composite.DeleteWithCredentials(ctx, f.resources, credentialsJSON(t, "cid", "csecret")), k8s.ErrNetworkIngressUnsupportedProvider)
+}
+
+func TestProvisionerSealsAuthKeysUnderTheOrganizationKey(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovorgkey")
+
+	// The organization has no data key yet; Apply mints one on first use.
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+
+	nodes, err := repo.New(f.db).ListNetworkIngressNodes(ctx, repo.ListNetworkIngressNodesParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID})
+	require.NoError(t, err)
+	require.NotEmpty(t, nodes)
+	ciphertext := nodes[0].AuthKeyEncrypted.String
+	require.True(t, encryption.IsEnvelope(ciphertext), "auth keys use organization envelopes, not the application key")
+
+	_, otherOrg := seedIngress(t, f.db, "tailnetprovorgkey-other")
+	_, err = gatewayEncryptor(t, f.db, otherOrg).Decrypt(ctx, authKeyColumn, ciphertext)
+	require.ErrorIs(t, err, orgencryption.ErrInvalidCiphertext, "another organization cannot open the key")
+	_, err = gatewayEncryptor(t, f.db, f.orgID).Decrypt(ctx, nodeStateColumn, ciphertext)
+	require.ErrorIs(t, err, orgencryption.ErrInvalidCiphertext, "the key is bound to its column")
+}
+
+func TestProvisionerReportsUnavailableOrganizationKey(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovsuspended")
+	provisionOrg(t, f.db, f.orgID)
+	suspendOrgEncryption(t, f.db, f.orgID)
+
+	observation, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.ErrorIs(t, err, orgencryption.ErrSuspended)
+	require.Equal(t, k8s.NetworkIngressErrorEncryptionKeyUnavailable, observation.ErrorCode)
+	require.Empty(t, f.api.Keys(), "no auth key is minted that could not be stored")
+}
+
+func TestProvisionerApplyRequiresOrganizationEncryption(t *testing.T) {
+	t.Parallel()
+	f := newProvisionerFixture(t, "tailnetprovnoenc")
+	unconfigured, err := tailnetgateway.NewProvisioner(f.db, nil, nil, f.api, tailnetgateway.ProvisionerConfig{
+		Tag: tailnetgateway.DefaultTag, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+	})
+	require.NoError(t, err)
+
+	_, err = unconfigured.Apply(t.Context(), f.desired(t))
+	require.ErrorContains(t, err, "organization encryption")
+	require.Empty(t, f.api.Services(), "nothing reaches the tailnet without somewhere to keep its secrets")
 }

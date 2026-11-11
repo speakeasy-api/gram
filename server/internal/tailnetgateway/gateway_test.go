@@ -25,7 +25,6 @@ import (
 	"tailscale.com/tailcfg"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
 	nirepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway"
@@ -190,7 +189,6 @@ func (r *fakeRuntime) started() []*fakeNode {
 
 type gatewayFixture struct {
 	db       *pgxpool.Pool
-	enc      *encryption.Client
 	runtime  *fakeRuntime
 	gateway  *tailnetgateway.Gateway
 	upstream *upstreamCapture
@@ -218,7 +216,6 @@ func newGatewayFixture(t *testing.T, name string, ordinal int32, configure ...fu
 	t.Helper()
 	db, err := infra.CloneTestDatabase(t, name)
 	require.NoError(t, err)
-	enc := testenv.NewEncryptionClient(t)
 
 	capture := &upstreamCapture{mu: sync.Mutex{}, requests: nil}
 	upstream := httptest.NewTLSServer(capture)
@@ -242,9 +239,9 @@ func newGatewayFixture(t *testing.T, name string, ordinal int32, configure ...fu
 	for _, apply := range configure {
 		apply(&cfg, runtime)
 	}
-	gateway, err := tailnetgateway.New(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, enc, cfg, runtime)
+	gateway, err := tailnetgateway.New(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, orgEncryption(t, db).Service, cfg, runtime)
 	require.NoError(t, err)
-	return &gatewayFixture{db: db, enc: enc, runtime: runtime, gateway: gateway, upstream: capture}
+	return &gatewayFixture{db: db, runtime: runtime, gateway: gateway, upstream: capture}
 }
 
 func (f *gatewayFixture) seedSlot(t *testing.T, ingressID uuid.UUID, orgID string, slot int32, authKey string) {
@@ -255,8 +252,7 @@ func (f *gatewayFixture) seedSlot(t *testing.T, ingressID uuid.UUID, orgID strin
 	if authKey == "" {
 		return
 	}
-	ciphertext, err := f.enc.Encrypt([]byte(authKey))
-	require.NoError(t, err)
+	ciphertext := sealAuthKey(t, f.db, orgID, authKey)
 	rows, err := queries.SetNetworkIngressNodeAuthKey(ctx, repo.SetNetworkIngressNodeAuthKeyParams{
 		AuthKeyEncrypted: conv.ToPGText(ciphertext), AuthKeyExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
 		NetworkIngressID: ingressID, OrganizationID: orgID, Slot: slot,
@@ -339,8 +335,7 @@ func TestGatewayWaitsForAuthKeyAndReconnectsWithState(t *testing.T) {
 	require.Empty(t, f.runtime.started())
 	require.Empty(t, f.gateway.Hosts())
 
-	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, ingressID, orgID, 0)
-	require.NoError(t, err)
+	store := newStateStore(t, f.db, ingressID, orgID, 0)
 	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("existing")))
 	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"profile-1":{"ID":"profile-1","Name":"speakeasy-gw-0"}}`)))
 
@@ -429,9 +424,8 @@ func TestGatewayResetsPartialStateAfterFailedRegistration(t *testing.T) {
 		assert.Equal(c, string(tailnetgateway.NodeStatusError), row.Status)
 		assert.False(c, row.AuthKeyEncrypted.Valid, "a consumed one-shot key is cleared so the reconciler mints another")
 	}, 5*time.Second, 20*time.Millisecond)
-	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, ingressID, orgID, 0)
-	require.NoError(t, err)
-	_, err = store.ReadState(ipn.MachineKeyStateKey)
+	store := newStateStore(t, f.db, ingressID, orgID, 0)
+	_, err := store.ReadState(ipn.MachineKeyStateKey)
 	require.ErrorIs(t, err, ipn.ErrStateNotExist, "partial state is reset")
 	messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
 	require.NoError(t, err)
@@ -469,8 +463,7 @@ func TestGatewayKeepsIdentityWhenStartFailsAfterLogin(t *testing.T) {
 		row := f.slotRow(t, ingressID, orgID, 0)
 		assert.Equal(c, string(tailnetgateway.NodeStatusError), row.Status)
 	}, 5*time.Second, 20*time.Millisecond)
-	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, ingressID, orgID, 0)
-	require.NoError(t, err)
+	store := newStateStore(t, f.db, ingressID, orgID, 0)
 	registered, err := store.Registered(ctx)
 	require.NoError(t, err)
 	require.True(t, registered, "a login that completed is a real device and is kept")
@@ -529,8 +522,7 @@ func TestGatewayMarksRefusedIdentityAtStart(t *testing.T) {
 	f.runtime.failStart = fmt.Errorf("bring tsnet node up: %w", tailnetgateway.ErrNodeNeedsLogin)
 	ingressID, orgID := seedIngress(t, f.db, "gateway-refused")
 	f.seedSlot(t, ingressID, orgID, 0, "")
-	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, ingressID, orgID, 0)
-	require.NoError(t, err)
+	store := newStateStore(t, f.db, ingressID, orgID, 0)
 	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"profile-1":{"ID":"profile-1","Name":"speakeasy-gw-0"}}`)))
 
 	f.gateway.Poll(ctx)
@@ -792,4 +784,23 @@ func TestConfigValidate(t *testing.T) {
 			require.Error(t, cfg.Validate())
 		})
 	}
+}
+
+func TestGatewayRecordsUnavailableOrganizationKey(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewaysuspended", 0)
+	ingressID, orgID := seedIngress(t, f.db, "gateway-suspended")
+	f.seedSlot(t, ingressID, orgID, 0, "")
+	store := newStateStore(t, f.db, ingressID, orgID, 0)
+	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"p1":{}}`)))
+	suspendOrgEncryption(t, f.db, orgID)
+
+	f.gateway.Poll(ctx)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		row := f.slotRow(t, ingressID, orgID, 0)
+		assert.Equal(c, string(tailnetgateway.NodeStatusError), row.Status)
+		assert.Equal(c, "organization encryption key unavailable", row.LastError.String, "the row says why the host is not serving")
+	}, 5*time.Second, 20*time.Millisecond)
+	require.Empty(t, f.runtime.started(), "a node whose state cannot be read is not started")
 }

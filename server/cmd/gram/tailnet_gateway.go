@@ -18,7 +18,6 @@ import (
 	"go.opentelemetry.io/otel"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway"
@@ -48,12 +47,6 @@ func newTailnetGatewayCommand() *cli.Command {
 			Name:    "unsafe-db-log",
 			Usage:   "Log database queries (unsafe outside local development)",
 			EnvVars: []string{"GRAM_UNSAFE_DB_LOG"},
-		},
-		&cli.StringFlag{
-			Name:     "encryption-key",
-			Usage:    "Application AES encryption key used for auth keys and node state",
-			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
-			Required: true,
 		},
 		&cli.StringFlag{
 			Name:    "ordinal",
@@ -152,6 +145,7 @@ func newTailnetGatewayCommand() *cli.Command {
 		},
 	}
 	flags = append(flags, networkIngressQueueFlags()...)
+	flags = append(flags, orgEncryptionFlags()...)
 	return &cli.Command{
 		Name:  "tailnet-gateway",
 		Usage: "Host private network ingresses on customer tailnets with tsnet",
@@ -197,9 +191,15 @@ func newTailnetGatewayCommand() *cli.Command {
 			}
 			defer db.Close()
 
-			encryptionClient, err := encryption.New(c.String("encryption-key"))
+			// Auth keys and node state are sealed under each organization's
+			// key. The gateway only decrypts and encrypts; the reconciler mints
+			// the keys.
+			orgEncryption, err := newOrgEncryptionService(ctx, logger, c, db, newGCPIdentity(ctx, logger, c))
 			if err != nil {
-				return fmt.Errorf("create encryption client: %w", err)
+				return err
+			}
+			if orgEncryption == nil {
+				return fmt.Errorf("tailnet gateway requires organization encryption: set %s", "GRAM_ORG_ENCRYPTION_CREDENTIAL_ID")
 			}
 
 			config, err := tailnetGatewayConfigFromCLI(c)
@@ -207,7 +207,7 @@ func newTailnetGatewayCommand() *cli.Command {
 				return err
 			}
 
-			gateway, err := tailnetgateway.New(logger, meterProvider, db, encryptionClient, config, tailnetgateway.NewTsnetRuntime(tailnetgateway.WithLogger(logger)))
+			gateway, err := tailnetgateway.New(logger, meterProvider, db, orgEncryption, config, tailnetgateway.NewTsnetRuntime(tailnetgateway.WithLogger(logger)))
 			if err != nil {
 				return fmt.Errorf("configure tailnet gateway: %w", err)
 			}

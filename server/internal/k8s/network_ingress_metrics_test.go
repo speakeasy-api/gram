@@ -150,6 +150,7 @@ func TestNetworkIngressObservationErrorTelemetry(t *testing.T) {
 			{"typed error takes precedence", ErrNetworkIngressProviderCredentialsRejected, NetworkIngressErrorInvalidCredentials, NetworkIngressErrorProviderCredentialsRejected},
 			{"bounded provider observation", errors.New("sensitive"), NetworkIngressErrorProviderRateLimited, NetworkIngressErrorProviderRateLimited},
 			{"unapproved service observation", errors.New("sensitive"), NetworkIngressErrorProviderServiceNotApproved, NetworkIngressErrorProviderServiceNotApproved},
+			{"unavailable encryption key observation", errors.New("sensitive"), NetworkIngressErrorEncryptionKeyUnavailable, NetworkIngressErrorEncryptionKeyUnavailable},
 			{"missing permission is not rejected credentials", ErrNetworkIngressProviderForbidden, NetworkIngressErrorProviderForbidden, NetworkIngressErrorProviderForbidden},
 			{"replacement pending", ErrNetworkIngressReplacementPending, "", networkIngressErrorCodeReplacementPending},
 			{"deletion pending outside delete", ErrNetworkIngressDeletionPending, "", networkIngressErrorCodeDeletionPending},

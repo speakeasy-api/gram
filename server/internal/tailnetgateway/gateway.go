@@ -19,10 +19,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
 )
 
@@ -273,7 +273,7 @@ func probeTransition(from NodeStatus, label string, state NodeState, err error) 
 type Gateway struct {
 	logger    *slog.Logger
 	db        *pgxpool.Pool
-	enc       *encryption.Client
+	enc       *orgencryption.Service
 	cfg       Config
 	runtime   NodeRuntime
 	metrics   *Metrics
@@ -290,13 +290,14 @@ type Gateway struct {
 	lastPoll atomic.Int64
 }
 
-// New builds a gateway; call Run to start it.
-func New(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, cfg Config, runtime NodeRuntime) (*Gateway, error) {
+// New builds a gateway; call Run to start it. enc decrypts auth keys and
+// node state under each organization's key; the gateway never mints keys.
+func New(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *orgencryption.Service, cfg Config, runtime NodeRuntime) (*Gateway, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	if db == nil || enc == nil || runtime == nil {
-		return nil, errors.New("tailnet gateway requires a database, encryption client and node runtime")
+		return nil, errors.New("tailnet gateway requires a database, organization encryption and node runtime")
 	}
 
 	return &Gateway{
@@ -568,11 +569,15 @@ func (g *Gateway) start(ctx context.Context, s *slot) {
 	store, err := NewPostgresStateStore(g.db, g.enc, want.id, want.organizationID, g.cfg.Ordinal)
 	if err != nil {
 		logger.ErrorContext(ctx, "build tailnet state store", attr.SlogError(err))
+		g.fail(ctx, s, "node state unavailable", false)
 		return
 	}
 	registered, err := store.Registered(ctx)
 	if err != nil {
+		// Usually the organization's key is unreachable or suspended. Record
+		// it, so the slot backs off and the row says why it is not serving.
 		logger.ErrorContext(ctx, "check tailnet node registration", attr.SlogError(err))
+		g.fail(ctx, s, nodeStateFailure(err), false)
 		return
 	}
 	if registered && row.Status == string(NodeStatusNeedsLogin) {
@@ -592,12 +597,13 @@ func (g *Gateway) start(ctx context.Context, s *slot) {
 			g.settle(ctx, s, hold(NodeStatusPending, "auth key expired"))
 			return
 		}
-		authKey, err = g.enc.Decrypt(row.AuthKeyEncrypted.String)
+		plaintext, err := g.decryptAuthKey(ctx, want.organizationID, row.AuthKeyEncrypted.String)
 		if err != nil {
 			logger.ErrorContext(ctx, "decrypt tailnet auth key", attr.SlogError(err))
 			g.fail(ctx, s, "auth key unreadable", false)
 			return
 		}
+		authKey = plaintext
 	}
 
 	g.settle(ctx, s, hold(NodeStatusStarting, ""))
@@ -883,4 +889,27 @@ func (g *Gateway) Hosts() []HostSummary {
 	}
 
 	return out
+}
+
+// decryptAuthKey opens a slot's one-shot auth key under the organization's
+// key.
+func (g *Gateway) decryptAuthKey(ctx context.Context, organizationID, ciphertext string) (string, error) {
+	keys, err := g.enc.For(organizationID, EncryptionUseCase)
+	if err != nil {
+		return "", fmt.Errorf("auth key encryption: %w", err)
+	}
+	plaintext, err := keys.Decrypt(ctx, authKeyColumn, ciphertext)
+	if err != nil {
+		return "", fmt.Errorf("decrypt auth key: %w", err)
+	}
+	return string(plaintext), nil
+}
+
+// nodeStateFailure is the bounded message recorded when a slot's persisted
+// state cannot be read.
+func nodeStateFailure(err error) string {
+	if encryptionKeyUnavailable(err) {
+		return "organization encryption key unavailable"
+	}
+	return "node state unreadable"
 }

@@ -105,6 +105,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 	)
 	flags = append(flags, networkIngressQueueFlags()...)
 	flags = append(flags, networkIngressProviderFlags()...)
+	flags = append(flags, orgEncryptionFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 
 	return &cli.Command{
@@ -200,7 +201,13 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 				return errors.New("private ingress reconciler requires in-cluster Kubernetes clients while the operator provider is enabled")
 			}
 			publicationRequester := plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}
-			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, config, publicationRequester)
+			// Gateway auth keys and node state are sealed under each
+			// organization's key, which the reconciler mints on first use.
+			orgEncryptionService, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, newGCPIdentity(ctx, logger, c), newAuditLogger())
+			if err != nil {
+				return err
+			}
+			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, orgEncryptionService, orgEncryptionProvisioner, k8sClient, config, publicationRequester)
 			if err != nil {
 				return err
 			}

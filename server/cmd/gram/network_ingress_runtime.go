@@ -13,14 +13,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tailscaleapi"
 )
 
 // newNetworkIngressExecutor registers the Tailscale provider as a composite
 // that routes by runtime: gateway ingresses to the tailnet gateway, every
-// other ingress to the operator provider while it is still enabled.
-func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, clients *k8s.KubernetesClients, config networkingress.RuntimeConfig, publicationRequester networkingress.PublicationRequester) (*networkingress.Executor, error) {
+// other ingress to the operator provider while it is still enabled. enc
+// decrypts the customer's saved Tailscale credentials; the gateway's own
+// secrets use organization encryption (orgEnc, orgKeys), and either may be nil
+// when it is not configured.
+func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, orgEnc *orgencryption.Service, orgKeys *orgencryption.Provisioner, clients *k8s.KubernetesClients, config networkingress.RuntimeConfig, publicationRequester networkingress.PublicationRequester) (*networkingress.Executor, error) {
 	providers := make(map[string]k8s.NetworkIngressProvisioner)
 	var operator *k8s.TailscaleNetworkIngressProvisioner
 	if config.OperatorProviderEnabled && clients != nil && clients.Clientset != nil && clients.DynamicClient != nil && config.Tailscale.OperatorNamespace != "" {
@@ -45,7 +49,7 @@ func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterPr
 	if slots <= 0 {
 		slots = tailnetgateway.DefaultSlots
 	}
-	gateway, err := tailnetgateway.NewProvisioner(db, enc, api, tailnetgateway.ProvisionerConfig{
+	gateway, err := tailnetgateway.NewProvisioner(db, orgEnc, gatewayKeyProvisioner(orgKeys), api, tailnetgateway.ProvisionerConfig{
 		Tag: tag, Slots: slots, AuthKeyTTL: 0, StaleAfter: 0, Now: nil,
 	})
 	if err != nil {
@@ -78,4 +82,12 @@ func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterPr
 			return nil
 		},
 	}), nil
+}
+
+// gatewayKeyProvisioner keeps a nil provisioner a nil interface.
+func gatewayKeyProvisioner(provisioner *orgencryption.Provisioner) tailnetgateway.KeyProvisioner {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
 }

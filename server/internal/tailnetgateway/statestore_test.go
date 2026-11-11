@@ -14,7 +14,6 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -43,11 +42,9 @@ func TestPostgresStateStoreRoundTrip(t *testing.T) {
 	ctx := t.Context()
 	db, err := infra.CloneTestDatabase(t, "tailnetstate")
 	require.NoError(t, err)
-	enc := testenv.NewEncryptionClient(t)
 	ingressID, orgID := seedIngress(t, db, "state-roundtrip")
 
-	store, err := tailnetgateway.NewPostgresStateStore(db, enc, ingressID, orgID, 0)
-	require.NoError(t, err)
+	store := newStateStore(t, db, ingressID, orgID, 0)
 
 	registered, err := store.Registered(ctx)
 	require.NoError(t, err)
@@ -72,9 +69,9 @@ func TestPostgresStateStoreRoundTrip(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotEqual(t, string(value), row, "state must not be stored in the clear")
-	decrypted, err := enc.Decrypt(row)
+	decrypted, err := gatewayEncryptor(t, db, orgID).Decrypt(ctx, nodeStateColumn, row)
 	require.NoError(t, err)
-	require.Equal(t, value, []byte(decrypted), "the column holds the application-encrypted value")
+	require.Equal(t, value, decrypted, "the column holds the value sealed under the organization's key")
 
 	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("second")))
 	got, err = store.ReadState(ipn.MachineKeyStateKey)
@@ -90,13 +87,10 @@ func TestPostgresStateStoreIsolatedBySlot(t *testing.T) {
 	t.Parallel()
 	db, err := infra.CloneTestDatabase(t, "tailnetstateslots")
 	require.NoError(t, err)
-	enc := testenv.NewEncryptionClient(t)
 	ingressID, orgID := seedIngress(t, db, "state-slots")
 
-	slot0, err := tailnetgateway.NewPostgresStateStore(db, enc, ingressID, orgID, 0)
-	require.NoError(t, err)
-	slot1, err := tailnetgateway.NewPostgresStateStore(db, enc, ingressID, orgID, 1)
-	require.NoError(t, err)
+	slot0 := newStateStore(t, db, ingressID, orgID, 0)
+	slot1 := newStateStore(t, db, ingressID, orgID, 1)
 
 	require.NoError(t, slot0.WriteState(ipn.CurrentProfileStateKey, []byte("zero")))
 	_, err = slot1.ReadState(ipn.CurrentProfileStateKey)
@@ -112,10 +106,8 @@ func TestPostgresStateStoreRegisteredAndReset(t *testing.T) {
 	ctx := t.Context()
 	db, err := infra.CloneTestDatabase(t, "tailnetstateregistered")
 	require.NoError(t, err)
-	enc := testenv.NewEncryptionClient(t)
 	ingressID, orgID := seedIngress(t, db, "state-registered")
-	store, err := tailnetgateway.NewPostgresStateStore(db, enc, ingressID, orgID, 0)
-	require.NoError(t, err)
+	store := newStateStore(t, db, ingressID, orgID, 0)
 
 	// A failed login leaves a machine key and an empty profile map behind.
 	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("machine")))
@@ -153,11 +145,13 @@ func TestPostgresStateStoreRegisteredAndReset(t *testing.T) {
 
 func TestNewPostgresStateStoreRejectsIncompleteIdentity(t *testing.T) {
 	t.Parallel()
-	enc := testenv.NewEncryptionClient(t)
-	_, err := tailnetgateway.NewPostgresStateStore(nil, enc, uuid.New(), "org", 0)
-	require.Error(t, err)
 	db, err := infra.CloneTestDatabase(t, "tailnetstateinvalid")
 	require.NoError(t, err)
+	enc := orgEncryption(t, db).Service
+	_, err = tailnetgateway.NewPostgresStateStore(nil, enc, uuid.New(), "org", 0)
+	require.Error(t, err)
+	_, err = tailnetgateway.NewPostgresStateStore(db, nil, uuid.New(), "org", 0)
+	require.Error(t, err, "organization encryption is required")
 	_, err = tailnetgateway.NewPostgresStateStore(db, enc, uuid.Nil, "org", 0)
 	require.Error(t, err)
 	_, err = tailnetgateway.NewPostgresStateStore(db, enc, uuid.New(), "org", -1)
