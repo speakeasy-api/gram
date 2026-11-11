@@ -452,6 +452,30 @@ type Client struct {
 	// listCustomDomains endpoint.
 	ListCustomDomainsDoer goahttp.Doer
 
+	// ListPlatformExternalCredentials Doer is the HTTP client used to make
+	// requests to the listPlatformExternalCredentials endpoint.
+	ListPlatformExternalCredentialsDoer goahttp.Doer
+
+	// GetGcpIamPlatformCredential Doer is the HTTP client used to make requests to
+	// the getGcpIamPlatformCredential endpoint.
+	GetGcpIamPlatformCredentialDoer goahttp.Doer
+
+	// CreateGcpIamPlatformCredential Doer is the HTTP client used to make requests
+	// to the createGcpIamPlatformCredential endpoint.
+	CreateGcpIamPlatformCredentialDoer goahttp.Doer
+
+	// UpdateGcpIamPlatformCredential Doer is the HTTP client used to make requests
+	// to the updateGcpIamPlatformCredential endpoint.
+	UpdateGcpIamPlatformCredentialDoer goahttp.Doer
+
+	// VerifyGcpIamPlatformCredential Doer is the HTTP client used to make requests
+	// to the verifyGcpIamPlatformCredential endpoint.
+	VerifyGcpIamPlatformCredentialDoer goahttp.Doer
+
+	// DeleteGcpIamPlatformCredential Doer is the HTTP client used to make requests
+	// to the deleteGcpIamPlatformCredential endpoint.
+	DeleteGcpIamPlatformCredentialDoer goahttp.Doer
+
 	// GetMemoryEvalOptions Doer is the HTTP client used to make requests to the
 	// getMemoryEvalOptions endpoint.
 	GetMemoryEvalOptionsDoer goahttp.Doer
@@ -597,6 +621,12 @@ func NewClient(
 		GetProjectRedeployPreviewDoer:               doer,
 		RedeployProjectDoer:                         doer,
 		ListCustomDomainsDoer:                       doer,
+		ListPlatformExternalCredentialsDoer:         doer,
+		GetGcpIamPlatformCredentialDoer:             doer,
+		CreateGcpIamPlatformCredentialDoer:          doer,
+		UpdateGcpIamPlatformCredentialDoer:          doer,
+		VerifyGcpIamPlatformCredentialDoer:          doer,
+		DeleteGcpIamPlatformCredentialDoer:          doer,
 		GetMemoryEvalOptionsDoer:                    doer,
 		ListMemoryEvalRunsDoer:                      doer,
 		GetMemoryEvalRunDoer:                        doer,
@@ -3225,6 +3255,150 @@ func (c *Client) ListCustomDomains() goa.Endpoint {
 		resp, err := c.ListCustomDomainsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "listCustomDomains", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPlatformExternalCredentials returns an endpoint that makes HTTP requests
+// to the admin service listPlatformExternalCredentials server.
+func (c *Client) ListPlatformExternalCredentials() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPlatformExternalCredentialsRequest(c.encoder)
+		decodeResponse = DecodeListPlatformExternalCredentialsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPlatformExternalCredentialsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPlatformExternalCredentialsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listPlatformExternalCredentials", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetGcpIamPlatformCredential returns an endpoint that makes HTTP requests to
+// the admin service getGcpIamPlatformCredential server.
+func (c *Client) GetGcpIamPlatformCredential() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetGcpIamPlatformCredentialRequest(c.encoder)
+		decodeResponse = DecodeGetGcpIamPlatformCredentialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetGcpIamPlatformCredentialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetGcpIamPlatformCredentialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getGcpIamPlatformCredential", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateGcpIamPlatformCredential returns an endpoint that makes HTTP requests
+// to the admin service createGcpIamPlatformCredential server.
+func (c *Client) CreateGcpIamPlatformCredential() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateGcpIamPlatformCredentialRequest(c.encoder)
+		decodeResponse = DecodeCreateGcpIamPlatformCredentialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateGcpIamPlatformCredentialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateGcpIamPlatformCredentialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "createGcpIamPlatformCredential", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateGcpIamPlatformCredential returns an endpoint that makes HTTP requests
+// to the admin service updateGcpIamPlatformCredential server.
+func (c *Client) UpdateGcpIamPlatformCredential() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateGcpIamPlatformCredentialRequest(c.encoder)
+		decodeResponse = DecodeUpdateGcpIamPlatformCredentialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateGcpIamPlatformCredentialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateGcpIamPlatformCredentialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "updateGcpIamPlatformCredential", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// VerifyGcpIamPlatformCredential returns an endpoint that makes HTTP requests
+// to the admin service verifyGcpIamPlatformCredential server.
+func (c *Client) VerifyGcpIamPlatformCredential() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeVerifyGcpIamPlatformCredentialRequest(c.encoder)
+		decodeResponse = DecodeVerifyGcpIamPlatformCredentialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildVerifyGcpIamPlatformCredentialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.VerifyGcpIamPlatformCredentialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "verifyGcpIamPlatformCredential", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteGcpIamPlatformCredential returns an endpoint that makes HTTP requests
+// to the admin service deleteGcpIamPlatformCredential server.
+func (c *Client) DeleteGcpIamPlatformCredential() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteGcpIamPlatformCredentialRequest(c.encoder)
+		decodeResponse = DecodeDeleteGcpIamPlatformCredentialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteGcpIamPlatformCredentialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteGcpIamPlatformCredentialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "deleteGcpIamPlatformCredential", err)
 		}
 		return decodeResponse(resp)
 	}

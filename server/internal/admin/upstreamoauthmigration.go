@@ -180,16 +180,20 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 			unresolved = append(unresolved, &gen.AdminUpstreamOAuthMigrationServer{McpServerID: serverID.String(), ProjectID: projectID.String()})
 		}
 	}
+	// An enforced organization's servers offer only what was configured for
+	// them, so what the backfill would infer from an issuer is neither pending
+	// nor unresolved there.
 	for _, result := range associations.Results {
-		if !result.Outcome.Covered() {
+		if !result.Outcome.Covered() && !result.Enforced {
 			addUnresolved(result.MCPServerID, result.ProjectID)
 		}
 	}
 	for _, result := range associations.GatewayResults {
-		if !result.Outcome.Covered() {
+		if !result.Outcome.Covered() && !result.Enforced {
 			addUnresolved(result.MCPServerID, result.ProjectID)
 		}
 	}
+	pendingAssociations := int64(associations.Decided - associations.Enforced)
 	reconnect := map[uuid.UUID]bool{}
 	for _, gap := range selections.Gaps {
 		if gap.Outcome == selectionbackfill.OutcomeAmbiguous || gap.Outcome == selectionbackfill.OutcomeUnreachableClient || gap.Outcome == selectionbackfill.OutcomeUnusableClient {
@@ -203,9 +207,9 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 		ExecutionProfiles:    s.executionProfileMigrationStatus(ctx, organizationID),
 		Enforcement:          nil,
 		OrganizationID:       organizationID,
-		Migrated:             associations.Decided == 0 && len(unresolved) == 0 && pendingSelections == 0,
+		Migrated:             pendingAssociations == 0 && len(unresolved) == 0 && pendingSelections == 0,
 		Servers:              int64(associations.Servers),
-		PendingAssociations:  int64(associations.Decided),
+		PendingAssociations:  pendingAssociations,
 		UnresolvedServers:    unresolved,
 		Credentials:          int64(selections.Credentials),
 		PendingSelections:    pendingSelections,

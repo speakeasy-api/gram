@@ -1500,5 +1500,6 @@ var _ = Service("admin", func() {
 	mcpConnectBackfillMethods()
 	projectRedeployMethods()
 	customDomainMethods()
+	platformExternalCredentialMethods()
 	memoryEvalMethods()
 })

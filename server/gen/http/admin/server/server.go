@@ -130,6 +130,12 @@ type Server struct {
 	GetProjectRedeployPreview               http.Handler
 	RedeployProject                         http.Handler
 	ListCustomDomains                       http.Handler
+	ListPlatformExternalCredentials         http.Handler
+	GetGcpIamPlatformCredential             http.Handler
+	CreateGcpIamPlatformCredential          http.Handler
+	UpdateGcpIamPlatformCredential          http.Handler
+	VerifyGcpIamPlatformCredential          http.Handler
+	DeleteGcpIamPlatformCredential          http.Handler
 	GetMemoryEvalOptions                    http.Handler
 	ListMemoryEvalRuns                      http.Handler
 	GetMemoryEvalRun                        http.Handler
@@ -272,6 +278,12 @@ func New(
 			{"GetProjectRedeployPreview", "GET", "/admin/project.redeployPreview"},
 			{"RedeployProject", "POST", "/admin/project.redeploy"},
 			{"ListCustomDomains", "GET", "/admin/customDomains.list"},
+			{"ListPlatformExternalCredentials", "GET", "/admin/externalCredentials.list"},
+			{"GetGcpIamPlatformCredential", "GET", "/admin/externalCredentials.getGcpIam"},
+			{"CreateGcpIamPlatformCredential", "POST", "/admin/externalCredentials.createGcpIam"},
+			{"UpdateGcpIamPlatformCredential", "POST", "/admin/externalCredentials.updateGcpIam"},
+			{"VerifyGcpIamPlatformCredential", "POST", "/admin/externalCredentials.verifyGcpIam"},
+			{"DeleteGcpIamPlatformCredential", "POST", "/admin/externalCredentials.deleteGcpIam"},
 			{"GetMemoryEvalOptions", "GET", "/admin/memoryEval.options"},
 			{"ListMemoryEvalRuns", "GET", "/admin/memoryEval.runs"},
 			{"GetMemoryEvalRun", "GET", "/admin/memoryEval.run"},
@@ -386,6 +398,12 @@ func New(
 		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewHandler(e.GetProjectRedeployPreview, mux, decoder, encoder, errhandler, formatter),
 		RedeployProject:                         NewRedeployProjectHandler(e.RedeployProject, mux, decoder, encoder, errhandler, formatter),
 		ListCustomDomains:                       NewListCustomDomainsHandler(e.ListCustomDomains, mux, decoder, encoder, errhandler, formatter),
+		ListPlatformExternalCredentials:         NewListPlatformExternalCredentialsHandler(e.ListPlatformExternalCredentials, mux, decoder, encoder, errhandler, formatter),
+		GetGcpIamPlatformCredential:             NewGetGcpIamPlatformCredentialHandler(e.GetGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
+		CreateGcpIamPlatformCredential:          NewCreateGcpIamPlatformCredentialHandler(e.CreateGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
+		UpdateGcpIamPlatformCredential:          NewUpdateGcpIamPlatformCredentialHandler(e.UpdateGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
+		VerifyGcpIamPlatformCredential:          NewVerifyGcpIamPlatformCredentialHandler(e.VerifyGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
+		DeleteGcpIamPlatformCredential:          NewDeleteGcpIamPlatformCredentialHandler(e.DeleteGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
 		GetMemoryEvalOptions:                    NewGetMemoryEvalOptionsHandler(e.GetMemoryEvalOptions, mux, decoder, encoder, errhandler, formatter),
 		ListMemoryEvalRuns:                      NewListMemoryEvalRunsHandler(e.ListMemoryEvalRuns, mux, decoder, encoder, errhandler, formatter),
 		GetMemoryEvalRun:                        NewGetMemoryEvalRunHandler(e.GetMemoryEvalRun, mux, decoder, encoder, errhandler, formatter),
@@ -507,6 +525,12 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetProjectRedeployPreview = m(s.GetProjectRedeployPreview)
 	s.RedeployProject = m(s.RedeployProject)
 	s.ListCustomDomains = m(s.ListCustomDomains)
+	s.ListPlatformExternalCredentials = m(s.ListPlatformExternalCredentials)
+	s.GetGcpIamPlatformCredential = m(s.GetGcpIamPlatformCredential)
+	s.CreateGcpIamPlatformCredential = m(s.CreateGcpIamPlatformCredential)
+	s.UpdateGcpIamPlatformCredential = m(s.UpdateGcpIamPlatformCredential)
+	s.VerifyGcpIamPlatformCredential = m(s.VerifyGcpIamPlatformCredential)
+	s.DeleteGcpIamPlatformCredential = m(s.DeleteGcpIamPlatformCredential)
 	s.GetMemoryEvalOptions = m(s.GetMemoryEvalOptions)
 	s.ListMemoryEvalRuns = m(s.ListMemoryEvalRuns)
 	s.GetMemoryEvalRun = m(s.GetMemoryEvalRun)
@@ -627,6 +651,12 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetProjectRedeployPreviewHandler(mux, h.GetProjectRedeployPreview)
 	MountRedeployProjectHandler(mux, h.RedeployProject)
 	MountListCustomDomainsHandler(mux, h.ListCustomDomains)
+	MountListPlatformExternalCredentialsHandler(mux, h.ListPlatformExternalCredentials)
+	MountGetGcpIamPlatformCredentialHandler(mux, h.GetGcpIamPlatformCredential)
+	MountCreateGcpIamPlatformCredentialHandler(mux, h.CreateGcpIamPlatformCredential)
+	MountUpdateGcpIamPlatformCredentialHandler(mux, h.UpdateGcpIamPlatformCredential)
+	MountVerifyGcpIamPlatformCredentialHandler(mux, h.VerifyGcpIamPlatformCredential)
+	MountDeleteGcpIamPlatformCredentialHandler(mux, h.DeleteGcpIamPlatformCredential)
 	MountGetMemoryEvalOptionsHandler(mux, h.GetMemoryEvalOptions)
 	MountListMemoryEvalRunsHandler(mux, h.ListMemoryEvalRuns)
 	MountGetMemoryEvalRunHandler(mux, h.GetMemoryEvalRun)
@@ -6480,6 +6510,330 @@ func NewListCustomDomainsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listCustomDomains")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListPlatformExternalCredentialsHandler configures the mux to serve the
+// "admin" service "listPlatformExternalCredentials" endpoint.
+func MountListPlatformExternalCredentialsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/externalCredentials.list", f)
+}
+
+// NewListPlatformExternalCredentialsHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "listPlatformExternalCredentials" endpoint.
+func NewListPlatformExternalCredentialsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListPlatformExternalCredentialsRequest(mux, decoder)
+		encodeResponse = EncodeListPlatformExternalCredentialsResponse(encoder)
+		encodeError    = EncodeListPlatformExternalCredentialsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listPlatformExternalCredentials")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetGcpIamPlatformCredentialHandler configures the mux to serve the
+// "admin" service "getGcpIamPlatformCredential" endpoint.
+func MountGetGcpIamPlatformCredentialHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/externalCredentials.getGcpIam", f)
+}
+
+// NewGetGcpIamPlatformCredentialHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getGcpIamPlatformCredential"
+// endpoint.
+func NewGetGcpIamPlatformCredentialHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetGcpIamPlatformCredentialRequest(mux, decoder)
+		encodeResponse = EncodeGetGcpIamPlatformCredentialResponse(encoder)
+		encodeError    = EncodeGetGcpIamPlatformCredentialError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getGcpIamPlatformCredential")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateGcpIamPlatformCredentialHandler configures the mux to serve the
+// "admin" service "createGcpIamPlatformCredential" endpoint.
+func MountCreateGcpIamPlatformCredentialHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/externalCredentials.createGcpIam", f)
+}
+
+// NewCreateGcpIamPlatformCredentialHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "createGcpIamPlatformCredential" endpoint.
+func NewCreateGcpIamPlatformCredentialHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateGcpIamPlatformCredentialRequest(mux, decoder)
+		encodeResponse = EncodeCreateGcpIamPlatformCredentialResponse(encoder)
+		encodeError    = EncodeCreateGcpIamPlatformCredentialError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createGcpIamPlatformCredential")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateGcpIamPlatformCredentialHandler configures the mux to serve the
+// "admin" service "updateGcpIamPlatformCredential" endpoint.
+func MountUpdateGcpIamPlatformCredentialHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/externalCredentials.updateGcpIam", f)
+}
+
+// NewUpdateGcpIamPlatformCredentialHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "updateGcpIamPlatformCredential" endpoint.
+func NewUpdateGcpIamPlatformCredentialHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateGcpIamPlatformCredentialRequest(mux, decoder)
+		encodeResponse = EncodeUpdateGcpIamPlatformCredentialResponse(encoder)
+		encodeError    = EncodeUpdateGcpIamPlatformCredentialError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateGcpIamPlatformCredential")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountVerifyGcpIamPlatformCredentialHandler configures the mux to serve the
+// "admin" service "verifyGcpIamPlatformCredential" endpoint.
+func MountVerifyGcpIamPlatformCredentialHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/externalCredentials.verifyGcpIam", f)
+}
+
+// NewVerifyGcpIamPlatformCredentialHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "verifyGcpIamPlatformCredential" endpoint.
+func NewVerifyGcpIamPlatformCredentialHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeVerifyGcpIamPlatformCredentialRequest(mux, decoder)
+		encodeResponse = EncodeVerifyGcpIamPlatformCredentialResponse(encoder)
+		encodeError    = EncodeVerifyGcpIamPlatformCredentialError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "verifyGcpIamPlatformCredential")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteGcpIamPlatformCredentialHandler configures the mux to serve the
+// "admin" service "deleteGcpIamPlatformCredential" endpoint.
+func MountDeleteGcpIamPlatformCredentialHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/externalCredentials.deleteGcpIam", f)
+}
+
+// NewDeleteGcpIamPlatformCredentialHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "deleteGcpIamPlatformCredential" endpoint.
+func NewDeleteGcpIamPlatformCredentialHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteGcpIamPlatformCredentialRequest(mux, decoder)
+		encodeResponse = EncodeDeleteGcpIamPlatformCredentialResponse(encoder)
+		encodeError    = EncodeDeleteGcpIamPlatformCredentialError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteGcpIamPlatformCredential")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

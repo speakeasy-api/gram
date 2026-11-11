@@ -142,7 +142,7 @@ type GetGcpIamPlatformCredentialPayload struct {
 // ListExternalCredentialsResult is the result type of the
 // adminExternalCredentials service listPlatformExternalCredentials method.
 type ListExternalCredentialsResult struct {
-	// The organization's external credentials.
+	// The external credentials.
 	Credentials []*ExternalCredentialSummary
 }
 

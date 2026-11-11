@@ -39,6 +39,7 @@ trackedFiles:
   src/funcs/adminCancelStripeSubscription.ts: {}
   src/funcs/adminChangeTrialEndDate.ts: {}
   src/funcs/adminCloneOnboardingPlaybook.ts: {}
+  src/funcs/adminCreateGcpIamPlatformCredential.ts: {}
   src/funcs/adminCreateGlobalIssuer.ts: {}
   src/funcs/adminCreateOnboardingPlaybook.ts: {}
   src/funcs/adminCreateOnboardingUseCase.ts: {}
@@ -46,6 +47,7 @@ trackedFiles:
   src/funcs/adminCreateRegistryEntry.ts: {}
   src/funcs/adminCreateSignupOffer.ts: {}
   src/funcs/adminCurateRegistryPromotionCandidate.ts: {}
+  src/funcs/adminDeleteGcpIamPlatformCredential.ts: {}
   src/funcs/adminDeleteGlobalIssuer.ts: {}
   src/funcs/adminDeleteOnboardingPlaybook.ts: {}
   src/funcs/adminDeleteOnboardingUseCase.ts: {}
@@ -56,6 +58,7 @@ trackedFiles:
   src/funcs/adminEnableUpstreamAuthEnforcement.ts: {}
   src/funcs/adminExtendTrial.ts: {}
   src/funcs/adminFetchGlobalIssuerMetadata.ts: {}
+  src/funcs/adminGetGcpIamPlatformCredential.ts: {}
   src/funcs/adminGetGlobalIssuer.ts: {}
   src/funcs/adminGetGlobalIssuerDuplicatePreflight.ts: {}
   src/funcs/adminGetGlobalIssuerMigratePreflight.ts: {}
@@ -100,6 +103,7 @@ trackedFiles:
   src/funcs/adminListOrganizationMembers.ts: {}
   src/funcs/adminListOrganizationProjects.ts: {}
   src/funcs/adminListOrganizations.ts: {}
+  src/funcs/adminListPlatformExternalCredentials.ts: {}
   src/funcs/adminListPlatformMcpFeedback.ts: {}
   src/funcs/adminListProjectMcpServers.ts: {}
   src/funcs/adminListRegistryEntries.ts: {}
@@ -135,6 +139,7 @@ trackedFiles:
   src/funcs/adminStartMemoryEvalRun.ts: {}
   src/funcs/adminStartTrial.ts: {}
   src/funcs/adminTriggerOrganizationChatAnalysis.ts: {}
+  src/funcs/adminUpdateGcpIamPlatformCredential.ts: {}
   src/funcs/adminUpdateGlobalIssuer.ts: {}
   src/funcs/adminUpdateOnboardingPlaybook.ts: {}
   src/funcs/adminUpdateOnboardingUseCase.ts: {}
@@ -142,6 +147,7 @@ trackedFiles:
   src/funcs/adminUpdateSignupOffer.ts: {}
   src/funcs/adminUpdateSupportMatrix.ts: {}
   src/funcs/adminUploadPlatformImage.ts: {}
+  src/funcs/adminVerifyGcpIamPlatformCredential.ts: {}
   src/hooks/hooks.ts: {}
   src/hooks/types.ts: {}
   src/index.ts: {}
@@ -285,6 +291,7 @@ trackedFiles:
   src/models/components/createonboardingplaybookrequestbody.ts: {}
   src/models/components/createonboardingusecaserequestbody.ts: {}
   src/models/components/createorganizationrequestbody.ts: {}
+  src/models/components/createplatformgcpiamcredentialform.ts: {}
   src/models/components/createregistryentryrequestbody.ts: {}
   src/models/components/createremotesessionissuerform.ts: {}
   src/models/components/createsignupofferrequestbody.ts: {}
@@ -298,12 +305,15 @@ trackedFiles:
   src/models/components/enableorganizationrequestbody.ts: {}
   src/models/components/enableupstreamauthenforcementrequestbody.ts: {}
   src/models/components/extendtrialrequestbody.ts: {}
+  src/models/components/externalcredentialsummary.ts: {}
   src/models/components/fetchissuermetadatarequestbody.ts: {}
+  src/models/components/gcpiamcredential.ts: {}
   src/models/components/getregistrypromotioncandidaterequestbody.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
   src/models/components/issuerconvergencecandidate.ts: {}
   src/models/components/issuerfieldmismatch.ts: {}
   src/models/components/issuermigratepreflight.ts: {}
+  src/models/components/listexternalcredentialsresult.ts: {}
   src/models/components/listglobalremotesessionissuersresult.ts: {}
   src/models/components/listissuerconvergencecandidatesresult.ts: {}
   src/models/components/listmemoryevalrunsresponsebody.ts: {}
@@ -354,12 +364,14 @@ trackedFiles:
   src/models/components/supportmethod.ts: {}
   src/models/components/supportplatform.ts: {}
   src/models/components/triggerorganizationchatanalysisrequestbody.ts: {}
+  src/models/components/updategcpiamplatformcredentialrequestbody.ts: {}
   src/models/components/updateonboardingplaybookrequestbody.ts: {}
   src/models/components/updateonboardingusecaserequestbody.ts: {}
   src/models/components/updateorganizationrequestbody.ts: {}
   src/models/components/updateremotesessionissuerform.ts: {}
   src/models/components/updatesignupofferrequestbody.ts: {}
   src/models/components/updatesupportmatrixrequestbody.ts: {}
+  src/models/components/verifyplatformcredentialresult.ts: {}
   src/models/errors/apierror.ts: {}
   src/models/errors/gramerror.ts: {}
   src/models/errors/httpclienterrors.ts: {}
@@ -368,6 +380,7 @@ trackedFiles:
   src/models/errors/serviceerror.ts: {}
   src/models/operations/admindeleteglobalissuer.ts: {}
   src/models/operations/admindescribemcpserverhealth.ts: {}
+  src/models/operations/admingetgcpiamplatformcredential.ts: {}
   src/models/operations/admingetglobalissuer.ts: {}
   src/models/operations/admingetglobalissuerduplicatepreflight.ts: {}
   src/models/operations/admingetglobalissuermigratepreflight.ts: {}
@@ -404,6 +417,7 @@ trackedFiles:
   src/models/operations/adminlistorganizationmembers.ts: {}
   src/models/operations/adminlistorganizationprojects.ts: {}
   src/models/operations/adminlistorganizations.ts: {}
+  src/models/operations/adminlistplatformexternalcredentials.ts: {}
   src/models/operations/adminlistplatformmcpfeedback.ts: {}
   src/models/operations/adminlistprojectmcpservers.ts: {}
   src/models/operations/adminlistregistryentries.ts: {}
@@ -418,11 +432,13 @@ trackedFiles:
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
   src/react-query/adminChangeTrialEndDate.ts: {}
+  src/react-query/adminCreateGcpIamPlatformCredential.ts: {}
   src/react-query/adminCreateGlobalIssuer.ts: {}
   src/react-query/adminCreateOrganization.ts: {}
   src/react-query/adminCreateRegistryEntry.ts: {}
   src/react-query/adminCreateSignupOffer.ts: {}
   src/react-query/adminCurateRegistryPromotionCandidate.ts: {}
+  src/react-query/adminDeleteGcpIamPlatformCredential.ts: {}
   src/react-query/adminDeleteGlobalIssuer.ts: {}
   src/react-query/adminDescribeMcpServerHealth.core.ts: {}
   src/react-query/adminDescribeMcpServerHealth.ts: {}
@@ -432,6 +448,8 @@ trackedFiles:
   src/react-query/adminEnableUpstreamAuthEnforcement.ts: {}
   src/react-query/adminExtendTrial.ts: {}
   src/react-query/adminFetchGlobalIssuerMetadata.ts: {}
+  src/react-query/adminGetGcpIamPlatformCredential.core.ts: {}
+  src/react-query/adminGetGcpIamPlatformCredential.ts: {}
   src/react-query/adminGetGlobalIssuer.core.ts: {}
   src/react-query/adminGetGlobalIssuer.ts: {}
   src/react-query/adminGetGlobalIssuerDuplicatePreflight.core.ts: {}
@@ -505,6 +523,8 @@ trackedFiles:
   src/react-query/adminListOrganizationProjects.ts: {}
   src/react-query/adminListOrganizations.core.ts: {}
   src/react-query/adminListOrganizations.ts: {}
+  src/react-query/adminListPlatformExternalCredentials.core.ts: {}
+  src/react-query/adminListPlatformExternalCredentials.ts: {}
   src/react-query/adminListPlatformMcpFeedback.core.ts: {}
   src/react-query/adminListPlatformMcpFeedback.ts: {}
   src/react-query/adminListProjectMcpServers.core.ts: {}
@@ -561,11 +581,13 @@ trackedFiles:
   src/react-query/adminStartMemoryEvalRun.ts: {}
   src/react-query/adminStartTrial.ts: {}
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
+  src/react-query/adminUpdateGcpIamPlatformCredential.ts: {}
   src/react-query/adminUpdateGlobalIssuer.ts: {}
   src/react-query/adminUpdateOrganization.ts: {}
   src/react-query/adminUpdateSignupOffer.ts: {}
   src/react-query/adminUpdateSupportMatrix.ts: {}
   src/react-query/adminUploadPlatformImage.ts: {}
+  src/react-query/adminVerifyGcpIamPlatformCredential.ts: {}
   src/react-query/assignAdminOrganizationOnboardingPlaybook.ts: {}
   src/react-query/cloneAdminOnboardingPlaybook.ts: {}
   src/react-query/createAdminOnboardingPlaybook.ts: {}
@@ -685,6 +707,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminCreateGcpIamPlatformCredential:
+    speakeasy-default-admin-create-gcp-iam-platform-credential:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-07-16T08:43:34.366Z", "id": "ac389b28-3da0-44e7-8a88-9f4d1e1d026e", "name": "<value>", "organization_id": "<id>", "provider": "aws_iam", "updated_at": "2025-11-23T07:58:32.014Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminCreateGlobalIssuer:
     speakeasy-default-admin-create-global-issuer:
       requestBody:
@@ -769,6 +802,15 @@ examples:
       responses:
         "200":
           application/json: {"can_override_eligibility": false, "created_at": "2025-04-11T09:01:57.801Z", "curation_revision": "f75e5b9e-9f29-4694-94d6-6ff7c992833e", "docs_attempts": 743212, "docs_retry_allowed": false, "docs_revision": "<value>", "eligible": false, "id": "<id>", "mcp_server_id": "<id>", "observed_days": 7723, "observed_failures": 463546, "observed_successes": 472321, "organization_id": "<id>", "project_id": "<id>", "reason": "<value>", "remote_mcp_server_id": "<id>", "source_revision": "<value>", "status": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminDeleteGcpIamPlatformCredential:
+    speakeasy-default-admin-delete-gcp-iam-platform-credential:
+      requestBody:
+        application/json: {"id": "6a9af4ba-52e5-4b2e-9f28-fc5030c531be"}
+      responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -907,6 +949,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminGetGcpIamPlatformCredential:
+    speakeasy-default-admin-get-gcp-iam-platform-credential:
+      parameters:
+        query:
+          id: "6c8704b4-181a-49c8-a5e5-4173c31b79b9"
+      responses:
+        "200":
+          application/json: {"created_at": "2026-10-19T05:43:05.255Z", "id": "10b1109f-e39b-4a5a-9427-e632f56a3917", "name": "<value>", "organization_id": "<id>", "provider": "aws_iam", "updated_at": "2025-10-15T13:41:16.501Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminGetGlobalIssuer:
     speakeasy-default-admin-get-global-issuer:
       parameters:
@@ -1490,6 +1544,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminListPlatformExternalCredentials:
+    speakeasy-default-admin-list-platform-external-credentials:
+      responses:
+        "200":
+          application/json: {"credentials": [{"created_at": "2026-02-24T15:40:33.688Z", "id": "6f1c539e-c268-4dc5-953a-84ade67e3a3d", "name": "<value>", "organization_id": "<id>", "provider": "gcp_iam", "updated_at": "2024-04-12T03:47:51.736Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminListPlatformMcpFeedback:
     speakeasy-default-admin-list-platform-mcp-feedback:
       parameters:
@@ -1923,6 +1986,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminUpdateGcpIamPlatformCredential:
+    speakeasy-default-admin-update-gcp-iam-platform-credential:
+      requestBody:
+        application/json: {"id": "affcb57d-f32f-40e7-a94d-15ee2dce1cf8", "name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-07-06T19:04:56.603Z", "id": "5252eaf2-c779-4407-9d8b-d7b4016cf5c8", "name": "<value>", "organization_id": "<id>", "provider": "aws_iam", "updated_at": "2026-03-28T21:42:17.852Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminUpdateGlobalIssuer:
     speakeasy-default-admin-update-global-issuer:
       requestBody:
@@ -2011,5 +2085,16 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminVerifyGcpIamPlatformCredential:
+    speakeasy-default-admin-verify-gcp-iam-platform-credential:
+      requestBody:
+        application/json: {"id": "bd31aa79-91e3-4a9d-8bcb-9c09abd1b881"}
+      responses:
+        "200":
+          application/json: {"verified": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

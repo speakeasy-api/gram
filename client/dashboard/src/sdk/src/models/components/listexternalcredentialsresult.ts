@@ -13,7 +13,7 @@ import {
 
 export type ListExternalCredentialsResult = {
   /**
-   * The organization's external credentials.
+   * The external credentials.
    */
   credentials: Array<ExternalCredentialSummary>;
 };

@@ -85,7 +85,7 @@ type CreateGcpIamPlatformCredentialResponseBody struct {
 // "adminExternalCredentials" service "listPlatformExternalCredentials"
 // endpoint HTTP response body.
 type ListPlatformExternalCredentialsResponseBody struct {
-	// The organization's external credentials.
+	// The external credentials.
 	Credentials []*ExternalCredentialSummaryResponseBody `form:"credentials,omitempty" json:"credentials,omitempty" xml:"credentials,omitempty"`
 }
 
