@@ -610,3 +610,66 @@ func TestRefreshNow_FallbackResourceFromTheOffer(t *testing.T) {
 		})
 	}
 }
+
+// Consolidation moves sign-ins to the organization tier without moving their
+// upstream registrations out of the project. Both direct links and offers must
+// keep those grants renewable, but neither may cross tenant boundaries.
+func TestRefreshSweep_ProjectClientWithOrganizationSignIn(t *testing.T) {
+	t.Parallel()
+	for _, reach := range []string{"linked", "offered"} {
+		for _, tenancy := range []string{"same-organization", "foreign-organization", "tenantless", "deleted-project"} {
+			t.Run(reach+"/"+tenancy, func(t *testing.T) {
+				t.Parallel()
+				slug := "sweep-org-" + reach + "-" + tenancy
+				ctx, o := seedOfferedRegistration(t, slug, "https://issuer.example.com/"+slug)
+				organization := conv.ToPGText(o.organization)
+				if tenancy == "foreign-organization" {
+					organization = conv.ToPGText(createOrganization(t, ctx, o.ti.conn, slug+"-org"))
+				} else if tenancy == "tenantless" {
+					organization = pgtype.Text{}
+				}
+				require.NoError(t, testrepo.New(o.ti.conn).SetUserSessionIssuerTenancyFixture(ctx, testrepo.SetUserSessionIssuerTenancyFixtureParams{
+					ID: o.signIn, ProjectID: uuid.NullUUID{}, OrganizationID: organization,
+				}))
+				if reach == "linked" {
+					require.NoError(t, repo.New(o.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+						RemoteSessionClientID: o.registration, UserSessionIssuerID: o.signIn,
+					}))
+				} else {
+					enforceUpstreamAuth(t, ctx, o.ti.conn, o.organization)
+					o.requireNoLink(t, ctx)
+				}
+				enableOrgAutoRefreshFeature(t, ctx, o.ti, o.organization, productfeatures.FeatureRemoteSessionAutoRefreshEnforced)
+				if organization.Valid && organization.String != o.organization {
+					enableOrgAutoRefreshFeature(t, ctx, o.ti, organization.String, productfeatures.FeatureRemoteSessionAutoRefreshEnforced)
+				}
+				sessionID := o.grant(t, ctx, o.signIn, true, false)
+				seedGramSession(t, ctx, o.ti, o.subject, o.signIn, slug, 24*time.Hour)
+				if tenancy == "deleted-project" {
+					n, err := testrepo.New(o.ti.conn).SoftDeleteAttachmentProjectFixture(ctx, o.projectID)
+					require.NoError(t, err)
+					require.Equal(t, int64(1), n)
+				}
+				window := newSweepWindow()
+				q := repo.New(o.ti.conn)
+				rows, err := q.ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
+				require.NoError(t, err)
+				candidate, candidateErr := q.GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(sessionID, o.organization))
+				if tenancy == "same-organization" {
+					require.Len(t, rows, 1)
+					require.Equal(t, sessionID, rows[0].ID)
+					require.Equal(t, o.organization, rows[0].OrganizationID)
+					require.NoError(t, candidateErr)
+					require.Equal(t, sessionID, candidate.RemoteSession.ID)
+				} else {
+					require.Empty(t, rows)
+					require.ErrorIs(t, candidateErr, pgx.ErrNoRows)
+				}
+				if organization.Valid && organization.String != o.organization {
+					_, err = q.GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(sessionID, organization.String))
+					require.ErrorIs(t, err, pgx.ErrNoRows, "foreign policy cannot authorize this project client's refresh")
+				}
+			})
+		}
+	}
+}
