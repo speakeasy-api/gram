@@ -233,8 +233,25 @@ export function usePylonInAppChat(user: User | undefined): void {
 
 declare global {
   interface Window {
-    Letterprove?: { identify: (email: string) => void };
+    Letterprove?: {
+      q?: [string, string][];
+      identify: (email: string) => void;
+    };
   }
+}
+
+// Same queue the Letterprove snippet installs inline: attest.js replays
+// window.Letterprove.q once it loads. It lives here because index.html
+// allows no inline scripts.
+function letterprove(): NonNullable<Window["Letterprove"]> {
+  if (!window.Letterprove) {
+    const q: [string, string][] = [];
+    window.Letterprove = {
+      q,
+      identify: (email) => q.push(["identify", email]),
+    };
+  }
+  return window.Letterprove;
 }
 
 /**
@@ -249,12 +266,11 @@ export function useLetterproveIdentify(
 ): void {
   useEffect(() => {
     if (!email || impersonating) return;
-    if (typeof window !== "undefined" && window.Letterprove) {
-      try {
-        window.Letterprove.identify(email);
-      } catch {
-        // never let the attestation script break the page
-      }
+    if (typeof window === "undefined") return;
+    try {
+      letterprove().identify(email);
+    } catch {
+      // never let the attestation script break the page
     }
   }, [email, impersonating]);
 }

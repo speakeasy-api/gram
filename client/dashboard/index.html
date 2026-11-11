@@ -95,9 +95,9 @@
       crossorigin
     />
     <!-- Letterprove: signed counts of companies signing in, from the email
-         domain only. The key is publishable. The stub queues calls made
-         before the async script loads. -->
-    <script>window.Letterprove=window.Letterprove||{q:[],identify:function(e){this.q.push(['identify',e])},login:function(e){this.q.push(['login',e])},signup:function(e){this.q.push(['signup',e])}}</script>
+         domain only. The key is publishable. Calls made before this async
+         script loads are queued by useLetterproveIdentify (Auth.tsx), since
+         index.html allows no inline scripts. -->
     <script async src="https://app.letterprove.com/attest.js" data-key="lp_live_speakeasyapi_979f5c4a428d"></script>
     <title>Speakeasy</title>
   </head>
