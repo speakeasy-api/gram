@@ -534,7 +534,7 @@ func TestPiMCPConfigIgnoresNonRegularAndOversizedFiles(t *testing.T) {
 
 	oversized := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(oversized, ".pi"), 0o755))
-	body := `{"mcpServers":{"linear":{"url":"https://mcp.example.com/sse"}}}` + strings.Repeat(" ", maxPiMCPConfigBytes)
+	body := `{"mcpServers":{"linear":{"url":"https://mcp.example.com/sse"}}}` + strings.Repeat(" ", maxMCPConfigBytes)
 	require.NoError(t, os.WriteFile(filepath.Join(oversized, ".pi", "mcp.json"), []byte(body), 0o600))
 	require.Empty(t, loadPiMCPServers(oversized))
 }
