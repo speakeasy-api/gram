@@ -103,8 +103,9 @@ type Entry struct {
 // folded, the memos no day digest folded, and the chats whose current
 // summary falls outside the period of every digest that folded them. Older
 // history therefore shows at its most compressed level. A summary regenerated
-// after its digest still appears, although an older snapshot of it stays
-// folded into that digest or the week or month digest above it.
+// outside the period of every digest that folded it still appears, although an
+// older snapshot of it stays folded into that digest or the week or month
+// digest above it.
 // Entries come back oldest first.
 func Uncovered(digests []Digest, chats []ChatNote, memos []MemoNote) []Entry {
 	covered := map[uuid.UUID]bool{}
