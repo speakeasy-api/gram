@@ -2733,7 +2733,7 @@ func generateVibeObservabilityPluginInDir(files map[string][]byte, subdir string
 	// own first so a schema-loader or future manifest error is not
 	// misreported as a name failure.
 	if err := validateAgentPluginName(manifestName); err != nil {
-		return fmt.Errorf("%w: %v", errVibeManifestName, err)
+		return fmt.Errorf("%w: %w", errVibeManifestName, err)
 	}
 	manifestJSON, err := marshalJSON(manifest)
 	if err != nil {

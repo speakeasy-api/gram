@@ -1097,7 +1097,7 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 	require.NoError(t, body.Close())
 }
 
-func TestPluginsService_DownloadObservabilityPluginVibe(t *testing.T) {
+func TestPluginsService_DownloadObservabilityPluginVibe(t *testing.T) { //nolint:paralleltest // Writes the pinnedHooksBinaryVersion package var.
 	plugins.SetPinnedHooksBinaryVersionForTest(t, plugins.VibeProviderMinHooksBinaryVersionForTest)
 
 	ctx, ti := newTestPluginsService(t)
