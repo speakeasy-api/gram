@@ -882,7 +882,8 @@ That check becomes a selector like:
   "resource_kind": "mcp",
   "resource_id": "toolset_123",
   "tool": "search_docs",
-  "disposition": "read_only"
+  "disposition": "read_only",
+  "project_id": "project_456"
 }
 ```
 
