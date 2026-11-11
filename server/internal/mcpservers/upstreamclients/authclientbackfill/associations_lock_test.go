@@ -1,8 +1,10 @@
 package authclientbackfill
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -109,6 +111,50 @@ func TestSyncServerAssociations_PrelocksSharedOAuthClientsAcrossProjects(t *test
 			require.NoError(t, <-secondDone)
 			require.ElementsMatch(t, typed, f.links(server))
 			require.ElementsMatch(t, typed, f.links(otherServer))
+		})
+	}
+}
+
+// observeOAuthGates checks that preflight takes a single complete ordered gate
+// set, including registrations whose server associations do not exist yet.
+type observeOAuthGates struct {
+	pgx.Tx
+	calls *[][]uuid.UUID
+}
+
+func (tx observeOAuthGates) Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error) {
+	if strings.HasPrefix(query, "-- name: LockOAuthRegistrationSyncScope ") {
+		registrations, ok := args[1].([]uuid.UUID)
+		if !ok {
+			return pgconn.CommandTag{}, fmt.Errorf("unexpected registration gate argument type %T", args[1])
+		}
+		*tx.calls = append(*tx.calls, slices.Clone(registrations))
+	}
+	tag, err := tx.Tx.Exec(ctx, query, args...) //nolint:glint // notestingrawsql: gate instrumentation delegates dynamically intercepted SQLc statements.
+	if err != nil {
+		return tag, fmt.Errorf("execute observed registration gate: %w", err)
+	}
+	return tag, nil
+}
+
+func TestPreflightServerAssociationsWithRegistrationsMergesOneOrderedGateSet(t *testing.T) {
+	t.Parallel()
+	for _, includeServer := range []bool{false, true} {
+		t.Run(fmt.Sprintf("include_server_%t", includeServer), func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			server, associated, prospective := f.server(), f.client("subject"), f.client("subject")
+			f.associate(server, associated)
+			var servers []uuid.UUID
+			expected := []uuid.UUID{prospective}
+			if includeServer {
+				servers, expected = []uuid.UUID{server, server}, append(expected, associated)
+			}
+			slices.SortFunc(expected, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+			tx := testenv.BeginTx(t, t.Context(), f.pool)
+			var calls [][]uuid.UUID
+			require.NoError(t, PreflightServerAssociationsWithRegistrations(t.Context(), observeOAuthGates{Tx: tx, calls: &calls}, f.orgID, servers, []uuid.UUID{prospective, uuid.Nil, prospective}))
+			require.Equal(t, [][]uuid.UUID{expected}, calls)
 		})
 	}
 }

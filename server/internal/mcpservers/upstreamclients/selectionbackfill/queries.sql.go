@@ -116,13 +116,15 @@ LEFT JOIN projects AS p
   ON p.id = usi.project_id
 WHERE s.deleted IS FALSE
   AND s.refresh_expires_at > clock_timestamp()
-  AND COALESCE(s.credential_id, s.id) > $1::uuid
-  AND ($2::text = '' OR COALESCE(usi.organization_id, p.organization_id) = $2::text)
+  AND ($1::uuid IS NULL OR s.user_session_issuer_id = $1::uuid)
+  AND COALESCE(s.credential_id, s.id) > $2::uuid
+  AND ($3::text = '' OR COALESCE(usi.organization_id, p.organization_id) = $3::text)
 ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
-LIMIT $3::int
+LIMIT $4::int
 `
 
 type ListLiveUserSessionCredentialsParams struct {
+	IssuerID       uuid.NullUUID
 	Cursor         uuid.UUID
 	OrganizationID string
 	PageSize       int32
@@ -140,7 +142,12 @@ type ListLiveUserSessionCredentialsRow struct {
 // Its organization is its issuer's, which a project issuer takes from its
 // project.
 func (q *Queries) ListLiveUserSessionCredentials(ctx context.Context, arg ListLiveUserSessionCredentialsParams) ([]ListLiveUserSessionCredentialsRow, error) {
-	rows, err := q.db.Query(ctx, listLiveUserSessionCredentials, arg.Cursor, arg.OrganizationID, arg.PageSize)
+	rows, err := q.db.Query(ctx, listLiveUserSessionCredentials,
+		arg.IssuerID,
+		arg.Cursor,
+		arg.OrganizationID,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}

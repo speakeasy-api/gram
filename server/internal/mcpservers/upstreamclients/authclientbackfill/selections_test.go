@@ -3,16 +3,20 @@ package authclientbackfill
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -470,4 +474,303 @@ func TestRun_ChoicesAreNotMappedAfterAFailedPhase(t *testing.T) { //nolint:paral
 	require.Equal(t, 1, report.PendingSelectionMappings)
 	require.Zero(t, report.SelectionsMapped)
 	require.False(t, f.selection(credential, server).AuthClientID.Valid)
+}
+
+func TestListSelectionMappingsScopedLiveCredentialsRespectTenant(t *testing.T) {
+	t.Parallel()
+	for _, organizationIssuer := range []bool{false, true} {
+		name := "project issuer"
+		if organizationIssuer {
+			name = "organization issuer"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			f := newFixture(t)
+			other := newFixtureIn(t, f.pool)
+			issuerID, foreignIssuerID := f.sessionIssuer(), other.sessionIssuer()
+			if organizationIssuer {
+				issuerID, foreignIssuerID = f.organizationIssuer(), other.organizationIssuer()
+			}
+			server := f.server()
+			seed := func(issuer uuid.UUID, organization pgtype.Text) uuid.UUID {
+				t.Helper()
+				credential := uuid.New()
+				require.NoError(t, f.q.SeedUserSessionFixture(ctx, SeedUserSessionFixtureParams{
+					ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, OrganizationID: organization,
+					UserSessionIssuerID: issuer, SubjectUrn: urn.NewUserSubject("scoped-user-" + credential.String()),
+					Jti: uuid.NewString(), CredentialID: uuid.NullUUID{UUID: credential, Valid: true},
+				}))
+				// An inconsistent historical choice must not make another tenant's
+				// session eligible for this tenant's scoped reconciliation.
+				f.noAuthSelection(credential, server)
+				return credential
+			}
+			current := seed(issuerID, pgtype.Text{String: f.orgID, Valid: true})
+			legacy := seed(issuerID, pgtype.Text{Valid: false})
+			foreignSessionTenant := seed(issuerID, pgtype.Text{String: other.orgID, Valid: true})
+			seed(foreignIssuerID, pgtype.Text{Valid: false})
+			params := ListSelectionMappingsParams{
+				OrganizationID: f.orgID, PageSize: 200, OnlyUnmapped: true,
+				ScopeUserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+			}
+			rows, err := f.q.ListSelectionMappings(ctx, params)
+			require.NoError(t, err)
+			credentials := make([]uuid.UUID, 0, len(rows))
+			for _, row := range rows {
+				credentials = append(credentials, row.CredentialID)
+			}
+			require.ElementsMatch(t, []uuid.UUID{current, legacy}, credentials)
+			require.NotContains(t, credentials, foreignSessionTenant)
+			params.ScopeUserSessionIssuerID.UUID = foreignIssuerID
+			rows, err = f.q.ListSelectionMappings(ctx, params)
+			require.NoError(t, err)
+			require.Empty(t, rows, "a foreign issuer cannot establish ownership, even with a legacy NULL session tenant")
+
+			params.ScopeUserSessionIssuerID = uuid.NullUUID{Valid: false}
+			rows, err = f.q.ListSelectionMappings(ctx, params)
+			require.NoError(t, err)
+			require.Len(t, rows, 4, "unscoped reporting retains its existing behavior")
+		})
+	}
+}
+
+func TestListSelectionMappingsScopedLiveCredentialsPagination(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	server := f.server()
+	for range defaultPageSize + 5 {
+		f.noAuthSelection(f.interactiveCredential(), server)
+	}
+	params := ListSelectionMappingsParams{
+		OrganizationID: f.orgID, PageSize: defaultPageSize, OnlyUnmapped: true,
+		ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true},
+	}
+	first, err := f.q.ListSelectionMappings(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, first, defaultPageSize)
+	params.Cursor = first[len(first)-1].ID
+	second, err := f.q.ListSelectionMappings(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, second, 5)
+	seen := make(map[uuid.UUID]bool, defaultPageSize+5)
+	for _, row := range append(first, second...) {
+		require.False(t, seen[row.CredentialID], "pagination must not repeat a live lineage")
+		seen[row.CredentialID] = true
+	}
+	visited := 0
+	params.Cursor = uuid.Nil
+	require.NoError(t, visitSelectionMappings(t.Context(), f.q, params, func(rows []ListSelectionMappingsRow) error {
+		visited += len(rows)
+		return nil
+	}))
+	require.Equal(t, defaultPageSize+5, visited)
+	params.Cursor = second[len(second)-1].ID
+	last, err := f.q.ListSelectionMappings(t.Context(), params)
+	require.NoError(t, err)
+	require.Empty(t, last)
+}
+
+func TestListSelectionMappingsIssuerScopeDoesNotImplyUnmapped(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	server, registration := f.server(), f.client("subject")
+	f.associate(server, registration)
+	f.run(true)
+	credential := f.interactiveCredential()
+	f.oauthSelection(credential, server, registration)
+	f.run(true)
+	require.True(t, f.selection(credential, server).AuthClientID.Valid)
+	params := ListSelectionMappingsParams{
+		OrganizationID: f.orgID, PageSize: defaultPageSize, OnlyUnmapped: false,
+		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true},
+	}
+	rows, err := f.q.ListSelectionMappings(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "issuer scope alone includes already mapped choices")
+	params.OnlyUnmapped = true
+	rows, err = f.q.ListSelectionMappings(t.Context(), params)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+// observeSelectionMapping counts policy rereads separately from page reads and
+// can simulate one representative receiving an explicit choice before reread.
+type observeSelectionMapping struct {
+	pgx.Tx
+	counts         *selectionMappingCounts
+	organizationID string
+	registrationID uuid.UUID
+	clientID       uuid.UUID
+	raceFirst      bool
+}
+
+type selectionMappingCounts struct {
+	rereads       int
+	serverLocks   int
+	singleUpdates int
+	groupUpdates  int
+	injected      bool
+}
+
+func (tx observeSelectionMapping) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
+	if strings.HasPrefix(query, "-- name: ListSelectionMappings ") {
+		onlyID, ok := args[4].(uuid.NullUUID)
+		if !ok {
+			return nil, fmt.Errorf("selection query only ID has unexpected type %T", args[4])
+		}
+		if onlyID.Valid {
+			tx.counts.rereads++
+			if tx.raceFirst && !tx.counts.injected {
+				tx.counts.injected = true
+				_, err := New(tx.Tx).MapSelectionToAuthClient(ctx, MapSelectionToAuthClientParams{
+					ID: onlyID.UUID, OrganizationID: tx.organizationID, NoAuth: false,
+					RemoteSessionClientID: uuid.NullUUID{UUID: tx.registrationID, Valid: true}, AuthClientID: tx.clientID,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("simulate representative choice: %w", err)
+				}
+			}
+		}
+	}
+	rows, err := tx.Tx.Query(ctx, query, args...) //nolint:glint // notestingrawsql: policy instrumentation delegates dynamically intercepted SQLc statements.
+	if err != nil {
+		return nil, fmt.Errorf("execute observed selection query: %w", err)
+	}
+	return rows, nil
+}
+
+func (tx observeSelectionMapping) Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error) {
+	switch {
+	case strings.HasPrefix(query, "-- name: LockSelectionServer "):
+		tx.counts.serverLocks++
+	case strings.HasPrefix(query, "-- name: MapSelectionToAuthClient "):
+		tx.counts.singleUpdates++
+	case strings.HasPrefix(query, "-- name: MapSelectionGroupToAuthClient "):
+		tx.counts.groupUpdates++
+	}
+	tag, err := tx.Tx.Exec(ctx, query, args...) //nolint:glint // notestingrawsql: policy instrumentation delegates dynamically intercepted SQLc statements.
+	if err != nil {
+		return tag, fmt.Errorf("execute observed selection write: %w", err)
+	}
+	return tag, nil
+}
+
+func TestReconcileUserSessionSelectionsGroupsAcrossPages(t *testing.T) {
+	t.Parallel()
+	for _, raceFirst := range []bool{false, true} {
+		t.Run(fmt.Sprintf("representative_race_%t", raceFirst), func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			f := newFixture(t)
+			other := newFixtureIn(t, f.pool)
+			server, registration := f.server(), f.client("subject")
+			detached, detachedRegistration := f.server(), f.client("subject")
+			f.associate(server, registration)
+			f.associate(detached, detachedRegistration)
+			source := f.source()
+			ambiguous := f.serverOn(source)
+			f.staticHeader(source, "Authorization")
+			f.run(true)
+			f.adminHeaderClient(ambiguous)
+			typed := OAuthClientID(f.orgID, registration, TypeRemoteSession)
+			f.adminDetach(detached, OAuthClientID(f.orgID, detachedRegistration, TypeRemoteSession))
+			namedCredential := f.interactiveCredential()
+			f.oauthSelection(namedCredential, server, registration)
+			_, err := f.q.MapSelectionToAuthClient(ctx, MapSelectionToAuthClientParams{
+				ID: selectionMappingID(t, f, namedCredential, server), OrganizationID: f.orgID, NoAuth: false,
+				RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}, AuthClientID: typed,
+			})
+			require.NoError(t, err)
+			beforeNamed := f.selection(namedCredential, server)
+			credentials := make([]uuid.UUID, 0, 2*defaultPageSize+5)
+			for range 2*defaultPageSize + 5 {
+				credential := f.interactiveCredential()
+				f.oauthSelection(credential, server, registration)
+				credentials = append(credentials, credential)
+			}
+			f.noAuthSelection(credentials[0], ambiguous)
+			f.oauthSelection(credentials[0], detached, detachedRegistration)
+			foreignCredential := other.interactiveCredential()
+			f.unboundOAuthSelection(foreignCredential, server, registration)
+
+			tx := testenv.BeginTx(t, ctx, f.pool)
+			require.NoError(t, LockEMAWriterScope(ctx, tx, f.orgID, []uuid.UUID{f.projectID}))
+			require.NoError(t, PreflightServerAssociations(ctx, tx, f.orgID, server, detached, ambiguous))
+			counts := selectionMappingCounts{rereads: 0, serverLocks: 0, singleUpdates: 0, groupUpdates: 0, injected: false}
+			require.NoError(t, ReconcileUserSessionSelectionsInLockedTransaction(ctx, observeSelectionMapping{
+				Tx: tx, counts: &counts, organizationID: f.orgID, registrationID: registration, clientID: typed, raceFirst: raceFirst,
+			}, f.orgID, f.sessionIssuer()))
+			require.NoError(t, tx.Commit(ctx))
+			expectedRepresentatives := 1
+			if raceFirst {
+				expectedRepresentatives++
+			}
+			require.Equal(t, expectedRepresentatives, counts.rereads, "policy rereads scale with confirmed groups, not choices")
+			require.Equal(t, expectedRepresentatives, counts.serverLocks)
+			require.Equal(t, 1, counts.singleUpdates)
+			require.Equal(t, 3, counts.groupUpdates, "one guarded bulk update per page for the shared group")
+			for _, credential := range credentials {
+				choice := f.selection(credential, server)
+				require.Equal(t, uuid.NullUUID{UUID: typed, Valid: true}, choice.AuthClientID)
+				require.Equal(t, uuid.NullUUID{UUID: registration, Valid: true}, choice.RemoteSessionClientID)
+				require.Equal(t, "issuance", choice.Source)
+			}
+			require.Equal(t, beforeNamed, f.selection(namedCredential, server))
+			require.False(t, f.selection(credentials[0], ambiguous).AuthClientID.Valid)
+			require.False(t, f.selection(credentials[0], detached).AuthClientID.Valid)
+			require.False(t, f.selection(foreignCredential, server).AuthClientID.Valid)
+		})
+	}
+}
+
+func selectionMappingID(t *testing.T, f *fixture, credentialID, serverID uuid.UUID) uuid.UUID {
+	t.Helper()
+	rows, err := f.q.ListSelectionMappings(t.Context(), ListSelectionMappingsParams{
+		OrganizationID: f.orgID, OnlyUnmapped: true, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true},
+		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PageSize: defaultPageSize,
+	})
+	require.NoError(t, err)
+	for _, row := range rows {
+		if row.CredentialID == credentialID && row.McpServerID == serverID {
+			return row.ID
+		}
+	}
+	t.Fatal("selection mapping not found")
+	return uuid.Nil
+}
+
+func TestReconcileUserSessionSelectionsGroupsNoAuthAcrossPages(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	source := f.source()
+	server := f.serverOn(source)
+	f.staticHeader(source, "Authorization")
+	f.run(true)
+	typed := f.live(TypeStaticCredential)[0].ID
+	credentials := make([]uuid.UUID, 0, defaultPageSize+5)
+	for range defaultPageSize + 5 {
+		credential := f.interactiveCredential()
+		f.noAuthSelection(credential, server)
+		credentials = append(credentials, credential)
+	}
+	ctx := t.Context()
+	tx := testenv.BeginTx(t, ctx, f.pool)
+	require.NoError(t, LockEMAWriterScope(ctx, tx, f.orgID, []uuid.UUID{f.projectID}))
+	require.NoError(t, PreflightServerAssociations(ctx, tx, f.orgID, server))
+	counts := selectionMappingCounts{rereads: 0, serverLocks: 0, singleUpdates: 0, groupUpdates: 0, injected: false}
+	require.NoError(t, ReconcileUserSessionSelectionsInLockedTransaction(ctx, observeSelectionMapping{
+		Tx: tx, counts: &counts, organizationID: f.orgID, registrationID: uuid.Nil, clientID: typed, raceFirst: false,
+	}, f.orgID, f.sessionIssuer()))
+	require.NoError(t, tx.Commit(ctx))
+	require.Equal(t, 1, counts.rereads)
+	require.Equal(t, 1, counts.singleUpdates)
+	require.Equal(t, 2, counts.groupUpdates)
+	for _, credential := range credentials {
+		choice := f.selection(credential, server)
+		require.Equal(t, uuid.NullUUID{UUID: typed, Valid: true}, choice.AuthClientID)
+		require.False(t, choice.RemoteSessionClientID.Valid)
+		require.False(t, choice.NoAuth, "a mapped header client is no longer an untyped no-auth choice")
+		require.Equal(t, "issuance", choice.Source)
+	}
 }

@@ -8,11 +8,14 @@ package selectionbackfill
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -158,6 +161,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 		credentials, err := q.ListLiveUserSessionCredentials(ctx, ListLiveUserSessionCredentialsParams{
 			Cursor:         cursor,
 			OrganizationID: opts.OrganizationID,
+			IssuerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			PageSize:       int32(pageSize), // #nosec G115 -- bounded by defaultPageSize or an operator flag
 		})
 		if err != nil {
@@ -186,16 +190,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 				}
 			}
 			if opts.Apply {
-				written, err := sessions.RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{
-					UserSessionIssuerID: credential.UserSessionIssuerID,
-					CredentialKind:      upstreamclients.CredentialKindUserSession,
-					CredentialID:        credential.CredentialID,
-					Source:              upstreamclients.SelectionSourceBackfill,
-					PickedMcpServerIds:  []uuid.UUID{},
-					PickedClientIds:     []uuid.UUID{},
-					PickedAuthClientIds: nil,
-					ScopeMcpServerIds:   nil,
-				})
+				written, err := recordCredentialSelections(ctx, sessions, credential)
 				if err != nil {
 					return report, fmt.Errorf("record selections for credential %s: %w", credential.CredentialID, err)
 				}
@@ -224,4 +219,53 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			return report, fmt.Errorf("backfill interrupted: %w", err)
 		}
 	}
+}
+
+// ReconcileIssuerInLockedTransaction records missing choices and names typed
+// clients on existing choices for one issuer's live credential lineages. The
+// caller holds the complete server/source writer scope and registration gates.
+// It uses migration selection policy without granting permissions.
+func ReconcileIssuerInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID) error {
+	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
+		return errors.New("reconcile issuer credentials: no transaction or tenant scope")
+	}
+	q, sessions := New(tx), usersessionsrepo.New(tx)
+	cursor := uuid.Nil
+	for {
+		credentials, err := q.ListLiveUserSessionCredentials(ctx, ListLiveUserSessionCredentialsParams{
+			Cursor: cursor, OrganizationID: organizationID, PageSize: defaultPageSize,
+			IssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("list issuer credentials: %w", err)
+		}
+		for _, credential := range credentials {
+			if _, err := recordCredentialSelections(ctx, sessions, credential); err != nil {
+				return fmt.Errorf("record issuer credential choices: %w", err)
+			}
+			cursor = credential.CredentialID
+		}
+		if len(credentials) < defaultPageSize {
+			break
+		}
+	}
+	if err := authclientbackfill.ReconcileUserSessionSelectionsInLockedTransaction(ctx, tx, organizationID, issuerID); err != nil {
+		return fmt.Errorf("map issuer credential choices: %w", err)
+	}
+	return nil
+}
+
+func recordCredentialSelections(ctx context.Context, q *usersessionsrepo.Queries, credential ListLiveUserSessionCredentialsRow) (int64, error) {
+	written, err := q.RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: credential.UserSessionIssuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        credential.CredentialID,
+		Source:              upstreamclients.SelectionSourceBackfill,
+		PickedMcpServerIds:  []uuid.UUID{}, PickedClientIds: []uuid.UUID{},
+		PickedAuthClientIds: nil, ScopeMcpServerIds: nil,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("record credential selections: %w", err)
+	}
+	return written, nil
 }

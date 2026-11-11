@@ -15,6 +15,7 @@ LEFT JOIN projects AS p
   ON p.id = usi.project_id
 WHERE s.deleted IS FALSE
   AND s.refresh_expires_at > clock_timestamp()
+  AND (sqlc.narg('issuer_id')::uuid IS NULL OR s.user_session_issuer_id = sqlc.narg('issuer_id')::uuid)
   AND COALESCE(s.credential_id, s.id) > @cursor::uuid
   AND (@organization_id::text = '' OR COALESCE(usi.organization_id, p.organization_id) = @organization_id::text)
 ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC

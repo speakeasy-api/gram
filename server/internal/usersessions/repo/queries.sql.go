@@ -2697,6 +2697,43 @@ func (q *Queries) ListAssistantWorkloadRuntimeRoots(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listBoundOAuthRegistrationsForUserSessionIssuerMigration = `-- name: ListBoundOAuthRegistrationsForUserSessionIssuerMigration :many
+SELECT DISTINCT link.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS issuer ON issuer.id = link.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = ANY($1::uuid[])
+  AND COALESCE(issuer.organization_id, project.organization_id) = $2::text
+ORDER BY link.remote_session_client_id
+`
+
+type ListBoundOAuthRegistrationsForUserSessionIssuerMigrationParams struct {
+	IssuerIds      []uuid.UUID
+	OrganizationID string
+}
+
+// Include prospective sole-consumer associations, including global upstream
+// registrations, in the ordered preflight. Tenant scope follows the issuer.
+func (q *Queries) ListBoundOAuthRegistrationsForUserSessionIssuerMigration(ctx context.Context, arg ListBoundOAuthRegistrationsForUserSessionIssuerMigrationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listBoundOAuthRegistrationsForUserSessionIssuerMigration, arg.IssuerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var remote_session_client_id uuid.UUID
+		if err := rows.Scan(&remote_session_client_id); err != nil {
+			return nil, err
+		}
+		items = append(items, remote_session_client_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGatewaySessionEndpoints = `-- name: ListGatewaySessionEndpoints :many
 SELECT e.slug, e.is_domain_root, d.domain
 FROM mcp_endpoints e
@@ -3094,45 +3131,6 @@ func (q *Queries) ListGatewaySessions(ctx context.Context, arg ListGatewaySessio
 	return items, nil
 }
 
-const listLiveCredentialIDsForUserSessionIssuerMigration = `-- name: ListLiveCredentialIDsForUserSessionIssuerMigration :many
-SELECT DISTINCT COALESCE(session.credential_id, session.id)::uuid AS credential_id
-FROM user_sessions AS session
-JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
-LEFT JOIN projects AS project ON project.id = issuer.project_id
-WHERE session.user_session_issuer_id = $1
-  AND COALESCE(issuer.organization_id, project.organization_id) = $2::text
-  AND session.deleted IS FALSE
-  AND session.refresh_expires_at > clock_timestamp()
-ORDER BY credential_id
-`
-
-type ListLiveCredentialIDsForUserSessionIssuerMigrationParams struct {
-	IssuerID       uuid.UUID
-	OrganizationID string
-}
-
-// Match selectionbackfill's refreshable credential lineages, only on the
-// surviving issuer after source sessions have moved in this transaction.
-func (q *Queries) ListLiveCredentialIDsForUserSessionIssuerMigration(ctx context.Context, arg ListLiveCredentialIDsForUserSessionIssuerMigrationParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listLiveCredentialIDsForUserSessionIssuerMigration, arg.IssuerID, arg.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var credential_id uuid.UUID
-		if err := rows.Scan(&credential_id); err != nil {
-			return nil, err
-		}
-		items = append(items, credential_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listMCPServerProjectIDsForUserSessionIssuerMigration = `-- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
 SELECT DISTINCT server.project_id
 FROM mcp_servers AS server
@@ -3173,16 +3171,95 @@ func (q *Queries) ListMCPServerProjectIDsForUserSessionIssuerMigration(ctx conte
 }
 
 const listMCPServersForUserSessionIssuerMigration = `-- name: ListMCPServersForUserSessionIssuerMigration :many
-SELECT server.id, server.project_id
+WITH transferred_registrations AS MATERIALIZED (
+    SELECT link.remote_session_client_id AS id
+    FROM remote_session_client_user_session_issuers AS link
+    WHERE link.user_session_issuer_id = $1::uuid
+    UNION
+    SELECT binding.remote_session_client_id AS id
+    FROM remote_session_ema_bindings AS binding
+    WHERE binding.user_session_issuer_id = $1::uuid
+      AND binding.organization_id = $2::text
+      AND binding.remote_session_client_id IS NOT NULL
+), impacted_servers AS MATERIALIZED (
+    SELECT association.mcp_server_id
+    FROM mcp_server_remote_session_clients AS association
+    WHERE association.organization_id = $2::text
+      AND association.remote_session_client_id IN (SELECT id FROM transferred_registrations)
+    UNION
+    SELECT link.mcp_server_id
+    FROM mcp_server_auth_clients AS link
+    JOIN mcp_auth_clients AS client ON client.id = link.auth_client_id AND client.organization_id = link.organization_id
+    WHERE link.organization_id = $2::text
+      AND client.source = 'backfill'
+      AND client.client_type IN ('remote_session', 'service_account', 'ema')
+      AND client.remote_session_client_id IN (SELECT id FROM transferred_registrations)
+), live_credentials AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(session.credential_id, session.id) AS id
+    FROM user_sessions AS session
+    JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id = ANY($3::uuid[])
+      AND COALESCE(issuer.organization_id, project.organization_id) = $2::text
+      AND (session.organization_id IS NULL OR session.organization_id = $2::text)
+      AND session.deleted IS FALSE
+      AND session.refresh_expires_at > clock_timestamp()
+), unmapped_servers AS MATERIALIZED (
+    SELECT DISTINCT choice.mcp_server_id
+    FROM upstream_client_selections AS choice
+    WHERE choice.organization_id = $2::text
+      AND choice.credential_kind = 'user_session'
+      AND choice.deleted IS FALSE
+      AND choice.auth_client_id IS NULL
+      AND choice.credential_id IN (SELECT id FROM live_credentials)
+), untyped_servers AS MATERIALIZED (
+    SELECT DISTINCT association.organization_id, association.mcp_server_id
+    FROM mcp_server_remote_session_clients AS association
+    WHERE association.organization_id = $2::text
+      AND association.deleted IS FALSE
+      AND NOT EXISTS (
+        SELECT 1
+        FROM mcp_server_auth_clients AS link
+        JOIN mcp_auth_clients AS client ON client.id = link.auth_client_id AND client.organization_id = link.organization_id
+        WHERE link.mcp_server_id = association.mcp_server_id
+          AND link.organization_id = association.organization_id
+          AND link.deleted IS FALSE
+          AND client.deleted IS FALSE
+          AND client.enabled
+          AND client.client_type IN ('remote_session', 'service_account')
+          AND client.remote_session_client_id = association.remote_session_client_id
+      )
+), untyped_missing_choice_servers AS MATERIALIZED (
+    -- First discard already-typed servers. Without this boundary the planner
+    -- can probe every credential's existing choice for every typed server.
+    SELECT untyped.mcp_server_id
+    FROM untyped_servers AS untyped
+    WHERE EXISTS (
+        SELECT 1 FROM live_credentials AS credential
+        WHERE NOT EXISTS (
+          SELECT 1 FROM upstream_client_selections AS choice
+          WHERE choice.organization_id = untyped.organization_id
+            AND choice.mcp_server_id = untyped.mcp_server_id
+            AND choice.credential_kind = 'user_session'
+            AND choice.credential_id = credential.id
+            AND choice.deleted IS FALSE
+        )
+      )
+)
+SELECT server.id, server.project_id,
+       (server.user_session_issuer_id IS NOT DISTINCT FROM $1::uuid
+        OR server.id IN (SELECT mcp_server_id FROM impacted_servers)
+        OR server.id IN (SELECT mcp_server_id FROM unmapped_servers)
+        OR server.id IN (SELECT mcp_server_id FROM untyped_missing_choice_servers))::boolean AS needs_sync
 FROM mcp_servers AS server
 JOIN projects AS project ON project.id = server.project_id
 WHERE server.deleted IS FALSE
   AND project.deleted IS FALSE
-  AND project.organization_id = $1::text
+  AND project.organization_id = $2::text
   AND (EXISTS (
     SELECT 1
     FROM user_session_issuers AS issuer
-    WHERE issuer.id = ANY($2::uuid[])
+    WHERE issuer.id = ANY($3::uuid[])
       AND issuer.deleted IS FALSE
       AND (
         server.user_session_issuer_id = issuer.id
@@ -3197,23 +3274,13 @@ WHERE server.deleted IS FALSE
               AND gateway.user_session_issuer_id = issuer.id
           )))
       )
-  ) OR EXISTS (
-    SELECT 1
-    FROM upstream_client_selections AS choice
-    JOIN user_sessions AS session ON COALESCE(session.credential_id, session.id) = choice.credential_id
-    WHERE choice.mcp_server_id = server.id
-      AND choice.organization_id = $1::text
-      AND choice.credential_kind = 'user_session'
-      AND choice.deleted IS FALSE
-      AND choice.auth_client_id IS NULL
-      AND session.user_session_issuer_id = ANY($2::uuid[])
-      AND session.deleted IS FALSE
-      AND session.refresh_expires_at > clock_timestamp()
-  ))
+  ) OR server.id IN (SELECT mcp_server_id FROM unmapped_servers)
+    OR server.id IN (SELECT mcp_server_id FROM impacted_servers))
 ORDER BY server.id
 `
 
 type ListMCPServersForUserSessionIssuerMigrationParams struct {
+	SourceIssuerID uuid.UUID
 	OrganizationID string
 	IssuerIds      []uuid.UUID
 }
@@ -3221,13 +3288,13 @@ type ListMCPServersForUserSessionIssuerMigrationParams struct {
 type ListMCPServersForUserSessionIssuerMigrationRow struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
+	NeedsSync bool
 }
 
-// Include credential reach, not only direct issuer ownership: organization
-// issuers reach every proxied server and gateways may cross project boundaries.
-// Direct hosted consumers and recorded choices also need lifecycle locks.
+// Lock the superset of credential reach and recorded unmapped choices. Only
+// moved consumers and registration/choice impact need typed synchronization.
 func (q *Queries) ListMCPServersForUserSessionIssuerMigration(ctx context.Context, arg ListMCPServersForUserSessionIssuerMigrationParams) ([]ListMCPServersForUserSessionIssuerMigrationRow, error) {
-	rows, err := q.db.Query(ctx, listMCPServersForUserSessionIssuerMigration, arg.OrganizationID, arg.IssuerIds)
+	rows, err := q.db.Query(ctx, listMCPServersForUserSessionIssuerMigration, arg.SourceIssuerID, arg.OrganizationID, arg.IssuerIds)
 	if err != nil {
 		return nil, err
 	}
@@ -3235,7 +3302,7 @@ func (q *Queries) ListMCPServersForUserSessionIssuerMigration(ctx context.Contex
 	var items []ListMCPServersForUserSessionIssuerMigrationRow
 	for rows.Next() {
 		var i ListMCPServersForUserSessionIssuerMigrationRow
-		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.NeedsSync); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -3311,57 +3378,6 @@ func (q *Queries) ListMergeableCimdClientPairs(ctx context.Context, arg ListMerg
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listOAuthRegistrationsForUserSessionIssuerMigration = `-- name: ListOAuthRegistrationsForUserSessionIssuerMigration :many
-SELECT link.remote_session_client_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS client ON client.id = link.remote_session_client_id
-WHERE link.user_session_issuer_id = ANY($1::uuid[])
-  AND COALESCE(client.organization_id, (SELECT organization_id FROM projects WHERE id = client.project_id)) = $2::text
-UNION
-SELECT association.remote_session_client_id
-FROM mcp_server_remote_session_clients AS association
-WHERE association.organization_id = $2::text
-  AND association.mcp_server_id = ANY($3::uuid[])
-UNION
-SELECT client.remote_session_client_id
-FROM mcp_server_auth_clients AS link
-JOIN mcp_auth_clients AS client ON client.id = link.auth_client_id AND client.organization_id = link.organization_id
-WHERE link.organization_id = $2::text
-  AND link.mcp_server_id = ANY($3::uuid[])
-  AND client.client_type IN ('remote_session', 'service_account')
-  AND client.source = 'backfill'
-  AND client.remote_session_client_id IS NOT NULL
-ORDER BY remote_session_client_id
-`
-
-type ListOAuthRegistrationsForUserSessionIssuerMigrationParams struct {
-	IssuerIds      []uuid.UUID
-	OrganizationID string
-	McpServerIds   []uuid.UUID
-}
-
-// Gate existing server registrations and bindings that sole-consumer capture
-// can add, in one ordered pass before locking issuer or registration rows.
-func (q *Queries) ListOAuthRegistrationsForUserSessionIssuerMigration(ctx context.Context, arg ListOAuthRegistrationsForUserSessionIssuerMigrationParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listOAuthRegistrationsForUserSessionIssuerMigration, arg.IssuerIds, arg.OrganizationID, arg.McpServerIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var remote_session_client_id uuid.UUID
-		if err := rows.Scan(&remote_session_client_id); err != nil {
-			return nil, err
-		}
-		items = append(items, remote_session_client_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -5292,6 +5308,21 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
+      -- Immutable existing choices cannot be changed by this writer. Exclude
+      -- them before client discovery/mapping, rather than doing all that work
+      -- only to lose the INSERT's guarded conflict update. An untyped no-auth
+      -- choice remains eligible for replacement when OAuth becomes decided.
+      AND NOT EXISTS (
+        SELECT 1 FROM upstream_client_selections AS existing
+        WHERE existing.credential_kind = $1::text
+          AND existing.credential_id = $2::uuid
+          AND existing.mcp_server_id = s.id
+          AND existing.organization_id = p.organization_id
+          AND existing.deleted IS FALSE
+          AND (NOT existing.no_auth
+            OR existing.auth_client_id IS NOT NULL
+            OR existing.remote_session_client_id IS NOT NULL)
+      )
       AND ($5::uuid[] IS NULL
            OR s.id = ANY($5::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)

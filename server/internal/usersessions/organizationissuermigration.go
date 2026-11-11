@@ -26,6 +26,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -496,6 +497,58 @@ func mergeDuplicateCimdClients(ctx context.Context, q *repo.Queries, organizatio
 	return merged, nil
 }
 
+// lockIssuerMigrationAuth prepares the complete credential reach before any
+// issuer mutation. The shared preflight combines server registrations with
+// issuer bindings that sole-consumer capture can associate later.
+func lockIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID string, source, target repo.UserSessionIssuer) ([]uuid.UUID, error) {
+	q := repo.New(dbtx)
+	issuerIDs := []uuid.UUID{source.ID, target.ID}
+	servers, err := q.ListMCPServersForUserSessionIssuerMigration(ctx, repo.ListMCPServersForUserSessionIssuerMigrationParams{
+		IssuerIds: issuerIDs, SourceIssuerID: source.ID, OrganizationID: organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("discover issuer migration writer scope: %w", err)
+	}
+	var lockProjects, serverIDs, syncServers []uuid.UUID
+	for _, server := range servers {
+		lockProjects = append(lockProjects, server.ProjectID)
+		serverIDs = append(serverIDs, server.ID)
+		if server.NeedsSync {
+			syncServers = append(syncServers, server.ID)
+		}
+	}
+	for _, issuer := range []repo.UserSessionIssuer{source, target} {
+		if issuer.ProjectID.Valid {
+			lockProjects = append(lockProjects, issuer.ProjectID.UUID)
+		}
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, organizationID, lockProjects); err != nil {
+		return nil, fmt.Errorf("lock issuer migration writer scope: %w", err)
+	}
+	registrations, err := q.ListBoundOAuthRegistrationsForUserSessionIssuerMigration(ctx, repo.ListBoundOAuthRegistrationsForUserSessionIssuerMigrationParams{
+		IssuerIds: issuerIDs, OrganizationID: organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("discover issuer migration registration scope: %w", err)
+	}
+	if err := authclientbackfill.PreflightServerAssociationsWithRegistrations(ctx, dbtx, organizationID, serverIDs, registrations); err != nil {
+		return nil, fmt.Errorf("preflight issuer migration auth clients: %w", err)
+	}
+	return syncServers, nil
+}
+
+// reconcileIssuerMigrationAuth preserves typed state and credential choices in
+// the consolidation transaction, independent of the enforcement feature flag.
+func reconcileIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs []uuid.UUID) error {
+	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, organizationID, serverIDs...); err != nil {
+		return fmt.Errorf("sync issuer auth clients: %w", err)
+	}
+	if err := selectionbackfill.ReconcileIssuerInLockedTransaction(ctx, dbtx, organizationID, issuerID); err != nil {
+		return fmt.Errorf("reconcile issuer credential choices: %w", err)
+	}
+	return nil
+}
+
 func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssuerPayload) (*orggen.MigrateOrganizationUserSessionIssuerResult, error) {
 	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
@@ -525,36 +578,9 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		}
 		return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogError(ctx, logger)
 	}
-	issuerIDs := []uuid.UUID{source.ID, target.ID}
-	servers, err := q.ListMCPServersForUserSessionIssuerMigration(ctx, repo.ListMCPServersForUserSessionIssuerMigrationParams{
-		IssuerIds: issuerIDs, OrganizationID: authCtx.ActiveOrganizationID,
-	})
+	serverIDs, err := lockIssuerMigrationAuth(ctx, dbtx, authCtx.ActiveOrganizationID, source, target)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "discover issuer migration writer scope").LogError(ctx, logger)
-	}
-	var lockProjects, serverIDs []uuid.UUID
-	for _, server := range servers {
-		lockProjects = append(lockProjects, server.ProjectID)
-		serverIDs = append(serverIDs, server.ID)
-	}
-	for _, issuer := range []repo.UserSessionIssuer{source, target} {
-		if issuer.ProjectID.Valid {
-			lockProjects = append(lockProjects, issuer.ProjectID.UUID)
-		}
-	}
-	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, lockProjects); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock issuer migration writer scope").LogError(ctx, logger)
-	}
-	registrations, err := q.ListOAuthRegistrationsForUserSessionIssuerMigration(ctx, repo.ListOAuthRegistrationsForUserSessionIssuerMigrationParams{
-		IssuerIds: issuerIDs, McpServerIds: serverIDs, OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "discover issuer migration registration scope").LogError(ctx, logger)
-	}
-	if err := authclientbackfill.New(dbtx).LockOAuthRegistrationSyncScope(ctx, authclientbackfill.LockOAuthRegistrationSyncScopeParams{
-		OrganizationID: authCtx.ActiveOrganizationID, RegistrationIds: registrations,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock issuer migration registration scope").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lock issuer migration auth scope").LogError(ctx, logger)
 	}
 	// Hosted toolset saves take this lock before issuer and toolset locks.
 	if err := networkingressrepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -690,32 +716,8 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 			return nil, oops.E(oops.CodeUnexpected, err, "resync MCP server remote session issuers").LogError(ctx, logger)
 		}
 	}
-	// Existing associations need typed maintenance even when capture is disabled
-	// or the target has several consumers. This preserves durable detaches and
-	// grants nothing; choices below only record what the shared writer decides.
-	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, serverIDs...); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "sync issuer migration auth clients").LogError(ctx, logger)
-	}
-	credentials, err := q.ListLiveCredentialIDsForUserSessionIssuerMigration(ctx, repo.ListLiveCredentialIDsForUserSessionIssuerMigrationParams{
-		IssuerID: target.ID, OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list issuer migration credentials").LogError(ctx, logger)
-	}
-	for _, credentialID := range credentials {
-		// Nil scope intentionally uses the same issuer-wide reach as issuance
-		// and selectionbackfill, for both existing and newly moved credentials.
-		if _, err := q.RecordUpstreamClientSelections(ctx, repo.RecordUpstreamClientSelectionsParams{
-			UserSessionIssuerID: target.ID, CredentialKind: upstreamclients.CredentialKindUserSession,
-			CredentialID: credentialID, Source: upstreamclients.SelectionSourceBackfill,
-			PickedMcpServerIds: []uuid.UUID{}, PickedClientIds: []uuid.UUID{},
-			PickedAuthClientIds: nil, ScopeMcpServerIds: nil,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "record issuer migration credential choices").LogError(ctx, logger)
-		}
-	}
-	if err := authclientbackfill.ReconcileUserSessionSelectionsInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, target.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "map issuer migration credential choices").LogError(ctx, logger)
+	if err := reconcileIssuerMigrationAuth(ctx, dbtx, authCtx.ActiveOrganizationID, target.ID, serverIDs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "reconcile issuer migration auth").LogError(ctx, logger)
 	}
 	deleted, err := q.SoftDeleteMigratedUserSessionIssuer(ctx, repo.SoftDeleteMigratedUserSessionIssuerParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: authCtx.ActiveOrganizationID})
 	if err != nil {
