@@ -113,6 +113,9 @@ vi.mock("@gram/client/react-query/listScopes.js", () => ({
                 category: "mcp",
                 visibility: "user_visible",
                 exclusionScope: `mcp:blocked_${action}`,
+                // As the server lists them: Manage includes View, and
+                // neither includes Connect.
+                subScopes: action === "write" ? ["mcp:read"] : [],
               })),
             ],
           },
@@ -934,6 +937,33 @@ describe("the access grid", () => {
     const use = screen.getByRole("button", { name: "Connect GitHub" });
     expect(use.getAttribute("aria-pressed")).toBe("true");
     expect(use.getAttribute("aria-disabled")).toBe("false");
+  });
+
+  it("lets a role that can manage a server be granted Connect on it", () => {
+    show({
+      ...role,
+      grants: [
+        {
+          scope: "mcp:write",
+          selectors: [{ resourceKind: "mcp", resourceId: "server-a" }],
+        },
+      ],
+    });
+    // Manage includes View, but connecting is a separate permission.
+    expect(
+      screen
+        .getByRole("button", { name: "View GitHub" })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
+    const use = screen.getByRole("button", { name: "Connect GitHub" });
+    expect(use.getAttribute("aria-pressed")).toBe("false");
+    expect(use.getAttribute("aria-disabled")).toBe("false");
+    // Neither does it reach the server's tools.
+    expect(
+      screen
+        .getByRole("button", { name: "All tools on GitHub" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
   });
 
   it("marks what a project row passes down to its servers", () => {

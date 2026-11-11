@@ -26,7 +26,6 @@ import {
   LEVEL_LABEL,
   LEVELS,
   type Level,
-  levelRank,
   limitMcpUse,
   type McpRow,
   type McpRowView,
@@ -240,7 +239,6 @@ function toolLimitText(limit: ToolLimit): string {
 /** How a server reaches its tools, for the tool rows under it. */
 interface ToolAccess {
   /** View or Manage reaches the server, and with it every tool. */
-  everyTool: boolean;
   connect: "own" | "inherited" | "none";
   /** The wider row an inherited Connect comes from. */
   from?: string;
@@ -269,7 +267,6 @@ function McpMatrix({
   // column hints follow the catalogue rather than restate it.
   const columnHint = (level: Level, base: string) => {
     const included = mcpLevelIncludes(scopes, level)
-      .filter((other) => other !== "use")
       .map((other) => LEVEL_LABEL[other])
       .reverse();
     return included.length > 0
@@ -466,10 +463,11 @@ function McpMatrix({
         reason: `Blocked on ${rowName(blockedAbove)}`,
       };
     }
-    // Connect stands on its own: View and Manage are shown as including
-    // each other, never Connect or tools. See the note under the table.
+    // Whether a grant of `other` satisfies this level. The server says what
+    // each permission includes (sub_scopes): Manage includes View, and
+    // neither includes Connect.
     const includes = (other: Level) =>
-      level === "use" ? other === "use" : levelRank(other) >= levelRank(level);
+      other === level || mcpLevelIncludes(scopes, other).includes(level);
     const higher = LEVELS.find(
       (other) =>
         other !== level && includes(other) && mcpAllows(grants, row, other),
@@ -534,24 +532,21 @@ function McpMatrix({
   };
 
   const toolAccess = (view: McpRowView): ToolAccess => {
-    // Tools follow Connect alone.
-    const everyTool = false;
+    // Only Connect calls tools; View and Manage reach none of them.
     if (mcpAllows(grants, view.row, "use")) {
       return {
-        everyTool,
         connect: "own",
         limit: mcpToolLimit(grants, view.row) ?? { kind: "all" },
       };
     }
     if (connectNoTools.has(mcpRowKey(view.row))) {
-      return { everyTool, connect: "own", limit: { kind: "tools", tools: [] } };
+      return { connect: "own", limit: { kind: "tools", tools: [] } };
     }
     const from = ancestors(view.row).find((up) =>
       mcpAllows(grants, up.row, "use"),
     );
     if (from) {
       return {
-        everyTool,
         connect: "inherited",
         from: rowName(from),
         limit: inheritedLimit(view),
@@ -560,12 +555,11 @@ function McpMatrix({
     const pending = ancestors(view.row).find((up) => connectOnly(up.row));
     return pending
       ? {
-          everyTool,
           connect: "inherited",
           from: rowName(pending),
           limit: { kind: "tools", tools: [] },
         }
-      : { everyTool, connect: "none", limit: { kind: "all" } };
+      : { connect: "none", limit: { kind: "all" } };
   };
 
   const toolsCell = (view: McpRowView): ReactNode => {
@@ -584,20 +578,14 @@ function McpMatrix({
     }
     const { row } = view;
     const access = toolAccess(view);
-    // The tick is "every tool". View and Manage reach every tool whatever
-    // Connect says; Connect from a wider row can still be narrowed on a
-    // server, which splits the wider row (splitMcpToolLimit).
+    // The tick is "every tool". Connect from a wider row can still be
+    // narrowed on a server, which splits the wider row (splitMcpToolLimit).
     // A row with no Connect at all still offers the tick: it grants Connect
     // on every tool in one step.
-    const every =
-      access.everyTool ||
-      (access.connect !== "none" && access.limit.kind === "all");
+    const every = access.connect !== "none" && access.limit.kind === "all";
     let state: CellState = "off";
     let reason: string | undefined;
-    if (access.everyTool) {
-      state = "inherited";
-      reason = "View and Manage reach every tool";
-    } else if (every) {
+    if (every) {
       state = access.connect === "own" ? "on" : "inherited";
       reason =
         access.connect === "own"
@@ -613,26 +601,22 @@ function McpMatrix({
           reason={reason}
           narrowable={row.kind === "server"}
           label={`All tools on ${rowName(view)}`}
-          onToggle={
-            access.everyTool
-              ? undefined
-              : () => {
-                  // Connect stays ticked; the tools are then picked one by
-                  // one under the server.
-                  setNoTools(row, every);
-                  if (every && row.kind === "server") {
-                    setOpenServers((prev) => new Set(prev).add(row.serverId));
-                  }
-                  onChange((prev) =>
-                    limitMcpUse(
-                      prev,
-                      row,
-                      every ? { kind: "tools", tools: [] } : { kind: "all" },
-                      serverRows,
-                    ),
-                  );
-                }
-          }
+          onToggle={() => {
+            // Connect stays ticked; the tools are then picked one by
+            // one under the server.
+            setNoTools(row, every);
+            if (every && row.kind === "server") {
+              setOpenServers((prev) => new Set(prev).add(row.serverId));
+            }
+            onChange((prev) =>
+              limitMcpUse(
+                prev,
+                row,
+                every ? { kind: "tools", tools: [] } : { kind: "all" },
+                serverRows,
+              ),
+            );
+          }}
         />
         <span className={cn("truncate", !every && "text-muted-foreground")}>
           {every ? "All tools" : toolLimitText(access.limit)}
@@ -686,15 +670,12 @@ function McpMatrix({
   const reachable = serverViews.filter(
     (view) =>
       !deniedOn(view) &&
-      LEVELS.some((level) => reaches(cellState(view, level).state)) &&
-      // Connect with no tools behind it reaches nothing yet.
+      // Only Connect reaches a server's tools, and Connect with no tools
+      // behind it reaches nothing yet.
+      reaches(cellState(view, "use").state) &&
       (() => {
-        const access = toolAccess(view);
-        return !(
-          !access.everyTool &&
-          access.limit.kind === "tools" &&
-          access.limit.tools.length === 0
-        );
+        const { limit } = toolAccess(view);
+        return !(limit.kind === "tools" && limit.tools.length === 0);
       })(),
   ).length;
   const all = viewByKey.get("all");
@@ -907,13 +888,6 @@ function McpMatrix({
         Grants add up: a tick on a project reaches every server in it, now and
         later.
       </Text>
-      {/* The grid shows Connect as its own permission. The server still lets
-          View and Manage connect, so say so until it stops. */}
-      <Alert variant="warning" title={null} className="text-sm">
-        For now, View and Manage still let a role connect to those servers and
-        call every tool, even where Connect is not ticked. That is being
-        separated: tick Connect for anyone who should keep it.
-      </Alert>
     </EditorSection>
   );
 }
@@ -1085,9 +1059,6 @@ function ServerToolRows({
           reason = ownDenied
             ? "Denied. Remove the deny from the tool's menu."
             : `Blocked on ${deniedOn}`;
-        } else if (access.everyTool) {
-          state = "inherited";
-          reason = "View and Manage reach every tool";
         } else if (on) {
           state = access.connect === "own" ? "on" : "inherited";
           reason =
@@ -1160,11 +1131,7 @@ function ServerToolRows({
                   reason={reason}
                   narrowable
                   label={`Connect ${tool.name} on ${view.name}`}
-                  onToggle={
-                    denied || access.everyTool
-                      ? undefined
-                      : () => toggle(tool.name)
-                  }
+                  onToggle={denied ? undefined : () => toggle(tool.name)}
                 />
                 {denied && (
                   <>

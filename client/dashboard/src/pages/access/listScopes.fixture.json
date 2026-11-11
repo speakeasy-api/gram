@@ -122,7 +122,7 @@
       "resource_type": "mcp",
       "category": "mcp",
       "sensitive": false,
-      "sub_scopes": ["mcp:connect"],
+      "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": true,
       "exclusion_scope": "mcp:blocked_read"
@@ -145,7 +145,7 @@
       "resource_type": "mcp",
       "category": "mcp",
       "sensitive": false,
-      "sub_scopes": ["mcp:connect", "mcp:read"],
+      "sub_scopes": ["mcp:read"],
       "visibility": "user_visible",
       "agent_eligible": true,
       "exclusion_scope": "mcp:blocked_write"
