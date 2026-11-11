@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -144,4 +145,20 @@ func TestOrganizationUserSessionIssuerMigrateSerializesBindingReach(t *testing.T
 	err = authclientbackfill.LockEMAWriterScope(attachmentCtx, attachmentTx, auth.ActiveOrganizationID, []uuid.UUID{*auth.ProjectID})
 	require.Error(t, err, "attachment preparation must wait before it can add an ungated registration")
 	require.ErrorIs(t, attachmentCtx.Err(), context.DeadlineExceeded)
+}
+
+func TestOrganizationUserSessionIssuerMigratePreflightsGlobalRegistrations(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer := seedIssuer(t, ctx, ti, "global-gate-issuer")
+	provider, registration := uuid.New(), uuid.New()
+	fixtures := selectionbackfill.New(ti.conn)
+	require.NoError(t, fixtures.SeedRemoteSessionIssuerFixture(ctx, selectionbackfill.SeedRemoteSessionIssuerFixtureParams{ID: provider, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Slug: "global-provider", Issuer: "https://global.example.com"}))
+	require.NoError(t, fixtures.SeedRemoteSessionClientFixture(ctx, selectionbackfill.SeedRemoteSessionClientFixtureParams{ID: registration, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: pgtype.Text{String: "", Valid: false}, RemoteSessionIssuerID: provider, ClientID: "global-client"}))
+	require.NoError(t, fixtures.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: registration, UserSessionIssuerID: issuer}))
+	registrations, err := usersessionsrepo.New(ti.conn).ListBoundOAuthRegistrationsForUserSessionIssuerMigration(ctx, usersessionsrepo.ListBoundOAuthRegistrationsForUserSessionIssuerMigrationParams{IssuerIds: []uuid.UUID{issuer}, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Contains(t, registrations, registration, "global registration scope follows its tenant-owned issuer binding")
 }

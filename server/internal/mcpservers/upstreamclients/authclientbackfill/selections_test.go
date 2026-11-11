@@ -774,3 +774,29 @@ func TestReconcileUserSessionSelectionsGroupsNoAuthAcrossPages(t *testing.T) {
 		require.Equal(t, "issuance", choice.Source)
 	}
 }
+
+// EMA requires its explicit authorization path; it is never an implicit
+// candidate for an existing legacy OAuth registration choice.
+func TestReconcileUserSessionSelectionsDoesNotInferEMA(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newFixture(t)
+	server, registration := f.server(), f.client("subject")
+	f.associate(server, registration)
+	credential := f.interactiveCredential()
+	f.oauthSelection(credential, server, registration)
+	ema, err := f.q.SeedAuthClientFixture(ctx, SeedAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ClientType: "ema", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, f.q.SeedAuthClientEMAFixture(ctx, SeedAuthClientEMAFixtureParams{AuthClientID: ema, Resource: "https://upstream.example.com/resource"}))
+	require.NoError(t, f.q.SeedServerAuthClientLinkFixture(ctx, SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server, AuthClientID: ema, Source: "admin"}))
+	rows, err := f.q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: f.orgID, Cursor: uuid.Nil, PageSize: 10, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true}, OnlyUnmapped: true})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Empty(t, rows[0].CandidateIds)
+	tx := testenv.BeginTx(t, ctx, f.pool)
+	require.NoError(t, LockEMAWriterScope(ctx, tx, f.orgID, []uuid.UUID{f.projectID}))
+	require.NoError(t, PreflightServerAssociations(ctx, tx, f.orgID, server))
+	require.NoError(t, ReconcileUserSessionSelectionsInLockedTransaction(ctx, tx, f.orgID, f.sessionIssuer()))
+	require.NoError(t, tx.Commit(ctx))
+	require.False(t, f.selection(credential, server).AuthClientID.Valid, "an EMA-only offer requires explicit selection")
+}
