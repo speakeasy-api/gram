@@ -96,16 +96,19 @@ export function useGrantFlow(): {
             level="component"
             reason="Only organization admins can grant access."
           >
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => {
-                setGrantChallenge(row);
-                setIsDrawerOpen(true);
-              }}
-            >
-              <Button.Text>Grant</Button.Text>
-            </Button>
+            {({ disabled }) => (
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={disabled}
+                onClick={() => {
+                  setGrantChallenge(row);
+                  setIsDrawerOpen(true);
+                }}
+              >
+                <Button.Text>Grant</Button.Text>
+              </Button>
+            )}
           </RequireScope>
         ) : null,
     }),
