@@ -347,9 +347,8 @@ func createBackingToolset(t *testing.T, ctx context.Context, ti *testInstance, s
 	return toolset
 }
 
-// TestMintUserSessionForToolsetIgnoresUngovernedWrapper pins that a wrapper
-// governs the toolset mint only when the runtime would serve through it; every
-// other shape falls back to the legacy toolset binding.
+// TestMintUserSessionForToolsetIgnoresUngovernedWrapper pins that a toolset
+// mint binds to the toolset's canonical server, not another wrapper of it.
 func TestMintUserSessionForToolsetIgnoresUngovernedWrapper(t *testing.T) {
 	t.Parallel()
 
@@ -358,7 +357,6 @@ func TestMintUserSessionForToolsetIgnoresUngovernedWrapper(t *testing.T) {
 		visibility string
 		issuer     bool
 	}{
-		// The runtime refuses disabled wrappers and serves the legacy route.
 		{name: "disabled", visibility: mcpservers.VisibilityDisabled, issuer: true},
 		// Production has manually created wrappers with no issuer.
 		{name: "issuerless", visibility: mcpservers.VisibilityPrivate, issuer: false},
@@ -421,7 +419,7 @@ func TestMintUserSessionForToolsetIgnoresUngovernedWrapper(t *testing.T) {
 
 			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(
 				got.AccessToken,
-				urn.NewToolset(toolset.ID).String(),
+				urn.NewUserSessionIssuer(hostedIssuerID(t, ctx, ti, toolset)).String(),
 			)
 			require.NoError(t, err)
 			require.Equal(t, "http://0.0.0.0/mcp/"+slug, claims.Issuer)

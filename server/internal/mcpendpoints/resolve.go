@@ -44,8 +44,7 @@ type ResolutionInput struct {
 
 // ResolutionResult distinguishes a genuine address miss from an authoritative
 // endpoint result. An authoritative denial must terminate the request even
-// though its public HTTP representation is 404; callers must not continue into
-// legacy toolset fallback.
+// though its public HTTP representation is 404.
 type ResolutionResult struct {
 	Endpoint   *repo.McpEndpoint
 	Server     *mcpservers_repo.McpServer
@@ -206,8 +205,7 @@ func deniedResult(endpoint *repo.McpEndpoint, server *mcpservers_repo.McpServer,
 }
 
 // ErrPolicyDenied marks a terminal address result whose public representation
-// is 404. Callers that support legacy fallback must not fall through when this
-// cause is present.
+// is 404. Callers must not try another lookup when this cause is present.
 var ErrPolicyDenied = errors.New("mcp endpoint policy denied")
 
 // IsPolicyDenied reports whether an error is the terminal policy outcome.
@@ -215,8 +213,8 @@ func IsPolicyDenied(err error) bool {
 	return errors.Is(err, ErrPolicyDenied)
 }
 
-// IsAddressMiss reports whether an error is a genuine address miss that may
-// fall back to legacy toolset lookup rather than an authoritative policy denial.
+// IsAddressMiss reports whether an error is a genuine address miss rather than
+// an authoritative policy denial.
 func IsAddressMiss(err error) bool {
 	var shareErr *oops.ShareableError
 	return errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound && !IsPolicyDenied(err)
@@ -224,8 +222,7 @@ func IsAddressMiss(err error) bool {
 
 // BySlugAndCustomDomain preserves the public resolver signature while callers
 // migrate to ResolutionResult. A genuine miss remains CodeNotFound. Policy
-// denial is also represented as 404 to clients, but is authoritative and must
-// never be converted into legacy fallback by callers using Resolve directly.
+// denial is also represented as 404 to clients, but is authoritative.
 func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, slug string) (*repo.McpEndpoint, *mcpservers_repo.McpServer, *metamcp_repo.MetaMcpServer, error) {
 	input, err := FromContext(ctx, slug)
 	if err != nil {

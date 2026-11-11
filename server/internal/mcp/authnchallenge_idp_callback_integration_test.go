@@ -163,6 +163,7 @@ func TestHandleIDPCallback_RealResolverMembershipReconciliation(t *testing.T) {
 				UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 				Endpoint: mcp.EndpointRef{
 					McpSlug:        toolset.McpSlug.String,
+					McpServerID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 					CustomDomainID: toolset.CustomDomainID,
 				},
 				ClientID:            "test-client",

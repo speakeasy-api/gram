@@ -6363,8 +6363,6 @@ SELECT
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
     COALESCE(ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    -- legacyalias: drop with AIM-670.
-    t.id AS alias_toolset_id,
     COALESCE(s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
     membership_version.value AS membership_version
 FROM plugin_servers ps
@@ -6431,7 +6429,6 @@ type ListPlatformMCPPluginMembershipsRow struct {
 	TargetID          uuid.NullUUID
 	TargetResolved    bool
 	McpSlug           string
-	AliasToolsetID    uuid.NullUUID
 	Enabled           bool
 	MembershipVersion string
 }
@@ -6467,7 +6464,6 @@ func (q *Queries) ListPlatformMCPPluginMemberships(ctx context.Context, arg List
 			&i.TargetID,
 			&i.TargetResolved,
 			&i.McpSlug,
-			&i.AliasToolsetID,
 			&i.Enabled,
 			&i.MembershipVersion,
 		); err != nil {
@@ -6489,8 +6485,6 @@ SELECT
     ps.sort_order,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
     COALESCE(ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    -- legacyalias: drop with AIM-670.
-    t.id AS alias_toolset_id,
     COALESCE(s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
@@ -6500,10 +6494,6 @@ LEFT JOIN mcp_servers s
   ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-LEFT JOIN toolsets t
-  ON t.id = (CASE WHEN s.toolset_id = s.id THEN s.id END)
-  AND t.project_id = p.project_id
-  AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id
@@ -6538,20 +6528,17 @@ type ListPlatformMCPPluginServersParams struct {
 }
 
 type ListPlatformMCPPluginServersRow struct {
-	ID             uuid.UUID
-	DisplayName    string
-	Policy         string
-	SortOrder      int32
-	GatewayBacked  bool
-	McpSlug        string
-	AliasToolsetID uuid.NullUUID
-	Enabled        bool
+	ID            uuid.UUID
+	DisplayName   string
+	Policy        string
+	SortOrder     int32
+	GatewayBacked bool
+	McpSlug       string
+	Enabled       bool
 }
 
 // Member-facing compatibility projection. It deliberately omits membership and
 // backend IDs, which are administrative identity and must not cross this path.
-// A canonical wrapper with no endpoint falls back to its toolset's legacy alias,
-// which the caller reads through legacyalias for alias_toolset_id.
 func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
 		arg.PluginID,
@@ -6573,7 +6560,6 @@ func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlat
 			&i.SortOrder,
 			&i.GatewayBacked,
 			&i.McpSlug,
-			&i.AliasToolsetID,
 			&i.Enabled,
 		); err != nil {
 			return nil, err

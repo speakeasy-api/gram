@@ -38,9 +38,12 @@ func createHostedMCPServerFixture(t *testing.T, ctx context.Context, ti *testIns
 		DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "acme-"+slug, uuid.NullUUID{})
-
-	return addToolsetWrapper(t, ctx, ti, toolset.ID, toolset.ID, "acme-"+slug)
+	serverID := addToolsetWrapper(t, ctx, ti, toolset.ID, toolset.ID, "acme-"+slug)
+	_, err = mcpendpointsRepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsRepo.CreateMCPEndpointParams{
+		ProjectID: *authCtx.ProjectID, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: "acme-" + slug,
+	})
+	require.NoError(t, err)
+	return serverID
 }
 
 // addToolsetWrapper adds a private, endpointless mcp_servers row serving the toolset.
@@ -190,7 +193,7 @@ func TestToolUsage_FiltersByMCPServerID(t *testing.T) {
 		}
 	})
 
-	t.Run("it lists the same traces by the legacy toolset slug", func(t *testing.T) {
+	t.Run("it lists the same traces by the toolset slug", func(t *testing.T) {
 		t.Parallel()
 		res, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
 			From:               from,
@@ -412,7 +415,6 @@ func TestToolUsage_DisabledToolsetKeepsServerIDForPastCalls(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "acme-retired", uuid.NullUUID{})
 	serverID := addToolsetWrapper(t, ctx, ti, toolset.ID, toolset.ID, "acme-retired")
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "disabled", UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{}})
 
@@ -452,7 +454,6 @@ func TestToolUsage_DisabledCanonicalKeepsUnstampedCalls(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "acme-paused", uuid.NullUUID{})
 	canonicalID := addToolsetWrapperWith(t, ctx, ti, toolset.ID, toolset.ID, "acme-paused", "disabled", true)
 	memberID := addToolsetWrapperWith(t, ctx, ti, toolset.ID, uuid.New(), "acme-paused-member", "public", true)
 

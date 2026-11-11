@@ -478,7 +478,7 @@ func TestGatewayRowsReadTheReportedClient(t *testing.T) {
 	}
 }
 
-// A toolset gate's rejection reads the record a hosted session keeps, and a missing session the User-Agent.
+// A hosted server's gate cannot name the toolset-keyed session record, so its rejection reads the User-Agent.
 func TestGateRejectionReadsTheReportedClient(t *testing.T) {
 	t.Parallel()
 
@@ -496,8 +496,8 @@ func TestGateRejectionReadsTheReportedClient(t *testing.T) {
 	_, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, map[string]string{"User-Agent": "claude-code/2.1.0", "Mcp-Session-Id": sessionID})
 	require.Error(t, err)
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidRemoteSession)
-	require.Equal(t, mcpconnectionattempts.FamilyCursor, row.ClientFamily)
-	require.Equal(t, "1.7.3", row.ClientVersion)
+	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, row.ClientFamily)
+	require.Equal(t, "2.1.0", row.ClientVersion)
 	require.NotEmpty(t, row.AppKey)
 }
 
@@ -804,7 +804,7 @@ func TestDirectHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
 			rec := mcpconnectionattemptstest.New(t)
 			ti.service.SetConnectionRecorder(rec.Recorder)
 			response, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, makeInitializeBody(), "", nil)
-			require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+			require.EqualError(t, err, "serve public: serve toolset-backed mcp: "+oops.C(oops.CodeUnauthorized).Error())
 			require.Empty(t, response.Body.String())
 			require.Empty(t, response.Header().Get("WWW-Authenticate"))
 			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
@@ -826,11 +826,11 @@ func TestDirectHostedMissingSecuritySkipsNotifications(t *testing.T) {
 	ti.service.SetConnectionRecorder(rec.Recorder)
 
 	_, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`), "", nil)
-	require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+	require.EqualError(t, err, "serve public: serve toolset-backed mcp: "+oops.C(oops.CodeUnauthorized).Error())
 	rec.RequireNothing()
 
 	_, err = servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", nil)
-	require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+	require.EqualError(t, err, "serve public: serve toolset-backed mcp: "+oops.C(oops.CodeUnauthorized).Error())
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCallerCredentialMissing)
 	require.Len(t, rec.Rows(), 1)
 }
@@ -1102,7 +1102,7 @@ func TestExternalOAuthFirstHandshakeRecordsNothing(t *testing.T) {
 
 			for range 2 {
 				response, err := servePublicHTTP(t, context.Background(), ti, external.McpSlug, makeInitializeBody(), "", nil)
-				require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+				require.EqualError(t, err, "serve public: serve toolset-backed mcp: "+oops.C(oops.CodeUnauthorized).Error())
 				require.Contains(t, response.Header().Get("WWW-Authenticate"), "resource_metadata=")
 			}
 			rec.RequireNothing()

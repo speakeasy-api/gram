@@ -12,20 +12,18 @@ import (
 func TestRemoteServerURL(t *testing.T) {
 	t.Parallel()
 	vendor := pgtype.Text{String: "https://vendor.example/mcp", Valid: true}
-	none := pgtype.Text{String: "", Valid: false}
 	for _, tc := range []struct {
 		name          string
-		row           pluginMCPServerRow
+		row           repo.ListPluginsWithMcpServersForProjectRow
 		want          string
 		wantUnproxied bool
 		wantError     bool
 	}{
-		{name: "endpoint on the server URL", row: pluginRow(repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote"}, none, none), want: "https://public.example/mcp/remote"},
-		{name: "custom domain endpoint wins", row: pluginRow(repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote", EndpointCustomDomain: pgtype.Text{String: "mcp.acme.example", Valid: true}}, none, none), want: "https://mcp.acme.example/mcp/remote"},
-		{name: "unproxied URL is the vendor's", row: pluginRow(repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote", UnproxiedUrl: vendor}, none, none), want: "https://vendor.example/mcp", wantUnproxied: true},
-		{name: "unproxied server cannot be private", row: pluginRow(repo.ListPluginsWithMcpServersForProjectRow{UnproxiedUrl: vendor, NetworkAccessMode: pgtype.Text{String: "private_only", Valid: true}}, none, none), wantUnproxied: true, wantError: true},
-		{name: "server address overrides the endpoint", row: pluginRow(repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote", EndpointCustomDomain: pgtype.Text{String: "old.example", Valid: true}}, pgtype.Text{String: "renamed", Valid: true}, pgtype.Text{String: "mcp.acme.example", Valid: true}), want: "https://mcp.acme.example/mcp/renamed"},
-		{name: "no endpoint fails closed", row: pluginRow(repo.ListPluginsWithMcpServersForProjectRow{}, none, none), wantError: true},
+		{name: "endpoint on the server URL", row: repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote"}, want: "https://public.example/mcp/remote"},
+		{name: "custom domain endpoint wins", row: repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote", EndpointCustomDomain: pgtype.Text{String: "mcp.acme.example", Valid: true}}, want: "https://mcp.acme.example/mcp/remote"},
+		{name: "unproxied URL is the vendor's", row: repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote", UnproxiedUrl: vendor}, want: "https://vendor.example/mcp", wantUnproxied: true},
+		{name: "unproxied server cannot be private", row: repo.ListPluginsWithMcpServersForProjectRow{UnproxiedUrl: vendor, NetworkAccessMode: pgtype.Text{String: "private_only", Valid: true}}, wantUnproxied: true, wantError: true},
+		{name: "no endpoint fails closed", row: repo.ListPluginsWithMcpServersForProjectRow{}, wantError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -39,10 +37,6 @@ func TestRemoteServerURL(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
-}
-
-func pluginRow(row repo.ListPluginsWithMcpServersForProjectRow, slug, domain pgtype.Text) pluginMCPServerRow {
-	return pluginMCPServerRow{ListPluginsWithMcpServersForProjectRow: row, AddressSlug: slug, AddressCustomDomain: domain}
 }
 
 func TestPackageMCPURL(t *testing.T) {

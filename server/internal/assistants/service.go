@@ -1077,21 +1077,10 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 	if len(toolsetSlugs) == 0 {
 		return nil, nil
 	}
-	var aliasCandidates []uuid.UUID
-	for _, row := range toolsetRows {
-		if row.DisabledWrapper && !row.EnablesMcp {
-			aliasCandidates = append(aliasCandidates, row.ID)
-		}
-	}
-	// A disabled hosted server with only its legacy alias still serves once enabled.
-	aliased, err := hasLegacyAlias(ctx, tx, projectID, aliasCandidates)
-	if err != nil {
-		return nil, err
-	}
 	enablesMCP := map[uuid.UUID]bool{}
 	for _, row := range toolsetRows {
 		toolsetIDs[row.Slug] = row.ID
-		enablesMCP[row.ID] = row.EnablesMcp || aliased[row.ID]
+		enablesMCP[row.ID] = row.EnablesMcp
 	}
 	for _, slug := range toolsetSlugs {
 		if _, ok := toolsetIDs[slug]; !ok {
@@ -1303,7 +1292,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 	if len(assistantIDs) == 0 {
 		return out, nil
 	}
-	rows, err := loadAssistantMcpServers(ctx, s.db, assistantrepo.LoadAssistantMcpServersParams{
+	rows, err := assistantrepo.New(s.db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{
 		AssistantIds: assistantIDs,
 		ProjectID:    projectID,
 	})
@@ -1919,7 +1908,7 @@ func (s *ServiceCore) UpdateAssistant(
 			checkKitAttachments = checkKitAttachments || runtime.RuntimeVersion == 3
 		}
 		if checkKitAttachments {
-			kitAttachmentsBefore, err = loadAssistantMcpServers(ctx, tx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
+			kitAttachmentsBefore, err = assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
 			if err != nil {
 				return assistantRecord{}, fmt.Errorf("read Kit attachments before edit: %w", err)
 			}
@@ -1988,7 +1977,7 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 
 	if checkKitAttachments {
-		after, err := loadAssistantMcpServers(ctx, tx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
+		after, err := assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
 		if err != nil {
 			return assistantRecord{}, fmt.Errorf("read Kit attachments after edit: %w", err)
 		}

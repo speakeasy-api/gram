@@ -106,7 +106,7 @@ func TestAuthorize_BeginsTheConnectionAttempt(t *testing.T) {
 	require.Equal(t, *authCtx.ProjectID, rows[0].ProjectID)
 	require.WithinDuration(t, stored.CreatedAt, rows[0].AttemptStartedAt, time.Microsecond)
 	require.Equal(t, toolset.ID.String(), rows[0].ServerID)
-	require.Equal(t, "toolset", rows[0].ServerKind)
+	require.Equal(t, "mcp", rows[0].ServerKind)
 	require.Equal(t, mcpconnectionattempts.StepInboundAuthorize.String(), rows[0].Step)
 	require.Equal(t, mcpconnectionattempts.ResultAccepted.String(), rows[0].StepResult)
 	require.False(t, rows[0].IsFinal)

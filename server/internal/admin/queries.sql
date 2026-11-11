@@ -940,8 +940,7 @@ ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK 
 -- outright: it counts as one, and any other wrapper of that toolset as two.
 -- url_slug is the slug in the /mcp/<slug> path clients call: the primary live
 -- endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
--- a domain root has no such path), else the server's own slug; the caller falls
--- back to the toolset's legacy alias when no other wrapper shares that toolset.
+-- a domain root has no such path), else the server's own slug.
 SELECT
     m.id,
     COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name,

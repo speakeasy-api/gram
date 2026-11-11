@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -146,13 +145,6 @@ func (s *Service) serverSessionResources(ctx context.Context, organizationID str
 			return nil, nil, fmt.Errorf("render custom domain endpoint url: %w", err)
 		}
 		resources = append(resources, u)
-	}
-	legacy, err := legacyalias.PlatformServedSlugs(ctx, s.db, organizationID, []uuid.UUID{server.ProjectID}, []uuid.UUID{server.ID})
-	if err != nil {
-		return nil, nil, fmt.Errorf("list legacy platform slugs: %w", err)
-	}
-	if slug, ok := legacy[server.ID]; ok {
-		platformPaths = append(platformPaths, platformPath(slug))
 	}
 	return resources, platformPaths, nil
 }

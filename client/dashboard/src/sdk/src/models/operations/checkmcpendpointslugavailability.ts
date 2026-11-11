@@ -30,7 +30,9 @@ export type CheckMcpEndpointSlugAvailabilityRequest = {
    */
   customDomainId?: string | undefined;
   /**
-   * Optional MCP server the slug is for. Addresses that server may claim, such as its own legacy alias, read as available.
+   * Deprecated: ignored.
+   *
+   * @deprecated field: Ignored; omit this parameter.
    */
   mcpServerId?: string | undefined;
   /**

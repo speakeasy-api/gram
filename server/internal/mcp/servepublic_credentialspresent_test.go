@@ -132,7 +132,7 @@ func TestServePublicAuth_PrivateServer_NoToken_LogsNoError(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "priv-auth-log-test", "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "priv-auth-log-test", "private", noIssuer())
 
 	// Fixture setup shares the service logger; only the request matters here.
 	logs.reset()
@@ -175,7 +175,7 @@ func TestServePublicAuth_PrivateServer_NoToken_Returns401(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "priv-auth-test", "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "priv-auth-test", "private", noIssuer())
 
 	unauthCtx := context.Background()
 	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
@@ -252,7 +252,7 @@ func TestServePublic_DeniesUnauthenticatedAccessToPrivateMCP(t *testing.T) {
 		// McpIsPublic defaults to false
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-unauth-mcp", "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "private-unauth-mcp", "private", noIssuer())
 
 	reqBody := map[string]any{
 		"jsonrpc": "2.0",
@@ -301,7 +301,7 @@ func TestServePublic_PrivateWithoutOAuth_InvalidAPIKey_Returns401(t *testing.T) 
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-no-oauth-mcp-"+uuid.New().String()[:8], "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "private-no-oauth-mcp-"+uuid.New().String()[:8], "private", noIssuer())
 
 	mcpSlug := toolset.McpSlug.String
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(makeInitializeBody()))
@@ -343,7 +343,7 @@ func TestServePublic_PrivateWithoutOAuth_BearerTokenFails(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-no-oauth-mcp-"+uuid.New().String()[:8], "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "private-no-oauth-mcp-"+uuid.New().String()[:8], "private", noIssuer())
 
 	mcpSlug := toolset.McpSlug.String
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(makeInitializeBody()))

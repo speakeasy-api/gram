@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -54,18 +53,8 @@ func loadCanonical(t *testing.T, ctx context.Context, ti *testInstance, toolset 
 	return canonicalState{server: server, endpoints: endpoints}
 }
 
-// requireHostingColumnsUnset asserts no toolset write has given the toolset a legacy alias.
-func requireHostingColumnsUnset(t *testing.T, ctx context.Context, ti *testInstance, toolsetID string) {
-	t.Helper()
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	alias, err := legacyalias.Get(ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(toolsetID))
-	require.NoError(t, err)
-	require.Equal(t, legacyalias.None(), alias)
-}
-
 // requireCanonicalMatches checks the toolset view reports its canonical wrapper's state and single
-// endpoint, and that the toolset hosting columns stay unset.
+// endpoint.
 func requireCanonicalMatches(t *testing.T, ctx context.Context, ti *testInstance, toolset *types.Toolset) canonicalState {
 	t.Helper()
 	state := loadCanonical(t, ctx, ti, toolset)
@@ -84,7 +73,6 @@ func requireCanonicalMatches(t *testing.T, ctx context.Context, ti *testInstance
 	require.NotNil(t, toolset.McpSlug)
 	require.Equal(t, string(*toolset.McpSlug), state.endpoints[0].Slug)
 	require.Equal(t, conv.PtrValOrEmpty(toolset.CustomDomainID, ""), nullUUIDString(state.endpoints[0].CustomDomainID))
-	requireHostingColumnsUnset(t, ctx, ti, toolset.ID)
 	return state
 }
 
@@ -162,9 +150,8 @@ func TestToolsetWritesNeverTouchHostingColumns(t *testing.T) {
 	require.NoError(t, err)
 	requireCanonicalMatches(t, ctx, ti, updated)
 
-	clone, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{Slug: toolset.Slug})
+	_, err = ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{Slug: toolset.Slug})
 	require.NoError(t, err)
-	requireHostingColumnsUnset(t, ctx, ti, clone.ID)
 
 	require.NoError(t, ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: toolset.Slug}))
 	_, err = mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: uuid.MustParse(toolset.ID), ProjectID: *authCtx.ProjectID})
@@ -244,7 +231,6 @@ func TestHostedServerUpdateKeepsValidationRules(t *testing.T) {
 	require.Error(t, err, "private access needs an eligible organization and a live ingress")
 
 	require.Equal(t, before.server, loadCanonical(t, ctx, ti, toolset).server, "rejected writes leave the wrapper untouched")
-	requireHostingColumnsUnset(t, ctx, ti, toolset.ID)
 }
 
 func TestUpdateToolsetRejectsHostingFields(t *testing.T) {
@@ -273,7 +259,6 @@ func TestUpdateToolsetRejectsHostingFields(t *testing.T) {
 	after := getToolset(t, ctx, ti, toolset.Slug)
 	require.Equal(t, toolset.Name, after.Name, "a rejected update writes nothing")
 	require.Equal(t, before, loadCanonical(t, ctx, ti, toolset))
-	requireHostingColumnsUnset(t, ctx, ti, toolset.ID)
 }
 
 // hostedUpdate is an mcpServers.update on toolset's canonical wrapper that keeps its tool variations group.
@@ -565,23 +550,23 @@ func TestToolsetViewsDeriveAddressFromCanonicalServer(t *testing.T) {
 	require.True(t, *view.McpIsPublic, "visibility still comes from the server")
 }
 
-func TestToolsetViewsFallBackToFrozenAlias(t *testing.T) {
+// A hosted server with no endpoint reports no address, though it stays enabled.
+func TestToolsetViewsReportNoAddressWithoutEndpoint(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestToolsetsService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	legacy, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
-		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, Name: "Frozen Alias", Slug: "frozen-alias",
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, Name: "Endpointless", Slug: "endpointless",
 	})
 	require.NoError(t, err)
-	alias := authCtx.OrganizationSlug + "-frozen-alias"
-	testenv.SetLegacyAlias(t, ctx, ti.conn, *authCtx.ProjectID, legacy.ID, alias, uuid.NullUUID{})
+	address := authCtx.OrganizationSlug + "-endpointless"
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: legacy.ID, ProjectID: *authCtx.ProjectID, Name: conv.ToPGText(legacy.Name),
 		ToolsetID: conv.ToNullUUID(legacy.ID), Visibility: mcpservers.VisibilityPrivate,
 	})
 	require.NoError(t, err)
-	testenv.SetHostedMCP(t, ctx, ti.conn, *authCtx.ProjectID, legacy.ID, testenv.HostedMCP{Slug: alias})
+	testenv.SetHostedMCP(t, ctx, ti.conn, *authCtx.ProjectID, legacy.ID, testenv.HostedMCP{Slug: address})
 	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: legacy.ID})
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
@@ -589,11 +574,8 @@ func TestToolsetViewsFallBackToFrozenAlias(t *testing.T) {
 	require.NoError(t, err)
 
 	view := getToolset(t, ctx, ti, types.Slug(legacy.Slug))
-	require.NotNil(t, view.McpSlug, "a server with no servable endpoint reports the alias that still serves it")
-	require.Equal(t, alias, string(*view.McpSlug))
+	require.Nil(t, view.McpSlug)
 	require.Nil(t, view.CustomDomainID)
 	require.True(t, *view.McpEnabled)
-	listed := listedEntry(t, ctx, ti, legacy.ID.String()).McpSlug
-	require.NotNil(t, listed)
-	require.Equal(t, alias, string(*listed))
+	require.Nil(t, listedEntry(t, ctx, ti, legacy.ID.String()).McpSlug)
 }

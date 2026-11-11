@@ -44,7 +44,7 @@ func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX
 		return nil, nil
 	}
 
-	remoteRows, err := listPluginMCPServers(ctx, db, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	remoteRows, err := repo.New(db).ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, fmt.Errorf("list remote plugin servers: %w", err)
 	}

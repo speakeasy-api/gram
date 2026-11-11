@@ -41,7 +41,7 @@ func TestServePublic_AllowsUnauthenticatedAccessToPublicMCP(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "public-unauth-mcp", "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "public-unauth-mcp", "private", noIssuer())
 
 	// Make the toolset public
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
@@ -107,7 +107,7 @@ func TestServePublic_AllowsCrossOrgAccessToPublicMCP(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "public-cross-org-mcp", "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "public-cross-org-mcp", "private", noIssuer())
 
 	// Make the toolset public
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
@@ -185,7 +185,7 @@ func TestServePublic_DeniesCrossOrgAccessToPrivateMCP(t *testing.T) {
 		// McpIsPublic defaults to false
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-cross-org-mcp", "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "private-cross-org-mcp", "private", noIssuer())
 
 	// Create a different organization
 	differentOrgID := uuid.New().String()
@@ -245,7 +245,7 @@ func TestServePublic_SameOrgAuthenticatedUserGetsFullAccess(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "production", Valid: true},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "public-same-org-mcp", "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "public-same-org-mcp", "private", noIssuer())
 
 	// Make the toolset public
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})

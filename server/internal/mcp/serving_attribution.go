@@ -15,8 +15,8 @@ import (
 )
 
 // servingServerID reports serving attribution without changing route authorization.
-// Tools retain their established use of this identity for scanner context; a
-// legacy fallback must never overwrite the fronting mcpServerID authorization marker.
+// Tools use this identity for scanner context; the attribution lookup must never
+// overwrite the fronting mcpServerID authorization marker.
 func (p *mcpInputs) servingServerID() *uuid.UUID {
 	if p.mcpServerID != nil {
 		return p.mcpServerID
@@ -37,7 +37,7 @@ func (p *mcpInputs) resolveServingAttribution(ctx context.Context, logger *slog.
 		case 1:
 			p.attributionServerID = &servers[0].ID
 		default:
-			logger.WarnContext(ctx, "multiple enabled MCP servers wrap the legacy toolset; skipping server attribution", attr.SlogToolsetID(toolsetID.String()))
+			logger.WarnContext(ctx, "multiple enabled MCP servers wrap the toolset; skipping server attribution", attr.SlogToolsetID(toolsetID.String()))
 		}
 	}
 	if id := optionalUUIDString(p.servingServerID()); id != nil {

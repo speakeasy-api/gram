@@ -2,16 +2,11 @@ package mcp
 
 import (
 	"encoding/json"
-	"errors"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-)
-
-var (
-	errToolsetNotFound = errors.New("toolset not found")
 )
 
 // ToolMode specifies whether tools should be loaded statically or dynamically.

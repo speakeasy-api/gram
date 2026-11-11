@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
 // packageMCPURL selects the same namespace the serving policy permits. A
@@ -33,7 +34,7 @@ func packageMCPURL(modeValue pgtype.Text, publicBase, publicSlug, privateDNS, pr
 // remoteServerURL resolves a plugin server's package address. unproxied means
 // the address is the vendor's own server, which must never get a Speakeasy
 // credential; it wins whenever set, even if an mcp_endpoints row also exists.
-func remoteServerURL(serverURL string, r pluginMCPServerRow) (mcpURL string, unproxied bool, err error) {
+func remoteServerURL(serverURL string, r repo.ListPluginsWithMcpServersForProjectRow) (mcpURL string, unproxied bool, err error) {
 	if r.UnproxiedUrl.Valid {
 		mode, err := networkaccess.Effective(r.NetworkAccessMode)
 		if err != nil {
@@ -46,16 +47,12 @@ func remoteServerURL(serverURL string, r pluginMCPServerRow) (mcpURL string, unp
 	}
 
 	// Custom-domain endpoints win on the public surface. The private surface
-	// is pinned to the ingress's configured namespace instead. A server
-	// address, when set, overrides the endpoint's slug and domain.
-	mcpBase, publicSlug, domain := serverURL, r.EndpointSlug, r.EndpointCustomDomain
-	if r.AddressSlug.Valid {
-		publicSlug, domain = r.AddressSlug.String, r.AddressCustomDomain
-	}
-	if cd := conv.FromPGText[string](domain); cd != nil {
+	// is pinned to the ingress's configured namespace instead.
+	mcpBase := serverURL
+	if cd := conv.FromPGText[string](r.EndpointCustomDomain); cd != nil {
 		mcpBase = "https://" + *cd
 	}
-	mcpURL, err = packageMCPURL(r.NetworkAccessMode, mcpBase, publicSlug, r.PrivateDnsName.String, r.PrivateEndpointSlug)
+	mcpURL, err = packageMCPURL(r.NetworkAccessMode, mcpBase, r.EndpointSlug, r.PrivateDnsName.String, r.PrivateEndpointSlug)
 	if err != nil {
 		return "", false, err
 	}
