@@ -202,7 +202,6 @@ describe("useAgentIdentityCandidates", () => {
       title: "Release Agent",
       detail: "Agent identity",
       keywords: ["agent", "agent/one", "agent:agent/one"],
-      fuzzyOnly: true,
       icon: "bot",
       group: "Identities",
       verbs: ["open"],
@@ -300,7 +299,6 @@ describe("useAgentIdentityCandidates", () => {
     expect(aliases).toHaveLength(1);
     expect(aliases[0]).toMatchObject({
       title: "Worker · Permissions",
-      fuzzyOnly: true,
       keywords: expect.arrayContaining(["inference", "permissions"]),
     });
     void aliases[0]!.run("open");
@@ -329,7 +327,6 @@ describe("useAgentIdentityCandidates", () => {
     expect(signIns).toHaveLength(1);
     expect(signIns[0]).toMatchObject({
       title: "Worker · MCP sign-in",
-      fuzzyOnly: true,
       kind: "person",
       keywords: expect.arrayContaining(["mcp", "reconnect"]),
     });

@@ -390,7 +390,6 @@ trackedFiles:
   src/funcs/killswitchesListCapabilities.ts: {}
   src/funcs/killswitchesListMCPServers.ts: {}
   src/funcs/killswitchesPreviewOverlaps.ts: {}
-  src/funcs/launcherJudge.ts: {}
   src/funcs/litellmCreateInstance.ts: {}
   src/funcs/litellmIngestGuardrail.ts: {}
   src/funcs/litellmListInstances.ts: {}
@@ -1433,7 +1432,6 @@ trackedFiles:
   src/models/components/jsonwebkey.ts: {}
   src/models/components/jsonwebkeyset.ts: {}
   src/models/components/jsonwebkeysetdeletepreflight.ts: {}
-  src/models/components/judgerequestbody.ts: {}
   src/models/components/key.ts: {}
   src/models/components/killswitchbatchuserbadgesrequest.ts: {}
   src/models/components/killswitchbatchuserbadgesresult.ts: {}
@@ -1467,9 +1465,6 @@ trackedFiles:
   src/models/components/killswitchstatus.ts: {}
   src/models/components/killswitchsummary.ts: {}
   src/models/components/killswitchuserbadge.ts: {}
-  src/models/components/launchercandidate.ts: {}
-  src/models/components/launchercontext.ts: {}
-  src/models/components/launcherjudgment.ts: {}
   src/models/components/linkskillrequestbody.ts: {}
   src/models/components/listactorattributesresult.ts: {}
   src/models/components/listagentconnectionblocksresult.ts: {}
@@ -2714,7 +2709,6 @@ trackedFiles:
   src/models/operations/killswitcheslistcapabilities.ts: {}
   src/models/operations/killswitcheslistmcpservers.ts: {}
   src/models/operations/killswitchespreviewoverlaps.ts: {}
-  src/models/operations/launcherjudge.ts: {}
   src/models/operations/linkskill.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
   src/models/operations/listagentconnectionblocks.ts: {}
@@ -3711,7 +3705,6 @@ trackedFiles:
   src/react-query/killswitches.ts: {}
   src/react-query/latestDeployment.core.ts: {}
   src/react-query/latestDeployment.ts: {}
-  src/react-query/launcherJudge.ts: {}
   src/react-query/liftKillswitch.ts: {}
   src/react-query/linkSkill.ts: {}
   src/react-query/listAPIKeys.core.ts: {}
@@ -4493,7 +4486,6 @@ trackedFiles:
   src/sdk/jsonwebkeysets.ts: {}
   src/sdk/keys.ts: {}
   src/sdk/killswitches.ts: {}
-  src/sdk/launcher.ts: {}
   src/sdk/litellm.ts: {}
   src/sdk/mcpapproval.ts: {}
   src/sdk/mcpendpoints.ts: {}
@@ -9601,17 +9593,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  launcherJudge:
-    speakeasy-default-launcher-judge:
-      requestBody:
-        application/json: {"candidates": [{"id": "<id>", "kind": "<value>", "title": "<value>"}], "query": "<value>"}
-      responses:
-        "200":
-          application/json: {"disabled": true}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   linkSkill:
     speakeasy-default-link-skill:
       requestBody:
