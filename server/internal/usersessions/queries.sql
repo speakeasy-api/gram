@@ -2575,8 +2575,11 @@ WHERE tb.project_id = @project_id AND tb.organization_id = @organization_id
 ORDER BY tb.original_trigger_id;
 
 -- name: RecordUpstreamClientSelections :execrows
--- Records, for one inbound credential, the upstream OAuth client it uses for
--- every MCP server it can reach, or an explicit no-auth choice. A NULL
+-- Records, for inbound credentials, the upstream OAuth client each uses for
+-- every MCP server it can reach, or an explicit no-auth choice. NULL
+-- credential_ids keeps the single credential_id path; a supplied array records
+-- the same per-issuer decision for those lineages, and an empty array is a no-op.
+-- Duplicate lineage IDs are processed once. A NULL
 -- scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
 -- recording to those servers, and an empty array records nothing. An existing
 -- client choice is never replaced. An existing no-auth choice is replaced
@@ -2618,16 +2621,20 @@ ORDER BY tb.original_trigger_id;
 -- client only fills choices recorded without one. A recorded choice naming
 -- any auth client, explicit or mapped, is never replaced here: only an
 -- untyped no-auth choice is.
-WITH session_issuer AS (
+WITH credential_ids AS MATERIALIZED (
+    SELECT DISTINCT unnest(COALESCE(sqlc.narg('credential_ids')::uuid[], ARRAY[@credential_id::uuid])) AS id
+),
+session_issuer AS (
     SELECT usi.id,
            usi.project_id,
-           COALESCE(usi.organization_id, p.organization_id) AS organization_id
+           CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END AS organization_id
     FROM user_session_issuers AS usi
     LEFT JOIN projects AS p ON p.id = usi.project_id
     WHERE usi.id = @user_session_issuer_id
       AND usi.deleted IS FALSE
+      AND (usi.project_id IS NULL OR p.deleted IS FALSE)
 ),
-reachable AS (
+reachable AS MATERIALIZED (
     SELECT s.id, s.project_id
     FROM mcp_servers AS s
     JOIN projects AS p
@@ -2636,20 +2643,23 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
-      -- Immutable existing choices cannot be changed by this writer. Exclude
-      -- them before client discovery/mapping, rather than doing all that work
-      -- only to lose the INSERT's guarded conflict update. An untyped no-auth
-      -- choice remains eligible for replacement when OAuth becomes decided.
-      AND NOT EXISTS (
-        SELECT 1 FROM upstream_client_selections AS existing
-        WHERE existing.credential_kind = @credential_kind::text
-          AND existing.credential_id = @credential_id::uuid
-          AND existing.mcp_server_id = s.id
-          AND existing.organization_id = p.organization_id
-          AND existing.deleted IS FALSE
-          AND (NOT existing.no_auth
-            OR existing.auth_client_id IS NOT NULL
-            OR existing.remote_session_client_id IS NOT NULL)
+      -- Skip discovery only when every requested lineage already has an
+      -- immutable choice. An untyped no-auth choice remains eligible for
+      -- replacement when OAuth becomes decided; guarded conflict updates still
+      -- preserve each other lineage's explicit or immutable choice.
+      AND EXISTS (
+        SELECT 1 FROM credential_ids AS credential
+        WHERE NOT EXISTS (
+          SELECT 1 FROM upstream_client_selections AS existing
+          WHERE existing.credential_kind = @credential_kind::text
+            AND existing.credential_id = credential.id
+            AND existing.mcp_server_id = s.id
+            AND existing.organization_id = p.organization_id
+            AND existing.deleted IS FALSE
+            AND (NOT existing.no_auth
+              OR existing.auth_client_id IS NOT NULL
+              OR existing.remote_session_client_id IS NOT NULL)
+        )
       )
       AND (sqlc.narg('scope_mcp_server_ids')::uuid[] IS NULL
            OR s.id = ANY(sqlc.narg('scope_mcp_server_ids')::uuid[]))
@@ -2689,7 +2699,7 @@ eligible AS (
      AND link.user_session_issuer_id = @user_session_issuer_id
     WHERE a.deleted IS FALSE
 ),
-decided AS (
+decided AS MATERIALIZED (
     SELECT r.id AS mcp_server_id,
            r.project_id,
            CASE WHEN pick.auth_client_id IS NOT NULL
@@ -2750,7 +2760,7 @@ decided AS (
 -- has reconciled the clients. A choice is mapped only when exactly one such
 -- client exists; otherwise it is recorded unmapped, as before, and coverage
 -- reports it.
-mapped AS (
+mapped AS MATERIALIZED (
     SELECT d.mcp_server_id,
            CASE WHEN count(ac.id) = 1 THEN (array_agg(ac.id))[1] END AS auth_client_id
     FROM decided AS d
@@ -2855,7 +2865,7 @@ INSERT INTO upstream_client_selections (
 SELECT d.project_id,
        si.organization_id,
        @credential_kind::text,
-       @credential_id::uuid,
+       credential.id,
        d.mcp_server_id,
        d.remote_session_client_id,
        chosen.attachment_scope,
@@ -2865,6 +2875,7 @@ SELECT d.project_id,
        @source::text
 FROM decided AS d
 CROSS JOIN session_issuer AS si
+CROSS JOIN credential_ids AS credential
 JOIN projects AS server_project
   ON server_project.id = d.project_id
 LEFT JOIN remote_session_clients AS chosen

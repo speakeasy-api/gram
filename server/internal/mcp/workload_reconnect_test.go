@@ -47,7 +47,7 @@ func TestDirectWorkloadReconnect(t *testing.T) {
 	selection.associate(t, ctx, server.ID, client)
 	policy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: fx.target.UserSessionIssuerID, Jti: session.Jti})
 	require.NoError(t, err)
-	_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: fx.target.UserSessionIssuerID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: policy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{server.ID}, PickedClientIds: []uuid.UUID{client}})
+	_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{CredentialIds: nil, UserSessionIssuerID: fx.target.UserSessionIssuerID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: policy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{server.ID}, PickedClientIds: []uuid.UUID{client}})
 	require.NoError(t, err)
 	token, _, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{Subject: subject, Audience: urn.NewUserSessionIssuer(fx.target.UserSessionIssuerID).String(), Issuer: ti.serverURL.JoinPath("mcp", slug).String(), ExpiresAt: &session.ExpiresAt.Time, ClientID: fx.client.ClientID, JTI: session.Jti})
 	require.NoError(t, err)

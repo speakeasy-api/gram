@@ -5301,16 +5301,20 @@ func (q *Queries) PurgeUserSessionClientCIMDCache(ctx context.Context, arg Purge
 }
 
 const recordUpstreamClientSelections = `-- name: RecordUpstreamClientSelections :execrows
-WITH session_issuer AS (
+WITH credential_ids AS MATERIALIZED (
+    SELECT DISTINCT unnest(COALESCE($3::uuid[], ARRAY[$4::uuid])) AS id
+),
+session_issuer AS (
     SELECT usi.id,
            usi.project_id,
-           COALESCE(usi.organization_id, p.organization_id) AS organization_id
+           CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END AS organization_id
     FROM user_session_issuers AS usi
     LEFT JOIN projects AS p ON p.id = usi.project_id
-    WHERE usi.id = $4
+    WHERE usi.id = $5
       AND usi.deleted IS FALSE
+      AND (usi.project_id IS NULL OR p.deleted IS FALSE)
 ),
-reachable AS (
+reachable AS MATERIALIZED (
     SELECT s.id, s.project_id
     FROM mcp_servers AS s
     JOIN projects AS p
@@ -5319,23 +5323,26 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
-      -- Immutable existing choices cannot be changed by this writer. Exclude
-      -- them before client discovery/mapping, rather than doing all that work
-      -- only to lose the INSERT's guarded conflict update. An untyped no-auth
-      -- choice remains eligible for replacement when OAuth becomes decided.
-      AND NOT EXISTS (
-        SELECT 1 FROM upstream_client_selections AS existing
-        WHERE existing.credential_kind = $1::text
-          AND existing.credential_id = $2::uuid
-          AND existing.mcp_server_id = s.id
-          AND existing.organization_id = p.organization_id
-          AND existing.deleted IS FALSE
-          AND (NOT existing.no_auth
-            OR existing.auth_client_id IS NOT NULL
-            OR existing.remote_session_client_id IS NOT NULL)
+      -- Skip discovery only when every requested lineage already has an
+      -- immutable choice. An untyped no-auth choice remains eligible for
+      -- replacement when OAuth becomes decided; guarded conflict updates still
+      -- preserve each other lineage's explicit or immutable choice.
+      AND EXISTS (
+        SELECT 1 FROM credential_ids AS credential
+        WHERE NOT EXISTS (
+          SELECT 1 FROM upstream_client_selections AS existing
+          WHERE existing.credential_kind = $1::text
+            AND existing.credential_id = credential.id
+            AND existing.mcp_server_id = s.id
+            AND existing.organization_id = p.organization_id
+            AND existing.deleted IS FALSE
+            AND (NOT existing.no_auth
+              OR existing.auth_client_id IS NOT NULL
+              OR existing.remote_session_client_id IS NOT NULL)
+        )
       )
-      AND ($5::uuid[] IS NULL
-           OR s.id = ANY($5::uuid[]))
+      AND ($6::uuid[] IS NULL
+           OR s.id = ANY($6::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -5354,9 +5361,9 @@ reachable AS (
 ),
 picked AS (
     -- The consent page's pick for each server, as parallel arrays.
-    SELECT unnest($6::uuid[]) AS mcp_server_id,
-           unnest($7::uuid[]) AS remote_session_client_id,
-           NULLIF(unnest($8::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
+    SELECT unnest($7::uuid[]) AS mcp_server_id,
+           unnest($8::uuid[]) AS remote_session_client_id,
+           NULLIF(unnest($9::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
 ),
 eligible AS (
     SELECT a.mcp_server_id,
@@ -5369,10 +5376,10 @@ eligible AS (
      AND c.deleted IS FALSE
     JOIN remote_session_client_user_session_issuers AS link
       ON link.remote_session_client_id = a.remote_session_client_id
-     AND link.user_session_issuer_id = $4
+     AND link.user_session_issuer_id = $5
     WHERE a.deleted IS FALSE
 ),
-decided AS (
+decided AS MATERIALIZED (
     SELECT r.id AS mcp_server_id,
            r.project_id,
            CASE WHEN pick.auth_client_id IS NOT NULL
@@ -5419,7 +5426,7 @@ decided AS (
     FROM reachable AS r
     LEFT JOIN picked AS pick ON pick.mcp_server_id = r.id
 ),
-mapped AS (
+mapped AS MATERIALIZED (
     SELECT d.mcp_server_id,
            CASE WHEN count(ac.id) = 1 THEN (array_agg(ac.id))[1] END AS auth_client_id
     FROM decided AS d
@@ -5524,16 +5531,17 @@ INSERT INTO upstream_client_selections (
 SELECT d.project_id,
        si.organization_id,
        $1::text,
-       $2::uuid,
+       credential.id,
        d.mcp_server_id,
        d.remote_session_client_id,
        chosen.attachment_scope,
        d.remote_session_client_id IS NULL AND auth_client.id IS NULL AND named.id IS NULL,
        COALESCE(auth_client.id, named.id),
        COALESCE(auth_client.attachment_scope, named.attachment_scope),
-       $3::text
+       $2::text
 FROM decided AS d
 CROSS JOIN session_issuer AS si
+CROSS JOIN credential_ids AS credential
 JOIN projects AS server_project
   ON server_project.id = d.project_id
 LEFT JOIN remote_session_clients AS chosen
@@ -5582,8 +5590,9 @@ WHERE upstream_client_selections.no_auth
 
 type RecordUpstreamClientSelectionsParams struct {
 	CredentialKind      string
-	CredentialID        uuid.UUID
 	Source              string
+	CredentialIds       []uuid.UUID
+	CredentialID        uuid.UUID
 	UserSessionIssuerID uuid.UUID
 	ScopeMcpServerIds   []uuid.UUID
 	PickedMcpServerIds  []uuid.UUID
@@ -5591,8 +5600,11 @@ type RecordUpstreamClientSelectionsParams struct {
 	PickedAuthClientIds []uuid.UUID
 }
 
-// Records, for one inbound credential, the upstream OAuth client it uses for
-// every MCP server it can reach, or an explicit no-auth choice. A NULL
+// Records, for inbound credentials, the upstream OAuth client each uses for
+// every MCP server it can reach, or an explicit no-auth choice. NULL
+// credential_ids keeps the single credential_id path; a supplied array records
+// the same per-issuer decision for those lineages, and an empty array is a no-op.
+// Duplicate lineage IDs are processed once. A NULL
 // scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
 // recording to those servers, and an empty array records nothing. An existing
 // client choice is never replaced. An existing no-auth choice is replaced
@@ -5651,8 +5663,9 @@ type RecordUpstreamClientSelectionsParams struct {
 func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg RecordUpstreamClientSelectionsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, recordUpstreamClientSelections,
 		arg.CredentialKind,
-		arg.CredentialID,
 		arg.Source,
+		arg.CredentialIds,
+		arg.CredentialID,
 		arg.UserSessionIssuerID,
 		arg.ScopeMcpServerIds,
 		arg.PickedMcpServerIds,

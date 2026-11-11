@@ -32,11 +32,12 @@ LIMIT @page_size::int;
 WITH session_issuer AS (
     SELECT usi.id,
            usi.project_id,
-           COALESCE(usi.organization_id, p.organization_id) AS organization_id
+           CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END AS organization_id
     FROM user_session_issuers AS usi
     LEFT JOIN projects AS p ON p.id = usi.project_id
     WHERE usi.id = @user_session_issuer_id
       AND usi.deleted IS FALSE
+      AND (usi.project_id IS NULL OR p.deleted IS FALSE)
 ),
 reachable AS (
     SELECT s.id, s.project_id

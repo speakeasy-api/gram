@@ -225,7 +225,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, s.logger)
 	}
-	if _, err := txRepo.RecordUpstreamClientSelections(ctx, repo.RecordUpstreamClientSelectionsParams{
+	if _, err := txRepo.RecordUpstreamClientSelections(ctx, repo.RecordUpstreamClientSelectionsParams{CredentialIds: nil,
 		UserSessionIssuerID: target.issuerID,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        session.ID,

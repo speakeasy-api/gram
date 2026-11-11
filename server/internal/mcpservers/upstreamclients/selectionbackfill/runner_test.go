@@ -171,7 +171,7 @@ func (f *fixture) recordPicked(userIssuerID, credentialID uuid.UUID, picks map[u
 		servers = append(servers, serverID)
 		clients = append(clients, clientID)
 	}
-	n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(f.t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+	n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(f.t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{CredentialIds: nil,
 		UserSessionIssuerID: userIssuerID,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credentialID,
@@ -690,7 +690,7 @@ func TestCoverageCountsHeaderOnlyChoiceAsSelected(t *testing.T) {
 	}))
 	credential := f.session(issuer)
 
-	n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+	n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{CredentialIds: nil,
 		UserSessionIssuerID: issuer,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credential,
@@ -739,7 +739,7 @@ func TestExplicitHeaderPickIsNeverReplaced(t *testing.T) {
 	}))
 	credential := f.session(issuer)
 
-	n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+	n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{CredentialIds: nil,
 		UserSessionIssuerID: issuer,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credential,

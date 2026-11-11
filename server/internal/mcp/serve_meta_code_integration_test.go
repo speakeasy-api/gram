@@ -423,7 +423,7 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	sessionPolicy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
 	require.NoError(t, err)
-	_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
+	_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{CredentialIds: nil, UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
 	require.NoError(t, err)
 	execute := func(code string, restricted bool) codemode.ExecutionResult {
 		t.Helper()
@@ -590,12 +590,12 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				_, err = usersessionsrepo.New(ti.conn).GetReconnectSessionPolicy(ctx, params)
 				require.Error(t, err)
 			}
-			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
+			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{CredentialIds: nil, UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
 			require.NoError(t, err)
 			unrelatedGateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "unrelated-"+uuid.NewString(), issuer)
 			unrelated := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, unrelatedGateway.ID, "unrelated", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
 			selection.associate(t, ctx, unrelated.mcpServerID, client)
-			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{unrelated.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
+			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{CredentialIds: nil, UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{unrelated.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
 			require.NoError(t, err)
 			execute := func(code string, restricted bool) codemode.ExecutionResult {
 				t.Helper()

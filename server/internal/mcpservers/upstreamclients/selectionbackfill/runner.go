@@ -86,7 +86,9 @@ func Classify(row ListUpstreamClientSelectionCoverageRow) Outcome {
 
 // Options controls one run.
 type Options struct {
-	// OrganizationID limits the run to one organization when non-empty.
+	// OrganizationID limits trusted offline maintenance to one organization
+	// when non-empty. Empty is the existing all-organization maintenance mode;
+	// request-driven lifecycle reconciliation requires a non-empty tenant.
 	OrganizationID string
 
 	// Apply records the decided choices; otherwise the run only predicts.
@@ -190,7 +192,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 				}
 			}
 			if opts.Apply {
-				written, err := recordCredentialSelections(ctx, sessions, credential, nil)
+				written, err := recordCredentialSelections(ctx, sessions, credential.UserSessionIssuerID, []uuid.UUID{credential.CredentialID}, nil)
 				if err != nil {
 					return report, fmt.Errorf("record selections for credential %s: %w", credential.CredentialID, err)
 				}
@@ -256,15 +258,20 @@ func ReconcileIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, org
 		if err != nil {
 			return 0, fmt.Errorf("list issuer credentials: %w", err)
 		}
+		var existingIDs, movedIDs []uuid.UUID
 		for _, credential := range credentials {
-			scope := serverIDs
 			if fullReach[credential.CredentialID] {
-				scope = nil
-			}
-			if _, err := recordCredentialSelections(ctx, sessions, credential, scope); err != nil {
-				return 0, fmt.Errorf("record issuer credential choices: %w", err)
+				movedIDs = append(movedIDs, credential.CredentialID)
+			} else {
+				existingIDs = append(existingIDs, credential.CredentialID)
 			}
 			cursor = credential.CredentialID
+		}
+		if _, err := recordCredentialSelections(ctx, sessions, issuerID, existingIDs, serverIDs); err != nil {
+			return 0, fmt.Errorf("record existing issuer credential choices: %w", err)
+		}
+		if _, err := recordCredentialSelections(ctx, sessions, issuerID, movedIDs, nil); err != nil {
+			return 0, fmt.Errorf("record moved issuer credential choices: %w", err)
 		}
 		if len(credentials) < defaultPageSize {
 			break
@@ -277,14 +284,14 @@ func ReconcileIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, org
 	return skipped, nil
 }
 
-func recordCredentialSelections(ctx context.Context, q *usersessionsrepo.Queries, credential ListLiveUserSessionCredentialsRow, serverIDs []uuid.UUID) (int64, error) {
-	if serverIDs != nil && len(serverIDs) == 0 {
+func recordCredentialSelections(ctx context.Context, q *usersessionsrepo.Queries, issuerID uuid.UUID, credentialIDs, serverIDs []uuid.UUID) (int64, error) {
+	if len(credentialIDs) == 0 || (serverIDs != nil && len(serverIDs) == 0) {
 		return 0, nil
 	}
-	written, err := q.RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{
-		UserSessionIssuerID: credential.UserSessionIssuerID,
+	written, err := q.RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{CredentialIds: credentialIDs,
+		UserSessionIssuerID: issuerID,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
-		CredentialID:        credential.CredentialID,
+		CredentialID:        uuid.Nil,
 		// These choices are inferred for existing credentials, not explicit
 		// administrator choices; consolidation uses the same backfill source.
 		Source:             upstreamclients.SelectionSourceBackfill,

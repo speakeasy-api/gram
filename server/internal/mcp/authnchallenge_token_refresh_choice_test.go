@@ -90,7 +90,7 @@ func TestHandleToken_AgentRefreshRefusesAnUnusableChoice(t *testing.T) {
 		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
-	_, err = sessions.RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
+	_, err = sessions.RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{CredentialIds: nil,
 		UserSessionIssuerID: issuer.ID,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        session.ID,

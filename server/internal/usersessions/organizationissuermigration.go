@@ -510,6 +510,8 @@ func lockIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID st
 		return nil, fmt.Errorf("discover issuer migration writer scope: %w", err)
 	}
 	var lockProjects, serverIDs []uuid.UUID
+	// Non-nil is intentional: empty means no maintenance, while nil would
+	// widen existing target credentials to their full issuer reach downstream.
 	syncServers := make([]uuid.UUID, 0)
 	for _, server := range servers {
 		lockProjects = append(lockProjects, server.ProjectID)
