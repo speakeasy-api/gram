@@ -2,13 +2,17 @@ package hooks
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -68,6 +72,102 @@ func TestDeviceMCPList_ExpiresAfterADay(t *testing.T) {
 		require.Greater(t, ttl, deviceMCPListTTL-time.Minute)
 	}
 	require.Equal(t, 24*time.Hour, deviceMCPListTTL)
+}
+
+// Once the copy expires the guard has nothing to fall back to: a server only
+// the copy listed is classified without install evidence again.
+func TestDeviceMCPList_ExpiredCopyIsNotRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	tc := canonicalBuiltinCase{
+		name:            "expired device copy",
+		toolName:        "mcp__linear__list_issues",
+		deviceInventory: []MCPServerEntry{{Source: "claude", Name: "linear", Command: "npx linear-mcp"}},
+	}
+	payload := canonicalBuiltinPayload(tc, "tool.requested", uuid.NewString(), "")
+	seedCanonicalBuiltinInventories(t, ctx, ti, tc, payload)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	actor := ti.service.resolveCanonicalActor(ctx, payload, authCtx)
+	scope := ti.service.canonicalDeviceMCPListScope(ctx, authCtx, actor.UserID, payload)
+	_, found := ti.service.getDeviceMCPList(ctx, scope)
+	require.True(t, found, "the copy is readable before it expires")
+
+	// Expire every key the copy was stored under, as its TTL would.
+	for _, identity := range scope.identities() {
+		key := deviceMCPListCacheKey(scope, identity)
+		require.NoError(t, ti.redisClient.PExpire(ctx, key, time.Millisecond).Err())
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			exists, err := ti.redisClient.Exists(ctx, key).Result()
+			assert.NoError(c, err)
+			assert.Zero(c, exists)
+		}, 5*time.Second, 10*time.Millisecond)
+	}
+
+	_, found = ti.service.getDeviceMCPList(ctx, scope)
+	require.False(t, found)
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision, "an expired copy is no install evidence")
+}
+
+// sessionMCPListSetFailingCache fails every write of a session MCP list
+// snapshot and passes everything else through.
+type sessionMCPListSetFailingCache struct {
+	cache.Cache
+}
+
+func (c sessionMCPListSetFailingCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	if strings.HasPrefix(key, "session:mcp-list:") {
+		return errors.New("snapshot write failed")
+	}
+	//nolint:wrapcheck // test pass-through to the embedded real cache
+	return c.Cache.Set(ctx, key, value, ttl)
+}
+
+// On the Claude endpoint a device copy is written only after the session
+// snapshot itself was stored, so a failed session write leaves no copy.
+func TestClaudeMCPListSnapshot_DeviceCopyNeedsStoredSnapshot(t *testing.T) {
+	t.Parallel()
+
+	for _, sessionWriteFails := range []bool{false, true} {
+		t.Run(map[bool]string{false: "stored snapshot", true: "failed snapshot"}[sessionWriteFails], func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx.Email)
+			if sessionWriteFails {
+				ti.service.cache = sessionMCPListSetFailingCache{Cache: ti.service.cache}
+			}
+
+			sessionID := uuid.NewString()
+			userEmail := *authCtx.Email
+			hostname := "dev-host-" + uuid.NewString()
+			cwd := "/work/app"
+			payload := &gen.ClaudePayload{
+				HookEventName: "SessionStart",
+				SessionID:     &sessionID,
+				UserEmail:     &userEmail,
+				HookHostname:  &hostname,
+				Cwd:           &cwd,
+				AdditionalData: map[string]any{
+					"mcp_inventory_claude_code": "linear: npx linear-mcp - connected",
+				},
+			}
+			ti.service.captureMCPListSnapshot(ctx, payload)
+
+			metadata, err := ti.service.resolveClaudeSessionMetadata(ctx, sessionID, userEmail)
+			require.NoError(t, err)
+			require.NotEmpty(t, metadata.UserID)
+			_, found := ti.service.getDeviceMCPList(ctx, claudeDeviceMCPListScope(metadata, payload))
+			require.Equal(t, !sessionWriteFails, found)
+		})
+	}
 }
 
 // A new session's first hook arrives before its OTEL stream, so a copy written

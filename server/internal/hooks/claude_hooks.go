@@ -543,10 +543,14 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 		return
 	}
 	projectID := authCtx.ProjectID.String()
-	if !s.cacheMCPListSnapshot(ctx, projectID, *payload.SessionID, entries, variant) {
+	owned, stored := s.cacheMCPListSnapshot(ctx, projectID, *payload.SessionID, entries, variant)
+	if !owned {
 		return
 	}
 	s.upsertShadowMCPInventoryURLs(ctx, authCtx.ActiveOrganizationID, projectID, *payload.SessionID, entries)
+	if !stored {
+		return
+	}
 	if metadata, err := s.resolveClaudeSessionMetadata(ctx, *payload.SessionID, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))); err == nil {
 		s.cacheDeviceMCPList(ctx, claudeDeviceMCPListScope(metadata, payload), entries)
 	}
@@ -630,16 +634,20 @@ func (s *Service) parseMCPInventoryFromPayload(ctx context.Context, payload *gen
 // the PreToolUse enforcement resolver, so a payload-carried inventory
 // self-heals the cache that the best-effort telemetry path later reads.
 //
-// A cache write failure is logged but still reports ownership: the shadow-MCP
+// The second result reports whether the snapshot itself was stored. A cache
+// write failure is logged but still reports ownership: the shadow-MCP
 // inventory row the caller persists next is independent security evidence and
 // must survive a transient Redis error. Only an ownership or authentication
-// mismatch refuses.
-func (s *Service) cacheMCPListSnapshot(ctx context.Context, projectID, sessionID string, entries []MCPServerEntry, variant string) bool {
+// mismatch refuses. A device copy, by contrast, is written only after a stored
+// snapshot, as on the canonical path.
+func (s *Service) cacheMCPListSnapshot(ctx context.Context, projectID, sessionID string, entries []MCPServerEntry, variant string) (bool, bool) {
 	if !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
-		return false
+		return false, false
 	}
+	stored := true
 	key := sessionMCPListCacheKey(projectID, sessionID)
 	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
+		stored = false
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 			attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
@@ -653,7 +661,7 @@ func (s *Service) cacheMCPListSnapshot(ctx context.Context, projectID, sessionID
 			attr.SlogError(err),
 		)
 	}
-	return true
+	return true, stored
 }
 
 // payloadInventoryIsFresh reports whether the hook payload's MCP inventory was
@@ -702,7 +710,7 @@ func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen
 	projectID := s.mcpListProjectID(ctx, sessionID)
 
 	if ok && payloadInventoryIsFresh(payload) {
-		if s.cacheMCPListSnapshot(ctx, projectID, sessionID, entries, variant) {
+		if _, stored := s.cacheMCPListSnapshot(ctx, projectID, sessionID, entries, variant); stored {
 			s.cacheDeviceMCPList(ctx, deviceScope, entries)
 		}
 		return entries, nil
@@ -720,7 +728,7 @@ func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen
 	// we fail closed exactly as the no-payload path does rather than enforce
 	// against a possibly-stale replay.
 	if ok && errors.Is(err, redisCache.ErrCacheMiss) {
-		if s.cacheMCPListSnapshot(ctx, projectID, sessionID, entries, variant) {
+		if _, stored := s.cacheMCPListSnapshot(ctx, projectID, sessionID, entries, variant); stored {
 			s.cacheDeviceMCPList(ctx, deviceScope, entries)
 		}
 		return entries, nil
