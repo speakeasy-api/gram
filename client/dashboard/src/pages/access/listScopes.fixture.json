@@ -440,7 +440,7 @@
     {
       "slug": "log:read",
       "label": "View tool logs",
-      "description": "View the project's tool-call logs and traces, including tool arguments, results, and prompt text from every member. Not implied by project or organization admin access.",
+      "description": "View every member's tool-call logs and traces in the project, including tool arguments, results, and prompt text. Everyone keeps the logs of their own sessions and of agents they own. Not implied by project or organization admin access.",
       "resource_type": "project",
       "category": "log",
       "sensitive": true,
