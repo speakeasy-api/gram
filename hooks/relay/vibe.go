@@ -6,12 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/speakeasy-api/agenthooks"
 )
 
@@ -26,8 +29,10 @@ import (
 const ProviderVibe agenthooks.Provider = "vibe"
 
 // Vibe hook event names, the hook_event_name discriminant of the stdin
-// payload. Vibe has exactly three hook types; there is no session or prompt
-// hook, so session telemetry rides on the tool/agent events.
+// payload. The relay classifies the three gating/telemetry-relevant hook
+// types; newer Vibe versions fire more (3.1.x adds pre_agent, session_start,
+// session_end, ...), which the relay passes through unclassified rather than
+// relaying with no canonical type.
 const (
 	vibeHookPreTool   = "pre_tool"
 	vibeHookPostTool  = "post_tool"
@@ -73,6 +78,8 @@ type vibeHookInput struct {
 	// Tool call fields on pre_tool and post_tool. ToolName is always the
 	// qualified name: file_system.bash, mcp_<server>.<tool> (with
 	// non-[A-Za-z0-9_$] characters mapped to _ by Vibe), connector_<...>.
+	// Note Vibe 3.1.2 also fires pre_agent/session_start/session_end and more;
+	// the relay handles the three gating types below and passes the rest through.
 	ToolName   string          `json:"tool_name"`
 	ToolCallID string          `json:"tool_call_id"`
 	ToolInput  json.RawMessage `json:"tool_input"`
@@ -286,9 +293,11 @@ func (r *Relay) serveVibe(ctx context.Context, payload []byte, strict bool) (*vi
 // as the tool error, and an updated input rides as the full tool_input
 // replacement.
 func (r *Relay) vibePreTool(ctx context.Context, in *vibeHookInput, raw json.RawMessage) (*vibeResponse, error) {
+	tc := vibeToolCall(in)
+	resolveVibeMCP(&tc, loadVibeMCPServers(in.CWD))
 	pre := &agenthooks.ToolPreEvent{
 		Event: vibeEvent(in, agenthooks.KindToolPre, raw),
-		Tool:  vibeToolCall(in),
+		Tool:  tc,
 	}
 	dec, err := r.onToolPre(ctx, pre)
 	if err != nil {
@@ -309,13 +318,15 @@ func (r *Relay) vibePostTool(ctx context.Context, in *vibeHookInput, raw json.Ra
 	if failed {
 		kind = agenthooks.KindToolError
 	}
+	tc := vibeToolCall(in)
+	resolveVibeMCP(&tc, loadVibeMCPServers(in.CWD))
 	post := &agenthooks.ToolPostEvent{
 		Event:      vibeEvent(in, kind, raw),
-		Tool:       vibeToolCall(in),
+		Tool:       tc,
 		Output:     vibeToolOutput(in),
 		Failed:     failed,
 		Error:      vibeToolError(in),
-		DurationMS: in.DurationMS,
+		DurationMS: vibeDurationMS(in.DurationMS),
 	}
 	res, state := r.deliver(ctx, post)
 	resp := &vibeResponse{Decision: vibeDecisionAllow}
@@ -501,6 +512,147 @@ func vibeToolCall(in *vibeHookInput) agenthooks.ToolCall {
 	return tc
 }
 
+// vibeDurationMS maps the payload's duration_ms to the unified event: Vibe
+// reports 0 on every real call (the field is not populated yet), and 0 ms must
+// persist as "unknown" (nil), not as a real zero.
+func vibeDurationMS(ms *float64) *float64 {
+	if ms == nil || *ms == 0 {
+		return nil
+	}
+	return ms
+}
+
+// vibeMCPConfig is the shape of ~/.vibe/config.toml's [[mcp_servers]] entries.
+type vibeMCPConfig struct {
+	MCPServers []struct {
+		Name    string `toml:"name"`
+		URL     string `toml:"url"`
+		Command string `toml:"command"`
+	} `toml:"mcp_servers"`
+}
+
+// vibePluginMCPConfig is the shape of a plugin package's mcp.json.
+type vibePluginMCPConfig struct {
+	MCPServers map[string]struct {
+		URL     string `json:"url"`
+		Command string `json:"command"`
+	} `json:"mcpServers"`
+}
+
+// vibeHomeDir resolves Vibe's home: $VIBE_HOME when set, else ~/.vibe.
+func vibeHomeDir() string {
+	if v := os.Getenv("VIBE_HOME"); v != "" {
+		return v
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".vibe")
+	}
+	return ""
+}
+
+// loadVibeMCPServers reads the MCP servers a Vibe session can reach:
+// [[mcp_servers]] in the Vibe home's config.toml, plus the mcp.json of every
+// plugin under the Vibe home's plugins/ (user scope) and the session cwd's
+// .vibe/plugins/ (trusted project scope). Config-file discovery is
+// best-effort, like Pi's.
+func loadVibeMCPServers(cwd string) []agenthooks.MCPServer {
+	var out []agenthooks.MCPServer
+	seen := map[string]bool{}
+	add := func(name, rawURL, command string) {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		out = append(out, agenthooks.MCPServer{Name: name, URL: strings.TrimSpace(rawURL), Command: command})
+	}
+
+	if home := vibeHomeDir(); home != "" {
+		if b, err := os.ReadFile(filepath.Join(home, "config.toml")); err == nil {
+			var cfg vibeMCPConfig
+			if err := toml.Unmarshal(b, &cfg); err == nil {
+				for _, s := range cfg.MCPServers {
+					add(s.Name, s.URL, s.Command)
+				}
+			}
+		}
+		for _, pluginDir := range vibePluginDirs(home, cwd) {
+			b, err := os.ReadFile(filepath.Join(pluginDir, "mcp.json"))
+			if err != nil {
+				continue
+			}
+			var doc vibePluginMCPConfig
+			if err := json.Unmarshal(b, &doc); err != nil {
+				continue
+			}
+			names := make([]string, 0, len(doc.MCPServers))
+			for name := range doc.MCPServers {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				s := doc.MCPServers[name]
+				add(name, s.URL, s.Command)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// vibePluginDirs lists the plugin roots in scope: user scope under the Vibe
+// home, then the session's trusted project scope under cwd.
+func vibePluginDirs(vibeHome, cwd string) []string {
+	var dirs []string
+	if entries, err := os.ReadDir(filepath.Join(vibeHome, "plugins")); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				dirs = append(dirs, filepath.Join(vibeHome, "plugins", e.Name()))
+			}
+		}
+	}
+	if cwd != "" {
+		if entries, err := os.ReadDir(filepath.Join(cwd, ".vibe", "plugins")); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					dirs = append(dirs, filepath.Join(cwd, ".vibe", "plugins", e.Name()))
+				}
+			}
+		}
+	}
+	return dirs
+}
+
+// normalizeVibeServerName maps a configured server name to the form Vibe uses
+// in tool names: every character outside [A-Za-z0-9_$] becomes _.
+func normalizeVibeServerName(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '_' || r == '$' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			return r
+		}
+		return '_'
+	}, s)
+}
+
+// resolveVibeMCP fills the URL/Command of an MCP tool call from the Vibe
+// config and installed plugins, the way pi.go resolves Pi's third-party MCP
+// extensions — without it the server cannot tell a call to a Speakeasy-hosted
+// server from a shadow-MCP one.
+func resolveVibeMCP(tc *agenthooks.ToolCall, servers []agenthooks.MCPServer) {
+	if tc.MCP == nil || tc.MCP.Server == "" || len(servers) == 0 {
+		return
+	}
+	for i := range servers {
+		if normalizeVibeServerName(servers[i].Name) == tc.MCP.Server {
+			tc.MCP.URL = servers[i].URL
+			tc.MCP.Command = servers[i].Command
+			tc.MCP.FromConfig = true
+			tc.Canonical = agenthooks.ToolMCP
+			return
+		}
+	}
+}
+
 // vibeToolOutput picks the model-visible output for a post_tool event: the
 // structured result when present, else the text form.
 func vibeToolOutput(in *vibeHookInput) json.RawMessage {
@@ -541,15 +693,20 @@ func vibeFirstNonEmpty(candidates ...string) string {
 }
 
 // vibeHooksToml renders the project-local Vibe hooks config that drives this
-// binary, for `speakeasy-hooks install --provider=vibe`. Tool hooks are
-// strict so a crashed hook denies the call / clears the output instead of
-// silently allowing (the same fail-closed posture the other providers' configs
-// render); post_agent cannot be strict in Vibe's schema.
+// binary, for `speakeasy-hooks install --provider=vibe`. Only pre_tool is
+// strict: a crashed pre_tool hook denies the call instead of silently
+// allowing. post_tool must not be strict — a strict post_tool failure would
+// clear the result of a tool call that already ran, throwing away work the
+// model has already seen. post_agent cannot be strict in Vibe's schema.
 func vibeHooksToml(cfg PluginConfig, dir string) string {
-	command := shellQuoteArg(cfg.BinaryPath) +
+	base := shellQuoteArg(cfg.BinaryPath) +
 		" --config=" + shellQuoteArg(filepath.Join(dir, configFileName)) +
-		" agenthooks run --provider=vibe --strict"
+		" agenthooks run --provider=vibe"
 	hook := func(name, typ string, strict bool) string {
+		command := base
+		if strict {
+			command += " --strict"
+		}
 		var b strings.Builder
 		fmt.Fprintf(&b, "[[hooks]]\nname = %s\ntype = %s\ncommand = %s\ntimeout = 60.0\n", strconv.Quote(name), strconv.Quote(typ), strconv.Quote(command))
 		if strict {
@@ -561,6 +718,6 @@ func vibeHooksToml(cfg PluginConfig, dir string) string {
 		"# speakeasy-hooks binary for every Vibe hook event. See hooks.toml in the\n" +
 		"# Vibe documentation for the wire protocol.\n\n" +
 		hook("speakeasy-pre-tool", vibeHookPreTool, true) + "\n" +
-		hook("speakeasy-post-tool", vibeHookPostTool, true) + "\n" +
+		hook("speakeasy-post-tool", vibeHookPostTool, false) + "\n" +
 		hook("speakeasy-post-agent", vibeHookPostAgent, false)
 }

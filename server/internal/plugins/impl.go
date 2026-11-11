@@ -1758,6 +1758,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 		ClaudeObservabilityPlugin: nil,
 		CodexObservabilityPlugin:  nil,
 		CursorObservabilityPlugin: nil,
+		VibeObservabilityPlugin:   nil,
 		HasCollaborators:          nil,
 		UpToDate:                  nil,
 		AutomaticSyncPending:      nil,
@@ -1807,6 +1808,13 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 				result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
 				result.CursorObservabilityPlugin = conv.PtrEmpty(CursorObservabilitySlug(slugCfg))
+				// The Vibe package is only published when the pinned hooks
+				// binary carries the vibe provider and the org's name fits
+				// the Agent Plugins 1.0 schema; report it only then, so
+				// install UIs never point at a package that was skipped.
+				if VibeObservabilityPluginAvailable(slugCfg) {
+					result.VibeObservabilityPlugin = conv.PtrEmpty(naming.ObservabilitySlug(conv.Default(slugCfg.HooksOrgName, slugCfg.OrgName)))
+				}
 			}
 			// The marketplace URL contains a bearer token, not just a package location.
 			if admin && conn.MarketplaceToken.Valid && s.serverURL != "" {

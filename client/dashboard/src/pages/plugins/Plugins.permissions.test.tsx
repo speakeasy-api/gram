@@ -66,6 +66,19 @@ vi.mock("@gram/client/react-query/publishStatus", () => ({
       marketplaceUrl: "https://example.com/private-token",
     } satisfies PublishStatusResult,
   }),
+  usePublishStatus: () => ({
+    data: {
+      configured: true,
+      connected: true,
+      hasCollaborators: true,
+      upToDate: false,
+      repoOwner: "example",
+      repoName: "plugins",
+      repoUrl: "https://example.com/repo",
+      marketplaceUrl: "https://example.com/private-token",
+      vibeObservabilityPlugin: "example-observability",
+    } satisfies PublishStatusResult,
+  }),
   invalidateAllPublishStatus: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/marketplaceSettings", () => ({

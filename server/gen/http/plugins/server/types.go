@@ -365,6 +365,11 @@ type GetPublishStatusResponseBody struct {
 	// marketplace — the value to mark required in Cursor's team marketplace.
 	// Present when connected.
 	CursorObservabilityPlugin *string `form:"cursor_observability_plugin,omitempty" json:"cursor_observability_plugin,omitempty" xml:"cursor_observability_plugin,omitempty"`
+	// Slug of the generated Mistral Vibe observability plugin's install directory
+	// (`~/.vibe/plugins/<slug>`) — present when connected and the pinned hooks
+	// binary supports the vibe provider. The marketplace repo directory is
+	// `<slug>-vibe`.
+	VibeObservabilityPlugin *string `form:"vibe_observability_plugin,omitempty" json:"vibe_observability_plugin,omitempty" xml:"vibe_observability_plugin,omitempty"`
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.
@@ -4982,6 +4987,7 @@ func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPubli
 		ClaudeObservabilityPlugin: res.ClaudeObservabilityPlugin,
 		CodexObservabilityPlugin:  res.CodexObservabilityPlugin,
 		CursorObservabilityPlugin: res.CursorObservabilityPlugin,
+		VibeObservabilityPlugin:   res.VibeObservabilityPlugin,
 		HasCollaborators:          res.HasCollaborators,
 		UpToDate:                  res.UpToDate,
 		AutomaticSyncPending:      res.AutomaticSyncPending,
