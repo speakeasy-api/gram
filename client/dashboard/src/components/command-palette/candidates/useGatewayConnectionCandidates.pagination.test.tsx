@@ -88,9 +88,11 @@ it("requests the SDK next cursor before exposing a later-page registration", asy
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  const { result, unmount } = renderHook(
-    () => useGatewayConnectionCandidates({ enabled: true, inProject: true }),
+  const { result, rerender, unmount } = renderHook(
+    ({ enabled }) =>
+      useGatewayConnectionCandidates({ enabled, inProject: true }),
     {
+      initialProps: { enabled: true },
       wrapper: ({ children }: { children: ReactNode }) => (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
       ),
@@ -119,6 +121,11 @@ it("requests the SDK next cursor before exposing a later-page registration", asy
     expect(state.navigate).toHaveBeenCalledWith(
       "/acme/projects/project-one/mcp/gateway/gateway-one/sessions?registration=later-page",
     );
+    expect(requests).toHaveLength(2);
+
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+    await act(async () => Promise.resolve());
     expect(requests).toHaveLength(2);
   } finally {
     release.resolve();
