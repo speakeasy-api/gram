@@ -123,6 +123,7 @@ var cardTools = map[string]cardSpec{
 	"create_mcp_access_role":          {kind: cardKindReceipt, route: "O/access/roles", label: "Open roles"},
 	"update_mcp_access_role":          {kind: cardKindReceipt, route: "O/access/roles", label: "Open roles"},
 	"configure_inference_access_role": {kind: cardKindReceipt, route: "O/access/roles", label: "Open roles"},
+	"configure_memory_access_role":    {kind: cardKindReceipt, route: "O/access/roles", label: "Open roles"},
 	"assign_mcp_access_role":          {kind: cardKindReceipt, route: "O/access/assignments", label: "Open assignments"},
 	"list_directory_review_items":     {kind: cardKindList, route: "O/access/members", label: "Open members"},
 	"resolve_directory_review_item":   {kind: cardKindReceipt, route: "O/access/members", label: "Open members"},
