@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -39,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
@@ -77,6 +79,13 @@ func newToolCallLogs(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *otelpub
 // newConnectionLogExport publishes failed connection attempts to the otel pipeline.
 func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord]) mcpconnectionattempts.RecorderOption {
 	return mcpconnectionattempts.WithExport(otelsink.New(publisher, gatewayRecordsServiceName))
+}
+
+// newDataExportRouteTests sends export test events with the server's outbound policy, one limit per route.
+func newDataExportRouteTests(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, auditLogger *audit.Logger, encryptionClient *encryption.Client, policy *guardian.Policy, redisClient *redis.Client) *dataexports.RouteTestCore {
+	sender := otelsink.NewTestSender(otelsvc.NewConnectionLogProbe(logger, meterProvider, policy), gatewayRecordsServiceName)
+	limiter := ratelimit.New(ratelimit.NewRedisStore(redisClient), dataexports.RouteTestLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerMinute), ratelimit.WithMetrics(meterProvider))
+	return dataexports.NewRouteTestCore(db, auditLogger, encryptionClient, sender, limiter)
 }
 
 type mcpServiceDependencies struct {

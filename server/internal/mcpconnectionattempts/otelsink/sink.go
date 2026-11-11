@@ -3,6 +3,8 @@ package otelsink
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -10,7 +12,9 @@ import (
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 )
@@ -24,9 +28,13 @@ var _ mcpconnectionattempts.ExportSink = (*Sink)(nil)
 
 // New is the sink every recorder that exports uses.
 func New(publisher gcp.Publisher[*otelv1.InboundLogRecord], serviceName string) *Sink {
-	return &Sink{logs: otelpub.NewLogger(publisher,
+	return &Sink{logs: newLogger(publisher, serviceName)}
+}
+
+func newLogger(publisher gcp.Publisher[*otelv1.InboundLogRecord], serviceName string) *otelpub.Logger {
+	return otelpub.NewLogger(publisher,
 		resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(serviceName)),
-		dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource))}
+		dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource))
 }
 
 func (s *Sink) Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) gcp.PublishResult {
@@ -34,3 +42,29 @@ func (s *Sink) Publish(ctx context.Context, organizationID, projectID, recordID 
 }
 
 func (s *Sink) Close() { s.logs.Close() }
+
+// TestSender sends a test connection event, built exactly as the sink builds
+// real ones, straight to one destination. It never publishes.
+type TestSender struct {
+	logs  *otelpub.Logger
+	probe *otelsvc.ConnectionLogProbe
+}
+
+var _ dataexports.TestEventSender = (*TestSender)(nil)
+
+func NewTestSender(probe *otelsvc.ConnectionLogProbe, serviceName string) *TestSender {
+	return &TestSender{logs: newLogger(nil, serviceName), probe: probe}
+}
+
+func (s *TestSender) SendConnectionLogTest(ctx context.Context, destination dataexports.TestDestination) (int, error) {
+	record := mcpconnectionattempts.TestExportRecord(time.Now())
+	inbound, err := s.logs.Prepare(otelpub.WithTenant(ctx, destination.OrganizationID, destination.ProjectID.String()), &record)
+	if err != nil {
+		return 0, fmt.Errorf("prepare connection log test record: %w", err)
+	}
+	status, err := s.probe.Send(ctx, destination, inbound)
+	if err != nil {
+		return 0, fmt.Errorf("send connection log test record: %w", err)
+	}
+	return status, nil
+}

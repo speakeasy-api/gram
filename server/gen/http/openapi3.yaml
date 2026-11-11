@@ -31319,6 +31319,113 @@ paths:
             x-speakeasy-name-override: listRoutes
             x-speakeasy-react-hook:
                 name: DataExportRoutes
+    /rpc/dataExports.testRoute:
+        post:
+            description: Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today.
+            operationId: testDataExportRoute
+            parameters:
+                - allowEmptyValue: true
+                  description: Route ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Route ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TestDataExportRouteResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: testRoute dataExports
+            tags:
+                - dataExports
+            x-speakeasy-name-override: testRoute
+            x-speakeasy-react-hook:
+                name: TestDataExportRoute
     /rpc/dataExports.updateDestination:
         post:
             description: Replace a data export destination in the selected project.
@@ -133520,6 +133627,29 @@ components:
                 - other_access
                 - created_at
                 - updated_at
+        TestDataExportRouteResult:
+            type: object
+            properties:
+                message:
+                    type: string
+                    description: What happened, in plain language.
+                outcome:
+                    type: string
+                    description: 'accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection. error: any other answer.'
+                    enum:
+                        - accepted
+                        - refused
+                        - not_found
+                        - unreachable
+                        - error
+                status_code:
+                    type: integer
+                    description: HTTP status the destination answered with. Omitted when it did not answer.
+                    format: int64
+            description: What the destination answered to one test event. Header values and the response body are never returned.
+            required:
+                - outcome
+                - message
         TestDetectionRuleMatch:
             type: object
             properties:

@@ -181,6 +181,15 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 FOR UPDATE;
 
+-- Read one live route without locking it, for a test send that waits on the network.
+-- name: GetDataExportRoute :one
+SELECT *
+FROM data_export_routes
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND id = @id
+  AND deleted IS FALSE;
+
 -- Create a route with a nullable OTEL destination. The partial unique index
 -- atomically enforces one non-deleted route per project and data source.
 -- name: CreateDataExportRoute :one

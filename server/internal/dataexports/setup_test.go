@@ -17,7 +17,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/otelsink"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -61,7 +65,14 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	enc := testenv.NewEncryptionClient(t)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	service := dataexports.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc)
+	// Unsafe so tests can reach httptest servers on loopback.
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
+	require.NoError(t, err)
+	sender := otelsink.NewTestSender(otelsvc.NewConnectionLogProbe(logger, testenv.NewMeterProvider(t), policy), "gram-server")
+	limiter := ratelimit.New(ratelimit.NewRedisStore(redisClient), dataexports.RouteTestLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerMinute))
+	routeTests := dataexports.NewRouteTestCore(conn, audit.NewLogger(), enc, sender, limiter)
+
+	service := dataexports.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc, routeTests)
 	return ctx, &testInstance{service: service, conn: conn, enc: enc}
 }
 

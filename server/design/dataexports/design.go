@@ -205,6 +205,29 @@ var _ = Service("dataExports", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteRoute")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteDataExportRoute"}`)
 	})
+
+	Method("testRoute", func() {
+		Description("Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today.")
+		Payload(func() {
+			Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Required("id")
+		})
+		Result(TestDataExportRouteResult)
+		HTTP(func() {
+			POST("/rpc/dataExports.testRoute")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "testDataExportRoute")
+		Meta("openapi:extension:x-speakeasy-name-override", "testRoute")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TestDataExportRoute"}`)
+	})
 })
 
 var OtelDestinationHeader = Type("OtelDestinationHeader", func() {
@@ -331,4 +354,14 @@ var ListDataExportsForOrgResult = Type("ListDataExportsForOrgResult", func() {
 var ListDataExportRoutesResult = Type("ListDataExportRoutesResult", func() {
 	Attribute("routes", ArrayOf(DataExportRoute), "Active data export routes in the selected project.")
 	Required("routes")
+})
+
+var TestDataExportRouteResult = Type("TestDataExportRouteResult", func() {
+	Description("What the destination answered to one test event. Header values and the response body are never returned.")
+	Attribute("outcome", String, "accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection. error: any other answer.", func() {
+		Enum("accepted", "refused", "not_found", "unreachable", "error")
+	})
+	Attribute("status_code", Int, "HTTP status the destination answered with. Omitted when it did not answer.")
+	Attribute("message", String, "What happened, in plain language.")
+	Required("outcome", "message")
 })

@@ -1,0 +1,235 @@
+package dataexports_test
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+)
+
+const testRouteSecret = "test-route-secret-value"
+
+// testRouteDestination is a collector answering status, counting requests that carry the secret header.
+func testRouteDestination(t *testing.T, status int) (*httptest.Server, *atomic.Int64) {
+	t.Helper()
+	var received atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/logs" && r.Header.Get("Dd-Api-Key") == testRouteSecret {
+			received.Add(1)
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte("response body " + testRouteSecret))
+	}))
+	t.Cleanup(server.Close)
+	return server, &received
+}
+
+func createTestableRoute(t *testing.T, ctx context.Context, ti *testInstance, endpointURL, dataSource string) *gen.DataExportRoute {
+	t.Helper()
+	destination, err := ti.service.CreateDestination(ctx, &gen.CreateDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		Name: "Collector", DestinationType: "otel", SensitiveData: "exclude",
+		Otel: &gen.CreateOtelDestinationInput{EndpointURL: endpointURL, Headers: []*gen.CreateOtelDestinationHeaderInput{{Name: "DD-API-KEY", Value: testRouteSecret}}}})
+	require.NoError(t, err)
+	route, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		DataSource: dataSource, Enabled: true, OtelDestinationID: &destination.ID})
+	require.NoError(t, err)
+	return route
+}
+
+func testRoute(ctx context.Context, ti *testInstance, routeID string) (*gen.TestDataExportRouteResult, error) {
+	result, err := ti.service.TestRoute(ctx, &gen.TestRoutePayload{ID: routeID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	if err != nil {
+		return nil, fmt.Errorf("test route: %w", err)
+	}
+	return result, nil
+}
+
+func TestTestRouteMapsDestinationAnswers(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		status  int
+		outcome string
+		message string
+	}{
+		{name: "accepted", status: http.StatusAccepted, outcome: "accepted", message: "The destination accepted the test event."},
+		{name: "unauthorized", status: http.StatusUnauthorized, outcome: "refused", message: "The destination refused the test event. Check the API key, and for Datadog, that the endpoint matches your site."},
+		{name: "forbidden", status: http.StatusForbidden, outcome: "refused", message: "The destination refused the test event. Check the API key, and for Datadog, that the endpoint matches your site."},
+		{name: "not found", status: http.StatusNotFound, outcome: "not_found", message: "No logs endpoint at this address. Check the URL; Speakeasy adds /v1/logs."},
+		{name: "server error", status: http.StatusInternalServerError, outcome: "error", message: "The destination returned an error (HTTP 500)."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestService(t)
+			server, received := testRouteDestination(t, tc.status)
+			route := createTestableRoute(t, ctx, ti, server.URL, dataexports.DataSourceMCPConnectionLogs)
+			before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
+			require.NoError(t, err)
+
+			result, err := testRoute(ctx, ti, route.ID)
+			require.NoError(t, err)
+			require.Equal(t, tc.outcome, result.Outcome)
+			require.NotNil(t, result.StatusCode)
+			require.Equal(t, tc.status, *result.StatusCode)
+			require.Equal(t, tc.message, result.Message)
+			require.NotContains(t, result.Message, testRouteSecret)
+			// One request, no retries, even for a retryable 500.
+			require.EqualValues(t, 1, received.Load())
+
+			after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
+			require.NoError(t, err)
+			require.Equal(t, before+1, after)
+			entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
+			require.NoError(t, err)
+			require.Equal(t, route.ID, entry.SubjectID)
+			require.NotContains(t, string(entry.Metadata), testRouteSecret)
+			metadata, err := audittest.DecodeAuditData(entry.Metadata)
+			require.NoError(t, err)
+			require.Equal(t, tc.outcome, metadata["outcome"])
+			require.InDelta(t, float64(tc.status), metadata["status_code"], 0)
+			require.Equal(t, *route.OtelDestinationID, metadata["otel_destination_id"])
+		})
+	}
+}
+
+func TestTestRouteReportsUnreachableDestination(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	endpoint := "http://" + listener.Addr().String()
+	require.NoError(t, listener.Close())
+	route := createTestableRoute(t, ctx, ti, endpoint, dataexports.DataSourceMCPConnectionLogs)
+
+	result, err := testRoute(ctx, ti, route.ID)
+	require.NoError(t, err)
+	require.Equal(t, "unreachable", result.Outcome)
+	require.Nil(t, result.StatusCode)
+	require.Equal(t, "Speakeasy could not reach the destination.", result.Message)
+
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
+	require.NoError(t, err)
+	metadata, err := audittest.DecodeAuditData(entry.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "unreachable", metadata["outcome"])
+	require.NotContains(t, metadata, "status_code")
+}
+
+func TestTestRouteRejectsOtherDataSources(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, received := testRouteDestination(t, http.StatusOK)
+	route := createTestableRoute(t, ctx, ti, server.URL, dataexports.DataSourceProductTelemetry)
+
+	_, err := testRoute(ctx, ti, route.ID)
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.Zero(t, received.Load())
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func TestTestRouteRequiresADestination(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	route, err := createConnectionLogsRoute(ctx, ti)
+	require.NoError(t, err)
+
+	_, err = testRoute(ctx, ti, route.ID)
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestTestRouteRequiresOrgAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, received := testRouteDestination(t, http.StatusOK)
+	route := createTestableRoute(t, ctx, ti, server.URL, dataexports.DataSourceMCPConnectionLogs)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	orgRead := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
+	_, err := testRoute(orgRead, ti, route.ID)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	projectWrite := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()))
+	_, err = testRoute(projectWrite, ti, route.ID)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Zero(t, received.Load())
+
+	orgAdmin := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+	result, err := testRoute(orgAdmin, ti, route.ID)
+	require.NoError(t, err)
+	require.Equal(t, "accepted", result.Outcome)
+}
+
+func TestTestRouteIsTenantScoped(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, received := testRouteDestination(t, http.StatusOK)
+	route := createTestableRoute(t, ctx, ti, server.URL, dataexports.DataSourceMCPConnectionLogs)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	otherSlug := "data-exports-other-" + uuid.NewString()[:8]
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           otherSlug,
+		Slug:           otherSlug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	otherProjectAuth := *authCtx
+	otherProjectAuth.ProjectID = &otherProject.ID
+	otherProjectAuth.ProjectSlug = &otherSlug
+	_, err = testRoute(contextvalues.SetAuthContext(ctx, &otherProjectAuth), ti, route.ID)
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	otherOrgID := "org-" + uuid.NewString()
+	otherOrgAuth := *authCtx
+	otherOrgAuth.ActiveOrganizationID = otherOrgID
+	otherOrgCtx := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &otherOrgAuth), authz.NewGrant(authz.ScopeOrgAdmin, otherOrgID))
+	_, err = testRoute(otherOrgCtx, ti, route.ID)
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	_, err = testRoute(ctx, ti, uuid.NewString())
+	requireOopsCode(t, err, oops.CodeNotFound)
+	require.Zero(t, received.Load())
+}
+
+func TestTestRouteIsRateLimitedPerRoute(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, received := testRouteDestination(t, http.StatusOK)
+	route := createTestableRoute(t, ctx, ti, server.URL, dataexports.DataSourceMCPConnectionLogs)
+
+	for range dataexports.RouteTestsPerMinute {
+		_, err := testRoute(ctx, ti, route.ID)
+		require.NoError(t, err)
+	}
+	_, err := testRoute(ctx, ti, route.ID)
+	requireOopsCode(t, err, oops.CodeRateLimitExceeded)
+	require.EqualValues(t, dataexports.RouteTestsPerMinute, received.Load())
+}

@@ -18,6 +18,7 @@ const (
 	ActionDataExportRouteDelete Action = "data_export_route:delete"
 	ActionDataExportRoutePause  Action = "data_export_route:pause"
 	ActionDataExportRouteResume Action = "data_export_route:resume"
+	ActionDataExportRouteTest   Action = "data_export_route:test"
 )
 
 type DataExportRouteSnapshot struct {
@@ -167,6 +168,61 @@ func (l *Logger) LogDataExportRouteDelete(ctx context.Context, dbtx repo.DBTX, e
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.DataExportRouteV1})
+}
+
+// LogDataExportRouteTestEvent records one test event sent to a route's
+// destination and what it got back. It never carries headers or the response body.
+type LogDataExportRouteTestEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RouteURN       urn.DataExportRoute
+	DataSource     string
+	DestinationURN urn.OtelDestination
+	Outcome        string
+	// StatusCode is zero when no response came back.
+	StatusCode int
+}
+
+type dataExportRouteTestMetadata struct {
+	DestinationID string `json:"otel_destination_id"`
+	Outcome       string `json:"outcome"`
+	StatusCode    int    `json:"status_code,omitempty"`
+}
+
+func (l *Logger) LogDataExportRouteTest(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteTestEvent) error {
+	action := ActionDataExportRouteTest
+	metadata, err := marshalAuditPayload(dataExportRouteTestMetadata{DestinationID: event.DestinationURN.ID.String(), Outcome: event.Outcome, StatusCode: event.StatusCode})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.RouteURN.ID.String(),
+		SubjectType:        string(subjectTypeDataExportRoute),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.DataSource),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.DataExportRouteV1})

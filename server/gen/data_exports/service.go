@@ -34,6 +34,9 @@ type Service interface {
 	UpdateRoute(context.Context, *UpdateRoutePayload) (res *DataExportRoute, err error)
 	// Delete a data source's export route configuration.
 	DeleteRoute(context.Context, *DeleteRoutePayload) (err error)
+	// Send one test event straight to a route's destination and report what it
+	// answered. Only MCP connection logs routes support this today.
+	TestRoute(context.Context, *TestRoutePayload) (res *TestDataExportRouteResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -56,7 +59,7 @@ const ServiceName = "dataExports"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"listDestinations", "listForOrg", "createDestination", "updateDestination", "deleteDestination", "listRoutes", "createRoute", "updateRoute", "deleteRoute"}
+var MethodNames = [10]string{"listDestinations", "listForOrg", "createDestination", "updateDestination", "deleteDestination", "listRoutes", "createRoute", "updateRoute", "deleteRoute", "testRoute"}
 
 // CreateDestinationPayload is the payload type of the dataExports service
 // createDestination method.
@@ -227,6 +230,28 @@ type OtelDestinationHeader struct {
 	Name string
 	// Whether a non-empty encrypted value is stored for this header.
 	HasValue bool
+}
+
+// TestDataExportRouteResult is the result type of the dataExports service
+// testRoute method.
+type TestDataExportRouteResult struct {
+	// accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no
+	// answer, such as a timeout or refused connection. error: any other answer.
+	Outcome string
+	// HTTP status the destination answered with. Omitted when it did not answer.
+	StatusCode *int
+	// What happened, in plain language.
+	Message string
+}
+
+// TestRoutePayload is the payload type of the dataExports service testRoute
+// method.
+type TestRoutePayload struct {
+	// Route ID.
+	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // UpdateDestinationPayload is the payload type of the dataExports service

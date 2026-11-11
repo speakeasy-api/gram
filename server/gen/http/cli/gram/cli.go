@@ -140,7 +140,7 @@ func UsageCommands() []string {
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"dashboards (list-dashboards|get-dashboard|create-dashboard|update-dashboard|save-dashboard-layout|add-dashboard-widget|remove-dashboard-widget|save-dashboard-filters|duplicate-dashboard|duplicate-built-in-dashboard|delete-dashboard)",
-		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route)",
+		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route|test-route)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs|evaluate-open-ap-iv3|get-deployment-evaluation)",
 		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage|list-fleet-devices|get-fleet-coverage)",
 		"domains (get-domain|list-domains|create-domain|update-domain|set-root-mcp-endpoint|list-root-mcp-servers|check-health|delete-domain|list-mcp-endpoints)",
@@ -1147,6 +1147,12 @@ func ParseEndpoint(
 		dataExportsDeleteRouteSessionTokenFlag     = dataExportsDeleteRouteFlags.String("session-token", "", "")
 		dataExportsDeleteRouteApikeyTokenFlag      = dataExportsDeleteRouteFlags.String("apikey-token", "", "")
 		dataExportsDeleteRouteProjectSlugInputFlag = dataExportsDeleteRouteFlags.String("project-slug-input", "", "")
+
+		dataExportsTestRouteFlags                = flag.NewFlagSet("test-route", flag.ExitOnError)
+		dataExportsTestRouteIDFlag               = dataExportsTestRouteFlags.String("id", "REQUIRED", "")
+		dataExportsTestRouteSessionTokenFlag     = dataExportsTestRouteFlags.String("session-token", "", "")
+		dataExportsTestRouteApikeyTokenFlag      = dataExportsTestRouteFlags.String("apikey-token", "", "")
+		dataExportsTestRouteProjectSlugInputFlag = dataExportsTestRouteFlags.String("project-slug-input", "", "")
 
 		deploymentsFlags = flag.NewFlagSet("deployments", flag.ContinueOnError)
 
@@ -5815,6 +5821,7 @@ func ParseEndpoint(
 	dataExportsCreateRouteFlags.Usage = dataExportsCreateRouteUsage
 	dataExportsUpdateRouteFlags.Usage = dataExportsUpdateRouteUsage
 	dataExportsDeleteRouteFlags.Usage = dataExportsDeleteRouteUsage
+	dataExportsTestRouteFlags.Usage = dataExportsTestRouteUsage
 
 	deploymentsFlags.Usage = deploymentsUsage
 	deploymentsGetDeploymentFlags.Usage = deploymentsGetDeploymentUsage
@@ -7589,6 +7596,9 @@ func ParseEndpoint(
 
 			case "delete-route":
 				epf = dataExportsDeleteRouteFlags
+
+			case "test-route":
+				epf = dataExportsTestRouteFlags
 
 			}
 
@@ -10988,6 +10998,9 @@ func ParseEndpoint(
 			case "delete-route":
 				endpoint = c.DeleteRoute()
 				data, err = dataexportsc.BuildDeleteRoutePayload(*dataExportsDeleteRouteIDFlag, *dataExportsDeleteRouteSessionTokenFlag, *dataExportsDeleteRouteApikeyTokenFlag, *dataExportsDeleteRouteProjectSlugInputFlag)
+			case "test-route":
+				endpoint = c.TestRoute()
+				data, err = dataexportsc.BuildTestRoutePayload(*dataExportsTestRouteIDFlag, *dataExportsTestRouteSessionTokenFlag, *dataExportsTestRouteApikeyTokenFlag, *dataExportsTestRouteProjectSlugInputFlag)
 			}
 		case "deployments":
 			c := deploymentsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -17612,6 +17625,7 @@ func dataExportsUsage() {
 	fmt.Fprintln(os.Stderr, `    create-route: Create the selected data source's export route configuration.`)
 	fmt.Fprintln(os.Stderr, `    update-route: Replace the selected data source's export route configuration.`)
 	fmt.Fprintln(os.Stderr, `    delete-route: Delete a data source's export route configuration.`)
+	fmt.Fprintln(os.Stderr, `    test-route: Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s data-exports COMMAND --help\n", os.Args[0])
@@ -17826,6 +17840,30 @@ func dataExportsDeleteRouteUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports delete-route --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dataExportsTestRouteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] data-exports test-route", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports test-route --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // deploymentsUsage displays the usage of the deployments command and its

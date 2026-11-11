@@ -53,6 +53,10 @@ type Client struct {
 	// endpoint.
 	DeleteRouteDoer goahttp.Doer
 
+	// TestRoute Doer is the HTTP client used to make requests to the testRoute
+	// endpoint.
+	TestRouteDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -82,6 +86,7 @@ func NewClient(
 		CreateRouteDoer:       doer,
 		UpdateRouteDoer:       doer,
 		DeleteRouteDoer:       doer,
+		TestRouteDoer:         doer,
 		RestoreResponseBody:   restoreBody,
 		scheme:                scheme,
 		host:                  host,
@@ -301,6 +306,30 @@ func (c *Client) DeleteRoute() goa.Endpoint {
 		resp, err := c.DeleteRouteDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("dataExports", "deleteRoute", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// TestRoute returns an endpoint that makes HTTP requests to the dataExports
+// service testRoute server.
+func (c *Client) TestRoute() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeTestRouteRequest(c.encoder)
+		decodeResponse = DecodeTestRouteResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildTestRouteRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.TestRouteDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("dataExports", "testRoute", err)
 		}
 		return decodeResponse(resp)
 	}
