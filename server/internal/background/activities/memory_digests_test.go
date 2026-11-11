@@ -325,6 +325,8 @@ func TestMemoryDigests_RegeneratedSummaryReturnsToRecall(t *testing.T) {
 		return ids
 	}
 	require.NotContains(t, recallChatIDs(), chatID)
+	before := enabled.digests(t, conn, "day")
+	require.Len(t, before, 1)
 
 	err = memorydigesttest.New(conn).SetChatMemorySummaryFixture(ctx, memorydigesttest.SetChatMemorySummaryFixtureParams{
 		Summary:            pgtype.Text{String: "moved to queue Y", Valid: true},
@@ -335,7 +337,14 @@ func TestMemoryDigests_RegeneratedSummaryReturnsToRecall(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Contains(t, recallChatIDs(), chatID)
+
+	// Building again must leave the old day digest and its snapshot alone.
+	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "day", Now: now})
+	require.NoError(t, err)
+	require.Zero(t, result.Built)
+	require.Equal(t, before, enabled.digests(t, conn, "day"))
 	require.Contains(t, enabled.digestSources(t, conn, "day", day).ChatIds, chatID, "the old day digest keeps its snapshot")
+	require.Contains(t, recallChatIDs(), chatID)
 }
 
 func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
