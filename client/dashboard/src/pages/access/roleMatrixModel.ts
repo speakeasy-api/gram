@@ -24,7 +24,7 @@ import type { ResourceType, RoleGrant, ScopeRule } from "./types";
 
 export type Level = "use" | "view" | "manage";
 
-/** Lowest to highest: each level includes the ones before it. */
+/** Lowest to highest. What each level includes is the server's to say: see mcpLevelIncludes. */
 export const LEVELS: readonly Level[] = ["use", "view", "manage"];
 
 export const LEVEL_LABEL: Record<Level, string> = {
@@ -39,10 +39,6 @@ const MCP_LEVEL_SCOPE: Record<Level, Scope> = {
   view: "mcp:read" as Scope,
   manage: "mcp:write" as Scope,
 };
-
-export function levelRank(level: Level): number {
-  return LEVELS.indexOf(level);
-}
 
 // ─── Grant plumbing ─────────────────────────────────────────────────────────
 
@@ -624,7 +620,7 @@ export function platformAreas(scopes: ScopeDefinition[]): PlatformArea[] {
 
 /**
  * The levels of the MCP table that a level's permission includes, as the
- * server describes it: Manage includes View and Connect.
+ * server describes it: Manage includes View; neither includes Connect.
  */
 export function mcpLevelIncludes(
   scopes: ScopeDefinition[],

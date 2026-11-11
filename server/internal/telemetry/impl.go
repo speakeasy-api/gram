@@ -214,6 +214,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.chRepo.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+		OwnScope:               params.ownScope,
 		GramProjectID:          params.projectID,
 		TimeStart:              params.timeStart,
 		TimeEnd:                params.timeEnd,
@@ -285,6 +286,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.chRepo.ListToolTraces(ctx, repo.ListToolTracesParams{
+		OwnScope:         params.ownScope,
 		GramProjectID:    params.projectID,
 		TimeStart:        params.timeStart,
 		TimeEnd:          params.timeEnd,
@@ -329,14 +331,16 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}, nil
 }
 
-// SearchChats retrieves chat session summaries with pagination.
+// SearchChats retrieves chat session summaries with pagination. A summary
+// names the session's user, so chat:read reads the whole project and a member
+// without it reads their own sessions and their agents' only.
 func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChatsPayload) (res *telem_gen.SearchChatsResult, err error) {
 	var from, to *string
 	if payload.Filter != nil {
 		from, to = payload.Filter.From, payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeProjectRead, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeChatRead, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -362,6 +366,7 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		Cursor:                  cursorChatID,
 		CursorStartTimeUnixNano: cursorStart,
 		Limit:                   params.limit + 1,
+		OwnScope:                params.ownScope,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing chats")
@@ -1839,20 +1844,25 @@ type searchParams struct {
 	cursor         string
 	timeStart      int64
 	timeEnd        int64
+	// ownScope is set when the caller lacks the project-wide scope and reads
+	// only their own activity. nil means the caller sees the whole project.
+	ownScope *repo.OwnScope
 }
 
 // prepareTelemetrySearch authorizes the caller for requiredScope on the active
 // project, then validates and prepares common search parameters. Endpoints that
 // return individual tool calls or raw log records pass authz.ScopeLogRead, since
-// those rows carry every member's tool arguments, results, and prompts;
-// aggregate and per-person summary endpoints pass authz.ScopeProjectRead.
+// those rows carry every member's tool arguments, results, and prompts; chat
+// session summaries pass authz.ScopeChatRead; aggregate and per-person summary
+// endpoints pass authz.ScopeProjectRead.
 func (s *Service) prepareTelemetrySearch(ctx context.Context, requiredScope authz.Scope, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: requiredScope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	ownScope, err := s.resolveSearchScope(ctx, authCtx, requiredScope)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1892,9 +1902,21 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, requiredScope auth
 		limit:          limit,
 		sortOrder:      sortOrder,
 		cursor:         cursorVal,
+		ownScope:       ownScope,
 		timeStart:      timeStart,
 		timeEnd:        timeEnd,
 	}, nil
+}
+
+// resolveSearchScope returns nil when the caller may read the whole project.
+// Who falls back to their own activity, and what counts as theirs, is decided
+// by authz.Engine.ResolveReadScope; this only maps its answer onto the query.
+func (s *Service) resolveSearchScope(ctx context.Context, authCtx *contextvalues.AuthContext, requiredScope authz.Scope) (*repo.OwnScope, error) {
+	scope, err := s.authz.ResolveReadScope(ctx, requiredScope, authCtx.ProjectID.String())
+	if err != nil {
+		return nil, err //nolint:wrapcheck // authz errors carry the oops code the caller must see
+	}
+	return repo.OwnScopeFrom(scope, s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)), nil
 }
 
 // parseTimeRange extracts and parses the time range from a telemetry filter.
@@ -3792,6 +3814,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 	}
 
 	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
+		OwnScope:           params.ownScope,
 		GramProjectID:      params.projectID,
 		TimeStart:          params.timeStart,
 		TimeEnd:            params.timeEnd,
@@ -5144,6 +5167,7 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 	// Query with limit+1 to detect if there are more results
 	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
 	items, err := s.chRepo.ListHooksTraces(ctx, repo.ListHooksTracesParams{
+		OwnScope:             params.ownScope,
 		GramProjectID:        params.projectID,
 		TimeStart:            params.timeStart,
 		TimeEnd:              params.timeEnd,

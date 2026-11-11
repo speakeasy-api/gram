@@ -230,8 +230,8 @@ const (
 	// issued.
 	SelectionSourceIssuance = "issuance"
 
-	// SelectionSourceBackfill is a choice recorded for an existing credential
-	// by the offline backfill.
+	// SelectionSourceBackfill is a choice inferred for an existing credential
+	// by the offline backfill or configuration lifecycle maintenance.
 	SelectionSourceBackfill = "backfill"
 
 	// SelectionSourceNewMember is a choice recorded for a gateway member

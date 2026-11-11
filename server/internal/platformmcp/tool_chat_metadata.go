@@ -14,9 +14,11 @@ const listChatsToolName = "list_chats"
 
 // listChatsMeta is shared by the live tool and its stub so the tool neither
 // appears on nor disappears from a surface as composition changes. Admitted to
-// the assistant because the read is connection-less and carries no content;
-// org:admin because a project-wide listing crosses every member's chats.
-var listChatsMeta = ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}
+// the assistant because the read is connection-less and carries no content.
+//
+// Every member is admitted because each has their own and their agents' chats
+// to list; chat:read decides at call time whether the listing crosses everyone's.
+var listChatsMeta = ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}
 
 func listChatsTool(description string) *mcp.Tool {
 	return &mcp.Tool{
@@ -38,7 +40,7 @@ func listChatsTool(description string) *mcp.Tool {
 }
 
 func registerChatMetadataTools(reg *Registrar, service *ChatMetadataService) {
-	addTool(reg, listChatsTool("List one project's chats active in a window of up to 30 days, newest activity first, as metadata only. Each chat is reduced to when it started and was last active, how many messages it holds, how many live risk findings it carries, the app and account type that produced it, the assistant behind it when there was one, the agent principal that produced it when an agent drove it directly, a masked participant, and a short-lived person reference that narrows a follow-up listing. Narrow by window, risk presence, source, assistant, agent, or person reference. Constraints: this is not a transcript reader or a search; no titles, messages, prompts, tool inputs or outputs, or raw identities are returned, the agent and assistant behind a chat are named but its human participants are only ever masked, pages are bounded and a limit above 50 is capped rather than refused, every count is in chats (one row per chat, total_matches in chats, at most 500 chats walked per listing), a cursor pins the window it was minted for, and cursors and references expire and are bound to this session."), listChatsMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input ListChatsInput) (*mcp.CallToolResult, ListChatsOutput, error) {
+	addTool(reg, listChatsTool("List one project's chats active in a window of up to 30 days, newest activity first, as metadata only. Every member sees their own chats and the chats of the agents they currently own; chat:read on the project widens this to every chat in the project, and no filter widens it. Each chat is reduced to when it started and was last active, how many messages it holds, how many live risk findings it carries, the app and account type that produced it, the assistant behind it when there was one, the agent principal that produced it when an agent drove it directly, a masked participant, and a short-lived person reference that narrows a follow-up listing. Narrow by window, risk presence, source, assistant, agent, or person reference. Constraints: this is not a transcript reader or a search; no titles, messages, prompts, tool inputs or outputs, or raw identities are returned, the agent and assistant behind a chat are named but its human participants are only ever masked, pages are bounded and a limit above 50 is capped rather than refused, every count is in chats (one row per chat, total_matches in chats, at most 500 chats walked per listing), a cursor pins the window it was minted for, and cursors and references expire and are bound to this session."), listChatsMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input ListChatsInput) (*mcp.CallToolResult, ListChatsOutput, error) {
 		return principalToolCall(ctx, chatMetadataToolResult, func(principal Principal) (ListChatsOutput, error) {
 			return service.List(ctx, principal, input)
 		})
@@ -63,7 +65,7 @@ func chatMetadataToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrRiskReadNotFound):
 		result = operationBudgetResult{Code: "not_found", Message: "That project is not one this organization holds. Choose one returned by list_projects."}
 	case errors.Is(err, ErrSubjectReferenceNotFound):
-		result = operationBudgetResult{Code: "not_found", Message: "That cursor or person reference is not available here. List the chats again with the same filters and use a value from the new result."}
+		result = operationBudgetResult{Code: "not_found", Message: "That cursor or person reference is not available here. List the chats again with the same filters and use a value from the new result. Without chat:read a person reference can only name the caller."}
 	default:
 		return operationBudgetToolResult(err)
 	}
