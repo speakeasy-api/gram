@@ -555,6 +555,14 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	}
 	registerOrganizationGatewayTool(reg, organizationGateway)
 	registerGatewayProxyTools(reg, gatewayProxy)
+	// Registered beside the organization gateway: both answer "what do I
+	// connect to, and may I" about a first-party endpoint this deployment
+	// serves the caller, and neither names anything inside it.
+	var channelsAccess *ChannelsAccessService
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		channelsAccess = postgresReader.channelsAccess
+	}
+	registerChannelsAccessTool(reg, channelsAccess)
 	if feedback == nil {
 		addTool(reg, &mcp.Tool{
 			Name:        "send_platform_mcp_feedback",

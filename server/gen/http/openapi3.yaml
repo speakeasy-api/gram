@@ -118173,6 +118173,9 @@ components:
                         - org:blocked_admin
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
                         - project:read
                         - project:blocked_read
                         - project:write
@@ -118230,6 +118233,9 @@ components:
                             - org:blocked_admin
                             - org:device_agent_sync
                             - org:hooks_ingest
+                            - channels:connect
+                            - channels:admin
+                            - channels:read_all
                             - project:read
                             - project:blocked_read
                             - project:write
@@ -125938,6 +125944,9 @@ components:
                         - workload:write
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
             description: Form for requesting access to a scope.
             required:
                 - scope
@@ -128196,6 +128205,9 @@ components:
                         - org:blocked_admin
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
                         - project:read
                         - project:blocked_read
                         - project:write
@@ -128645,6 +128657,9 @@ components:
                         - org:blocked_admin
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
                         - project:read
                         - project:blocked_read
                         - project:write
@@ -128725,6 +128740,9 @@ components:
                             - org:blocked_admin
                             - org:device_agent_sync
                             - org:hooks_ingest
+                            - channels:connect
+                            - channels:admin
+                            - channels:read_all
                             - project:read
                             - project:blocked_read
                             - project:write
