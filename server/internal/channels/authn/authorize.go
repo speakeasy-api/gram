@@ -42,7 +42,7 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request) {
 	}
 	redirect := q.Get("redirect_uri")
 	// Never redirect an invalid request to an unregistered URI.
-	if !slices.Contains(client.RedirectUris, redirect) {
+	if validateRedirectURI(redirect) != nil || !slices.Contains(client.RedirectUris, redirect) {
 		oauthError(w, 400, "invalid_request")
 		return
 	}
@@ -87,9 +87,8 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request) {
 	//nolint:exhaustruct // Optional cookie fields must remain unset for this host-only browser proof.
 	http.SetCookie(w, &http.Cookie{Name: proofCookie, Value: proof, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 600})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// As on MCP consent, do not restrict form-action: Chrome also applies it
-	// to the POST redirect to registered web, loopback, and native-app callbacks.
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+	// Use the same callback-aware form-action sources as Platform MCP.
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; form-action "+consentpage.FormActionSources(redirect)+"; frame-ancestors 'none'; base-uri 'none'")
 	_ = consentTemplate.Execute(w, struct {
 		Styles                                                                         template.CSS
 		Name, RedirectURI, Organization, Project, Resource, UserEmail, Challenge, CSRF string
@@ -137,7 +136,7 @@ func (s *Service) consent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client, err := queries.GetClient(ctx, challenge.ClientID.String)
-	if err != nil || !slices.Contains(client.RedirectUris, challenge.RedirectUri) {
+	if err != nil || validateRedirectURI(challenge.RedirectUri) != nil || !slices.Contains(client.RedirectUris, challenge.RedirectUri) {
 		oauthError(w, 400, "invalid_client")
 		return
 	}

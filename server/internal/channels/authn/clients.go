@@ -48,7 +48,7 @@ func (s *Service) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, u := range v.RedirectURIs {
-		if oauthwire.ValidateRedirectURI(u) != nil {
+		if validateRedirectURI(u) != nil {
 			oauthError(w, 400, "invalid_redirect_uri")
 			return
 		}
@@ -100,6 +100,11 @@ func (s *Service) resolveClient(ctx context.Context, id string, metadata bool) (
 		// advertised and must never be silently downgraded to unauthenticated.
 		if d.DeclaredAuthMethod() != "none" {
 			return emptyClient(), errors.New("unsupported client authentication method")
+		}
+		for _, redirect := range d.RedirectURIs {
+			if err := validateRedirectURI(redirect); err != nil {
+				return emptyClient(), fmt.Errorf("invalid client metadata redirect URI: %w", err)
+			}
 		}
 		if err = repo.New(s.config.DB).UpsertMetadataClient(ctx, repo.UpsertMetadataClientParams{ClientID: id, ClientName: d.ClientName, RedirectUris: d.RedirectURIs}); err != nil {
 			return emptyClient(), fmt.Errorf("persist Channels metadata client: %w", err)
@@ -158,6 +163,24 @@ func (s *Service) clientError(w http.ResponseWriter, r *http.Request, code strin
 		}
 	}
 	oauthError(w, status, code)
+}
+
+// validateRedirectURI applies Channels callback shape checks without changing
+// the shared native-app scheme policy.
+func validateRedirectURI(raw string) error {
+	if err := oauthwire.ValidateRedirectURI(raw); err != nil {
+		return err
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || strings.Contains(raw, "#") || parsed.User != nil {
+		return errors.New("redirect URI must not contain a fragment or user information")
+	}
+	if scheme := strings.ToLower(parsed.Scheme); scheme == "http" || scheme == "https" {
+		if !parsed.IsAbs() || parsed.Opaque != "" || parsed.Hostname() == "" {
+			return errors.New("HTTP redirect URI must be an absolute URL with a host")
+		}
+	}
+	return nil
 }
 
 func emptyClient() repo.ChannelsOauthClient { var client repo.ChannelsOauthClient; return client }

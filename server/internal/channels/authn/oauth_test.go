@@ -258,7 +258,14 @@ func TestOAuthSecurity(t *testing.T) {
 					page := f.request(http.MethodGet, "/channels/oauth/authorize?"+query.Encode(), "", "")
 					require.Equal(t, http.StatusOK, page.Code)
 					policy := page.Header().Get("Content-Security-Policy")
-					require.NotContains(t, policy, "form-action")
+					callbackURL, err := url.Parse(callback)
+					require.NoError(t, err)
+					allowedCallback := callbackURL.Scheme + ":"
+					if callbackURL.Host != "" {
+						allowedCallback += "//" + callbackURL.Host
+					}
+					require.Contains(t, policy, "form-action 'self' "+allowedCallback+";")
+					require.NotContains(t, policy, "/callback")
 					require.Contains(t, policy, "frame-ancestors 'none'")
 					require.Contains(t, policy, "default-src 'none'")
 					require.Equal(t, "same-origin", page.Header().Get("Referrer-Policy"))
