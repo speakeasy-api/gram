@@ -36,6 +36,15 @@ func (r refusingProjectReader) ResolveProjectLogRead(context.Context, Principal,
 	return ResolvedProject{}, nil
 }
 
+// ResolveProjectLogScope refuses with the same error as ResolveProjectLogRead:
+// the fake stands for a caller the scope resolver turns away outright.
+func (r refusingProjectReader) ResolveProjectLogScope(context.Context, Principal, FindMCPInput) (ResolvedProject, *telemetryrepo.OwnScope, error) {
+	if r.logReadErr != nil {
+		return ResolvedProject{}, nil, r.logReadErr
+	}
+	return ResolvedProject{}, nil, nil
+}
+
 func (r refusingProjectReader) GetMCP(context.Context, Principal, GetMCPInput) (MCP, error) {
 	if r.mcpErr != nil {
 		return MCP{}, r.mcpErr
