@@ -376,6 +376,7 @@ type PostgresReader struct {
 	gatewayProxy              *GatewayProxyService
 	gatewaySessions           GatewaySessionManagement
 	agentIdentityReads        *AgentIdentityReadService
+	channelsAccess            *ChannelsAccessService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
@@ -425,6 +426,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		gatewayProxy:              nil,
 		gatewaySessions:           nil,
 		agentIdentityReads:        nil,
+		channelsAccess:            nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
@@ -683,6 +685,16 @@ func (r *PostgresReader) WithChatSearch(service *ChatSearchService) *PostgresRea
 func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewayService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.organizationGateway = service
+	}
+	return r
+}
+
+// WithChannelsAccess serves get_my_channels_access. A nil or incomplete
+// service leaves the tool registered as a stub, so it does not appear on and
+// disappear from the catalogue as the rollout flips.
+func (r *PostgresReader) WithChannelsAccess(service *ChannelsAccessService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.channelsAccess = service
 	}
 	return r
 }

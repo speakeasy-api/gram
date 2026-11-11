@@ -70,6 +70,40 @@
       "agent_eligible": true
     },
     {
+      "slug": "channels:connect",
+      "label": "Connect to Channels",
+      "description": "Connect to Channels and exchange messages as an authorized instance.",
+      "resource_type": "project",
+      "category": "project",
+      "sensitive": false,
+      "sub_scopes": [],
+      "visibility": "user_visible",
+      "agent_eligible": false
+    },
+    {
+      "slug": "channels:admin",
+      "label": "Manage Channels",
+      "description": "Manage Channels settings and member access without reading other members' messages.",
+      "resource_type": "project",
+      "category": "project",
+      "sensitive": false,
+      "sub_scopes": [],
+      "visibility": "user_visible",
+      "agent_eligible": false
+    },
+    {
+      "slug": "channels:read_all",
+      "label": "Read all Channels messages",
+      "description": "Read other members' private Channels conversations in the project.",
+      "resource_type": "project",
+      "category": "project",
+      "sensitive": true,
+      "sensitivity": "conversations",
+      "sub_scopes": [],
+      "visibility": "user_visible",
+      "agent_eligible": false
+    },
+    {
       "slug": "project:read",
       "label": "View projects",
       "description": "View projects and project-related resources.",

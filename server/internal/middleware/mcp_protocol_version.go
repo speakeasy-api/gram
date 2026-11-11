@@ -34,7 +34,7 @@ import (
 // upstream untouched, so nothing here may mutate it.
 func MCPProtocolVersionTelemetry(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isMCPJSONRPCEndpoint(r.URL.Path) {
+		if isMCPJSONRPCEndpoint(channelsClassificationPath(r)) {
 			if span := trace.SpanFromContext(r.Context()); span.IsRecording() {
 				if v := mcpversions.Sanitize(r.Header.Get(mcpversions.HTTPHeader)); v != "" {
 					span.SetAttributes(attr.MCPNegotiatedProtocolVersion(v))
@@ -92,6 +92,8 @@ func isMCPJSONRPCEndpoint(path string) bool {
 		// beside it, and the tail is an agent id rather than a slug, so every
 		// one-segment tail here is the endpoint itself.
 		return isEndpointSlug(tail)
+	case "channels":
+		return isChannelsEndpoint(path, "mcp")
 	case "platform-mcp":
 		// POST /platform-mcp is Speakeasy's own platform MCP server
 		// (internal/platformmcp), served by the go-sdk's Streamable HTTP
