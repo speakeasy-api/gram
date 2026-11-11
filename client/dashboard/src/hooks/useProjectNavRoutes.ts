@@ -49,6 +49,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isSignalsIntelligenceEnabled =
     productFeatures.isSuccess &&
     productFeatures.data.signalsIntelligenceEnabled === true;
+  const channelsFlag = useFeatureFlag(FEATURE_FLAGS.channels);
+  const isChannelsEnabled = channelsFlag.status === "enabled";
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
@@ -62,8 +64,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     // Observe navigation stays visible to project readers. The Identities
     // roster uses that scope; identity detail resolution separately requires
     // org:read, and the remaining Observe pages render an org-admin notice.
-    // Tool Logs is the exception: it needs log:read on this project, which no
-    // role holds by default, so it only appears to those granted it.
+    // Tool Logs included: without log:read on the project it shows the
+    // member's own sessions and agents, so the page is reachable by all.
     const observe: Scope[] = ["project:read"];
     return [
       { route: routes.home, scope: read },
@@ -92,6 +94,19 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.deployments, scope: readWrite },
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
+      // Keep this selected-project page discoverable for per-person exceptions.
+      // The project snapshot authorizes effective access; native RBAC alone
+      // would hide it from explicitly admitted members. No content is indexed.
+      ...(isChannelsEnabled
+        ? [
+            {
+              route: routes.channels,
+              scope: [],
+              resourceId: projectId,
+              projectId,
+            },
+          ]
+        : []),
       {
         route: routes.assistants,
         scope: ["assistant:read"],
@@ -128,12 +143,13 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       ...(isOrgMemoryEnabled
         ? [{ route: routes.orgMemory, scope: observe }]
         : []),
-      { route: routes.logs, scope: ["log:read"], resourceId: projectId },
+      { route: routes.logs, scope: observe, resourceId: projectId },
       { route: routes.settings, scope: ["project:write"] },
     ];
   }, [
     routes,
     projectId,
+    isChannelsEnabled,
     isExploreEnabled,
     isOrgMemoryEnabled,
     isSignalsIntelligenceEnabled,

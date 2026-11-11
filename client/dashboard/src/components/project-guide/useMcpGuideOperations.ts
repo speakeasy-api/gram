@@ -32,7 +32,6 @@ import {
   normalizeRemoteUrl,
 } from "@/pages/catalog/remotes";
 import { useRemoteMcpInstallWorkflow } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
-import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
@@ -60,7 +59,7 @@ type ActiveOperation = {
 
 // The server's call count and latest call time when the guide started
 // listening. Detection reads the project:read activity aggregate rather than
-// individual calls, which need log:read and so are closed to most guide users.
+// individual calls, which the server narrows to the caller's own sessions.
 type ActivityBaseline = {
   capturedAtMs: number;
   totalToolCalls: number;
@@ -255,15 +254,14 @@ export function useMcpGuideOperations(): {
   serverName: string | undefined;
   setClient: (client: McpGuideClient) => void;
   connectionPrompts: Record<McpGuideClient, string> | undefined;
-  /** Undefined when the caller cannot open Tool Logs (it needs log:read). */
-  toolLogsHref: string | undefined;
+  /** Tool Logs, where the governed call lands; every member can open it. */
+  toolLogsHref: string;
   /** The governed server's overview, where its call activity is shown. */
   mcpServerHref: string;
 } {
   const gramProject = useProjectSlugForRequests();
   const { orgSlug, projectSlug } = useSlugs();
   const routes = useRoutes();
-  const canViewToolLogs = useCanViewToolLogs();
   const queryClient = useQueryClient();
   const [selectedServerOverride, setSelectedServerOverride] = useState<
     CatalogServer | undefined
@@ -800,9 +798,7 @@ export function useMcpGuideOperations(): {
         { key: "server", value: entry.targetLabel },
         { key: "endpoint", value: endpointUrl },
       ],
-      note: canViewToolLogs
-        ? "The first new call is recorded in Tool Logs."
-        : "The first new call is counted in the server's activity.",
+      note: "The first new call is recorded in Tool Logs.",
     };
     updateActiveOperation(undefined);
     void invalidateAllGetMcpServerActivity(queryClient);
@@ -812,7 +808,6 @@ export function useMcpGuideOperations(): {
     activityError,
     activityQuery.data?.activity,
     activityQuery.isPending,
-    canViewToolLogs,
     endpointUrl,
     mcpServer,
     suppressActivityError,
@@ -866,7 +861,7 @@ export function useMcpGuideOperations(): {
       setPromptCopied(false);
     },
     connectionPrompts,
-    toolLogsHref: canViewToolLogs ? routes.logs.href() : undefined,
+    toolLogsHref: routes.logs.href(),
     mcpServerHref: mcpServer
       ? routes.mcp.details.overview.href(mcpServerRouteParam(mcpServer))
       : routes.home.href(),

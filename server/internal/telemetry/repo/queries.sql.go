@@ -2075,6 +2075,8 @@ type ListTelemetryLogsParams struct {
 	SortOrder              string
 	Cursor                 string
 	Limit                  int
+	// OwnScope, when set, is ANDed with every other filter; see OwnScope.
+	OwnScope *OwnScope
 }
 
 // ListTelemetryLogs retrieves telemetry logs with optional filters and cursor pagination.
@@ -2163,11 +2165,19 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		sb = sb.Where(pred)
 	}
 
+	if arg.OwnScope != nil {
+		sb = sb.Where(arg.OwnScope.telemetryLogsPredicate())
+	}
+
 	sb = withPagination(sb, arg.Cursor, arg.SortOrder)
 
 	sb = withOrdering(sb, arg.SortOrder, "time_unix_nano", "toUUID(id)")
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	if arg.OwnScope != nil {
+		sb = arg.OwnScope.withFoldSettings(sb)
+	}
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -2208,6 +2218,8 @@ type ListToolTracesParams struct {
 	SortOrder        string
 	Cursor           string // trace_id to paginate from
 	Limit            int
+	// OwnScope, when set, is ANDed with every other filter; see OwnScope.
+	OwnScope *OwnScope
 }
 
 // traceWindowScanSlop pads the WHERE pre-filter trace-window reads apply to
@@ -2269,6 +2281,9 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 	if arg.GramFunctionID != "" {
 		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
 	}
+	if arg.OwnScope != nil {
+		sb = sb.Where(arg.OwnScope.traceSummariesPredicate())
+	}
 
 	// Build HAVING clause for tool filtering.
 	// IMPORTANT: We must construct a single HAVING clause with explicit AND logic to ensure
@@ -2324,6 +2339,10 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "")
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	if arg.OwnScope != nil {
+		sb = arg.OwnScope.withFoldSettings(sb)
+	}
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -2952,6 +2971,10 @@ type ListChatsParams struct {
 	CursorStartTimeUnixNano int64
 
 	Limit int
+
+	// OwnScope, when set, keeps only chats with at least one row of the
+	// caller's own; the other filters narrow further. See OwnScope.
+	OwnScope *OwnScope
 }
 
 // ListChats retrieves aggregated chat summaries grouped by gram_chat_id.
@@ -2997,13 +3020,19 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		sb = sb.Where("position(telemetry_logs.gram_urn, ?) > 0", arg.GramURN)
 	}
 	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+		// Qualified: the select aliases user_id to an aggregate, and ClickHouse
+		// resolves a bare user_id in WHERE to that alias and rejects the query.
+		sb = sb.Where(squirrel.Eq{"telemetry_logs.user_id": arg.UserID})
 	}
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
 	}
 
 	sb = sb.GroupBy("gram_chat_id")
+
+	if arg.OwnScope != nil {
+		sb = sb.Having(arg.OwnScope.chatHasOwnRow())
+	}
 
 	// HAVING clause for cursor pagination with tuple comparison for tie-breaking
 	if arg.CursorStartTimeUnixNano != 0 {
@@ -3016,6 +3045,10 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "gram_chat_id")
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	if arg.OwnScope != nil {
+		sb = arg.OwnScope.withFoldSettings(sb)
+	}
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -4294,6 +4327,8 @@ type ListToolUsageTracesParams struct {
 	CursorTimeUnixNano   int64
 	CursorID             string
 	Limit                int
+	// OwnScope, when set, is ANDed with every other filter; see OwnScope.
+	OwnScope *OwnScope
 }
 
 // ToolUsageSummary contains bounded chart-ready tool usage aggregates.
@@ -4916,6 +4951,19 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		}
 	}
 
+	// On the summary path an event-source chip applies to the per-trace event
+	// source. The raw path already pushed it down to rows.
+	if !toolUsageTracesNeedRawScan(arg) {
+		for _, filter := range arg.Filters {
+			if filter.Path != toolUsageEventSourcePath {
+				continue
+			}
+			if pred := filter.Predicate("event_source"); pred != nil {
+				sb = sb.Where(pred)
+			}
+		}
+	}
+
 	// First-class Status filter, applied to the aggregated per-trace outcome columns.
 	if pred := toolUsageOutcomePredicate(arg.Statuses); pred != nil {
 		sb = sb.Where(pred)
@@ -4936,7 +4984,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 	}
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // validated by service layer
-	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(foldOrg(arg.CanonicalIdentityOrg, arg.OwnScope)))
 
 	query, queryArgs, err := sb.ToSql()
 	if err != nil {
@@ -5877,6 +5925,19 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 		}
 	}
 
+	// On the summary path an event-source chip applies to the per-trace event
+	// source the CTE projects. The raw path already pushed it down to rows.
+	if !toolUsageSummaryNeedsRawScan(arg) {
+		for _, filter := range arg.Filters {
+			if filter.Path != toolUsageEventSourcePath {
+				continue
+			}
+			if pred := filter.Predicate("event_source"); pred != nil {
+				sb = sb.Where(pred)
+			}
+		}
+	}
+
 	return sb, nil
 }
 
@@ -6136,6 +6197,9 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 	if err != nil {
 		return "", nil, err
 	}
+	if arg.OwnScope != nil {
+		groupedSB = groupedSB.Where(arg.OwnScope.traceSummariesPredicate())
+	}
 
 	groupedSQL, groupedArgs, err := groupedSB.ToSql()
 	if err != nil {
@@ -6362,12 +6426,26 @@ FROM (%s)`,
 	return "WITH normalized_traces_base AS (" + tracesSQL + ")" + serverIDSQL, finalArgs, nil
 }
 
+// toolUsageTracesNeedRawScan is toolUsageSummaryNeedsRawScan for the trace
+// listing: the two paths must agree on which chips the view can answer.
+func toolUsageTracesNeedRawScan(arg ListToolUsageTracesParams) bool {
+	if arg.Query != "" {
+		return true
+	}
+	for _, filter := range arg.Filters {
+		if !toolUsageSummaryAnswersFilter(filter) {
+			return true
+		}
+	}
+	return false
+}
+
 func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error) {
 	// Fast path: when no free-text query or arbitrary attribute filters are active,
 	// serve the trace list from the trace_summaries materialized view. Free-text
 	// search, custom-attribute filters, and (traceless) trigger events fall through
 	// to the raw telemetry_logs scan below.
-	if arg.Query == "" && len(arg.Filters) == 0 {
+	if !toolUsageTracesNeedRawScan(arg) {
 		return toolUsageTraceRowsFromSummariesCTE(arg)
 	}
 
@@ -6416,6 +6494,9 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
+	if arg.OwnScope != nil {
+		rawSB = rawSB.Where(arg.OwnScope.telemetryLogsPredicate())
+	}
 
 	sourceCondition := "((startsWith(gram_urn, 'tools:') AND (toolset_slug != '' OR tool_source != '')) OR (event_source = 'hook' AND (" + hookToolNamePredicate("tool_name") + " OR skill_name != '' OR " + toolCallSkillName + " != '')) OR (" + toolUsageRawMCPSkillLoad + "))"
 	includeTriggerRows := arg.Query != ""
@@ -6742,6 +6823,7 @@ normalized_traces_base AS (
 // place to derive that is the only way to keep them agreeing.
 func toolUsageRawNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {
 	traceSQL, traceArgs, err := toolUsageTraceRowsCTE(ListToolUsageTracesParams{
+		OwnScope:           nil,
 		GramProjectID:      arg.GramProjectID,
 		TimeStart:          arg.TimeStart,
 		TimeEnd:            arg.TimeEnd,
@@ -6875,11 +6957,41 @@ func toolUsageScanIdentityFilter(arg GetToolUsageSummaryParams) squirrel.Sqlizer
 	return and
 }
 
+// toolUsageEventSourcePath is the attribute the dashboard's "loaded via" skill
+// split filters on. trace_summaries carries the event source per trace, so a
+// chip on it can be answered from the view instead of the raw log scan.
+const toolUsageEventSourcePath = "gram.event.source"
+
+// toolUsageSummaryNeedsRawScan reports whether the summary must be answered
+// from the raw telemetry_logs scan. Only a free-text query or an attribute
+// chip the trace_summaries view cannot answer forces it: the raw scan of a
+// multi-day window costs gigabytes of ClickHouse memory per call.
+func toolUsageSummaryNeedsRawScan(arg GetToolUsageSummaryParams) bool {
+	if arg.Query != "" {
+		return true
+	}
+	for _, filter := range arg.Filters {
+		if !toolUsageSummaryAnswersFilter(filter) {
+			return true
+		}
+	}
+	return false
+}
+
+// toolUsageSummaryAnswersFilter reports whether the trace_summaries path can
+// apply the chip to its per-trace event_source column. Every other chip,
+// http.response.status_code included, still takes the raw scan.
+func toolUsageSummaryAnswersFilter(filter AttributeFilter) bool {
+	if filter.Path != toolUsageEventSourcePath {
+		return false
+	}
+	return filter.Op == "eq" || filter.Op == "not_eq" || filter.Op == "in"
+}
+
 func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {
-	// A free-text query or an attribute chip cannot be answered from the
-	// pre-aggregated view, which carries neither. Those fall through to the raw
-	// scan, exactly as the trace listing does.
-	if arg.Query != "" || len(arg.Filters) > 0 {
+	// A free-text query or an attribute chip the pre-aggregated view does not
+	// carry falls through to the raw scan, exactly as the trace listing does.
+	if toolUsageSummaryNeedsRawScan(arg) {
 		return toolUsageRawNormalizedEventsCTE(arg)
 	}
 
@@ -7070,6 +7182,7 @@ SELECT
 	toUInt8(0) AS blocked,
 	toUInt8(0) AS pending,
 	'' AS hook_source,
+	g_event_source AS event_source,
 	g_account_type AS account_type,
 	g_meta_mcp_server_id AS meta_mcp_server_id,
 	%s AS client_key,
@@ -7207,6 +7320,7 @@ SELECT
 	toUInt8(g_has_block = 1) AS blocked,
 	toUInt8(g_has_block = 0 AND g_has_error = 0 AND g_has_result = 0) AS pending,
 	g_hook_source AS hook_source,
+	'hook' AS event_source,
 	g_account_type AS account_type,
 	g_meta_mcp_server_id AS meta_mcp_server_id,
 	%s AS client_key,
@@ -7891,6 +8005,8 @@ type ListHooksTracesParams struct {
 	// CanonicalIdentityOrg, when set, folds email filters through the
 	// identity_map so a drill from a folded bucket matches all linked emails.
 	CanonicalIdentityOrg string
+	// OwnScope, when set, is ANDed with every other filter; see OwnScope.
+	OwnScope *OwnScope
 }
 
 // ListHooksTraces retrieves aggregated hook trace summaries grouped by trace_id.
@@ -7920,6 +8036,9 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		Having("start_time_unix_nano >= ?", arg.TimeStart).
 		Having("start_time_unix_nano <= ?", arg.TimeEnd).
 		Where("trace_id IS NOT NULL AND trace_id != ''")
+	if arg.OwnScope != nil {
+		sb = sb.Where(arg.OwnScope.traceSummariesPredicate())
+	}
 
 	// Apply arbitrary attribute filters
 	for _, filter := range arg.Filters {
@@ -8017,7 +8136,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
 
-	sb = withCanonicalFoldSettings(sb, orgLit)
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(foldOrg(arg.CanonicalIdentityOrg, arg.OwnScope)))
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building list hooks traces query: %w", err)

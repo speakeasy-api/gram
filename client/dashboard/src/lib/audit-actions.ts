@@ -76,6 +76,8 @@ export const AUDIT_ACTIONS = [
   "catalog-promotion:reject",
   "catalog-promotion:restore",
   "catalog-promotion:retry-docs",
+  "channels:update_access",
+  "channels:update_settings",
   "chat_analysis_settings:upsert",
   "chat_session:access",
   "chat_session:handoff_export",
@@ -602,6 +604,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "restored catalog promotion candidate";
     case "catalog-promotion:retry-docs":
       return "retried setup documentation for";
+    case "channels:update_access":
+      return "changed Channels access for";
+    case "channels:update_settings":
+      return "changed Channels availability for";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":

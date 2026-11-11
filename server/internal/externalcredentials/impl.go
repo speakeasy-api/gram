@@ -104,6 +104,28 @@ func NewService(
 	}
 }
 
+// NewPlatformService builds a service for the standalone admin server, which
+// serves only the platform-tier handlers under its own verified staff
+// identity. It has no dashboard sessions, RBAC engine, audit logger or verify
+// limiter, and mounts no routes: the organization-tier handlers must not be
+// reached through it.
+func NewPlatformService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity) *Service {
+	logger = logger.With(attr.SlogComponent("externalcredentials"))
+
+	return &Service{
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/externalcredentials"),
+		logger:          logger,
+		db:              db,
+		auth:            nil,
+		sessions:        nil,
+		authz:           nil,
+		audit:           nil,
+		gcpIdentity:     gcpIdentity,
+		productFeatures: nil,
+		verifyLimiter:   nil,
+	}
+}
+
 // requireOrgAccess resolves the auth context and enforces both gates every
 // organization-tier handler needs: the RBAC scope and the customer-managed-keys
 // entitlement. Routing all of them through one function keeps the entitlement
@@ -1046,6 +1068,11 @@ func (s *Service) resolveGcpColumns(ctx context.Context, logger *slog.Logger, in
 	}
 	if wifSet != 0 && wifSet != 3 {
 		return cols, oops.E(oops.CodeBadRequest, nil, "wif_pool_id, wif_provider_id, and wif_project_number must be set together").LogError(ctx, logger)
+	}
+	// GCP project numbers are decimal digits; anything else could never
+	// resolve as a Workload Identity Federation audience.
+	if projectNumber.Valid && strings.IndexFunc(projectNumber.String, func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
+		return cols, oops.E(oops.CodeBadRequest, nil, "wif_project_number must be the numeric GCP project number").LogWarn(ctx, logger)
 	}
 
 	return cols, nil

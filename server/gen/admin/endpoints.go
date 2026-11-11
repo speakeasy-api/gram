@@ -126,6 +126,12 @@ type Endpoints struct {
 	GetProjectRedeployPreview               goa.Endpoint
 	RedeployProject                         goa.Endpoint
 	ListCustomDomains                       goa.Endpoint
+	ListPlatformExternalCredentials         goa.Endpoint
+	GetGcpIamPlatformCredential             goa.Endpoint
+	CreateGcpIamPlatformCredential          goa.Endpoint
+	UpdateGcpIamPlatformCredential          goa.Endpoint
+	VerifyGcpIamPlatformCredential          goa.Endpoint
+	DeleteGcpIamPlatformCredential          goa.Endpoint
 	GetMemoryEvalOptions                    goa.Endpoint
 	ListMemoryEvalRuns                      goa.Endpoint
 	GetMemoryEvalRun                        goa.Endpoint
@@ -264,6 +270,12 @@ func NewEndpoints(s Service) *Endpoints {
 		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewEndpoint(s, a.APIKeyAuth),
 		RedeployProject:                         NewRedeployProjectEndpoint(s, a.APIKeyAuth),
 		ListCustomDomains:                       NewListCustomDomainsEndpoint(s, a.APIKeyAuth),
+		ListPlatformExternalCredentials:         NewListPlatformExternalCredentialsEndpoint(s, a.APIKeyAuth),
+		GetGcpIamPlatformCredential:             NewGetGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
+		CreateGcpIamPlatformCredential:          NewCreateGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
+		UpdateGcpIamPlatformCredential:          NewUpdateGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
+		VerifyGcpIamPlatformCredential:          NewVerifyGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
+		DeleteGcpIamPlatformCredential:          NewDeleteGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
 		GetMemoryEvalOptions:                    NewGetMemoryEvalOptionsEndpoint(s, a.APIKeyAuth),
 		ListMemoryEvalRuns:                      NewListMemoryEvalRunsEndpoint(s, a.APIKeyAuth),
 		GetMemoryEvalRun:                        NewGetMemoryEvalRunEndpoint(s, a.APIKeyAuth),
@@ -382,6 +394,12 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetProjectRedeployPreview = m(e.GetProjectRedeployPreview)
 	e.RedeployProject = m(e.RedeployProject)
 	e.ListCustomDomains = m(e.ListCustomDomains)
+	e.ListPlatformExternalCredentials = m(e.ListPlatformExternalCredentials)
+	e.GetGcpIamPlatformCredential = m(e.GetGcpIamPlatformCredential)
+	e.CreateGcpIamPlatformCredential = m(e.CreateGcpIamPlatformCredential)
+	e.UpdateGcpIamPlatformCredential = m(e.UpdateGcpIamPlatformCredential)
+	e.VerifyGcpIamPlatformCredential = m(e.VerifyGcpIamPlatformCredential)
+	e.DeleteGcpIamPlatformCredential = m(e.DeleteGcpIamPlatformCredential)
 	e.GetMemoryEvalOptions = m(e.GetMemoryEvalOptions)
 	e.ListMemoryEvalRuns = m(e.ListMemoryEvalRuns)
 	e.GetMemoryEvalRun = m(e.GetMemoryEvalRun)
@@ -2860,6 +2878,144 @@ func NewListCustomDomainsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.ListCustomDomains(ctx, p)
+	}
+}
+
+// NewListPlatformExternalCredentialsEndpoint returns an endpoint function that
+// calls the method "listPlatformExternalCredentials" of service "admin".
+func NewListPlatformExternalCredentialsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPlatformExternalCredentialsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPlatformExternalCredentials(ctx, p)
+	}
+}
+
+// NewGetGcpIamPlatformCredentialEndpoint returns an endpoint function that
+// calls the method "getGcpIamPlatformCredential" of service "admin".
+func NewGetGcpIamPlatformCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGcpIamPlatformCredentialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGcpIamPlatformCredential(ctx, p)
+	}
+}
+
+// NewCreateGcpIamPlatformCredentialEndpoint returns an endpoint function that
+// calls the method "createGcpIamPlatformCredential" of service "admin".
+func NewCreateGcpIamPlatformCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateGcpIamPlatformCredentialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateGcpIamPlatformCredential(ctx, p)
+	}
+}
+
+// NewUpdateGcpIamPlatformCredentialEndpoint returns an endpoint function that
+// calls the method "updateGcpIamPlatformCredential" of service "admin".
+func NewUpdateGcpIamPlatformCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateGcpIamPlatformCredentialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateGcpIamPlatformCredential(ctx, p)
+	}
+}
+
+// NewVerifyGcpIamPlatformCredentialEndpoint returns an endpoint function that
+// calls the method "verifyGcpIamPlatformCredential" of service "admin".
+func NewVerifyGcpIamPlatformCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*VerifyGcpIamPlatformCredentialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.VerifyGcpIamPlatformCredential(ctx, p)
+	}
+}
+
+// NewDeleteGcpIamPlatformCredentialEndpoint returns an endpoint function that
+// calls the method "deleteGcpIamPlatformCredential" of service "admin".
+func NewDeleteGcpIamPlatformCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteGcpIamPlatformCredentialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteGcpIamPlatformCredential(ctx, p)
 	}
 }
 

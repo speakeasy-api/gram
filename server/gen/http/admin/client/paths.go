@@ -552,6 +552,36 @@ func ListCustomDomainsAdminPath() string {
 	return "/admin/customDomains.list"
 }
 
+// ListPlatformExternalCredentialsAdminPath returns the URL path to the admin service listPlatformExternalCredentials HTTP endpoint.
+func ListPlatformExternalCredentialsAdminPath() string {
+	return "/admin/externalCredentials.list"
+}
+
+// GetGcpIamPlatformCredentialAdminPath returns the URL path to the admin service getGcpIamPlatformCredential HTTP endpoint.
+func GetGcpIamPlatformCredentialAdminPath() string {
+	return "/admin/externalCredentials.getGcpIam"
+}
+
+// CreateGcpIamPlatformCredentialAdminPath returns the URL path to the admin service createGcpIamPlatformCredential HTTP endpoint.
+func CreateGcpIamPlatformCredentialAdminPath() string {
+	return "/admin/externalCredentials.createGcpIam"
+}
+
+// UpdateGcpIamPlatformCredentialAdminPath returns the URL path to the admin service updateGcpIamPlatformCredential HTTP endpoint.
+func UpdateGcpIamPlatformCredentialAdminPath() string {
+	return "/admin/externalCredentials.updateGcpIam"
+}
+
+// VerifyGcpIamPlatformCredentialAdminPath returns the URL path to the admin service verifyGcpIamPlatformCredential HTTP endpoint.
+func VerifyGcpIamPlatformCredentialAdminPath() string {
+	return "/admin/externalCredentials.verifyGcpIam"
+}
+
+// DeleteGcpIamPlatformCredentialAdminPath returns the URL path to the admin service deleteGcpIamPlatformCredential HTTP endpoint.
+func DeleteGcpIamPlatformCredentialAdminPath() string {
+	return "/admin/externalCredentials.deleteGcpIam"
+}
+
 // GetMemoryEvalOptionsAdminPath returns the URL path to the admin service getMemoryEvalOptions HTTP endpoint.
 func GetMemoryEvalOptionsAdminPath() string {
 	return "/admin/memoryEval.options"

@@ -16914,6 +16914,555 @@ ON memory_digests USING gin (search_vector);
 CREATE INDEX IF NOT EXISTS memory_digests_chat_ids_idx
 ON memory_digests USING gin (chat_ids);
 
+-- Normalized Channels storage.
+--
+-- Channels data, permissions, presence, and cursor allocators are isolated by
+-- organization and project. Composite keys pin every child to the same scope.
+CREATE TABLE IF NOT EXISTS channels_settings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+
+  enabled boolean NOT NULL DEFAULT false,
+
+  -- Per-organization message sequence. A posting transaction allocates from
+  -- this row last, holding its write lock until commit, so sequence order and
+  -- commit order agree: a reader paging on `seq > cursor` can never skip a
+  -- message that commits after a higher sequence became visible.
+  message_seq BIGINT NOT NULL DEFAULT 0,
+  -- Per-organization announcement counter stamped onto instances and
+  -- conversations. Subscribers reconcile against bounded aggregates of it
+  -- instead of reloading the organization's state.
+  announce_seq BIGINT NOT NULL DEFAULT 0,
+  -- Highest message sequence retention has already removed. A cursor at or
+  -- below it cannot be served completely, and the reader is told so instead of
+  -- silently receiving a gap.
+  retention_floor_seq BIGINT NOT NULL DEFAULT 0,
+
+  message_retention_days INTEGER NOT NULL DEFAULT 90,
+  instance_retention_days INTEGER NOT NULL DEFAULT 30,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT channels_settings_pkey PRIMARY KEY (organization_id, project_id, id),
+  CONSTRAINT channels_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT channels_settings_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN channels_settings.id IS '@access: confidential';
+COMMENT ON COLUMN channels_settings.organization_id IS '@access: confidential';
+COMMENT ON COLUMN channels_settings.project_id IS 'Project that owns these Channels settings and cursor allocators.
+@access: confidential';
+COMMENT ON COLUMN channels_settings.enabled IS '@access: confidential';
+COMMENT ON COLUMN channels_settings.message_seq IS 'Commit-ordered message sequence allocator.
+@access: confidential';
+COMMENT ON COLUMN channels_settings.announce_seq IS '@access: confidential';
+COMMENT ON COLUMN channels_settings.retention_floor_seq IS '@access: confidential';
+COMMENT ON COLUMN channels_settings.message_retention_days IS '@access: confidential';
+COMMENT ON COLUMN channels_settings.instance_retention_days IS '@access: confidential';
+COMMENT ON COLUMN channels_settings.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_settings.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS channels_settings_organization_id_project_id_key
+  ON channels_settings (organization_id, project_id);
+
+CREATE INDEX IF NOT EXISTS channels_settings_project_id_idx
+  ON channels_settings (project_id);
+
+-- Per-identity overrides of the project's native Channels permissions.
+-- An exception never grants organization membership and never grants
+-- administration; it only narrows or widens connect and read-all.
+CREATE TABLE IF NOT EXISTS channels_access_exceptions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  subject_id TEXT NOT NULL CHECK (subject_id <> '' AND CHAR_LENGTH(subject_id) <= 255),
+
+  can_connect boolean NOT NULL DEFAULT false,
+  can_read_all boolean NOT NULL DEFAULT false,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT channels_access_exceptions_pkey PRIMARY KEY (organization_id, project_id, id),
+  CONSTRAINT channels_access_exceptions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT channels_access_exceptions_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN channels_access_exceptions.id IS '@access: confidential';
+COMMENT ON COLUMN channels_access_exceptions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN channels_access_exceptions.project_id IS '@access: confidential';
+COMMENT ON COLUMN channels_access_exceptions.subject_id IS 'Control Plane user identity the exception applies to.
+@access: confidential-pii';
+COMMENT ON COLUMN channels_access_exceptions.can_connect IS '@access: confidential';
+COMMENT ON COLUMN channels_access_exceptions.can_read_all IS '@access: confidential';
+COMMENT ON COLUMN channels_access_exceptions.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_access_exceptions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN channels_access_exceptions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN channels_access_exceptions.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS channels_access_exceptions_subject_key
+  ON channels_access_exceptions (organization_id, project_id, subject_id)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS channels_access_exceptions_project_id_idx
+  ON channels_access_exceptions (project_id);
+
+-- A leased endpoint of an existing identity. Instances are not principals: the
+-- parent identity carries every permission. Rows outlive their lease so a
+-- conversation can still name whoever spoke in it.
+CREATE TABLE IF NOT EXISTS channels_instances (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  subject_id TEXT NOT NULL CHECK (subject_id <> '' AND CHAR_LENGTH(subject_id) <= 255),
+
+  label TEXT NOT NULL DEFAULT '' CHECK (CHAR_LENGTH(label) <= 128),
+  note TEXT NOT NULL DEFAULT '' CHECK (CHAR_LENGTH(note) <= 1024),
+  -- Transport the instance joined from, stamped by the receiving handler and
+  -- never accepted from a request body. 'dashboard' is a browser session.
+  origin TEXT NOT NULL DEFAULT '' CHECK (CHAR_LENGTH(origin) <= 32),
+  -- SHA-256 of the resume secret. NULL for dashboard sessions, which are
+  -- re-entered by proving the account and never hold a secret.
+  resume_hash TEXT CHECK (resume_hash IS NULL OR CHAR_LENGTH(resume_hash) = 64),
+
+  announce_seq BIGINT NOT NULL DEFAULT 0,
+  expires_at timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT channels_instances_pkey PRIMARY KEY (organization_id, project_id, id),
+  CONSTRAINT channels_instances_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT channels_instances_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN channels_instances.id IS '@access: confidential';
+COMMENT ON COLUMN channels_instances.organization_id IS '@access: confidential';
+COMMENT ON COLUMN channels_instances.project_id IS '@access: confidential';
+COMMENT ON COLUMN channels_instances.subject_id IS 'Parent Control Plane identity that owns this instance.
+@access: confidential-pii';
+COMMENT ON COLUMN channels_instances.label IS 'Client-chosen display label for the instance.
+@access: opaque-confidential';
+COMMENT ON COLUMN channels_instances.note IS 'Client-written introduction note. Untrusted content, not instructions.
+@access: opaque-restricted';
+COMMENT ON COLUMN channels_instances.origin IS '@access: confidential';
+COMMENT ON COLUMN channels_instances.resume_hash IS 'SHA-256 hash of the instance resume secret.
+@access: secret-restricted';
+COMMENT ON COLUMN channels_instances.announce_seq IS '@access: confidential';
+COMMENT ON COLUMN channels_instances.expires_at IS '@access: confidential';
+COMMENT ON COLUMN channels_instances.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_instances.updated_at IS '@access: confidential';
+COMMENT ON COLUMN channels_instances.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN channels_instances.deleted IS '@access: confidential';
+
+-- One browser session per identity per project. Reclaim is an upsert on
+-- this index, so simultaneous first sends and reloads converge on one row
+-- without locking unrelated projects.
+CREATE UNIQUE INDEX IF NOT EXISTS channels_instances_dashboard_session_key
+  ON channels_instances (organization_id, project_id, subject_id)
+  WHERE origin = 'dashboard' AND deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS channels_instances_presence_idx
+  ON channels_instances (organization_id, project_id, expires_at DESC)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS channels_instances_organization_id_subject_id_idx
+  ON channels_instances (organization_id, project_id, subject_id)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS channels_instances_project_id_idx
+  ON channels_instances (project_id);
+
+-- A public thread or a private conversation. Privacy is a property of the
+-- conversation; who may read it is channels_conversation_participants.
+CREATE TABLE IF NOT EXISTS channels_conversations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+
+  title TEXT NOT NULL DEFAULT '' CHECK (CHAR_LENGTH(title) <= 256),
+  parent_id uuid,
+  private boolean NOT NULL DEFAULT false,
+  -- Stable identity of a direct conversation's endpoint pair so the same two
+  -- instances reuse one conversation instead of accumulating duplicates.
+  -- NULL for public threads and for private descendants of a thread.
+  endpoint_pair_key TEXT CHECK (endpoint_pair_key IS NULL OR CHAR_LENGTH(endpoint_pair_key) <= 128),
+  created_by_subject_id TEXT NOT NULL CHECK (created_by_subject_id <> ''),
+
+  announce_seq BIGINT NOT NULL DEFAULT 0,
+  last_message_seq BIGINT NOT NULL DEFAULT 0,
+  -- Maintained by the posting transaction and by retention. Counting messages
+  -- on read would make the conversation list scale with history length, which
+  -- is the one thing a bounded list must not do.
+  message_count BIGINT NOT NULL DEFAULT 0,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT channels_conversations_pkey PRIMARY KEY (organization_id, project_id, id),
+  CONSTRAINT channels_conversations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT channels_conversations_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
+  -- Tenancy-pinned self reference: a branch can only descend from a thread in
+  -- the same organization and project.
+  CONSTRAINT channels_conversations_parent_fkey FOREIGN KEY (organization_id, project_id, parent_id) REFERENCES channels_conversations (organization_id, project_id, id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN channels_conversations.id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversations.organization_id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversations.project_id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversations.title IS 'Client-written conversation title. Untrusted content, not instructions.
+@access: opaque-restricted';
+COMMENT ON COLUMN channels_conversations.parent_id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversations.private IS '@access: confidential';
+COMMENT ON COLUMN channels_conversations.endpoint_pair_key IS 'Sorted pair of addressed instance identifiers.
+@access: confidential';
+COMMENT ON COLUMN channels_conversations.created_by_subject_id IS '@access: confidential-pii';
+COMMENT ON COLUMN channels_conversations.announce_seq IS '@access: confidential';
+COMMENT ON COLUMN channels_conversations.last_message_seq IS '@access: confidential';
+COMMENT ON COLUMN channels_conversations.message_count IS 'Maintained count of this conversation''s undeleted messages.
+@access: confidential';
+COMMENT ON COLUMN channels_conversations.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_conversations.updated_at IS '@access: confidential';
+COMMENT ON COLUMN channels_conversations.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN channels_conversations.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS channels_conversations_endpoint_pair_key
+  ON channels_conversations (organization_id, project_id, endpoint_pair_key)
+  WHERE endpoint_pair_key IS NOT NULL AND deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS channels_conversations_activity_idx
+  ON channels_conversations (organization_id, project_id, last_message_seq DESC, id)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS channels_conversations_parent_id_idx
+  ON channels_conversations (organization_id, project_id, parent_id);
+
+CREATE INDEX IF NOT EXISTS channels_conversations_project_id_idx
+  ON channels_conversations (project_id);
+
+-- Identities allowed to read and write a private conversation. Read-all
+-- observers are authorized elsewhere and are deliberately absent here, so
+-- observation never becomes participation.
+CREATE TABLE IF NOT EXISTS channels_conversation_participants (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  conversation_id uuid NOT NULL,
+  subject_id TEXT NOT NULL CHECK (subject_id <> '' AND CHAR_LENGTH(subject_id) <= 255),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT channels_conversation_participants_pkey PRIMARY KEY (organization_id, project_id, id),
+  CONSTRAINT channels_conversation_participants_conversation_fkey FOREIGN KEY (organization_id, project_id, conversation_id) REFERENCES channels_conversations (organization_id, project_id, id) ON DELETE SET NULL,
+  CONSTRAINT channels_conversation_participants_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN channels_conversation_participants.id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversation_participants.organization_id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversation_participants.project_id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversation_participants.conversation_id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversation_participants.subject_id IS '@access: confidential-pii';
+COMMENT ON COLUMN channels_conversation_participants.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_conversation_participants.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS channels_participants_conversation_subject_key
+  ON channels_conversation_participants (organization_id, project_id, conversation_id, subject_id);
+
+CREATE INDEX IF NOT EXISTS channels_participants_organization_subject_idx
+  ON channels_conversation_participants (organization_id, project_id, subject_id);
+
+CREATE INDEX IF NOT EXISTS channels_participants_project_id_idx
+  ON channels_conversation_participants (project_id);
+
+-- Instances a private conversation was addressed to. Reads are authorized by
+-- the participant identities above; these rows record the exact endpoints.
+CREATE TABLE IF NOT EXISTS channels_conversation_endpoints (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  conversation_id uuid NOT NULL,
+  instance_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT channels_conversation_endpoints_pkey PRIMARY KEY (organization_id, project_id, id),
+  CONSTRAINT channels_conversation_endpoints_conversation_fkey FOREIGN KEY (organization_id, project_id, conversation_id) REFERENCES channels_conversations (organization_id, project_id, id) ON DELETE SET NULL,
+  CONSTRAINT channels_conversation_endpoints_instance_fkey FOREIGN KEY (organization_id, project_id, instance_id) REFERENCES channels_instances (organization_id, project_id, id) ON DELETE SET NULL,
+  CONSTRAINT channels_conversation_endpoints_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN channels_conversation_endpoints.id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversation_endpoints.organization_id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversation_endpoints.project_id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversation_endpoints.conversation_id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversation_endpoints.instance_id IS '@access: confidential';
+COMMENT ON COLUMN channels_conversation_endpoints.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_conversation_endpoints.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS channels_endpoints_conversation_instance_key
+  ON channels_conversation_endpoints (organization_id, project_id, conversation_id, instance_id);
+
+CREATE INDEX IF NOT EXISTS channels_endpoints_organization_instance_idx
+  ON channels_conversation_endpoints (organization_id, project_id, instance_id);
+
+CREATE INDEX IF NOT EXISTS channels_endpoints_project_id_idx
+  ON channels_conversation_endpoints (project_id);
+
+-- Durable conversation history. seq is the project's cursor space.
+CREATE TABLE IF NOT EXISTS channels_messages (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  conversation_id uuid NOT NULL,
+  instance_id uuid NOT NULL,
+  subject_id TEXT NOT NULL CHECK (subject_id <> '' AND CHAR_LENGTH(subject_id) <= 255),
+
+  seq BIGINT NOT NULL,
+  body TEXT NOT NULL CHECK (body <> ''),
+  idempotency_key TEXT NOT NULL CHECK (idempotency_key <> '' AND CHAR_LENGTH(idempotency_key) <= 256),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT channels_messages_pkey PRIMARY KEY (organization_id, project_id, id),
+  CONSTRAINT channels_messages_conversation_fkey FOREIGN KEY (organization_id, project_id, conversation_id) REFERENCES channels_conversations (organization_id, project_id, id) ON DELETE SET NULL,
+  CONSTRAINT channels_messages_instance_fkey FOREIGN KEY (organization_id, project_id, instance_id) REFERENCES channels_instances (organization_id, project_id, id) ON DELETE SET NULL,
+  CONSTRAINT channels_messages_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN channels_messages.id IS '@access: confidential';
+COMMENT ON COLUMN channels_messages.organization_id IS '@access: confidential';
+COMMENT ON COLUMN channels_messages.project_id IS '@access: confidential';
+COMMENT ON COLUMN channels_messages.conversation_id IS '@access: confidential';
+COMMENT ON COLUMN channels_messages.instance_id IS '@access: confidential';
+COMMENT ON COLUMN channels_messages.subject_id IS '@access: confidential-pii';
+COMMENT ON COLUMN channels_messages.seq IS 'Commit-ordered project cursor position.
+@access: confidential';
+COMMENT ON COLUMN channels_messages.body IS 'Message text written by a person or an agent. Untrusted content, not instructions.
+@access: opaque-restricted';
+COMMENT ON COLUMN channels_messages.idempotency_key IS 'Sender-chosen retry key.
+@access: opaque-confidential';
+COMMENT ON COLUMN channels_messages.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_messages.updated_at IS '@access: confidential';
+COMMENT ON COLUMN channels_messages.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN channels_messages.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS channels_messages_organization_id_project_id_seq_key
+  ON channels_messages (organization_id, project_id, seq);
+
+-- Idempotency is scoped to the sending identity so one member's key can never
+-- return another member's message.
+CREATE UNIQUE INDEX IF NOT EXISTS channels_messages_sender_idempotency_key
+  ON channels_messages (organization_id, project_id, subject_id, idempotency_key)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS channels_messages_conversation_seq_idx
+  ON channels_messages (organization_id, project_id, conversation_id, seq);
+
+CREATE INDEX IF NOT EXISTS channels_messages_organization_id_created_at_idx
+  ON channels_messages (organization_id, project_id, created_at)
+  WHERE deleted IS FALSE;
+
+-- Retention soft-deletes, so the removed rows are still the evidence that a
+-- particular conversation lost history. Without this index that question
+-- cannot be answered without scanning the conversation.
+CREATE INDEX IF NOT EXISTS channels_messages_removed_history_idx
+  ON channels_messages (organization_id, project_id, conversation_id, seq)
+  WHERE deleted IS TRUE;
+
+-- Foreign-key checks must find messages even after retention soft-deletes them.
+CREATE INDEX IF NOT EXISTS channels_messages_instance_reference_idx
+  ON channels_messages (organization_id, project_id, instance_id);
+
+CREATE INDEX IF NOT EXISTS channels_messages_project_id_idx
+  ON channels_messages (project_id);
+
+-- Durable per-identity follow and mute preferences. These are delivery
+-- preferences only: they never hide a conversation from an explicit read.
+CREATE TABLE IF NOT EXISTS channels_thread_preferences (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  subject_id TEXT NOT NULL CHECK (subject_id <> '' AND CHAR_LENGTH(subject_id) <= 255),
+  conversation_id uuid NOT NULL,
+
+  followed boolean NOT NULL DEFAULT false,
+  muted boolean NOT NULL DEFAULT false,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT channels_thread_preferences_pkey PRIMARY KEY (organization_id, project_id, id),
+  CONSTRAINT channels_thread_preferences_conversation_fkey FOREIGN KEY (organization_id, project_id, conversation_id) REFERENCES channels_conversations (organization_id, project_id, id) ON DELETE SET NULL,
+  CONSTRAINT channels_thread_preferences_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN channels_thread_preferences.id IS '@access: confidential';
+COMMENT ON COLUMN channels_thread_preferences.organization_id IS '@access: confidential';
+COMMENT ON COLUMN channels_thread_preferences.project_id IS '@access: confidential';
+COMMENT ON COLUMN channels_thread_preferences.subject_id IS '@access: confidential-pii';
+COMMENT ON COLUMN channels_thread_preferences.conversation_id IS '@access: confidential';
+COMMENT ON COLUMN channels_thread_preferences.followed IS '@access: confidential';
+COMMENT ON COLUMN channels_thread_preferences.muted IS '@access: confidential';
+COMMENT ON COLUMN channels_thread_preferences.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_thread_preferences.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS channels_preferences_subject_conversation_key
+  ON channels_thread_preferences (organization_id, project_id, subject_id, conversation_id);
+
+CREATE INDEX IF NOT EXISTS channels_preferences_conversation_subject_idx
+  ON channels_thread_preferences (organization_id, project_id, conversation_id, subject_id);
+
+CREATE INDEX IF NOT EXISTS channels_preferences_project_id_idx
+  ON channels_thread_preferences (project_id);
+
+-- Channels owns its OAuth registrations, browser challenges, and token families.
+-- Clients and pre-consent challenges are global. Tenant-owned credentials follow
+-- their mandatory grant ownership with CASCADE, never another product's sessions.
+CREATE TABLE IF NOT EXISTS channels_oauth_clients (
+    client_id TEXT PRIMARY KEY,
+    client_name TEXT NOT NULL,
+    redirect_uris TEXT[] NOT NULL,
+    secret_hash TEXT NOT NULL DEFAULT '',
+    token_endpoint_auth_method TEXT NOT NULL DEFAULT 'none',
+    revoked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE TABLE IF NOT EXISTS channels_oauth_grants (
+    id UUID NOT NULL,
+    client_id TEXT NOT NULL REFERENCES channels_oauth_clients (client_id) ON DELETE SET NULL,
+    organization_id TEXT NOT NULL REFERENCES organization_metadata (id) ON DELETE SET NULL,
+    project_id UUID NOT NULL,
+    principal TEXT NOT NULL,
+    resource TEXT NOT NULL,
+    revoked_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (organization_id, project_id, id),
+    FOREIGN KEY (organization_id,project_id) REFERENCES projects (organization_id,id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS channels_oauth_grants_client_idx ON channels_oauth_grants (client_id);
+CREATE INDEX IF NOT EXISTS channels_oauth_grants_identity_idx ON channels_oauth_grants (organization_id,project_id,principal,client_id);
+CREATE INDEX IF NOT EXISTS channels_oauth_grants_expiry_idx ON channels_oauth_grants (expires_at);
+CREATE TABLE IF NOT EXISTS channels_oauth_credentials (
+    token_hash TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    organization_id TEXT NOT NULL,
+    project_id UUID NOT NULL,
+    grant_id UUID NOT NULL,
+    redirect_uri TEXT NOT NULL DEFAULT '',
+    code_challenge TEXT NOT NULL DEFAULT '',
+    used_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (organization_id, project_id, token_hash),
+    FOREIGN KEY (organization_id,project_id,grant_id) REFERENCES channels_oauth_grants (organization_id,project_id,id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS channels_oauth_credentials_grant_idx ON channels_oauth_credentials (organization_id,project_id,grant_id);
+CREATE INDEX IF NOT EXISTS channels_oauth_credentials_expiry_idx ON channels_oauth_credentials (expires_at);
+CREATE TABLE IF NOT EXISTS channels_oauth_access_tokens (
+    jti TEXT NOT NULL,
+    organization_id TEXT NOT NULL,
+    project_id UUID NOT NULL,
+    grant_id UUID NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (organization_id, project_id, jti),
+    FOREIGN KEY (organization_id,project_id,grant_id) REFERENCES channels_oauth_grants (organization_id,project_id,id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS channels_oauth_access_tokens_grant_idx ON channels_oauth_access_tokens (organization_id,project_id,grant_id);
+CREATE INDEX IF NOT EXISTS channels_oauth_access_tokens_expiry_idx ON channels_oauth_access_tokens (expires_at);
+CREATE TABLE IF NOT EXISTS channels_oauth_challenges (
+    id TEXT NOT NULL,
+    organization_id TEXT NOT NULL,
+    project_id UUID NOT NULL,
+    principal TEXT NOT NULL,
+    resource TEXT NOT NULL,
+    browser_hash TEXT NOT NULL,
+    csrf_hash TEXT NOT NULL,
+    client_id TEXT REFERENCES channels_oauth_clients (client_id) ON DELETE SET NULL,
+    redirect_uri TEXT NOT NULL,
+    state TEXT NOT NULL,
+    code_challenge TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (organization_id, project_id, id),
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS channels_oauth_challenges_client_idx ON channels_oauth_challenges (client_id);
+CREATE INDEX IF NOT EXISTS channels_oauth_challenges_expiry_idx ON channels_oauth_challenges (expires_at);
+CREATE INDEX IF NOT EXISTS channels_oauth_clients_unused_idx ON channels_oauth_clients (updated_at);
+COMMENT ON COLUMN channels_oauth_clients.client_id IS '@access: opaque-restricted';
+COMMENT ON COLUMN channels_oauth_clients.client_name IS '@access: opaque-confidential';
+COMMENT ON COLUMN channels_oauth_clients.redirect_uris IS '@access: opaque-restricted';
+COMMENT ON COLUMN channels_oauth_clients.secret_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN channels_oauth_clients.token_endpoint_auth_method IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_clients.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_clients.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_clients.updated_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_grants.id IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_grants.client_id IS '@access: opaque-restricted';
+COMMENT ON COLUMN channels_oauth_grants.organization_id IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_grants.project_id IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_grants.principal IS '@access: confidential-pii';
+COMMENT ON COLUMN channels_oauth_grants.resource IS 'Exact resource URI bound to this grant at authorization.
+@access: confidential';
+COMMENT ON COLUMN channels_oauth_grants.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_grants.expires_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_grants.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_grants.updated_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_credentials.token_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN channels_oauth_credentials.kind IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_credentials.organization_id IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_credentials.project_id IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_credentials.grant_id IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_credentials.redirect_uri IS '@access: opaque-restricted';
+COMMENT ON COLUMN channels_oauth_credentials.code_challenge IS '@access: secret-restricted';
+COMMENT ON COLUMN channels_oauth_credentials.used_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_credentials.expires_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_credentials.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_credentials.updated_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_access_tokens.jti IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_access_tokens.organization_id IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_access_tokens.project_id IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_access_tokens.grant_id IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_access_tokens.expires_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_access_tokens.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_access_tokens.updated_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_challenges.id IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_challenges.organization_id IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_challenges.project_id IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_challenges.principal IS 'Verified user identity bound to this authorization challenge.
+@access: confidential-pii';
+COMMENT ON COLUMN channels_oauth_challenges.resource IS 'Exact resource URI bound to this authorization challenge.
+@access: confidential';
+COMMENT ON COLUMN channels_oauth_challenges.browser_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN channels_oauth_challenges.csrf_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN channels_oauth_challenges.client_id IS '@access: opaque-restricted';
+COMMENT ON COLUMN channels_oauth_challenges.redirect_uri IS '@access: opaque-restricted';
+COMMENT ON COLUMN channels_oauth_challenges.state IS '@access: secret-restricted';
+COMMENT ON COLUMN channels_oauth_challenges.code_challenge IS '@access: secret-restricted';
+COMMENT ON COLUMN channels_oauth_challenges.expires_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_challenges.created_at IS '@access: confidential';
+COMMENT ON COLUMN channels_oauth_challenges.updated_at IS '@access: confidential';
+
 -- One team memory eval run started from the platform-admin dashboard. Runs
 -- are Speakeasy-internal: they score memory tools and models against the
 -- synthetic eval corpus loaded into the demo organization. organization_id
