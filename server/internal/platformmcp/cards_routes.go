@@ -258,7 +258,7 @@ var textOnlyTools = map[string]string{
 	"list_my_mcp_access":                   textOnlyMember,
 	"send_platform_mcp_feedback":           textOnlyNothing,
 	"record_workflow_run":                  textOnlyNothing,
-	"remember":                             textOnlyNothing,
+	"remember":                             textOnlyForModel,
 }
 
 // cardRouteParam fills one {name} route segment. Exact keys are read from
