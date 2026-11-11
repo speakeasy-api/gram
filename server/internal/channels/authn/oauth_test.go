@@ -212,6 +212,7 @@ func TestOAuthSecurity(t *testing.T) {
 	}
 
 	t.Run("consent identifies the signed-in account without exposing its principal ID", func(t *testing.T) {
+		t.Parallel()
 		f := fixture(t)
 		client := f.register(t)
 		email := "member@example.test"
