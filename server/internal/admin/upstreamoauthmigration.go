@@ -77,52 +77,28 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate upstream oauth client associations").LogError(ctx, logger)
 	}
-	selections, err := selectionbackfill.Run(migrationCtx, s.db, selectionbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
+	// Under enforcement a choice is recorded from the auth clients a server
+	// offers, so those are recorded first, and choices only after a run that
+	// recorded every auth client phase: a choice recorded while a server's
+	// OAuth-backed client is missing reads as no-auth, and the auth client
+	// backfill leaves it stale once that client exists. Otherwise choices are
+	// recorded from the associations just written, before the auth clients
+	// that map them.
+	enforced, err := s.productFeatures.IsFeatureEnabledUncached(migrationCtx, organizationID, productfeatures.FeatureUpstreamAuthEnforced)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
+	}
+	var authClients authclientbackfill.Report
+	var authClientsError *string
+	if enforced {
+		authClients, authClientsError = s.recordAuthClients(ctx, migrationCtx, organizationID, true)
+	}
+	selections, err := selectionbackfill.Run(migrationCtx, s.db, selectionbackfill.Options{OrganizationID: organizationID, Apply: !enforced || authClientsError == nil, PageSize: 0})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate upstream oauth client selections").LogError(ctx, logger)
 	}
-	// Typed auth clients last, from the associations just recorded. A failure
-	// here is reported beside the run and never fails the migration above.
-	var authClientsError *string
-	var authClients authclientbackfill.Report
-	enforced, err := s.productFeatures.IsFeatureEnabledUncached(migrationCtx, organizationID, productfeatures.FeatureUpstreamAuthEnforced)
-	if err == nil {
-		authClients, err = authclientbackfill.Run(migrationCtx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: enforced})
-	}
-	switch {
-	case errors.Is(err, authclientbackfill.ErrRunInProgress):
-		logger.WarnContext(ctx, "record typed auth clients", attr.SlogError(err))
-		message := "A typed auth client run is already in progress for this organization; try again when it finishes."
-		authClientsError = &message
-	case err != nil:
-		logger.ErrorContext(ctx, "record typed auth clients", attr.SlogError(err))
-		message := "Recording typed auth clients failed. Run again; the upstream OAuth migration is unaffected."
-		authClientsError = &message
-	case len(authClients.PhaseErrors) > 0:
-		phases := failedPhases(authClients)
-		for _, phase := range phases {
-			logger.ErrorContext(ctx, "record typed auth clients", attr.SlogError(errors.New(authClients.PhaseErrors[phase])), attr.SlogAuthClientBackfillPhase(phase))
-		}
-		message := fmt.Sprintf("Recording typed auth clients failed in %s; the other phases were recorded. Run again; the upstream OAuth migration is unaffected.", strings.Join(phases, ", "))
-		authClientsError = &message
-	}
-	if err == nil {
-		for _, kind := range authclientbackfill.Kinds {
-			counts := authClients.ByKind[kind]
-			logger.InfoContext(ctx, "typed auth clients recorded",
-				attr.SlogAuthClientBackfillKind(string(kind)),
-				attr.SlogAuthClientBackfillDecided(counts.Decided),
-				attr.SlogAuthClientBackfillWritten(counts.Written),
-				attr.SlogAuthClientBackfillRetired(counts.Retired),
-				attr.SlogAuthClientBackfillUnresolved(counts.Unresolved),
-			)
-		}
-		if _, failed := authClients.PhaseErrors[authclientbackfill.PhaseGrants]; !failed {
-			logger.InfoContext(detached, "default auth permissions granted",
-				attr.SlogAuthClientBackfillWritten(authClients.GrantsWritten),
-				attr.SlogAuthClientBackfillAPIKeys(authClients.APIKeysGranted),
-			)
-		}
+	if !enforced {
+		authClients, authClientsError = s.recordAuthClients(ctx, migrationCtx, organizationID, false)
 	}
 	// Profiles decide from the typed auth clients, so they are recorded only
 	// after a run that recorded every auth client phase.
@@ -163,6 +139,56 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 		AuthClientsError:                   authClientsError,
 		Status:                             status,
 	}, nil
+}
+
+// recordAuthClients runs the typed auth client backfill for one migration
+// run. A failure is returned as the message reported beside the run, never as
+// an error, so it does not fail the migration.
+func (s *Service) recordAuthClients(ctx, migrationCtx context.Context, organizationID string, enforced bool) (authclientbackfill.Report, *string) {
+	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
+	var authClientsError *string
+	// Under enforcement the run records no choices after a failure here.
+	rerun := "Run again; the upstream OAuth migration is unaffected."
+	if enforced {
+		rerun = "Run again; credential choices are recorded once every auth client phase succeeds."
+	}
+	authClients, err := authclientbackfill.Run(migrationCtx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: enforced})
+	switch {
+	case errors.Is(err, authclientbackfill.ErrRunInProgress):
+		logger.WarnContext(ctx, "record typed auth clients", attr.SlogError(err))
+		message := "A typed auth client run is already in progress for this organization; try again when it finishes."
+		authClientsError = &message
+	case err != nil:
+		logger.ErrorContext(ctx, "record typed auth clients", attr.SlogError(err))
+		message := "Recording typed auth clients failed. " + rerun
+		authClientsError = &message
+	case len(authClients.PhaseErrors) > 0:
+		phases := failedPhases(authClients)
+		for _, phase := range phases {
+			logger.ErrorContext(ctx, "record typed auth clients", attr.SlogError(errors.New(authClients.PhaseErrors[phase])), attr.SlogAuthClientBackfillPhase(phase))
+		}
+		message := fmt.Sprintf("Recording typed auth clients failed in %s; the other phases were recorded. %s", strings.Join(phases, ", "), rerun)
+		authClientsError = &message
+	}
+	if err == nil {
+		for _, kind := range authclientbackfill.Kinds {
+			counts := authClients.ByKind[kind]
+			logger.InfoContext(ctx, "typed auth clients recorded",
+				attr.SlogAuthClientBackfillKind(string(kind)),
+				attr.SlogAuthClientBackfillDecided(counts.Decided),
+				attr.SlogAuthClientBackfillWritten(counts.Written),
+				attr.SlogAuthClientBackfillRetired(counts.Retired),
+				attr.SlogAuthClientBackfillUnresolved(counts.Unresolved),
+			)
+		}
+		if _, failed := authClients.PhaseErrors[authclientbackfill.PhaseGrants]; !failed {
+			logger.InfoContext(context.WithoutCancel(ctx), "default auth permissions granted",
+				attr.SlogAuthClientBackfillWritten(authClients.GrantsWritten),
+				attr.SlogAuthClientBackfillAPIKeys(authClients.APIKeysGranted),
+			)
+		}
+	}
+	return authClients, authClientsError
 }
 
 // upstreamOAuthMigrationStatus dry-runs both backfills for one organization.
