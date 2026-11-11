@@ -297,6 +297,29 @@ describe("MCP cells", () => {
     expect(mcpAllows(noServer, linear, "view")).toBe(true);
     expect(mcpAllows(noServer, other, "view")).toBe(true);
 
+    // A limited Connect on every server is carried to a server that already
+    // has a narrower one of its own, on top of it.
+    const limited = load([
+      {
+        scope: "mcp:connect",
+        selectors: [
+          mcp("*", { disposition: "read_only" }),
+          mcp("rem", { tool: "x" }),
+        ],
+      },
+    ]);
+    const carried = excludeMcpRow(limited, project, "use", rows);
+    expect(
+      sdkGrantsFromForm(carried, scopes).find((g) => g.scope === "mcp:connect")
+        ?.selectors,
+    ).toEqual(
+      expect.arrayContaining([
+        mcp("rem", { tool: "x" }),
+        mcp("rem", { disposition: "read_only" }),
+      ]),
+    );
+    expect(mcpAllows(carried, github, "use")).toBe(false);
+
     // Connect on a project, taken off one of its servers.
     const connect = load([
       { scope: "mcp:connect", selectors: [mcp("*", { projectId: "p1" })] },

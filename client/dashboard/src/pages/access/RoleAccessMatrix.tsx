@@ -492,7 +492,17 @@ function McpMatrix({
       if (from) {
         // The same level handed down from a wider row can be unticked here:
         // the wider grant is split to leave this row out.
-        const handedDown = from === level;
+        // Only when nothing else would still give the level: View that also
+        // comes from Manage, here or above, has to be taken back there.
+        const alsoCovered = [view, ...ancestors(row)].some((covering) =>
+          LEVELS.some(
+            (other) =>
+              other !== level &&
+              includes(other) &&
+              mcpAllows(grants, covering.row, other),
+          ),
+        );
+        const handedDown = from === level && !alsoCovered;
         return {
           state: "inherited",
           reason: handedDown

@@ -988,6 +988,27 @@ describe("the access grid", () => {
     ).toBe("true");
   });
 
+  it("does not offer to untick View that Manage above would still give", () => {
+    show({
+      ...role,
+      grants: (["mcp:read", "mcp:write"] as const).map((scope) => ({
+        scope,
+        selectors: [
+          { resourceKind: "mcp", resourceId: "*", projectId: "project-a" },
+        ],
+      })),
+    });
+    // Splitting View alone would leave it granted through Manage.
+    const view = screen.getByRole("button", { name: "View GitHub" });
+    expect(view.getAttribute("aria-disabled")).toBe("true");
+    // Manage is what gives both, and it can be unticked.
+    expect(
+      screen
+        .getByRole("button", { name: "Manage GitHub" })
+        .getAttribute("aria-disabled"),
+    ).toBe("false");
+  });
+
   it("unticks a level one server gets from a wider grant by splitting it", () => {
     show({
       ...role,

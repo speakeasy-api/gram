@@ -1094,6 +1094,29 @@ export function denyCountLabel(count: number): string {
 }
 
 /**
+ * Give a row Connect on the tools a limit names, on top of any Connect it
+ * already has: a server limited to two tools keeps them and gains the rest.
+ */
+function addUseLimit(
+  grants: Record<string, RoleGrant>,
+  row: McpRow,
+  limit: ToolLimit,
+): Record<string, RoleGrant> {
+  const own = mcpToolLimit(grants, row);
+  if (own?.kind === "all") return grants;
+  if (!own || limit.kind === "all") return setMcpToolLimit(grants, row, limit);
+  const base = rowSelector(row);
+  const extra: Selector[] =
+    limit.kind === "tools"
+      ? limit.tools.map((tool) => ({ ...base, tool }))
+      : limit.dispositions.map((disposition) => ({ ...base, disposition }));
+  return editFlat(grants, MCP_LEVEL_SCOPE.use, (flat) => ({
+    ...flat,
+    allow: [...flat.allow, ...extra],
+  }));
+}
+
+/**
  * Take one level away from a row that gets it from a wider row. Grants add
  * up, so nothing stored on the row itself could take it away: the wider
  * grant is split instead. A grant on every server becomes one on each other
@@ -1142,9 +1165,7 @@ export function excludeMcpRow(
       }
       for (const server of servers) {
         if (server.projectId !== other.projectId) continue;
-        if (!mcpAllows(next, server, "use")) {
-          next = setMcpToolLimit(next, server, allLimit);
-        }
+        next = addUseLimit(next, server, allLimit);
       }
     }
   }
