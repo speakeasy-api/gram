@@ -89,123 +89,11 @@ const (
 	ScopeVisibilityInternal    = "internal"
 )
 
-var adminScopes = []Scope{
-	ScopeOrgRead,
-	ScopeOrgAdmin,
-	ScopeProjectRead,
-	ScopeProjectWrite,
-	ScopeMCPRead,
-	ScopeMCPWrite,
-	ScopeMCPConnect,
-	ScopeMCPAuth,
-	ScopeEnvironmentRead,
-	ScopeEnvironmentWrite,
-	ScopeSkillRead,
-	ScopeSkillWrite,
-	ScopeAssistantRead,
-	ScopeAssistantWrite,
-	ScopePluginWrite,
-	ScopeAgentRead,
-	ScopeAgentWrite,
-	ScopeAgentAuthorize,
-	ScopeAgentTransfer,
-	// workload:read is a member default (see memberScopes below) so that team
-	// members can view the Access Hub. workload:write remains admin-only:
-	// assigning an agent to a workload is the same delegation as issuing that
-	// agent a credential.
-	ScopeWorkloadRead,
-	ScopeWorkloadWrite,
-	// chat:read and chat:write are intentionally NOT defaults for any system
-	// role: reading other members' session transcripts is sensitive, and
-	// mutating them (rename, feedback, delete) is destructive, so both must be
-	// granted explicitly via a custom role grant. Pinning follows chat:read —
-	// it is a shared project bookmark, not a transcript mutation. Everyone
-	// reads and mutates their own sessions via owner-matching in the chat
-	// handlers regardless. chat:write satisfies chat:read via scopeExpansions,
-	// so a session reviewer who should not be able to delete gets chat:read
-	// alone.
-	//
-	// log:read is likewise NOT a default for any system role: raw tool-call
-	// logs carry tool arguments, results, prompt text, and hook payloads from
-	// every member of a project, so viewing them must be granted explicitly per
-	// project. Neither project:* nor org:admin implies it.
-}
-
-// scopeVisibilityByScope is the source of truth for whether a scope is exposed
-// to clients as a first-class permission or only used internally for storage
-// and evaluation.
-var scopeVisibilityByScope = map[Scope]scopeVisibility{
-	ScopeRoot:                    scopeVisibilityInternal,
-	ScopeOrgRead:                 scopeVisibilityUserVisible,
-	ScopeOrgBlockedRead:          scopeVisibilityInternal,
-	ScopeOrgAdmin:                scopeVisibilityUserVisible,
-	ScopeOrgBlockedAdmin:         scopeVisibilityInternal,
-	ScopeProjectRead:             scopeVisibilityUserVisible,
-	ScopeProjectBlockedRead:      scopeVisibilityInternal,
-	ScopeProjectWrite:            scopeVisibilityUserVisible,
-	ScopeProjectBlockedWrite:     scopeVisibilityInternal,
-	ScopeMCPRead:                 scopeVisibilityUserVisible,
-	ScopeMCPBlockedRead:          scopeVisibilityInternal,
-	ScopeMCPWrite:                scopeVisibilityUserVisible,
-	ScopeMCPBlockedWrite:         scopeVisibilityInternal,
-	ScopeMCPConnect:              scopeVisibilityUserVisible,
-	ScopeMCPBlockedConnect:       scopeVisibilityInternal,
-	ScopeMCPAuth:                 scopeVisibilityUserVisible,
-	ScopeMCPBlockedAuth:          scopeVisibilityInternal,
-	ScopeEnvironmentRead:         scopeVisibilityUserVisible,
-	ScopeEnvironmentBlockedRead:  scopeVisibilityInternal,
-	ScopeEnvironmentWrite:        scopeVisibilityUserVisible,
-	ScopeEnvironmentBlockedWrite: scopeVisibilityInternal,
-	ScopeSkillRead:               scopeVisibilityUserVisible,
-	ScopeSkillBlockedRead:        scopeVisibilityInternal,
-	ScopeSkillWrite:              scopeVisibilityUserVisible,
-	ScopeSkillBlockedWrite:       scopeVisibilityInternal,
-	ScopePluginWrite:             scopeVisibilityUserVisible,
-	ScopePluginBlockedWrite:      scopeVisibilityInternal,
-	ScopeAssistantRead:           scopeVisibilityUserVisible,
-	ScopeAssistantBlockedRead:    scopeVisibilityInternal,
-	ScopeAssistantWrite:          scopeVisibilityUserVisible,
-	ScopeAssistantBlockedWrite:   scopeVisibilityInternal,
-	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
-	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
-	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
-	ScopeChatRead:                scopeVisibilityUserVisible,
-	ScopeChatWrite:               scopeVisibilityUserVisible,
-	ScopeInferenceExecute:        scopeVisibilityUserVisible,
-	ScopeLogRead:                 scopeVisibilityUserVisible,
-	ScopeAgentRead:               scopeVisibilityUserVisible,
-	ScopeAgentWrite:              scopeVisibilityUserVisible,
-	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
-	ScopeAgentTransfer:           scopeVisibilityUserVisible,
-	ScopeWorkloadRead:            scopeVisibilityUserVisible,
-	ScopeWorkloadBlockedRead:     scopeVisibilityInternal,
-	ScopeWorkloadWrite:           scopeVisibilityUserVisible,
-	ScopeWorkloadBlockedWrite:    scopeVisibilityInternal,
-	ScopeOrgDeviceAgentSync:      scopeVisibilityUserVisible,
-	ScopeOrgHooksIngest:          scopeVisibilityUserVisible,
-}
-
-var memberScopes = []Scope{
-	ScopeOrgRead,
-	ScopeProjectRead,
-	ScopeMCPRead,
-	ScopeMCPConnect,
-	ScopeMCPAuth,
-	ScopeSkillRead,
-	ScopeAssistantRead,
-	ScopeWorkloadRead,
-	// environment:read is intentionally NOT a default for members: environment
-	// values include secrets, so viewing them must be granted explicitly via a
-	// custom role. Admins retain environment:read/write via adminScopes.
-	//
-	// Most Observe pages are separately gated on org:admin. The Identities
-	// roster and required-employee-scoped Shadow AI read are project:read
-	// surfaces; identity detail resolution separately requires org:read.
-	//
-	// workload:read is a member default so that team members can view the
-	// Access Hub in preview deployments and development environments.
-	// workload:write remains admin-only since it allows granting machine access.
-}
+// scopeVisibilityByScope says whether a scope is exposed to clients as a
+// first-class permission or only used internally for storage and evaluation.
+// Derived from Model: declared permissions are user-visible, generated blocks
+// and root are internal.
+var scopeVisibilityByScope = Model.deriveScopeVisibility()
 
 func (s Scope) Parts() ScopeParts {
 	resource, action, ok := strings.Cut(string(s), ":")
@@ -244,138 +132,18 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 
 // scopeExpansions maps a checked scope to the other scopes that also satisfy
 // it. For allow scopes, these are higher-privilege scopes. For blocklist
-// scopes, these are broader blocklist scopes. Expansion is non-transitive: list
-// every satisfying scope directly, since Check.expand only walks
-// scopeExpansions[c.Scope] one step.
+// scopes, these are broader blocklist scopes. Expansion is non-transitive: the
+// derivation lists every satisfying scope directly, since Check.expand only
+// walks scopeExpansions[c.Scope] one step.
 //
-// environment:* scopes are independent of project:* in the expansion graph (analogous to
-// mcp:* scopes). Environment checks carry resource_kind="environment" with the project_id
-// as a Dimensions constraint, so they don't share a resource kind with project checks and
-// scope expansion across the boundary would never selector-match. Roles that need
-// environment access must hold environment:read or environment:write explicitly — the
-// system "admin" role does so via SystemRoleGrants.
-//
-// Preserves qstearns' non-escalation rule: project:read does not grant environment access
-// (a generic project-viewer must not gain access to environment values, which include
-// secrets).
-//
-// The mcp:blocked_* scopes are deliberately independent of each other, unlike
-// the other blocklist families. Connecting to a server and administering it
-// are different jobs — an operator who never calls a server's tools may still
-// have to manage it — so "cannot connect" has to be expressible without also
-// meaning "cannot see or manage". Anything that takes a principal off a
-// server entirely writes all three.
-//
-// mcp:connect is satisfied only by an explicit mcp:connect grant (or root).
-// mcp:read and mcp:write do not imply it: viewing or managing a server is not
-// permission to call its tools, so who may connect is decided per server.
-//
-// mcp:auth is independent of every other scope: server access, authoring and
-// administration imply no use of an auth client.
-var scopeExpansions = map[Scope][]Scope{
-	ScopeRoot:                    nil,
-	ScopeOrgRead:                 {ScopeOrgAdmin},
-	ScopeOrgBlockedRead:          nil,
-	ScopeOrgAdmin:                nil,
-	ScopeOrgBlockedAdmin:         {ScopeOrgBlockedRead},
-	ScopeProjectRead:             {ScopeProjectWrite},
-	ScopeProjectBlockedRead:      nil,
-	ScopeProjectWrite:            nil,
-	ScopeProjectBlockedWrite:     {ScopeProjectBlockedRead},
-	ScopeMCPRead:                 {ScopeMCPWrite},
-	ScopeMCPBlockedRead:          nil,
-	ScopeMCPWrite:                nil,
-	ScopeMCPBlockedWrite:         nil,
-	ScopeMCPConnect:              nil,
-	ScopeMCPBlockedConnect:       nil,
-	ScopeMCPAuth:                 nil,
-	ScopeMCPBlockedAuth:          nil,
-	ScopeEnvironmentRead:         {ScopeEnvironmentWrite},
-	ScopeEnvironmentBlockedRead:  nil,
-	ScopeEnvironmentWrite:        nil,
-	ScopeEnvironmentBlockedWrite: {ScopeEnvironmentBlockedRead},
-	ScopeSkillRead:               {ScopeSkillWrite},
-	ScopeSkillBlockedRead:        nil,
-	ScopeSkillWrite:              nil,
-	ScopeSkillBlockedWrite:       {ScopeSkillBlockedRead},
-	ScopePluginWrite:             nil,
-	ScopePluginBlockedWrite:      nil,
-	ScopeAssistantRead:           {ScopeAssistantWrite},
-	ScopeAssistantBlockedRead:    nil,
-	ScopeAssistantWrite:          nil,
-	ScopeAssistantBlockedWrite:   {ScopeAssistantBlockedRead},
-	ScopeRiskPolicyEvaluate:      nil,
-	ScopeRiskPolicyBypass:        nil,
-	ScopeRiskPolicyBlock:         nil,
-	ScopeChatRead:                {ScopeChatWrite},
-	ScopeChatWrite:               nil,
-	ScopeInferenceExecute:        nil,
-	ScopeLogRead:                 nil,
-	ScopeAgentRead:               nil,
-	ScopeAgentWrite:              nil,
-	ScopeAgentAuthorize:          nil,
-	ScopeAgentTransfer:           nil,
-	ScopeWorkloadRead:            {ScopeWorkloadWrite},
-	ScopeWorkloadBlockedRead:     nil,
-	ScopeWorkloadWrite:           nil,
-	ScopeWorkloadBlockedWrite:    {ScopeWorkloadBlockedRead},
-	ScopeOrgDeviceAgentSync:      {ScopeOrgAdmin},
-	ScopeOrgHooksIngest:          {ScopeOrgAdmin},
-}
+// Derived from Model (Implies and Exclusions); see registry_resources.go for why
+// each family relates the way it does.
+var scopeExpansions = Model.deriveScopeExpansions()
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
 // stores exception grants for it. Broader blocklist scopes are handled by
-// scopeExpansions on the blocklist scope itself.
-var scopeExclusions = map[Scope]Scope{
-	ScopeRoot:                    "",
-	ScopeOrgRead:                 ScopeOrgBlockedRead,
-	ScopeOrgBlockedRead:          "",
-	ScopeOrgAdmin:                ScopeOrgBlockedAdmin,
-	ScopeOrgBlockedAdmin:         "",
-	ScopeProjectRead:             ScopeProjectBlockedRead,
-	ScopeProjectBlockedRead:      "",
-	ScopeProjectWrite:            ScopeProjectBlockedWrite,
-	ScopeProjectBlockedWrite:     "",
-	ScopeMCPRead:                 ScopeMCPBlockedRead,
-	ScopeMCPBlockedRead:          "",
-	ScopeMCPWrite:                ScopeMCPBlockedWrite,
-	ScopeMCPBlockedWrite:         "",
-	ScopeMCPConnect:              ScopeMCPBlockedConnect,
-	ScopeMCPBlockedConnect:       "",
-	ScopeMCPAuth:                 ScopeMCPBlockedAuth,
-	ScopeMCPBlockedAuth:          "",
-	ScopeEnvironmentRead:         ScopeEnvironmentBlockedRead,
-	ScopeEnvironmentBlockedRead:  "",
-	ScopeEnvironmentWrite:        ScopeEnvironmentBlockedWrite,
-	ScopeEnvironmentBlockedWrite: "",
-	ScopeSkillRead:               ScopeSkillBlockedRead,
-	ScopeSkillBlockedRead:        "",
-	ScopeSkillWrite:              ScopeSkillBlockedWrite,
-	ScopeSkillBlockedWrite:       "",
-	ScopePluginWrite:             ScopePluginBlockedWrite,
-	ScopePluginBlockedWrite:      "",
-	ScopeAssistantRead:           ScopeAssistantBlockedRead,
-	ScopeAssistantBlockedRead:    "",
-	ScopeAssistantWrite:          ScopeAssistantBlockedWrite,
-	ScopeAssistantBlockedWrite:   "",
-	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
-	ScopeRiskPolicyBypass:        "",
-	ScopeRiskPolicyBlock:         "",
-	ScopeChatRead:                "",
-	ScopeChatWrite:               "",
-	ScopeInferenceExecute:        "",
-	ScopeLogRead:                 "",
-	ScopeAgentRead:               "",
-	ScopeAgentWrite:              "",
-	ScopeAgentAuthorize:          "",
-	ScopeAgentTransfer:           "",
-	ScopeWorkloadRead:            ScopeWorkloadBlockedRead,
-	ScopeWorkloadBlockedRead:     "",
-	ScopeWorkloadWrite:           ScopeWorkloadBlockedWrite,
-	ScopeWorkloadBlockedWrite:    "",
-	ScopeOrgDeviceAgentSync:      "",
-	ScopeOrgHooksIngest:          "",
-}
+// scopeExpansions on the blocklist scope itself. Derived from Model.
+var scopeExclusions = Model.deriveScopeExclusions()
 
 // ExclusionScopeFor returns the scope that stores exception grants for the
 // provided base scope.
