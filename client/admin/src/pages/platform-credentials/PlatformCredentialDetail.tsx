@@ -190,7 +190,7 @@ export function PlatformCredentialDetail(): JSX.Element {
     const confirmed = await confirm({
       title: `Delete ${credential.name}?`,
       description:
-        "Anything that signs through this credential stops working. The server refuses while managed signing keys or live issuer keys still use it.",
+        "Anything that signs through this credential stops working. The server refuses while managed signing keys, organization encryption keys or live issuer keys still use it.",
       confirmLabel: "Delete credential",
       destructive: true,
     });
@@ -255,7 +255,12 @@ export function PlatformCredentialDetail(): JSX.Element {
             </p>
           )}
           <Configuration credential={query.data} />
-          <Verification id={query.data.id} />
+          {/* Keyed on the save time so an edit clears a result that described
+              the identity it replaced. */}
+          <Verification
+            key={query.data.updatedAt.getTime()}
+            id={query.data.id}
+          />
           <Dialog
             open={editing}
             onOpenChange={(open) => {

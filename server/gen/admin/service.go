@@ -406,14 +406,17 @@ type Service interface {
 	// impersonation, or neither for Speakeasy's ambient attached identity.
 	CreateGcpIamPlatformCredential(context.Context, *CreateGcpIamPlatformCredentialPayload) (res *GcpIamCredential, err error)
 	// Replace a platform GCP IAM external credential's name and configuration.
-	// Refused while managed signing keys still sign through it.
+	// Refused while managed signing keys still sign through it. Changing the
+	// impersonated account or wif_* identity is also refused while organization
+	// encryption keys or issuer keys still reach KMS through it; renames stay
+	// allowed.
 	UpdateGcpIamPlatformCredential(context.Context, *UpdateGcpIamPlatformCredentialPayload) (res *GcpIamCredential, err error)
 	// Run a live 'who am I' probe against a platform GCP IAM credential's resolved
 	// identity and report the effective principal. Nothing is persisted.
 	VerifyGcpIamPlatformCredential(context.Context, *VerifyGcpIamPlatformCredentialPayload) (res *VerifyPlatformCredentialResult, err error)
 	// Soft-delete a platform GCP IAM external credential. Refused while managed
-	// signing keys or live issuer keys still sign through it. Deleting a missing
-	// credential succeeds.
+	// signing keys, organization encryption keys or live issuer keys still use it.
+	// Deleting a missing credential succeeds.
 	DeleteGcpIamPlatformCredential(context.Context, *DeleteGcpIamPlatformCredentialPayload) (err error)
 }
 
@@ -2984,7 +2987,7 @@ type ListCustomerUsagePayload struct {
 // ListExternalCredentialsResult is the result type of the admin service
 // listPlatformExternalCredentials method.
 type ListExternalCredentialsResult struct {
-	// The organization's external credentials.
+	// The external credentials.
 	Credentials []*ExternalCredentialSummary
 }
 

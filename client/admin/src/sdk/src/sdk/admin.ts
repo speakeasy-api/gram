@@ -384,7 +384,7 @@ export class Admin extends ClientSDK {
    * deleteGcpIamPlatformCredential admin
    *
    * @remarks
-   * Soft-delete a platform GCP IAM external credential. Refused while managed signing keys or live issuer keys still sign through it. Deleting a missing credential succeeds.
+   * Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.
    */
   async deleteGcpIamPlatformCredential(
     request: RiskIDRequestBody,
@@ -435,7 +435,7 @@ export class Admin extends ClientSDK {
    * updateGcpIamPlatformCredential admin
    *
    * @remarks
-   * Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it.
+   * Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.
    */
   async updateGcpIamPlatformCredential(
     request: UpdateGcpIamPlatformCredentialRequestBody,

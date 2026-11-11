@@ -33158,9 +33158,9 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-platform-external-credentials: List the platform external credentials (organization_id NULL, project_id NULL) that Speakeasy authenticates into a cloud provider with. Optionally filter by provider.`)
 	fmt.Fprintln(os.Stderr, `    get-gcp-iam-platform-credential: Get a platform GCP IAM external credential by ID.`)
 	fmt.Fprintln(os.Stderr, `    create-gcp-iam-platform-credential: Create a platform GCP IAM external credential. Set the wif_* triple for Workload Identity Federation, impersonate_service_account alone for direct impersonation, or neither for Speakeasy's ambient attached identity.`)
-	fmt.Fprintln(os.Stderr, `    update-gcp-iam-platform-credential: Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it.`)
+	fmt.Fprintln(os.Stderr, `    update-gcp-iam-platform-credential: Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.`)
 	fmt.Fprintln(os.Stderr, `    verify-gcp-iam-platform-credential: Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Nothing is persisted.`)
-	fmt.Fprintln(os.Stderr, `    delete-gcp-iam-platform-credential: Soft-delete a platform GCP IAM external credential. Refused while managed signing keys or live issuer keys still sign through it. Deleting a missing credential succeeds.`)
+	fmt.Fprintln(os.Stderr, `    delete-gcp-iam-platform-credential: Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -35496,7 +35496,7 @@ func adminUpdateGcpIamPlatformCredentialUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it.`)
+	fmt.Fprintln(os.Stderr, `Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -35536,7 +35536,7 @@ func adminDeleteGcpIamPlatformCredentialUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Soft-delete a platform GCP IAM external credential. Refused while managed signing keys or live issuer keys still sign through it. Deleting a missing credential succeeds.`)
+	fmt.Fprintln(os.Stderr, `Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

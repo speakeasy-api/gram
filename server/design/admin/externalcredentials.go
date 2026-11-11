@@ -85,7 +85,7 @@ func platformExternalCredentialMethods() {
 
 	Method("updateGcpIamPlatformCredential", func() {
 		declareUnavailable()
-		Description("Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it.")
+		Description("Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the credential to update.", func() {
@@ -134,7 +134,7 @@ func platformExternalCredentialMethods() {
 
 	Method("deleteGcpIamPlatformCredential", func() {
 		declareUnavailable()
-		Description("Soft-delete a platform GCP IAM external credential. Refused while managed signing keys or live issuer keys still sign through it. Deleting a missing credential succeeds.")
+		Description("Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the credential to delete.", func() {

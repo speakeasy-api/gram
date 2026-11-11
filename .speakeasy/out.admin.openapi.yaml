@@ -645,7 +645,7 @@ paths:
       x-speakeasy-name-override: createGcpIamPlatformCredential
   /admin/externalCredentials.deleteGcpIam:
     post:
-      description: Soft-delete a platform GCP IAM external credential. Refused while managed signing keys or live issuer keys still sign through it. Deleting a missing credential succeeds.
+      description: Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.
       operationId: adminDeleteGcpIamPlatformCredential
       requestBody:
         content:
@@ -893,7 +893,7 @@ paths:
       x-speakeasy-name-override: listPlatformExternalCredentials
   /admin/externalCredentials.updateGcpIam:
     post:
-      description: Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it.
+      description: Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.
       operationId: adminUpdateGcpIamPlatformCredential
       requestBody:
         content:
@@ -13489,7 +13489,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ExternalCredentialSummary'
-          description: The organization's external credentials.
+          description: The external credentials.
       required:
         - credentials
     ListGlobalRemoteSessionIssuersResult:

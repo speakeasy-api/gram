@@ -3164,7 +3164,7 @@ type ListCustomDomainsResponseBody struct {
 // ListPlatformExternalCredentialsResponseBody is the type of the "admin"
 // service "listPlatformExternalCredentials" endpoint HTTP response body.
 type ListPlatformExternalCredentialsResponseBody struct {
-	// The organization's external credentials.
+	// The external credentials.
 	Credentials []*ExternalCredentialSummaryResponseBody `form:"credentials" json:"credentials" xml:"credentials"`
 }
 

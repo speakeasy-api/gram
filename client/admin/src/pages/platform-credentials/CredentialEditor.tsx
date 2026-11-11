@@ -176,8 +176,13 @@ export function CredentialEditor({
       {credential && (
         <p className="text-muted-foreground text-sm">
           Saving replaces the whole configuration. The server refuses the change
-          while managed signing keys still sign through this credential.
+          while managed signing keys still sign through this credential, and
+          refuses an identity change while organization encryption keys or
+          issuer keys still use it.
         </p>
+      )}
+      {problem && !error && (
+        <p className="text-muted-foreground text-sm">{problem}</p>
       )}
       {error && (
         <p role="alert" className="text-destructive text-sm">

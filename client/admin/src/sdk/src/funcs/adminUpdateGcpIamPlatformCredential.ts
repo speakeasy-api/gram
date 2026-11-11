@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * updateGcpIamPlatformCredential admin
  *
  * @remarks
- * Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it.
+ * Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.
  */
 export function adminUpdateGcpIamPlatformCredential(
   client: GramCore,

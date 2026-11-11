@@ -49,7 +49,7 @@ export type AdminDeleteGcpIamPlatformCredentialMutationError =
  * deleteGcpIamPlatformCredential admin
  *
  * @remarks
- * Soft-delete a platform GCP IAM external credential. Refused while managed signing keys or live issuer keys still sign through it. Deleting a missing credential succeeds.
+ * Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.
  */
 export function useAdminDeleteGcpIamPlatformCredentialMutation(
   options?: MutationHookOptions<
