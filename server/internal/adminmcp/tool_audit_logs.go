@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
@@ -205,7 +206,8 @@ func registerAuditLogTools(server *mcp.Server, organizations OrganizationReader,
 func parseAuditLogFilter(input ListAuditLogEntriesInput) (admin.OrganizationActivityFilter, error) {
 	filter := admin.OrganizationActivityFilter{
 		OrganizationID: input.OrganizationID, Cursor: conv.PtrEmpty(input.Cursor),
-		ActorID: conv.PtrEmpty(input.ActorID), Action: conv.PtrEmpty(input.Action),
+		ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActorID:   conv.PtrEmpty(input.ActorID), Action: conv.PtrEmpty(input.Action),
 		SubjectType: conv.PtrEmpty(input.SubjectType), SubjectID: conv.PtrEmpty(input.SubjectID),
 		ActingSurface: conv.PtrEmpty(input.ActingSurface), From: nil, To: nil,
 	}
@@ -226,7 +228,7 @@ func parseAuditLogFilter(input ListAuditLogEntriesInput) (admin.OrganizationActi
 		ActingSurface: input.ActingSurface, From: input.From, To: input.To,
 	})
 	if err != nil {
-		return filter, err
+		return filter, fmt.Errorf("parse audit log filter: %w", err)
 	}
 	filter.ProjectID, filter.From, filter.To = parsed.ProjectID, parsed.From, parsed.To
 	return filter, nil

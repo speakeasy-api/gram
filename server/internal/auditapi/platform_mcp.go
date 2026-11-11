@@ -107,6 +107,7 @@ func (s *Service) ListPlatformMCPAuditLogs(ctx context.Context, request Platform
 		Action: conv.ToPGTextEmpty(request.Action), SubjectType: conv.ToPGTextEmpty(request.SubjectType),
 		SubjectID: conv.ToPGTextEmpty(request.SubjectID), SubjectIds: nil,
 		ActingSurface: conv.ToPGTextEmpty(request.ActingSurface), IncludeAssistantEvents: false,
+		IncludeInternalEvents: false, Origin: pgtype.Text{String: "", Valid: false},
 		CreatedFrom: conv.PtrToPGTimestamptz(request.From),
 		CreatedTo:   conv.PtrToPGTimestamptz(request.To),
 	}

@@ -420,8 +420,9 @@ func TestCustomerAuditOversizedEntryContinuation(t *testing.T) {
 	require.ErrorAs(t, err, &refusal)
 	require.Empty(t, output.Entries)
 	var payload struct {
-		Code, Message string
-		NextCursor    string `json:"next_cursor"`
+		Code       string `json:"code"`
+		Message    string `json:"message"`
+		NextCursor string `json:"next_cursor"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &payload))
 	require.Equal(t, "page_too_large", payload.Code)

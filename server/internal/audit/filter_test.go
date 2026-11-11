@@ -8,13 +8,16 @@ import (
 )
 
 func TestParseExactFilter(t *testing.T) {
+	t.Parallel()
 	t.Run("empty", func(t *testing.T) {
+		t.Parallel()
 		got, err := ParseExactFilter(ExactFilter{})
 		if err != nil || got.ProjectID.Valid || got.From != nil || got.To != nil {
 			t.Fatalf("unexpected empty filter: %+v, %v", got, err)
 		}
 	})
 	t.Run("canonical project and offset window", func(t *testing.T) {
+		t.Parallel()
 		input := ExactFilter{
 			ProjectID: "00000000-0000-0000-0000-000000000001",
 			Action:    "future.action", ActingSurface: "future_surface",
@@ -30,6 +33,7 @@ func TestParseExactFilter(t *testing.T) {
 	})
 	for _, field := range []string{"ActorID", "Action", "SubjectType", "SubjectID", "ActingSurface", "From", "To"} {
 		t.Run(field, func(t *testing.T) {
+			t.Parallel()
 			limit := 256
 			if field == "From" || field == "To" {
 				limit = 64

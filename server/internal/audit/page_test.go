@@ -6,6 +6,7 @@ import (
 )
 
 func TestMarshalBoundedPage(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct {
 		name        string
 		value       any
@@ -22,6 +23,7 @@ func TestMarshalBoundedPage(t *testing.T) {
 		{name: "marshal failure", value: make(chan int), limit: 100, encodeError: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := MarshalBoundedPage(tt.value, tt.limit)
 			if errors.Is(err, ErrPageTooLarge) != tt.tooLarge {
 				t.Fatalf("unexpected size error: %v", err)
