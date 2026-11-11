@@ -39,6 +39,10 @@ const (
 	// The hosts are connected but the customer's tailnet has not approved
 	// them to host the service, so clients cannot reach it.
 	NetworkIngressErrorProviderServiceNotApproved = "provider_service_not_approved"
+	// The organization's encryption key is suspended or unreachable, so the
+	// gateway cannot seal or read its secrets. For a customer-managed key the
+	// customer restores access to it.
+	NetworkIngressErrorEncryptionKeyUnavailable = "encryption_key_unavailable"
 )
 
 var (

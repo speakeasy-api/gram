@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"tailscale.com/ipn"
 
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
 )
 
@@ -20,11 +20,11 @@ import (
 const stateStoreTimeout = 10 * time.Second
 
 // PostgresStateStore persists one node's tsnet state in Postgres, encrypted
-// with the application key. It implements ipn.StateStore for a single
+// under the organization's key. It implements ipn.StateStore for a single
 // (ingress, slot) pair.
 type PostgresStateStore struct {
 	db        repo.DBTX
-	enc       *encryption.Client
+	enc       *orgencryption.Encryptor
 	ingressID uuid.UUID
 	orgID     string
 	slot      int32
@@ -33,14 +33,18 @@ type PostgresStateStore struct {
 var _ ipn.StateStore = (*PostgresStateStore)(nil)
 
 // NewPostgresStateStore builds the store for one node identity.
-func NewPostgresStateStore(db repo.DBTX, enc *encryption.Client, ingressID uuid.UUID, orgID string, slot int32) (*PostgresStateStore, error) {
+func NewPostgresStateStore(db repo.DBTX, enc *orgencryption.Service, ingressID uuid.UUID, orgID string, slot int32) (*PostgresStateStore, error) {
 	if db == nil || enc == nil {
-		return nil, errors.New("tailnet state store requires a database and an encryption client")
+		return nil, errors.New("tailnet state store requires a database and organization encryption")
 	}
 	if ingressID == uuid.Nil || orgID == "" || slot < 0 {
 		return nil, errors.New("tailnet state store requires an ingress, organization and slot")
 	}
-	return &PostgresStateStore{db: db, enc: enc, ingressID: ingressID, orgID: orgID, slot: slot}, nil
+	encryptor, err := enc.For(orgID, EncryptionUseCase)
+	if err != nil {
+		return nil, fmt.Errorf("tailnet state store encryption: %w", err)
+	}
+	return &PostgresStateStore{db: db, enc: encryptor, ingressID: ingressID, orgID: orgID, slot: slot}, nil
 }
 
 // ReadState returns the decrypted bytes for id, or ipn.ErrStateNotExist.
@@ -58,11 +62,11 @@ func (s *PostgresStateStore) ReadState(id ipn.StateKey) ([]byte, error) {
 		return nil, fmt.Errorf("read tailnet node state: %w", err)
 	}
 
-	value, err := s.enc.Decrypt(ciphertext)
+	value, err := s.enc.Decrypt(ctx, nodeStateColumn, ciphertext)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt tailnet node state: %w", err)
 	}
-	return []byte(value), nil
+	return value, nil
 }
 
 // WriteState encrypts and upserts bs under id. A nil value deletes the key.
@@ -80,7 +84,7 @@ func (s *PostgresStateStore) WriteState(id ipn.StateKey, bs []byte) error {
 		return nil
 	}
 
-	ciphertext, err := s.enc.Encrypt(bs)
+	ciphertext, err := s.enc.Encrypt(ctx, nodeStateColumn, bs)
 	if err != nil {
 		return fmt.Errorf("encrypt tailnet node state: %w", err)
 	}
@@ -108,11 +112,11 @@ func (s *PostgresStateStore) Registered(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("read tailnet login profiles: %w", err)
 	}
-	raw, err := s.enc.Decrypt(ciphertext)
+	raw, err := s.enc.Decrypt(ctx, nodeStateColumn, ciphertext)
 	if err != nil {
 		return false, fmt.Errorf("decrypt tailnet login profiles: %w", err)
 	}
-	return knownProfilesPresent([]byte(raw))
+	return knownProfilesPresent(raw)
 }
 
 // knownProfilesPresent reports whether the persisted known-profiles document

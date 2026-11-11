@@ -20,8 +20,8 @@ per-ingress attestor pods.
   OAuth client never leaves the control plane.
 - Every 15s each pod lists enabled ingresses for its shard. For each it starts
   a `tsnet.Server` whose `ipn.StateStore` is backed by
-  `network_ingress_node_states` (encrypted with the application key). Restarts
-  reconnect as the same device, so customers never see registration churn.
+  `network_ingress_node_states`. Restarts reconnect as the same device, so
+  customers never see registration churn.
 - The node advertises the service with `ListenService`. Requests arrive over
   tsnet's loopback proxy; the gateway resolves the peer with `WhoIs`, replaces
   every `Tailscale-*` header with the resolved identity and forwards to the
@@ -37,6 +37,26 @@ per-ingress attestor pods.
   shows `provider_service_not_approved` until the customer approves the host
   or fixes `autoApprovers`. Approval is re-checked on every heartbeat, so
   approving or revoking a host takes effect without a restart.
+
+## Encryption
+
+Node state and auth keys are the gateway's most sensitive data: anyone holding
+a node's state can act as that device on the customer's tailnet. Both are
+sealed with organization encryption (`orgencryption`, use case
+`tailscale-gateway-state`), never with the application key, and each value is
+bound to its organization and column.
+
+- The reconciler mints the organization's data key on first use, before it
+  mints any auth key. The gateway only encrypts and decrypts.
+- Both processes need the `GRAM_ORG_ENCRYPTION_*` settings. Without them the
+  reconciler refuses to provision gateway ingresses and the gateway refuses to
+  start; nothing falls back to the application key.
+- When the organization's key is suspended or unreachable, provisioning
+  reports `encryption_key_unavailable` without minting auth keys, and a host
+  whose state cannot be read records `error` instead of starting. For a
+  customer-managed key, the customer restores Speakeasy's access to it.
+- The customer's Tailscale OAuth client (`network_ingresses.credentials_encrypted`)
+  still uses the application key; it predates this package.
 
 ## Which ingresses use it
 
@@ -54,7 +74,9 @@ are deployed; until it is set, gateway ingresses wait as
 
 ## Running locally
 
-The daemon needs a real tailnet, so it is opt-in. Provision an ingress through
+The daemon needs a real tailnet, so it is opt-in. It also needs organization
+encryption, which `./zero` configures (`mise run zero:org-encryption`).
+Provision an ingress through
 the dashboard with the `tag:speakeasy` policy, then set in `mise.local.toml`:
 
 ```toml
