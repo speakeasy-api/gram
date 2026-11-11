@@ -62,10 +62,12 @@ func TestOrganizationUserSessionIssuerMigrateCreatesNoAuthClientForTypedServers(
 }
 
 // A registration still bound to a source issuer that no live server uses was
-// left behind by earlier configuration. Consolidation must not offer it on the
-// target's only server, which never signed in through it. Without a leftover
-// binding the same consolidation changes nothing about that server.
-func TestOrganizationUserSessionIssuerMigrateDoesNotCaptureLeftoverSourceBinding(t *testing.T) {
+// left behind by earlier configuration. Under enforcement consolidation must
+// not offer it on the target's only server, which never signed in through it.
+// Without enforcement the issuer's bindings are what that server serves from,
+// so the binding is captured. Without a leftover binding the same consolidation
+// changes nothing about that server.
+func TestOrganizationUserSessionIssuerMigrateCapturesLeftoverSourceBindingOnlyWithoutEnforcement(t *testing.T) {
 	t.Parallel()
 	for _, enforced := range []bool{false, true} {
 		for _, leftover := range []bool{false, true} {

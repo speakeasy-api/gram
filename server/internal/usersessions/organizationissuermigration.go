@@ -712,7 +712,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list MCP server projects for issuer migration").LogError(ctx, logger)
 	}
-	movedServers := 0
+	movedServerProjects := map[uuid.UUID]bool{}
 	ownerUpdates := []struct {
 		name string
 		fn   func() (int64, error)
@@ -725,7 +725,9 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 			if err := auditHostedIssuerMoves(ctx, dbtx, s.audit, authCtx, moved, source.ID); err != nil {
 				return 0, err
 			}
-			movedServers = len(moved)
+			for _, server := range moved {
+				movedServerProjects[server.ProjectID] = true
+			}
 			return int64(len(moved)), nil
 		}},
 		{name: "meta MCP servers", fn: func() (int64, error) {
@@ -746,7 +748,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		// consumer offers the clients the target bound. A server already on
 		// the target was not configured by this move, and a binding that only
 		// the source held was configured for neither.
-		if movedServers > 0 {
+		if movedServerProjects[projectID] {
 			if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{target.ID}, slices.Concat([]uuid.UUID{}, targetRegistrations)); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "capture MCP server upstream clients").LogError(ctx, logger)
 			}
