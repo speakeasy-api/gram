@@ -27,9 +27,9 @@ INSERT INTO principal_grants
   (organization_id, principal_urn, scope, selectors)
 SELECT @organization_id::text, @principal_urn::text, scope,
        jsonb_build_object(
-         'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read') THEN 'project'
+         'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read', 'channels:connect', 'channels:admin', 'channels:read_all') THEN 'project'
                                ELSE split_part(scope, ':', 1) END,
-         'resource_id', CASE WHEN scope = 'log:read' THEN @project_id::text ELSE '*' END)
+         'resource_id', CASE WHEN scope IN ('log:read', 'channels:connect', 'channels:admin', 'channels:read_all') THEN @project_id::text ELSE '*' END)
 FROM unnest(@scopes::text[]) AS scope;
 
 -- name: RolesInsertRoleAssignment :exec

@@ -18,10 +18,14 @@ const (
 	RuntimeScopeRegistryVersion5 RuntimeScopeRegistryVersion = 5
 
 	RuntimeScopeRegistryVersion6 RuntimeScopeRegistryVersion = 6
-
 	RuntimeScopeRegistryVersion7 RuntimeScopeRegistryVersion = 7
 
-	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion7
+	// RuntimeScopeRegistryVersion8 registers the same scopes as version 7. It
+	// exists for DelegatedPolicyVersion8, whose implication closure no longer
+	// derives mcp:connect from mcp:read or mcp:write.
+	RuntimeScopeRegistryVersion8 RuntimeScopeRegistryVersion = 8
+
+	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion8
 )
 
 // RuntimeScopeLifecycle distinguishes active scope registrations from retained
@@ -129,6 +133,12 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeWorkloadWrite:        activeRuntimeScope(),
 	authz.ScopeWorkloadBlockedWrite: activeRuntimeScope(),
 	authz.ScopeOrgDeviceAgentSync:   safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
+	// Channels scopes govern human messaging, Channels administration and
+	// access to other members' transcripts; agent runtime policy cannot
+	// request them.
+	authz.ScopeChannelsConnect:      activeRuntimeScope(),
+	authz.ScopeChannelsAdmin:        activeRuntimeScope(),
+	authz.ScopeChannelsReadAll:      activeRuntimeScope(),
 	authz.ScopeOrgHooksIngest:       safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
 	scopeMCPApprovalReadTombstone:   retiredRuntimeScope(),
 	scopeMCPApprovalDecideTombstone: retiredRuntimeScope(),

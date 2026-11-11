@@ -1,43 +1,62 @@
-# Slack and GitHub setup integration
+# MCP provider setup
 
-The shared setup flow supports Slack and GitHub in the MCP server details shell. GitHub setup includes organization, OAuth-app and credential steps. Endpoint matching and catalog handoff recognize only the official Slack and GitHub MCP endpoints. The Identity modal remains; only User Identity enters setup. Service Account and Manual retain their paths. Other providers remain outside this integration.
+Read this before changing provider instructions, catalog handoff, or the save/sign-in/test flow for Slack, GitHub, or Salesforce. Use the [implementing-mcp-provider-setup skill](../../../../../../.agents/skills/implementing-mcp-provider-setup/SKILL.md) for scope and approval rules. Extend the existing shell and actions; the current provider ticket and explicit user decisions govern requirements.
 
-## Rollout visibility
+## Owning code
 
-The organization's `providerSetupEnabled` product feature gates the Setup sidebar entry, direct route and catalog handoff. Missing or failed feature reads disable Setup. While the feature is loading, the sidebar and catalog handoff stay hidden and the direct route waits without mounting setup; a disabled route redirects to Overview. Existing installation completion remains available when setup is off.
+| Concern                                                          | Source                                                                                                                           |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Page shell, rollout gate, completion to Overview                 | [ProviderSetupPage.tsx](../../mcp/x/setup/ProviderSetupPage.tsx)                                                                 |
+| Endpoint allowlist, catalog handoff, non-secret progress         | [provider-setup.ts](../../mcp/x/setup/provider-setup.ts)                                                                         |
+| Credential saving, OAuth, testing, stale-operation guards        | [useProviderConnection.ts](../../mcp/x/setup/useProviderConnection.ts)                                                           |
+| Provider steps, invalidation, completion conditions              | [state.ts](./state.ts)                                                                                                           |
+| Provider instructions and connection action rows                 | [ProviderTasks.tsx](./ProviderTasks.tsx), [SalesforceTask.tsx](./SalesforceTask.tsx), [ConnectionTask.tsx](./ConnectionTask.tsx) |
+| Salesforce endpoint mappings, prerequisites, OAuth configuration | [salesforce.ts](./salesforce.ts)                                                                                                 |
+| Backend identity and connection-test contract                    | [SETUP.md](../../../../../../server/internal/remotesessions/SETUP.md)                                                            |
 
-The backend owns the staff-controlled switch and independently refuses connection tests when disabled. Demo defaults remain off. This visibility change adds no API or Platform MCP operation; the existing Command K resource entry still opens Overview, and the route guard also protects remembered setup URLs.
+Read the owning code before editing; this document records safeguards and provider distinctions rather than copying every endpoint or field.
 
-## Backend contract
+## Shared safeguards
 
-The GRW-324 parent supplies the backend and generated SDK contracts. Credential saving uses `remoteSessions.commitServerIdentityConfiguration` with `clientMode: "manual"` and `targetServerOnly: true`. Manual client mode encrypts the supplied secret; existing-client linking does not accept or replace it. Saved configuration exposes the Client ID, callback and scopes, never the secret. The saved form is disabled and uses placeholder dots; Update credentials requires a new secret.
+- `providerSetupEnabled` gates the sidebar, direct route, and catalog handoff. Missing/failed reads fail closed; a loading direct route waits before mounting setup. The backend independently gates connection testing.
+- Catalog handoff applies to User Identity installations. Service Account and Manual retain their existing paths. Setup can also configure an unconfigured supported server: `deriveIdentityMode` can still report `none` before the first client is linked. Installation choice is not a durable identity mode.
+- Save with `remoteSessions.commitServerIdentityConfiguration`, `clientMode: "manual"`, and `targetServerOnly: true`. Preserve dedicated-issuer isolation and fresh target checks. Existing-client linking cannot replace a secret. Read saved configuration through the secret-free association/client queries.
+- Obtain callbacks from the new-client or retained-client API. Replacing credentials requires entering any secret needed by that provider; Salesforce public clients can omit it. Keep secrets and tokens out of browser progress.
+- Sign in through the first-party OAuth route. Returning from the popup is not authorization. The shared action verifies the current user's exact saved grant; the explicit connection test remains a separate action.
+- `testServerConnection` initializes the saved source and lists tools without executing them. Only `ready` with a tool count passes. Keep the generated request body as `testServerConnectionRequestBody` with the exact `mcp_server_id`.
+- App/configuration changes invalidate authorization and test results. Preserve generation checks against stale requests, inline retry/correction actions, and completion gating. Complete setup opens Overview; reopening requires fresh verification. Persist only non-secret choices and navigation.
+- A stored Authorization header conflicts with User Identity testing. Keep this refusal so shared credentials cannot masquerade as the signed-in user's grant.
 
-Sign-in opens the existing first-party OAuth endpoint. Returning from the provider tab triggers `remoteSessions.testServerConnection`; only `ready` with a tool count verifies sign-in. The explicit connection test remains a separate action and never executes tools. The generated request property is `testServerConnectionRequestBody`, serialized as `{ mcp_server_id }` with the ordinary dashboard session.
+## Provider distinctions
 
-Changing apps clears unsaved credentials and authorization/test results. Changing saved Slack permissions revokes every person's grants on the target issuer before updating scopes. Read-only verification rejects broader stored write grants and requires removing the app's existing Slack authorization before retrying. Shared app connections refuse the change and link to identity settings. Continue retries failed permission changes, and cancellation retains the mutation lock until preparation settles. Verification cannot accept a stale result.
+### Slack
 
-Backend failures stay in the relevant action row with retry or correction actions. Complete setup opens Overview. Reopening setup restores choices and saved configuration but requires fresh verification. Session progress contains only non-secret choices and step navigation; credentials, tokens, authorization, connection success and completion are not restored.
+Changing saved permissions revokes the target issuer's users' grants before updating scopes. Read-only verification rejects stored write grants. Shared app connections refuse permission changes and point to identity settings. Keep the preparation lock until permission writes settle, including after cancellation. These operations are Slack-specific.
 
-## Verification
+### GitHub
 
-Focused tests cover Slack and GitHub state invalidation, manifest/callback consistency, saved credential presentation, backend request serialization, inline recovery, cancellation, connection outcomes, GitHub organization validation, both app paths, issuer metadata, first-party sign-in, and exclusion of other providers from setup routing. Browser checks use the actual signed-in local dashboard; controlled API tests do not prove live provider failure recovery.
+Use organization-owned OAuth app settings for new and existing apps, with the actual callback and Device Flow off. GitHub advertises issuer response parameters; Slack does not. Organization approval and SSO are possible recovery instructions, not causes inferred from the backend's bounded errors. Keep GitHub outside Slack's permission-sync and grant-revocation paths.
 
-## Surface assessments
+### Salesforce
 
-Platform MCP intentionally has no new tool: a signed-in person configures one installed server through interactive credential entry and first-party OAuth. Existing connection-status tools retain their own identity contracts; the GRW-324 live diagnostic requires a validated human browser session and excludes agents and API keys.
+Read the current [published Salesforce setup guide](https://www.speakeasy.com/docs/ai-control-plane/guides/salesforce) directly before changing this flow. Cached search excerpts have omitted documented branches and endpoints; their omissions are not evidence that a path is unsupported.
 
-Command K’s existing `useMcpServerCandidates`, registered in `useLauncherCandidates`, opens the canonical Overview for the named server. Setup is an intentionally excluded transient subtask. No new entity or data shape requires a demo seed change; existing GitHub catalog/server examples remain available. No OAuth secrets, grants or fake readiness are seeded. Setup-guide sidebar visibility remains deferred.
+The current guide documents **two app methods** against Salesforce-native MCP endpoints: install Speakeasy’s Salesforce application and finish OAuth with support, or create your own External Client App and configure credentials. Both select production/sandbox and one of seven native servers: the four SObject variants, Data 360, Headless 360 (Beta), or Tableau Next. Keep each server’s prerequisites and endpoint mapping. These app methods do not select different MCP implementations.
 
-## GitHub specifics
+The optional My Domain field accepts the org’s Current My Domain URL or hostname: `<org>.my.salesforce.com` for production, or `<org>--<sandbox>.sandbox.my.salesforce.com` for sandbox. Blank keeps standard login/test hosts. Known Salesforce Setup and Lightning page URLs normalize to their matching login origin when the field loses focus. Developer Edition domains retain `.develop` and use the documented `/develop/` MCP segment. A supplied domain sets both OAuth endpoints and the actual upstream MCP URL using Salesforce’s documented `/d/<domain>/[sandbox/|develop/]<server-name>` format. See [Salesforce server URLs](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/server-urls.html) and [OAuth configuration](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/postman.html). This is separate from the legacy `MCP-Instance-URL` header. Domain edits invalidate credentials and verification; saved scoped URLs restore the domain selection.
 
-The organization opens its organization-owned OAuth app settings. New and existing apps use the same credential form and backend save. Instructions use the real new-client callback, or the retained callback when credentials are already saved, and leave Device Flow off. GitHub’s published OAuth metadata advertises issuer response parameters; Slack does not. GitHub never enters the Slack permission-sync or grant-revocation paths.
+The installation URL comes from the guide and lives in `salesforce.ts`. Installation alone does not finish OAuth. The support page supplies the selected native endpoint and links to the published support instructions; it stops at that handoff without inventing tickets, activation polling, or a completion signal. The own-app path saves Consumer Key-only credentials with native `mcp_api refresh_token` scopes and uses the shared real sign-in/test actions. The guide explicitly says that compatibility is not yet live-verified with the product; report it accordingly.
 
-The backend exposes bounded connection failures rather than distinguishing GitHub organization policy and SSO responses. Inline failures therefore offer the approved organization-approval and SSO instructions as possible corrections without asserting either cause. Credential and app-setting corrections remain available beside them. No simulated success controls are included.
+The older fixed-endpoint registry integration is a distinct server and retains generic configuration. It is not a hosting-mode alternative within the guide’s native setup. Reuse the shared plan, fields, provider instructions, credentials and connection actions rather than copying prototype layouts.
 
-Successful live GitHub authorization requires valid OAuth app credentials; controlled-response tests do not establish provider authorization or SSO success.
+For a single supported catalog Add with setup enabled, retain Identity and optional Guardrails, then open Setup. Org type and native server selection belong on the guided page; install one catalog endpoint initially. Other identity modes, bulk/headless/plugin callers and rollout-disabled installs retain their existing paths.
 
-## Setup entry and identity
+Salesforce progress uses revision 4 and persists only non-secret native server/environment/domain, app-method choices and configuration fingerprints. Older snapshots reset; they cannot restore the removed legacy-integration switch. Preserve configuration invalidation, stale-operation rejection, shared-source safeguards and guarded rollback. Compensation is not an atomic transaction.
 
-Catalog handoff is limited to installations that selected User Identity; Shared credential and Manual keep their existing installation completion paths. The optional Setup entry is a way to configure User Identity, so it is also available on unconfigured official Slack servers. `deriveIdentityMode` reports `none` until a client is linked; requiring `user` would prevent a new Slack installation from saving its first credentials. The installation choice is not stored as an enduring server mode.
+## Verification and related surfaces
 
-Opening Setup does not report a configured or verified connection. A stored Authorization header blocks the backend test with `authorization_header_conflict`, and shared issuer changes require the existing dedicated-issuer flow. These safeguards prevent an existing shared credential from being accepted as a successful User Identity connection.
+Use the colocated provider tests and the setup integration tests beside `ProviderSetupPage.tsx` and `useProviderConnection.ts`. Cover changed endpoint mappings, credential requirements, invalidation, failed-save retry, stale results, and completion gating; spot-check Slack/GitHub when shared actions change. Inspect affected states in the local dashboard through `gram-playwright-cli`, including a narrow viewport.
+
+Report mocked/controlled checks separately from live provider authorization and authenticated tool discovery. Record run results, account-access gaps, and catalog publication status in the PR or ticket rather than treating them as permanent documentation here.
+
+Platform MCP reuses existing management operations; interactive credential entry and this browser-session-only probe add no agent tool. Command K's registered `useMcpServerCandidates` opens canonical Overview; Setup is an intentionally excluded transient subtask. No new stored data shape requires a demo-seed change, and OAuth credentials/grants/readiness are not seeded. Reassess these decisions if the workflow, API, resources, or permissions change.

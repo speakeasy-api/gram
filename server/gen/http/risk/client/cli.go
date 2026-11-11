@@ -1761,6 +1761,31 @@ func BuildCreateRiskPolicyBypassRequestPayload(riskCreateRiskPolicyBypassRequest
 	return v, nil
 }
 
+// BuildGetRiskPolicyBypassRequestTargetPayload builds the payload for the risk
+// getRiskPolicyBypassRequestTarget endpoint from CLI flags.
+func BuildGetRiskPolicyBypassRequestTargetPayload(riskGetRiskPolicyBypassRequestTargetBody string, riskGetRiskPolicyBypassRequestTargetSessionToken string) (*risk.GetRiskPolicyBypassRequestTargetPayload, error) {
+	var err error
+	var body GetRiskPolicyBypassRequestTargetRequestBody
+	{
+		err = json.Unmarshal([]byte(riskGetRiskPolicyBypassRequestTargetBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"request_token\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskPolicyBypassRequestTargetSessionToken != "" {
+			sessionToken = &riskGetRiskPolicyBypassRequestTargetSessionToken
+		}
+	}
+	v := &risk.GetRiskPolicyBypassRequestTargetPayload{
+		RequestToken: body.RequestToken,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildAcknowledgeRiskPolicyChallengePayload builds the payload for the risk
 // acknowledgeRiskPolicyChallenge endpoint from CLI flags.
 func BuildAcknowledgeRiskPolicyChallengePayload(riskAcknowledgeRiskPolicyChallengeBody string, riskAcknowledgeRiskPolicyChallengeSessionToken string) (*risk.AcknowledgeRiskPolicyChallengePayload, error) {

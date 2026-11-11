@@ -4,20 +4,27 @@ import { useReducer } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { initialState, reduce } from "./state";
+import { initialState, reduce, type Action } from "./state";
 import { SetupContext } from "./setup-context";
 import { ProviderTask } from "./ProviderTasks";
 
+const callback = vi.hoisted(() => ({
+  data: { callbackUrl: "https://current.example/callback" },
+  isError: false,
+  refetch: vi.fn(),
+}));
 vi.mock(
   "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js",
   () => ({
-    useNewRemoteSessionClientCallbackUrl: () => ({
-      data: { callbackUrl: "https://current.example/callback" },
-      isError: false,
-    }),
+    useNewRemoteSessionClientCallbackUrl: () => callback,
   }),
 );
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  callback.data.callbackUrl = "https://current.example/callback";
+  callback.isError = false;
+  callback.refetch.mockClear();
+});
 function SavedCredentials({ provider }: { provider: "slack" | "github" }) {
   const [s, dispatch] = useReducer(reduce, {
     ...initialState(provider),
@@ -192,3 +199,285 @@ it.each(["all", "read"])(
     );
   },
 );
+
+function SalesforceFixture({
+  step,
+  integration = "native",
+  path = "own",
+  salesforceServer = "sobject-reads",
+  salesforceDomain = "",
+  saved = false,
+  savedTokenEndpointAuthMethod,
+}: {
+  step: string;
+  integration?: string;
+  path?: string;
+  salesforceServer?: string;
+  salesforceDomain?: string;
+  saved?: boolean;
+  savedTokenEndpointAuthMethod?: string;
+}) {
+  const [s, dispatch] = useReducer(reduce, {
+    ...initialState("salesforce"),
+    step,
+    saved,
+    values: {
+      ...initialState("salesforce").values,
+      integration,
+      path,
+      salesforceServer,
+      salesforceDomain,
+    },
+  });
+  return (
+    <SetupContext
+      value={{
+        s,
+        dispatch,
+        live: connectionFixture(dispatch, { savedTokenEndpointAuthMethod }),
+      }}
+    >
+      <ProviderTask serverName="Salesforce" />
+      <button onClick={() => dispatch({ type: "next" })}>Continue</button>
+    </SetupContext>
+  );
+}
+it("offers the documented app methods, org types and seven native servers", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="choices" />);
+  expect(screen.getByRole("radio", { name: "Production" })).toBeDefined();
+  expect(screen.getByRole("radio", { name: "Sandbox" })).toBeDefined();
+  expect(
+    screen.getAllByRole("option").map((option) => option.textContent),
+  ).toEqual([
+    "SObject Reads",
+    "SObject Mutations",
+    "SObject Deletes",
+    "SObject All",
+    "Data 360",
+    "Headless 360 (Beta)",
+    "Tableau Next",
+  ]);
+  expect(
+    screen.queryByRole("group", { name: "Salesforce connection" }),
+  ).toBeNull();
+  expect(screen.getByRole("group", { name: "Setup method" })).toBeDefined();
+  expect(screen.getByRole("radio", { name: "Use your own app" })).toBeDefined();
+  expect(
+    screen.getByRole("radio", { name: "Use Speakeasy’s app" }),
+  ).toBeDefined();
+  expect(screen.queryByLabelText("Salesforce instance URL")).toBeNull();
+  await user.selectOptions(
+    screen.getByLabelText("Salesforce server"),
+    "sobject-mutations",
+  );
+  await user.click(screen.getByText("Sandbox", { exact: true }));
+  await user.click(screen.getByText("View selected endpoint"));
+  expect(
+    screen.getByText(
+      "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-mutations",
+    ),
+  ).toBeDefined();
+});
+it("reuses shared app registration controls for the own-app instructions", () => {
+  render(<SalesforceFixture step="app" />);
+  expect(screen.getByText("New External Client App")).toBeDefined();
+  expect(screen.getByRole("radiogroup", { name: "OAuth app" })).toBeDefined();
+  expect(screen.queryByText("Use Speakeasy’s app")).toBeNull();
+});
+it("validates My Domain before opening the app setup in that org", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="salesforce-org" />);
+  const input = screen.getByLabelText("Salesforce Domain (optional)");
+  await user.type(input, "example.salesforce.com.evil.test");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen.getByText(/Enter your production org’s Current My Domain URL/),
+  ).toBeDefined();
+  await user.clear(input);
+  await user.type(input, "https://example.my.salesforce.com/");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen.getByRole("link", { name: "Open Salesforce" }).getAttribute("href"),
+  ).toBe("https://example.my.salesforce.com");
+});
+it("corrects a pasted Developer Edition Setup URL in the domain field", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="salesforce-org" />);
+  const input = screen.getByLabelText("Salesforce Domain (optional)");
+  await user.click(input);
+  await user.paste(
+    "https://example-dev-ed.develop.my.salesforce-setup.com/lightning/setup/SetupOneHome/home",
+  );
+  await user.tab();
+  expect(input).toHaveProperty(
+    "value",
+    "https://example-dev-ed.develop.my.salesforce.com",
+  );
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen.getByRole("link", { name: "Open Salesforce" }).getAttribute("href"),
+  ).toBe("https://example-dev-ed.develop.my.salesforce.com");
+});
+it("keeps standard production login when My Domain is blank", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="salesforce-org" />);
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen.getByRole("link", { name: "Open Salesforce" }).getAttribute("href"),
+  ).toBe("https://login.salesforce.com");
+});
+it.each(["app", "install"])(
+  "offers domain correction for an invalid Salesforce domain on %s",
+  async (step) => {
+    const user = userEvent.setup();
+    render(
+      <SalesforceFixture
+        step={step}
+        path={step === "install" ? "support" : "own"}
+        salesforceDomain="example--uat.sandbox.my.salesforce.com"
+      />,
+    );
+    const label =
+      step === "install" ? "Open Salesforce installation" : "Open Salesforce";
+    expect(screen.getByRole("button", { name: label })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Review Salesforce domain" }),
+    );
+    expect(
+      screen.getByLabelText("Salesforce Domain (optional)"),
+    ).toHaveProperty("value", "example--uat.sandbox.my.salesforce.com");
+  },
+);
+it("uses the real Salesforce callback and native scopes", () => {
+  render(<SalesforceFixture step="oauth" />);
+  expect(screen.getByLabelText("Callback URL")).toHaveProperty(
+    "value",
+    "https://current.example/callback",
+  );
+  expect(screen.getByText("Access MCP servers (mcp_api)")).toBeDefined();
+  expect(
+    screen.getByText("Perform requests at any time (refresh_token)"),
+  ).toBeDefined();
+});
+it("shows only the documented Consumer Key credential", () => {
+  render(<SalesforceFixture step="credentials" />);
+  expect(screen.getByLabelText("Consumer Key")).toBeDefined();
+  expect(screen.queryByLabelText(/Client Secret/)).toBeNull();
+});
+it("shows invalid SObject selection from credentials and offers correction", async () => {
+  const user = userEvent.setup();
+  render(
+    <SalesforceFixture step="credentials" salesforceServer="unsupported" />,
+  );
+  await user.type(screen.getByLabelText("Consumer Key"), "consumer-key");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen.getByText("Choose a documented Salesforce server and environment."),
+  ).toBeDefined();
+  await user.click(
+    screen.getByRole("button", { name: "Review connection choices" }),
+  );
+  expect(screen.getByLabelText("Salesforce server")).toBeDefined();
+  expect(screen.queryByLabelText("Consumer Key")).toBeNull();
+});
+it.each([
+  ["salesforce", "oauth", "callback URL"],
+  ["github", "app", "authorization callback URL"],
+  ["slack", "app", "redirect URL"],
+] as const)(
+  "shows callback loading, failure and retry consistently for %s",
+  async (provider, step, label) => {
+    callback.data.callbackUrl = "";
+    const user = userEvent.setup();
+    const s = { ...initialState(provider), step };
+    const dispatch = vi.fn<(action: Action) => void>();
+    const task = (
+      <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
+        <ProviderTask serverName="Demo" />
+      </SetupContext>
+    );
+    const view = render(task);
+    expect(screen.getByText(`Loading ${label}…`)).toBeDefined();
+    callback.isError = true;
+    view.rerender(
+      <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
+        <ProviderTask serverName="Demo" />
+      </SetupContext>,
+    );
+    expect(screen.getByText(`Couldn’t load the ${label}.`)).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(callback.refetch).toHaveBeenCalledOnce();
+  },
+);
+
+it.each([
+  ["github", "GitHub", "permission to manage OAuth apps"],
+  ["slack", "Slack", "permission to manage an app"],
+  ["salesforce", "Salesforce", "Salesforce System Administrator access"],
+] as const)(
+  "uses the shared setup-plan card with %s content",
+  (provider, name, requirement) => {
+    const s = { ...initialState(provider), step: "begin" };
+    const dispatch = vi.fn<(action: Action) => void>();
+    render(
+      <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
+        <ProviderTask serverName={name} />
+      </SetupContext>,
+    );
+    const heading = screen.getByRole("heading", {
+      name: `Let’s connect ${name} to Speakeasy.`,
+    });
+    expect(heading).toBeDefined();
+    expect(screen.getByText(requirement, { exact: false })).toBeDefined();
+    if (provider === "salesforce") {
+      expect(
+        screen.getByText("create your own External Client App", {
+          exact: false,
+        }),
+      ).toBeDefined();
+      expect(
+        screen.queryByText("Using an existing app or an IP allowlist?"),
+      ).toBeNull();
+      expect(screen.queryByText("Organization approval and SSO")).toBeNull();
+    }
+  },
+);
+
+it("renders the published installation link and support handoff details", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="choices" />);
+  await user.click(screen.getByText("Sandbox", { exact: true }));
+  await user.click(screen.getByText("Use Speakeasy’s app", { exact: true }));
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen
+      .getByRole("link", { name: "Open Salesforce installation" })
+      .getAttribute("href"),
+  ).toBe(
+    "https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2",
+  );
+  expect(
+    screen.getByText(/Installation alone does not complete OAuth/),
+  ).toBeDefined();
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen
+      .getByRole("link", { name: "Read support instructions" })
+      .getAttribute("href"),
+  ).toBe(
+    "https://www.speakeasy.com/docs/ai-control-plane/guides/salesforce#contact-speakeasy-support",
+  );
+  expect(screen.getByLabelText("Selected MCP endpoint")).toHaveProperty(
+    "value",
+    "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-reads",
+  );
+  expect(
+    screen.getByText(/Your next step is with Speakeasy support/),
+  ).toBeDefined();
+  expect(screen.queryByLabelText("Consumer Key")).toBeNull();
+});

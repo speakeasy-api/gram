@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 )
 
@@ -19,15 +20,20 @@ func chatMetadataRegistrar(t *testing.T, reader chatMetadataReader) (*Registrar,
 	return registrar, service
 }
 
-func TestListChatsToolDeclaresBothAudiencesAndAdminAuthorization(t *testing.T) {
+// Every member is admitted: each one has their own and their agents' chats to
+// list, and chat:read widens the listing at call time rather than at discovery.
+func TestListChatsToolDeclaresBothAudiencesAndMemberAuthorization(t *testing.T) {
 	t.Parallel()
 
 	registrar, _ := chatMetadataRegistrar(t, &recordingChatReader{rows: nil, params: nil, err: nil, countParams: nil, count: 0})
 	descriptor := descriptorByName(t, registrar, listChatsToolName)
 	require.Equal(t, bothAudiences, descriptor.Meta.Audiences)
-	require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
+	require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
+	require.Empty(t, descriptor.Meta.DiscoveryScopes, "a member with no grants still lists their own chats")
+	require.True(t, externalToolDiscoverable([]authz.Grant{}, true, registrationServicePrincipal(), descriptor.Meta))
 	require.Equal(t, ProjectScopeDefaultable, descriptor.Meta.ProjectScope)
 	require.Contains(t, descriptor.Description, "metadata only")
+	require.Contains(t, descriptor.Description, "chat:read on the project widens this")
 	require.Contains(t, descriptor.Description, "no titles, messages, prompts, tool inputs or outputs, or raw identities")
 
 	// The schema is closed and carries the project selectors the assistant
@@ -90,7 +96,7 @@ func TestListChatsToolMapsRefusals(t *testing.T) {
 	_, err := descriptor.Invoke(ctx, json.RawMessage(`{"cursor":"stale"}`))
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
-	require.JSONEq(t, `{"code":"not_found","message":"That cursor or person reference is not available here. List the chats again with the same filters and use a value from the new result."}`, refusal.Payload)
+	require.JSONEq(t, `{"code":"not_found","message":"That cursor or person reference is not available here. List the chats again with the same filters and use a value from the new result. Without chat:read a person reference can only name the caller."}`, refusal.Payload)
 
 	_, err = descriptor.Invoke(ctx, json.RawMessage(`{"user_reference":"stale"}`))
 	require.ErrorAs(t, err, &refusal)
