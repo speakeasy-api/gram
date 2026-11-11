@@ -12,8 +12,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
@@ -94,4 +98,78 @@ func TestConsentValidationTimeoutStillDeletesMintedSession(t *testing.T) {
 	require.Equal(t, "unknown", session.ValidationStatus.String)
 	require.Equal(t, fx.name+" did not answer in time", session.ValidationReason.String)
 	require.Equal(t, map[string]int64{"unknown": 1}, validationCounts(t, fx.reader))
+}
+
+// Legacy direct Verify scopes ambiguity checks to the target server's bindings.
+func TestConsentValidationLegacyDirectServerScopesAmbiguousClients(t *testing.T) {
+	t.Parallel()
+	for _, relevant := range []bool{false, true} {
+		name := "unrelated"
+		if relevant {
+			name = "relevant"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			prefix := "validate-legacy-" + name
+			ctx, fx := seedStandaloneValidationFixture(t, prefix)
+			projectID, orgID := consentTestTenant(t, ctx)
+			_, err := productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+				OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced),
+			})
+			require.NoError(t, err)
+			_, err = productfeaturesrepo.New(fx.ti.conn).DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{
+				OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced),
+			})
+			require.NoError(t, err)
+			fx.ti.service.ReloadAuthEnforcement()
+
+			associate := func(serverID, clientID uuid.UUID) {
+				t.Helper()
+				rows, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+					OrganizationID: orgID, ProjectID: projectID, McpServerID: serverID, RemoteSessionClientID: clientID,
+				})
+				require.NoError(t, err)
+				require.Equal(t, int64(1), rows)
+			}
+			associate(fx.endpoint.McpServerID.UUID, fx.clientID)
+			first := fx.clientID
+			boundServer := fx.endpoint.McpServerID.UUID
+			resource := fx.member.url
+			var unrelated *validationMember
+			if !relevant {
+				unrelated = newValidationMember(t)
+				resource = unrelated.url
+				boundServer = createPublicRemoteMcpServer(t, ctx, fx.ti.conn, projectID, fx.endpoint.UserSessionIssuerID, prefix+"-sibling", resource)
+				first = createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+				associate(boundServer, first)
+				insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, first, fx.subject, "token-other", resource)
+			}
+			providerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, first)
+			duplicate, err := remotesessionsrepo.New(fx.ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+				ProjectID: conv.ToNullUUID(projectID), OrganizationID: conv.ToPGText(orgID), RemoteSessionIssuerID: providerID,
+				ClientID: prefix + "-duplicate", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			})
+			require.NoError(t, err)
+			require.NoError(t, remotesessionsrepo.New(fx.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+				RemoteSessionClientID: duplicate.ID, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID,
+			}))
+			associate(boundServer, duplicate.ID)
+			insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate.ID, fx.subject, "token-duplicate", resource)
+
+			if relevant {
+				_, err := postValidate(t, fx, fx.clientID)
+				var shareable *oops.ShareableError
+				require.ErrorAs(t, err, &shareable)
+				require.Equal(t, oops.CodeUnexpected, shareable.Code)
+				require.Empty(t, fx.member.drain(), "ambiguous relevant credentials must not be probed")
+			} else {
+				requireValidated(t, fx)
+				requireProbe(t, fx.member.drain(), "token-"+prefix, true, true)
+				_, err := postValidate(t, fx, first)
+				require.Error(t, err, "an unrelated card cannot be verified on this endpoint")
+				require.Empty(t, fx.member.drain(), "an unrelated card must not probe the target")
+				require.Empty(t, unrelated.drain(), "an unrelated card must not probe its own backend")
+			}
+		})
+	}
 }
