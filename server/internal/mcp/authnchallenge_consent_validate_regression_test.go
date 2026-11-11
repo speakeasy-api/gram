@@ -166,7 +166,9 @@ func TestConsentValidationLegacyDirectServerScopesAmbiguousClients(t *testing.T)
 				requireValidated(t, fx)
 				requireProbe(t, fx.member.drain(), "token-"+prefix, true, true)
 				_, err := postValidate(t, fx, first)
-				require.Error(t, err, "an unrelated card cannot be verified on this endpoint")
+				var refused *oops.ShareableError
+				require.ErrorAs(t, err, &refused)
+				require.Equal(t, oops.CodeBadRequest, refused.Code, "an unrelated card cannot be verified on this endpoint")
 				require.Empty(t, fx.member.drain(), "an unrelated card must not probe the target")
 				require.Empty(t, unrelated.drain(), "an unrelated card must not probe its own backend")
 			}
