@@ -16934,7 +16934,8 @@ CREATE TABLE IF NOT EXISTS memory_eval_runs (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
-  CONSTRAINT memory_eval_runs_pkey PRIMARY KEY (id)
+  CONSTRAINT memory_eval_runs_pkey PRIMARY KEY (id),
+  CONSTRAINT memory_eval_runs_cost_usd_check CHECK (cost_usd IS NULL OR cost_usd >= 0)
 );
 
 COMMENT ON COLUMN memory_eval_runs.id IS '@access: confidential';
@@ -16950,8 +16951,8 @@ COMMENT ON COLUMN memory_eval_runs.error IS 'Why a failed run stopped; may quote
 @access: restricted';
 COMMENT ON COLUMN memory_eval_runs.cost_usd IS 'Model spend the run reported across preparation, answers and grading.
 @access: confidential';
-COMMENT ON COLUMN memory_eval_runs.requested_by IS 'User ID of the Speakeasy staff member who started the run.
-@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.requested_by IS 'Email of the Speakeasy staff member who started the run.
+@access: confidential-pii';
 COMMENT ON COLUMN memory_eval_runs.started_at IS '@access: confidential';
 COMMENT ON COLUMN memory_eval_runs.finished_at IS '@access: confidential';
 COMMENT ON COLUMN memory_eval_runs.created_at IS '@access: confidential';
