@@ -427,6 +427,28 @@
       "agent_eligible": false
     },
     {
+      "slug": "memory:read",
+      "label": "Team memory",
+      "description": "Search and recall the project's team memory: masked session summaries, memos and digests from every member. The built-in Admin role holds it by default; other roles need an explicit grant.",
+      "resource_type": "project",
+      "category": "session",
+      "sensitive": false,
+      "sub_scopes": [],
+      "visibility": "user_visible",
+      "agent_eligible": false
+    },
+    {
+      "slug": "memory:write",
+      "label": "Team memos",
+      "description": "Save memos to the project's team memory, attributed to you.",
+      "resource_type": "project",
+      "category": "session",
+      "sensitive": false,
+      "sub_scopes": ["memory:read"],
+      "visibility": "user_visible",
+      "agent_eligible": false
+    },
+    {
       "slug": "inference:execute",
       "label": "Run inference",
       "description": "Run model inference without accessing chat transcripts.",
