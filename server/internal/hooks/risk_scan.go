@@ -197,9 +197,21 @@ func renderUserBlockReason(scanResult *risk.ScanResult, auditReason string) stri
 		return analysisUnavailableReason(scanResult)
 	}
 	if scanResult.UserMessage != nil && strings.TrimSpace(*scanResult.UserMessage) != "" {
-		return renderPolicyPlaceholders(*scanResult.UserMessage, scanResult)
+		return renderPolicyPlaceholders(*scanResult.UserMessage, scanResult, maskBlockedMatch(scanResult.MatchedValue))
 	}
 	return auditReason
+}
+
+// maskBlockedMatch is %{match} in a block message. A block exists to keep the
+// value out of the session, so the message names it without repeating it:
+// the first and last four characters, or nothing for a short value. Repeating
+// a live credential also makes Claude's apps drop the whole message.
+func maskBlockedMatch(v string) string {
+	r := []rune(v)
+	if len(r) <= 12 {
+		return "…"
+	}
+	return string(r[:4]) + "…" + string(r[len(r)-4:])
 }
 
 // renderPolicyUserMessage applies a policy's user_message override to a deny
@@ -309,7 +321,7 @@ func renderWarnBody(scanResult *risk.ScanResult) string {
 	}
 
 	if scanResult.UserMessage != nil && strings.TrimSpace(*scanResult.UserMessage) != "" {
-		return renderPolicyPlaceholders(*scanResult.UserMessage, scanResult)
+		return renderPolicyPlaceholders(*scanResult.UserMessage, scanResult, match)
 	}
 	if match != "" {
 		return fmt.Sprintf("Your request matched policy %q: potentially harmful or sensitive content %q identified as %s. Do you wish to continue?",
@@ -320,15 +332,16 @@ func renderWarnBody(scanResult *risk.ScanResult) string {
 }
 
 // renderPolicyPlaceholders fills a policy's custom message template:
-// %{match} (the matched value, truncated), %{entity}, %{policy} and %{rule}.
-// Warn, block and quarantine messages all accept the same placeholders.
-func renderPolicyPlaceholders(message string, scanResult *risk.ScanResult) string {
+// %{match} (the caller's rendering of the matched value), %{entity},
+// %{policy} and %{rule}. Warn, block and quarantine messages all accept the
+// same placeholders.
+func renderPolicyPlaceholders(message string, scanResult *risk.ScanResult, match string) string {
 	entity := scanResult.Entity
 	if entity == "" {
 		entity = scanResult.RuleID
 	}
 	return strings.NewReplacer(
-		"%{match}", truncateForWarn(scanResult.MatchedValue),
+		"%{match}", match,
 		"%{entity}", entity,
 		"%{policy}", scanResult.PolicyName,
 		"%{rule}", scanResult.RuleID,
