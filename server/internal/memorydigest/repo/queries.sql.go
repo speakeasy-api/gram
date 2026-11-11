@@ -653,6 +653,7 @@ WHERE c.project_id = $1
     WHERE d.project_id = c.project_id
       AND d.level = 'day'
       AND d.chat_ids @> ARRAY[c.id]
+      AND d.period_start = (c.summary_generated_at AT TIME ZONE 'UTC')::date
       AND cardinality(d.chat_ids) = (
         SELECT count(*)
         FROM chats dc
@@ -695,6 +696,8 @@ type ListRecallChatsRow struct {
 // yet, newest first so @row_limit keeps the most recent. A stale day digest
 // (one that folded a source no longer eligible) is hidden from recall, so its
 // still-eligible sources come back here until the next run rebuilds the day.
+// A day digest covers a chat only for the day of its current summary, so a
+// summary regenerated on a later day comes back until that day is digested.
 func (q *Queries) ListRecallChats(ctx context.Context, arg ListRecallChatsParams) ([]ListRecallChatsRow, error) {
 	rows, err := q.db.Query(ctx, listRecallChats,
 		arg.ProjectID,

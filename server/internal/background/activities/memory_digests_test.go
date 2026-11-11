@@ -324,6 +324,52 @@ func TestMemoryDigests_ProjectIDsScopeTheRun(t *testing.T) {
 	require.NotContains(t, stub.allPrompts(), "other project summary")
 }
 
+// A day digest covers a chat only for the day of the summary it folded. When
+// the chat's summary is regenerated on a later day, the new summary comes back
+// to recall instead of hiding behind the old day's digest.
+func TestMemoryDigests_RegeneratedSummaryReturnsToRecall(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "memory_digests_regenerated")
+	require.NoError(t, err)
+	ctx := t.Context()
+
+	enabled := newDigestProject(t, conn)
+	require.NoError(t, memorygate.Set(ctx, conn, enabled.orgID, true))
+
+	day := digestDay(2026, 10, 27)
+	at := day.Add(10 * time.Hour)
+	chatID := enabled.addChat(t, conn, "picked queue X", at, true)
+
+	job := activities.NewMemoryDigests(testenv.NewLogger(t), conn, &digestCompletionStub{})
+	now := day.AddDate(0, 0, 2).Add(time.Hour)
+	result, err := job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "day", Now: now})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Built)
+
+	since := pgtype.Timestamptz{Time: day, Valid: true, InfinityModifier: pgtype.Finite}
+	recallChatIDs := func() []uuid.UUID {
+		rows, err := repo.New(conn).ListRecallChats(ctx, repo.ListRecallChatsParams{ProjectID: enabled.projectID, OrganizationID: enabled.orgID, Since: since, RowLimit: 50})
+		require.NoError(t, err)
+		ids := make([]uuid.UUID, 0, len(rows))
+		for _, row := range rows {
+			ids = append(ids, row.ID)
+		}
+		return ids
+	}
+	require.NotContains(t, recallChatIDs(), chatID)
+
+	err = memorydigesttest.New(conn).SetChatMemorySummaryFixture(ctx, memorydigesttest.SetChatMemorySummaryFixtureParams{
+		Summary:            pgtype.Text{String: "moved to queue Y", Valid: true},
+		SummaryGeneratedAt: pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
+		SummaryRedacted:    true,
+		MemoryExcludedAt:   pgtype.Timestamptz{},
+		ID:                 chatID,
+	})
+	require.NoError(t, err)
+	require.Contains(t, recallChatIDs(), chatID)
+}
+
 func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
 	t.Parallel()
 
