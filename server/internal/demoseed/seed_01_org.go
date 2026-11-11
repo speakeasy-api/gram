@@ -115,7 +115,7 @@ func (s *seeder) orgMetadata(ctx context.Context) error {
 func (s *seeder) orgPurge(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
-	return runOrgSteps([]orgStep{
+	if err := runOrgSteps([]orgStep{
 		// Killswitch aggregates retain canonical MCP server keys in immutable
 		// snapshots. Clear every org-scoped aggregate and replay receipt before
 		// the referenced servers/toolsets, including rows created by local
@@ -288,6 +288,13 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete sigint custom signals", func() error {
 			return s.q.OrgDeleteSigintCustomSignals(ctx, org)
 		}},
+	}); err != nil {
+		return err
+	}
+	if err := runOrgSteps(s.channelsPurgeSteps(ctx)); err != nil {
+		return err
+	}
+	return runOrgSteps([]orgStep{
 		{"delete projects", func() error { return s.q.OrgDeleteProjects(ctx, org) }},
 	})
 }
@@ -399,7 +406,7 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 		return fmt.Errorf("insert demo hooks_fail_open feature: %w", err)
 	}
 
-	for _, u := range demoUsers {
+	for _, u := range demoMembers() {
 		id := s.userID(u.handle)
 		if err := s.q.OrgUpsertUser(ctx, repo.OrgUpsertUserParams{
 			ID:          id,
@@ -440,7 +447,7 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
-	for i, u := range demoUsers {
+	for i, u := range demoMembers() {
 		id := s.userID(u.handle)
 		if err := s.q.OrgInsertMembership(ctx, repo.OrgInsertMembershipParams{
 			OrgID:              org,
@@ -457,7 +464,8 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 	// Existing fictional owners exercise name/initials rendering without
 	// adding external avatar dependencies. The two active release agents
 	// receive only project/server-scoped direct grants alongside their inert
-	// attachments.
+	// attachments. The fifth belongs to the agent owner persona, whose only
+	// way into its sessions and tool logs is owning it.
 	if err := s.q.OrgInsertManagedAgents(ctx, repo.OrgInsertManagedAgentsParams{
 		Agent1: s.det("managed-agent-1"),
 		OrgID:  org,
@@ -467,6 +475,8 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 		Agent3: s.det("managed-agent-3"),
 		Owner3: s.userID(demoUsers[2].handle),
 		Agent4: s.det("managed-agent-4"),
+		Agent5: s.ownerAgentID(),
+		Owner5: s.userID(demoAgentOwner.handle),
 	}); err != nil {
 		return fmt.Errorf("insert demo managed agents: %w", err)
 	}
@@ -487,7 +497,7 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 	if adminURN == "" || memberURN == "" {
 		return nil
 	}
-	for _, u := range demoUsers {
+	for _, u := range demoMembers() {
 		id := s.userID(u.handle)
 		role := memberURN
 		if id == s.userID("lucas") || id == s.userID("priya") {

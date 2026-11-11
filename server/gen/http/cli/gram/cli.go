@@ -193,7 +193,7 @@ func UsageCommands() []string {
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (begin-binding-refresh|complete-binding-refresh|list-bindings|attach-binding|detach-binding|test-server-connection|commit-server-identity-configuration|get-server-identity-impact|list-server-client-associations|detach-server-client-association|list-remote-sessions|count-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|reveal-risk-result-payload|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|list-risk-presets|suggest-risk-policy|compile-expr|get-risk-user-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|list-risk-policy-approvals|get-risk-policy-approval|decide-risk-policy-approval|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|reveal-risk-result-payload|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|list-risk-presets|suggest-risk-policy|compile-expr|get-risk-user-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|create-risk-policy-bypass-request|get-risk-policy-bypass-request-target|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|list-risk-policy-approvals|get-risk-policy-approval|decide-risk-policy-approval|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"sigint (create-signal|get-signal|list-signals|update-signal|delete-signal|create-sensor|get-sensor|list-sensors|update-sensor|delete-sensor)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions|link|unlink|list-links)",
@@ -208,7 +208,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -3423,6 +3423,10 @@ func ParseEndpoint(
 		riskCreateRiskPolicyBypassRequestSessionTokenFlag = riskCreateRiskPolicyBypassRequestFlags.String("session-token", "", "")
 		riskCreateRiskPolicyBypassRequestApikeyTokenFlag  = riskCreateRiskPolicyBypassRequestFlags.String("apikey-token", "", "")
 
+		riskGetRiskPolicyBypassRequestTargetFlags            = flag.NewFlagSet("get-risk-policy-bypass-request-target", flag.ExitOnError)
+		riskGetRiskPolicyBypassRequestTargetBodyFlag         = riskGetRiskPolicyBypassRequestTargetFlags.String("body", "REQUIRED", "")
+		riskGetRiskPolicyBypassRequestTargetSessionTokenFlag = riskGetRiskPolicyBypassRequestTargetFlags.String("session-token", "", "")
+
 		riskAcknowledgeRiskPolicyChallengeFlags            = flag.NewFlagSet("acknowledge-risk-policy-challenge", flag.ExitOnError)
 		riskAcknowledgeRiskPolicyChallengeBodyFlag         = riskAcknowledgeRiskPolicyChallengeFlags.String("body", "REQUIRED", "")
 		riskAcknowledgeRiskPolicyChallengeSessionTokenFlag = riskAcknowledgeRiskPolicyChallengeFlags.String("session-token", "", "")
@@ -5004,6 +5008,30 @@ func ParseEndpoint(
 		adminListCustomDomainsDNSRoutingMethodFlag  = adminListCustomDomainsFlags.String("dns-routing-method", "", "")
 		adminListCustomDomainsAdminSessionTokenFlag = adminListCustomDomainsFlags.String("admin-session-token", "", "")
 
+		adminListPlatformExternalCredentialsFlags                 = flag.NewFlagSet("list-platform-external-credentials", flag.ExitOnError)
+		adminListPlatformExternalCredentialsProviderFlag          = adminListPlatformExternalCredentialsFlags.String("provider", "", "")
+		adminListPlatformExternalCredentialsAdminSessionTokenFlag = adminListPlatformExternalCredentialsFlags.String("admin-session-token", "", "")
+
+		adminGetGcpIamPlatformCredentialFlags                 = flag.NewFlagSet("get-gcp-iam-platform-credential", flag.ExitOnError)
+		adminGetGcpIamPlatformCredentialIDFlag                = adminGetGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
+		adminGetGcpIamPlatformCredentialAdminSessionTokenFlag = adminGetGcpIamPlatformCredentialFlags.String("admin-session-token", "", "")
+
+		adminCreateGcpIamPlatformCredentialFlags                 = flag.NewFlagSet("create-gcp-iam-platform-credential", flag.ExitOnError)
+		adminCreateGcpIamPlatformCredentialBodyFlag              = adminCreateGcpIamPlatformCredentialFlags.String("body", "REQUIRED", "")
+		adminCreateGcpIamPlatformCredentialAdminSessionTokenFlag = adminCreateGcpIamPlatformCredentialFlags.String("admin-session-token", "", "")
+
+		adminUpdateGcpIamPlatformCredentialFlags                 = flag.NewFlagSet("update-gcp-iam-platform-credential", flag.ExitOnError)
+		adminUpdateGcpIamPlatformCredentialBodyFlag              = adminUpdateGcpIamPlatformCredentialFlags.String("body", "REQUIRED", "")
+		adminUpdateGcpIamPlatformCredentialAdminSessionTokenFlag = adminUpdateGcpIamPlatformCredentialFlags.String("admin-session-token", "", "")
+
+		adminVerifyGcpIamPlatformCredentialFlags                 = flag.NewFlagSet("verify-gcp-iam-platform-credential", flag.ExitOnError)
+		adminVerifyGcpIamPlatformCredentialBodyFlag              = adminVerifyGcpIamPlatformCredentialFlags.String("body", "REQUIRED", "")
+		adminVerifyGcpIamPlatformCredentialAdminSessionTokenFlag = adminVerifyGcpIamPlatformCredentialFlags.String("admin-session-token", "", "")
+
+		adminDeleteGcpIamPlatformCredentialFlags                 = flag.NewFlagSet("delete-gcp-iam-platform-credential", flag.ExitOnError)
+		adminDeleteGcpIamPlatformCredentialBodyFlag              = adminDeleteGcpIamPlatformCredentialFlags.String("body", "REQUIRED", "")
+		adminDeleteGcpIamPlatformCredentialAdminSessionTokenFlag = adminDeleteGcpIamPlatformCredentialFlags.String("admin-session-token", "", "")
+
 		adminGetMemoryEvalOptionsFlags                 = flag.NewFlagSet("get-memory-eval-options", flag.ExitOnError)
 		adminGetMemoryEvalOptionsAdminSessionTokenFlag = adminGetMemoryEvalOptionsFlags.String("admin-session-token", "", "")
 
@@ -6358,6 +6386,7 @@ func ParseEndpoint(
 	riskGetRiskMcpServerCountsFlags.Usage = riskGetRiskMcpServerCountsUsage
 	riskGetRiskAnalysisStatusFlags.Usage = riskGetRiskAnalysisStatusUsage
 	riskCreateRiskPolicyBypassRequestFlags.Usage = riskCreateRiskPolicyBypassRequestUsage
+	riskGetRiskPolicyBypassRequestTargetFlags.Usage = riskGetRiskPolicyBypassRequestTargetUsage
 	riskAcknowledgeRiskPolicyChallengeFlags.Usage = riskAcknowledgeRiskPolicyChallengeUsage
 	riskGetRiskPolicyChallengeFlags.Usage = riskGetRiskPolicyChallengeUsage
 	riskDeclineRiskPolicyChallengeFlags.Usage = riskDeclineRiskPolicyChallengeUsage
@@ -6686,6 +6715,12 @@ func ParseEndpoint(
 	adminGetProjectRedeployPreviewFlags.Usage = adminGetProjectRedeployPreviewUsage
 	adminRedeployProjectFlags.Usage = adminRedeployProjectUsage
 	adminListCustomDomainsFlags.Usage = adminListCustomDomainsUsage
+	adminListPlatformExternalCredentialsFlags.Usage = adminListPlatformExternalCredentialsUsage
+	adminGetGcpIamPlatformCredentialFlags.Usage = adminGetGcpIamPlatformCredentialUsage
+	adminCreateGcpIamPlatformCredentialFlags.Usage = adminCreateGcpIamPlatformCredentialUsage
+	adminUpdateGcpIamPlatformCredentialFlags.Usage = adminUpdateGcpIamPlatformCredentialUsage
+	adminVerifyGcpIamPlatformCredentialFlags.Usage = adminVerifyGcpIamPlatformCredentialUsage
+	adminDeleteGcpIamPlatformCredentialFlags.Usage = adminDeleteGcpIamPlatformCredentialUsage
 	adminGetMemoryEvalOptionsFlags.Usage = adminGetMemoryEvalOptionsUsage
 	adminListMemoryEvalRunsFlags.Usage = adminListMemoryEvalRunsUsage
 	adminGetMemoryEvalRunFlags.Usage = adminGetMemoryEvalRunUsage
@@ -9085,6 +9120,9 @@ func ParseEndpoint(
 			case "create-risk-policy-bypass-request":
 				epf = riskCreateRiskPolicyBypassRequestFlags
 
+			case "get-risk-policy-bypass-request-target":
+				epf = riskGetRiskPolicyBypassRequestTargetFlags
+
 			case "acknowledge-risk-policy-challenge":
 				epf = riskAcknowledgeRiskPolicyChallengeFlags
 
@@ -10038,6 +10076,24 @@ func ParseEndpoint(
 
 			case "list-custom-domains":
 				epf = adminListCustomDomainsFlags
+
+			case "list-platform-external-credentials":
+				epf = adminListPlatformExternalCredentialsFlags
+
+			case "get-gcp-iam-platform-credential":
+				epf = adminGetGcpIamPlatformCredentialFlags
+
+			case "create-gcp-iam-platform-credential":
+				epf = adminCreateGcpIamPlatformCredentialFlags
+
+			case "update-gcp-iam-platform-credential":
+				epf = adminUpdateGcpIamPlatformCredentialFlags
+
+			case "verify-gcp-iam-platform-credential":
+				epf = adminVerifyGcpIamPlatformCredentialFlags
+
+			case "delete-gcp-iam-platform-credential":
+				epf = adminDeleteGcpIamPlatformCredentialFlags
 
 			case "get-memory-eval-options":
 				epf = adminGetMemoryEvalOptionsFlags
@@ -12507,6 +12563,9 @@ func ParseEndpoint(
 			case "create-risk-policy-bypass-request":
 				endpoint = c.CreateRiskPolicyBypassRequest()
 				data, err = riskc.BuildCreateRiskPolicyBypassRequestPayload(*riskCreateRiskPolicyBypassRequestBodyFlag, *riskCreateRiskPolicyBypassRequestSessionTokenFlag, *riskCreateRiskPolicyBypassRequestApikeyTokenFlag)
+			case "get-risk-policy-bypass-request-target":
+				endpoint = c.GetRiskPolicyBypassRequestTarget()
+				data, err = riskc.BuildGetRiskPolicyBypassRequestTargetPayload(*riskGetRiskPolicyBypassRequestTargetBodyFlag, *riskGetRiskPolicyBypassRequestTargetSessionTokenFlag)
 			case "acknowledge-risk-policy-challenge":
 				endpoint = c.AcknowledgeRiskPolicyChallenge()
 				data, err = riskc.BuildAcknowledgeRiskPolicyChallengePayload(*riskAcknowledgeRiskPolicyChallengeBodyFlag, *riskAcknowledgeRiskPolicyChallengeSessionTokenFlag)
@@ -13463,6 +13522,24 @@ func ParseEndpoint(
 			case "list-custom-domains":
 				endpoint = c.ListCustomDomains()
 				data, err = adminc.BuildListCustomDomainsPayload(*adminListCustomDomainsOrganizationIDFlag, *adminListCustomDomainsDNSRoutingMethodFlag, *adminListCustomDomainsAdminSessionTokenFlag)
+			case "list-platform-external-credentials":
+				endpoint = c.ListPlatformExternalCredentials()
+				data, err = adminc.BuildListPlatformExternalCredentialsPayload(*adminListPlatformExternalCredentialsProviderFlag, *adminListPlatformExternalCredentialsAdminSessionTokenFlag)
+			case "get-gcp-iam-platform-credential":
+				endpoint = c.GetGcpIamPlatformCredential()
+				data, err = adminc.BuildGetGcpIamPlatformCredentialPayload(*adminGetGcpIamPlatformCredentialIDFlag, *adminGetGcpIamPlatformCredentialAdminSessionTokenFlag)
+			case "create-gcp-iam-platform-credential":
+				endpoint = c.CreateGcpIamPlatformCredential()
+				data, err = adminc.BuildCreateGcpIamPlatformCredentialPayload(*adminCreateGcpIamPlatformCredentialBodyFlag, *adminCreateGcpIamPlatformCredentialAdminSessionTokenFlag)
+			case "update-gcp-iam-platform-credential":
+				endpoint = c.UpdateGcpIamPlatformCredential()
+				data, err = adminc.BuildUpdateGcpIamPlatformCredentialPayload(*adminUpdateGcpIamPlatformCredentialBodyFlag, *adminUpdateGcpIamPlatformCredentialAdminSessionTokenFlag)
+			case "verify-gcp-iam-platform-credential":
+				endpoint = c.VerifyGcpIamPlatformCredential()
+				data, err = adminc.BuildVerifyGcpIamPlatformCredentialPayload(*adminVerifyGcpIamPlatformCredentialBodyFlag, *adminVerifyGcpIamPlatformCredentialAdminSessionTokenFlag)
+			case "delete-gcp-iam-platform-credential":
+				endpoint = c.DeleteGcpIamPlatformCredential()
+				data, err = adminc.BuildDeleteGcpIamPlatformCredentialPayload(*adminDeleteGcpIamPlatformCredentialBodyFlag, *adminDeleteGcpIamPlatformCredentialAdminSessionTokenFlag)
 			case "get-memory-eval-options":
 				endpoint = c.GetMemoryEvalOptions()
 				data, err = adminc.BuildGetMemoryEvalOptionsPayload(*adminGetMemoryEvalOptionsAdminSessionTokenFlag)
@@ -27502,6 +27579,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    get-risk-mcp-server-counts: Get live finding counts per concrete MCP server over a window, largest first. Powers the MCP server filter pickers on Risk Events and Watchdog. Served from the ClickHouse findings store.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-analysis-status: Get the run state of the project's risk analysis coordinator, which produces the findings behind the Watchdog page. Analysis is signal-driven, not scheduled: the coordinator wakes within about 30 seconds of new chat traffic and never runs on a timer, so a quiet project can legitimately go a long time between runs. The state is never when no run is visible (the project has never been analyzed, or its last run is older than Temporal's retention window), idle when the latest run has closed and the coordinator is waiting for the next chat write, and running when a run is in flight.`)
 	fmt.Fprintln(os.Stderr, `    create-risk-policy-bypass-request: Create or refresh a risk policy bypass request from a signed request URL token.`)
+	fmt.Fprintln(os.Stderr, `    get-risk-policy-bypass-request-target: Fetch what a request access link asks for (the blocked server and tool) WITHOUT filing the request. Powers the request access page.`)
 	fmt.Fprintln(os.Stderr, `    acknowledge-risk-policy-challenge: Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-challenge: Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).`)
 	fmt.Fprintln(os.Stderr, `    decline-risk-policy-challenge: Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.`)
@@ -28263,6 +28341,26 @@ func riskCreateRiskPolicyBypassRequestUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy-bypass-request --body '{\n      \"note\": \"aaa\",\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func riskGetRiskPolicyBypassRequestTargetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk get-risk-policy-bypass-request-target", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Fetch what a request access link asks for (the blocked server and tool) WITHOUT filing the request. Powers the request access page.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-policy-bypass-request-target --body '{\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func riskAcknowledgeRiskPolicyChallengeUsage() {
@@ -33101,6 +33199,12 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-project-redeploy-preview: Returns what redeploying a project would act on, for review before redeployProject.`)
 	fmt.Fprintln(os.Stderr, `    redeploy-project: Clones a project's active deployment and starts processing it. Refuses when the active deployment is no longer the one reviewed. The new deployment becomes active only if processing succeeds.`)
 	fmt.Fprintln(os.Stderr, `    list-custom-domains: Lists live custom domains across organizations with their designated CNAME targets and observed DNS routing methods.`)
+	fmt.Fprintln(os.Stderr, `    list-platform-external-credentials: List the platform external credentials (organization_id NULL, project_id NULL) that Speakeasy authenticates into a cloud provider with. Optionally filter by provider.`)
+	fmt.Fprintln(os.Stderr, `    get-gcp-iam-platform-credential: Get a platform GCP IAM external credential by ID.`)
+	fmt.Fprintln(os.Stderr, `    create-gcp-iam-platform-credential: Create a platform GCP IAM external credential. Set the wif_* triple for Workload Identity Federation, impersonate_service_account alone for direct impersonation, or neither for Speakeasy's ambient attached identity.`)
+	fmt.Fprintln(os.Stderr, `    update-gcp-iam-platform-credential: Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.`)
+	fmt.Fprintln(os.Stderr, `    verify-gcp-iam-platform-credential: Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Nothing is persisted.`)
+	fmt.Fprintln(os.Stderr, `    delete-gcp-iam-platform-credential: Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.`)
 	fmt.Fprintln(os.Stderr, `    get-memory-eval-options: Default Organizational Memory eval config, the models a run may pick from, and the daily run budget.`)
 	fmt.Fprintln(os.Stderr, `    list-memory-eval-runs: Organizational Memory eval runs, newest first, without their reports.`)
 	fmt.Fprintln(os.Stderr, `    get-memory-eval-run: One Organizational Memory eval run with its report.`)
@@ -35369,6 +35473,126 @@ func adminListCustomDomainsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-custom-domains --organization-id \"abc123\" --dns-routing-method \"shared_cname\" --admin-session-token \"abc123\"")
+}
+
+func adminListPlatformExternalCredentialsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-platform-external-credentials", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the platform external credentials (organization_id NULL, project_id NULL) that Speakeasy authenticates into a cloud provider with. Optionally filter by provider.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-platform-external-credentials --provider \"gcp_iam\" --admin-session-token \"abc123\"")
+}
+
+func adminGetGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a platform GCP IAM external credential by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --admin-session-token \"abc123\"")
+}
+
+func adminCreateGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin create-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a platform GCP IAM external credential. Set the wif_* triple for Workload Identity Federation, impersonate_service_account alone for direct impersonation, or neither for Speakeasy's ambient attached identity.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-gcp-iam-platform-credential --body '{\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminUpdateGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin update-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-gcp-iam-platform-credential --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminVerifyGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin verify-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Nothing is persisted.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin verify-gcp-iam-platform-credential --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminDeleteGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin delete-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin delete-gcp-iam-platform-credential --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetMemoryEvalOptionsUsage() {

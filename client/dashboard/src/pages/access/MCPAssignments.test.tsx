@@ -276,11 +276,19 @@ it("removes only this role’s grants without creating a block or removing other
   state.audience.mockResolvedValue({
     version: "v2",
     entries: [
+      // Manage does not include connect, so the role holds both, as the
+      // explicit-connect backfill left every manage grant.
       {
         ...other,
         principalUrn: role.principalUrn,
         displayName: role.name,
         level: "manage",
+      },
+      {
+        ...other,
+        principalUrn: role.principalUrn,
+        displayName: role.name,
+        level: "use",
       },
       other,
     ],

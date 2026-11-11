@@ -50,6 +50,41 @@ Channel context stays in the Raw view.
 
 const activityClaudeTagReplyCalls = `[{"id":"demo-tag-reply","type":"function","function":{"name":"mcp__slackbot__reply","arguments":"{\"text\":\"The release improves session transcripts and channel visibility.\",\"thread_ts\":\"demo-message-1\"}"}}]`
 
+// activityMessage is one hand-written transcript message. toolCallID pairs a
+// tool-role message with the assistant call it answers.
+type activityMessage struct {
+	key        string
+	role       string
+	content    string
+	contentRaw []byte
+	toolCalls  []byte
+	source     pgtype.Text
+	model      pgtype.Text
+	age        pgtype.Interval
+	toolCallID pgtype.Text
+}
+
+func (s *seeder) activityInsertMessages(ctx context.Context, chatID uuid.UUID, msgs []activityMessage) error {
+	for _, m := range msgs {
+		if err := s.q.ActivityInsertChatMessage(ctx, repo.ActivityInsertChatMessageParams{
+			ID:         s.det(m.key),
+			ChatID:     chatID,
+			ProjectID:  s.projectID(),
+			Role:       m.role,
+			Content:    m.content,
+			ContentRaw: m.contentRaw,
+			ToolCalls:  m.toolCalls,
+			Source:     m.source,
+			Model:      m.model,
+			ToolCallID: m.toolCallID,
+			Age:        m.age,
+		}); err != nil {
+			return fmt.Errorf("insert demo chat message %s: %w", m.key, err)
+		}
+	}
+	return nil
+}
+
 // seedActivity: Audit feed, hooks, trials, spend rules, widgets.
 func (s *seeder) seedActivity(ctx context.Context) error {
 	org := s.orgID()
@@ -119,35 +154,6 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		}
 		return nil
 	}
-	type activityMessage struct {
-		key        string
-		role       string
-		content    string
-		contentRaw []byte
-		toolCalls  []byte
-		source     pgtype.Text
-		model      pgtype.Text
-		age        pgtype.Interval
-	}
-	insertMessages := func(chatID uuid.UUID, msgs []activityMessage) error {
-		for _, m := range msgs {
-			if err := s.q.ActivityInsertChatMessage(ctx, repo.ActivityInsertChatMessageParams{
-				ID:         s.det(m.key),
-				ChatID:     chatID,
-				ProjectID:  proj,
-				Role:       m.role,
-				Content:    m.content,
-				ContentRaw: m.contentRaw,
-				ToolCalls:  m.toolCalls,
-				Source:     m.source,
-				Model:      m.model,
-				Age:        m.age,
-			}); err != nil {
-				return fmt.Errorf("insert demo chat message %s: %w", m.key, err)
-			}
-		}
-		return nil
-	}
 
 	// A signed inference hook archives the conversation before the next model call.
 	chatID := s.det("anthropic-inference-chat")
@@ -155,13 +161,13 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		return err
 	}
 	chatSrc, model := activityText("claude-chat"), activityText(activityModel)
-	if err := insertMessages(chatID, []activityMessage{
+	if err := s.activityInsertMessages(ctx, chatID, []activityMessage{
 		{"anthropic-inference-prompt", "user", "Summarize the release checklist.",
-			activityTextRaw("Summarize the release checklist."), nil, chatSrc, model, activityMinutes(20)},
+			activityTextRaw("Summarize the release checklist."), nil, chatSrc, model, activityMinutes(20), activityNull},
 		{"anthropic-inference-reply", "assistant", "The checklist covers tests, rollout, and rollback readiness.",
-			activityTextRaw("The checklist covers tests, rollout, and rollback readiness."), nil, chatSrc, model, activityMinutes(19)},
+			activityTextRaw("The checklist covers tests, rollout, and rollback readiness."), nil, chatSrc, model, activityMinutes(19), activityNull},
 		{"anthropic-inference-followup", "user", "Which checks remain before rollout?",
-			activityTextRaw("Which checks remain before rollout?"), nil, chatSrc, model, activityMinutes(18)},
+			activityTextRaw("Which checks remain before rollout?"), nil, chatSrc, model, activityMinutes(18), activityNull},
 	}); err != nil {
 		return err
 	}
@@ -176,16 +182,16 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		return err
 	}
 	tagSrc := activityText("claude-tag")
-	if err := insertMessages(chatID, []activityMessage{
-		{"claude-tag-prompt", "user", activityClaudeTagPrompt, nil, nil, activityText("Claude In Slack"), model, activityMinutes(10)},
-		{"claude-tag-reply", "assistant", "", nil, []byte(activityClaudeTagReplyCalls), tagSrc, model, activityMinutes(9)},
-		{"claude-tag-ack", "assistant", "Replied in the thread.", nil, nil, tagSrc, model, activityMinutes(9)},
+	if err := s.activityInsertMessages(ctx, chatID, []activityMessage{
+		{"claude-tag-prompt", "user", activityClaudeTagPrompt, nil, nil, activityText("Claude In Slack"), model, activityMinutes(10), activityNull},
+		{"claude-tag-reply", "assistant", "", nil, []byte(activityClaudeTagReplyCalls), tagSrc, model, activityMinutes(9), activityNull},
+		{"claude-tag-ack", "assistant", "Replied in the thread.", nil, nil, tagSrc, model, activityMinutes(9), activityNull},
 		// Standing-owner deliveries preserve sender provenance for each turn.
 		{"claude-tag-owner-1", "user", `<system-reminder>Delivery notes stay in the Raw view.</system-reminder>
 <standing_owner_message sender="U0DEMO00001" ts="demo-standing-1" originating-ask="true">Check the rollout status.</standing_owner_message>`,
-			nil, nil, tagSrc, model, activityMinutes(8)},
+			nil, nil, tagSrc, model, activityMinutes(8), activityNull},
 		{"claude-tag-owner-2", "user", `<standing_owner_message sender="U0DEMO00003" ts="demo-standing-2" originating-ask="true">Review the rollback steps.</standing_owner_message>`,
-			nil, nil, tagSrc, model, activityMinutes(7)},
+			nil, nil, tagSrc, model, activityMinutes(7), activityNull},
 	}); err != nil {
 		return err
 	}
@@ -209,8 +215,8 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	if err := insertChat(helperID, amara, "Release checklist helper", tagSrc, releaseAgent, activityMinutes(6), activityMinutes(5)); err != nil {
 		return err
 	}
-	if err := insertMessages(helperID, []activityMessage{
-		{"claude-tag-helper-reply", "assistant", "The rollback checklist is ready for review.", nil, nil, tagSrc, model, activityMinutes(5)},
+	if err := s.activityInsertMessages(ctx, helperID, []activityMessage{
+		{"claude-tag-helper-reply", "assistant", "The rollback checklist is ready for review.", nil, nil, tagSrc, model, activityMinutes(5), activityNull},
 	}); err != nil {
 		return err
 	}
@@ -245,8 +251,8 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		if m.role == "assistant" {
 			age = activityMinutes(39)
 		}
-		if err := insertMessages(s.det("assistant-session-"+m.fixture), []activityMessage{
-			{"assistant-session-" + m.fixture + "-" + m.role, m.role, m.content, nil, nil, activityNull, activityNull, age},
+		if err := s.activityInsertMessages(ctx, s.det("assistant-session-"+m.fixture), []activityMessage{
+			{"assistant-session-" + m.fixture + "-" + m.role, m.role, m.content, nil, nil, activityNull, activityNull, age, activityNull},
 		}); err != nil {
 			return err
 		}
