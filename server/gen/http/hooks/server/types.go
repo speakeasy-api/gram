@@ -1973,6 +1973,10 @@ type HookIngestDataRequestBody struct {
 	// where it must be the only block and the payload carries no session; rejected
 	// on every other event type.
 	DeliveryFailure *HookDeliveryFailureDataRequestBody `form:"delivery_failure,omitempty" json:"delivery_failure,omitempty" xml:"delivery_failure,omitempty"`
+	// Bootstrap install failure report. Required on client.install_failed, where
+	// it must be the only block and the payload carries no session; rejected on
+	// every other event type.
+	InstallFailure *HookInstallFailureDataRequestBody `form:"install_failure,omitempty" json:"install_failure,omitempty" xml:"install_failure,omitempty"`
 }
 
 // HookPromptDataRequestBody is used to define fields on request body types.
@@ -2150,6 +2154,23 @@ type HookDeliveryFailureDataRequestBody struct {
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
 	// Events waiting in the device's offline spool when the report was written.
 	SpoolDepth *int `form:"spool_depth,omitempty" json:"spool_depth,omitempty" xml:"spool_depth,omitempty"`
+}
+
+// HookInstallFailureDataRequestBody is used to define fields on request body
+// types.
+type HookInstallFailureDataRequestBody struct {
+	// Why the install failed.
+	Cause *string `form:"cause,omitempty" json:"cause,omitempty" xml:"cause,omitempty"`
+	// RFC3339 time of the failed install, on the device clock.
+	AttemptedAt *string `form:"attempted_at,omitempty" json:"attempted_at,omitempty" xml:"attempted_at,omitempty"`
+	// speakeasy-hooks version the script tried to install.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Operating system of the device.
+	Os *string `form:"os,omitempty" json:"os,omitempty" xml:"os,omitempty"`
+	// CPU architecture of the device.
+	Arch *string `form:"arch,omitempty" json:"arch,omitempty" xml:"arch,omitempty"`
+	// Coding agent harness the hook ran under.
+	Harness *string `form:"harness,omitempty" json:"harness,omitempty" xml:"harness,omitempty"`
 }
 
 // OTELResourceLogRequestBody is used to define fields on request body types.
@@ -4028,8 +4049,8 @@ func ValidateHookIngestEventRequestBody(body *HookIngestEventRequestBody) (err e
 		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
 	}
 	if body.Type != nil {
-		if !(*body.Type == "session.started" || *body.Type == "session.updated" || *body.Type == "session.ended" || *body.Type == "mcp.inventory" || *body.Type == "prompt.submitted" || *body.Type == "tool.requested" || *body.Type == "tool.completed" || *body.Type == "tool.failed" || *body.Type == "assistant.responded" || *body.Type == "assistant.thought" || *body.Type == "usage.reported" || *body.Type == "skill.activated" || *body.Type == "notification.reported" || *body.Type == "client.delivery_failed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted", "tool.requested", "tool.completed", "tool.failed", "assistant.responded", "assistant.thought", "usage.reported", "skill.activated", "notification.reported", "client.delivery_failed"}))
+		if !(*body.Type == "session.started" || *body.Type == "session.updated" || *body.Type == "session.ended" || *body.Type == "mcp.inventory" || *body.Type == "prompt.submitted" || *body.Type == "tool.requested" || *body.Type == "tool.completed" || *body.Type == "tool.failed" || *body.Type == "assistant.responded" || *body.Type == "assistant.thought" || *body.Type == "usage.reported" || *body.Type == "skill.activated" || *body.Type == "notification.reported" || *body.Type == "client.delivery_failed" || *body.Type == "client.install_failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted", "tool.requested", "tool.completed", "tool.failed", "assistant.responded", "assistant.thought", "usage.reported", "skill.activated", "notification.reported", "client.delivery_failed", "client.install_failed"}))
 		}
 	}
 	if body.OccurredAt != nil {
@@ -4062,6 +4083,11 @@ func ValidateHookIngestDataRequestBody(body *HookIngestDataRequestBody) (err err
 	}
 	if body.DeliveryFailure != nil {
 		if err2 := ValidateHookDeliveryFailureDataRequestBody(body.DeliveryFailure); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.InstallFailure != nil {
+		if err2 := ValidateHookInstallFailureDataRequestBody(body.InstallFailure); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -4197,6 +4223,46 @@ func ValidateHookDeliveryFailureDataRequestBody(body *HookDeliveryFailureDataReq
 	if body.SessionID != nil {
 		if utf8.RuneCountInString(*body.SessionID) > 256 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", *body.SessionID, utf8.RuneCountInString(*body.SessionID), 256, false))
+		}
+	}
+	return
+}
+
+// ValidateHookInstallFailureDataRequestBody runs the validations defined on
+// HookInstallFailureDataRequestBody
+func ValidateHookInstallFailureDataRequestBody(body *HookInstallFailureDataRequestBody) (err error) {
+	if body.Cause == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cause", "body"))
+	}
+	if body.AttemptedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attempted_at", "body"))
+	}
+	if body.Cause != nil {
+		if !(*body.Cause == "download" || *body.Cause == "checksum_mismatch") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.cause", *body.Cause, []any{"download", "checksum_mismatch"}))
+		}
+	}
+	if body.AttemptedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.attempted_at", *body.AttemptedAt, goa.FormatDateTime))
+	}
+	if body.Version != nil {
+		if utf8.RuneCountInString(*body.Version) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *body.Version, utf8.RuneCountInString(*body.Version), 64, false))
+		}
+	}
+	if body.Os != nil {
+		if utf8.RuneCountInString(*body.Os) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.os", *body.Os, utf8.RuneCountInString(*body.Os), 32, false))
+		}
+	}
+	if body.Arch != nil {
+		if utf8.RuneCountInString(*body.Arch) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.arch", *body.Arch, utf8.RuneCountInString(*body.Arch), 32, false))
+		}
+	}
+	if body.Harness != nil {
+		if utf8.RuneCountInString(*body.Harness) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.harness", *body.Harness, utf8.RuneCountInString(*body.Harness), 64, false))
 		}
 	}
 	return

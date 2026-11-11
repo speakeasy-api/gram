@@ -311,6 +311,16 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		}, nil
 	}
 
+	if isInstallFailureReport(payload) {
+		if !s.isHookDuplicate(ctx) {
+			s.recordInstallFailure(context.WithoutCancel(ctx), payload, authCtx, actor)
+		}
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor(actor),
+		}, nil
+	}
+
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
 	skillCapture, observed, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)
 	if observationErr != nil {
@@ -638,7 +648,10 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if strings.TrimSpace(payload.SchemaVersion) != hookIngestSchemaV1 {
 		return oops.E(oops.CodeInvalid, nil, "unsupported hook schema_version")
 	}
-	return validateDeliveryFailurePayload(payload)
+	if err := validateDeliveryFailurePayload(payload); err != nil {
+		return err
+	}
+	return validateInstallFailurePayload(payload)
 }
 
 func isReservedServerAdapter(adapter string) bool {

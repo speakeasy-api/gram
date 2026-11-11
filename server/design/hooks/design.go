@@ -276,6 +276,24 @@ var HookDeliveryFailedEventType = Type("HookDeliveryFailedEventType", String, fu
 	Enum(vocab.Any(vocab.FailedEventTypes)...)
 })
 
+var HookInstallFailureCause = Type("HookInstallFailureCause", String, func() {
+	Description("Why a bootstrap script could not install the hooks binary.")
+	Enum(vocab.Any(vocab.InstallFailureCauses)...)
+})
+
+var HookInstallFailureData = Type("HookInstallFailureData", func() {
+	Description("Bootstrap install failure report, sent with event type client.install_failed. A plugin's bootstrap script sends one, best effort, when it cannot download the hooks binary or the download fails its checksum. It is diagnostic only and never counts as agent activity.")
+	Required("cause", "attempted_at")
+	Attribute("cause", HookInstallFailureCause, "Why the install failed.")
+	Attribute("attempted_at", String, "RFC3339 time of the failed install, on the device clock.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("version", String, "speakeasy-hooks version the script tried to install.", func() { MaxLength(64) })
+	Attribute("os", String, "Operating system of the device.", func() { MaxLength(32) })
+	Attribute("arch", String, "CPU architecture of the device.", func() { MaxLength(32) })
+	Attribute("harness", String, "Coding agent harness the hook ran under.", func() { MaxLength(64) })
+})
+
 var HookDeliveryFailureData = Type("HookDeliveryFailureData", func() {
 	Description("Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.")
 	Required("failed_event_type", "delivery_phase", "cause", "attempted_at")
@@ -338,6 +356,7 @@ var HookIngestData = Type("HookIngestData", func() {
 	Attribute("mcp_attribution", ArrayOf(HookMCPAttributionEntry), "Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).")
 	Attribute("prompt_attachments", ArrayOf(HookPromptAttachmentEntry), "Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).")
 	Attribute("delivery_failure", HookDeliveryFailureData, "Device-side delivery failure report. Required on client.delivery_failed, where it must be the only block and the payload carries no session; rejected on every other event type.")
+	Attribute("install_failure", HookInstallFailureData, "Bootstrap install failure report. Required on client.install_failed, where it must be the only block and the payload carries no session; rejected on every other event type.")
 })
 
 var IngestHookPayload = Type("IngestHookPayload", func() {

@@ -377,6 +377,10 @@ type HookIngestData struct {
 	// where it must be the only block and the payload carries no session; rejected
 	// on every other event type.
 	DeliveryFailure *HookDeliveryFailureData
+	// Bootstrap install failure report. Required on client.install_failed, where
+	// it must be the only block and the payload carries no session; rejected on
+	// every other event type.
+	InstallFailure *HookInstallFailureData
 }
 
 // Canonical Speakeasy feature event.
@@ -414,6 +418,28 @@ type HookIngestSource struct {
 	// or provider account), used for attribution when the API key is shared
 	// org-wide.
 	UserEmail *string
+}
+
+// Why a bootstrap script could not install the hooks binary.
+type HookInstallFailureCause string
+
+// Bootstrap install failure report, sent with event type
+// client.install_failed. A plugin's bootstrap script sends one, best effort,
+// when it cannot download the hooks binary or the download fails its checksum.
+// It is diagnostic only and never counts as agent activity.
+type HookInstallFailureData struct {
+	// Why the install failed.
+	Cause HookInstallFailureCause
+	// RFC3339 time of the failed install, on the device clock.
+	AttemptedAt string
+	// speakeasy-hooks version the script tried to install.
+	Version *string
+	// Operating system of the device.
+	Os *string
+	// CPU architecture of the device.
+	Arch *string
+	// Coding agent harness the hook ran under.
+	Harness *string
 }
 
 // Transcript-derived MCP attribution for one model API request. Claude redacts
