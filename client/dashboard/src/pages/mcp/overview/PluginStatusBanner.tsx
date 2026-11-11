@@ -457,6 +457,7 @@ function WritablePluginStatusBanner({
                       name: plugin.name,
                       slug: plugin.slug,
                       description: plugin.description,
+                      agentPluginsV1Compatible: plugin.agentPluginsV1Compatible,
                     }))}
                   />
                 )}

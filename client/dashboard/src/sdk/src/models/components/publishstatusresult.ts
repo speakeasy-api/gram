@@ -74,7 +74,7 @@ export type PublishStatusResult = {
    */
   upToDate?: boolean | undefined;
   /**
-   * Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present when connected and the pinned hooks binary supports the vibe provider. The marketplace repo directory is `<slug>-vibe`.
+   * Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present only when connected, observability is enabled for the project, the org is past the phased hooks rollout, the pinned hooks binary supports the vibe provider, and the org name satisfies the Agent Plugins 1.0 name schema; absent otherwise. The marketplace repo directory is `<slug>-vibe`.
    */
   vibeObservabilityPlugin?: string | undefined;
 };
