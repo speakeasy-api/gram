@@ -248,7 +248,9 @@ function letterprove(): NonNullable<Window["Letterprove"]> {
     const q: [string, string][] = [];
     window.Letterprove = {
       q,
-      identify: (email) => q.push(["identify", email]),
+      identify: (email) => {
+        q.push(["identify", email]);
+      },
     };
   }
   return window.Letterprove;
