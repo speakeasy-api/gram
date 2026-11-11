@@ -254,25 +254,28 @@ function letterprove(): NonNullable<Window["Letterprove"]> {
   return window.Letterprove;
 }
 
+// Letterprove counts are published as signed evidence, so only the production
+// dashboard host reports. PR previews and shared staging are production
+// builds too, so the build mode alone would not keep their (mostly staff)
+// sign-ins out of the counts.
+const LETTERPROVE_HOST = "ai.speakeasy.com";
+
 /**
  * Report the signed-in user's email to Letterprove, which publishes counts of
- * companies by email domain. The email comes from the server session, so it
- * is the verified account address. Skipped while impersonating or using
- * support access so staff activity is not attributed to the customer.
+ * companies by email domain. Pass the email only for a valid session that is
+ * not impersonated or under support access; the caller decides that.
  */
-export function useLetterproveIdentify(
-  email: string | undefined,
-  impersonating: boolean,
-): void {
+export function useLetterproveIdentify(email: string | undefined): void {
   useEffect(() => {
-    if (!email || impersonating) return;
+    if (!email || !import.meta.env.PROD) return;
     if (typeof window === "undefined") return;
+    if (window.location.hostname !== LETTERPROVE_HOST) return;
     try {
       letterprove().identify(email);
     } catch {
       // never let the attestation script break the page
     }
-  }, [email, impersonating]);
+  }, [email]);
 }
 
 /**

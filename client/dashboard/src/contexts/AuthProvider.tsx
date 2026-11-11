@@ -167,11 +167,6 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // organization-targeted feature flags resolve on the lockout pages too.
   useRegisterOrganizationForTelemetry(session?.organization?.slug ?? "");
   usePylonInAppChat(session?.user);
-  useLetterproveIdentify(
-    session?.user.email,
-    Boolean(session?.impersonatorEmail) ||
-      Boolean(session?.organizationOverride),
-  );
   useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
 
   // Sync isAdmin into the SDK fetcher so it can attach X-Gram-Scope-Override in production.
@@ -211,6 +206,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   );
   const sessionAuthorized =
     Boolean(session?.session) && !isGramSessionUnauthorizedError(error);
+  // Only a valid, non-impersonated session's email is reported.
+  useLetterproveIdentify(
+    sessionAuthorized && !isImpersonating ? session?.user.email : undefined,
+  );
   const organizationHostTarget =
     sessionAuthorized &&
     session?.activeOrganizationId &&
