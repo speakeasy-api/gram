@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -287,13 +288,27 @@ func (c *Client) Download(ctx context.Context, file File) ([]byte, error) {
 		return nil, errors.New("vault export file size mismatch")
 	}
 	if file.MD5Hash != "" {
-		// GCS publishes a base64 MD5 checksum for transfer integrity, not security.
-		digest := md5.Sum(data) //nolint:gosec // GCS protocol checksum, not a security primitive.
-		if base64.StdEncoding.EncodeToString(digest[:]) != file.MD5Hash {
+		// A transfer-integrity checksum, not a security primitive.
+		digest := md5.Sum(data) //nolint:gosec // Export protocol checksum.
+		want, ok := decodeMD5(file.MD5Hash)
+		if !ok || !bytes.Equal(digest[:], want) {
 			return nil, errors.New("vault export file checksum mismatch")
 		}
 	}
 	return data, nil
+}
+
+// decodeMD5 reads Vault's CloudStorageFile.md5Hash, whose encoding Google does
+// not document. Cloud Storage object metadata uses base64; accept hex as well.
+// The forms cannot collide: an MD5 is 32 hex characters or 24 base64 ones.
+func decodeMD5(encoded string) ([]byte, bool) {
+	if raw, err := hex.DecodeString(encoded); err == nil && len(raw) == md5.Size {
+		return raw, true
+	}
+	if raw, err := base64.StdEncoding.DecodeString(encoded); err == nil && len(raw) == md5.Size {
+		return raw, true
+	}
+	return nil, false
 }
 
 // HTTPError exposes only the status code, never upstream response bodies.

@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -379,6 +380,9 @@ func TestDownloadIntegrity(t *testing.T) {
 		wantError string
 	}{
 		{name: "matching", size: 7, hash: hash, wantError: ""},
+		{name: "matching hex digest", size: 7, hash: hex.EncodeToString(digest[:]), wantError: ""},
+		{name: "matching uppercase hex digest", size: 7, hash: strings.ToUpper(hex.EncodeToString(digest[:])), wantError: ""},
+		{name: "wrong hex digest", size: 7, hash: strings.Repeat("0", 32), wantError: "checksum mismatch"},
 		{name: "no advertised size", size: 0, hash: hash, wantError: ""},
 		{name: "truncated", size: 8, hash: hash, wantError: "size mismatch"},
 		{name: "wrong digest", size: 7, hash: "secret-invalid-digest", wantError: "checksum mismatch"},
